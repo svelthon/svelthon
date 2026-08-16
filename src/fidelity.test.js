@@ -9,6 +9,8 @@ import Frames from './fidelity/Frames.svelte';
 import Mutations from './fidelity/Mutations.svelte';
 import Template from './fidelity/Template.svelte';
 import Events from './fidelity/Events.svelte';
+import Composition from './fidelity/Composition.svelte';
+import Keyed from './fidelity/Keyed.svelte';
 
 // Grille de fidélité sémantique.
 //
@@ -170,6 +172,56 @@ describe('composition — objets Python et composants enfants', () => {
     test('un objet Python se passe en prop à un composant enfant', () => {
         expect(cell('child')).toBe('>a=1>b=2'); // prefix laissé à son défaut
         expect(cell('child_prop')).toBe('-a=1-b=2');
+    });
+});
+
+// `{#each}` avec clé est le cas où l'identité des objets Python compte
+// vraiment : la copie que fait publish() ne doit pas casser la réconciliation.
+describe('{#each} avec clé', () => {
+    const setup = () => {
+        const target = render(Keyed);
+        return {
+            list: () =>
+                [...target.querySelectorAll('li')]
+                    .map((n) => `${n.dataset.id}:${n.textContent}`)
+                    .join(','),
+            node: (id) => target.querySelector(`li[data-id="${id}"]`),
+            click: (k) => {
+                target.querySelector(`button[data-k="${k}"]`).click();
+                flushSync();
+            }
+        };
+    };
+
+    test('insertion et suppression réconcilient sur la clé Python', () => {
+        const { list, node, click } = setup();
+        const kept = node(2);
+
+        expect(list()).toBe('1:a,2:b');
+
+        click('prepend');
+        expect(list()).toBe('3:c,1:a,2:b');
+        expect(node(2)).toBe(kept); // nœud réutilisé, pas recréé
+
+        click('drop_first');
+        expect(list()).toBe('1:a,2:b');
+        expect(node(2)).toBe(kept);
+    });
+
+    test('muter un attribut d’un élément ne re-rend pas', () => {
+        const { list, click } = setup();
+
+        click('relabel'); // it.label = it.label.upper() + publish("items")
+        expect(list()).toBe('1:a,2:b'); // inchangé : l'élément a la même identité
+    });
+
+    test('remplacer l’élément re-rend, et garde le nœud', () => {
+        const { list, node, click } = setup();
+        const kept = node(2);
+
+        click('replace'); // items[i] = Item(it.id, ...)
+        expect(list()).toBe('1:a,2:B');
+        expect(node(2)).toBe(kept); // la clé n'a pas changé
     });
 });
 

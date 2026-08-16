@@ -188,6 +188,20 @@ def add():
 
 Un composant qui définit son propre `publish` garde le sien.
 
+La même règle se décline à trois niveaux, et c'est la seule à retenir —
+**réaffecter, pas muter** :
+
+| niveau | ne propage pas | propage |
+|---|---|---|
+| nom | — | `count += 1` |
+| collection | `items.append(x)` | `items.append(x)` + `publish("items")` |
+| élément d'une liste à clé | `it.label = …` | `items[i] = Item(it.id, …)` |
+
+Le troisième cas surprend : dans un `{#each items as it (py.of(it).id)}`, muter
+un attribut d'un élément ne re-rend rien même après `publish()`, parce que
+l'élément a gardé son identité. Le remplacer met à jour le rendu **et** réutilise
+le nœud DOM, puisque la clé, elle, n'a pas bougé.
+
 Les accesseurs vivent sur le **prototype** du namespace, jamais sur l'objet
 lui-même : réaffecter un global émet `$B.delete_for_reassign(name, locals)`, et
 un `delete` sur un accesseur propre le supprimerait définitivement — le signal
@@ -220,7 +234,7 @@ C'est le même mécanisme qui accueillera les `.wasm` de Wasthon.
 
 ## État
 
-Validé par `npm test` — 29 tests, plus 1 échec attendu (voir plus bas) :
+Validé par `npm test` — 32 tests, plus 1 échec attendu (voir plus bas) :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
 - props : défaut Python, priorité du parent, lisibilité pendant l'init,
