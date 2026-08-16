@@ -370,29 +370,37 @@ portée propre.
 
 ## Reste à faire
 
-- **Affichage des valeurs Python.** Svelte interpole avec `String()`, donc une
-  liste s'affiche `0,1` au lieu de `[0, 1]` et un dict `[object Object]`. Seul
-  `None` est traité. Corriger demanderait de distinguer, dans le gabarit, une
-  interpolation textuelle d'un passage de prop à un composant enfant.
-- **Interop des handlers.** Aujourd'hui les arguments JS sont tronqués à
-  l'arité déclarée en Python, ce qui fait marcher `onclick` sans que Python
-  reçoive l'événement. Une vraie politique (`$B.jsobj2pyobj` à la demande, ou
-  sur décorateur) reste à choisir.
-- **Wasthon.** Le tree-shaking de la stdlib est en place ; reste à y brancher
-  les `.wasm`, pour qu'ils entrent dans le graphe d'assets de Vite — préchargés
-  et hashés — au lieu d'être découverts au runtime par un `await import(url)`
-  invisible au bundler.
-- **Mutations en place.** Tenté et abandonné : faire incrémenter une révision
-  par chaque appel entrant en Python invalide bien les liaisons, mais une liste
-  mutée reste **le même objet**, et `$derived` comme `$state.raw` ignorent une
-  écriture dont la valeur est inchangée au sens de `===`. Propager demanderait
-  de livrer une copie fraîche au gabarit à chaque rendu, donc de sacrifier
-  l'identité des objets. Résolu autrement, par `publish(nom)` (voir plus haut) —
-  explicite, une ligne, et sans coût pour les composants qui ne l'utilisent pas.
-- **`__file__`.** Brython dérive son identifiant de namespace du `filename` et
-  ne neutralise que les `.`, pas les `/` : un chemin réel produit
+### Avant d'écrire une vraie application
+
+- **Empaquetage.** `src/lib/` est le framework, mêlé à la démo. Pour l'utiliser
+  ailleurs il faut en faire un paquet npm installable.
+- **`bind:value`.** La liaison bidirectionnelle n'a jamais été essayée sur un
+  nom Python. C'est le geste le plus courant d'un formulaire.
+- **Valeurs dérivées.** Ni dans un composant ni dans un store il n'existe
+  d'équivalent à `$derived` : une `@property` Python n'est pas réactive, et tout
+  calcul dépendant doit être refait à la main dans un handler.
+- **Numéros de ligne.** Une erreur nomme sa fonction et son fichier, pas sa
+  ligne. Il n'y a pas de source map du Python vers le JS généré.
+
+### Confort
+
+- **Éditeur.** Aucune coloration ni complétion dans `<script lang="python">`.
+- **Cache de compilation.** Un store est recompilé à chaque `load()`.
+- **Coût à l'exécution** jamais mesuré face à du Svelte ordinaire.
+
+### En amont, chez Brython
+
+- **`__file__` aplati.** Brython dérive son identifiant de namespace du
+  `filename` et n'y neutralise que les `.`, pas les `/` : un chemin réel produit
   `locals_src/Counter_svelte`, du JS invalide. On passe donc un nom aplati, au
-  prix de la lisibilité des tracebacks. Correctif en amont possible.
+  prix de la lisibilité des tracebacks.
+- **Fuite de compréhension**, la divergence connue ci-dessus.
+
+### Bloqué ailleurs
+
+- **Wasthon.** Le tree-shaking de la stdlib est en place et les `.wasm`
+  s'y brancheraient directement — préchargés et hashés par Vite au lieu d'être
+  découverts au runtime. Demande de construire Wasthon (Emscripten).
 
 ## Lancer
 
