@@ -57,6 +57,20 @@ export const py = {
     }
 };
 
+// Rebinding is what propagates, and a mutated container is still the same
+// object — Svelte drops a write that === the previous value. Returning a copy
+// gives it a new identity, which is the whole point of publish().
+export function republish(value) {
+    const $B = globalThis.__BRYTHON__;
+
+    if (Array.isArray(value)) return value.slice(); // list
+    const cls = $B.get_class(value);
+    if (cls === _b_.dict) return _b_.dict.$factory(value);
+    if (cls === _b_.set) return _b_.set.$factory(value);
+
+    return value; // scalars already propagate on assignment
+}
+
 // Expose one component-level signal as a property of the namespace Brython
 // writes into. Values pass through untouched — never wrapped, never proxied —
 // which is the point: a Svelte state proxy around a Brython object breaks its

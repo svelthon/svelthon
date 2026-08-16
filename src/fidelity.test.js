@@ -214,6 +214,24 @@ describe('réactivité — quelles écritures Python propagent', () => {
         expect(read('depth')).toBe('0');
     });
 
+    // publish(nom) rend au gabarit une identité neuve après une mutation en
+    // place, sans que le composant entretienne une valeur publiée en parallèle.
+    test('publish() rattache une liste mutée', () => {
+        const { read, click } = setup();
+
+        const before = read('items');
+        click('mutate_then_publish');
+        expect(read('items')).not.toBe(before);
+    });
+
+    test('publish() rattache un dict muté', () => {
+        const { read, click } = setup();
+
+        expect(read('table')).toBe('{}');
+        click('dict_then_publish');
+        expect(read('table')).toBe("{'k': 0}");
+    });
+
     test('muter puis publier propage', () => {
         const { read, click } = setup();
 

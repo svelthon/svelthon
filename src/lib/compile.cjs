@@ -106,9 +106,18 @@ function compile(src, name = 'Component') {
     // leaves '/' alone, so a real path would emit `locals_src/Counter_svelte`,
     // which is not valid JavaScript. Pass an identifier-safe name instead; the
     // cost is that Python's __file__ says "Counter" rather than the full path.
-    const root = $B.py2js({ src, filename: name }, name, [name]);
+    let root = $B.py2js({ src, filename: name }, name, [name]);
+    let { props, state, funcs } = surface(root._ast.body);
+
+    // NOTE — traversing a DOM node from Python (`event.target.value`) resolves
+    // the node's class through `$B.imported['browser.html']`, which only a real
+    // import registers; it cannot be done at boot either, since $B.$import reads
+    // $B.frame_obj, null until a module body runs. Appending
+    // `from browser import html` to the source (appending, so line numbers stay
+    // true) is the obvious fix, but that import hangs under jsdom — to retry in
+    // a real browser before wiring it in. Until then the template extracts the
+    // value and Python receives it, which works today.
     const js = root.to_js();
-    const { props, state, funcs } = surface(root._ast.body);
 
     if (!NAMESPACE_DECL.test(js)) {
         throw new Error(`svelthon: no Brython namespace found in the code generated for ${name}`);
@@ -143,14 +152,24 @@ function compile(src, name = 'Component') {
     // object but received a 'tuple'"). $state.raw keeps values opaque, so
     // reactivity tracks *rebinding a name* — which is what `count = …` and
     // `global count; count += 1` both do.
+    //
+    // Making `items.append(x)` reactive too was tried and abandoned: bumping a
+    // revision signal that the bindings also read does invalidate them, but a
+    // mutated list is still the *same object*, and both $derived and $state.raw
+    // drop a write whose value is unchanged by ===. Propagating it would mean
+    // handing the template a fresh copy on every render, at the cost of object
+    // identity — too high a price for a rule that is easy to state instead.
     const fn = (name) => `__fn_${name}`;
     const local = (name) => `__local_${name}`;
+
+    // A component free to define its own `publish` keeps it.
+    const hasPublish = [...props, ...state, ...funcs.map((f) => f.name)].includes('publish');
 
     const script = [
         `import { init } from ${JSON.stringify(virtualId(name))};`,
         // `py` backs the rewritten conditions, and is available to the template
         // for explicit conversions: {py.str(items)} renders ['a', 'b'].
-        `import { bind, py, NONE } from 'svelthon/runtime';`,
+        `import { bind, py, republish, NONE } from 'svelthon/runtime';`,
         ``,
         ...(props.length ? [`const __props = $props();`, ``] : []),
         // A prop's value comes from the parent when it was passed, and from the
@@ -168,7 +187,13 @@ function compile(src, name = 'Component') {
         // Python may write to a prop; the write lands in the local fallback and
         // is shadowed for as long as the parent supplies a value, which is
         // Svelte's own rule for non-bindable props.
-        ...props.map((n) => `bind(__proto, '${n}', () => ${n}, (v) => { ${local(n)} = v; });`),
+        //
+        // The accessors read the raw cell, never the tracked binding: Python must
+        // not subscribe to Svelte's graph, only feed it.
+        ...props.map(
+            (n) =>
+                `bind(__proto, '${n}', () => ('${n}' in __props ? __props.${n} : ${local(n)}) ?? NONE, (v) => { ${local(n)} = v; });`
+        ),
         ...state.map((n) => `bind(__proto, '${n}', () => ${n}, (v) => { ${n} = v; });`),
         ...funcs.map((f) => `bind(__proto, '${f.name}', () => ${fn(f.name)}, (v) => { ${fn(f.name)} = v; });`),
         ``,
@@ -179,6 +204,16 @@ function compile(src, name = 'Component') {
         // walks the prototype chain, where our accessors live. It is the only
         // place in Brython that consults this flag.
         `${NS}.$proxy = true;`,
+        // publish("items") gives back a rendering-visible identity after an
+        // in-place mutation, so `{#each items}` keeps working without the
+        // component having to maintain a parallel published value.
+        ...(hasPublish
+            ? []
+            : [
+                  ``,
+                  `const __publish = (key) => { ${NS}[key] = republish(${NS}[key]); };`,
+                  `bind(__proto, 'publish', () => __publish, () => {});`
+              ]),
         ``,
         `init(${NS});`,
         ``,

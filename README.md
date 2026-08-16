@@ -28,11 +28,10 @@ locals_Counter = $B.namespace('Counter')
 locals_Counter.count = 0
 ```
 
-Or `$state` de Svelte 5 rend un objet profondément réactif via un Proxy. Il y a
-donc un seul point à intercepter : on donne à Brython un proxy `$state` à la
-place de son namespace, et **chaque affectation que son codegen émet déjà
-devient une écriture réactive**. C'est toute l'astuce, et elle tient en une
-substitution (`src/lib/compile.cjs`).
+Il y a donc **un seul point à intercepter**. On substitue à ce namespace un
+objet dont chaque nom est un accesseur vers un signal Svelte, et chaque
+affectation que le codegen émet déjà devient une écriture réactive. Le Python
+reste du Python nu, sans une seule rune.
 
 ## Chaîne de compilation
 
@@ -48,10 +47,12 @@ substitution (`src/lib/compile.cjs`).
          │      export function init(__py) { …code généré… }
          │
          └──→ script du composant
-                let __py = $state({});
+                let count = $state.raw(undefined);
+                bind(__proto, 'count', () => count, (v) => { count = v; });
+                const __py = Object.create(__proto);
+                __py.$proxy = true;
                 init(__py);
-                let count = $derived(__py.count);
-                const increment = (...a) => __py.increment(...a.slice(0, 0));
+                const increment = (...a) => __fn_increment(...a.slice(0, 0));
 ```
 
 Le code généré vit dans un module séparé parce que **Svelte interdit le préfixe
@@ -132,6 +133,19 @@ items.append(x)     # PAS réactif — mute sans réaffecter
 box.value += 1      # PAS réactif — mute un attribut
 ```
 
+Pour muter en place sans renoncer à `{#each items}`, `publish(nom)` est injecté
+dans chaque composant. Il rend au gabarit une identité neuve — une copie
+superficielle pour une liste, un dict ou un set — ce qui suffit à franchir la
+comparaison `===` de Svelte :
+
+```python
+def add():
+    items.append(len(items))
+    publish("items")
+```
+
+Un composant qui définit son propre `publish` garde le sien.
+
 Les accesseurs vivent sur le **prototype** du namespace, jamais sur l'objet
 lui-même : réaffecter un global émet `$B.delete_for_reassign(name, locals)`, et
 un `delete` sur un accesseur propre le supprimerait définitivement — le signal
@@ -155,7 +169,7 @@ C'est le même mécanisme qui accueillera les `.wasm` de Wasthon.
 
 ## État
 
-Validé par `npm test` — 17 tests, plus 1 échec attendu (voir plus bas) :
+Validé par `npm test` — 25 tests, plus 1 échec attendu (voir plus bas) :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
 - props : défaut Python, priorité du parent, lisibilité pendant l'init,
@@ -164,7 +178,7 @@ Validé par `npm test` — 17 tests, plus 1 échec attendu (voir plus bas) :
   contrôle et frames. Chaque valeur attendue a été produite par CPython 3.12 en
   exécutant le code du composant tel quel, jamais écrite à la main. Brython
   reproduit CPython sur **39 des 40 points** ;
-- build de production : **233 Ko gzip**, runtime Brython compris.
+- build de production : **242 Ko gzip**, runtime Brython compris.
 
 La grille sert de banc d'acceptation aux codegens optimisés (wasthonf) : un
 codegen qui supprime les cadres d'appel casse `Frames`, qui déballe les entiers
@@ -191,9 +205,13 @@ portée propre.
   les `.wasm`, pour qu'ils entrent dans le graphe d'assets de Vite — préchargés
   et hashés — au lieu d'être découverts au runtime par un `await import(url)`
   invisible au bundler.
-- **Mutations en place.** Les rendre réactives demanderait d'observer les
-  valeurs, ce que le proxy `$state` interdit ici. Piste : un décorateur Python
-  qui republie explicitement, ou un type liste réactif fourni par SVELTHON.
+- **Mutations en place.** Tenté et abandonné : faire incrémenter une révision
+  par chaque appel entrant en Python invalide bien les liaisons, mais une liste
+  mutée reste **le même objet**, et `$derived` comme `$state.raw` ignorent une
+  écriture dont la valeur est inchangée au sens de `===`. Propager demanderait
+  de livrer une copie fraîche au gabarit à chaque rendu, donc de sacrifier
+  l'identité des objets. Résolu autrement, par `publish(nom)` (voir plus haut) —
+  explicite, une ligne, et sans coût pour les composants qui ne l'utilisent pas.
 - **`__file__`.** Brython dérive son identifiant de namespace du `filename` et
   ne neutralise que les `.`, pas les `/` : un chemin réel produit
   `locals_src/Counter_svelte`, du JS invalide. On passe donc un nom aplati, au

@@ -3,6 +3,7 @@ count = 0
 items = []
 size = 0
 depth = 0
+table = {}
 
 class Box:
     def __init__(self):
@@ -30,6 +31,14 @@ def mutate_and_publish():
     items.append(len(items))
     size = len(items)
 
+def mutate_then_publish():
+    items.append(len(items))
+    publish("items")
+
+def dict_then_publish():
+    table["k"] = len(table)
+    publish("table")
+
 def attribute_only():
     box.value += 1
 
@@ -43,11 +52,14 @@ def attribute_and_publish():
 <p data-k="items">{items}</p>
 <p data-k="size">{size}</p>
 <p data-k="depth">{depth}</p>
+<p data-k="table">{py.str(table)}</p>
 
 <button data-k="rebind" onclick={rebind}>rebind</button>
 <button data-k="augment" onclick={augment}>augment</button>
 <button data-k="mutate_only" onclick={mutate_only}>mutate_only</button>
 <button data-k="rebind_list" onclick={rebind_list}>rebind_list</button>
 <button data-k="mutate_and_publish" onclick={mutate_and_publish}>mutate_and_publish</button>
+<button data-k="mutate_then_publish" onclick={mutate_then_publish}>mutate_then_publish</button>
+<button data-k="dict_then_publish" onclick={dict_then_publish}>dict_then_publish</button>
 <button data-k="attribute_only" onclick={attribute_only}>attribute_only</button>
 <button data-k="attribute_and_publish" onclick={attribute_and_publish}>attribute_and_publish</button>
