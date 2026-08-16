@@ -59,14 +59,67 @@ Le code généré vit dans un module séparé parce que **Svelte interdit le pr�
 codegen Brython ouvre sur `var $B = __BRYTHON__`. Un IIFE ne suffit pas ; il
 faut un fichier que Svelte ne parse pas.
 
+## Réactivité : un signal par nom
+
+Le namespace n'est **pas** un proxy `$state`. Svelte proxifierait alors chaque
+valeur Python qu'on y range, et un objet Brython proxifié échoue à ses propres
+vérifications de type — `repr((1, 2))` lève « descriptor `__repr__` requires a
+'tuple' object but received a 'tuple' ». À la place, chaque nom de niveau module
+reçoit son propre `$state.raw`, publié vers Brython par un accesseur : les
+valeurs Python restent opaques à Svelte.
+
+Conséquence à connaître : **c'est la réaffectation d'un nom qui est réactive**,
+pas la mutation en place d'une valeur.
+
+```python
+count += 1          # réactif — réaffecte `count`
+items = items + [x] # réactif — réaffecte `items`
+items.append(x)     # PAS réactif — mute sans réaffecter
+box.value += 1      # PAS réactif — mute un attribut
+```
+
+Les accesseurs vivent sur le **prototype** du namespace, jamais sur l'objet
+lui-même : réaffecter un global émet `$B.delete_for_reassign(name, locals)`, et
+un `delete` sur un accesseur propre le supprimerait définitivement — le signal
+se débranchait silencieusement après la première écriture.
+
+## Stdlib : seulement ce qui est importé
+
+`py2js()` expose les imports du composant, et le VFS de Brython porte déjà le
+graphe de dépendances (`[ext, source, deps, is_package]`). La fermeture
+transitive est donc exacte, et seule elle entre dans le bundle :
+
+| | |
+|---|---|
+| `import sys` → modules embarqués | `sys`, `browser` |
+| poids embarqué | **7,2 Ko** |
+| stdlib complète | 4,6 Mo |
+| | **652× plus petit** |
+
+`vendor/brython_stdlib.js` sert de source au build et n'est jamais expédié.
+C'est le même mécanisme qui accueillera les `.wasm` de Wasthon.
+
 ## État
 
-Validé par les tests (`npm test`) :
+Validé par `npm test` — 11 tests, plus 1 échec attendu (voir plus bas) :
 
-- réactivité de bout en bout — un `global count` en Python met le DOM à jour ;
-- vraie sémantique CPython — `-7 // 2 == -4` (JS donnerait `-3`), `2 ** 70`
-  exact (JS donnerait `1.1805916207174113e+21`), `sorted(set)` ;
+- réactivité de bout en bout, et quels chemins d'écriture propagent ;
+- **grille de fidélité sémantique** : entiers, texte, protocoles, flot de
+  contrôle et frames. Chaque valeur attendue a été produite par CPython 3.12 en
+  exécutant le code du composant tel quel, jamais écrite à la main. Brython
+  reproduit CPython sur **39 des 40 points** ;
 - build de production : **233 Ko gzip**, runtime Brython compris.
+
+La grille sert de banc d'acceptation aux codegens optimisés (wasthonf) : un
+codegen qui supprime les cadres d'appel casse `Frames`, qui déballe les entiers
+casse `Integers`, qui court-circuite `augm_assign` casse `Protocols`.
+
+### Divergence connue
+
+Une seule, signalée par un `test.fails` qui alertera le jour où elle sera
+corrigée : la variable d'une compréhension **fuit dans la portée module**
+(`[q for q in range(3)]` laisse `q` défini), alors que Python 3 lui donne une
+portée propre.
 
 ## Reste à faire
 
@@ -76,10 +129,13 @@ Validé par les tests (`npm test`) :
   l'arité déclarée en Python, ce qui fait marcher `onclick` sans que Python
   reçoive l'événement. Une vraie politique (`$B.jsobj2pyobj` à la demande, ou
   sur décorateur) reste à choisir.
-- **Wasthon.** `py2js()` expose déjà la liste des imports du composant
-  (`root.imports`). De quoi n'expédier que les `.wasm` réellement importés et
-  les faire entrer dans le graphe d'assets de Vite — préchargés et hashés — au
-  lieu d'être découverts au runtime.
+- **Wasthon.** Le tree-shaking de la stdlib est en place ; reste à y brancher
+  les `.wasm`, pour qu'ils entrent dans le graphe d'assets de Vite — préchargés
+  et hashés — au lieu d'être découverts au runtime par un `await import(url)`
+  invisible au bundler.
+- **Mutations en place.** Les rendre réactives demanderait d'observer les
+  valeurs, ce que le proxy `$state` interdit ici. Piste : un décorateur Python
+  qui republie explicitement, ou un type liste réactif fourni par SVELTHON.
 - **`__file__`.** Brython dérive son identifiant de namespace du `filename` et
   ne neutralise que les `.`, pas les `/` : un chemin réel produit
   `locals_src/Counter_svelte`, du JS invalide. On passe donc un nom aplati, au

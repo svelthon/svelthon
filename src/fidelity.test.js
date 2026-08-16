@@ -1,0 +1,171 @@
+import { test, expect, describe } from 'vitest';
+import { mount, flushSync } from 'svelte';
+
+import Integers from './fidelity/Integers.svelte';
+import Text from './fidelity/Text.svelte';
+import Protocols from './fidelity/Protocols.svelte';
+import Flow from './fidelity/Flow.svelte';
+import Frames from './fidelity/Frames.svelte';
+import Mutations from './fidelity/Mutations.svelte';
+
+// Grille de fidélité sémantique.
+//
+// Chaque valeur attendue a été produite par CPython 3.12 en exécutant le code
+// Python du composant tel quel (`python3 fichier.py`) — jamais écrite à la main.
+// Un codegen qui optimise trop casse ces lignes avant tout le reste : supprimer
+// les frames tue `Frames`, déballer les entiers tue `Integers`, court-circuiter
+// `augm_assign` tue `Protocols`.
+
+function render(Component) {
+    const target = document.body.appendChild(document.createElement('div'));
+    mount(Component, { target });
+    return target;
+}
+
+function report(Component) {
+    const text = render(Component).querySelector('pre').textContent;
+    return Object.fromEntries(
+        text.split('\n').map((line) => {
+            const cut = line.indexOf('=');
+            return [line.slice(0, cut), line.slice(cut + 1)];
+        })
+    );
+}
+
+describe('entiers — canari du déballage', () => {
+    test('précision arbitraire et division euclidienne', () => {
+        expect(report(Integers)).toEqual({
+            big: '1180591620717411303424',
+            mul: '9223372037000250000',
+            floor: '-4',
+            mod: '1',
+            dm: '(-4, 1)',
+            tdiv: '3.5',
+            shift: '1267650600228229401496703205376',
+            negpow: '-8',
+            inexact: '0.30000000000000004'
+        });
+    });
+});
+
+describe('texte — canari de la représentation des chaînes', () => {
+    test('unicode, tranches et mini-langage de format', () => {
+        expect(report(Text)).toEqual({
+            emoji_len: '1',
+            emoji_ord: '128512',
+            rev: "'édcba'",
+            last: "'l'",
+            prec: "'3.14'",
+            pad: "'   42'",
+            sign: "'+7'",
+            sharp: "'STRASSE'",
+            joined: "'abricot, banane, pomme'",
+            mult: "'ababab'"
+        });
+    });
+});
+
+describe('protocoles — canari des raccourcis de dispatch', () => {
+    test('opérateurs, descripteurs et slots', () => {
+        expect(report(Protocols)).toEqual({
+            inplace: 'Acc(21)',
+            plain: 'Acc(3)',
+            radd: "'radd(1)'",
+            prop: '42',
+            fallback: "'missing:nope'",
+            length: '3',
+            item: '8',
+            slots: "'AttributeError'"
+        });
+    });
+});
+
+describe('flot de contrôle', () => {
+    test('générateurs, fermetures, finally et chaînage d’exceptions', () => {
+        const { leaked, ...rest } = report(Flow);
+
+        expect(rest).toEqual({
+            squares: '[0, 1, 4, 9]',
+            genexp: '30',
+            late: '[2, 2, 2]',
+            nl: '2',
+            ret: "'ret'",
+            flow: "'try,finally'",
+            cause: "'ZeroDivisionError'"
+        });
+    });
+
+    // Divergence Brython connue, pas une régression de SVELTHON : la variable
+    // d'une compréhension fuit dans la portée module, alors que Python 3 lui
+    // donne une portée propre. Ce test passe *parce qu'il échoue* ; le jour où
+    // Brython corrige, vitest le signalera.
+    test.fails('la variable de compréhension ne doit pas fuir', () => {
+        expect(report(Flow).leaked).toBe('False');
+    });
+});
+
+describe('frames — canari de la suppression des cadres d’appel', () => {
+    test('introspection et profondeur de traceback', () => {
+        expect(report(Frames)).toEqual({
+            name: "'own_name'",
+            caller: "'outer'",
+            delta: '1',
+            depth: '4',
+            msg: "'deep'"
+        });
+    });
+});
+
+// Ce bloc ne teste pas Python mais SVELTHON lui-même : quelles écritures Python
+// déclenchent un rendu. Un signal par nom de module ⇒ c'est le *rebinding* d'un
+// nom qui est réactif, jamais la mutation en place d'une valeur.
+describe('réactivité — quelles écritures Python propagent', () => {
+    const setup = () => {
+        const target = render(Mutations);
+        const read = (k) => target.querySelector(`p[data-k="${k}"]`).textContent;
+        const click = (k) => {
+            target.querySelector(`button[data-k="${k}"]`).click();
+            flushSync();
+        };
+        return { read, click };
+    };
+
+    test('réaffecter un nom propage', () => {
+        const { read, click } = setup();
+
+        expect(read('count')).toBe('0');
+        click('rebind');
+        expect(read('count')).toBe('1');
+        click('augment'); // `global count; count += 10` est aussi une réaffectation
+        expect(read('count')).toBe('11');
+    });
+
+    test('réaffecter une liste propage', () => {
+        const { read, click } = setup();
+
+        const before = read('items');
+        click('rebind_list');
+        expect(read('items')).not.toBe(before);
+    });
+
+    test('muter en place ne propage pas — limitation assumée', () => {
+        const { read, click } = setup();
+
+        const before = read('items');
+        click('mutate_only');
+        expect(read('items')).toBe(before);
+
+        click('attribute_only');
+        expect(read('depth')).toBe('0');
+    });
+
+    test('muter puis publier propage', () => {
+        const { read, click } = setup();
+
+        click('mutate_and_publish');
+        expect(read('size')).toBe('1');
+
+        click('attribute_and_publish');
+        expect(read('depth')).toBe('1');
+    });
+});

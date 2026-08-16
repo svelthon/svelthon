@@ -2,7 +2,7 @@ import { createRequire } from 'node:module';
 import { relative } from 'node:path';
 
 const require = createRequire(import.meta.url);
-const { compile, VIRTUAL_PREFIX } = require('./compile.cjs');
+const { compile, VIRTUAL_PREFIX, VFS_PREFIX } = require('./compile.cjs');
 
 // Generated modules, keyed by component name. Filled by the preprocessor when
 // Svelte transforms a component, read back when Vite resolves the import that
@@ -22,8 +22,10 @@ export function python() {
             if (attributes.lang !== 'python') return;
 
             const name = nameFor(filename);
-            const { script, module } = compile(content, name);
-            generated.set(name, module);
+            const { script, module, stdlib } = compile(content, name);
+
+            generated.set(VIRTUAL_PREFIX + name, module);
+            if (stdlib) generated.set(VFS_PREFIX + name, stdlib);
 
             return { code: script };
         }
@@ -32,15 +34,15 @@ export function python() {
 
 // The Vite plugin that serves those modules.
 export function svelthon() {
-    const resolved = '\0' + VIRTUAL_PREFIX;
+    const isVirtual = (id) => id.startsWith(VIRTUAL_PREFIX) || id.startsWith(VFS_PREFIX);
 
     return {
         name: 'svelthon:modules',
         resolveId(id) {
-            if (id.startsWith(VIRTUAL_PREFIX)) return '\0' + id;
+            if (isVirtual(id)) return '\0' + id;
         },
         load(id) {
-            if (id.startsWith(resolved)) return generated.get(id.slice(resolved.length));
+            if (id.startsWith('\0')) return generated.get(id.slice(1));
         }
     };
 }
