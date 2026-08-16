@@ -267,6 +267,21 @@ Un composant qui *consomme* un store sans avoir de Python à lui reçoit quand
 même les réécritures de gabarit et `py` en portée — sinon `{store.history}`
 retomberait sur le rendu JavaScript.
 
+Le pont va dans les deux sens : le Python d'un composant importe le store comme
+un module Python ordinaire et atteint les mêmes signaux.
+
+```python
+import counter_store
+
+def bump():
+    counter_store.increment()
+    return counter_store.count
+```
+
+Le namespace du store est publié dans `$B.imported` sous son nom de module, et
+le module virtuel du composant importe le store en tête — pour qu'il soit
+enregistré avant que le corps du composant ne tourne.
+
 Le plugin est en `enforce: 'pre'` : sans ça, le résolveur de Vite réclame
 `./store.py` comme un fichier ordinaire et livre son Python au parseur JS.
 
@@ -326,7 +341,7 @@ C'est le même mécanisme qui accueillera les `.wasm` de Wasthon.
 
 ## État
 
-Validé par `npm test` — 44 tests, plus 1 échec attendu (voir plus bas) :
+Validé par `npm test` — 46 tests, plus 1 échec attendu (voir plus bas) :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
 - props : défaut Python, priorité du parent, lisibilité pendant l'init,

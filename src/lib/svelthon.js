@@ -1,6 +1,7 @@
 import { createRequire } from 'node:module';
 import { relative, resolve, dirname } from 'node:path';
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
 
 const require = createRequire(import.meta.url);
 const { compile, VIRTUAL_PREFIX, VFS_PREFIX } = require('./compile.cjs');
@@ -172,9 +173,23 @@ export function python() {
             }
 
             const name = nameFor(filename);
-            const { script, module, stdlib } = compile(content, name, relative(process.cwd(), filename || "Component"));
+            const { script, module, stdlib, imports } = compile(
+                content,
+                name,
+                relative(process.cwd(), filename || 'Component')
+            );
 
-            generated.set(VIRTUAL_PREFIX + name, module);
+            // `import counter_store` in a component resolves to a sibling .py.
+            // The store module has to be evaluated before init() runs, so its
+            // namespace is registered by the time Brython looks it up.
+            const stores = imports
+                .map((mod) => join(dirname(filename || '.'), `${mod}.py`))
+                .filter((path) => existsSync(path));
+
+            generated.set(
+                VIRTUAL_PREFIX + name,
+                stores.map((path) => `import ${JSON.stringify(path)};`).join('\n') + '\n' + module
+            );
             if (stdlib) generated.set(VFS_PREFIX + name, stdlib);
 
             return { code: script };

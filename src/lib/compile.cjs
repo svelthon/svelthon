@@ -34,6 +34,9 @@ const NS = '__py';
 // instead of producing a component with no reactivity at all.
 const namespaceCall = (name) => `$B.namespace('${name}')`;
 
+// `src/lib/counter_store.py` → `counter_store`, the name Python will import it by.
+const pythonModuleName = (source) => source.split('/').pop().replace(/\.py$/, '');
+
 // Python identifiers that JavaScript will not accept as bindings. They stay
 // perfectly usable inside the component's Python; they simply are not published
 // to the template.
@@ -185,7 +188,7 @@ function compile(src, name = 'Component', source = name, { store = false } = {})
         `import { init } from ${JSON.stringify(virtualId(name))};`,
         // `py` backs the rewritten conditions, and is available to the template
         // for explicit conversions: {py.str(items)} renders ['a', 'b'].
-        `import { bind, py, republish, pyError, NONE } from 'svelthon/runtime';`,
+        `import { bind, py, republish, pyError, NONE${store ? ', registerModule' : ''} } from 'svelthon/runtime';`,
         ...(lifecycle('on_mount') || lifecycle('on_destroy')
             ? [`import { untrack } from 'svelte';`]
             : []),
@@ -248,6 +251,8 @@ function compile(src, name = 'Component', source = name, { store = false } = {})
         ),
         ...(store
             ? [
+                  ``,
+                  `registerModule(${JSON.stringify(pythonModuleName(source))}, ${NS});`,
                   ``,
                   // Module-scope signals live once for the whole app. Exported
                   // through getters because Svelte forbids exporting a reassigned

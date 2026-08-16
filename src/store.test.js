@@ -2,6 +2,7 @@ import { test, expect } from 'vitest';
 import { mount, unmount, flushSync } from 'svelte';
 import StoreA from './fidelity/StoreA.svelte';
 import StoreB from './fidelity/StoreB.svelte';
+import StoreFromPython from './fidelity/StoreFromPython.svelte';
 
 // Un store est du Python au niveau module : ses signaux existent une fois pour
 // toute l'application, là où l'état d'un composant naît et meurt avec chaque
@@ -43,4 +44,22 @@ test('l’état d’un store survit au démontage', () => {
     mount(StoreB, { target: second });
     second.querySelector('button[data-k="reset"]').click();
     flushSync();
+});
+
+// Le pont dans l'autre sens : le Python d'un composant importe le store et
+// atteint les mêmes signaux que le gabarit.
+test('le Python d’un composant importe le store', () => {
+    const t = document.body.appendChild(document.createElement('div'));
+    mount(StoreB, { target: t });
+    mount(StoreFromPython, { target: t });
+
+    t.querySelector('button[data-k="reset"]').click();
+    flushSync();
+    expect(t.querySelector('p[data-k="b"]').textContent).toBe('B:0');
+
+    t.querySelector('button[data-k="bump"]').click();
+    flushSync();
+
+    expect(t.querySelector('p[data-k="seen"]').textContent).toBe('2'); // lu depuis Python
+    expect(t.querySelector('p[data-k="b"]').textContent).toBe('B:2');  // vu par l'autre composant
 });

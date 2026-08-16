@@ -121,6 +121,16 @@ export function pyError(error, where) {
     return error;
 }
 
+// A store's namespace, published under its Python module name, so a component's
+// own Python can `import counter_store` and reach the very same signals the
+// template reads. Without it the bridge would only run one way.
+export function registerModule(name, namespace) {
+    const $B = globalThis.__BRYTHON__;
+
+    namespace.__name__ = name;
+    $B.imported[name] = namespace;
+}
+
 // Hand Brython our namespace instead of the one it would have made for itself.
 //
 // The codegen opens every module body with `locals_X = $B.namespace('X')`, so
