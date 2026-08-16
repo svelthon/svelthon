@@ -1,0 +1,55 @@
+import { test, expect, describe } from 'vitest';
+import { mount, flushSync } from 'svelte';
+import Greeting from './Greeting.svelte';
+import PropsHost from './fidelity/PropsHost.svelte';
+
+// Une annotation déclare un prop, une affectation nue de l'état interne :
+//     name: str          → prop requis
+//     punct: str = "!"   → prop avec défaut
+//     greeting = "..."   → état interne
+
+function render(Component, props) {
+    const target = document.body.appendChild(document.createElement('div'));
+    mount(Component, { target, props });
+    return (k) => target.querySelector(`p[data-k="${k}"]`).textContent;
+}
+
+describe('props', () => {
+    test('le défaut Python s’applique quand le parent ne passe rien', () => {
+        expect(render(Greeting, { name: 'Pierre' })('line')).toBe('Bonjour Pierre!');
+    });
+
+    test('la valeur du parent l’emporte sur le défaut', () => {
+        expect(render(Greeting, { name: 'Pierre', punct: '?' })('line')).toBe('Bonjour Pierre?');
+    });
+
+    test('un prop est lisible pendant l’exécution du corps du module', () => {
+        expect(render(Greeting, { name: 'Ada' })('initial')).toBe('Bonjour Ada');
+    });
+
+    test('un prop requis non fourni vaut None, pas undefined', () => {
+        expect(render(Greeting, {})('line')).toBe('Bonjour None!');
+    });
+
+    test('l’état interne reste réactif à côté des props', () => {
+        const target = document.body.appendChild(document.createElement('div'));
+        mount(Greeting, { target, props: { name: 'Pierre' } });
+
+        target.querySelector('button').click();
+        flushSync();
+
+        expect(target.querySelector('p[data-k="line"]').textContent).toBe('BONJOUR Pierre!');
+    });
+
+    test('une mise à jour du parent traverse jusqu’au Python', () => {
+        const target = document.body.appendChild(document.createElement('div'));
+        mount(PropsHost, { target });
+
+        expect(target.querySelector('p[data-k="line"]').textContent).toBe('Bonjour Pierre!');
+
+        target.querySelector('button[data-k="rename"]').click();
+        flushSync();
+
+        expect(target.querySelector('p[data-k="line"]').textContent).toBe('Bonjour Ada!');
+    });
+});

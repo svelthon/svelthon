@@ -1,6 +1,9 @@
 <script>
     import Counter from './Counter.svelte';
     import Semantics from './Semantics.svelte';
+    import Greeting from './Greeting.svelte';
+
+    let who = $state('Pierre');
 </script>
 
 <main>
@@ -9,6 +12,10 @@
 
     <h2>Réactivité</h2>
     <Counter />
+
+    <h2>Props</h2>
+    <Greeting name={who} punct="…" />
+    <button onclick={() => (who = who === 'Pierre' ? 'Ada' : 'Pierre')}>changer de nom</button>
 
     <h2>Sémantique Python</h2>
     <Semantics />

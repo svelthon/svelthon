@@ -42,6 +42,7 @@ yield arguments eval`.split(/\s+/));
 // Module-level names, read off the AST rather than the generated JS — the
 // codegen mangles function names (`increment941818`) but the AST has the truth.
 function surface(body) {
+    const props = [];
     const state = [];
     const funcs = [];
     const seen = new Set();
@@ -58,7 +59,10 @@ function surface(body) {
                 if (target instanceof $B.ast.Name && take(target.id)) state.push(target.id);
             }
         } else if (node instanceof $B.ast.AnnAssign) {
-            if (node.target instanceof $B.ast.Name && take(node.target.id)) state.push(node.target.id);
+            // An annotation is a declaration of interface, like a dataclass
+            // field: `name: str` is a prop, `count: int = 0` a prop with a
+            // default. A bare assignment stays internal state.
+            if (node.target instanceof $B.ast.Name && take(node.target.id)) props.push(node.target.id);
         } else if (node instanceof $B.ast.FunctionDef) {
             if (take(node.name)) {
                 funcs.push({ name: node.name, arity: (node.args && node.args.args || []).length });
@@ -66,7 +70,7 @@ function surface(body) {
         }
     }
 
-    return { state, funcs };
+    return { props, state, funcs };
 }
 
 // Transitive closure of a component's imports over the build-time stdlib.
@@ -103,7 +107,7 @@ function compile(src, name = 'Component') {
     // cost is that Python's __file__ says "Counter" rather than the full path.
     const root = $B.py2js({ src, filename: name }, name, [name]);
     const js = root.to_js();
-    const { state, funcs } = surface(root._ast.body);
+    const { props, state, funcs } = surface(root._ast.body);
 
     if (!NAMESPACE_DECL.test(js)) {
         throw new Error(`svelthon: no Brython namespace found in the code generated for ${name}`);
@@ -139,19 +143,39 @@ function compile(src, name = 'Component') {
     // reactivity tracks *rebinding a name* — which is what `count = …` and
     // `global count; count += 1` both do.
     const fn = (name) => `__fn_${name}`;
+    const local = (name) => `__local_${name}`;
 
     const script = [
         `import { init } from ${JSON.stringify(virtualId(name))};`,
-        `import { bind } from 'svelthon/runtime';`,
+        `import { bind, NONE } from 'svelthon/runtime';`,
         ``,
+        ...(props.length ? [`const __props = $props();`, ``] : []),
+        // A prop's value comes from the parent when it was passed, and from the
+        // annotation's default otherwise — the default being whatever the Python
+        // body assigned during init(). Reading __props keeps it reactive, so a
+        // parent update flows into Python's namespace on the next read.
+        ...props.flatMap((n) => [
+            `let ${local(n)} = $state.raw(undefined);`,
+            `const ${n} = $derived(('${n}' in __props ? __props.${n} : ${local(n)}) ?? NONE);`
+        ]),
         ...state.map((n) => `let ${n} = $state.raw(undefined);`),
         ...funcs.map((f) => `let ${fn(f.name)} = $state.raw(undefined);`),
         ``,
         `const __proto = {};`,
+        // Python may write to a prop; the write lands in the local fallback and
+        // is shadowed for as long as the parent supplies a value, which is
+        // Svelte's own rule for non-bindable props.
+        ...props.map((n) => `bind(__proto, '${n}', () => ${n}, (v) => { ${local(n)} = v; });`),
         ...state.map((n) => `bind(__proto, '${n}', () => ${n}, (v) => { ${n} = v; });`),
         ...funcs.map((f) => `bind(__proto, '${f.name}', () => ${fn(f.name)}, (v) => { ${fn(f.name)} = v; });`),
         ``,
         `const ${NS} = Object.create(__proto);`,
+        // Reading a global goes through $B.resolve_global → resolve_in_namespace,
+        // which demands an *own* property unless the namespace is flagged
+        // $proxy — in which case it reads the property normally and therefore
+        // walks the prototype chain, where our accessors live. It is the only
+        // place in Brython that consults this flag.
+        `${NS}.$proxy = true;`,
         ``,
         `init(${NS});`,
         ``,

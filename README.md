@@ -59,6 +59,27 @@ Le code généré vit dans un module séparé parce que **Svelte interdit le pr�
 codegen Brython ouvre sur `var $B = __BRYTHON__`. Un IIFE ne suffit pas ; il
 faut un fichier que Svelte ne parse pas.
 
+## Props : l'annotation est l'interface
+
+Comme dans un dataclass — annoté, c'est public ; affecté, c'est interne.
+
+```python
+name: str          # prop requis
+punct: str = "!"   # prop avec défaut
+greeting = "Bonjour"   # état interne, invisible du parent
+```
+
+Un prop est lisible dès l'exécution du corps du module, une mise à jour du
+parent traverse jusqu'au Python, et un prop requis non fourni vaut `None` — pas
+`undefined`. Écrire dans un prop depuis Python n'a d'effet que si le parent n'en
+fournit pas : c'est la règle de Svelte pour les props non `$bindable`.
+
+La lecture d'un global passe par `$B.resolve_global`, qui exige une propriété
+**propre** sauf si le namespace porte le drapeau `$proxy` — auquel cas il lit la
+propriété normalement, donc en traversant le prototype. C'est le seul endroit de
+Brython qui consulte ce drapeau, et c'est ce qui rend l'astuce du prototype
+compatible avec les props.
+
 ## Réactivité : un signal par nom
 
 Le namespace n'est **pas** un proxy `$state`. Svelte proxifierait alors chaque
@@ -101,9 +122,11 @@ C'est le même mécanisme qui accueillera les `.wasm` de Wasthon.
 
 ## État
 
-Validé par `npm test` — 11 tests, plus 1 échec attendu (voir plus bas) :
+Validé par `npm test` — 17 tests, plus 1 échec attendu (voir plus bas) :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
+- props : défaut Python, priorité du parent, lisibilité pendant l'init,
+  propagation d'une mise à jour du parent jusqu'au Python ;
 - **grille de fidélité sémantique** : entiers, texte, protocoles, flot de
   contrôle et frames. Chaque valeur attendue a été produite par CPython 3.12 en
   exécutant le code du composant tel quel, jamais écrite à la main. Brython
@@ -123,8 +146,10 @@ portée propre.
 
 ## Reste à faire
 
-- **Props.** Prévu : une annotation sans valeur, comme un dataclass —
-  `name: str` devient un prop requis, `count: int = 0` un prop à défaut.
+- **Affichage des valeurs Python.** Svelte interpole avec `String()`, donc une
+  liste s'affiche `0,1` au lieu de `[0, 1]` et un dict `[object Object]`. Seul
+  `None` est traité. Corriger demanderait de distinguer, dans le gabarit, une
+  interpolation textuelle d'un passage de prop à un composant enfant.
 - **Interop des handlers.** Aujourd'hui les arguments JS sont tronqués à
   l'arité déclarée en Python, ce qui fait marcher `onclick` sans que Python
   reçoive l'événement. Une vraie politique (`$B.jsobj2pyobj` à la demande, ou
