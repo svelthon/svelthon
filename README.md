@@ -405,6 +405,20 @@ npm run dev          # page de démonstration
 npm run build
 ```
 
+### Deux réglages non évidents dans `vite.config.js`
+
+`optimizeDeps.entries: []` — le scanner de dépendances de Vite tourne **avant**
+le pipeline de plugins : il lit les entrées HTML, tombe sur
+`<script lang="python">` et livre le Python à un parseur JavaScript, puis
+échoue sur `./store.py`, qu'aucun fichier de ce nom n'est censé servir. Son
+unique rôle ici étant de découvrir les imports nus, on le court-circuite et on
+nomme le seul paquet qui mérite d'être pré-bundlé.
+
+`vendorQuirks()` — Brython charge des modules JS nommés depuis Python par un
+`import()` dont l'argument est une variable. Vite ne sait pas l'analyser et le
+dit à chaque démarrage ; le plugin marque ces appels d'un `@vite-ignore` à la
+volée, ce qui laisse le fichier vendu identique à l'amont.
+
 `vendor/brython.js` est une copie de `www/src/brython.js` (3.14 dev). Le dossier
 porte un `package.json` marqué `commonjs` : Node doit le charger comme script
 classique, alors que la racine est en `type: module`.

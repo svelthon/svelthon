@@ -23,11 +23,29 @@ REPORT=$(chromium --headless --no-sandbox --disable-gpu \
     --virtual-time-budget=8000 --dump-dom "$URL" 2>/dev/null |
     grep -o '<pre id="report">[^<]*' | sed 's|<pre id="report">||')
 
+status=0
+
 if [ "$REPORT" = "$EXPECTED" ]; then
     echo "✓ interop DOM en navigateur — $REPORT"
 else
     echo "✗ interop DOM"
     echo "  attendu : $EXPECTED"
     echo "  obtenu  : ${REPORT:-<vide>}"
-    exit 1
+    status=1
 fi
+
+# La démo entière, rendue pour de bon : réactivité, prop à défaut Python, store
+# partagé entre deux instances, et sémantique CPython.
+APP=$(chromium --headless --no-sandbox --disable-gpu \
+    --virtual-time-budget=9000 --dump-dom "http://localhost:$PORT/" 2>/dev/null)
+
+for expected in "compté 0 fois" "Bonjour Pierre…" "compteur partagé : 0 — []" "-4 · 1180591620717411303424"; do
+    if printf '%s' "$APP" | grep -qF -- "$expected"; then
+        echo "✓ démo — $expected"
+    else
+        echo "✗ démo — introuvable : $expected"
+        status=1
+    fi
+done
+
+exit $status

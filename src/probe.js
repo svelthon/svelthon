@@ -1,3 +1,4 @@
 import { mount } from 'svelte';
-import StoreDemo from './StoreDemo.svelte';
-mount(StoreDemo, { target: document.getElementById('app') });
+import DomProbe from './DomProbe.svelte';
+
+mount(DomProbe, { target: document.getElementById('app') });

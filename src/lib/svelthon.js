@@ -197,6 +197,20 @@ export function python() {
     };
 }
 
+// Brython loads JS modules named from Python at runtime, with an `import()`
+// whose argument is a variable. Vite cannot analyse that and says so, twice, on
+// every start. Marking the calls keeps the vendored file byte-identical to
+// upstream while silencing a warning that describes intended behaviour.
+export function vendorQuirks() {
+    return {
+        name: 'svelthon:vendor-quirks',
+        transform(code, id) {
+            if (!id.endsWith('vendor/brython.js')) return;
+            return { code: code.replace(/(^|[^.\w])import\(/g, '$1import(/* @vite-ignore */ '), map: null };
+        }
+    };
+}
+
 // A shared store is a plain .py file. It compiles to module-scope signals —
 // created once for the whole application, not per component instance — and is
 // served under a `.svelte.js` identity, which is what makes vite-plugin-svelte
@@ -255,13 +269,21 @@ export function svelthon() {
             const graph = this.environment.moduleGraph;
             const stale = [];
 
-            for (const prefix of [VIRTUAL_PREFIX, VFS_PREFIX]) {
-                const mod = graph.getModuleById('\0' + prefix + name);
+            const forget = (id) => {
+                const mod = graph.getModuleById(id);
                 if (mod) {
                     graph.invalidateModule(mod);
                     stale.push(mod);
                 }
-            }
+            };
+
+            for (const prefix of [VIRTUAL_PREFIX, VFS_PREFIX]) forget('\0' + prefix + name);
+
+            // A store's .py is watched, not imported: its compiled module is
+            // served under a different id, and unless that one is invalidated too
+            // its load() never reruns — leaving `generated` holding the previous
+            // body, exactly the staleness this hook exists to prevent.
+            if (file.endsWith('.py')) forget(file + STORE_SUFFIX);
 
             return [...modules, ...stale];
         }
