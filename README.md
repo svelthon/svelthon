@@ -228,7 +228,12 @@ du graphe Vite, que rien ne relie au `.svelte` qui l'a produit. Sans
 invalidation explicite, éditer le Python re-transforme le composant tout en
 continuant de servir **l'ancien corps généré** : la page se met à jour vers du
 code qui n'a pas changé. Le hook `hotUpdate` du plugin invalide les deux modules
-virtuels du composant, et `npm run test:hmr` le vérifie.
+virtuels du composant, et `npm run test:hmr` le vérifie sur les deux chemins.
+
+Un store passe par un chemin différent — `load()` plutôt que le préprocesseur —
+et souffrait du même mal en pire : son propre module `.svelte.js` devait être
+invalidé lui aussi, faute de quoi son `load()` ne rejouait jamais et le cache
+gardait l'ancien corps.
 
 ## État partagé : un simple fichier `.py`
 
@@ -350,7 +355,7 @@ Validé par `npm test` — 46 tests, plus 1 échec attendu (voir plus bas) :
   contrôle et frames. Chaque valeur attendue a été produite par CPython 3.12 en
   exécutant le code du composant tel quel, jamais écrite à la main. Brython
   reproduit CPython sur **39 des 40 points** ;
-- build de production : **242 Ko gzip**, runtime Brython compris.
+- build de production : **244 Ko gzip**, runtime Brython compris.
 
 La grille sert de banc d'acceptation aux codegens optimisés (wasthonf) : un
 codegen qui supprime les cadres d'appel casse `Frames`, qui déballe les entiers
@@ -395,7 +400,7 @@ portée propre.
 npm install
 npm test             # grille de fidélité, props, réactivité (jsdom)
 npm run test:browser # interop DOM, dans un vrai Chromium
-npm run test:hmr     # invalidation des modules virtuels
+npm run test:hmr     # invalidation des modules virtuels (composant + store)
 npm run dev          # page de démonstration
 npm run build
 ```
