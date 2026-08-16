@@ -7,6 +7,8 @@ import Protocols from './fidelity/Protocols.svelte';
 import Flow from './fidelity/Flow.svelte';
 import Frames from './fidelity/Frames.svelte';
 import Mutations from './fidelity/Mutations.svelte';
+import Template from './fidelity/Template.svelte';
+import Events from './fidelity/Events.svelte';
 
 // Grille de fidélité sémantique.
 //
@@ -113,6 +115,59 @@ describe('frames — canari de la suppression des cadres d’appel', () => {
             depth: '4',
             msg: "'deep'"
         });
+    });
+});
+
+// Dans un gabarit Svelte on est en JavaScript, pas en Python — et les deux
+// langages ne sont pas d'accord. JS tient tout objet pour vrai, donc `{#if}` sur
+// une liste vide, un dict vide ou None dirait vrai là où Python dit faux. Le
+// préprocesseur réécrit les conditions vers le bool() de Python.
+describe('gabarit — frontière Python/JavaScript', () => {
+    const cell = (k) => render(Template).querySelector(`[data-k="${k}"]`).textContent;
+
+    test('les valeurs vides sont fausses comme en Python', () => {
+        expect(cell('empty')).toBe('faux'); // []
+        expect(cell('empty_dict')).toBe('faux'); // {}
+        expect(cell('none')).toBe('faux'); // None
+        expect(cell('zero')).toBe('faux'); // 0
+        expect(cell('text')).toBe('faux'); // ""
+        expect(cell('items')).toBe('vrai'); // ["a", "b", "c"]
+    });
+
+    test('la réécriture tient sur {:else if} et les {#if} imbriqués', () => {
+        expect(cell('elseif')).toBe('b');
+        expect(cell('nested')).toBe('y');
+    });
+
+    test('{#each} itère nativement sur une liste Python', () => {
+        expect(cell('each')).toBe('abc');
+    });
+
+    test('py.str() rend les valeurs à la façon de Python', () => {
+        expect(cell('str_list')).toBe("['a', 'b', 'c']"); // JS dirait "a,b,c"
+        expect(cell('str_dict')).toBe("{'x': 1}"); // JS dirait "[object Object]"
+    });
+});
+
+describe('événements — la frontière avec le DOM', () => {
+    test('une valeur extraite dans le gabarit arrive en Python', () => {
+        const target = render(Events);
+        const input = target.querySelector('input');
+
+        input.value = 'bonjour';
+        input.dispatchEvent(new window.Event('input', { bubbles: true })); // Svelte délègue
+        flushSync();
+
+        expect(target.querySelector('p[data-k="typed"]').textContent).toBe('BONJOUR');
+    });
+
+    test('un handler qui déclare un paramètre reçoit l’événement emballé', () => {
+        const target = render(Events);
+
+        target.querySelector('button').click();
+        flushSync();
+
+        expect(target.querySelector('p[data-k="kind"]').textContent).toBe('DOMEvent');
     });
 });
 

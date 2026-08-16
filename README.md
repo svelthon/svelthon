@@ -80,6 +80,39 @@ propriété normalement, donc en traversant le prototype. C'est le seul endroit 
 Brython qui consulte ce drapeau, et c'est ce qui rend l'astuce du prototype
 compatible avec les props.
 
+## Le gabarit est du JavaScript
+
+Règle à retenir : dans le balisage on est en JS, pas en Python. Deux
+conséquences, dont une corrigée automatiquement.
+
+`{#if}` est **réécrit** vers le `bool()` de Python par le préprocesseur — sinon
+une liste vide, un dict vide ou `None` seraient vrais, puisque JS tient tout
+objet pour vrai. `{#each}` fonctionne nativement : une liste Brython *est* un
+tableau JS.
+
+L'interpolation reste JS : `{items}` affiche `a,b,c` là où Python dirait
+`['a', 'b', 'c']`. D'où `py.str()`, injecté dans tout composant Python :
+
+```svelte
+{#if items}          <!-- réécrit en py.truthy(items) -->
+  {py.str(items)}    <!-- ['a', 'b', 'c'] -->
+{/if}
+```
+
+Pour les événements, le motif recommandé est d'extraire dans le gabarit et de
+calculer en Python :
+
+```svelte
+<input oninput={(e) => on_text(e.target.value)} />
+```
+
+Un handler qui déclare un paramètre reçoit bien l'événement emballé
+(`DOMEvent`), mais **traverser le DOM depuis Python** (`event.target.value`)
+exige `$B.imported['browser.html']`, que seul un vrai `import` enregistre : le
+composant doit alors faire `from browser import html`. On ne peut pas le
+pré-importer au boot — `$B.$import` lit `$B.frame_obj`, nul tant qu'aucun corps
+de module n'a tourné.
+
 ## Réactivité : un signal par nom
 
 Le namespace n'est **pas** un proxy `$state`. Svelte proxifierait alors chaque

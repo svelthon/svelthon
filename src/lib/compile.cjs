@@ -37,7 +37,8 @@ const NAMESPACE_DECL = /(locals_\w+) = \$B\.namespace\((['"]).*?\2\)/;
 const JS_RESERVED = new Set(`break case catch class const continue debugger default delete do else
 enum export extends false function if implements in instanceof interface let new null package
 private protected public return static super switch this throw true typeof var void while with
-yield arguments eval`.split(/\s+/));
+yield arguments eval
+py`.split(/\s+/));
 
 // Module-level names, read off the AST rather than the generated JS — the
 // codegen mangles function names (`increment941818`) but the AST has the truth.
@@ -147,7 +148,9 @@ function compile(src, name = 'Component') {
 
     const script = [
         `import { init } from ${JSON.stringify(virtualId(name))};`,
-        `import { bind, NONE } from 'svelthon/runtime';`,
+        // `py` backs the rewritten conditions, and is available to the template
+        // for explicit conversions: {py.str(items)} renders ['a', 'b'].
+        `import { bind, py, NONE } from 'svelthon/runtime';`,
         ``,
         ...(props.length ? [`const __props = $props();`, ``] : []),
         // A prop's value comes from the parent when it was passed, and from the

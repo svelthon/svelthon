@@ -18,6 +18,45 @@ Object.defineProperty(NONE, 'toString', {
     configurable: true
 });
 
+const _b_ = globalThis.__BRYTHON__.builtins;
+
+// Inside a Svelte template you are in JavaScript, not Python — and the two
+// disagree. `py` is the bridge, injected into every component that uses
+// `<script lang="python">`.
+export const py = {
+    // JS calls every object truthy, so `{#if items}` would be true for an empty
+    // list, an empty dict, or None. Conditions are rewritten to go through this.
+    truthy(value) {
+        if (value === undefined || value === null) return false;
+        // str/int/float/bool are JS primitives in Brython, and there the two
+        // languages already agree.
+        if (typeof value !== 'object' && typeof value !== 'function') return Boolean(value);
+        try {
+            return _b_.bool.$factory(value) === true;
+        } catch {
+            return Boolean(value);
+        }
+    },
+
+    // Python's str(), for interpolation: `['a', 'b']` rather than `a,b`.
+    str(value) {
+        if (value === undefined || value === null) return '';
+        try {
+            return _b_.str.$factory(value);
+        } catch {
+            return String(value);
+        }
+    },
+
+    repr(value) {
+        try {
+            return _b_.repr(value);
+        } catch {
+            return String(value);
+        }
+    }
+};
+
 // Expose one component-level signal as a property of the namespace Brython
 // writes into. Values pass through untouched — never wrapped, never proxied —
 // which is the point: a Svelte state proxy around a Brython object breaks its
