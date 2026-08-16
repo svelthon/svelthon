@@ -112,7 +112,7 @@ export function pyError(error, where) {
     }
 
     try {
-        error.message = `${described}  (${where})`;
+        error.message = `${described} (${where})`;
         if (error.stack === undefined) error.stack = `${error.message}\n    at ${where}`;
     } catch {
         /* exception figée : tant pis, on la relaie telle quelle */

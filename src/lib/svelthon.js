@@ -157,7 +157,7 @@ export function python() {
             if (attributes.lang !== 'python') return;
 
             const name = nameFor(filename);
-            const { script, module, stdlib } = compile(content, name);
+            const { script, module, stdlib } = compile(content, name, relative(process.cwd(), filename || "Component"));
 
             generated.set(VIRTUAL_PREFIX + name, module);
             if (stdlib) generated.set(VFS_PREFIX + name, stdlib);

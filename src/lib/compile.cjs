@@ -166,6 +166,11 @@ function compile(src, name = 'Component', source = name) {
     const fn = (name) => `__fn_${name}`;
     const local = (name) => `__local_${name}`;
 
+    // Lifecycle by convention, mapped onto a single $effect: its body runs once
+    // after the DOM exists, its teardown when the component goes away. Both
+    // names stay ordinary functions — nothing stops Python calling them too.
+    const lifecycle = (hook) => funcs.some((f) => f.name === hook);
+
     // A component free to define its own `publish` keeps it.
     const hasPublish = [...props, ...state, ...funcs.map((f) => f.name)].includes('publish');
 
@@ -174,6 +179,9 @@ function compile(src, name = 'Component', source = name) {
         // `py` backs the rewritten conditions, and is available to the template
         // for explicit conversions: {py.str(items)} renders ['a', 'b'].
         `import { bind, py, republish, pyError, NONE } from 'svelthon/runtime';`,
+        ...(lifecycle('on_mount') || lifecycle('on_destroy')
+            ? [`import { untrack } from 'svelte';`]
+            : []),
         ``,
         ...(props.length ? [`const __props = $props();`, ``] : []),
         // A prop's value comes from the parent when it was passed, and from the
@@ -230,7 +238,32 @@ function compile(src, name = 'Component', source = name) {
             (f) =>
                 `const ${f.name} = (...a) => { try { return ${fn(f.name)}(...a.slice(0, ${f.arity})); }` +
                 ` catch (err) { throw pyError(err, ${JSON.stringify(`${f.name}() — ${source}`)}); } };`
-        )
+        ),
+        ...(lifecycle('on_mount') || lifecycle('on_destroy')
+            ? [
+                  ``,
+                  `$effect(() => {`,
+                  // untrack, because a hook reads the component's names through
+                  // the namespace accessors — and those reads are signal reads.
+                  // `mounts += 1` inside on_mount would otherwise make the effect
+                  // depend on state it also writes, and Svelte loops until it
+                  // gives up with effect_update_depth_exceeded.
+                  //
+                  // Captured while the component is alive, too: reading a signal
+                  // from a teardown, once destroyed, yields no function at all.
+                  ...(lifecycle('on_destroy')
+                      ? [`    const __teardown = untrack(() => ${fn('on_destroy')});`]
+                      : []),
+                  ...(lifecycle('on_mount') ? [`    untrack(() => on_mount());`] : []),
+                  ...(lifecycle('on_destroy')
+                      ? [
+                            `    return () => { try { __teardown(); }` +
+                                ` catch (err) { throw pyError(err, ${JSON.stringify(`on_destroy() — ${source}`)}); } };`
+                        ]
+                      : []),
+                  `});`
+              ]
+            : [])
     ].join('\n');
 
     // Only the modules this component actually imports reach the browser.

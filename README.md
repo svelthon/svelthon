@@ -230,6 +230,29 @@ continuant de servir **l'ancien corps généré** : la page se met à jour vers 
 code qui n'a pas changé. Le hook `hotUpdate` du plugin invalide les deux modules
 virtuels du composant, et `npm run test:hmr` le vérifie.
 
+## Cycle de vie
+
+Par convention de nom, adossé à un unique `$effect` :
+
+```python
+def on_mount():
+    ...   # après que le DOM existe
+
+def on_destroy():
+    ...   # au démontage, l'état final encore lisible
+```
+
+Les deux restent des fonctions ordinaires — Python peut les appeler aussi. Elles
+s'exécutent **hors suivi** (`untrack`) : un hook lit les noms du composant à
+travers les accesseurs du namespace, et ces lectures *sont* des lectures de
+signaux. Sans ça, un `mounts += 1` dans `on_mount` ferait dépendre l'effet d'un
+état qu'il écrit, et Svelte boucle jusqu'à `effect_update_depth_exceeded`. La
+fonction de nettoyage est capturée pendant que le composant est vivant : lire un
+signal depuis un teardown déjà détruit ne rend plus rien.
+
+Chaque instance a son propre namespace — le corps du module Python est
+ré-exécuté à chaque montage, défauts mutables compris.
+
 ## Erreurs
 
 Une exception Brython arrive en JavaScript **sans `message` ni `stack`** : les
@@ -263,7 +286,7 @@ C'est le même mécanisme qui accueillera les `.wasm` de Wasthon.
 
 ## État
 
-Validé par `npm test` — 39 tests, plus 1 échec attendu (voir plus bas) :
+Validé par `npm test` — 43 tests, plus 1 échec attendu (voir plus bas) :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
 - props : défaut Python, priorité du parent, lisibilité pendant l'init,
