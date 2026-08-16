@@ -92,6 +92,33 @@ export function svelthon() {
         },
         load(id) {
             if (id.startsWith('\0')) return generated.get(id.slice(1));
+        },
+
+        // A component's generated code lives in its own module, which Vite has
+        // no reason to tie to the .svelte file that produced it. Without
+        // this, editing the Python re-transforms the component but keeps
+        // serving the previous generated body: the page updates to code that
+        // never changed.
+        //
+        // Order holds on its own — the browser refetches the component first,
+        // which re-runs the preprocessor and refreshes `generated`, and only
+        // then follows its import to the virtual module.
+        hotUpdate({ file, modules }) {
+            const name = nameFor(file);
+            if (!generated.has(VIRTUAL_PREFIX + name)) return;
+
+            const graph = this.environment.moduleGraph;
+            const stale = [];
+
+            for (const prefix of [VIRTUAL_PREFIX, VFS_PREFIX]) {
+                const mod = graph.getModuleById('\0' + prefix + name);
+                if (mod) {
+                    graph.invalidateModule(mod);
+                    stale.push(mod);
+                }
+            }
+
+            return [...modules, ...stale];
         }
     };
 }

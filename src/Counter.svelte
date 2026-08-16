@@ -1,5 +1,5 @@
 <script lang="python">
-count = 0
+count = 7
 
 def increment():
     global count

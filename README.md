@@ -107,12 +107,24 @@ calculer en Python :
 <input oninput={(e) => on_text(e.target.value)} />
 ```
 
-Un handler qui déclare un paramètre reçoit bien l'événement emballé
-(`DOMEvent`), mais **traverser le DOM depuis Python** (`event.target.value`)
-exige `$B.imported['browser.html']`, que seul un vrai `import` enregistre : le
-composant doit alors faire `from browser import html`. On ne peut pas le
-pré-importer au boot — `$B.$import` lit `$B.frame_obj`, nul tant qu'aucun corps
-de module n'a tourné.
+Traverser le DOM depuis Python fonctionne aussi, à une ligne près : la classe
+d'un nœud se résout via `$B.imported['browser.html']`, que seul un vrai `import`
+enregistre.
+
+```python
+from browser import html, document
+
+el = document.createElement("input")   # → INPUT
+```
+
+On ne peut pas le pré-importer au boot (`$B.$import` lit `$B.frame_obj`, nul
+tant qu'aucun corps de module n'a tourné), et l'injecter d'office dans tout
+composant à handler paramétré coûterait une classe par balise HTML à des
+composants qui ne touchent jamais au DOM.
+
+**jsdom se bloque sur cet import**, alors qu'un navigateur ne bronche pas. D'où
+`npm run test:browser`, qui rejoue la vérification dans un Chromium headless —
+la seule partie du projet que la suite jsdom ne peut pas couvrir.
 
 ## Réactivité : un signal par nom
 
@@ -150,6 +162,15 @@ Les accesseurs vivent sur le **prototype** du namespace, jamais sur l'objet
 lui-même : réaffecter un global émet `$B.delete_for_reassign(name, locals)`, et
 un `delete` sur un accesseur propre le supprimerait définitivement — le signal
 se débranchait silencieusement après la première écriture.
+
+## HMR
+
+Le code généré d'un composant vit dans un module virtuel — une entrée distincte
+du graphe Vite, que rien ne relie au `.svelte` qui l'a produit. Sans
+invalidation explicite, éditer le Python re-transforme le composant tout en
+continuant de servir **l'ancien corps généré** : la page se met à jour vers du
+code qui n'a pas changé. Le hook `hotUpdate` du plugin invalide les deux modules
+virtuels du composant, et `npm run test:hmr` le vérifie.
 
 ## Stdlib : seulement ce qui est importé
 
@@ -221,8 +242,10 @@ portée propre.
 
 ```sh
 npm install
-npm test        # les deux suites de validation
-npm run dev     # page de démonstration
+npm test             # grille de fidélité, props, réactivité (jsdom)
+npm run test:browser # interop DOM, dans un vrai Chromium
+npm run test:hmr     # invalidation des modules virtuels
+npm run dev          # page de démonstration
 npm run build
 ```
 
