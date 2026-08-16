@@ -28,10 +28,18 @@ locals_Counter = $B.namespace('Counter')
 locals_Counter.count = 0
 ```
 
-Il y a donc **un seul point à intercepter**. On substitue à ce namespace un
-objet dont chaque nom est un accesseur vers un signal Svelte, et chaque
-affectation que le codegen émet déjà devient une écriture réactive. Le Python
-reste du Python nu, sans une seule rune.
+Il y a donc **un seul point à intercepter** : cet unique appel à
+`$B.namespace()`. Le runtime le détourne le temps que le corps du module
+s'exécute, et rend à sa place un objet dont chaque nom est un accesseur vers un
+signal Svelte. Chaque affectation que le codegen émet déjà devient une écriture
+réactive, sans qu'une ligne du code généré soit réécrite. Le Python reste du
+Python nu, sans une seule rune.
+
+Le détournement est nominatif — un corps de module peut en importer d'autres
+pendant qu'il tourne, et chaque import crée son namespace par la même fonction.
+Le motif attendu est seulement *vérifié* à la compilation : si un futur codegen
+cessait de l'émettre, le build échoue bruyamment au lieu de livrer un composant
+sans réactivité.
 
 ## Chaîne de compilation
 

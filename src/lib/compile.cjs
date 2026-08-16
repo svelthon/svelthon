@@ -28,8 +28,11 @@ const NS = '__py';
 // Brython emits module state into a namespace object:
 //     locals_Counter = $B.namespace('Counter')
 //     locals_Counter.count = 0
-// Nothing lives in a lexical binding, so there is a single object to intercept.
-const NAMESPACE_DECL = /(locals_\w+) = \$B\.namespace\((['"]).*?\2\)/;
+// Nothing lives in a lexical binding, so there is a single call to intercept —
+// which the runtime does at execution time. This pattern is only checked, never
+// rewritten; if a future codegen stops emitting it, compilation fails loudly
+// instead of producing a component with no reactivity at all.
+const namespaceCall = (name) => `$B.namespace('${name}')`;
 
 // Python identifiers that JavaScript will not accept as bindings. They stay
 // perfectly usable inside the component's Python; they simply are not published
@@ -119,15 +122,12 @@ function compile(src, name = 'Component') {
     // `from browser import html`, verified by scripts/browser-check.sh.
     const js = root.to_js();
 
-    if (!NAMESPACE_DECL.test(js)) {
-        throw new Error(`svelthon: no Brython namespace found in the code generated for ${name}`);
+    if (!js.includes(namespaceCall(name))) {
+        throw new Error(
+            `svelthon: the code generated for ${name} never calls ${namespaceCall(name)} — ` +
+                `Brython's codegen no longer exposes the module namespace where SVELTHON hooks it`
+        );
     }
-
-    // The whole trick, in one substitution: give Brython a $state proxy instead
-    // of a plain namespace, and every assignment its codegen already emits
-    // becomes a reactive write. The Python source stays plain Python.
-    // (A function replacer, so a '$' in NS is not read as a capture reference.)
-    const body = js.replace(NAMESPACE_DECL, (_match, binding) => `${binding} = ${NS}`);
 
     // Svelte reserves the '$' prefix for *every* scope inside a component, and
     // Brython's codegen opens with `var $B = __BRYTHON__`. So the generated
@@ -136,11 +136,13 @@ function compile(src, name = 'Component') {
     const needsStdlib = Object.keys(vfs).length > 0;
 
     const module = [
-        `import 'svelthon/runtime';`,
+        `import { withNamespace } from 'svelthon/runtime';`,
         ...(needsStdlib ? [`import ${JSON.stringify(vfsId(name))};`] : []),
         ``,
         `export function init(${NS}) {`,
-        body,
+        `  return withNamespace('${name}', ${NS}, () => {`,
+        js,
+        `  });`,
         `}`
     ].join('\n');
 

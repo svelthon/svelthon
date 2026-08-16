@@ -92,6 +92,25 @@ export function republish(value) {
     return value; // scalars already propagate on assignment
 }
 
+// Hand Brython our namespace instead of the one it would have made for itself.
+//
+// The codegen opens every module body with `locals_X = $B.namespace('X')`, so
+// intercepting that single call is enough — no rewriting of generated code.
+// The name is checked because a module body may import others while it runs,
+// and each import creates its own namespace through the same function.
+export function withNamespace(name, namespace, run) {
+    const $B = globalThis.__BRYTHON__;
+    const original = $B.namespace;
+
+    $B.namespace = (requested) => (requested === name ? namespace : original(requested));
+
+    try {
+        return run();
+    } finally {
+        $B.namespace = original;
+    }
+}
+
 // Expose one component-level signal as a property of the namespace Brython
 // writes into. Values pass through untouched — never wrapped, never proxied —
 // which is the point: a Svelte state proxy around a Brython object breaks its
