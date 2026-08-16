@@ -96,7 +96,7 @@ export function republish(value) {
 // so devtools and Vite's overlay show nothing at all — the text sits in the
 // Python object, where nothing JS looks. Fill both in, keeping the original
 // object so Python semantics upstream are untouched.
-export function pyError(error, where) {
+export function pyError(error, where, lineOffset = 0) {
     const $B = globalThis.__BRYTHON__;
 
     if (!error || typeof error !== 'object' || error.message !== undefined) return error;
@@ -111,9 +111,25 @@ export function pyError(error, where) {
         described = 'PythonError';
     }
 
+    // The deepest frame is where it actually broke. Line numbers count from the
+    // start of the Python source, which for a component begins after its opening
+    // <script> tag — hence the offset back to the file's own numbering.
+    let line;
     try {
-        error.message = `${described} (${where})`;
-        if (error.stack === undefined) error.stack = `${error.message}\n    at ${where}`;
+        let tb = $B.$getattr(error, '__traceback__');
+        while (tb && tb !== NONE) {
+            line = $B.$getattr(tb, 'tb_lineno');
+            tb = $B.$getattr(tb, 'tb_next');
+        }
+    } catch {
+        /* pas de traceback exploitable */
+    }
+
+    const at = line === undefined ? where : `${where}:${line + lineOffset}`;
+
+    try {
+        error.message = `${described} (${at})`;
+        if (error.stack === undefined) error.stack = `${error.message}\n    at ${at}`;
     } catch {
         /* exception figée : tant pis, on la relaie telle quelle */
     }

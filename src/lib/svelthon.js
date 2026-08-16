@@ -152,6 +152,10 @@ const IMPORTS_STORE = /from\s+["'][^"']+\.py["']/;
 // needs `py` in scope too.
 const needsRuntime = new Set();
 
+// Python line numbers count from the start of the <script> body; the file counts
+// from its first line. The gap is the number of lines before the opening tag.
+const lineOffsets = new Map();
+
 // The Svelte preprocessor: runs before Svelte parses the component, so the
 // compiler only ever sees ordinary JavaScript with runes.
 export function python() {
@@ -162,6 +166,7 @@ export function python() {
             if (!isPython && !IMPORTS_STORE.test(content)) return;
 
             if (!isPython) needsRuntime.add(filename);
+            else lineOffsets.set(filename, content.slice(0, content.search(HAS_PYTHON_SCRIPT)).split('\n').length - 1);
 
             // Conditions first: pythonText then sees `{#if …}` and leaves it be.
             return { code: overMarkup(content, (markup) => pythonText(pythonConditions(markup))) };
@@ -176,7 +181,8 @@ export function python() {
             const { script, module, stdlib, imports } = compile(
                 content,
                 name,
-                relative(process.cwd(), filename || 'Component')
+                relative(process.cwd(), filename || 'Component'),
+                { lineOffset: lineOffsets.get(filename) ?? 0 }
             );
 
             // `import counter_store` in a component resolves to a sibling .py.

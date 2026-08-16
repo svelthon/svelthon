@@ -170,6 +170,31 @@ Python, protocole des descripteurs compris :
 {py.of(item).double}   <!-- @property, évaluée -->
 ```
 
+## Valeurs dérivées et liaisons
+
+`@derived` transforme une fonction en valeur — Python lit le nom et obtient le
+résultat, comme une `@property` :
+
+```python
+first = "Ada"
+last = "Lovelace"
+
+@derived
+def full():
+    return f"{first} {last}"
+```
+
+`{full}` dans le gabarit, `full` en Python. Le corps s'exécute dans
+`$derived.by`, et chaque global qu'il touche passe par un accesseur du
+namespace : **Svelte découvre les dépendances tout seul**, rien à déclarer. Un
+`@derived` peut en lire un autre. Il doit être **pur** — écrire de l'état dans un
+dérivé est refusé par Svelte, à juste titre.
+
+`bind:` ne demande rien : un nom d'état est un `let` réactif ordinaire, donc
+`bind:value={name}` fonctionne dans les deux sens et Python relit la valeur
+saisie. (Un *prop* est un `$derived`, donc en lecture seule — la règle de Svelte
+pour les props non `$bindable`.)
+
 ## Réactivité : un signal par nom
 
 Le namespace n'est **pas** un proxy `$state`. Svelte proxifierait alors chaque
@@ -321,8 +346,11 @@ l'objet Python. Chaque handler et le corps du module sont donc enveloppés pour
 les renseigner, en nommant la fonction et le fichier :
 
 ```
-ValueError: cassé au fond (boom() — src/Counter.svelte)
+ValueError: cassé au fond (boom() — src/Counter.svelte:6)
 ```
+
+La ligne vient de la traceback Python, recalée sur la numérotation du fichier —
+un `<script module>` placé avant le Python ne la fausse pas.
 
 Le composant survit à l'exception — le handler suivant fonctionne — et un
 `try/except` Python reste un `try/except` Python : l'enveloppe ne s'applique
@@ -346,7 +374,7 @@ C'est le même mécanisme qui accueillera les `.wasm` de Wasthon.
 
 ## État
 
-Validé par `npm test` — 46 tests, plus 1 échec attendu (voir plus bas) :
+Validé par `npm test` — 53 tests, plus 1 échec attendu (voir plus bas) :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
 - props : défaut Python, priorité du parent, lisibilité pendant l'init,
@@ -374,13 +402,8 @@ portée propre.
 
 - **Empaquetage.** `src/lib/` est le framework, mêlé à la démo. Pour l'utiliser
   ailleurs il faut en faire un paquet npm installable.
-- **`bind:value`.** La liaison bidirectionnelle n'a jamais été essayée sur un
-  nom Python. C'est le geste le plus courant d'un formulaire.
-- **Valeurs dérivées.** Ni dans un composant ni dans un store il n'existe
-  d'équivalent à `$derived` : une `@property` Python n'est pas réactive, et tout
-  calcul dépendant doit être refait à la main dans un handler.
-- **Numéros de ligne.** Une erreur nomme sa fonction et son fichier, pas sa
-  ligne. Il n'y a pas de source map du Python vers le JS généré.
+- **Source maps.** Les erreurs portent un numéro de ligne juste, mais le
+  débogueur du navigateur montre toujours le JS généré, pas le Python.
 
 ### Confort
 

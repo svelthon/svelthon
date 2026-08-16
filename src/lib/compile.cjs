@@ -48,10 +48,14 @@ py`.split(/\s+/));
 
 // Module-level names, read off the AST rather than the generated JS — the
 // codegen mangles function names (`increment941818`) but the AST has the truth.
+const isDerivedDecorator = (node) =>
+    (node.decorator_list || []).some((d) => d instanceof $B.ast.Name && d.id === 'derived');
+
 function surface(body) {
     const props = [];
     const state = [];
     const funcs = [];
+    const deriveds = [];
     const seen = new Set();
 
     const take = (name) => {
@@ -71,13 +75,18 @@ function surface(body) {
             // default. A bare assignment stays internal state.
             if (node.target instanceof $B.ast.Name && take(node.target.id)) props.push(node.target.id);
         } else if (node instanceof $B.ast.FunctionDef) {
-            if (take(node.name)) {
-                funcs.push({ name: node.name, arity: (node.args && node.args.args || []).length });
-            }
+            if (!take(node.name)) continue;
+
+            // @derived turns a function into a value: Python reads the name and
+            // gets the result, exactly like a property.
+            (isDerivedDecorator(node) ? deriveds : funcs).push({
+                name: node.name,
+                arity: (node.args && node.args.args || []).length
+            });
         }
     }
 
-    return { props, state, funcs };
+    return { props, state, funcs, deriveds };
 }
 
 // Transitive closure of a component's imports over the build-time stdlib.
@@ -106,14 +115,14 @@ function stdlibClosure(names) {
     return needed;
 }
 
-function compile(src, name = 'Component', source = name, { store = false } = {}) {
+function compile(src, name = 'Component', source = name, { store = false, lineOffset = 0 } = {}) {
     // The namespace identifier is derived from `filename` alone — `module` and
     // `locals_id` are ignored by js_from_root. Brython maps '.' to '_' but
     // leaves '/' alone, so a real path would emit `locals_src/Counter_svelte`,
     // which is not valid JavaScript. Pass an identifier-safe name instead; the
     // cost is that Python's __file__ says "Counter" rather than the full path.
     let root = $B.py2js({ src, filename: name }, name, [name]);
-    let { props, state, funcs } = surface(root._ast.body);
+    let { props, state, funcs, deriveds } = surface(root._ast.body);
 
     // A store has no parent, so an annotation there declares plain state — and
     // $props() would be meaningless at module scope anyway.
@@ -154,7 +163,7 @@ function compile(src, name = 'Component', source = name, { store = false } = {})
         `    return withNamespace('${name}', ${NS}, () => {`,
         js,
         `    });`,
-        `  } catch (err) { throw pyError(err, ${JSON.stringify(source)}); }`,
+        `  } catch (err) { throw pyError(err, ${JSON.stringify(source)}, ${lineOffset}); }`,
         `}`
     ].join('\n');
 
@@ -181,8 +190,10 @@ function compile(src, name = 'Component', source = name, { store = false } = {})
     // names stay ordinary functions — nothing stops Python calling them too.
     const lifecycle = (hook) => !store && funcs.some((f) => f.name === hook);
 
-    // A component free to define its own `publish` keeps it.
-    const hasPublish = [...props, ...state, ...funcs.map((f) => f.name)].includes('publish');
+    // A component free to define its own `publish` or `derived` keeps it.
+    const declared = [...props, ...state, ...funcs, ...deriveds].map((n) => n.name || n);
+    const hasPublish = declared.includes('publish');
+    const hasDerived = declared.includes('derived');
 
     const script = [
         `import { init } from ${JSON.stringify(virtualId(name))};`,
@@ -204,6 +215,13 @@ function compile(src, name = 'Component', source = name, { store = false } = {})
         ]),
         ...state.map((n) => `let ${n} = $state.raw(undefined);`),
         ...funcs.map((f) => `let ${fn(f.name)} = $state.raw(undefined);`),
+        // A @derived name reads as its result — on both sides. The body runs
+        // inside $derived.by, and every global it touches goes through a
+        // namespace accessor, so Svelte discovers the dependencies by itself.
+        ...deriveds.flatMap((d) => [
+            `let ${fn(d.name)} = $state.raw(undefined);`,
+            `const ${d.name} = $derived.by(() => ${fn(d.name)}());`
+        ]),
         ``,
         `const __proto = {};`,
         // Python may write to a prop; the write lands in the local fallback and
@@ -218,6 +236,9 @@ function compile(src, name = 'Component', source = name, { store = false } = {})
         ),
         ...state.map((n) => `bind(__proto, '${n}', () => ${n}, (v) => { ${n} = v; });`),
         ...funcs.map((f) => `bind(__proto, '${f.name}', () => ${fn(f.name)}, (v) => { ${fn(f.name)} = v; });`),
+        ...deriveds.map(
+            (d) => `bind(__proto, '${d.name}', () => ${d.name}, (v) => { ${fn(d.name)} = v; });`
+        ),
         ``,
         `const ${NS} = Object.create(__proto);`,
         // Reading a global goes through $B.resolve_global → resolve_in_namespace,
@@ -236,6 +257,8 @@ function compile(src, name = 'Component', source = name, { store = false } = {})
                   `const __publish = (key) => { ${NS}[key] = republish(${NS}[key]); };`,
                   `bind(__proto, 'publish', () => __publish, () => {});`
               ]),
+        // The decorator only marks; the compiler did the work already.
+        ...(hasDerived ? [] : [`bind(__proto, 'derived', () => (f) => f, () => {});`]),
         ``,
         `init(${NS});`,
         ``,
@@ -247,7 +270,7 @@ function compile(src, name = 'Component', source = name, { store = false } = {})
         ...funcs.map(
             (f) =>
                 `const ${f.name} = (...a) => { try { return ${fn(f.name)}(...a.slice(0, ${f.arity})); }` +
-                ` catch (err) { throw pyError(err, ${JSON.stringify(`${f.name}() — ${source}`)}); } };`
+                ` catch (err) { throw pyError(err, ${JSON.stringify(`${f.name}() — ${source}`)}, ${lineOffset}); } };`
         ),
         ...(store
             ? [
@@ -261,6 +284,7 @@ function compile(src, name = 'Component', source = name, { store = false } = {})
                   `export const store = {`,
                   ...state.map((n) => `    get ${n}() { return ${n}; },`),
                   ...state.map((n) => `    set ${n}(v) { ${n} = v; },`),
+                  ...deriveds.map((d) => `    get ${d.name}() { return ${d.name}; },`),
                   ...funcs.map((f) => `    ${f.name},`),
                   `};`,
                   ``,
@@ -286,7 +310,7 @@ function compile(src, name = 'Component', source = name, { store = false } = {})
                   ...(lifecycle('on_destroy')
                       ? [
                             `    return () => { try { __teardown(); }` +
-                                ` catch (err) { throw pyError(err, ${JSON.stringify(`on_destroy() — ${source}`)}); } };`
+                                ` catch (err) { throw pyError(err, ${JSON.stringify(`on_destroy() — ${source}`)}, ${lineOffset}); } };`
                         ]
                       : []),
                   `});`

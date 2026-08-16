@@ -13,6 +13,7 @@ import Composition from './fidelity/Composition.svelte';
 import Keyed from './fidelity/Keyed.svelte';
 import Errors from './fidelity/Errors.svelte';
 import InitError from './fidelity/InitError.svelte';
+import OffsetError from './fidelity/OffsetError.svelte';
 
 // Grille de fidélité sémantique.
 //
@@ -257,10 +258,11 @@ describe('erreurs Python', () => {
         flushSync();
 
         expect(captured).not.toBeNull();
+        // La ligne vient de la traceback Python, recalée sur le fichier.
         expect(captured.error.message).toBe(
-            'ValueError: cassé au fond (boom() — src/fidelity/Errors.svelte)'
+            'ValueError: cassé au fond (boom() — src/fidelity/Errors.svelte:6)'
         );
-        expect(captured.error.stack).toContain('boom() — src/fidelity/Errors.svelte');
+        expect(captured.error.stack).toContain('boom() — src/fidelity/Errors.svelte:6');
     });
 
     test('le composant survit à une exception', () => {
@@ -283,6 +285,19 @@ describe('erreurs Python', () => {
 
         expect(target.querySelector('p[data-k="message"]').textContent).toBe(
             'ValueError: cassé au fond'
+        );
+    });
+
+    test('la ligne reste juste quand un autre script précède le Python', () => {
+        const target = render(OffsetError);
+        let captured = null;
+        window.addEventListener('error', (ev) => (captured = ev), { once: true });
+
+        target.querySelector('button[data-k="boom"]').click();
+        flushSync();
+
+        expect(captured.error.message).toBe(
+            "KeyError: 'décalé' (boom() — src/fidelity/OffsetError.svelte:11)"
         );
     });
 
