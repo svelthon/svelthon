@@ -126,6 +126,36 @@ composants qui ne touchent jamais au DOM.
 `npm run test:browser`, qui rejoue la vérification dans un Chromium headless —
 la seule partie du projet que la suite jsdom ne peut pas couvrir.
 
+## Composition
+
+Un composant Python n'a qu'un `<script>` d'instance. Les enfants s'importent
+donc dans un `<script module>`, dont les déclarations restent visibles du
+gabarit :
+
+```svelte
+<script module>
+    import Row from './Row.svelte';
+</script>
+
+<script lang="python">
+rows = [Item("a", 1), Item("b", 2)]
+</script>
+
+{#each rows as r}<Row row={r} />{/each}
+```
+
+Un objet Python se passe en prop sans conversion. Dans le gabarit, dicts et
+tuples se lisent directement — les clés d'un dict Brython sont exposées comme
+propriétés JS, un tuple *est* un tableau. Les **instances de classe** font
+exception : Brython garde leurs attributs hors des propriétés JS, donc
+`{o.label}` rendrait du vide. `py.of()` passe par la recherche d'attributs de
+Python, protocole des descripteurs compris :
+
+```svelte
+{py.of(item).label}    <!-- attribut -->
+{py.of(item).double}   <!-- @property, évaluée -->
+```
+
 ## Réactivité : un signal par nom
 
 Le namespace n'est **pas** un proxy `$state`. Svelte proxifierait alors chaque
@@ -190,7 +220,7 @@ C'est le même mécanisme qui accueillera les `.wasm` de Wasthon.
 
 ## État
 
-Validé par `npm test` — 25 tests, plus 1 échec attendu (voir plus bas) :
+Validé par `npm test` — 29 tests, plus 1 échec attendu (voir plus bas) :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
 - props : défaut Python, priorité du parent, lisibilité pendant l'init,

@@ -149,6 +149,30 @@ describe('gabarit — frontière Python/JavaScript', () => {
     });
 });
 
+describe('composition — objets Python et composants enfants', () => {
+    const cell = (k) => render(Composition).querySelector(`[data-k="${k}"]`).textContent;
+
+    test('dicts et tuples traversent le gabarit sans aide', () => {
+        expect(cell('dict')).toBe('[x|9]'); // clés exposées comme propriétés JS
+        expect(cell('tuple')).toBe('[k=1]'); // un tuple est un tableau JS
+    });
+
+    test('py.of() donne accès aux attributs d’une instance', () => {
+        // Brython garde les attributs hors des propriétés JS : {o.label} rendrait
+        // du vide. py.of() passe par la recherche d’attributs de Python.
+        expect(cell('obj')).toBe('[a:1][b:2]');
+    });
+
+    test('py.of() respecte le protocole des descripteurs', () => {
+        expect(cell('prop')).toBe('[2][4]'); // une @property, pas un attribut
+    });
+
+    test('un objet Python se passe en prop à un composant enfant', () => {
+        expect(cell('child')).toBe('>a=1>b=2'); // prefix laissé à son défaut
+        expect(cell('child_prop')).toBe('-a=1-b=2');
+    });
+});
+
 describe('événements — la frontière avec le DOM', () => {
     test('une valeur extraite dans le gabarit arrive en Python', () => {
         const target = render(Events);
