@@ -103,7 +103,7 @@ function stdlibClosure(names) {
     return needed;
 }
 
-function compile(src, name = 'Component', source = name) {
+function compile(src, name = 'Component', source = name, { store = false } = {}) {
     // The namespace identifier is derived from `filename` alone — `module` and
     // `locals_id` are ignored by js_from_root. Brython maps '.' to '_' but
     // leaves '/' alone, so a real path would emit `locals_src/Counter_svelte`,
@@ -111,6 +111,13 @@ function compile(src, name = 'Component', source = name) {
     // cost is that Python's __file__ says "Counter" rather than the full path.
     let root = $B.py2js({ src, filename: name }, name, [name]);
     let { props, state, funcs } = surface(root._ast.body);
+
+    // A store has no parent, so an annotation there declares plain state — and
+    // $props() would be meaningless at module scope anyway.
+    if (store) {
+        state = [...props, ...state];
+        props = [];
+    }
 
     // NOTE — traversing a DOM node from Python (`event.target.value`) resolves
     // the node's class through `$B.imported['browser.html']`, which only a real
@@ -169,7 +176,7 @@ function compile(src, name = 'Component', source = name) {
     // Lifecycle by convention, mapped onto a single $effect: its body runs once
     // after the DOM exists, its teardown when the component goes away. Both
     // names stay ordinary functions — nothing stops Python calling them too.
-    const lifecycle = (hook) => funcs.some((f) => f.name === hook);
+    const lifecycle = (hook) => !store && funcs.some((f) => f.name === hook);
 
     // A component free to define its own `publish` keeps it.
     const hasPublish = [...props, ...state, ...funcs.map((f) => f.name)].includes('publish');
@@ -239,6 +246,22 @@ function compile(src, name = 'Component', source = name) {
                 `const ${f.name} = (...a) => { try { return ${fn(f.name)}(...a.slice(0, ${f.arity})); }` +
                 ` catch (err) { throw pyError(err, ${JSON.stringify(`${f.name}() — ${source}`)}); } };`
         ),
+        ...(store
+            ? [
+                  ``,
+                  // Module-scope signals live once for the whole app. Exported
+                  // through getters because Svelte forbids exporting a reassigned
+                  // $state binding directly — and a getter is what keeps the read
+                  // reactive at the call site.
+                  `export const store = {`,
+                  ...state.map((n) => `    get ${n}() { return ${n}; },`),
+                  ...state.map((n) => `    set ${n}(v) { ${n} = v; },`),
+                  ...funcs.map((f) => `    ${f.name},`),
+                  `};`,
+                  ``,
+                  `export default store;`
+              ]
+            : []),
         ...(lifecycle('on_mount') || lifecycle('on_destroy')
             ? [
                   ``,

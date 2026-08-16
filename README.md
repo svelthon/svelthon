@@ -230,6 +230,46 @@ continuant de servir **l'ancien corps généré** : la page se met à jour vers 
 code qui n'a pas changé. Le hook `hotUpdate` du plugin invalide les deux modules
 virtuels du composant, et `npm run test:hmr` le vérifie.
 
+## État partagé : un simple fichier `.py`
+
+L'équivalent Python d'un `.svelte.ts`. Le fichier est du Python ordinaire ; ses
+noms de niveau module deviennent des signaux créés **une fois pour toute
+l'application**, là où l'état d'un composant naît et meurt avec chaque instance.
+
+```python
+# counter_store.py
+count = 0
+history = []
+
+def increment():
+    global count
+    count += 1
+    history.append(count)
+    publish("history")
+```
+
+```svelte
+<script module>
+    import { store } from './counter_store.py';
+</script>
+
+<p>{store.count} — {store.history}</p>
+<button onclick={store.increment}>+</button>
+```
+
+Le store est servi sous une identité `.svelte.js`, ce qui est précisément ce qui
+décide vite-plugin-svelte à en compiler les runes. Les noms sont exportés par
+des accesseurs : Svelte interdit d'exporter directement une liaison `$state`
+réaffectée, et un getter est de toute façon ce qui garde la lecture réactive
+chez l'appelant.
+
+Un composant qui *consomme* un store sans avoir de Python à lui reçoit quand
+même les réécritures de gabarit et `py` en portée — sinon `{store.history}`
+retomberait sur le rendu JavaScript.
+
+Le plugin est en `enforce: 'pre'` : sans ça, le résolveur de Vite réclame
+`./store.py` comme un fichier ordinaire et livre son Python au parseur JS.
+
 ## Cycle de vie
 
 Par convention de nom, adossé à un unique `$effect` :
@@ -286,7 +326,7 @@ C'est le même mécanisme qui accueillera les `.wasm` de Wasthon.
 
 ## État
 
-Validé par `npm test` — 43 tests, plus 1 échec attendu (voir plus bas) :
+Validé par `npm test` — 44 tests, plus 1 échec attendu (voir plus bas) :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
 - props : défaut Python, priorité du parent, lisibilité pendant l'init,

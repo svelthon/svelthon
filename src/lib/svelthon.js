@@ -1,5 +1,6 @@
 import { createRequire } from 'node:module';
-import { relative } from 'node:path';
+import { relative, resolve, dirname } from 'node:path';
+import { readFileSync } from 'node:fs';
 
 const require = createRequire(import.meta.url);
 const { compile, VIRTUAL_PREFIX, VFS_PREFIX } = require('./compile.cjs');
@@ -142,19 +143,33 @@ function pythonConditions(markup) {
     return out + markup.slice(cut);
 }
 
+const HAS_PYTHON_SCRIPT = /<script[^>]*\blang=["']python["']/;
+const IMPORTS_STORE = /from\s+["'][^"']+\.py["']/;
+
+// A component that only *consumes* a store has no Python script of its own, yet
+// its markup still renders Python values and needs the same rewriting — so it
+// needs `py` in scope too.
+const needsRuntime = new Set();
+
 // The Svelte preprocessor: runs before Svelte parses the component, so the
 // compiler only ever sees ordinary JavaScript with runes.
 export function python() {
     return {
         name: 'svelthon',
-        markup({ content }) {
-            if (!/<script[^>]*\blang=["']python["']/.test(content)) return;
+        markup({ content, filename }) {
+            const isPython = HAS_PYTHON_SCRIPT.test(content);
+            if (!isPython && !IMPORTS_STORE.test(content)) return;
+
+            if (!isPython) needsRuntime.add(filename);
 
             // Conditions first: pythonText then sees `{#if …}` and leaves it be.
             return { code: overMarkup(content, (markup) => pythonText(pythonConditions(markup))) };
         },
         script({ content, attributes, filename }) {
-            if (attributes.lang !== 'python') return;
+            if (attributes.lang !== 'python') {
+                if (!needsRuntime.delete(filename)) return;
+                return { code: `import { py } from 'svelthon/runtime';\n${content}` };
+            }
 
             const name = nameFor(filename);
             const { script, module, stdlib } = compile(content, name, relative(process.cwd(), filename || "Component"));
@@ -167,17 +182,46 @@ export function python() {
     };
 }
 
+// A shared store is a plain .py file. It compiles to module-scope signals —
+// created once for the whole application, not per component instance — and is
+// served under a `.svelte.js` identity, which is what makes vite-plugin-svelte
+// compile the runes inside it.
+const STORE_SUFFIX = '.svelte.js';
+
 // The Vite plugin that serves those modules.
 export function svelthon() {
     const isVirtual = (id) => id.startsWith(VIRTUAL_PREFIX) || id.startsWith(VFS_PREFIX);
+    const isStore = (id) => id.endsWith('.py' + STORE_SUFFIX);
 
     return {
         name: 'svelthon:modules',
-        resolveId(id) {
+        // 'pre', or Vite's own resolver claims `./store.py` as a plain file and
+        // hands its Python straight to the JS parser.
+        enforce: 'pre',
+        resolveId(id, importer) {
             if (isVirtual(id)) return '\0' + id;
+            if (id.endsWith('.py') && importer) {
+                return resolve(dirname(importer), id) + STORE_SUFFIX;
+            }
         },
         load(id) {
             if (id.startsWith('\0')) return generated.get(id.slice(1));
+            if (!isStore(id)) return;
+
+            const file = id.slice(0, -STORE_SUFFIX.length);
+            const name = nameFor(file);
+            const { script, module, stdlib } = compile(
+                readFileSync(file, 'utf8'),
+                name,
+                relative(process.cwd(), file),
+                { store: true }
+            );
+
+            generated.set(VIRTUAL_PREFIX + name, module);
+            if (stdlib) generated.set(VFS_PREFIX + name, stdlib);
+
+            this.addWatchFile(file);
+            return script;
         },
 
         // A component's generated code lives in its own module, which Vite has
