@@ -1,0 +1,21 @@
+import { test, expect } from 'vitest';
+import { mount, flushSync } from 'svelte';
+import Semantics from './Semantics.svelte';
+
+// Each of these is wrong under JavaScript semantics, so passing them means the
+// component really ran through CPython's grammar and Brython's object model —
+// not something that merely looks like Python.
+test('les composants exécutent de vraies sémantiques Python', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+    mount(Semantics, { target });
+
+    const [floor, big, words] = target.querySelector('p').textContent.split(' · ');
+
+    expect(floor).toBe('-4');                     // JS: Math.trunc(-3.5) === -3
+    expect(big).toBe('1180591620717411303424');   // JS: 1.1805916207174113e+21
+    expect(words).toBe('abricot, banane, pomme'); // un set trié, pas un objet
+
+    target.querySelector('button').click();
+    flushSync();
+    expect(target.querySelector('p').textContent.split(' · ')[0]).toBe('-7');
+});
