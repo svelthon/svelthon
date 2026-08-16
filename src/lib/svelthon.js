@@ -36,6 +36,90 @@ function closingBrace(source, start) {
     return -1;
 }
 
+// Only the markup, never a <script> or <style> body — Python is full of braces
+// (dict literals, f-strings) and rewriting them would be catastrophic.
+function overMarkup(content, transform) {
+    const blocks = /<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi;
+    let out = '';
+    let cut = 0;
+    let block;
+
+    while ((block = blocks.exec(content))) {
+        out += transform(content.slice(cut, block.index)) + block[0];
+        cut = block.index + block[0].length;
+    }
+
+    return out + transform(content.slice(cut));
+}
+
+// Text interpolation is `String(value)`, which renders a Python list as `a,b,c`
+// and a dict as `[object Object]`. Lists are literally JS arrays, so no
+// prototype can be patched — the interpolation itself has to go through
+// Python's str(). Attribute values and component props are left alone: those
+// carry the value, not its rendering.
+function pythonText(markup) {
+    let out = '';
+    let i = 0;
+    let inTag = false;
+    let quote = null;
+
+    while (i < markup.length) {
+        const c = markup[i];
+
+        if (inTag) {
+            if (quote) {
+                if (c === quote) quote = null;
+            } else if (c === '"' || c === "'") {
+                quote = c;
+            } else if (c === '{') {
+                // An attribute expression: keep the value as it is.
+                const end = closingBrace(markup, i);
+                if (end !== -1) {
+                    out += markup.slice(i, end + 1);
+                    i = end + 1;
+                    continue;
+                }
+            } else if (c === '>') {
+                inTag = false;
+            }
+
+            out += c;
+            i++;
+            continue;
+        }
+
+        if (c === '<') {
+            inTag = true;
+            out += c;
+            i++;
+            continue;
+        }
+
+        if (c === '{') {
+            const end = closingBrace(markup, i);
+            if (end === -1) {
+                out += c;
+                i++;
+                continue;
+            }
+
+            const inner = markup.slice(i + 1, end);
+            // Blocks and tags — {#if}, {:else}, {/each}, {@html} — are not values.
+            out += '#/:@'.includes(inner.trimStart()[0])
+                ? markup.slice(i, end + 1)
+                : `{py.str(${inner.trim()})}`;
+
+            i = end + 1;
+            continue;
+        }
+
+        out += c;
+        i++;
+    }
+
+    return out;
+}
+
 // `{#if items}` is a JavaScript condition, so an empty list — an object — reads
 // as true where Python reads false. Same for an empty dict and for None. Route
 // every condition through Python's own bool().
@@ -65,7 +149,9 @@ export function python() {
         name: 'svelthon',
         markup({ content }) {
             if (!/<script[^>]*\blang=["']python["']/.test(content)) return;
-            return { code: pythonConditions(content) };
+
+            // Conditions first: pythonText then sees `{#if …}` and leaves it be.
+            return { code: overMarkup(content, (markup) => pythonText(pythonConditions(markup))) };
         },
         script({ content, attributes, filename }) {
             if (attributes.lang !== 'python') return;

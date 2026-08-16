@@ -149,6 +149,18 @@ describe('gabarit — frontière Python/JavaScript', () => {
         expect(cell('str_list')).toBe("['a', 'b', 'c']"); // JS dirait "a,b,c"
         expect(cell('str_dict')).toBe("{'x': 1}"); // JS dirait "[object Object]"
     });
+
+    // Le préprocesseur enveloppe les interpolations de *texte* dans py.str().
+    test('une interpolation nue rend déjà à la façon de Python', () => {
+        expect(cell('raw_list')).toBe("['a', 'b', 'c']");
+        expect(cell('raw_dict')).toBe("{'x': 1}");
+        expect(cell('raw_none')).toBe('None');
+    });
+
+    test('une valeur d’attribut garde la valeur, pas son rendu', () => {
+        const el = render(Template).querySelector('[data-k="attr"]');
+        expect(el.dataset.v).toBe('a,b,c'); // non enveloppé : c'est la liste elle-même
+    });
 });
 
 describe('composition — objets Python et composants enfants', () => {

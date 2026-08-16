@@ -99,14 +99,20 @@ une liste vide, un dict vide ou `None` seraient vrais, puisque JS tient tout
 objet pour vrai. `{#each}` fonctionne nativement : une liste Brython *est* un
 tableau JS.
 
-L'interpolation reste JS : `{items}` affiche `a,b,c` là où Python dirait
-`['a', 'b', 'c']`. D'où `py.str()`, injecté dans tout composant Python :
+L'interpolation de **texte** est enveloppée dans `py.str()`, sinon une liste
+s'afficherait `a,b,c` et un dict `[object Object]` — et comme une liste Brython
+*est* un tableau JS, aucun prototype ne pouvait être corrigé à la place.
 
 ```svelte
-{#if items}          <!-- réécrit en py.truthy(items) -->
-  {py.str(items)}    <!-- ['a', 'b', 'c'] -->
+{#if items}   <!-- réécrit en py.truthy(items) -->
+  {items}     <!-- réécrit en py.str(items) → ['a', 'b', 'c'] -->
 {/if}
 ```
+
+Les **valeurs d'attribut et les props** sont laissées intactes : elles
+transportent la valeur, pas son rendu. `data-v={items}` reçoit bien la liste.
+Les réécritures ne touchent que le balisage, jamais un `<script>` ou un
+`<style>` — le Python est plein d'accolades.
 
 Pour les événements, le motif recommandé est d'extraire dans le gabarit et de
 calculer en Python :
