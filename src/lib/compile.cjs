@@ -103,7 +103,7 @@ function stdlibClosure(names) {
     return needed;
 }
 
-function compile(src, name = 'Component') {
+function compile(src, name = 'Component', source = name) {
     // The namespace identifier is derived from `filename` alone — `module` and
     // `locals_id` are ignored by js_from_root. Brython maps '.' to '_' but
     // leaves '/' alone, so a real path would emit `locals_src/Counter_svelte`,
@@ -136,13 +136,15 @@ function compile(src, name = 'Component') {
     const needsStdlib = Object.keys(vfs).length > 0;
 
     const module = [
-        `import { withNamespace } from 'svelthon/runtime';`,
+        `import { withNamespace, pyError } from 'svelthon/runtime';`,
         ...(needsStdlib ? [`import ${JSON.stringify(vfsId(name))};`] : []),
         ``,
         `export function init(${NS}) {`,
-        `  return withNamespace('${name}', ${NS}, () => {`,
+        `  try {`,
+        `    return withNamespace('${name}', ${NS}, () => {`,
         js,
-        `  });`,
+        `    });`,
+        `  } catch (err) { throw pyError(err, ${JSON.stringify(source)}); }`,
         `}`
     ].join('\n');
 
@@ -171,7 +173,7 @@ function compile(src, name = 'Component') {
         `import { init } from ${JSON.stringify(virtualId(name))};`,
         // `py` backs the rewritten conditions, and is available to the template
         // for explicit conversions: {py.str(items)} renders ['a', 'b'].
-        `import { bind, py, republish, NONE } from 'svelthon/runtime';`,
+        `import { bind, py, republish, pyError, NONE } from 'svelthon/runtime';`,
         ``,
         ...(props.length ? [`const __props = $props();`, ``] : []),
         // A prop's value comes from the parent when it was passed, and from the
@@ -222,7 +224,13 @@ function compile(src, name = 'Component') {
         // Event handlers are called with a DOM event Python never asked for.
         // Truncating to the declared arity is a placeholder for a real interop
         // policy (jsobj2pyobj on demand) — enough to make handlers work.
-        ...funcs.map((f) => `const ${f.name} = (...a) => ${fn(f.name)}(...a.slice(0, ${f.arity}));`)
+        // An uncaught Python exception arrives in JS without message or stack;
+        // pyError fills them in, naming the function and the file it came from.
+        ...funcs.map(
+            (f) =>
+                `const ${f.name} = (...a) => { try { return ${fn(f.name)}(...a.slice(0, ${f.arity})); }` +
+                ` catch (err) { throw pyError(err, ${JSON.stringify(`${f.name}() — ${source}`)}); } };`
+        )
     ].join('\n');
 
     // Only the modules this component actually imports reach the browser.

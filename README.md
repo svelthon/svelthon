@@ -230,6 +230,21 @@ continuant de servir **l'ancien corps généré** : la page se met à jour vers 
 code qui n'a pas changé. Le hook `hotUpdate` du plugin invalide les deux modules
 virtuels du composant, et `npm run test:hmr` le vérifie.
 
+## Erreurs
+
+Une exception Brython arrive en JavaScript **sans `message` ni `stack`** : les
+devtools et l'overlay de Vite n'affichent rien, alors que le texte existe dans
+l'objet Python. Chaque handler et le corps du module sont donc enveloppés pour
+les renseigner, en nommant la fonction et le fichier :
+
+```
+ValueError: cassé au fond (boom() — src/Counter.svelte)
+```
+
+Le composant survit à l'exception — le handler suivant fonctionne — et un
+`try/except` Python reste un `try/except` Python : l'enveloppe ne s'applique
+qu'à ce qui remonte jusqu'à JavaScript.
+
 ## Stdlib : seulement ce qui est importé
 
 `py2js()` expose les imports du composant, et le VFS de Brython porte déjà le
@@ -248,7 +263,7 @@ C'est le même mécanisme qui accueillera les `.wasm` de Wasthon.
 
 ## État
 
-Validé par `npm test` — 32 tests, plus 1 échec attendu (voir plus bas) :
+Validé par `npm test` — 39 tests, plus 1 échec attendu (voir plus bas) :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
 - props : défaut Python, priorité du parent, lisibilité pendant l'init,

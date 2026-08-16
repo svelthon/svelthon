@@ -92,6 +92,35 @@ export function republish(value) {
     return value; // scalars already propagate on assignment
 }
 
+// A Brython exception reaching JavaScript carries no `message` and no `stack`,
+// so devtools and Vite's overlay show nothing at all — the text sits in the
+// Python object, where nothing JS looks. Fill both in, keeping the original
+// object so Python semantics upstream are untouched.
+export function pyError(error, where) {
+    const $B = globalThis.__BRYTHON__;
+
+    if (!error || typeof error !== 'object' || error.message !== undefined) return error;
+
+    let described;
+    try {
+        // Not `cls.__name__`: a Brython class keeps it out of its JS properties,
+        // so the lookup has to go through Python's own attribute protocol.
+        const name = $B.$getattr($B.get_class(error), '__name__');
+        described = `${name}: ${_b_.str.$factory(error)}`;
+    } catch {
+        described = 'PythonError';
+    }
+
+    try {
+        error.message = `${described}  (${where})`;
+        if (error.stack === undefined) error.stack = `${error.message}\n    at ${where}`;
+    } catch {
+        /* exception figée : tant pis, on la relaie telle quelle */
+    }
+
+    return error;
+}
+
 // Hand Brython our namespace instead of the one it would have made for itself.
 //
 // The codegen opens every module body with `locals_X = $B.namespace('X')`, so

@@ -11,6 +11,8 @@ import Template from './fidelity/Template.svelte';
 import Events from './fidelity/Events.svelte';
 import Composition from './fidelity/Composition.svelte';
 import Keyed from './fidelity/Keyed.svelte';
+import Errors from './fidelity/Errors.svelte';
+import InitError from './fidelity/InitError.svelte';
 
 // Grille de fidélité sémantique.
 //
@@ -157,6 +159,11 @@ describe('gabarit — frontière Python/JavaScript', () => {
         expect(cell('raw_none')).toBe('None');
     });
 
+    test('la réécriture survit aux accolades et aux chevrons', () => {
+        expect(cell('brace')).toBe('a}b'); // '}' dans une chaîne, pas une fermeture
+        expect(cell('gt')).toBe('dans une balise'); // '>' dans un attribut cité
+    });
+
     test('une valeur d’attribut garde la valeur, pas son rendu', () => {
         const el = render(Template).querySelector('[data-k="attr"]');
         expect(el.dataset.v).toBe('a,b,c'); // non enveloppé : c'est la liste elle-même
@@ -234,6 +241,53 @@ describe('{#each} avec clé', () => {
         click('replace'); // items[i] = Item(it.id, ...)
         expect(list()).toBe('1:a,2:B');
         expect(node(2)).toBe(kept); // la clé n'a pas changé
+    });
+});
+
+// Une exception Brython arrive en JavaScript sans `message` ni `stack` : les
+// devtools et l'overlay de Vite n'afficheraient rien. Le texte existe pourtant,
+// dans l'objet Python, là où rien de JS ne va le chercher.
+describe('erreurs Python', () => {
+    test('une exception non rattrapée est lisible côté JavaScript', () => {
+        const target = render(Errors);
+        let captured = null;
+        window.addEventListener('error', (ev) => (captured = ev), { once: true });
+
+        target.querySelector('button[data-k="boom"]').click();
+        flushSync();
+
+        expect(captured).not.toBeNull();
+        expect(captured.error.message).toBe(
+            'ValueError: cassé au fond (boom() — src/fidelity/Errors.svelte)'
+        );
+        expect(captured.error.stack).toContain('boom() — src/fidelity/Errors.svelte');
+    });
+
+    test('le composant survit à une exception', () => {
+        const target = render(Errors);
+        window.addEventListener('error', () => {}, { once: true });
+
+        target.querySelector('button[data-k="boom"]').click();
+        flushSync();
+        target.querySelector('button[data-k="works"]').click();
+        flushSync();
+
+        expect(target.querySelector('p[data-k="count"]').textContent).toBe('1');
+    });
+
+    test('un try/except Python reste un try/except Python', () => {
+        const target = render(Errors);
+
+        target.querySelector('button[data-k="caught"]').click();
+        flushSync();
+
+        expect(target.querySelector('p[data-k="message"]').textContent).toBe(
+            'ValueError: cassé au fond'
+        );
+    });
+
+    test('une erreur dans le corps du module nomme le fichier', () => {
+        expect(() => render(InitError)).toThrow(/ZeroDivisionError.*InitError\.svelte/);
     });
 });
 
