@@ -12,6 +12,7 @@ import Greeting from './Greeting.svelte';
 import Semantics from './Semantics.svelte';
 import StoreDemo from './StoreDemo.svelte';
 import Composition from './fidelity/Composition.svelte';
+import CtxHost from './fidelity/CtxHost.svelte';
 import { store } from './lib/counter_store.py';
 
 // Svelte parsème le HTML de marqueurs d'hydratation ; seul le texte nous importe.
@@ -41,6 +42,18 @@ describe('rendu serveur', () => {
         expect(html).toContain('[a:1][b:2]'); // attributs d'instance
         expect(html).toContain('[2][4]'); // @property évaluée
         expect(html).toContain('<li>>a=1</li>'); // composant enfant
+    });
+
+    // Le contexte, lui, vit dans l'arbre de composants — recréé à chaque rendu,
+    // donc sans fuite d'une requête à l'autre. C'est la réponse de Svelte au
+    // problème ci-dessous.
+    test('le contexte reste propre à chaque rendu', () => {
+        const first = text(render(CtxHost));
+        const second = text(render(CtxHost));
+
+        expect(first).toContain('dark/None');
+        expect(first).toContain('light/None');
+        expect(second).toBe(first);
     });
 
     // Le piège du rendu serveur, et il n'est pas propre à SVELTHON : l'état d'un

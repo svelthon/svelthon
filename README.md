@@ -45,7 +45,7 @@ npm run dev
 ```
 
 ```sh
-npm test             # 76 tests: semantics, props, reactivity, Svelte surface
+npm test             # 80 tests: semantics, props, reactivity, Svelte surface
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
 npm run build
@@ -367,6 +367,29 @@ An exception raised *inside* a coroutine surfaces through Brython's loop, not
 through the wrapper, so it does not carry the file and line the synchronous path
 adds.
 
+## Context
+
+`set_context` and `get_context` are injected into every component, like
+`publish` and `derived`. Both must run while an instance initialises — which is
+exactly when the Python module body runs, so nothing else was needed.
+
+```python
+# an ancestor
+set_context("theme", "dark")
+
+# any descendant, however deep
+theme = get_context("theme")
+```
+
+Context is **per subtree**, where a store is per application: two instances of
+the same component can carry different values, and the components in between
+know nothing about it. A key that was never set reads as `None`, not
+`undefined`.
+
+That also makes it the one place to put state under per-request server
+rendering: the component tree is rebuilt on every render, so nothing leaks
+between requests — unlike a store, whose state lives in the module.
+
 ## Server-side rendering
 
 It works. Svelte compiles a second version of each component that returns an
@@ -454,16 +477,14 @@ a Python component:
 | elements | `<svelte:window>` `<svelte:head>` `<svelte:boundary>` |
 | styles | scoped `<style>` |
 
-Not covered: `setContext`/`getContext` have no Python-facing API — they must be
-called during an instance's initialisation, which a `<script module>` cannot do.
-Nor `$bindable()` — a prop is a `$derived`, hence read-only.
+Not covered: `$bindable()` — a prop is a `$derived`, hence read-only.
 
 Reminder: **template expressions are JavaScript.** `{node is not None}` does not
 compile; write `{py.truthy(node)}`.
 
 ## Status
 
-Validated by `npm test` — 76 tests, plus 1 expected failure (below):
+Validated by `npm test` — 80 tests, plus 1 expected failure (below):
 
 - end-to-end reactivity, and which write paths propagate;
 - props: Python defaults, parent precedence, readability during init, parent
@@ -501,12 +522,6 @@ in parallel against under one sequentially.
 
 **Missing, with a workaround**
 
-- **`setContext` / `getContext`.** No Python-facing API. They must be called
-  during an *instance's* initialisation, which a `<script module>` — running
-  once — cannot do. The Python module body does run at initialisation, so
-  exposing them should be enough. This is also what per-request server rendering
-  would need first, since context is Svelte's answer to per-request state.
-  Workaround for global state: a store `.py`.
 - **`$bindable()`.** A prop is a `$derived`, hence read-only; no two-way
   parent↔child binding. Workaround: pass a callback as a prop.
 - **Effects beyond `on_mount` / `on_destroy`.** No way to say "run this Python

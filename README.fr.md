@@ -363,6 +363,31 @@ Une exception levée *dans* une coroutine remonte par la boucle de Brython, pas
 par l'enveloppe : elle ne porte donc pas le fichier et la ligne que le chemin
 synchrone ajoute.
 
+## Contexte
+
+`set_context` et `get_context` sont injectés dans chaque composant, comme
+`publish` et `derived`. Les deux doivent s'exécuter pendant l'initialisation
+d'une instance — soit exactement au moment où tourne le corps du module Python,
+si bien que rien d'autre n'a été nécessaire.
+
+```python
+# chez un ancêtre
+set_context("theme", "dark")
+
+# chez n'importe quel descendant, si profond soit-il
+theme = get_context("theme")
+```
+
+Le contexte est **par sous-arbre**, là où un store est par application : deux
+instances du même composant peuvent en porter des valeurs différentes, et les
+composants intermédiaires n'en savent rien. Une clé jamais posée vaut `None`, pas
+`undefined`.
+
+C'est aussi, de ce fait, le seul endroit où placer de l'état en rendu serveur par
+requête : l'arbre de composants est reconstruit à chaque rendu, donc rien ne fuit
+d'une requête à l'autre — contrairement à un store, dont l'état vit dans le
+module.
+
 ## Rendu côté serveur
 
 Ça fonctionne. Svelte compile une seconde version de chaque composant qui rend
@@ -423,7 +448,7 @@ C'est le même mécanisme qui accueillera les `.wasm` de Wasthon.
 
 ## État
 
-Validé par `npm test` — 76 tests, plus 1 échec attendu (voir plus bas) :
+Validé par `npm test` — 80 tests, plus 1 échec attendu (voir plus bas) :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
 - props : défaut Python, priorité du parent, lisibilité pendant l'init,
@@ -460,10 +485,7 @@ un composant Python :
 | éléments | `<svelte:window>` `<svelte:head>` `<svelte:boundary>` |
 | styles | `<style>` scopé |
 
-Non couvert : `setContext`/`getContext` n'ont pas d'API côté Python — ils
-doivent s'appeler pendant l'initialisation d'une instance, ce qu'un
-`<script module>` ne permet pas. Ni `$bindable()` (un prop est un `$derived`,
-donc en lecture seule).
+Non couvert : `$bindable()` (un prop est un `$derived`, donc en lecture seule).
 
 Rappel : **les expressions de gabarit sont du JavaScript.** `{node is not None}`
 ne compile pas ; c'est `{py.truthy(node)}`.
@@ -484,12 +506,6 @@ pour son compte au lieu de partager le travail. Mesuré sur ce projet à plus de
 
 **Manquant, avec contournement**
 
-- **`setContext` / `getContext`.** Aucune API côté Python. Ils doivent être
-  appelés pendant l'initialisation d'une *instance*, ce qu'un `<script module>`
-  — exécuté une seule fois — ne peut pas faire. Le corps du module Python
-  tournant bien à l'initialisation, l'exposer devrait suffire. C'est aussi le
-  préalable au rendu serveur par requête, le contexte étant la réponse de Svelte
-  à l'état par requête. Contournement pour de l'état global : un store `.py`.
 - **`$bindable()`.** Un prop est un `$derived`, donc en lecture seule ; pas de
   liaison bidirectionnelle parent↔enfant. Contournement : passer une fonction de
   rappel en prop.

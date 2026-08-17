@@ -228,14 +228,20 @@ function compile(src, name = 'Component', source = name, { store = false, lineOf
     const hasPublish = declared.includes('publish');
     const hasDerived = declared.includes('derived');
 
+    // Context is per component subtree, where a store is per application — and
+    // it is the only per-request-safe place to put state under server
+    // rendering. Both must be called while an instance initialises, which is
+    // exactly when the Python module body runs.
+    const hasContext = declared.includes('set_context') || declared.includes('get_context');
+
     const script = [
         `import { init } from ${JSON.stringify(virtualId(name))};`,
         // `py` backs the rewritten conditions, and is available to the template
         // for explicit conversions: {py.str(items)} renders ['a', 'b'].
         `import { bind, py, republish, pyError, schedule, NONE${store ? ', registerModule' : ''} } from 'svelthon/runtime';`,
-        ...(lifecycle('on_mount') || lifecycle('on_destroy')
-            ? [`import { untrack } from 'svelte';`]
-            : []),
+        `import { ${['getContext', 'setContext']
+            .concat(lifecycle('on_mount') || lifecycle('on_destroy') ? ['untrack'] : [])
+            .join(', ')} } from 'svelte';`,
         ``,
         ...(props.length ? [`const __props = $props();`, ``] : []),
         // A prop's value comes from the parent when it was passed, and from the
@@ -292,6 +298,13 @@ function compile(src, name = 'Component', source = name, { store = false, lineOf
               ]),
         // The decorator only marks; the compiler did the work already.
         ...(hasDerived ? [] : [`bind(__proto, 'derived', () => (f) => f, () => {});`]),
+        ...(hasContext
+            ? []
+            : [
+                  `bind(__proto, 'set_context', () => setContext, () => {});`,
+                  // A missing key is `undefined` in Svelte; Python expects None.
+                  `bind(__proto, 'get_context', () => (key) => getContext(key) ?? NONE, () => {});`
+              ]),
         ``,
         `init(${NS});`,
         ``,
