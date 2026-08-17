@@ -1,17 +1,9 @@
 import { defineConfig } from 'vitest/config';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { fileURLToPath } from 'node:url';
-import { readdirSync, readFileSync } from 'node:fs';
 import { python, svelthon, vendorQuirks } from './src/lib/svelthon.js';
 
-// La démo affiche le nombre de tests. Le coder en dur, c'est le laisser dériver
-// à chaque ajout — on le compte donc à la construction.
-const tests = readdirSync('src')
-    .filter((name) => name.endsWith('.test.js'))
-    .reduce((total, name) => total + (readFileSync(`src/${name}`, 'utf8').match(/\btest\(/g) || []).length, 0);
-
 export default defineConfig({
-    define: { __TESTS__: JSON.stringify(String(tests)) },
     plugins: [svelthon(), vendorQuirks(), svelte({ preprocess: [python()] })],
     resolve: {
         alias: {

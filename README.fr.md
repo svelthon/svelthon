@@ -2,6 +2,8 @@
 
 > Version française. La documentation de référence est le [README anglais](README.md).
 
+![La page de démonstration : le source Python à côté du composant vivant](docs/demo.png)
+
 Des composants Svelte écrits en Python, compilés par Brython **au build**.
 
 ```svelte

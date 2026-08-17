@@ -1,0 +1,26 @@
+{
+  "name": "svelthon",
+  "version": "1.0.0",
+  "description": "Svelte components written in Python, compiled by Brython at build time",
+  "main": "index.js",
+  "scripts": {
+    "test": "vitest run",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test:browser": "bash scripts/browser-check.sh",
+    "test:hmr": "bash scripts/hmr-check.sh",
+    "bench": "bash scripts/bench.sh"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^7.3.0",
+    "jsdom": "^29.1.1",
+    "svelte": "^5.56.9",
+    "vite": "^8.2.1",
+    "vitest": "^4.1.10"
+  }
+}
