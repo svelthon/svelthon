@@ -1,9 +1,9 @@
 <script lang="python">
-name: str          # prop requis
-punct: str = "!"   # prop avec défaut
+name: str          # required prop
+punct: str = "!"   # prop with a default
 
-greeting = "Bonjour"                 # état interne
-initial = f"{greeting} {name}"       # un prop est lisible dès l'init
+greeting = "Hello"               # internal state
+initial = f"{greeting} {name}"   # a prop is readable during init
 
 def shout():
     global greeting
@@ -12,4 +12,4 @@ def shout():
 
 <p data-k="line">{greeting} {name}{punct}</p>
 <p data-k="initial">{initial}</p>
-<button onclick={shout}>crier</button>
+<button onclick={shout}>shout</button>

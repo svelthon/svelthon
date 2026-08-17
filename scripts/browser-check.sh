@@ -39,7 +39,7 @@ fi
 APP=$(chromium --headless --no-sandbox --disable-gpu \
     --virtual-time-budget=9000 --dump-dom "http://localhost:$PORT/" 2>/dev/null)
 
-for expected in "compté 0 fois" "Bonjour Pierre…" "compteur partagé : 0 — []" "-4 · 1180591620717411303424"; do
+for expected in "clicked 0 times" "Hello Pierre…" "shared counter: 0 — []" "-4 · 1180591620717411303424"; do
     if printf '%s' "$APP" | grep -qF -- "$expected"; then
         echo "✓ démo — $expected"
     else

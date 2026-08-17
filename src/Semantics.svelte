@@ -1,7 +1,7 @@
 <script lang="python">
 floor = -7 // 2
 big = 2 ** 70
-words = ", ".join(sorted({"pomme", "abricot", "banane"}))
+words = ", ".join(sorted({"apple", "apricot", "banana"}))
 
 def descend():
     global floor
@@ -9,4 +9,4 @@ def descend():
 </script>
 
 <p>{floor} · {big} · {words}</p>
-<button onclick={descend}>descendre</button>
+<button onclick={descend}>descend</button>
