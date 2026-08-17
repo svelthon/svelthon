@@ -48,6 +48,7 @@ npm run dev
 npm test             # 92 tests: semantics, props, reactivity, Svelte surface
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
+npm run bench        # Python vs JavaScript, same component, real browser
 npm run build
 ```
 
@@ -573,6 +574,41 @@ The grammar already lists `coffee` beside `ts`, so adding `python` upstream in
 `svelte-language-tools` follows an existing precedent. A grammar injection
 shipped as a small editor extension is the other route.
 
+## What it costs at runtime
+
+Measured with `npm run bench`: the same component written twice, once in Python
+and once in JavaScript, driven through real clicks in a headless Chromium. Click
+dispatch costs the same on both sides, so the gap between the columns belongs to
+the handler. Seven alternating rounds, the minimum kept — the least polluted
+measurement, not the average of the machine's interruptions.
+
+| | Python | JS | gap |
+|---|---:|---:|---:|
+| warm mount | 0.3 ms | 0.2 ms | ~1.5× |
+| 2000 handler calls | 28 ms | 18 ms | **~1.5×** |
+| 1500 × sum of 500 squares | 1128 ms | 15 ms | **50–100×** |
+| rendering a 500-row keyed list | 5.0 ms | 8.0 ms | **0.6×** |
+
+Three things to take from it.
+
+**Calling into Python is cheap** — about 1.5× a JS handler. Frames and
+`augm_assign` cost something, but nothing that a click will ever notice.
+
+**Python computation is one to two orders of magnitude slower.** The ratio swings
+between 50× and 100× across runs, which is the honest range on a modest laptop.
+Keep hot loops out of a component, or reach for the C extensions
+[Wasthon](https://github.com/fgallaire/wasthon) compiles to WebAssembly.
+
+**Rendering is not slower — it is faster.** Consistently, across every run. Svelte
+deep-proxies the objects inside a `$state` array; SVELTHON's names are
+`$state.raw`, so Python values are never proxied. The reactivity design pays for
+itself exactly where a real application spends its time.
+
+Loading is the real price: **1.2 s to interactive** for the production demo on
+this laptop, against 0.5 s for the same page without Brython — 244 KB gzip
+instead of 13 KB. Paid once per session, not per page, since the app never
+reloads.
+
 ## Not done yet
 
 **Blocks a real application**
@@ -582,10 +618,6 @@ shipped as a small editor extension is the other route.
   technical stands in the way — it is the one item on this list that is pure
   work.
 
-
-**Rough edges**
-
-- **Runtime cost** never measured against plain Svelte.
 
 **Upstream, in Brython**
 

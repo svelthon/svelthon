@@ -559,6 +559,43 @@ La grammaire liste déjà `coffee` à côté de `ts` : ajouter `python` en amont
 `svelte-language-tools` ne demande donc aucune exception. L'autre voie est une
 injection de grammaire livrée comme petite extension d'éditeur.
 
+## Ce que ça coûte à l'exécution
+
+Mesuré par `npm run bench` : le même composant écrit deux fois, en Python et en
+JavaScript, actionné par de vrais clics dans un Chromium headless. Le dispatch
+d'un clic coûtant pareil des deux côtés, l'écart entre les colonnes revient au
+handler. Sept tours alternés, minimum retenu — la mesure la moins polluée, pas la
+moyenne des interruptions de la machine.
+
+| | Python | JS | écart |
+|---|---:|---:|---:|
+| montage à chaud | 0,3 ms | 0,2 ms | ~1,5× |
+| 2000 appels de handler | 28 ms | 18 ms | **~1,5×** |
+| 1500 × somme de 500 carrés | 1128 ms | 15 ms | **50 à 100×** |
+| rendu d'une liste à clé de 500 lignes | 5,0 ms | 8,0 ms | **0,6×** |
+
+Trois enseignements.
+
+**Entrer dans Python coûte peu** — environ 1,5× un handler JS. Les frames et
+`augm_assign` se paient, mais rien qu'un clic puisse percevoir.
+
+**Le calcul Python est un à deux ordres de grandeur plus lent.** Le rapport
+oscille entre 50× et 100× selon les exécutions : c'est la fourchette honnête sur
+une machine modeste. Garder les boucles chaudes hors des composants, ou passer
+par les extensions C que [Wasthon](https://github.com/fgallaire/wasthon) compile
+en WebAssembly.
+
+**Le rendu n'est pas plus lent — il est plus rapide.** De façon constante, à
+chaque exécution. Svelte proxifie en profondeur les objets d'un tableau `$state` ;
+les noms de SVELTHON sont des `$state.raw`, donc les valeurs Python ne sont jamais
+proxifiées. Le choix de conception de la réactivité se rembourse précisément là
+où une vraie application passe son temps.
+
+Le vrai prix est au chargement : **1,2 s jusqu'à l'interactivité** pour la démo de
+production sur ce portable, contre 0,5 s pour la même page sans Brython — 244 Ko
+gzip au lieu de 13. Payé une fois par session, pas par page, puisque
+l'application ne recharge jamais.
+
 ## Reste à faire
 
 **Bloque une vraie application**
@@ -567,10 +604,6 @@ injection de grammaire livrée comme petite extension d'éditeur.
   ailleurs demande d'en faire un paquet npm installable. Rien ne s'y oppose
   techniquement : c'est le seul point de cette liste qui soit du pur travail.
 
-
-**Aspérités**
-
-- **Coût à l'exécution** jamais mesuré face à du Svelte ordinaire.
 
 **En amont, chez Brython**
 
