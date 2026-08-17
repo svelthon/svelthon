@@ -509,6 +509,17 @@ Aucun parallélisme : chaque worker recharge et retransforme le runtime Brython
 pour son compte au lieu de partager le travail. Mesuré sur ce projet à plus de
 30 minutes en parallèle contre moins d'une en séquentiel.
 
+## Support éditeur
+
+Ce n'est pas un manque de SVELTHON, mais autant le savoir : la grammaire
+TextMate de Svelte rabat un `lang` inconnu sur **JavaScript**. `<script
+lang="python">` n'est donc pas laissé sans coloration — il est colorié faux,
+commentaires `#` compris.
+
+La grammaire liste déjà `coffee` à côté de `ts` : ajouter `python` en amont dans
+`svelte-language-tools` ne demande donc aucune exception. L'autre voie est une
+injection de grammaire livrée comme petite extension d'éditeur.
+
 ## Reste à faire
 
 **Bloque une vraie application**
@@ -530,7 +541,6 @@ pour son compte au lieu de partager le travail. Mesuré sur ce projet à plus de
   débogueur du navigateur montre le JS généré, pas le Python.
 - **Les erreurs levées dans une coroutine** remontent par la boucle de Brython :
   elles n'ont pas le fichier ni la ligne que le chemin synchrone ajoute.
-- **Éditeur.** Aucune coloration ni complétion dans `<script lang="python">`.
 - **Cache de compilation.** Un store est recompilé à chaque `load()`.
 - **Coût à l'exécution** jamais mesuré face à du Svelte ordinaire.
 

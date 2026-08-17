@@ -523,6 +523,16 @@ No parallelism. Each worker reloads and re-transforms the Brython runtime for
 itself instead of sharing the work: measured on this project at over 30 minutes
 in parallel against under one sequentially.
 
+## Editor support
+
+Not a gap in SVELTHON, but worth knowing: the Svelte TextMate grammar falls back
+to **JavaScript** for an unrecognised `lang`, so `<script lang="python">` is not
+left uncoloured — it is coloured wrongly, `#` comments included.
+
+The grammar already lists `coffee` beside `ts`, so adding `python` upstream in
+`svelte-language-tools` follows an existing precedent. A grammar injection
+shipped as a small editor extension is the other route.
+
 ## Not done yet
 
 **Blocks a real application**
@@ -544,7 +554,6 @@ in parallel against under one sequentially.
   shows the generated JS, not the Python.
 - **Errors inside a coroutine** surface through Brython's loop, so they miss the
   file and line the synchronous path adds.
-- **Editor.** No highlighting or completion inside `<script lang="python">`.
 - **Compilation cache.** A store is recompiled on every `load()`.
 - **Runtime cost** never measured against plain Svelte.
 
