@@ -21,6 +21,8 @@ page loads.
 
 *[Version française](README.fr.md).*
 
+![The SVELTHON demo page: Python source next to the running component](docs/demo.png)
+
 ## Why
 
 Python is the most used language in the world, and running it in a browser has

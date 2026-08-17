@@ -11,6 +11,9 @@ export default defineConfig({
         },
         conditions: ['browser']
     },
+    // 5173 est pris par TABLE.
+    server: { port: 5174, strictPort: true },
+
     optimizeDeps: {
         // Vite's dependency scanner runs ahead of the plugin pipeline: it reads
         // the HTML entries, finds `<script lang="python">` and hands the Python
