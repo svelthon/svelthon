@@ -363,6 +363,30 @@ Une exception levée *dans* une coroutine remonte par la boucle de Brython, pas
 par l'enveloppe : elle ne porte donc pas le fichier et la ligne que le chemin
 synchrone ajoute.
 
+## Rendu côté serveur
+
+Ça fonctionne. Svelte compile une seconde version de chaque composant qui rend
+une chaîne HTML au lieu de créer des nœuds DOM ; le corps Python s'exécute donc
+sous Node — ce que le compilateur fait déjà au build. Il manquait deux shims au
+runtime navigateur (`self`, `addEventListener`) ; `src/lib/globals.js` les pose
+désormais, et c'était tout l'obstacle.
+
+Couvert par `src/ssr.test.js` : composants, props, composition avec composants
+enfants et `py.of()`, et les valeurs Python elles-mêmes — `-7 // 2` rend bien
+`-4` côté serveur.
+
+**Le seul vrai piège, et il n'est pas propre à SVELTHON.** L'état d'un store vit
+dans le module, donc il est partagé par toutes les requêtes servies par le
+processus. Svelte pose exactement le même avertissement pour un `$state` de
+niveau module dans un `.svelte.js`. Sans danger au **prérendu** — une seule
+passe, aucun utilisateur concurrent — et fuite de données en rendu par requête.
+La réponse de Svelte est le contexte, que SVELTHON n'expose pas encore au
+Python : les deux manques se composent.
+
+Le prérendu est donc la cible atteignable : aucun serveur nécessaire, il tient
+dans la chaîne de build qui exécute déjà Brython sous Node, et c'est ce dont un
+site de documentation ou une démo a réellement besoin.
+
 ## Erreurs
 
 Une exception Brython arrive en JavaScript **sans `message` ni `stack`** : les
@@ -399,7 +423,7 @@ C'est le même mécanisme qui accueillera les `.wasm` de Wasthon.
 
 ## État
 
-Validé par `npm test` — 71 tests, plus 1 échec attendu (voir plus bas) :
+Validé par `npm test` — 76 tests, plus 1 échec attendu (voir plus bas) :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
 - props : défaut Python, priorité du parent, lisibilité pendant l'init,
@@ -439,7 +463,7 @@ un composant Python :
 Non couvert : `setContext`/`getContext` n'ont pas d'API côté Python — ils
 doivent s'appeler pendant l'initialisation d'une instance, ce qu'un
 `<script module>` ne permet pas. Ni `$bindable()` (un prop est un `$derived`,
-donc en lecture seule) ni le rendu côté serveur.
+donc en lecture seule).
 
 Rappel : **les expressions de gabarit sont du JavaScript.** `{node is not None}`
 ne compile pas ; c'est `{py.truthy(node)}`.

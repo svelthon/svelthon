@@ -45,7 +45,7 @@ npm run dev
 ```
 
 ```sh
-npm test             # 71 tests: semantics, props, reactivity, Svelte surface
+npm test             # 76 tests: semantics, props, reactivity, Svelte surface
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
 npm run build
@@ -367,6 +367,30 @@ An exception raised *inside* a coroutine surfaces through Brython's loop, not
 through the wrapper, so it does not carry the file and line the synchronous path
 adds.
 
+## Server-side rendering
+
+It works. Svelte compiles a second version of each component that returns an
+HTML string instead of creating DOM nodes, so the Python body runs under Node —
+which is what the compiler already does at build time. Two shims were missing
+from the browser runtime (`self`, `addEventListener`); `src/lib/globals.js` now
+sets them, and that was the whole obstacle.
+
+Covered by `src/ssr.test.js`: components, props, composition with child
+components and `py.of()`, and the Python values themselves — `-7 // 2` still
+renders `-4` server-side.
+
+**The one real trap, and it is not specific to SVELTHON.** A store's state lives
+in the module, so it is shared by every request the process serves. Svelte warns
+about exactly this for module-level `$state` in a `.svelte.js`. Harmless when
+**prerendering** — one pass, no concurrent users — and a data leak under
+per-request rendering. Svelte's answer is context, which SVELTHON does not
+expose to Python yet, so the two gaps compound: per-request SSR needs context
+first.
+
+Prerendering is therefore the reachable target: it needs no server, it fits the
+build chain that already runs Brython under Node, and it is what a documentation
+or demo site actually wants.
+
 ## Errors
 
 A Brython exception reaches JavaScript **with no `message` and no `stack`**:
@@ -432,15 +456,14 @@ a Python component:
 
 Not covered: `setContext`/`getContext` have no Python-facing API — they must be
 called during an instance's initialisation, which a `<script module>` cannot do.
-Nor `$bindable()` (a prop is a `$derived`, hence read-only), nor server-side
-rendering.
+Nor `$bindable()` — a prop is a `$derived`, hence read-only.
 
 Reminder: **template expressions are JavaScript.** `{node is not None}` does not
 compile; write `{py.truthy(node)}`.
 
 ## Status
 
-Validated by `npm test` — 71 tests, plus 1 expected failure (below):
+Validated by `npm test` — 76 tests, plus 1 expected failure (below):
 
 - end-to-end reactivity, and which write paths propagate;
 - props: Python defaults, parent precedence, readability during init, parent
@@ -488,7 +511,6 @@ in parallel against under one sequentially.
 - **Editor.** No highlighting or completion inside `<script lang="python">`.
 - **Compilation cache.** A store is recompiled on every `load()`.
 - **Runtime cost** never measured against plain Svelte.
-- **Server-side rendering** never attempted.
 
 **Upstream, in Brython**
 

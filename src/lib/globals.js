@@ -7,6 +7,12 @@
 //    (vendor/brython.js:38).
 //  - the codegen builds its AST classes with eval(), whose code resolves `$B`
 //    in *global* scope; a module-scoped binding would be invisible to it.
+// Server-side rendering runs this same module under Node, where the bootstrap
+// finds neither of these. brython.js shims `document` itself when it is absent,
+// but not these two.
+globalThis.self ??= globalThis;
+globalThis.addEventListener ??= () => {};
+
 // brython_path must be an absolute URL: $B.strip_host feeds it to new URL().
 const base = globalThis.location?.href ?? 'http://localhost/';
 
