@@ -22,6 +22,18 @@ export default defineConfig({
         include: ['svelte']
     },
     test: {
-        environment: 'jsdom'
+        environment: 'jsdom',
+
+        // Chaque worker recharge et retransforme pour son compte le runtime
+        // Brython — 1,4 Mo — puis reboote l'interpréteur. Paralléliser les
+        // fichiers multiplie ce coût au lieu de le partager : mesuré à plus de
+        // 30 minutes en parallèle contre moins de 2 en séquentiel.
+        fileParallelism: false,
+        pool: 'threads',
+        poolOptions: { threads: { singleThread: true } },
+
+        // Le premier import d'une chaîne de composants compile leur Python ;
+        // sur une machine modeste cela dépasse largement les 5 s par défaut.
+        testTimeout: 30000
     }
 });
