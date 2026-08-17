@@ -184,16 +184,13 @@ rows = [Item("a", 1), Item("b", 2)]
 {#each rows as r}<Row row={r} />{/each}
 ```
 
-A Python object is passed as a prop with no conversion. In markup, dicts and
-tuples read directly — a Brython dict's keys are exposed as JS properties, a
-tuple *is* an array. **Class instances** are the exception: Brython keeps their
-attributes out of the JS properties, so `{o.label}` would render empty.
-`py.of()` goes through Python's own attribute lookup, descriptor protocol
-included:
+A Python object is passed as a prop with no conversion, and read back as
+Python — attributes and descriptors included, since template expressions are
+compiled as Python:
 
 ```svelte
-{py.of(item).label}    <!-- attribute -->
-{py.of(item).double}   <!-- @property, evaluated -->
+{item.label}     <!-- attribute -->
+{item.double}    <!-- @property, evaluated -->
 ```
 
 ## Derived values and bindings
