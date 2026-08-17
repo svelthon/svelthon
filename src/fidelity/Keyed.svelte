@@ -31,7 +31,7 @@ def drop_first():
 </script>
 
 <ul data-k="list">
-{#each items as it (py.of(it).id)}<li data-id={py.of(it).id}>{py.of(it).label}</li>{/each}
+{#each items as it (it.id)}<li data-id={it.id}>{it.label}</li>{/each}
 </ul>
 <button data-k="prepend" onclick={prepend}>prepend</button>
 <button data-k="relabel" onclick={relabel}>relabel</button>

@@ -45,7 +45,7 @@ npm run dev
 ```
 
 ```sh
-npm test             # 96 tests: semantics, props, reactivity, Svelte surface
+npm test             # 101 tests: semantics, props, reactivity, Svelte surface
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
 npm run bench        # Python vs JavaScript, same component, real browser
@@ -121,53 +121,51 @@ the property normally and therefore walks the prototype chain. It is the only
 place in Brython that consults that flag, and it is what makes the prototype
 trick compatible with props.
 
-## Templates are JavaScript
+## Templates are Python
 
-The rule to remember: inside markup you are in JS, not Python. Two consequences,
-one of them fixed automatically.
-
-`{#if}` is **rewritten** to Python's `bool()` by the preprocessor — otherwise an
-empty list, an empty dict or `None` would all read as true, since JS holds every
-object truthy. `{#each}` needs nothing: a Brython list *is* a JS array.
-
-**Text interpolation** is wrapped in `py.str()`, or a list would render as
-`a,b,c` and a dict as `[object Object]` — and since a Brython list is literally a
-JS array, no prototype could have been patched instead.
+Every expression a template *reads* is compiled as Python. Each site becomes a
+hidden function appended to the module, and the markup calls it:
 
 ```svelte
-{#if items}   <!-- rewritten to py.truthy(items) -->
-  {items}     <!-- rewritten to py.str(items) → ['a', 'b', 'c'] -->
+{#if rows}                    <!-- {#if __expr_0()}     def __expr_0(): … -->
+  {#each rows as r}
+    <li data-id={r.id}>{r.label}</li>
+  {/each}
 {/if}
 ```
 
-**Attribute values and component props are left alone**: they carry the value,
-not its rendering. `data-v={items}` receives the list itself. The rewrites touch
-markup only, never a `<script>` or `<style>` — Python is full of braces.
+Block variables are passed as arguments, so the functions read the component's
+names through the namespace accessors — which means **Svelte discovers their
+dependencies by itself**, exactly as it does for `@derived`.
 
-For events, the recommended shape is to extract in the template and compute in
-Python:
+So the template is Python, with no helpers:
 
 ```svelte
-<input oninput={(e) => on_text(e.target.value)} />
+{value is None}              {a and not b}           {len(rows)}
+{"yes" if flag else "no"}    {rows[1:]}              {f"{n} items"}
+{item.label}                 {mapping["key"]}        {[x.upper() for x in xs]}
 ```
 
-Walking the DOM from Python works too, one line away: a node's class is resolved
-through `$B.imported['browser.html']`, which only a real import registers.
+`{item.label}` on a class instance works — that was the wart `py.of()` used to
+paper over. `{#if rows}` follows Python's truth, so an empty list is false. And a
+`dict` has no attributes: `{d["k"]}`, not `{d.k}` — the semantics are Python's,
+including where that differs from JavaScript.
 
-```python
-from browser import html, document
+**Directives keep the host language**, because they carry a callback or a
+JavaScript value rather than a rendering:
 
-el = document.createElement("input")   # → INPUT
+```svelte
+<input oninput={(e) => on_text(e.target.value)} bind:value={name} use:action />
 ```
 
-It cannot be pre-imported at boot (`$B.$import` reads `$B.frame_obj`, null until
-a module body has run), and injecting it into every component with a
-parameterised handler would cost a class per HTML tag to components that never
-touch a node.
+The rule: `on*`, `bind:`, `use:`, `class:`, `style:` and the transition family
+stay JavaScript; every other attribute, component prop included, is Python. A
+component with no Python of its own — a store consumer — keeps the JavaScript
+template and the `py.str()` / `py.truthy()` helpers.
 
-**jsdom hangs on that import** while a real browser does not — hence
-`npm run test:browser`, which replays the check in headless Chromium. It is the
-one part of the project the jsdom suite cannot cover.
+It costs about **1.3× on rendering** against a JavaScript component (`npm run
+bench`), against 0.6× before: one Python call per expression per render. That is
+the price of the template being Python.
 
 ## Composition
 
@@ -537,7 +535,7 @@ compile; write `{py.truthy(node)}`.
 
 ## Status
 
-Validated by `npm test` — 96 tests, plus 2 expected failures (below):
+Validated by `npm test` — 101 tests, plus 2 expected failures (below):
 
 - end-to-end reactivity, and which write paths propagate;
 - props: Python defaults, parent precedence, readability during init, parent

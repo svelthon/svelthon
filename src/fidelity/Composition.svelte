@@ -19,9 +19,9 @@ dicts = [{"label": "x", "qty": 9}]
 pairs = [("k", 1)]
 </script>
 
-<p data-k="obj">{#each objs as o}[{py.of(o).label}:{py.of(o).qty}]{/each}</p>
-<p data-k="prop">{#each objs as o}[{py.of(o).double}]{/each}</p>
-<p data-k="dict">{#each dicts as d}[{d.label}|{d["qty"]}]{/each}</p>
+<p data-k="obj">{#each objs as o}[{o.label}:{o.qty}]{/each}</p>
+<p data-k="prop">{#each objs as o}[{o.double}]{/each}</p>
+<p data-k="dict">{#each dicts as d}[{d["label"]}|{d["qty"]}]{/each}</p>
 <p data-k="tuple">{#each pairs as t}[{t[0]}={t[1]}]{/each}</p>
 <ul data-k="child">{#each objs as o}<Row row={o} />{/each}</ul>
 <ul data-k="child_prop">{#each objs as o}<Row row={o} prefix="-" />{/each}</ul>

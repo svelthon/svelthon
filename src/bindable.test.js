@@ -55,6 +55,8 @@ describe('bindable', () => {
         const { read, click } = setup();
 
         click('[data-k="bound"] button');
-        expect(read('[data-k="unbound"] [data-k="value"]')).toBe(''); // jamais fourni
+        // Un prop non fourni vaut None, comme un prop ordinaire — les
+        // expressions du gabarit étant du Python, il se rend « None ».
+        expect(read('[data-k="unbound"] [data-k="value"]')).toBe('None');
     });
 });

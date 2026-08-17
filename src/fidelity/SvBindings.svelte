@@ -20,7 +20,7 @@ def grab(el):
 <p data-k="pick">{pick}</p>
 
 <p data-k="this" bind:this={node}>ancre</p>
-<p data-k="thisv">{py.truthy(node)}</p>
+<p data-k="thisv">{node}</p>
 
 <Card title="Bonjour">
     {#snippet children()}<em>contenu</em>{/snippet}

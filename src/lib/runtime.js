@@ -146,11 +146,10 @@ export function schedule(result, where, lineOffset = 0) {
 
     if (!aio || result === undefined || result === null) return result;
 
-    try {
-        if ($B.$getattr(aio, 'iscoroutine')(result) !== true) return result;
-    } catch {
-        return result; // not a coroutine — hand the value back untouched
-    }
+    // Compared in JavaScript rather than through aio.iscoroutine(): this runs on
+    // every call into Python, template expressions included, and a Brython call
+    // here costs more than the check saves.
+    if ($B.get_class(result) !== $B.coroutine) return result;
 
     // run(coro, onsuccess, onerror). Its default onerror only logs, so an
     // exception raised inside a coroutine reaches nothing at all — no error

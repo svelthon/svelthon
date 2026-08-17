@@ -144,6 +144,157 @@ function pythonConditions(markup) {
     return out + markup.slice(cut);
 }
 
+// Template expressions compiled as Python.
+//
+// Each site becomes a hidden Python function appended to the module, and the
+// markup calls it. The function reads the component's names through the
+// namespace accessors, so Svelte discovers its dependencies exactly as it does
+// for @derived — nothing to declare. The *kind* of site decides the wrapper:
+// text renders with str(), a condition with bool(), which is why neither
+// py.str() nor py.truthy() appears in the output any more.
+//
+// Only the two sites where a Python value is *read* are converted. Attribute
+// values and event handlers stay JavaScript: they carry a value or a callback,
+// not a rendering — the same boundary py.str() already drew.
+
+// Directives carry a callback or a JavaScript value, never a rendering, so they
+// keep the host language: `onclick={increment}`, `bind:value={name}`,
+// `use:action={opts}`, the transition family. Every other attribute — including
+// a component prop — carries a Python value and is compiled as one.
+const DIRECTIVE = /^(?:on[a-z]|(?:on|use|bind|transition|animate|in|out|class|style):)/;
+
+// Names a block introduces, which are not module globals and must therefore be
+// passed in as arguments.
+const BLOCK_NAMES = {
+    '#each': /\bas\s+([^()]*?)\s*(?:\(|$)/,
+    '#snippet': /\w+\s*\(([^)]*)\)/,
+    ':then': /^:then\s+(.+)$/,
+    ':catch': /^:catch\s+(.+)$/,
+    '@const': /^@const\s+([^=]+)=/
+};
+
+const identifiers = (text) => [...text.matchAll(/[A-Za-z_]\w*/g)].map((m) => m[0]);
+
+function declaredBy(inner) {
+    const keyword = inner.trimStart().split(/[\s(]/)[0];
+    const pattern = BLOCK_NAMES[keyword];
+    if (!pattern) return [];
+
+    const found = inner.trim().match(pattern);
+    return found ? identifiers(found[1]) : [];
+}
+
+function pythonExpressions(markup, collect) {
+    let out = '';
+    let index = 0;
+    let inTag = false;
+    let quote = null;
+    const scopes = [];
+
+    const inScope = () => [...new Set(scopes.flat())];
+
+    const call = (expr, wrapper) => {
+        const args = inScope();
+        const name = collect(expr.trim(), wrapper, args);
+        return `${name}(${args.join(', ')})`;
+    };
+
+    while (index < markup.length) {
+        const char = markup[index];
+
+        if (inTag) {
+            if (quote) {
+                if (char === quote) quote = null;
+            } else if (char === '"' || char === "'") {
+                quote = char;
+            } else if (char === '{') {
+                const end = closingBrace(markup, index);
+                if (end !== -1) {
+                    const attribute = out.match(/([^\s=]+)=$/);
+                    const inner = markup.slice(index + 1, end);
+
+                    // A directive, a spread, or a bare shorthand: left as
+                    // JavaScript. A named attribute carries a Python value.
+                    out +=
+                        attribute && !DIRECTIVE.test(attribute[1]) && !inner.trimStart().startsWith('...')
+                            ? `{${call(inner, '')}}`
+                            : markup.slice(index, end + 1);
+
+                    index = end + 1;
+                    continue;
+                }
+            } else if (char === '>') {
+                inTag = false;
+            }
+
+            out += char;
+            index++;
+            continue;
+        }
+
+        if (char === '<') {
+            inTag = true;
+            out += char;
+            index++;
+            continue;
+        }
+
+        if (char !== '{') {
+            out += char;
+            index++;
+            continue;
+        }
+
+        const end = closingBrace(markup, index);
+        if (end === -1) {
+            out += char;
+            index++;
+            continue;
+        }
+
+        const inner = markup.slice(index + 1, end);
+        const trimmed = inner.trim();
+
+        if (trimmed.startsWith('#')) {
+            scopes.push(declaredBy(trimmed));
+
+            if (trimmed.startsWith('#if ')) {
+                out += `{#if ${call(trimmed.slice(4), '__truthy')}}`;
+            } else if (trimmed.startsWith('#each ')) {
+                // The key sees the block's own names, so it is compiled after
+                // the scope is pushed. Keyed lists of Python objects need it:
+                // `(item.id)` is attribute access on an instance.
+                const keyed = trimmed.match(/^(#each\s+.*?)\(([^()]*)\)\s*$/s);
+                out += keyed
+                    ? `{${keyed[1]}(${call(keyed[2], 'repr')})}`
+                    : markup.slice(index, end + 1);
+            } else {
+                out += markup.slice(index, end + 1);
+            }
+        } else if (trimmed.startsWith('/')) {
+            scopes.pop();
+            out += markup.slice(index, end + 1);
+        } else if (trimmed.startsWith(':')) {
+            // A continuation clause may rebind the block's names.
+            const declared = declaredBy(trimmed);
+            if (declared.length) scopes[scopes.length - 1] = declared;
+
+            out += /^:else\s+if\s/.test(trimmed)
+                ? `{:else if ${call(trimmed.replace(/^:else\s+if\s/, ''), '__truthy')}}`
+                : markup.slice(index, end + 1);
+        } else if (trimmed.startsWith('@')) {
+            if (trimmed.startsWith('@const')) scopes[scopes.length - 1]?.push(...declaredBy(trimmed));
+            out += markup.slice(index, end + 1);
+        } else {
+            out += `{${call(inner, '__text')}}`;
+        }
+
+        index = end + 1;
+    }
+
+    return out;
+}
+
 const HAS_PYTHON_SCRIPT = /<script[^>]*\blang=["']python["']/;
 const IMPORTS_STORE = /from\s+["'][^"']+\.py["']/;
 
@@ -156,6 +307,30 @@ const needsRuntime = new Set();
 // from its first line. The gap is the number of lines before the opening tag.
 const lineOffsets = new Map();
 
+// The hidden functions the markup of each file needs, appended to its Python.
+const templateFunctions = new Map();
+
+// Appended, never prepended: the Python's own line numbers stay true, which is
+// what keeps error messages and source maps pointing at the right place.
+function collector(filename) {
+    const defs = [];
+    const seen = new Map();
+
+    templateFunctions.set(filename, defs);
+
+    return (expression, wrapper, args) => {
+        const key = `${wrapper}|${args.join(',')}|${expression}`;
+        if (seen.has(key)) return seen.get(key);
+
+        const name = `__expr_${defs.length}`;
+        seen.set(key, name);
+        defs.push(
+            `def ${name}(${args.join(', ')}):\n    return ${wrapper ? `${wrapper}(${expression})` : expression}`
+        );
+        return name;
+    };
+}
+
 // The Svelte preprocessor: runs before Svelte parses the component, so the
 // compiler only ever sees ordinary JavaScript with runes.
 export function python() {
@@ -165,11 +340,21 @@ export function python() {
             const isPython = HAS_PYTHON_SCRIPT.test(content);
             if (!isPython && !IMPORTS_STORE.test(content)) return;
 
-            if (!isPython) needsRuntime.add(filename);
-            else lineOffsets.set(filename, content.slice(0, content.search(HAS_PYTHON_SCRIPT)).split('\n').length - 1);
+            // A component with no Python of its own — a store consumer — has
+            // nowhere to put the hidden functions, so its markup keeps the
+            // JavaScript path. The template language follows the script language.
+            if (!isPython) {
+                needsRuntime.add(filename);
+                return { code: overMarkup(content, (markup) => pythonText(pythonConditions(markup))) };
+            }
 
-            // Conditions first: pythonText then sees `{#if …}` and leaves it be.
-            return { code: overMarkup(content, (markup) => pythonText(pythonConditions(markup))) };
+            lineOffsets.set(
+                filename,
+                content.slice(0, content.search(HAS_PYTHON_SCRIPT)).split('\n').length - 1
+            );
+
+            const collect = collector(filename);
+            return { code: overMarkup(content, (markup) => pythonExpressions(markup, collect)) };
         },
         script({ content, attributes, filename }) {
             if (attributes.lang !== 'python') {
@@ -178,8 +363,11 @@ export function python() {
             }
 
             const name = nameFor(filename);
+            const defs = templateFunctions.get(filename) || [];
+            const source = defs.length ? `${content}\n${defs.join('\n\n')}\n` : content;
+
             const { script, module, map, stdlib, imports } = compile(
-                content,
+                source,
                 name,
                 relative(process.cwd(), filename || 'Component'),
                 {

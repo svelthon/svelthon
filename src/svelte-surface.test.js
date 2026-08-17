@@ -64,7 +64,12 @@ describe('liaisons et snippets', () => {
     });
 
     test('bind:this écrit le nœud dans un nom Python', () => {
-        expect(render(SvBindings).querySelector('[data-k="thisv"]').textContent).toBe('True');
+        // Un nœud DOM brut n'est pas un objet Python tant que browser.html n'est
+        // pas importé — comme event.target. On l'observe donc sans opération
+        // Python : le rendu se replie sur la conversion JavaScript.
+        expect(render(SvBindings).querySelector('[data-k="thisv"]').textContent).toContain(
+            'HTMLParagraph'
+        );
     });
 
     test('un composant Python reçoit et rend ses enfants', () => {

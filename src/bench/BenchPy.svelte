@@ -19,4 +19,4 @@ def fill():
 <button data-k="tick" onclick={tick}>tick</button>
 <button data-k="heavy" onclick={heavy}>heavy</button>
 <button data-k="fill" onclick={fill}>fill</button>
-<ul data-k="rows">{#each items as row (row.id)}<li>{row.label}</li>{/each}</ul>
+<ul data-k="rows">{#each items as row (row["id"])}<li>{row["label"]}</li>{/each}</ul>

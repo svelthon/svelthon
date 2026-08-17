@@ -397,6 +397,11 @@ function compile(
         // bindable() only marks the annotation; the compiler read it already.
         ...(hasBindable ? [] : [`bind(__proto, 'bindable', () => (v) => v, () => {});`]),
         ...(hasEffect ? [] : [`bind(__proto, 'effect', () => (f) => f, () => {});`]),
+        // Wrappers for compiled template expressions. Not Python's own bool()
+        // and str(): a template may hold a foreign JavaScript value — a DOM node
+        // from bind:this — on which Brython's classifier trips. These fall back.
+        `bind(__proto, '__truthy', () => py.truthy, () => {});`,
+        `bind(__proto, '__text', () => py.str, () => {});`,
         ...(hasContext
             ? []
             : [

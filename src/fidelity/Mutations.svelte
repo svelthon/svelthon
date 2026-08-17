@@ -52,7 +52,7 @@ def attribute_and_publish():
 <p data-k="items">{items}</p>
 <p data-k="size">{size}</p>
 <p data-k="depth">{depth}</p>
-<p data-k="table">{py.str(table)}</p>
+<p data-k="table">{table}</p>
 
 <button data-k="rebind" onclick={rebind}>rebind</button>
 <button data-k="augment" onclick={augment}>augment</button>

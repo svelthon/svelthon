@@ -93,56 +93,51 @@ propriété normalement, donc en traversant le prototype. C'est le seul endroit 
 Brython qui consulte ce drapeau, et c'est ce qui rend l'astuce du prototype
 compatible avec les props.
 
-## Le gabarit est du JavaScript
+## Le gabarit est du Python
 
-Règle à retenir : dans le balisage on est en JS, pas en Python. Deux
-conséquences, dont une corrigée automatiquement.
-
-`{#if}` est **réécrit** vers le `bool()` de Python par le préprocesseur — sinon
-une liste vide, un dict vide ou `None` seraient vrais, puisque JS tient tout
-objet pour vrai. `{#each}` fonctionne nativement : une liste Brython *est* un
-tableau JS.
-
-L'interpolation de **texte** est enveloppée dans `py.str()`, sinon une liste
-s'afficherait `a,b,c` et un dict `[object Object]` — et comme une liste Brython
-*est* un tableau JS, aucun prototype ne pouvait être corrigé à la place.
+Toute expression que le gabarit *lit* est compilée en Python. Chaque site devient
+une fonction cachée ajoutée au module, que le balisage appelle :
 
 ```svelte
-{#if items}   <!-- réécrit en py.truthy(items) -->
-  {items}     <!-- réécrit en py.str(items) → ['a', 'b', 'c'] -->
+{#if rows}                    <!-- {#if __expr_0()}     def __expr_0(): … -->
+  {#each rows as r}
+    <li data-id={r.id}>{r.label}</li>
+  {/each}
 {/if}
 ```
 
-Les **valeurs d'attribut et les props** sont laissées intactes : elles
-transportent la valeur, pas son rendu. `data-v={items}` reçoit bien la liste.
-Les réécritures ne touchent que le balisage, jamais un `<script>` ou un
-`<style>` — le Python est plein d'accolades.
+Les variables de bloc sont passées en argument, si bien que ces fonctions lisent
+les noms du composant par les accesseurs du namespace — donc **Svelte découvre
+leurs dépendances tout seul**, exactement comme pour `@derived`.
 
-Pour les événements, le motif recommandé est d'extraire dans le gabarit et de
-calculer en Python :
+Le gabarit est donc du Python, sans aucun helper :
 
 ```svelte
-<input oninput={(e) => on_text(e.target.value)} />
+{value is None}              {a and not b}           {len(rows)}
+{"oui" if flag else "non"}   {rows[1:]}              {f"{n} éléments"}
+{item.label}                 {mapping["key"]}        {[x.upper() for x in xs]}
 ```
 
-Traverser le DOM depuis Python fonctionne aussi, à une ligne près : la classe
-d'un nœud se résout via `$B.imported['browser.html']`, que seul un vrai `import`
-enregistre.
+`{item.label}` sur une instance fonctionne — c'était la verrue que `py.of()`
+masquait. `{#if rows}` suit la vérité de Python, donc une liste vide est fausse.
+Et un `dict` n'a pas d'attributs : `{d["k"]}` et non `{d.k}` — la sémantique est
+celle de Python, y compris là où elle diffère de JavaScript.
 
-```python
-from browser import html, document
+**Les directives gardent la langue de l'hôte**, parce qu'elles portent un rappel
+ou une valeur JavaScript, pas un rendu :
 
-el = document.createElement("input")   # → INPUT
+```svelte
+<input oninput={(e) => on_text(e.target.value)} bind:value={name} use:action />
 ```
 
-On ne peut pas le pré-importer au boot (`$B.$import` lit `$B.frame_obj`, nul
-tant qu'aucun corps de module n'a tourné), et l'injecter d'office dans tout
-composant à handler paramétré coûterait une classe par balise HTML à des
-composants qui ne touchent jamais au DOM.
+La règle : `on*`, `bind:`, `use:`, `class:`, `style:` et la famille des
+transitions restent en JavaScript ; tout autre attribut, prop de composant
+compris, est du Python. Un composant sans Python à lui — un consommateur de store
+— conserve le gabarit JavaScript et les helpers `py.str()` / `py.truthy()`.
 
-**jsdom se bloque sur cet import**, alors qu'un navigateur ne bronche pas. D'où
-`npm run test:browser`, qui rejoue la vérification dans un Chromium headless —
-la seule partie du projet que la suite jsdom ne peut pas couvrir.
+Ça coûte environ **1,3× sur le rendu** face à un composant JavaScript
+(`npm run bench`), contre 0,6× auparavant : un appel Python par expression et par
+rendu. C'est le prix du gabarit en Python.
 
 ## Composition
 
@@ -504,7 +499,7 @@ C'est le même mécanisme qui accueillera les `.wasm` de Wasthon.
 
 ## État
 
-Validé par `npm test` — 96 tests, plus 2 échecs attendus (voir plus bas) :
+Validé par `npm test` — 101 tests, plus 2 échecs attendus (voir plus bas) :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
 - props : défaut Python, priorité du parent, lisibilité pendant l'init,

@@ -16,12 +16,12 @@ mapping = {"x": 1}
 <p data-k="items">{#if items}vrai{:else}faux{/if}</p>
 <p data-k="elseif">{#if empty}a{:else if items}b{:else}c{/if}</p>
 <p data-k="nested">{#if items}{#if empty}x{:else}y{/if}{/if}</p>
-<p data-k="brace">{py.str("a}b")}</p>
+<p data-k="brace">{"a}b"}</p>
 <p data-k="gt" title="a > b">{#if items}dans une balise{/if}</p>
 <p data-k="raw_list">{items}</p>
 <p data-k="raw_dict">{mapping}</p>
 <p data-k="raw_none">{nothing}</p>
 <p data-k="attr" data-v={items}>attr</p>
-<p data-k="str_list">{py.str(items)}</p>
-<p data-k="str_dict">{py.str(mapping)}</p>
+<p data-k="str_list">{items}</p>
+<p data-k="str_dict">{mapping}</p>
 <ul data-k="each">{#each items as it}<li>{it}</li>{/each}</ul>
