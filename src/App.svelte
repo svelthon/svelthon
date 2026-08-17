@@ -3,6 +3,7 @@
     import Greeting from './Greeting.svelte';
     import Semantics from './Semantics.svelte';
     import StoreDemo from './StoreDemo.svelte';
+    import Highlight from './Highlight.svelte';
 
     let who = $state('Pierre');
 
@@ -53,8 +54,8 @@ words = ", ".join(sorted({"apple", "apricot", "banana"}))`;
             <p>Assign to a name and the DOM follows. That is the entire API.</p>
         </div>
         <div class="body">
-            <div class="code"><span class="tag">Counter.svelte</span><pre><code>{counter}</code></pre></div>
-            <div class="live"><Counter /></div>
+            <div class="code"><span class="tag">Counter.svelte</span><pre><code><Highlight code={counter} /></code></pre></div>
+            <div class="live"><div class="row"><Counter /></div></div>
         </div>
     </article>
 
@@ -66,7 +67,7 @@ words = ", ".join(sorted({"apple", "apricot", "banana"}))`;
                 follow the parent.</p>
         </div>
         <div class="body">
-            <div class="code"><span class="tag">Greeting.svelte</span><pre><code>{props}</code></pre></div>
+            <div class="code"><span class="tag">Greeting.svelte</span><pre><code><Highlight code={props} /></code></pre></div>
             <div class="live">
                 <Greeting name={who} punct="…" />
                 <button class="ghost" onclick={() => (who = who === 'Pierre' ? 'Ada' : 'Pierre')}>
@@ -83,10 +84,10 @@ words = ", ".join(sorted({"apple", "apricot", "banana"}))`;
                 application — both components below read the same counter.</p>
         </div>
         <div class="body">
-            <div class="code"><span class="tag">counter_store.py</span><pre><code>{store}</code></pre></div>
+            <div class="code"><span class="tag">counter_store.py</span><pre><code><Highlight code={store} /></code></pre></div>
             <div class="live pair">
-                <div><span class="tag">instance A</span><StoreDemo /></div>
-                <div><span class="tag">instance B</span><StoreDemo /></div>
+                <div><span class="tag">instance A</span><div class="row"><StoreDemo /></div></div>
+                <div><span class="tag">instance B</span><div class="row"><StoreDemo /></div></div>
             </div>
         </div>
     </article>
@@ -98,8 +99,8 @@ words = ", ".join(sorted({"apple", "apricot", "banana"}))`;
                 Every value here would be wrong in JavaScript.</p>
         </div>
         <div class="body">
-            <div class="code"><span class="tag">Semantics.svelte</span><pre><code>{semantics}</code></pre></div>
-            <div class="live"><Semantics /></div>
+            <div class="code"><span class="tag">Semantics.svelte</span><pre><code><Highlight code={semantics} /></code></pre></div>
+            <div class="live"><div class="row"><Semantics /></div></div>
         </div>
     </article>
 
@@ -119,6 +120,13 @@ words = ", ".join(sorted({"apple", "apricot", "banana"}))`;
         --text: #1b1a19;
         --muted: #6e6a65;
         --accent: #ff3e00;
+        --c-kw: #1e5aa8;
+        --c-fn: #a14e12;
+        --c-str: #3f7d3f;
+        --c-num: #8a6d1f;
+        --c-bi: #6b4fa8;
+        --c-op: #8b857e;
+        --c-com: #97918a;
         color-scheme: light dark;
     }
 
@@ -130,6 +138,13 @@ words = ", ".join(sorted({"apple", "apricot", "banana"}))`;
             --border: #2b2a28;
             --text: #eceae7;
             --muted: #97928c;
+            --c-kw: #7aa9e6;
+            --c-fn: #e0955a;
+            --c-str: #8cc48c;
+            --c-num: #d4b872;
+            --c-bi: #b39ae0;
+            --c-op: #8b857e;
+            --c-com: #6f6a64;
         }
     }
 
@@ -271,6 +286,24 @@ words = ", ".join(sorted({"apple", "apricot", "banana"}))`;
         justify-content: center;
         gap: 0.7rem;
         padding: 1.25rem 1.4rem;
+    }
+
+    /* Button then value, side by side: inside the button the pointer sits right
+       on top of the digit that changes. */
+    .live :global(output) {
+        display: block;
+        font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+        font-size: 0.92rem;
+        font-variant-numeric: tabular-nums;
+        color: var(--text);
+        overflow-wrap: anywhere;
+    }
+
+    .row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.75rem;
     }
 
     /* The demo components stay minimal on purpose — their markup is the point,

@@ -12,4 +12,4 @@ def shout():
 
 <p data-k="line">{greeting} {name}{punct}</p>
 <p data-k="initial">{initial}</p>
-<button onclick={shout}>shout</button>
+<button onclick={shout}>shout()</button>

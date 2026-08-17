@@ -2,5 +2,5 @@
     import { store } from './lib/counter_store.py';
 </script>
 
-<p>shared counter: {store.count} — {store.history}</p>
-<button onclick={store.increment}>+</button>
+<button onclick={store.increment}>increment()</button>
+<output>{store.count} · {store.history}</output>

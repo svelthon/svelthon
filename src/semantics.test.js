@@ -9,7 +9,7 @@ test('components run real Python semantics', () => {
     const target = document.body.appendChild(document.createElement('div'));
     mount(Semantics, { target });
 
-    const [floor, big, words] = target.querySelector('p').textContent.split(' · ');
+    const [floor, big, words] = target.querySelector('output').textContent.split(' · ');
 
     expect(floor).toBe('-4');                     // JS: Math.trunc(-3.5) === -3
     expect(big).toBe('1180591620717411303424');   // JS: 1.1805916207174113e+21
@@ -17,5 +17,5 @@ test('components run real Python semantics', () => {
 
     target.querySelector('button').click();
     flushSync();
-    expect(target.querySelector('p').textContent.split(' · ')[0]).toBe('-7');
+    expect(target.querySelector('output').textContent.split(' · ')[0]).toBe('-7');
 });

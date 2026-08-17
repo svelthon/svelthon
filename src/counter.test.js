@@ -7,14 +7,16 @@ test('a click runs Python and the DOM follows', () => {
     mount(Counter, { target });
 
     const button = target.querySelector('button');
-    expect(button.textContent).toBe('clicked 0 times');
+    const value = () => target.querySelector('output').textContent;
+
+    expect(value()).toBe('0');
 
     button.click();
     flushSync();
-    expect(button.textContent).toBe('clicked 1 times');
+    expect(value()).toBe('1');
 
     button.click();
     button.click();
     flushSync();
-    expect(button.textContent).toBe('clicked 3 times');
+    expect(value()).toBe('3');
 });

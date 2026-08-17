@@ -8,5 +8,5 @@ def descend():
     floor -= 3
 </script>
 
-<p>{floor} · {big} · {words}</p>
-<button onclick={descend}>descend</button>
+<button onclick={descend}>descend()</button>
+<output>{floor} · {big} · {words}</output>

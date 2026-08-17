@@ -11,7 +11,8 @@ def increment():
     count += 1
 </script>
 
-<button onclick={increment}>clicked {count} times</button>
+<button onclick={increment}>increment()</button>
+<output>{count}</output>
 ```
 
 That is the whole thing. Plain Python — no runes, no reactivity API to learn,
