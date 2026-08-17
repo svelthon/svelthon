@@ -1,15 +1,13 @@
 <script lang="python">
-name: str          # required prop
-punct: str = "!"   # prop with a default
+name: str          # required
+punct: str = "!"   # used when the parent passes nothing
 
-greeting = "Hello"               # internal state
-initial = f"{greeting} {name}"   # a prop is readable during init
+greeting = "Hello"
 
 def shout():
     global greeting
     greeting = greeting.upper()
 </script>
 
-<p data-k="line">{greeting} {name}{punct}</p>
-<p data-k="initial">{initial}</p>
 <button onclick={shout}>shout()</button>
+<output data-k="line">{greeting} {name}{punct}</output>

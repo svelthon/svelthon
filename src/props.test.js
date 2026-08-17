@@ -2,6 +2,7 @@ import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from 'svelte';
 import Greeting from './Greeting.svelte';
 import PropsHost from './fidelity/PropsHost.svelte';
+import PropsInit from './fidelity/PropsInit.svelte';
 
 // Une annotation déclare un prop, une affectation nue de l'état interne :
 //     name: str          → prop requis
@@ -11,7 +12,7 @@ import PropsHost from './fidelity/PropsHost.svelte';
 function render(Component, props) {
     const target = document.body.appendChild(document.createElement('div'));
     mount(Component, { target, props });
-    return (k) => target.querySelector(`p[data-k="${k}"]`).textContent;
+    return (k) => target.querySelector(`[data-k="${k}"]`).textContent;
 }
 
 describe('props', () => {
@@ -24,7 +25,7 @@ describe('props', () => {
     });
 
     test('un prop est lisible pendant l’exécution du corps du module', () => {
-        expect(render(Greeting, { name: 'Ada' })('initial')).toBe('Hello Ada');
+        expect(render(PropsInit, { name: 'Ada' })('initial')).toBe('Hello Ada');
     });
 
     test('un prop requis non fourni vaut None, pas undefined', () => {
@@ -38,18 +39,18 @@ describe('props', () => {
         target.querySelector('button').click();
         flushSync();
 
-        expect(target.querySelector('p[data-k="line"]').textContent).toBe('HELLO Pierre!');
+        expect(target.querySelector('[data-k="line"]').textContent).toBe('HELLO Pierre!');
     });
 
     test('une mise à jour du parent traverse jusqu’au Python', () => {
         const target = document.body.appendChild(document.createElement('div'));
         mount(PropsHost, { target });
 
-        expect(target.querySelector('p[data-k="line"]').textContent).toBe('Hello Pierre!');
+        expect(target.querySelector('[data-k="line"]').textContent).toBe('Hello Pierre!');
 
         target.querySelector('button[data-k="rename"]').click();
         flushSync();
 
-        expect(target.querySelector('p[data-k="line"]').textContent).toBe('Hello Ada!');
+        expect(target.querySelector('[data-k="line"]').textContent).toBe('Hello Ada!');
     });
 });

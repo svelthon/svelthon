@@ -5,8 +5,6 @@
     import StoreDemo from './StoreDemo.svelte';
     import Highlight from './Highlight.svelte';
 
-    let who = $state('Pierre');
-
     // Each demo shows its own source next to the running component: the whole
     // argument of the project, visible at a glance.
     const counter = `count = 0
@@ -16,7 +14,7 @@ def increment():
     count += 1`;
 
     const props = `name: str          # required
-punct: str = "!"   # with a default
+punct: str = "!"   # used when the parent passes nothing
 
 greeting = "Hello"
 
@@ -63,16 +61,20 @@ words = ", ".join(sorted({"apple", "apricot", "banana"}))`;
         <div class="head">
             <h2>Props</h2>
             <p>An annotation declares the interface, like a dataclass field. A bare assignment stays
-                internal. The second line was captured while the module body ran, so it does not
-                follow the parent.</p>
+                internal. The two instances differ by one attribute — the second overrides the
+                default.</p>
         </div>
         <div class="body">
             <div class="code"><span class="tag">Greeting.svelte</span><pre><code><Highlight code={props} /></code></pre></div>
-            <div class="live">
-                <Greeting name={who} punct="…" />
-                <button class="ghost" onclick={() => (who = who === 'Pierre' ? 'Ada' : 'Pierre')}>
-                    rename from the parent
-                </button>
+            <div class="live pair">
+                <div>
+                    <span class="tag">&lt;Greeting name="Ada" /&gt;</span>
+                    <div class="row"><Greeting name="Ada" /></div>
+                </div>
+                <div>
+                    <span class="tag">&lt;Greeting name="Ada" punct="?" /&gt;</span>
+                    <div class="row"><Greeting name="Ada" punct="?" /></div>
+                </div>
             </div>
         </div>
     </article>
@@ -95,12 +97,12 @@ words = ", ".join(sorted({"apple", "apricot", "banana"}))`;
     <article class="demo">
         <div class="head">
             <h2>Real Python semantics</h2>
-            <p>Not a Python-flavoured dialect: CPython's grammar and object model, all the way down.
-                Every value here would be wrong in JavaScript.</p>
+            <p>Not a Python-flavoured dialect: CPython's grammar and object model, all the way
+                down. Each comment on the left is what JavaScript would have produced instead.</p>
         </div>
         <div class="body">
             <div class="code"><span class="tag">Semantics.svelte</span><pre><code><Highlight code={semantics} /></code></pre></div>
-            <div class="live"><div class="row"><Semantics /></div></div>
+            <div class="live"><Semantics /></div>
         </div>
     </article>
 
@@ -332,13 +334,6 @@ words = ", ".join(sorted({"apple", "apricot", "banana"}))`;
 
     .live :global(button:hover) {
         filter: brightness(1.08);
-    }
-
-    .live :global(button.ghost) {
-        background: transparent;
-        color: var(--muted);
-        border-color: var(--border);
-        font-weight: 450;
     }
 
     footer {
