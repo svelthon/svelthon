@@ -194,8 +194,23 @@ dérivé est refusé par Svelte, à juste titre.
 
 `bind:` ne demande rien : un nom d'état est un `let` réactif ordinaire, donc
 `bind:value={name}` fonctionne dans les deux sens et Python relit la valeur
-saisie. (Un *prop* est un `$derived`, donc en lecture seule — la règle de Svelte
-pour les props non `$bindable`.)
+saisie.
+
+`bindable()` sur une annotation déclare un prop bidirectionnel — l'enfant peut y
+écrire et la variable du parent suit :
+
+```python
+value: str = bindable()          # sans défaut
+tag: str = bindable("default")   # avec
+```
+
+```svelte
+<Child bind:value={text} />
+```
+
+La subtilité est dans le défaut : le corps du module l'applique en écrivant dans
+le nom, et cette écriture-là ne doit pas remonter au parent. Seules celles qui
+suivent le retour d'`init()` sont de vraies écritures.
 
 ## Réactivité : un signal par nom
 
@@ -448,7 +463,7 @@ C'est le même mécanisme qui accueillera les `.wasm` de Wasthon.
 
 ## État
 
-Validé par `npm test` — 80 tests, plus 1 échec attendu (voir plus bas) :
+Validé par `npm test` — 85 tests, plus 1 échec attendu (voir plus bas) :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
 - props : défaut Python, priorité du parent, lisibilité pendant l'init,
@@ -485,8 +500,6 @@ un composant Python :
 | éléments | `<svelte:window>` `<svelte:head>` `<svelte:boundary>` |
 | styles | `<style>` scopé |
 
-Non couvert : `$bindable()` (un prop est un `$derived`, donc en lecture seule).
-
 Rappel : **les expressions de gabarit sont du JavaScript.** `{node is not None}`
 ne compile pas ; c'est `{py.truthy(node)}`.
 
@@ -506,9 +519,6 @@ pour son compte au lieu de partager le travail. Mesuré sur ce projet à plus de
 
 **Manquant, avec contournement**
 
-- **`$bindable()`.** Un prop est un `$derived`, donc en lecture seule ; pas de
-  liaison bidirectionnelle parent↔enfant. Contournement : passer une fonction de
-  rappel en prop.
 - **Les effets au-delà de `on_mount` / `on_destroy`.** Pas moyen de dire
   « exécute ce Python quand X change ». `@derived` couvre les valeurs calculées ;
   les effets de bord — journaliser, écrire dans `localStorage`, synchroniser —

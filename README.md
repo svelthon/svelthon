@@ -45,7 +45,7 @@ npm run dev
 ```
 
 ```sh
-npm test             # 80 tests: semantics, props, reactivity, Svelte surface
+npm test             # 85 tests: semantics, props, reactivity, Svelte surface
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
 npm run build
@@ -218,9 +218,23 @@ It must be **pure**: writing state inside a derived is rejected by Svelte, and
 rightly so.
 
 `bind:` needs no support code at all: a state name is an ordinary reactive `let`,
-so `bind:value={name}` works both ways and Python reads back what was typed. (A
-*prop* is a `$derived`, hence read-only — Svelte's rule for non-`$bindable`
-props.)
+so `bind:value={name}` works both ways and Python reads back what was typed.
+
+`bindable()` on an annotation declares a two-way prop — the child may write to
+it and the parent's own variable follows:
+
+```python
+value: str = bindable()          # no default
+tag: str = bindable("default")   # with one
+```
+
+```svelte
+<Child bind:value={text} />
+```
+
+The subtlety is in the default: the module body applies it by writing to the
+name, and that write must not travel up to the parent. Only writes made after
+`init()` returns are real ones.
 
 ## Reactivity: one signal per name
 
@@ -477,14 +491,12 @@ a Python component:
 | elements | `<svelte:window>` `<svelte:head>` `<svelte:boundary>` |
 | styles | scoped `<style>` |
 
-Not covered: `$bindable()` — a prop is a `$derived`, hence read-only.
-
 Reminder: **template expressions are JavaScript.** `{node is not None}` does not
 compile; write `{py.truthy(node)}`.
 
 ## Status
 
-Validated by `npm test` — 80 tests, plus 1 expected failure (below):
+Validated by `npm test` — 85 tests, plus 1 expected failure (below):
 
 - end-to-end reactivity, and which write paths propagate;
 - props: Python defaults, parent precedence, readability during init, parent
@@ -522,8 +534,6 @@ in parallel against under one sequentially.
 
 **Missing, with a workaround**
 
-- **`$bindable()`.** A prop is a `$derived`, hence read-only; no two-way
-  parent↔child binding. Workaround: pass a callback as a prop.
 - **Effects beyond `on_mount` / `on_destroy`.** No way to say "run this Python
   whenever X changes". `@derived` covers computed values; side effects — logging,
   writing to `localStorage`, syncing — have no hook.

@@ -71,11 +71,17 @@ py`.split(/\s+/));
 
 // Module-level names, read off the AST rather than the generated JS — the
 // codegen mangles function names (`increment941818`) but the AST has the truth.
+const isBindable = (node) =>
+    node.value instanceof $B.ast.Call &&
+    node.value.func instanceof $B.ast.Name &&
+    node.value.func.id === 'bindable';
+
 const isDerivedDecorator = (node) =>
     (node.decorator_list || []).some((d) => d instanceof $B.ast.Name && d.id === 'derived');
 
 function surface(body) {
     const props = [];
+    const bindables = [];
     const state = [];
     const funcs = [];
     const deriveds = [];
@@ -96,7 +102,9 @@ function surface(body) {
             // An annotation is a declaration of interface, like a dataclass
             // field: `name: str` is a prop, `count: int = 0` a prop with a
             // default. A bare assignment stays internal state.
-            if (node.target instanceof $B.ast.Name && take(node.target.id)) props.push(node.target.id);
+            if (node.target instanceof $B.ast.Name && take(node.target.id)) {
+                (isBindable(node) ? bindables : props).push(node.target.id);
+            }
         } else if (
             // `async def` is a different AST node, and missing it left async
             // handlers undefined — a click did nothing at all, silently.
@@ -114,7 +122,7 @@ function surface(body) {
         }
     }
 
-    return { props, state, funcs, deriveds };
+    return { props, bindables, state, funcs, deriveds };
 }
 
 // Transitive closure of a component's imports over the build-time stdlib.
@@ -155,13 +163,14 @@ function compile(src, name = 'Component', source = name, { store = false, lineOf
     } catch (error) {
         throw pythonError(error, source, lineOffset);
     }
-    let { props, state, funcs, deriveds } = surface(root._ast.body);
+    let { props, bindables, state, funcs, deriveds } = surface(root._ast.body);
 
     // A store has no parent, so an annotation there declares plain state — and
     // $props() would be meaningless at module scope anyway.
     if (store) {
-        state = [...props, ...state];
+        state = [...props, ...bindables, ...state];
         props = [];
+        bindables = [];
     }
 
     // NOTE — traversing a DOM node from Python (`event.target.value`) resolves
@@ -224,9 +233,12 @@ function compile(src, name = 'Component', source = name, { store = false, lineOf
     const lifecycle = (hook) => !store && funcs.some((f) => f.name === hook);
 
     // A component free to define its own `publish` or `derived` keeps it.
-    const declared = [...props, ...state, ...funcs, ...deriveds].map((n) => n.name || n);
+    const declared = [...props, ...bindables, ...state, ...funcs, ...deriveds].map(
+        (n) => n.name || n
+    );
     const hasPublish = declared.includes('publish');
     const hasDerived = declared.includes('derived');
+    const hasBindable = declared.includes('bindable');
 
     // Context is per component subtree, where a store is per application — and
     // it is the only per-request-safe place to put state under server
@@ -243,7 +255,19 @@ function compile(src, name = 'Component', source = name, { store = false, lineOf
             .concat(lifecycle('on_mount') || lifecycle('on_destroy') ? ['untrack'] : [])
             .join(', ')} } from 'svelte';`,
         ``,
-        ...(props.length ? [`const __props = $props();`, ``] : []),
+        ...(bindables.length
+            ? [
+                  `let { ${bindables.map((b) => `${b} = $bindable()`).join(', ')}, ...__props } =` +
+                      ` $props();`,
+                  // The module body applies the annotation's default by writing
+                  // to the name — and that write must not travel up to the
+                  // parent. Only writes made after init() are real ones.
+                  `let __initialising = true;`,
+                  ``
+              ]
+            : props.length
+              ? [`const __props = $props();`, ``]
+              : []),
         // A prop's value comes from the parent when it was passed, and from the
         // annotation's default otherwise — the default being whatever the Python
         // body assigned during init(). Reading __props keeps it reactive, so a
@@ -273,6 +297,11 @@ function compile(src, name = 'Component', source = name, { store = false, lineOf
             (n) =>
                 `bind(__proto, '${n}', () => ('${n}' in __props ? __props.${n} : ${local(n)}) ?? NONE, (v) => { ${local(n)} = v; });`
         ),
+        ...bindables.map(
+            (b) =>
+                `bind(__proto, '${b}', () => ${b} ?? NONE,` +
+                ` (v) => { if (!__initialising || ${b} === undefined) ${b} = v; });`
+        ),
         ...state.map((n) => `bind(__proto, '${n}', () => ${n}, (v) => { ${n} = v; });`),
         ...funcs.map((f) => `bind(__proto, '${f.name}', () => ${fn(f.name)}, (v) => { ${fn(f.name)} = v; });`),
         ...deriveds.map(
@@ -298,6 +327,8 @@ function compile(src, name = 'Component', source = name, { store = false, lineOf
               ]),
         // The decorator only marks; the compiler did the work already.
         ...(hasDerived ? [] : [`bind(__proto, 'derived', () => (f) => f, () => {});`]),
+        // bindable() only marks the annotation; the compiler read it already.
+        ...(hasBindable ? [] : [`bind(__proto, 'bindable', () => (v) => v, () => {});`]),
         ...(hasContext
             ? []
             : [
@@ -307,6 +338,7 @@ function compile(src, name = 'Component', source = name, { store = false, lineOf
               ]),
         ``,
         `init(${NS});`,
+        ...(bindables.length ? [`__initialising = false;`] : []),
         ``,
         // Event handlers are called with a DOM event Python never asked for.
         // Truncating to the declared arity is a placeholder for a real interop
