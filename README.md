@@ -492,22 +492,33 @@ in parallel against under one sequentially.
 
 ## Not done yet
 
-**Before writing a real application**
+**Blocks a real application**
 
 - **Packaging.** `src/lib/` is the framework, mixed in with the demo. Using it
-  elsewhere means turning it into an installable npm package.
+  anywhere else means turning it into an installable npm package. Nothing
+  technical stands in the way — it is the one item on this list that is pure
+  work.
+
+**Missing, with a workaround**
+
 - **`setContext` / `getContext`.** No Python-facing API. They must be called
-  during an *instance's* initialisation — a `<script module>`, which runs once,
-  cannot do it. This is the only Svelte feature structurally out of reach today,
-  and since the Python module body does run at initialisation, exposing them
-  should be enough.
+  during an *instance's* initialisation, which a `<script module>` — running
+  once — cannot do. The Python module body does run at initialisation, so
+  exposing them should be enough. This is also what per-request server rendering
+  would need first, since context is Svelte's answer to per-request state.
+  Workaround for global state: a store `.py`.
 - **`$bindable()`.** A prop is a `$derived`, hence read-only; no two-way
-  parent↔child binding.
+  parent↔child binding. Workaround: pass a callback as a prop.
+- **Effects beyond `on_mount` / `on_destroy`.** No way to say "run this Python
+  whenever X changes". `@derived` covers computed values; side effects — logging,
+  writing to `localStorage`, syncing — have no hook.
+
+**Rough edges**
+
 - **Source maps.** Errors carry a correct line number, but the browser debugger
-  still shows the generated JS, not the Python.
-
-**Comfort**
-
+  shows the generated JS, not the Python.
+- **Errors inside a coroutine** surface through Brython's loop, so they miss the
+  file and line the synchronous path adds.
 - **Editor.** No highlighting or completion inside `<script lang="python">`.
 - **Compilation cache.** A store is recompiled on every `load()`.
 - **Runtime cost** never measured against plain Svelte.

@@ -476,41 +476,45 @@ pour son compte au lieu de partager le travail. Mesuré sur ce projet à plus de
 
 ## Reste à faire
 
-### Avant d'écrire une vraie application
+**Bloque une vraie application**
 
-- **Empaquetage.** `src/lib/` est le framework, mêlé à la démo. Pour l'utiliser
-  ailleurs il faut en faire un paquet npm installable.
+- **Empaquetage.** `src/lib/` est le framework, mêlé à la démo. L'utiliser
+  ailleurs demande d'en faire un paquet npm installable. Rien ne s'y oppose
+  techniquement : c'est le seul point de cette liste qui soit du pur travail.
+
+**Manquant, avec contournement**
+
 - **`setContext` / `getContext`.** Aucune API côté Python. Ils doivent être
-  appelés pendant l'initialisation d'une *instance* — un `<script module>`, qui
-  ne s'exécute qu'une fois, ne peut pas s'en charger. C'est la seule
-  fonctionnalité de Svelte structurellement hors de portée aujourd'hui, et le
-  corps du module Python tournant bien à l'initialisation, l'exposer devrait
-  suffire.
+  appelés pendant l'initialisation d'une *instance*, ce qu'un `<script module>`
+  — exécuté une seule fois — ne peut pas faire. Le corps du module Python
+  tournant bien à l'initialisation, l'exposer devrait suffire. C'est aussi le
+  préalable au rendu serveur par requête, le contexte étant la réponse de Svelte
+  à l'état par requête. Contournement pour de l'état global : un store `.py`.
 - **`$bindable()`.** Un prop est un `$derived`, donc en lecture seule ; pas de
-  liaison bidirectionnelle parent↔enfant.
+  liaison bidirectionnelle parent↔enfant. Contournement : passer une fonction de
+  rappel en prop.
+- **Les effets au-delà de `on_mount` / `on_destroy`.** Pas moyen de dire
+  « exécute ce Python quand X change ». `@derived` couvre les valeurs calculées ;
+  les effets de bord — journaliser, écrire dans `localStorage`, synchroniser —
+  n'ont aucun crochet.
+
+**Aspérités**
+
 - **Source maps.** Les erreurs portent un numéro de ligne juste, mais le
-  débogueur du navigateur montre toujours le JS généré, pas le Python.
-
-### Confort
-
+  débogueur du navigateur montre le JS généré, pas le Python.
+- **Les erreurs levées dans une coroutine** remontent par la boucle de Brython :
+  elles n'ont pas le fichier ni la ligne que le chemin synchrone ajoute.
 - **Éditeur.** Aucune coloration ni complétion dans `<script lang="python">`.
 - **Cache de compilation.** Un store est recompilé à chaque `load()`.
 - **Coût à l'exécution** jamais mesuré face à du Svelte ordinaire.
-- **Rendu côté serveur** jamais essayé.
 
-### En amont, chez Brython
+**En amont, chez Brython**
 
 - **`__file__` aplati.** Brython dérive son identifiant de namespace du
   `filename` et n'y neutralise que les `.`, pas les `/` : un chemin réel produit
   `locals_src/Counter_svelte`, du JS invalide. On passe donc un nom aplati, au
   prix de la lisibilité des tracebacks.
 - **Fuite de compréhension**, la divergence connue ci-dessus.
-
-### Bloqué ailleurs
-
-- **Wasthon.** Le tree-shaking de la stdlib est en place et les `.wasm`
-  s'y brancheraient directement — préchargés et hashés par Vite au lieu d'être
-  découverts au runtime. Demande de construire Wasthon (Emscripten).
 
 ## Lancer
 
