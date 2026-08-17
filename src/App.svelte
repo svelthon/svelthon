@@ -4,6 +4,7 @@
     import Semantics from './Semantics.svelte';
     import StoreDemo from './StoreDemo.svelte';
     import Highlight from './Highlight.svelte';
+    import { tests } from 'virtual:svelthon/stats';
 
     // The sources shown are the files themselves — nothing to keep in sync, and
     // the reader sees the whole component: the Python *and* the markup that
@@ -87,7 +88,7 @@
 
     <footer>
         <span><strong>244 KB</strong> gzip, runtime included</span>
-        <span><strong>69</strong> tests</span>
+        <span><strong>{tests}</strong> tests</span>
         <span><strong>0 ms</strong> compiling at load</span>
     </footer>
 </main>

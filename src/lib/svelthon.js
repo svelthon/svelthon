@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 import { relative, resolve, dirname } from 'node:path';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 const require = createRequire(import.meta.url);
@@ -223,6 +223,19 @@ export function vendorQuirks() {
 // compile the runes inside it.
 const STORE_SUFFIX = '.svelte.js';
 
+// The demo shows how many tests back the project. Hard-coding it means letting
+// it drift on every addition, so it is counted when the module is served.
+const STATS_ID = VIRTUAL_PREFIX + 'stats';
+
+const countTests = () =>
+    readdirSync('src')
+        .filter((name) => name.endsWith('.test.js'))
+        .reduce(
+            (total, name) =>
+                total + (readFileSync(`src/${name}`, 'utf8').match(/\btest\(/g) || []).length,
+            0
+        );
+
 // The Vite plugin that serves those modules.
 export function svelthon() {
     const isVirtual = (id) => id.startsWith(VIRTUAL_PREFIX) || id.startsWith(VFS_PREFIX);
@@ -240,6 +253,7 @@ export function svelthon() {
             }
         },
         load(id) {
+            if (id === '\0' + STATS_ID) return `export const tests = ${countTests()};`;
             if (id.startsWith('\0')) return generated.get(id.slice(1));
             if (!isStore(id)) return;
 
