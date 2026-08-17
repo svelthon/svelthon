@@ -374,7 +374,7 @@ C'est le même mécanisme qui accueillera les `.wasm` de Wasthon.
 
 ## État
 
-Validé par `npm test` — 53 tests, plus 1 échec attendu (voir plus bas) :
+Validé par `npm test` — 64 tests, plus 1 échec attendu (voir plus bas) :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
 - props : défaut Python, priorité du parent, lisibilité pendant l'init,
@@ -396,12 +396,49 @@ corrigée : la variable d'une compréhension **fuit dans la portée module**
 (`[q for q in range(3)]` laisse `q` défini), alors que Python 3 lui donne une
 portée propre.
 
+## Surface Svelte couverte
+
+Mesuré, pas supposé (`src/svelte-surface.test.js`) — tout ceci fonctionne dans
+un composant Python :
+
+| | |
+|---|---|
+| blocs | `{#if}` `{:else if}` `{#each}` (indexé, `{:else}`, avec clé) `{#key}` `{#await}` |
+| balises | `{@html}` `{@const}` `{@render}` `{#snippet}` |
+| liaisons | `bind:value` `bind:checked` `bind:group` `bind:this` |
+| directives | `class:` `style:` `use:` `transition:` |
+| composition | props, défauts, spread d'un **dict Python**, enfants par snippet |
+| éléments | `<svelte:window>` `<svelte:head>` `<svelte:boundary>` |
+| styles | `<style>` scopé |
+
+Non couvert : `setContext`/`getContext` n'ont pas d'API côté Python — ils
+doivent s'appeler pendant l'initialisation d'une instance, ce qu'un
+`<script module>` ne permet pas. Ni `$bindable()` (un prop est un `$derived`,
+donc en lecture seule) ni le rendu côté serveur.
+
+Rappel : **les expressions de gabarit sont du JavaScript.** `{node is not None}`
+ne compile pas ; c'est `{py.truthy(node)}`.
+
+## Tests
+
+Aucun parallélisme : chaque worker recharge et retransforme le runtime Brython
+pour son compte au lieu de partager le travail. Mesuré sur ce projet à plus de
+30 minutes en parallèle contre moins d'une en séquentiel.
+
 ## Reste à faire
 
 ### Avant d'écrire une vraie application
 
 - **Empaquetage.** `src/lib/` est le framework, mêlé à la démo. Pour l'utiliser
   ailleurs il faut en faire un paquet npm installable.
+- **`setContext` / `getContext`.** Aucune API côté Python. Ils doivent être
+  appelés pendant l'initialisation d'une *instance* — un `<script module>`, qui
+  ne s'exécute qu'une fois, ne peut pas s'en charger. C'est la seule
+  fonctionnalité de Svelte structurellement hors de portée aujourd'hui, et le
+  corps du module Python tournant bien à l'initialisation, l'exposer devrait
+  suffire.
+- **`$bindable()`.** Un prop est un `$derived`, donc en lecture seule ; pas de
+  liaison bidirectionnelle parent↔enfant.
 - **Source maps.** Les erreurs portent un numéro de ligne juste, mais le
   débogueur du navigateur montre toujours le JS généré, pas le Python.
 
@@ -410,6 +447,7 @@ portée propre.
 - **Éditeur.** Aucune coloration ni complétion dans `<script lang="python">`.
 - **Cache de compilation.** Un store est recompilé à chaque `load()`.
 - **Coût à l'exécution** jamais mesuré face à du Svelte ordinaire.
+- **Rendu côté serveur** jamais essayé.
 
 ### En amont, chez Brython
 
