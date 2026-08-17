@@ -44,6 +44,16 @@ try:
 except NameError:
     leaked = False
 
+def scoped():
+    [w for w in range(3)]
+    try:
+        w
+        return True
+    except NameError:
+        return False
+
+leaked_in_func = scoped()
+
 def chained():
     try:
         1 / 0
@@ -63,6 +73,7 @@ report = "\n".join([
     f"ret={ret!r}",
     f"flow={flow!r}",
     f"leaked={leaked!r}",
+    f"leaked_in_func={leaked_in_func!r}",
     f"cause={cause!r}",
 ])
 </script>

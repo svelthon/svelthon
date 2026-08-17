@@ -89,7 +89,7 @@ describe('protocoles — canari des raccourcis de dispatch', () => {
 
 describe('flot de contrôle', () => {
     test('générateurs, fermetures, finally et chaînage d’exceptions', () => {
-        const { leaked, ...rest } = report(Flow);
+        const { leaked, leaked_in_func, ...rest } = report(Flow);
 
         expect(rest).toEqual({
             squares: '[0, 1, 4, 9]',
@@ -106,8 +106,14 @@ describe('flot de contrôle', () => {
     // d'une compréhension fuit dans la portée module, alors que Python 3 lui
     // donne une portée propre. Ce test passe *parce qu'il échoue* ; le jour où
     // Brython corrige, vitest le signalera.
-    test.fails('la variable de compréhension ne doit pas fuir', () => {
+    test.fails('la variable de compréhension ne doit pas fuir, au niveau module', () => {
         expect(report(Flow).leaked).toBe('False');
+    });
+
+    // Elle fuit aussi dans une fonction — la compréhension a sa propre portée
+    // depuis Python 3.0. Vérifié contre CPython 3.12 (voir BRYTHON.md).
+    test.fails('ni dans une fonction', () => {
+        expect(report(Flow).leaked_in_func).toBe('False');
     });
 });
 
