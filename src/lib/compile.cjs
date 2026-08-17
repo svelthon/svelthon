@@ -76,8 +76,8 @@ const isBindable = (node) =>
     node.value.func instanceof $B.ast.Name &&
     node.value.func.id === 'bindable';
 
-const isDerivedDecorator = (node) =>
-    (node.decorator_list || []).some((d) => d instanceof $B.ast.Name && d.id === 'derived');
+const hasDecorator = (node, name) =>
+    (node.decorator_list || []).some((d) => d instanceof $B.ast.Name && d.id === name);
 
 function surface(body) {
     const props = [];
@@ -85,6 +85,7 @@ function surface(body) {
     const state = [];
     const funcs = [];
     const deriveds = [];
+    const effects = [];
     const seen = new Set();
 
     const take = (name) => {
@@ -114,15 +115,20 @@ function surface(body) {
             if (!take(node.name)) continue;
 
             // @derived turns a function into a value: Python reads the name and
-            // gets the result, exactly like a property.
-            (isDerivedDecorator(node) ? deriveds : funcs).push({
-                name: node.name,
-                arity: (node.args && node.args.args || []).length
-            });
+            // gets the result, exactly like a property. @effect re-runs it
+            // whenever something it read has changed.
+            const entry = { name: node.name, arity: (node.args && node.args.args || []).length };
+            const bucket = hasDecorator(node, 'derived')
+                ? deriveds
+                : hasDecorator(node, 'effect')
+                  ? effects
+                  : funcs;
+
+            bucket.push(entry);
         }
     }
 
-    return { props, bindables, state, funcs, deriveds };
+    return { props, bindables, state, funcs, deriveds, effects };
 }
 
 // Transitive closure of a component's imports over the build-time stdlib.
@@ -163,7 +169,7 @@ function compile(src, name = 'Component', source = name, { store = false, lineOf
     } catch (error) {
         throw pythonError(error, source, lineOffset);
     }
-    let { props, bindables, state, funcs, deriveds } = surface(root._ast.body);
+    let { props, bindables, state, funcs, deriveds, effects } = surface(root._ast.body);
 
     // A store has no parent, so an annotation there declares plain state — and
     // $props() would be meaningless at module scope anyway.
@@ -171,6 +177,9 @@ function compile(src, name = 'Component', source = name, { store = false, lineOf
         state = [...props, ...bindables, ...state];
         props = [];
         bindables = [];
+        // $effect needs a component to belong to; a store has none.
+        funcs = [...funcs, ...effects];
+        effects = [];
     }
 
     // NOTE — traversing a DOM node from Python (`event.target.value`) resolves
@@ -233,12 +242,13 @@ function compile(src, name = 'Component', source = name, { store = false, lineOf
     const lifecycle = (hook) => !store && funcs.some((f) => f.name === hook);
 
     // A component free to define its own `publish` or `derived` keeps it.
-    const declared = [...props, ...bindables, ...state, ...funcs, ...deriveds].map(
+    const declared = [...props, ...bindables, ...state, ...funcs, ...deriveds, ...effects].map(
         (n) => n.name || n
     );
     const hasPublish = declared.includes('publish');
     const hasDerived = declared.includes('derived');
     const hasBindable = declared.includes('bindable');
+    const hasEffect = declared.includes('effect');
 
     // Context is per component subtree, where a store is per application — and
     // it is the only per-request-safe place to put state under server
@@ -278,6 +288,7 @@ function compile(src, name = 'Component', source = name, { store = false, lineOf
         ]),
         ...state.map((n) => `let ${n} = $state.raw(undefined);`),
         ...funcs.map((f) => `let ${fn(f.name)} = $state.raw(undefined);`),
+        ...effects.map((e) => `let ${fn(e.name)} = $state.raw(undefined);`),
         // A @derived name reads as its result — on both sides. The body runs
         // inside $derived.by, and every global it touches goes through a
         // namespace accessor, so Svelte discovers the dependencies by itself.
@@ -304,6 +315,7 @@ function compile(src, name = 'Component', source = name, { store = false, lineOf
         ),
         ...state.map((n) => `bind(__proto, '${n}', () => ${n}, (v) => { ${n} = v; });`),
         ...funcs.map((f) => `bind(__proto, '${f.name}', () => ${fn(f.name)}, (v) => { ${fn(f.name)} = v; });`),
+        ...effects.map((e) => `bind(__proto, '${e.name}', () => ${fn(e.name)}, (v) => { ${fn(e.name)} = v; });`),
         ...deriveds.map(
             (d) => `bind(__proto, '${d.name}', () => ${d.name}, (v) => { ${fn(d.name)} = v; });`
         ),
@@ -329,6 +341,7 @@ function compile(src, name = 'Component', source = name, { store = false, lineOf
         ...(hasDerived ? [] : [`bind(__proto, 'derived', () => (f) => f, () => {});`]),
         // bindable() only marks the annotation; the compiler read it already.
         ...(hasBindable ? [] : [`bind(__proto, 'bindable', () => (v) => v, () => {});`]),
+        ...(hasEffect ? [] : [`bind(__proto, 'effect', () => (f) => f, () => {});`]),
         ...(hasContext
             ? []
             : [
@@ -369,6 +382,18 @@ function compile(src, name = 'Component', source = name, { store = false, lineOf
                   `export default store;`
               ]
             : []),
+        // Deliberately *not* untracked: discovering what the body read is the
+        // whole point. A Python function that returns a callable hands back a
+        // teardown, exactly as a Svelte effect does.
+        ...effects.flatMap((e) => [
+            ``,
+            `$effect(() => {`,
+            `    let teardown;`,
+            `    try { teardown = ${fn(e.name)}(); }` +
+                ` catch (err) { throw pyError(err, ${JSON.stringify(`${e.name}() — ${source}`)}, ${lineOffset}); }`,
+            `    if (typeof teardown === 'function') return () => { teardown(); };`,
+            `});`
+        ]),
         ...(lifecycle('on_mount') || lifecycle('on_destroy')
             ? [
                   ``,

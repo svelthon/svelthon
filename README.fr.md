@@ -332,6 +332,33 @@ enregistré avant que le corps du composant ne tourne.
 Le plugin est en `enforce: 'pre'` : sans ça, le résolveur de Vite réclame
 `./store.py` comme un fichier ordinaire et livre son Python au parseur JS.
 
+## Effets
+
+`@effect` rejoue une fonction quand un nom qu'elle a *lu* change. Rien à
+déclarer : les globals passent par les accesseurs du namespace, donc leurs
+lectures sont des lectures de signaux et Svelte en déduit seul les dépendances.
+
+```python
+count = 0
+
+@effect
+def watch():
+    global seen
+    seen = f"count={count}"
+
+    def cleanup():
+        ...
+    return cleanup     # nettoyage optionnel, avant chaque reprise et au démontage
+```
+
+**Le piège que ce modèle crée** : `runs += 1` sur un nom de niveau module *lit*
+avant d'écrire, donc un compteur incrémenté dans un effet le rend dépendant de ce
+qu'il écrit, et Svelte boucle jusqu'à `effect_update_depth_exceeded`. Une
+affectation simple ne lit rien.
+
+`$effect` appartient à un composant : un store, qui n'en a pas, traite une
+fonction `@effect` comme une fonction ordinaire.
+
 ## Cycle de vie
 
 Par convention de nom, adossé à un unique `$effect` :
@@ -463,7 +490,7 @@ C'est le même mécanisme qui accueillera les `.wasm` de Wasthon.
 
 ## État
 
-Validé par `npm test` — 85 tests, plus 1 échec attendu (voir plus bas) :
+Validé par `npm test` — 89 tests, plus 1 échec attendu (voir plus bas) :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
 - props : défaut Python, priorité du parent, lisibilité pendant l'init,
@@ -528,12 +555,6 @@ injection de grammaire livrée comme petite extension d'éditeur.
   ailleurs demande d'en faire un paquet npm installable. Rien ne s'y oppose
   techniquement : c'est le seul point de cette liste qui soit du pur travail.
 
-**Manquant, avec contournement**
-
-- **Les effets au-delà de `on_mount` / `on_destroy`.** Pas moyen de dire
-  « exécute ce Python quand X change ». `@derived` couvre les valeurs calculées ;
-  les effets de bord — journaliser, écrire dans `localStorage`, synchroniser —
-  n'ont aucun crochet.
 
 **Aspérités**
 

@@ -45,7 +45,7 @@ npm run dev
 ```
 
 ```sh
-npm test             # 85 tests: semantics, props, reactivity, Svelte surface
+npm test             # 89 tests: semantics, props, reactivity, Svelte surface
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
 npm run build
@@ -336,6 +336,33 @@ The store's namespace is published in `$B.imported` under its module name, and
 the component's virtual module imports the store first, so it is registered by
 the time the component body runs.
 
+## Effects
+
+`@effect` re-runs a function whenever a name it *read* has changed. Nothing to
+declare: globals go through the namespace accessors, so their reads are signal
+reads and Svelte works out the dependencies itself.
+
+```python
+count = 0
+
+@effect
+def watch():
+    global seen
+    seen = f"count={count}"
+
+    def cleanup():
+        ...
+    return cleanup     # optional teardown, run before each re-run and on destroy
+```
+
+**The trap this model creates**: `runs += 1` on a module-level name *reads*
+before it writes, so a counter incremented inside an effect makes the effect
+depend on what it writes, and Svelte loops until
+`effect_update_depth_exceeded`. A plain assignment reads nothing.
+
+`$effect` belongs to a component, so a store — which has none — treats an
+`@effect` function as an ordinary one.
+
 ## Lifecycle
 
 By naming convention, backed by a single `$effect`:
@@ -496,7 +523,7 @@ compile; write `{py.truthy(node)}`.
 
 ## Status
 
-Validated by `npm test` — 85 tests, plus 1 expected failure (below):
+Validated by `npm test` — 89 tests, plus 1 expected failure (below):
 
 - end-to-end reactivity, and which write paths propagate;
 - props: Python defaults, parent precedence, readability during init, parent
@@ -542,11 +569,6 @@ shipped as a small editor extension is the other route.
   technical stands in the way — it is the one item on this list that is pure
   work.
 
-**Missing, with a workaround**
-
-- **Effects beyond `on_mount` / `on_destroy`.** No way to say "run this Python
-  whenever X changes". `@derived` covers computed values; side effects — logging,
-  writing to `localStorage`, syncing — have no hook.
 
 **Rough edges**
 

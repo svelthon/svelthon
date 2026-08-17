@@ -24,6 +24,10 @@ done
 # machine modeste. On préchauffe les deux pages avant de mesurer.
 curl -sf -o /dev/null "$URL"
 curl -sf -o /dev/null "http://localhost:$PORT/"
+# La coquille HTML répond tout de suite ; c'est le module d'entrée qui déclenche
+# la compilation du graphe, et c'est elle qu'il faut attendre.
+curl -sf -o /dev/null "http://localhost:$PORT/src/probe.js"
+curl -sf -o /dev/null "http://localhost:$PORT/src/main.js"
 
 REPORT=$(chromium --headless --no-sandbox --disable-gpu \
     --virtual-time-budget=8000 --dump-dom "$URL" 2>/dev/null |
@@ -43,7 +47,7 @@ fi
 # La démo entière, rendue pour de bon : réactivité, prop à défaut Python, store
 # partagé entre deux instances, et sémantique CPython.
 APP=$(chromium --headless --no-sandbox --disable-gpu \
-    --virtual-time-budget=9000 --dump-dom "http://localhost:$PORT/" 2>/dev/null)
+    --virtual-time-budget=15000 --dump-dom "http://localhost:$PORT/" 2>/dev/null)
 
 for expected in "increment()" "Hello Ada!" "0 · []" "1180591620717411303424"; do
     if printf '%s' "$APP" | grep -qF -- "$expected"; then
