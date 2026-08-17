@@ -140,22 +140,33 @@ export function pyError(error, where, lineOffset = 0) {
 // Calling an `async def` from JavaScript returns a coroutine that nobody runs:
 // the handler appears to do nothing at all, silently. Brython has its own event
 // loop, so hand it over.
-export function schedule(result) {
+export function schedule(result, where, lineOffset = 0) {
     const $B = globalThis.__BRYTHON__;
     const aio = $B.imported['browser.aio'];
 
     if (!aio || result === undefined || result === null) return result;
 
     try {
-        if ($B.$getattr(aio, 'iscoroutine')(result) === true) {
-            $B.$getattr(aio, 'run')(result);
-            return undefined;
-        }
+        if ($B.$getattr(aio, 'iscoroutine')(result) !== true) return result;
     } catch {
-        /* not a coroutine — hand the value back untouched */
+        return result; // not a coroutine — hand the value back untouched
     }
 
-    return result;
+    // run(coro, onsuccess, onerror). Its default onerror only logs, so an
+    // exception raised inside a coroutine reaches nothing at all — no error
+    // event, no overlay. Rethrowing from a timeout turns it into a genuine
+    // uncaught error, the way the synchronous path already behaves.
+    $B.$getattr(aio, 'run')(
+        result,
+        () => $B.leave_frame(), // what Brython's own default does
+        (error) => {
+            setTimeout(() => {
+                throw pyError(error, where, lineOffset);
+            });
+        }
+    );
+
+    return undefined;
 }
 
 // A store's namespace, published under its Python module name, so a component's

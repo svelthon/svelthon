@@ -48,4 +48,48 @@ describe('compilateur', () => {
         expect(script).toContain('let n = $state.raw');
         expect(script).toContain('registerModule("shop"');
     });
+
+    // Brython scatters `$B.set_lineno(frame, N)` through its output, which is
+    // enough to map generated lines back to Python ones. A map that points at
+    // the wrong line is worse than no map, so decode it and check.
+    test('la source map renvoie à la bonne ligne Python', () => {
+        const file = `<script lang="python">
+count = 0
+
+def increment():
+    global count
+    count += 1
+</script>`;
+        const body = file.match(/<script lang="python">([\s\S]*?)<\/script>/)[1];
+
+        const { module, map } = compile(body, 'C', 'src/C.svelte', { sourceContent: file });
+
+        expect(map.sources).toEqual(['src/C.svelte']);
+        expect(map.sourcesContent[0]).toBe(file);
+
+        // Décodage VLQ minimal : un segment par ligne générée, delta-encodé.
+        const CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+        let sourceLine = 0;
+        const lineFor = map.mappings.split(';').map((segment) => {
+            if (!segment) return null;
+            let value = 0;
+            let shift = 0;
+            let index = 2; // on saute colonne générée et index de source
+            for (;;) {
+                const digit = CHARS.indexOf(segment[index++]);
+                value += (digit & 31) << shift;
+                if (!(digit & 32)) break;
+                shift += 5;
+            }
+            sourceLine += value & 1 ? -(value >> 1) : value >> 1;
+            return sourceLine;
+        });
+
+        // `count += 1` est ligne 6 du fichier ; on retrouve la ligne générée qui
+        // porte son marqueur et on vérifie où la carte l'envoie.
+        const generated = module.split('\n').findIndex((l) => /set_lineno\(frame, 6\)/.test(l));
+
+        expect(generated).toBeGreaterThan(0);
+        expect(lineFor[generated]).toBe(5); // 0-indexé : ligne 6 du fichier
+    });
 });

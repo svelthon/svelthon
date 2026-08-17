@@ -57,6 +57,56 @@ function pythonError(error, source, lineOffset) {
     return new SyntaxError(`svelthon — ${described} (${where})`);
 }
 
+// Brython scatters `$B.set_lineno(frame, N)` through the code it generates, so
+// the generated JS carries the Python line it came from. That is enough for a
+// line-level source map: the debugger then shows the .py or .svelte file rather
+// than a thousand lines of generated JavaScript.
+const VLQ_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+function vlq(value) {
+    let rest = value < 0 ? (-value << 1) | 1 : value << 1;
+    let encoded = '';
+
+    do {
+        let digit = rest & 31;
+        rest >>>= 5;
+        if (rest > 0) digit |= 32;
+        encoded += VLQ_CHARS[digit];
+    } while (rest > 0);
+
+    return encoded;
+}
+
+function sourceMap(generated, source, content, lineOffset) {
+    const marker = /\$B\.set_lineno\(frame, (\d+)\)/;
+    const segments = [];
+    let previous = 0;
+    let current = null;
+
+    for (const line of generated.split('\n')) {
+        const found = line.match(marker);
+        if (found) current = Number(found[1]) - 1 + lineOffset;
+
+        if (current === null) {
+            segments.push('');
+            continue;
+        }
+
+        // One segment per line: column 0 of the generated line maps to column 0
+        // of the Python line. Everything in a source map is delta-encoded.
+        segments.push(vlq(0) + vlq(0) + vlq(current - previous) + vlq(0));
+        previous = current;
+    }
+
+    return {
+        version: 3,
+        sources: [source],
+        sourcesContent: [content],
+        names: [],
+        mappings: segments.join(';')
+    };
+}
+
 // `src/lib/counter_store.py` → `counter_store`, the name Python will import it by.
 const pythonModuleName = (source) => source.split('/').pop().replace(/\.py$/, '');
 
@@ -157,7 +207,12 @@ function stdlibClosure(names) {
     return needed;
 }
 
-function compile(src, name = 'Component', source = name, { store = false, lineOffset = 0 } = {}) {
+function compile(
+    src,
+    name = 'Component',
+    source = name,
+    { store = false, lineOffset = 0, sourceContent = null } = {}
+) {
     // The namespace identifier is derived from `filename` alone — `module` and
     // `locals_id` are ignored by js_from_root. Brython maps '.' to '_' but
     // leaves '/' alone, so a real path would emit `locals_src/Counter_svelte`,
@@ -360,7 +415,7 @@ function compile(src, name = 'Component', source = name, { store = false, lineOf
         // pyError fills them in, naming the function and the file it came from.
         ...funcs.map(
             (f) =>
-                `const ${f.name} = (...a) => { try { return schedule(${fn(f.name)}(...a.slice(0, ${f.arity}))); }` +
+                `const ${f.name} = (...a) => { try { return schedule(${fn(f.name)}(...a.slice(0, ${f.arity})), ${JSON.stringify(`${f.name}() — ${source}`)}, ${lineOffset}); }` +
                 ` catch (err) { throw pyError(err, ${JSON.stringify(`${f.name}() — ${source}`)}, ${lineOffset}); } };`
         ),
         ...(store
@@ -431,7 +486,13 @@ function compile(src, name = 'Component', source = name, { store = false, lineOf
           ].join('\n')
         : null;
 
-    return { script, module, stdlib, imports: Object.keys(root.imports) };
+    return {
+        script,
+        module,
+        map: sourceMap(module, source, sourceContent ?? src, lineOffset),
+        stdlib,
+        imports: Object.keys(root.imports)
+    };
 }
 
 const VIRTUAL_PREFIX = 'virtual:svelthon/';

@@ -430,6 +430,18 @@ requête : l'arbre de composants est reconstruit à chaque rendu, donc rien ne f
 d'une requête à l'autre — contrairement à un store, dont l'état vit dans le
 module.
 
+## Source maps
+
+Brython parsème son code généré de `$B.set_lineno(frame, N)` : le JavaScript
+produit porte donc la ligne Python dont chaque instruction provient. De quoi
+émettre une source map de niveau ligne avec chaque module virtuel — le débogueur
+ouvre alors le fichier `.svelte` ou `.py`, et non mille lignes de JS généré.
+
+Niveau ligne, pas colonne : une ligne Python correspond à la suite de lignes
+générées qui l'implémentent. Un test décode la carte et vérifie qu'une
+instruction connue atterrit sur sa vraie ligne — une carte qui pointe à côté
+étant pire que pas de carte du tout.
+
 ## Rendu côté serveur
 
 Ça fonctionne. Svelte compile une seconde version de chaque composant qui rend
@@ -490,7 +502,7 @@ C'est le même mécanisme qui accueillera les `.wasm` de Wasthon.
 
 ## État
 
-Validé par `npm test` — 89 tests, plus 1 échec attendu (voir plus bas) :
+Validé par `npm test` — 92 tests, plus 1 échec attendu (voir plus bas) :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
 - props : défaut Python, priorité du parent, lisibilité pendant l'init,
@@ -558,11 +570,6 @@ injection de grammaire livrée comme petite extension d'éditeur.
 
 **Aspérités**
 
-- **Source maps.** Les erreurs portent un numéro de ligne juste, mais le
-  débogueur du navigateur montre le JS généré, pas le Python.
-- **Les erreurs levées dans une coroutine** remontent par la boucle de Brython :
-  elles n'ont pas le fichier ni la ligne que le chemin synchrone ajoute.
-- **Cache de compilation.** Un store est recompilé à chaque `load()`.
 - **Coût à l'exécution** jamais mesuré face à du Svelte ordinaire.
 
 **En amont, chez Brython**

@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 import { relative, resolve, dirname } from 'node:path';
-import { readFileSync, existsSync, readdirSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 const require = createRequire(import.meta.url);
@@ -178,11 +178,15 @@ export function python() {
             }
 
             const name = nameFor(filename);
-            const { script, module, stdlib, imports } = compile(
+            const { script, module, map, stdlib, imports } = compile(
                 content,
                 name,
                 relative(process.cwd(), filename || 'Component'),
-                { lineOffset: lineOffsets.get(filename) ?? 0 }
+                {
+                    lineOffset: lineOffsets.get(filename) ?? 0,
+                    // The whole file, so a debugger opens the .svelte itself.
+                    sourceContent: filename ? readFileSync(filename, 'utf8') : content
+                }
             );
 
             // `import counter_store` in a component resolves to a sibling .py.
@@ -192,11 +196,15 @@ export function python() {
                 .map((mod) => join(dirname(filename || '.'), `${mod}.py`))
                 .filter((path) => existsSync(path));
 
-            generated.set(
-                VIRTUAL_PREFIX + name,
-                stores.map((path) => `import ${JSON.stringify(path)};`).join('\n') + '\n' + module
-            );
-            if (stdlib) generated.set(VFS_PREFIX + name, stdlib);
+            const prelude = stores.map((path) => `import ${JSON.stringify(path)};`).join('\n');
+
+            generated.set(VIRTUAL_PREFIX + name, {
+                code: `${prelude}\n${module}`,
+                // A prelude line is always prepended, so every mapping shifts
+                // down by one generated line.
+                map: { ...map, mappings: `;${map.mappings}` }
+            });
+            if (stdlib) generated.set(VFS_PREFIX + name, { code: stdlib, map: null });
 
             return { code: script };
         }
@@ -227,6 +235,25 @@ const STORE_SUFFIX = '.svelte.js';
 // it drift on every addition, so it is counted when the module is served.
 const STATS_ID = VIRTUAL_PREFIX + 'stats';
 
+// A store is served on every request in dev, and compiling Python is the
+// expensive half. Keyed on mtime, so an edit still recompiles.
+const compiledStores = new Map();
+
+function compileStore(file) {
+    const stamp = statSync(file).mtimeMs;
+    const cached = compiledStores.get(file);
+    if (cached && cached.stamp === stamp) return cached.result;
+
+    const source = readFileSync(file, 'utf8');
+    const result = compile(source, nameFor(file), relative(process.cwd(), file), {
+        store: true,
+        sourceContent: source
+    });
+
+    compiledStores.set(file, { stamp, result });
+    return result;
+}
+
 const countTests = () =>
     readdirSync('src')
         .filter((name) => name.endsWith('.test.js'))
@@ -254,20 +281,19 @@ export function svelthon() {
         },
         load(id) {
             if (id === '\0' + STATS_ID) return `export const tests = ${countTests()};`;
-            if (id.startsWith('\0')) return generated.get(id.slice(1));
+
+            if (id.startsWith('\0')) {
+                const entry = generated.get(id.slice(1));
+                return entry && (entry.map ? { code: entry.code, map: entry.map } : entry.code);
+            }
             if (!isStore(id)) return;
 
             const file = id.slice(0, -STORE_SUFFIX.length);
             const name = nameFor(file);
-            const { script, module, stdlib } = compile(
-                readFileSync(file, 'utf8'),
-                name,
-                relative(process.cwd(), file),
-                { store: true }
-            );
+            const { script, module, map, stdlib } = compileStore(file);
 
-            generated.set(VIRTUAL_PREFIX + name, module);
-            if (stdlib) generated.set(VFS_PREFIX + name, stdlib);
+            generated.set(VIRTUAL_PREFIX + name, { code: module, map });
+            if (stdlib) generated.set(VFS_PREFIX + name, { code: stdlib, map: null });
 
             this.addWatchFile(file);
             return script;

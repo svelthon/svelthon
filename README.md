@@ -45,7 +45,7 @@ npm run dev
 ```
 
 ```sh
-npm test             # 89 tests: semantics, props, reactivity, Svelte surface
+npm test             # 92 tests: semantics, props, reactivity, Svelte surface
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
 npm run build
@@ -431,6 +431,19 @@ That also makes it the one place to put state under per-request server
 rendering: the component tree is rebuilt on every render, so nothing leaks
 between requests — unlike a store, whose state lives in the module.
 
+## Source maps
+
+Brython scatters `$B.set_lineno(frame, N)` through the code it generates, so the
+generated JavaScript carries the Python line each statement came from. That is
+enough for a line-level source map, emitted with every virtual module: a
+debugger opens the `.svelte` or `.py` file rather than a thousand lines of
+generated JS.
+
+Line-level, not column-level — one Python line maps to the run of generated
+lines that implement it. A test decodes the map and checks a known statement
+lands on its real line, because a map that points at the wrong place is worse
+than no map at all.
+
 ## Server-side rendering
 
 It works. Svelte compiles a second version of each component that returns an
@@ -523,7 +536,7 @@ compile; write `{py.truthy(node)}`.
 
 ## Status
 
-Validated by `npm test` — 89 tests, plus 1 expected failure (below):
+Validated by `npm test` — 92 tests, plus 1 expected failure (below):
 
 - end-to-end reactivity, and which write paths propagate;
 - props: Python defaults, parent precedence, readability during init, parent
@@ -572,11 +585,6 @@ shipped as a small editor extension is the other route.
 
 **Rough edges**
 
-- **Source maps.** Errors carry a correct line number, but the browser debugger
-  shows the generated JS, not the Python.
-- **Errors inside a coroutine** surface through Brython's loop, so they miss the
-  file and line the synchronous path adds.
-- **Compilation cache.** A store is recompiled on every `load()`.
 - **Runtime cost** never measured against plain Svelte.
 
 **Upstream, in Brython**
