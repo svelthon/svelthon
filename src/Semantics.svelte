@@ -4,6 +4,6 @@ big = 2 ** 70
 words = ", ".join(sorted({"apple", "apricot", "banana"}))
 </script>
 
-<output data-k="floor">{floor}</output>
-<output data-k="big">{big}</output>
-<output data-k="words">{words}</output>
+<output>{floor}</output>
+<output>{big}</output>
+<output>{words}</output>

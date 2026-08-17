@@ -137,6 +137,27 @@ export function pyError(error, where, lineOffset = 0) {
     return error;
 }
 
+// Calling an `async def` from JavaScript returns a coroutine that nobody runs:
+// the handler appears to do nothing at all, silently. Brython has its own event
+// loop, so hand it over.
+export function schedule(result) {
+    const $B = globalThis.__BRYTHON__;
+    const aio = $B.imported['browser.aio'];
+
+    if (!aio || result === undefined || result === null) return result;
+
+    try {
+        if ($B.$getattr(aio, 'iscoroutine')(result) === true) {
+            $B.$getattr(aio, 'run')(result);
+            return undefined;
+        }
+    } catch {
+        /* not a coroutine — hand the value back untouched */
+    }
+
+    return result;
+}
+
 // A store's namespace, published under its Python module name, so a component's
 // own Python can `import counter_store` and reach the very same signals the
 // template reads. Without it the bridge would only run one way.

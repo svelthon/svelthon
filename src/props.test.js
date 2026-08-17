@@ -12,7 +12,7 @@ import PropsInit from './fidelity/PropsInit.svelte';
 function render(Component, props) {
     const target = document.body.appendChild(document.createElement('div'));
     mount(Component, { target, props });
-    return (k) => target.querySelector(`[data-k="${k}"]`).textContent;
+    return (k) => target.querySelector(k === 'line' ? 'output' : `[data-k="${k}"]`).textContent;
 }
 
 describe('props', () => {
@@ -39,18 +39,18 @@ describe('props', () => {
         target.querySelector('button').click();
         flushSync();
 
-        expect(target.querySelector('[data-k="line"]').textContent).toBe('HELLO Pierre!');
+        expect(target.querySelector('output').textContent).toBe('HELLO Pierre!');
     });
 
     test('une mise à jour du parent traverse jusqu’au Python', () => {
         const target = document.body.appendChild(document.createElement('div'));
         mount(PropsHost, { target });
 
-        expect(target.querySelector('[data-k="line"]').textContent).toBe('Hello Pierre!');
+        expect(target.querySelector('output').textContent).toBe('Hello Pierre!');
 
         target.querySelector('button[data-k="rename"]').click();
         flushSync();
 
-        expect(target.querySelector('[data-k="line"]').textContent).toBe('Hello Ada!');
+        expect(target.querySelector('output').textContent).toBe('Hello Ada!');
     });
 });

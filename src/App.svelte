@@ -5,35 +5,14 @@
     import StoreDemo from './StoreDemo.svelte';
     import Highlight from './Highlight.svelte';
 
-    // Each demo shows its own source next to the running component: the whole
-    // argument of the project, visible at a glance.
-    const counter = `count = 0
-
-def increment():
-    global count
-    count += 1`;
-
-    const props = `name: str          # required
-punct: str = "!"   # used when the parent passes nothing
-
-greeting = "Hello"
-
-def shout():
-    global greeting
-    greeting = greeting.upper()`;
-
-    const store = `count = 0
-history = []
-
-def increment():
-    global count
-    count += 1
-    history.append(count)
-    publish("history")`;
-
-    const semantics = `floor = -7 // 2                  # -4, not -3
-big = 2 ** 70                    # exact, not 1.18e+21
-words = ", ".join(sorted({"apple", "apricot", "banana"}))`;
+    // The sources shown are the files themselves — nothing to keep in sync, and
+    // the reader sees the whole component: the Python *and* the markup that
+    // wires it to the DOM.
+    import counterSrc from './Counter.svelte?raw';
+    import greetingSrc from './Greeting.svelte?raw';
+    import storeSrc from './lib/counter_store.py?raw';
+    import storeDemoSrc from './StoreDemo.svelte?raw';
+    import semanticsSrc from './Semantics.svelte?raw';
 </script>
 
 <main>
@@ -52,7 +31,7 @@ words = ", ".join(sorted({"apple", "apricot", "banana"}))`;
             <p>Assign to a name and the DOM follows. That is the entire API.</p>
         </div>
         <div class="body">
-            <div class="code"><span class="tag">Counter.svelte</span><pre><code><Highlight code={counter} /></code></pre></div>
+            <div class="files"><div class="code"><span class="tag">Counter.svelte</span><pre><code><Highlight file="Counter.svelte" code={counterSrc} /></code></pre></div></div>
             <div class="live"><div class="row"><Counter /></div></div>
         </div>
     </article>
@@ -65,7 +44,7 @@ words = ", ".join(sorted({"apple", "apricot", "banana"}))`;
                 default.</p>
         </div>
         <div class="body">
-            <div class="code"><span class="tag">Greeting.svelte</span><pre><code><Highlight code={props} /></code></pre></div>
+            <div class="files"><div class="code"><span class="tag">Greeting.svelte</span><pre><code><Highlight file="Greeting.svelte" code={greetingSrc} /></code></pre></div></div>
             <div class="live pair">
                 <div>
                     <span class="tag">&lt;Greeting name="Ada" /&gt;</span>
@@ -86,7 +65,7 @@ words = ", ".join(sorted({"apple", "apricot", "banana"}))`;
                 application — both components below read the same counter.</p>
         </div>
         <div class="body">
-            <div class="code"><span class="tag">counter_store.py</span><pre><code><Highlight code={store} /></code></pre></div>
+            <div class="files"><div class="code"><span class="tag">counter_store.py</span><pre><code><Highlight file="counter_store.py" code={storeSrc} /></code></pre></div><div class="code"><span class="tag">StoreDemo.svelte — how a component uses it</span><pre><code><Highlight file="StoreDemo.svelte" code={storeDemoSrc} /></code></pre></div></div>
             <div class="live pair">
                 <div><span class="tag">instance A</span><div class="row"><StoreDemo /></div></div>
                 <div><span class="tag">instance B</span><div class="row"><StoreDemo /></div></div>
@@ -101,7 +80,7 @@ words = ", ".join(sorted({"apple", "apricot", "banana"}))`;
                 down. Each comment on the left is what JavaScript would have produced instead.</p>
         </div>
         <div class="body">
-            <div class="code"><span class="tag">Semantics.svelte</span><pre><code><Highlight code={semantics} /></code></pre></div>
+            <div class="files"><div class="code"><span class="tag">Semantics.svelte</span><pre><code><Highlight file="Semantics.svelte" code={semanticsSrc} /></code></pre></div></div>
             <div class="live stack"><Semantics /></div>
         </div>
     </article>
@@ -129,6 +108,8 @@ words = ", ".join(sorted({"apple", "apricot", "banana"}))`;
         --c-bi: #6b4fa8;
         --c-op: #8b857e;
         --c-com: #97918a;
+        --c-tag: #1e5aa8;
+        --c-attr: #6b4fa8;
         color-scheme: light dark;
     }
 
@@ -147,6 +128,8 @@ words = ", ".join(sorted({"apple", "apricot", "banana"}))`;
             --c-bi: #b39ae0;
             --c-op: #8b857e;
             --c-com: #6f6a64;
+            --c-tag: #7aa9e6;
+            --c-attr: #b39ae0;
         }
     }
 
@@ -230,9 +213,15 @@ words = ", ".join(sorted({"apple", "apricot", "banana"}))`;
         grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
     }
 
-    .code {
+    /* One column, however many files it holds. */
+    .files {
         background: var(--code-bg);
         border-right: 1px solid var(--border);
+        min-width: 0;
+    }
+
+    .code + .code {
+        border-top: 1px solid var(--border);
     }
 
     pre {
@@ -285,7 +274,7 @@ words = ", ".join(sorted({"apple", "apricot", "banana"}))`;
         display: flex;
         flex-direction: column;
         align-items: flex-start;
-        justify-content: center;
+        justify-content: flex-start;
         gap: 0.7rem;
         padding: 1.25rem 1.4rem;
     }

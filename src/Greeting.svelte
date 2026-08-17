@@ -10,4 +10,4 @@ def shout():
 </script>
 
 <button onclick={shout}>shout()</button>
-<output data-k="line">{greeting} {name}{punct}</output>
+<output>{greeting} {name}{punct}</output>

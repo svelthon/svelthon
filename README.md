@@ -45,7 +45,7 @@ npm run dev
 ```
 
 ```sh
-npm test             # 69 tests: semantics, props, reactivity, Svelte surface
+npm test             # 71 tests: semantics, props, reactivity, Svelte surface
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
 npm run build
@@ -345,6 +345,28 @@ nothing.
 Each instance gets its own namespace — the Python module body re-runs on every
 mount, mutable defaults included.
 
+## Async
+
+An `async def` handler runs. Two things had to be true for that: `async def` is a
+distinct AST node, and missing it left async handlers **undefined** — a click did
+nothing at all, silently. And calling one from JavaScript returns a coroutine
+nobody runs, so the wrapper hands it to Brython's own event loop.
+
+```python
+from browser import aio
+
+rows = []
+
+async def load():
+    global rows
+    await aio.sleep(0)      # or aio.get(...) for a real request
+    rows = ["…"]
+```
+
+An exception raised *inside* a coroutine surfaces through Brython's loop, not
+through the wrapper, so it does not carry the file and line the synchronous path
+adds.
+
 ## Errors
 
 A Brython exception reaches JavaScript **with no `message` and no `stack`**:
@@ -418,7 +440,7 @@ compile; write `{py.truthy(node)}`.
 
 ## Status
 
-Validated by `npm test` — 69 tests, plus 1 expected failure (below):
+Validated by `npm test` — 71 tests, plus 1 expected failure (below):
 
 - end-to-end reactivity, and which write paths propagate;
 - props: Python defaults, parent precedence, readability during init, parent

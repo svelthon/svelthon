@@ -340,6 +340,29 @@ signal depuis un teardown déjà détruit ne rend plus rien.
 Chaque instance a son propre namespace — le corps du module Python est
 ré-exécuté à chaque montage, défauts mutables compris.
 
+## Asynchrone
+
+Un handler `async def` s'exécute. Il a fallu deux choses pour ça : `async def`
+est un nœud d'AST distinct, et l'ignorer laissait les handlers asynchrones
+**indéfinis** — un clic ne faisait rien, en silence. Et appeler une telle
+fonction depuis JavaScript rend une coroutine que personne n'exécute : l'enveloppe
+la confie donc à la boucle d'événements de Brython.
+
+```python
+from browser import aio
+
+rows = []
+
+async def load():
+    global rows
+    await aio.sleep(0)      # ou aio.get(...) pour une vraie requête
+    rows = ["…"]
+```
+
+Une exception levée *dans* une coroutine remonte par la boucle de Brython, pas
+par l'enveloppe : elle ne porte donc pas le fichier et la ligne que le chemin
+synchrone ajoute.
+
 ## Erreurs
 
 Une exception Brython arrive en JavaScript **sans `message` ni `stack`** : les
@@ -376,7 +399,7 @@ C'est le même mécanisme qui accueillera les `.wasm` de Wasthon.
 
 ## État
 
-Validé par `npm test` — 69 tests, plus 1 échec attendu (voir plus bas) :
+Validé par `npm test` — 71 tests, plus 1 échec attendu (voir plus bas) :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
 - props : défaut Python, priorité du parent, lisibilité pendant l'init,

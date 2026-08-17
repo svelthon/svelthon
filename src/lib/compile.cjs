@@ -97,7 +97,12 @@ function surface(body) {
             // field: `name: str` is a prop, `count: int = 0` a prop with a
             // default. A bare assignment stays internal state.
             if (node.target instanceof $B.ast.Name && take(node.target.id)) props.push(node.target.id);
-        } else if (node instanceof $B.ast.FunctionDef) {
+        } else if (
+            // `async def` is a different AST node, and missing it left async
+            // handlers undefined — a click did nothing at all, silently.
+            node instanceof $B.ast.FunctionDef ||
+            node instanceof $B.ast.AsyncFunctionDef
+        ) {
             if (!take(node.name)) continue;
 
             // @derived turns a function into a value: Python reads the name and
@@ -227,7 +232,7 @@ function compile(src, name = 'Component', source = name, { store = false, lineOf
         `import { init } from ${JSON.stringify(virtualId(name))};`,
         // `py` backs the rewritten conditions, and is available to the template
         // for explicit conversions: {py.str(items)} renders ['a', 'b'].
-        `import { bind, py, republish, pyError, NONE${store ? ', registerModule' : ''} } from 'svelthon/runtime';`,
+        `import { bind, py, republish, pyError, schedule, NONE${store ? ', registerModule' : ''} } from 'svelthon/runtime';`,
         ...(lifecycle('on_mount') || lifecycle('on_destroy')
             ? [`import { untrack } from 'svelte';`]
             : []),
@@ -297,7 +302,7 @@ function compile(src, name = 'Component', source = name, { store = false, lineOf
         // pyError fills them in, naming the function and the file it came from.
         ...funcs.map(
             (f) =>
-                `const ${f.name} = (...a) => { try { return ${fn(f.name)}(...a.slice(0, ${f.arity})); }` +
+                `const ${f.name} = (...a) => { try { return schedule(${fn(f.name)}(...a.slice(0, ${f.arity}))); }` +
                 ` catch (err) { throw pyError(err, ${JSON.stringify(`${f.name}() — ${source}`)}, ${lineOffset}); } };`
         ),
         ...(store
