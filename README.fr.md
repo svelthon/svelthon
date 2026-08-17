@@ -502,7 +502,7 @@ C'est le même mécanisme qui accueillera les `.wasm` de Wasthon.
 
 ## État
 
-Validé par `npm test` — 92 tests, plus 1 échec attendu (voir plus bas) :
+Validé par `npm test` — 96 tests, plus 2 échecs attendus (voir plus bas) :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
 - props : défaut Python, priorité du parent, lisibilité pendant l'init,
@@ -558,6 +558,23 @@ commentaires `#` compris.
 La grammaire liste déjà `coffee` à côté de `ts` : ajouter `python` en amont dans
 `svelte-language-tools` ne demande donc aucune exception. L'autre voie est une
 injection de grammaire livrée comme petite extension d'éditeur.
+
+### Hydratation
+
+Le runner de Svelte exécute chaque échantillon dans trois modes — client, serveur,
+**hydratation** — et c'est le troisième qui exige que les deux moitiés
+s'accordent, puisque le corps Python tourne des deux côtés. Couvert par
+`src/hydration.test.js` :
+
+- les nœuds du serveur sont **repris, pas reconstruits** — leur identité survit,
+  ce qui prouve que l'hydratation a bien eu lieu ;
+- le Python est branché sur ces nœuds repris : un clic incrémente toujours ;
+- **en cas de divergence, la valeur du client l'emporte, en silence.** Aucun
+  avertissement. Un composant non déterministe — l'heure, un aléa, une session —
+  ne plantera pas : il affichera une valeur puis basculera sur l'autre.
+
+La sortie serveur exacte, marqueurs compris, est affirmée dans `src/ssr.test.js`
+pour que les deux fichiers ne puissent pas diverger.
 
 ## Ce que ça coûte à l'exécution
 

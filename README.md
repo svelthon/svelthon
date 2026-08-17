@@ -45,7 +45,7 @@ npm run dev
 ```
 
 ```sh
-npm test             # 92 tests: semantics, props, reactivity, Svelte surface
+npm test             # 96 tests: semantics, props, reactivity, Svelte surface
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
 npm run bench        # Python vs JavaScript, same component, real browser
@@ -537,7 +537,7 @@ compile; write `{py.truthy(node)}`.
 
 ## Status
 
-Validated by `npm test` — 92 tests, plus 1 expected failure (below):
+Validated by `npm test` — 96 tests, plus 2 expected failures (below):
 
 - end-to-end reactivity, and which write paths propagate;
 - props: Python defaults, parent precedence, readability during init, parent
@@ -573,6 +573,22 @@ left uncoloured — it is coloured wrongly, `#` comments included.
 The grammar already lists `coffee` beside `ts`, so adding `python` upstream in
 `svelte-language-tools` follows an existing precedent. A grammar injection
 shipped as a small editor extension is the other route.
+
+### Hydration
+
+Svelte's own runner drives every sample in three modes — client, server,
+**hydrate** — and the third is where the two halves have to agree, since the
+Python body runs on both sides. Covered by `src/hydration.test.js`:
+
+- the server's nodes are **reused, not rebuilt** — node identity survives, which
+  is the proof hydration actually happened;
+- Python is wired to those reused nodes: a click still increments;
+- **on a mismatch the client value wins, silently.** No warning. A
+  non-deterministic component — reading the clock, a random, a session — will not
+  crash; it will paint one value and then flip to another.
+
+The exact server output, hydration markers included, is asserted in
+`src/ssr.test.js`, so the two files cannot drift apart.
 
 ## What it costs at runtime
 

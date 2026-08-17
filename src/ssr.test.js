@@ -23,6 +23,14 @@ describe('rendu serveur', () => {
         expect(text(render(Counter))).toBe('<button>increment()</button> <output>0</output>');
     });
 
+    // src/hydration.test.js repart de cette chaîne exacte, marqueurs compris :
+    // l'affirmer ici interdit aux deux fichiers de diverger en silence.
+    test('les marqueurs d’hydratation sont ceux attendus par le client', () => {
+        expect(render(Counter).body).toBe(
+            '<!--[--><button>increment()</button> <output>0</output><!--]-->'
+        );
+    });
+
     test('les props sont résolues côté serveur', () => {
         expect(text(render(Greeting, { props: { name: 'Ada' } }))).toContain('Hello Ada!');
     });
