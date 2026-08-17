@@ -621,11 +621,16 @@ reloads.
 
 **Upstream, in Brython**
 
-- **Flattened `__file__`.** Brython derives its namespace identifier from
-  `filename` and neutralises only `.`, not `/`: a real path yields
-  `locals_src/Counter_svelte`, which is invalid JS. A flattened name is passed
-  instead, at the cost of traceback readability.
-- **Comprehension leak**, the known divergence above.
+Both bugs, the internals SVELTHON depends on, and the error messages that cost
+the most debugging time are written up in **[BRYTHON.md](BRYTHON.md)** — the
+contract between the two projects, with a minimal reproduction for each.
+
+- **Flattened `__file__`.** The namespace identifier comes from `filename` and
+  only `.` is neutralised, so a real path yields `locals_src/Counter_svelte` —
+  invalid JavaScript. A flattened name is passed instead, at the cost of
+  traceback readability.
+- **Comprehension leak.** The loop variable escapes its scope, in a function as
+  well as at module level.
 
 ## Running
 

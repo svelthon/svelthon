@@ -607,6 +607,10 @@ l'application ne recharge jamais.
 
 **En amont, chez Brython**
 
+Les deux bugs, les internes dont SVELTHON dépend et les messages d'erreur qui ont
+coûté le plus de débogage sont réunis dans **[BRYTHON.md](BRYTHON.md)** — le
+contrat entre les deux projets, avec une reproduction minimale pour chacun.
+
 - **`__file__` aplati.** Brython dérive son identifiant de namespace du
   `filename` et n'y neutralise que les `.`, pas les `/` : un chemin réel produit
   `locals_src/Counter_svelte`, du JS invalide. On passe donc un nom aplati, au
