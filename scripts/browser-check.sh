@@ -14,10 +14,16 @@ trap cleanup EXIT
 cleanup
 (npx vite --port "$PORT" --strictPort >/dev/null 2>&1 &)
 
-for _ in $(seq 30); do
+for _ in $(seq 40); do
     sleep 0.5
     curl -sf -o /dev/null "$URL" && break
 done
+
+# Répondre 200 ne veut pas dire prêt : la première requête déclenche la
+# compilation du graphe, qui dépasse le budget de temps de Chromium sur une
+# machine modeste. On préchauffe les deux pages avant de mesurer.
+curl -sf -o /dev/null "$URL"
+curl -sf -o /dev/null "http://localhost:$PORT/"
 
 REPORT=$(chromium --headless --no-sandbox --disable-gpu \
     --virtual-time-budget=8000 --dump-dom "$URL" 2>/dev/null |
@@ -39,7 +45,7 @@ fi
 APP=$(chromium --headless --no-sandbox --disable-gpu \
     --virtual-time-budget=9000 --dump-dom "http://localhost:$PORT/" 2>/dev/null)
 
-for expected in "increment()" "Hello Ada!" "0 · []" "-4 · 1180591620717411303424"; do
+for expected in "increment()" "Hello Ada!" "0 · []" "1180591620717411303424"; do
     if printf '%s' "$APP" | grep -qF -- "$expected"; then
         echo "✓ démo — $expected"
     else

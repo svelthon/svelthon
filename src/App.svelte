@@ -102,7 +102,7 @@ words = ", ".join(sorted({"apple", "apricot", "banana"}))`;
         </div>
         <div class="body">
             <div class="code"><span class="tag">Semantics.svelte</span><pre><code><Highlight code={semantics} /></code></pre></div>
-            <div class="live"><Semantics /></div>
+            <div class="live stack"><Semantics /></div>
         </div>
     </article>
 
@@ -299,6 +299,11 @@ words = ", ".join(sorted({"apple", "apricot", "banana"}))`;
         font-variant-numeric: tabular-nums;
         color: var(--text);
         overflow-wrap: anywhere;
+    }
+
+    /* Une ligne de résultat par ligne de source : le rythme suit celui du code. */
+    .stack {
+        gap: 0.3rem;
     }
 
     .row {

@@ -9,9 +9,9 @@ test('components run real Python semantics', () => {
     const target = document.body.appendChild(document.createElement('div'));
     mount(Semantics, { target });
 
-    const [floor, big, words] = target.querySelector('output').textContent.split(' · ');
+    const value = (k) => target.querySelector(`[data-k="${k}"]`).textContent;
 
-    expect(floor).toBe('-4');                     // JS: Math.trunc(-3.5) === -3
-    expect(big).toBe('1180591620717411303424');   // JS: 1.1805916207174113e+21
-    expect(words).toBe('apple, apricot, banana'); // a sorted set, not an object
+    expect(value('floor')).toBe('-4');                     // JS: Math.trunc(-3.5) === -3
+    expect(value('big')).toBe('1180591620717411303424');   // JS: 1.1805916207174113e+21
+    expect(value('words')).toBe('apple, apricot, banana'); // a sorted set, not an object
 });
