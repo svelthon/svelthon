@@ -34,6 +34,29 @@ const NS = '__py';
 // instead of producing a component with no reactivity at all.
 const namespaceCall = (name) => `$B.namespace('${name}')`;
 
+// A Brython exception carries neither `message` nor `stack`, so a Python syntax
+// error would reach Vite as an empty object and be reported as nothing at all.
+function pythonError(error, source, lineOffset) {
+    let described = 'PythonError';
+    let where = source;
+
+    try {
+        const name = $B.$getattr($B.get_class(error), '__name__');
+        described = `${name}: ${$B.builtins.str.$factory(error)}`;
+    } catch {
+        /* pas une exception Brython : on garde le libellé générique */
+    }
+
+    try {
+        const line = $B.$getattr(error, 'lineno');
+        if (typeof line === 'number') where = `${source}:${line + lineOffset}`;
+    } catch {
+        /* pas de position */
+    }
+
+    return new SyntaxError(`svelthon — ${described} (${where})`);
+}
+
 // `src/lib/counter_store.py` → `counter_store`, the name Python will import it by.
 const pythonModuleName = (source) => source.split('/').pop().replace(/\.py$/, '');
 
@@ -121,7 +144,12 @@ function compile(src, name = 'Component', source = name, { store = false, lineOf
     // leaves '/' alone, so a real path would emit `locals_src/Counter_svelte`,
     // which is not valid JavaScript. Pass an identifier-safe name instead; the
     // cost is that Python's __file__ says "Counter" rather than the full path.
-    let root = $B.py2js({ src, filename: name }, name, [name]);
+    let root;
+    try {
+        root = $B.py2js({ src, filename: name }, name, [name]);
+    } catch (error) {
+        throw pythonError(error, source, lineOffset);
+    }
     let { props, state, funcs, deriveds } = surface(root._ast.body);
 
     // A store has no parent, so an annotation there declares plain state — and

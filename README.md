@@ -374,7 +374,7 @@ C'est le même mécanisme qui accueillera les `.wasm` de Wasthon.
 
 ## État
 
-Validé par `npm test` — 64 tests, plus 1 échec attendu (voir plus bas) :
+Validé par `npm test` — 69 tests, plus 1 échec attendu (voir plus bas) :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
 - props : défaut Python, priorité du parent, lisibilité pendant l'init,
