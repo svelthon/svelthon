@@ -1,6 +1,6 @@
 # SVELTHON
 
-Des composants Svelte écrits en Python, compilés par Brython **au build**.
+**Svelte components written in Python, compiled at build time.**
 
 ```svelte
 <script lang="python">
@@ -11,50 +11,78 @@ def increment():
     count += 1
 </script>
 
-<button onclick={increment}>compté {count} fois</button>
+<button onclick={increment}>clicked {count} times</button>
 ```
 
-Pas de rune côté Python, pas d'API de réactivité à apprendre : du Python nu.
-Le navigateur ne reçoit que du JavaScript — plus aucune transcompilation au
-chargement de la page.
+That is the whole thing. Plain Python — no runes, no reactivity API to learn,
+no decorators around your state. The browser receives only JavaScript: unlike
+every other Python-in-the-browser approach, nothing is transcompiled while the
+page loads.
 
-## L'idée
+*[Version française](README.fr.md).*
 
-Brython range l'état d'un module Python dans un **objet namespace**, jamais dans
-des bindings lexicaux :
+## Why
+
+Python is the most used language in the world, and running it in a browser has
+been promised many times — Brython, Skulpt, Transcrypt, PyScript. The barrier
+was never the language. It was the workflow: no components, no props, no hot
+reload, a compiler shipped to every visitor, and a page that spent its first
+second compiling.
+
+SVELTHON keeps the modern frontend chain intact. Components, props, scoped
+styles, keyed lists, HMR, tree-shaking — all of it — with Python as the
+component language and **no runtime penalty at load**, because the compilation
+already happened.
+
+## Quick start
+
+```sh
+npm install
+npm run dev
+```
+
+```sh
+npm test             # 69 tests: semantics, props, reactivity, Svelte surface
+npm run test:browser # DOM interop and the demo, in a real headless Chromium
+npm run test:hmr     # virtual-module invalidation, component and store paths
+npm run build
+```
+
+## The idea
+
+Brython keeps a module's state in a **namespace object**, never in lexical
+bindings:
 
 ```js
 locals_Counter = $B.namespace('Counter')
 locals_Counter.count = 0
 ```
 
-Il y a donc **un seul point à intercepter** : cet unique appel à
-`$B.namespace()`. Le runtime le détourne le temps que le corps du module
-s'exécute, et rend à sa place un objet dont chaque nom est un accesseur vers un
-signal Svelte. Chaque affectation que le codegen émet déjà devient une écriture
-réactive, sans qu'une ligne du code généré soit réécrite. Le Python reste du
-Python nu, sans une seule rune.
+So there is exactly **one point to intercept**: that single call to
+`$B.namespace()`. The runtime hijacks it for as long as the module body runs and
+hands back an object whose every name is an accessor onto a Svelte signal. Every
+assignment Brython's code generator already emits becomes a reactive write —
+without rewriting a line of generated code.
 
-Le détournement est nominatif — un corps de module peut en importer d'autres
-pendant qu'il tourne, et chaque import crée son namespace par la même fonction.
-Le motif attendu est seulement *vérifié* à la compilation : si un futur codegen
-cessait de l'émettre, le build échoue bruyamment au lieu de livrer un composant
-sans réactivité.
+The hijack is by name: a module body may import others while it runs, and each
+import creates its namespace through the same function. The expected pattern is
+only *checked* at compile time — if a future code generator stopped emitting it,
+the build fails loudly instead of shipping a component with no reactivity.
 
-## Chaîne de compilation
+## Compilation pipeline
 
 ```
  Counter.svelte
    └── <script lang="python">
          │
-         │  préprocesseur Svelte (src/lib/svelthon.js)
+         │  Svelte preprocessor (src/lib/svelthon.js)
          ↓
-       $B.py2js()  ← Brython, sous Node          [build]
+       $B.py2js()  ← Brython, under Node          [build time]
          │
-         ├──→ module virtuel  virtual:svelthon/<nom>
-         │      export function init(__py) { …code généré… }
+         ├──→ virtual module  virtual:svelthon/<name>
+         │      export function init(__py) { …generated code… }
          │
-         └──→ script du composant
+         └──→ component script
                 let count = $state.raw(undefined);
                 bind(__proto, 'count', () => count, (v) => { count = v; });
                 const __py = Object.create(__proto);
@@ -63,67 +91,64 @@ sans réactivité.
                 const increment = (...a) => __fn_increment(...a.slice(0, 0));
 ```
 
-Le code généré vit dans un module séparé parce que **Svelte interdit le préfixe
-`$` sur toute déclaration d'un composant**, dans toutes les portées — et le
-codegen Brython ouvre sur `var $B = __BRYTHON__`. Un IIFE ne suffit pas ; il
-faut un fichier que Svelte ne parse pas.
+The generated code lives in a separate module because **Svelte forbids the `$`
+prefix on any declaration inside a component**, in every scope — and Brython's
+code generator opens with `var $B = __BRYTHON__`. An IIFE is not enough; it takes
+a file Svelte never parses.
 
-## Props : l'annotation est l'interface
+## Props: the annotation is the interface
 
-Comme dans un dataclass — annoté, c'est public ; affecté, c'est interne.
+Like a dataclass — annotated is public, assigned is internal.
 
 ```python
-name: str          # prop requis
-punct: str = "!"   # prop avec défaut
-greeting = "Bonjour"   # état interne, invisible du parent
+name: str              # required prop
+punct: str = "!"       # prop with a default
+greeting = "Hello"     # internal state, invisible to the parent
 ```
 
-Un prop est lisible dès l'exécution du corps du module, une mise à jour du
-parent traverse jusqu'au Python, et un prop requis non fourni vaut `None` — pas
-`undefined`. Écrire dans un prop depuis Python n'a d'effet que si le parent n'en
-fournit pas : c'est la règle de Svelte pour les props non `$bindable`.
+A prop is readable while the module body runs, a parent update flows through to
+Python, and a required prop that was not passed reads as `None`, not
+`undefined`. Writing to a prop from Python only takes effect when the parent
+supplies nothing — Svelte's own rule for non-`$bindable` props.
 
-La lecture d'un global passe par `$B.resolve_global`, qui exige une propriété
-**propre** sauf si le namespace porte le drapeau `$proxy` — auquel cas il lit la
-propriété normalement, donc en traversant le prototype. C'est le seul endroit de
-Brython qui consulte ce drapeau, et c'est ce qui rend l'astuce du prototype
-compatible avec les props.
+Reading a global goes through `$B.resolve_global`, which demands an *own*
+property unless the namespace carries the `$proxy` flag — in which case it reads
+the property normally and therefore walks the prototype chain. It is the only
+place in Brython that consults that flag, and it is what makes the prototype
+trick compatible with props.
 
-## Le gabarit est du JavaScript
+## Templates are JavaScript
 
-Règle à retenir : dans le balisage on est en JS, pas en Python. Deux
-conséquences, dont une corrigée automatiquement.
+The rule to remember: inside markup you are in JS, not Python. Two consequences,
+one of them fixed automatically.
 
-`{#if}` est **réécrit** vers le `bool()` de Python par le préprocesseur — sinon
-une liste vide, un dict vide ou `None` seraient vrais, puisque JS tient tout
-objet pour vrai. `{#each}` fonctionne nativement : une liste Brython *est* un
-tableau JS.
+`{#if}` is **rewritten** to Python's `bool()` by the preprocessor — otherwise an
+empty list, an empty dict or `None` would all read as true, since JS holds every
+object truthy. `{#each}` needs nothing: a Brython list *is* a JS array.
 
-L'interpolation de **texte** est enveloppée dans `py.str()`, sinon une liste
-s'afficherait `a,b,c` et un dict `[object Object]` — et comme une liste Brython
-*est* un tableau JS, aucun prototype ne pouvait être corrigé à la place.
+**Text interpolation** is wrapped in `py.str()`, or a list would render as
+`a,b,c` and a dict as `[object Object]` — and since a Brython list is literally a
+JS array, no prototype could have been patched instead.
 
 ```svelte
-{#if items}   <!-- réécrit en py.truthy(items) -->
-  {items}     <!-- réécrit en py.str(items) → ['a', 'b', 'c'] -->
+{#if items}   <!-- rewritten to py.truthy(items) -->
+  {items}     <!-- rewritten to py.str(items) → ['a', 'b', 'c'] -->
 {/if}
 ```
 
-Les **valeurs d'attribut et les props** sont laissées intactes : elles
-transportent la valeur, pas son rendu. `data-v={items}` reçoit bien la liste.
-Les réécritures ne touchent que le balisage, jamais un `<script>` ou un
-`<style>` — le Python est plein d'accolades.
+**Attribute values and component props are left alone**: they carry the value,
+not its rendering. `data-v={items}` receives the list itself. The rewrites touch
+markup only, never a `<script>` or `<style>` — Python is full of braces.
 
-Pour les événements, le motif recommandé est d'extraire dans le gabarit et de
-calculer en Python :
+For events, the recommended shape is to extract in the template and compute in
+Python:
 
 ```svelte
 <input oninput={(e) => on_text(e.target.value)} />
 ```
 
-Traverser le DOM depuis Python fonctionne aussi, à une ligne près : la classe
-d'un nœud se résout via `$B.imported['browser.html']`, que seul un vrai `import`
-enregistre.
+Walking the DOM from Python works too, one line away: a node's class is resolved
+through `$B.imported['browser.html']`, which only a real import registers.
 
 ```python
 from browser import html, document
@@ -131,20 +156,19 @@ from browser import html, document
 el = document.createElement("input")   # → INPUT
 ```
 
-On ne peut pas le pré-importer au boot (`$B.$import` lit `$B.frame_obj`, nul
-tant qu'aucun corps de module n'a tourné), et l'injecter d'office dans tout
-composant à handler paramétré coûterait une classe par balise HTML à des
-composants qui ne touchent jamais au DOM.
+It cannot be pre-imported at boot (`$B.$import` reads `$B.frame_obj`, null until
+a module body has run), and injecting it into every component with a
+parameterised handler would cost a class per HTML tag to components that never
+touch a node.
 
-**jsdom se bloque sur cet import**, alors qu'un navigateur ne bronche pas. D'où
-`npm run test:browser`, qui rejoue la vérification dans un Chromium headless —
-la seule partie du projet que la suite jsdom ne peut pas couvrir.
+**jsdom hangs on that import** while a real browser does not — hence
+`npm run test:browser`, which replays the check in headless Chromium. It is the
+one part of the project the jsdom suite cannot cover.
 
 ## Composition
 
-Un composant Python n'a qu'un `<script>` d'instance. Les enfants s'importent
-donc dans un `<script module>`, dont les déclarations restent visibles du
-gabarit :
+A Python component has a single instance `<script>`. Children are therefore
+imported in a `<script module>`, whose declarations stay visible to the markup:
 
 ```svelte
 <script module>
@@ -158,22 +182,22 @@ rows = [Item("a", 1), Item("b", 2)]
 {#each rows as r}<Row row={r} />{/each}
 ```
 
-Un objet Python se passe en prop sans conversion. Dans le gabarit, dicts et
-tuples se lisent directement — les clés d'un dict Brython sont exposées comme
-propriétés JS, un tuple *est* un tableau. Les **instances de classe** font
-exception : Brython garde leurs attributs hors des propriétés JS, donc
-`{o.label}` rendrait du vide. `py.of()` passe par la recherche d'attributs de
-Python, protocole des descripteurs compris :
+A Python object is passed as a prop with no conversion. In markup, dicts and
+tuples read directly — a Brython dict's keys are exposed as JS properties, a
+tuple *is* an array. **Class instances** are the exception: Brython keeps their
+attributes out of the JS properties, so `{o.label}` would render empty.
+`py.of()` goes through Python's own attribute lookup, descriptor protocol
+included:
 
 ```svelte
-{py.of(item).label}    <!-- attribut -->
-{py.of(item).double}   <!-- @property, évaluée -->
+{py.of(item).label}    <!-- attribute -->
+{py.of(item).double}   <!-- @property, evaluated -->
 ```
 
-## Valeurs dérivées et liaisons
+## Derived values and bindings
 
-`@derived` transforme une fonction en valeur — Python lit le nom et obtient le
-résultat, comme une `@property` :
+`@derived` turns a function into a value — Python reads the name and gets the
+result, exactly like a `@property`:
 
 ```python
 first = "Ada"
@@ -184,40 +208,38 @@ def full():
     return f"{first} {last}"
 ```
 
-`{full}` dans le gabarit, `full` en Python. Le corps s'exécute dans
-`$derived.by`, et chaque global qu'il touche passe par un accesseur du
-namespace : **Svelte découvre les dépendances tout seul**, rien à déclarer. Un
-`@derived` peut en lire un autre. Il doit être **pur** — écrire de l'état dans un
-dérivé est refusé par Svelte, à juste titre.
+`{full}` in markup, `full` in Python. The body runs inside `$derived.by`, and
+every global it touches goes through a namespace accessor, so **Svelte discovers
+the dependencies by itself** — nothing to declare. A `@derived` may read another.
+It must be **pure**: writing state inside a derived is rejected by Svelte, and
+rightly so.
 
-`bind:` ne demande rien : un nom d'état est un `let` réactif ordinaire, donc
-`bind:value={name}` fonctionne dans les deux sens et Python relit la valeur
-saisie. (Un *prop* est un `$derived`, donc en lecture seule — la règle de Svelte
-pour les props non `$bindable`.)
+`bind:` needs no support code at all: a state name is an ordinary reactive `let`,
+so `bind:value={name}` works both ways and Python reads back what was typed. (A
+*prop* is a `$derived`, hence read-only — Svelte's rule for non-`$bindable`
+props.)
 
-## Réactivité : un signal par nom
+## Reactivity: one signal per name
 
-Le namespace n'est **pas** un proxy `$state`. Svelte proxifierait alors chaque
-valeur Python qu'on y range, et un objet Brython proxifié échoue à ses propres
-vérifications de type — `repr((1, 2))` lève « descriptor `__repr__` requires a
-'tuple' object but received a 'tuple' ». À la place, chaque nom de niveau module
-reçoit son propre `$state.raw`, publié vers Brython par un accesseur : les
-valeurs Python restent opaques à Svelte.
+The namespace is **not** a `$state` proxy. Svelte would then deep-proxy every
+Python value stored in it, and a proxied Brython object fails its own type checks
+— `repr((1, 2))` raises *descriptor `__repr__` requires a 'tuple' object but
+received a 'tuple'*. Instead every module-level name gets its own `$state.raw`,
+published to Brython through an accessor: Python values stay opaque to Svelte.
 
-Conséquence à connaître : **c'est la réaffectation d'un nom qui est réactive**,
-pas la mutation en place d'une valeur.
+The consequence worth knowing: **rebinding a name is reactive, mutating a value
+in place is not.**
 
 ```python
-count += 1          # réactif — réaffecte `count`
-items = items + [x] # réactif — réaffecte `items`
-items.append(x)     # PAS réactif — mute sans réaffecter
-box.value += 1      # PAS réactif — mute un attribut
+count += 1          # reactive — rebinds `count`
+items = items + [x] # reactive — rebinds `items`
+items.append(x)     # NOT reactive — mutates without rebinding
+box.value += 1      # NOT reactive — mutates an attribute
 ```
 
-Pour muter en place sans renoncer à `{#each items}`, `publish(nom)` est injecté
-dans chaque composant. Il rend au gabarit une identité neuve — une copie
-superficielle pour une liste, un dict ou un set — ce qui suffit à franchir la
-comparaison `===` de Svelte :
+To mutate in place without giving up `{#each items}`, `publish(name)` is injected
+into every component. It hands the template a fresh identity — a shallow copy for
+a list, a dict or a set — which is enough to clear Svelte's `===` check:
 
 ```python
 def add():
@@ -225,46 +247,32 @@ def add():
     publish("items")
 ```
 
-Un composant qui définit son propre `publish` garde le sien.
+A component that defines its own `publish` keeps it.
 
-La même règle se décline à trois niveaux, et c'est la seule à retenir —
-**réaffecter, pas muter** :
+The same rule holds at three levels, and it is the only one to remember —
+**rebind, don't mutate**:
 
-| niveau | ne propage pas | propage |
+| level | does not propagate | propagates |
 |---|---|---|
-| nom | — | `count += 1` |
+| name | — | `count += 1` |
 | collection | `items.append(x)` | `items.append(x)` + `publish("items")` |
-| élément d'une liste à clé | `it.label = …` | `items[i] = Item(it.id, …)` |
+| item of a keyed list | `it.label = …` | `items[i] = Item(it.id, …)` |
 
-Le troisième cas surprend : dans un `{#each items as it (py.of(it).id)}`, muter
-un attribut d'un élément ne re-rend rien même après `publish()`, parce que
-l'élément a gardé son identité. Le remplacer met à jour le rendu **et** réutilise
-le nœud DOM, puisque la clé, elle, n'a pas bougé.
+The third case surprises: in `{#each items as it (py.of(it).id)}`, mutating an
+item's attribute re-renders nothing even after `publish()`, because the item kept
+its identity. Replacing it updates the render **and** still reuses the DOM node,
+since the key did not move.
 
-Les accesseurs vivent sur le **prototype** du namespace, jamais sur l'objet
-lui-même : réaffecter un global émet `$B.delete_for_reassign(name, locals)`, et
-un `delete` sur un accesseur propre le supprimerait définitivement — le signal
-se débranchait silencieusement après la première écriture.
+Accessors live on the namespace's **prototype**, never on the object itself:
+rebinding a global emits `$B.delete_for_reassign(name, locals)`, and a `delete`
+on an own accessor would drop it for good — silently unhooking the signal after
+the very first write.
 
-## HMR
+## Shared state: a plain `.py` file
 
-Le code généré d'un composant vit dans un module virtuel — une entrée distincte
-du graphe Vite, que rien ne relie au `.svelte` qui l'a produit. Sans
-invalidation explicite, éditer le Python re-transforme le composant tout en
-continuant de servir **l'ancien corps généré** : la page se met à jour vers du
-code qui n'a pas changé. Le hook `hotUpdate` du plugin invalide les deux modules
-virtuels du composant, et `npm run test:hmr` le vérifie sur les deux chemins.
-
-Un store passe par un chemin différent — `load()` plutôt que le préprocesseur —
-et souffrait du même mal en pire : son propre module `.svelte.js` devait être
-invalidé lui aussi, faute de quoi son `load()` ne rejouait jamais et le cache
-gardait l'ancien corps.
-
-## État partagé : un simple fichier `.py`
-
-L'équivalent Python d'un `.svelte.ts`. Le fichier est du Python ordinaire ; ses
-noms de niveau module deviennent des signaux créés **une fois pour toute
-l'application**, là où l'état d'un composant naît et meurt avec chaque instance.
+The Python equivalent of a `.svelte.ts`. The file is ordinary Python; its
+module-level names become signals created **once for the whole application**,
+where a component's state is born and dies with each instance.
 
 ```python
 # counter_store.py
@@ -287,18 +295,17 @@ def increment():
 <button onclick={store.increment}>+</button>
 ```
 
-Le store est servi sous une identité `.svelte.js`, ce qui est précisément ce qui
-décide vite-plugin-svelte à en compiler les runes. Les noms sont exportés par
-des accesseurs : Svelte interdit d'exporter directement une liaison `$state`
-réaffectée, et un getter est de toute façon ce qui garde la lecture réactive
-chez l'appelant.
+The store is served under a `.svelte.js` identity, which is precisely what makes
+vite-plugin-svelte compile the runes inside it. Names are exported through
+accessors: Svelte forbids exporting a reassigned `$state` binding, and a getter
+is what keeps the read reactive at the call site anyway.
 
-Un composant qui *consomme* un store sans avoir de Python à lui reçoit quand
-même les réécritures de gabarit et `py` en portée — sinon `{store.history}`
-retomberait sur le rendu JavaScript.
+A component that only *consumes* a store, with no Python of its own, still gets
+the markup rewrites and `py` in scope — otherwise `{store.history}` would fall
+back to JavaScript rendering.
 
-Le pont va dans les deux sens : le Python d'un composant importe le store comme
-un module Python ordinaire et atteint les mêmes signaux.
+The bridge runs both ways: a component's Python imports the store as an ordinary
+Python module and reaches the same signals.
 
 ```python
 import counter_store
@@ -308,186 +315,203 @@ def bump():
     return counter_store.count
 ```
 
-Le namespace du store est publié dans `$B.imported` sous son nom de module, et
-le module virtuel du composant importe le store en tête — pour qu'il soit
-enregistré avant que le corps du composant ne tourne.
+The store's namespace is published in `$B.imported` under its module name, and
+the component's virtual module imports the store first, so it is registered by
+the time the component body runs.
 
-Le plugin est en `enforce: 'pre'` : sans ça, le résolveur de Vite réclame
-`./store.py` comme un fichier ordinaire et livre son Python au parseur JS.
+## Lifecycle
 
-## Cycle de vie
-
-Par convention de nom, adossé à un unique `$effect` :
+By naming convention, backed by a single `$effect`:
 
 ```python
 def on_mount():
-    ...   # après que le DOM existe
+    ...   # after the DOM exists
 
 def on_destroy():
-    ...   # au démontage, l'état final encore lisible
+    ...   # on teardown, final state still readable
 ```
 
-Les deux restent des fonctions ordinaires — Python peut les appeler aussi. Elles
-s'exécutent **hors suivi** (`untrack`) : un hook lit les noms du composant à
-travers les accesseurs du namespace, et ces lectures *sont* des lectures de
-signaux. Sans ça, un `mounts += 1` dans `on_mount` ferait dépendre l'effet d'un
-état qu'il écrit, et Svelte boucle jusqu'à `effect_update_depth_exceeded`. La
-fonction de nettoyage est capturée pendant que le composant est vivant : lire un
-signal depuis un teardown déjà détruit ne rend plus rien.
+Both stay ordinary functions — Python may call them too. They run **untracked**:
+a hook reads the component's names through the namespace accessors, and those
+reads *are* signal reads. Without `untrack`, a `mounts += 1` inside `on_mount`
+would make the effect depend on state it also writes, and Svelte loops until
+`effect_update_depth_exceeded`. The teardown function is captured while the
+component is alive: reading a signal from an already-destroyed teardown returns
+nothing.
 
-Chaque instance a son propre namespace — le corps du module Python est
-ré-exécuté à chaque montage, défauts mutables compris.
+Each instance gets its own namespace — the Python module body re-runs on every
+mount, mutable defaults included.
 
-## Erreurs
+## Errors
 
-Une exception Brython arrive en JavaScript **sans `message` ni `stack`** : les
-devtools et l'overlay de Vite n'affichent rien, alors que le texte existe dans
-l'objet Python. Chaque handler et le corps du module sont donc enveloppés pour
-les renseigner, en nommant la fonction et le fichier :
+A Brython exception reaches JavaScript **with no `message` and no `stack`**:
+devtools and Vite's overlay show nothing at all, while the text sits in the
+Python object. Every handler and the module body are therefore wrapped to fill
+them in, naming the function and the file:
 
 ```
-ValueError: cassé au fond (boom() — src/Counter.svelte:6)
+ValueError: broke deep down (boom() — src/Counter.svelte:6)
 ```
 
-La ligne vient de la traceback Python, recalée sur la numérotation du fichier —
-un `<script module>` placé avant le Python ne la fausse pas.
+The line comes from the Python traceback, offset back to the file's own
+numbering — a `<script module>` placed before the Python does not skew it. A
+Python **syntax error** at build time is reported the same way, rather than as an
+empty object Vite cannot describe.
 
-Le composant survit à l'exception — le handler suivant fonctionne — et un
-`try/except` Python reste un `try/except` Python : l'enveloppe ne s'applique
-qu'à ce qui remonte jusqu'à JavaScript.
+The component survives the exception — the next handler still works — and a
+Python `try/except` stays a Python `try/except`: the wrapper only applies to what
+reaches JavaScript.
 
-## Stdlib : seulement ce qui est importé
+## HMR
 
-`py2js()` expose les imports du composant, et le VFS de Brython porte déjà le
-graphe de dépendances (`[ext, source, deps, is_package]`). La fermeture
-transitive est donc exacte, et seule elle entre dans le bundle :
+A component's generated code lives in a virtual module — a separate entry in
+Vite's graph, tied to nothing. Without explicit invalidation, editing the Python
+re-transforms the component while still serving **the previous generated body**:
+the page updates to code that never changed. The plugin's `hotUpdate` hook
+invalidates the component's virtual modules, and `npm run test:hmr` checks both
+paths.
+
+A store goes through a different path — `load()` rather than the preprocessor —
+and had the same illness, worse: its own `.svelte.js` module has to be
+invalidated too, or its `load()` never re-runs and the cache keeps the old body.
+
+## Stdlib: only what you import
+
+`py2js()` exposes a component's imports, and Brython's VFS already carries the
+dependency graph (`[ext, source, deps, is_package]`). The transitive closure is
+therefore exact, and only it enters the bundle:
 
 | | |
 |---|---|
-| `import sys` → modules embarqués | `sys`, `browser` |
-| poids embarqué | **7,2 Ko** |
-| stdlib complète | 4,6 Mo |
-| | **652× plus petit** |
+| `import sys` → modules bundled | `sys`, `browser` |
+| bundled weight | **7.2 KB** |
+| full stdlib | 4.6 MB |
+| | **652× smaller** |
 
-`vendor/brython_stdlib.js` sert de source au build et n'est jamais expédié.
-C'est le même mécanisme qui accueillera les `.wasm` de Wasthon.
+`vendor/brython_stdlib.js` is the build-time source and is never shipped.
 
-## État
+## Svelte surface covered
 
-Validé par `npm test` — 69 tests, plus 1 échec attendu (voir plus bas) :
-
-- réactivité de bout en bout, et quels chemins d'écriture propagent ;
-- props : défaut Python, priorité du parent, lisibilité pendant l'init,
-  propagation d'une mise à jour du parent jusqu'au Python ;
-- **grille de fidélité sémantique** : entiers, texte, protocoles, flot de
-  contrôle et frames. Chaque valeur attendue a été produite par CPython 3.12 en
-  exécutant le code du composant tel quel, jamais écrite à la main. Brython
-  reproduit CPython sur **39 des 40 points** ;
-- build de production : **244 Ko gzip**, runtime Brython compris.
-
-La grille sert de banc d'acceptation aux codegens optimisés (wasthonf) : un
-codegen qui supprime les cadres d'appel casse `Frames`, qui déballe les entiers
-casse `Integers`, qui court-circuite `augm_assign` casse `Protocols`.
-
-### Divergence connue
-
-Une seule, signalée par un `test.fails` qui alertera le jour où elle sera
-corrigée : la variable d'une compréhension **fuit dans la portée module**
-(`[q for q in range(3)]` laisse `q` défini), alors que Python 3 lui donne une
-portée propre.
-
-## Surface Svelte couverte
-
-Mesuré, pas supposé (`src/svelte-surface.test.js`) — tout ceci fonctionne dans
-un composant Python :
+Measured, not assumed (`src/svelte-surface.test.js`) — all of this works inside
+a Python component:
 
 | | |
 |---|---|
-| blocs | `{#if}` `{:else if}` `{#each}` (indexé, `{:else}`, avec clé) `{#key}` `{#await}` |
-| balises | `{@html}` `{@const}` `{@render}` `{#snippet}` |
-| liaisons | `bind:value` `bind:checked` `bind:group` `bind:this` |
+| blocks | `{#if}` `{:else if}` `{#each}` (indexed, `{:else}`, keyed) `{#key}` `{#await}` |
+| tags | `{@html}` `{@const}` `{@render}` `{#snippet}` |
+| bindings | `bind:value` `bind:checked` `bind:group` `bind:this` |
 | directives | `class:` `style:` `use:` `transition:` |
-| composition | props, défauts, spread d'un **dict Python**, enfants par snippet |
-| éléments | `<svelte:window>` `<svelte:head>` `<svelte:boundary>` |
-| styles | `<style>` scopé |
+| composition | props, defaults, spread of a **Python dict**, children as snippets |
+| elements | `<svelte:window>` `<svelte:head>` `<svelte:boundary>` |
+| styles | scoped `<style>` |
 
-Non couvert : `setContext`/`getContext` n'ont pas d'API côté Python — ils
-doivent s'appeler pendant l'initialisation d'une instance, ce qu'un
-`<script module>` ne permet pas. Ni `$bindable()` (un prop est un `$derived`,
-donc en lecture seule) ni le rendu côté serveur.
+Not covered: `setContext`/`getContext` have no Python-facing API — they must be
+called during an instance's initialisation, which a `<script module>` cannot do.
+Nor `$bindable()` (a prop is a `$derived`, hence read-only), nor server-side
+rendering.
 
-Rappel : **les expressions de gabarit sont du JavaScript.** `{node is not None}`
-ne compile pas ; c'est `{py.truthy(node)}`.
+Reminder: **template expressions are JavaScript.** `{node is not None}` does not
+compile; write `{py.truthy(node)}`.
 
-## Tests
+## Status
 
-Aucun parallélisme : chaque worker recharge et retransforme le runtime Brython
-pour son compte au lieu de partager le travail. Mesuré sur ce projet à plus de
-30 minutes en parallèle contre moins d'une en séquentiel.
+Validated by `npm test` — 69 tests, plus 1 expected failure (below):
 
-## Reste à faire
+- end-to-end reactivity, and which write paths propagate;
+- props: Python defaults, parent precedence, readability during init, parent
+  updates flowing through to Python;
+- **semantic fidelity grid**: integers, text, protocols, control flow, frames.
+  Every expected value was produced by running the component's Python through
+  CPython 3.12 as-is, never written by hand. Brython matches CPython on **39 of
+  40 points**;
+- production build: **244 KB gzip**, Brython runtime included.
 
-### Avant d'écrire une vraie application
+The grid doubles as an acceptance bench for optimising code generators: one that
+drops call frames breaks `Frames`, one that unboxes integers breaks `Integers`,
+one that short-circuits `augm_assign` breaks `Protocols`.
 
-- **Empaquetage.** `src/lib/` est le framework, mêlé à la démo. Pour l'utiliser
-  ailleurs il faut en faire un paquet npm installable.
-- **`setContext` / `getContext`.** Aucune API côté Python. Ils doivent être
-  appelés pendant l'initialisation d'une *instance* — un `<script module>`, qui
-  ne s'exécute qu'une fois, ne peut pas s'en charger. C'est la seule
-  fonctionnalité de Svelte structurellement hors de portée aujourd'hui, et le
-  corps du module Python tournant bien à l'initialisation, l'exposer devrait
-  suffire.
-- **`$bindable()`.** Un prop est un `$derived`, donc en lecture seule ; pas de
-  liaison bidirectionnelle parent↔enfant.
-- **Source maps.** Les erreurs portent un numéro de ligne juste, mais le
-  débogueur du navigateur montre toujours le JS généré, pas le Python.
+### Known divergence
 
-### Confort
+One, flagged by a `test.fails` that will speak up the day it is fixed: a
+comprehension's variable **leaks into module scope** (`[q for q in range(3)]`
+leaves `q` defined), where Python 3 gives it a scope of its own.
 
-- **Éditeur.** Aucune coloration ni complétion dans `<script lang="python">`.
-- **Cache de compilation.** Un store est recompilé à chaque `load()`.
-- **Coût à l'exécution** jamais mesuré face à du Svelte ordinaire.
-- **Rendu côté serveur** jamais essayé.
+## Testing
 
-### En amont, chez Brython
+No parallelism. Each worker reloads and re-transforms the Brython runtime for
+itself instead of sharing the work: measured on this project at over 30 minutes
+in parallel against under one sequentially.
 
-- **`__file__` aplati.** Brython dérive son identifiant de namespace du
-  `filename` et n'y neutralise que les `.`, pas les `/` : un chemin réel produit
-  `locals_src/Counter_svelte`, du JS invalide. On passe donc un nom aplati, au
-  prix de la lisibilité des tracebacks.
-- **Fuite de compréhension**, la divergence connue ci-dessus.
+## Not done yet
 
-### Bloqué ailleurs
+**Before writing a real application**
 
-- **Wasthon.** Le tree-shaking de la stdlib est en place et les `.wasm`
-  s'y brancheraient directement — préchargés et hashés par Vite au lieu d'être
-  découverts au runtime. Demande de construire Wasthon (Emscripten).
+- **Packaging.** `src/lib/` is the framework, mixed in with the demo. Using it
+  elsewhere means turning it into an installable npm package.
+- **`setContext` / `getContext`.** No Python-facing API. They must be called
+  during an *instance's* initialisation — a `<script module>`, which runs once,
+  cannot do it. This is the only Svelte feature structurally out of reach today,
+  and since the Python module body does run at initialisation, exposing them
+  should be enough.
+- **`$bindable()`.** A prop is a `$derived`, hence read-only; no two-way
+  parent↔child binding.
+- **Source maps.** Errors carry a correct line number, but the browser debugger
+  still shows the generated JS, not the Python.
 
-## Lancer
+**Comfort**
+
+- **Editor.** No highlighting or completion inside `<script lang="python">`.
+- **Compilation cache.** A store is recompiled on every `load()`.
+- **Runtime cost** never measured against plain Svelte.
+- **Server-side rendering** never attempted.
+
+**Upstream, in Brython**
+
+- **Flattened `__file__`.** Brython derives its namespace identifier from
+  `filename` and neutralises only `.`, not `/`: a real path yields
+  `locals_src/Counter_svelte`, which is invalid JS. A flattened name is passed
+  instead, at the cost of traceback readability.
+- **Comprehension leak**, the known divergence above.
+
+## Running
 
 ```sh
 npm install
-npm test             # grille de fidélité, props, réactivité (jsdom)
-npm run test:browser # interop DOM, dans un vrai Chromium
-npm run test:hmr     # invalidation des modules virtuels (composant + store)
-npm run dev          # page de démonstration
+npm test             # fidelity grid, props, reactivity (jsdom)
+npm run test:browser # DOM interop and the demo, in a real Chromium
+npm run test:hmr     # virtual-module invalidation
+npm run dev          # demo page
 npm run build
 ```
 
-### Deux réglages non évidents dans `vite.config.js`
+### Two non-obvious settings in `vite.config.js`
 
-`optimizeDeps.entries: []` — le scanner de dépendances de Vite tourne **avant**
-le pipeline de plugins : il lit les entrées HTML, tombe sur
-`<script lang="python">` et livre le Python à un parseur JavaScript, puis
-échoue sur `./store.py`, qu'aucun fichier de ce nom n'est censé servir. Son
-unique rôle ici étant de découvrir les imports nus, on le court-circuite et on
-nomme le seul paquet qui mérite d'être pré-bundlé.
+`optimizeDeps.entries: []` — Vite's dependency scanner runs **ahead** of the
+plugin pipeline: it reads the HTML entries, hits `<script lang="python">` and
+hands the Python to a JavaScript parser, then fails on `./store.py`, which no
+file of that name is meant to serve. Its only job here is to discover bare
+imports, so the scan is skipped and the one package worth pre-bundling is named.
 
-`vendorQuirks()` — Brython charge des modules JS nommés depuis Python par un
-`import()` dont l'argument est une variable. Vite ne sait pas l'analyser et le
-dit à chaque démarrage ; le plugin marque ces appels d'un `@vite-ignore` à la
-volée, ce qui laisse le fichier vendu identique à l'amont.
+`vendorQuirks()` — Brython loads JS modules named from Python through an
+`import()` whose argument is a variable. Vite cannot analyse it and says so on
+every start; the plugin marks those calls with `@vite-ignore` on the fly, which
+leaves the vendored file byte-identical to upstream.
 
-`vendor/brython.js` est une copie de `www/src/brython.js` (3.14 dev). Le dossier
-porte un `package.json` marqué `commonjs` : Node doit le charger comme script
-classique, alors que la racine est en `type: module`.
+`vendor/brython.js` is a copy of `www/src/brython.js` (3.14 dev). The folder
+carries a `package.json` marked `commonjs`: Node must load it as a classic
+script, while the root is `type: module`.
+
+## The wider stack
+
+SVELTHON stands on its own — a Python frontend framework, nothing more required.
+But because it runs on Brython rather than a sandboxed interpreter, everything
+built for Brython is available to a component: notably
+[Wasthon](https://github.com/fgallaire/wasthon), which brings CPython's real C
+extension modules to the browser as WebAssembly, and
+[NumBry](https://github.com/fgallaire/numbry), which builds the scientific stack
+— NumPy, pandas, SciPy, matplotlib, Pillow, SymPy — on top of it.
+
+That matters for how much you ship. Where a full CPython-in-WebAssembly runtime
+arrives as one large payload, these are per-module `.wasm` files, and SVELTHON
+already knows exactly which modules a component imports — the same tree-shaking
+that trims the standard library applies to them.
