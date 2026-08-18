@@ -18,6 +18,15 @@ cleanup() {
 trap cleanup EXIT
 
 cleanup
+
+# pkill rend la main avant que le port soit rendu. Sans cette attente, le vite
+# suivant échoue en silence (--strictPort) et le script interroge l'ancien
+# serveur, en train de s'éteindre — d'où des échecs qui changent à chaque fois.
+for _ in $(seq 40); do
+    ss -ltn 2>/dev/null | grep -q ":$PORT " || break
+    sleep 0.25
+done
+
 (npx vite --port "$PORT" --strictPort >/dev/null 2>&1 &)
 
 for _ in $(seq 40); do
