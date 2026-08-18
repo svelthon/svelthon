@@ -498,6 +498,29 @@ export function pyArg(value) {
     ]);
 }
 
+// The same, for a module whose caller can wait: a framework awaits `load()`,
+// so a coroutine has to come back as a promise rather than be fired and
+// forgotten. Inside a component nobody awaits a handler, which is why the two
+// are separate.
+export function scheduleAsync(result, where, lineOffset = 0) {
+    const $B = globalThis.__BRYTHON__;
+    const aio = $B.imported['browser.aio'];
+
+    if (!aio || result === undefined || result === null) return result;
+    if ($B.get_class(result) !== $B.coroutine) return result;
+
+    return new Promise((resolve, reject) => {
+        $B.$getattr(aio, 'run')(
+            result,
+            (value) => {
+                $B.leave_frame();
+                resolve(value);
+            },
+            (error) => reject(pyError(error, where, lineOffset))
+        );
+    });
+}
+
 // A store's namespace, published under its Python module name, so a component's
 // own Python can `import counter_store` and reach the very same signals the
 // template reads. Without it the bridge would only run one way.

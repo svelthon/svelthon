@@ -357,7 +357,7 @@ function compile(
 
     const plainScript = [
         `import { init } from ${JSON.stringify(virtualId(name))};`,
-        `import { bind, py, pyError, schedule, plainData, pyArg, NONE, registerModule } from 'svelthon/runtime';`,
+        `import { bind, py, pyError, scheduleAsync, plainData, pyArg, NONE, registerModule } from 'svelthon/runtime';`,
         ``,
         ...state.map((n) => `let ${n};`),
         ...[...funcs, ...plainDeriveds].map((f) => `let ${fn(f.name)};`),
@@ -388,7 +388,8 @@ function compile(
         ``,
         ...[...funcs, ...plainDeriveds].map(
             (f) =>
-                `const ${f.name} = (...a) => { try { return plainData(schedule(${fn(f.name)}(...a.slice(0, ${f.arity ?? 0}).map(pyArg)), ${JSON.stringify(`${f.name}() — ${source}`)}, ${lineOffset})); }` +
+                `const ${f.name} = (...a) => { try { const r = scheduleAsync(${fn(f.name)}(...a.slice(0, ${f.arity ?? 0}).map(pyArg)), ${JSON.stringify(`${f.name}() — ${source}`)}, ${lineOffset});` +
+                ` return r instanceof Promise ? r.then(plainData) : plainData(r); }` +
                 ` catch (err) { throw pyError(err, ${JSON.stringify(`${f.name}() — ${source}`)}, ${lineOffset}); } };`
         ),
         ``,

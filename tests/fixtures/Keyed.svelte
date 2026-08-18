@@ -33,6 +33,10 @@ def drop_first():
 <ul data-k="list">
 {#each items as it (it.id)}<li data-id={it.id}>{it.label}</li>{/each}
 </ul>
+
+<ul data-k="paires">
+{#each enumerate(items) as (rang, it)}<li>{rang}:{it.label}</li>{/each}
+</ul>
 <button data-k="prepend" onclick={prepend}>prepend</button>
 <button data-k="relabel" onclick={relabel}>relabel</button>
 <button data-k="replace" onclick={replace}>replace</button>

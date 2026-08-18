@@ -92,26 +92,50 @@ function declaredBy(inner) {
 // is compiled before the block's names exist; the key is evaluated inside it.
 // Both matter: a Python iterable that is not a list — a dict, a range, the
 // result of .items() — has to become an array for Svelte to walk it.
-function eachBlock(trimmed, openScope, call) {
-    const keyed = trimmed.match(/^([\s\S]*?)\s*\(([^()]*)\)\s*$/);
-    const head = keyed ? keyed[1] : trimmed;
-    const parts = head.match(/^#each\s+([\s\S]+)\s+as\s+([\s\S]+)$/) || head.match(/^#each\s+([\s\S]+)$/);
+// `for k, v in d.items()` is how Python unpacks, and `as (k, v)` is how it reads
+// in a template. Svelte destructures with brackets — and a Python tuple *is* an
+// array, so the two mean the same thing once the punctuation is translated.
+function pattern(target) {
+    const trimmed = target.trim();
 
-    // Malformed: leave it alone and let Svelte say so in its own words.
-    if (!parts) {
-        openScope();
-        return `{${trimmed}}`;
+    // Only what is explicitly parenthesised. A bare `x, i` is Svelte's item and
+    // index, not a tuple — turning that into `[x, i]` would silently destructure
+    // every indexed loop in the project.
+    if (!trimmed.startsWith('(')) return trimmed;
+
+    let depth = 0;
+    let close = -1;
+
+    for (let i = 0; i < trimmed.length && close === -1; i++) {
+        if (trimmed[i] === '(') depth++;
+        else if (trimmed[i] === ')' && --depth === 0) close = i;
     }
 
-    const iterable = call(parts[1], '__seq');
-    openScope();
+    if (close === -1) return trimmed;
 
-    return (
-        `{#each ${iterable}` +
-        (parts[2] ? ` as ${parts[2].trim()}` : '') +
-        (keyed ? ` (${call(keyed[2], 'repr')})` : '') +
-        '}'
-    );
+    const inner = trimmed.slice(1, close).replace(/[()]/g, (one) => (one === '(' ? '[' : ']'));
+    return `[${inner}]${trimmed.slice(close + 1)}`;
+}
+
+function eachBlock(trimmed, declare, call) {
+    const split = trimmed.match(/^#each\s+([\s\S]+?)\s+as\s+([\s\S]+)$/);
+
+    // No `as`: nothing is declared, and there is no key to find either.
+    if (!split) {
+        const alone = trimmed.match(/^#each\s+([\s\S]+)$/);
+        declare([]);
+        return alone ? `{#each ${call(alone[1], '__seq')}}` : `{${trimmed}}`;
+    }
+
+    // A key trails the target, so the part before it has to be non-empty —
+    // otherwise `as (statut, combien)` would read as a key with no target.
+    const keyed = split[2].match(/^([\s\S]*\S)\s*\(([^()]*)\)\s*$/);
+    const target = pattern(keyed ? keyed[1] : split[2]);
+
+    const iterable = call(split[1], '__seq');
+    declare(identifiers(target));
+
+    return `{#each ${iterable} as ${target}` + (keyed ? ` (${call(keyed[2], 'repr')})` : '') + '}';
 }
 
 function pythonExpressions(markup, collect) {
@@ -238,7 +262,7 @@ function pythonExpressions(markup, collect) {
                 scopes.push([]);
                 out += `{#if ${call(trimmed.slice(4), '__truthy')}}`;
             } else if (trimmed.startsWith('#each ')) {
-                out += eachBlock(trimmed, () => scopes.push(declaredBy(trimmed)), call);
+                out += eachBlock(trimmed, (names) => scopes.push(names), call);
             } else if (trimmed.startsWith('#key ')) {
                 // Svelte re-creates the block when the value changes, by
                 // identity — which no Python value keeps. repr() gives one.

@@ -208,8 +208,9 @@ describe('{#each} avec clé', () => {
     const setup = () => {
         const target = render(Keyed);
         return {
+            target,
             list: () =>
-                [...target.querySelectorAll('li')]
+                [...target.querySelectorAll('[data-k="list"] li')]
                     .map((n) => `${n.dataset.id}:${n.textContent}`)
                     .join(','),
             node: (id) => target.querySelector(`li[data-id="${id}"]`),
