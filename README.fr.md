@@ -174,7 +174,9 @@ ou une valeur JavaScript, pas un rendu :
 
 La règle : `on*`, `bind:`, `use:`, `class:`, `style:` et la famille des
 transitions restent en JavaScript ; tout autre attribut, prop de composant
-compris, est du Python. Un composant sans Python à lui — un consommateur de store
+compris, est du Python — de même que le raccourci `{nom}` et l'étalement
+`{...attrs}`, développés pour que la lecture passe par le namespace au lieu de
+le contourner. Un composant sans Python à lui — un consommateur de store
 — conserve le gabarit JavaScript et les helpers `py.str()` / `py.truthy()`.
 
 Ça coûte **1,3× à 1,7× sur le rendu** face à un composant JavaScript

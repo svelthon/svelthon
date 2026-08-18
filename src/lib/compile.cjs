@@ -375,11 +375,11 @@ function compile(
         // not subscribe to Svelte's graph, only feed it.
         ...props.map(
             (n) =>
-                `bind(__proto, '${n}', () => ('${n}' in __props ? __props.${n} : ${local(n)}) ?? NONE, (v) => { ${local(n)} = v; });`
+                `bind(__proto, '${n}', () => follow(('${n}' in __props ? __props.${n} : ${local(n)}) ?? NONE), (v) => { ${local(n)} = v; });`
         ),
         ...bindables.map(
             (b) =>
-                `bind(__proto, '${b}', () => (${rev(b)}, ${b} ?? NONE),` +
+                `bind(__proto, '${b}', () => (${rev(b)}, follow(${b} ?? NONE)),` +
                 ` (v) => { if (!__initialising || ${b} === undefined) ${b} = track(v, ${bump(b)}, ${read(b)}); });`
         ),
         // Reading the revision alongside the value is what registers the

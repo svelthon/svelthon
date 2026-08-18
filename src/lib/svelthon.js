@@ -238,13 +238,27 @@ function pythonExpressions(markup, collect) {
                 if (end !== -1) {
                     const attribute = out.match(/([^\s=]+)=$/);
                     const inner = markup.slice(index + 1, end);
+                    const trimmed = inner.trim();
 
-                    // A directive, a spread, or a bare shorthand: left as
-                    // JavaScript. A named attribute carries a Python value.
-                    out +=
-                        attribute && !DIRECTIVE.test(attribute[1]) && !inner.trimStart().startsWith('...')
-                            ? `{${call(inner, '')}}`
-                            : markup.slice(index, end + 1);
+                    if (attribute) {
+                        // A directive carries a callback or a JavaScript value;
+                        // every other named attribute, component prop included,
+                        // carries a Python one.
+                        out += DIRECTIVE.test(attribute[1])
+                            ? markup.slice(index, end + 1)
+                            : `{${call(inner, '')}}`;
+                    } else if (trimmed.startsWith('...')) {
+                        // {...attrs} — spreading a Python dict, whose keys are
+                        // JavaScript properties.
+                        out += `{...${call(trimmed.slice(3), '')}}`;
+                    } else if (/^[A-Za-z_$][\w$]*$/.test(trimmed)) {
+                        // {name}, Svelte's shorthand for name={name}. Expanding
+                        // it is what routes the read through the namespace, and
+                        // therefore through the accessor.
+                        out += `${trimmed}={${call(trimmed, '')}}`;
+                    } else {
+                        out += markup.slice(index, end + 1);
+                    }
 
                     index = end + 1;
                     continue;
@@ -259,6 +273,19 @@ function pythonExpressions(markup, collect) {
         }
 
         if (char === '<') {
+            // An HTML comment is not a tag. Quotes mean nothing inside one, and
+            // an apostrophe — `aujourd'hui` — would otherwise open a string that
+            // never closes, silently leaving the whole rest of the template in
+            // JavaScript.
+            if (markup.startsWith('<!--', index)) {
+                const close = markup.indexOf('-->', index);
+                const stop = close === -1 ? markup.length : close + 3;
+
+                out += markup.slice(index, stop);
+                index = stop;
+                continue;
+            }
+
             inTag = true;
             out += char;
             index++;

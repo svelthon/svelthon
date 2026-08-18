@@ -200,7 +200,9 @@ JavaScript value rather than a rendering:
 ```
 
 The rule: `on*`, `bind:`, `use:`, `class:`, `style:` and the transition family
-stay JavaScript; every other attribute, component prop included, is Python. A
+stay JavaScript; every other attribute, component prop included, is Python — and
+so are the shorthand `{name}` and the spread `{...attrs}`, which are expanded so
+that the read goes through the namespace rather than around it. A
 component with no Python of its own — a store consumer — keeps the JavaScript
 template and the `py.str()` / `py.truthy()` helpers.
 
