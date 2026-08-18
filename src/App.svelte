@@ -1,6 +1,8 @@
 <script>
     import Counter from './Counter.svelte';
     import Greeting from './Greeting.svelte';
+    import Expressions from './Expressions.svelte';
+    import Blocks from './Blocks.svelte';
     import Semantics from './Semantics.svelte';
     import StoreDemo from './StoreDemo.svelte';
     import Highlight from './Highlight.svelte';
@@ -13,6 +15,8 @@
     import greetingSrc from './Greeting.svelte?raw';
     import storeSrc from './lib/counter_store.py?raw';
     import storeDemoSrc from './StoreDemo.svelte?raw';
+    import expressionsSrc from './Expressions.svelte?raw';
+    import blocksSrc from './Blocks.svelte?raw';
     import semanticsSrc from './Semantics.svelte?raw';
 </script>
 
@@ -61,6 +65,45 @@
 
     <article class="demo">
         <div class="head">
+            <h2>Real Python semantics</h2>
+            <p>Not a Python-flavoured dialect: CPython's grammar and object model, all the way
+                down. The comment on each line is what JavaScript would have given instead.</p>
+        </div>
+        <div class="body">
+            <div class="files"><div class="code"><span class="tag">Semantics.svelte</span><pre><code><Highlight file="Semantics.svelte" code={semanticsSrc} /></code></pre></div></div>
+            <div class="live stack"><Semantics /></div>
+        </div>
+    </article>
+
+    <article class="demo">
+        <div class="head">
+            <h2>The template is Python too</h2>
+            <p>Every expression the markup reads is compiled as Python, not JavaScript — so an
+                empty list is false, a comprehension is a comprehension, and an attribute of a
+                class instance is found where Python keeps it.</p>
+        </div>
+        <div class="body">
+            <div class="files"><div class="code"><span class="tag">Expressions.svelte</span><pre><code><Highlight file="Expressions.svelte" code={expressionsSrc} /></code></pre></div></div>
+            <div class="live stack"><Expressions /></div>
+        </div>
+    </article>
+
+    <article class="demo">
+        <div class="head">
+            <h2>Blocks iterate Python</h2>
+            <p>A list is already a JavaScript array, so it needed nothing. A dict, a
+                <code>range</code>, a generator, the pairs of <code>.items()</code> — those are
+                Python objects, and <code>{'{#each}'}</code> walks them all. So does
+                <code>{'{@const}'}</code>, in Python arithmetic.</p>
+        </div>
+        <div class="body">
+            <div class="files"><div class="code"><span class="tag">Blocks.svelte</span><pre><code><Highlight file="Blocks.svelte" code={blocksSrc} /></code></pre></div></div>
+            <div class="live stack"><Blocks /></div>
+        </div>
+    </article>
+
+    <article class="demo">
+        <div class="head">
             <h2>Shared state</h2>
             <p>A plain <code>.py</code> file. Its names become signals created once for the whole
                 application — both components below read the same counter.</p>
@@ -74,20 +117,8 @@
         </div>
     </article>
 
-    <article class="demo">
-        <div class="head">
-            <h2>Real Python semantics</h2>
-            <p>Not a Python-flavoured dialect: CPython's grammar and object model, all the way
-                down. Each comment on the left is what JavaScript would have produced instead.</p>
-        </div>
-        <div class="body">
-            <div class="files"><div class="code"><span class="tag">Semantics.svelte</span><pre><code><Highlight file="Semantics.svelte" code={semanticsSrc} /></code></pre></div></div>
-            <div class="live stack"><Semantics /></div>
-        </div>
-    </article>
-
     <footer>
-        <span><strong>244 KB</strong> gzip, runtime included</span>
+        <span><strong>248 KB</strong> gzip, runtime included</span>
         <span><strong>{tests}</strong> tests</span>
         <span><strong>0 ms</strong> compiling at load</span>
     </footer>

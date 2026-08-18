@@ -13,5 +13,5 @@ test('components run real Python semantics', () => {
 
     expect(floor).toBe('-4');                     // JS: Math.trunc(-3.5) === -3
     expect(big).toBe('1180591620717411303424');   // JS: 1.1805916207174113e+21
-    expect(words).toBe('apple, apricot, banana'); // a sorted set, not an object
+    expect(words).toBe('apple, pear'); // a sorted set, not an object
 });

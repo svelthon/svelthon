@@ -199,7 +199,7 @@ function eachBlock(trimmed, openScope, call) {
         return `{${trimmed}}`;
     }
 
-    const iterable = parts[1]; // MESURE : sans __seq
+    const iterable = call(parts[1], '__seq');
     openScope();
 
     return (

@@ -41,7 +41,7 @@ describe('rendu serveur', () => {
 
         expect(html).toContain('-4');
         expect(html).toContain('1180591620717411303424');
-        expect(html).toContain('apple, apricot, banana');
+        expect(html).toContain('apple, pear');
     });
 
     test('la composition et les attributs d’instance traversent aussi', () => {

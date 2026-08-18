@@ -1,7 +1,7 @@
 <script lang="python">
-floor = -7 // 2
-big = 2 ** 70
-words = ", ".join(sorted({"apple", "apricot", "banana"}))
+floor = -7 // 2                               # JS: -3.5
+big = 2 ** 70                                 # JS: 1.18e+21
+words = ", ".join(sorted({"pear", "apple"}))  # JS: no set
 </script>
 
 <output>{floor}</output>

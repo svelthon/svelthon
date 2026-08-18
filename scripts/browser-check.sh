@@ -49,7 +49,10 @@ fi
 APP=$(chromium --headless --no-sandbox --disable-gpu \
     --virtual-time-budget=15000 --dump-dom "http://localhost:$PORT/" 2>/dev/null)
 
-for expected in "increment()" "Hello Ada!" "0 · []" "1180591620717411303424"; do
+# Les deux dernières lignes couvrent le gabarit : une compréhension rendue avec
+# str() de Python, et un {#each} qui parcourt les paires d'un dict.
+for expected in "increment()" "Hello Ada!" "0 · []" "1180591620717411303424" \
+    "['apple', 'pear']" "pear · ▪"; do
     if printf '%s' "$APP" | grep -qF -- "$expected"; then
         echo "✓ démo — $expected"
     else
