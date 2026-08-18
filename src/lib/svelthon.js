@@ -464,9 +464,6 @@ export function svelthon() {
         // which re-runs the preprocessor and refreshes `generated`, and only
         // then follows its import to the virtual module.
         hotUpdate({ file, modules }) {
-            const name = nameFor(file);
-            if (!generated.has(VIRTUAL_PREFIX + name)) return;
-
             const graph = this.environment.moduleGraph;
             const stale = [];
 
@@ -477,6 +474,17 @@ export function svelthon() {
                     stale.push(mod);
                 }
             };
+
+            // The test count is read from the filesystem once, and the module
+            // holding it depends on no file Vite can see — so nothing would ever
+            // invalidate it, and the page would keep showing a stale number.
+            if (file.endsWith('.test.js')) {
+                forget('\0' + STATS_ID);
+                return [...modules, ...stale];
+            }
+
+            const name = nameFor(file);
+            if (!generated.has(VIRTUAL_PREFIX + name)) return;
 
             for (const prefix of [VIRTUAL_PREFIX, VFS_PREFIX]) forget('\0' + prefix + name);
 
