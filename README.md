@@ -352,14 +352,12 @@ Where it stands, each line held by a test:
 | `it.label = …` — an item of a keyed list | yes |
 | a mutation made inside a helper the compiler cannot see | yes |
 | through a `@derived` that hands back the object, or a component prop | yes |
-| a child reached only through `.items()` or `.values()` | no — nothing indexed it |
+| a child reached through `.items()`, `.values()` or `.get()` | yes |
 | a DOM attribute or a spread — `<p {...attrs}>` | no — Svelte compares by identity before writing |
 
-The last two are of different kinds. The first is the price of laziness: the
-watch is handed over when Python reaches for a child, and `.items()` reaches for
-nothing. The second is not ours to fix — Svelte compares the value against the
-one it last applied, by identity, inside its own DOM writer, where no signal can
-reach.
+The one exception is not ours to fix: Svelte compares the value against the one
+it last applied, by identity, inside its own DOM writer, where no signal can
+reach. Everything else propagates, and a test holds each line.
 
 Accessors live on the namespace's **prototype**, never on the object itself:
 rebinding a global emits `$B.delete_for_reassign(name, locals)`, and a `delete`

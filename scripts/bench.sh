@@ -21,7 +21,7 @@ done
 # La première visite ne mesurerait que la compilation à la volée de Vite.
 curl -sf -o /dev/null "$URL"
 curl -sf -o /dev/null "http://localhost:$PORT/src/bench/bench.js"
-chromium --headless --no-sandbox --disable-gpu --dump-dom "$URL" >/dev/null 2>&1
+chromium --headless --no-sandbox --disable-gpu --user-data-dir="$(mktemp -d)" --dump-dom "$URL" >/dev/null 2>&1
 
-chromium --headless --no-sandbox --disable-gpu --dump-dom "$URL" 2>/dev/null |
+chromium --headless --no-sandbox --disable-gpu --user-data-dir="$(mktemp -d)" --dump-dom "$URL" 2>/dev/null |
     sed -n '/id="out"/,/<\/pre>/p' | sed 's|<pre id="out">||; s|</pre>||'

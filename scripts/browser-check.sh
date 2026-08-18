@@ -8,7 +8,13 @@ PORT=${PORT:-5199}
 URL="http://localhost:$PORT/probe.html"
 EXPECTED='import_html=OK imported | doc=OK DOMNode | create=OK INPUT | tagName=OK INPUT'
 
-cleanup() { pkill -f "vite --port $PORT" 2>/dev/null; }
+# Un profil par lancement : deux Chromium coup sur coup se disputent le verrou du
+# profil par défaut, et le second rend une page incomplète — au hasard.
+PROFILES=$(mktemp -d)
+cleanup() {
+    pkill -f "vite --port $PORT" 2>/dev/null
+    rm -rf "$PROFILES"
+}
 trap cleanup EXIT
 
 cleanup
@@ -28,8 +34,12 @@ curl -sf -o /dev/null "http://localhost:$PORT/"
 # la compilation du graphe, et c'est elle qu'il faut attendre.
 curl -sf -o /dev/null "http://localhost:$PORT/src/probe.js"
 curl -sf -o /dev/null "http://localhost:$PORT/src/main.js"
+# Le gros morceau : 4,6 Mo que Vite doit transformer avant de les servir. Tant
+# qu'il n'est pas en cache, un rendu peut dépasser le budget du navigateur.
+curl -sf -o /dev/null "http://localhost:$PORT/vendor/brython.js"
+curl -sf -o /dev/null "http://localhost:$PORT/src/App.svelte"
 
-REPORT=$(chromium --headless --no-sandbox --disable-gpu \
+REPORT=$(chromium --headless --no-sandbox --disable-gpu --user-data-dir="$PROFILES/probe" \
     --virtual-time-budget=8000 --dump-dom "$URL" 2>/dev/null |
     grep -o '<pre id="report">[^<]*' | sed 's|<pre id="report">||')
 
@@ -44,19 +54,31 @@ else
     status=1
 fi
 
-# La démo entière, rendue pour de bon : réactivité, prop à défaut Python, store
-# partagé entre deux instances, et sémantique CPython.
-APP=$(chromium --headless --no-sandbox --disable-gpu \
-    --virtual-time-budget=40000 --dump-dom "http://localhost:$PORT/" 2>/dev/null)
+# La démo entière, rendue pour de bon. Sur une machine modeste, un premier rendu
+# peut manquer un morceau — le serveur de dev compile encore. On redemande donc
+# la page tant qu'il manque quelque chose, dans une limite bornée : ce qui compte
+# est que la page finisse complète, pas qu'elle le soit du premier coup.
+expected=("increment()" "Hello Ada!" "0 · []" "1180591620717411303424" \
+    "['apple', 'pear']" "pear · ▪" "let count = \$state(0)")
 
-# Les deux dernières lignes couvrent le gabarit : une compréhension rendue avec
-# str() de Python, et un {#each} qui parcourt les paires d'un dict.
-for expected in "increment()" "Hello Ada!" "0 · []" "1180591620717411303424" \
-    "['apple', 'pear']" "pear · ▪" "let count = \$state(0)"; do
-    if printf '%s' "$APP" | grep -qF -- "$expected"; then
-        echo "✓ démo — $expected"
+missing=()
+for attempt in 1 2 3; do
+    APP=$(chromium --headless --no-sandbox --disable-gpu --user-data-dir="$PROFILES/app$attempt" \
+        --virtual-time-budget=40000 --dump-dom "http://localhost:$PORT/" 2>/dev/null)
+
+    missing=()
+    for one in "${expected[@]}"; do
+        printf '%s' "$APP" | grep -qF -- "$one" || missing+=("$one")
+    done
+
+    [ ${#missing[@]} -eq 0 ] && break
+done
+
+for one in "${expected[@]}"; do
+    if printf '%s' "$APP" | grep -qF -- "$one"; then
+        echo "✓ démo — $one"
     else
-        echo "✗ démo — introuvable : $expected"
+        echo "✗ démo — introuvable : $one"
         status=1
     fi
 done

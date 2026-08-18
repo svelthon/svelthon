@@ -459,13 +459,21 @@ describe('réactivité — quelles écritures Python propagent', () => {
         expect(read('nested')).toBe("{'rows': [1]}");
     });
 
-    test("mais pas s'il n'est atteint que par .items()", () => {
+    test("y compris s'il n'est atteint que par .items()", () => {
         const { read, click } = setup();
 
-        // .items() rend les mêmes objets sans passer par une indexation : rien
-        // ne les met sous surveillance.
+        // .items() rend les enfants sans jamais les indexer. Un dict Brython
+        // expose ses clés comme propriétés JavaScript, donc la garde leur est
+        // transmise sans matérialiser la vue.
         click('mutate_via_items');
-        expect(read('nested')).toBe("{'rows': []}");
+        expect(read('nested')).toBe("{'rows': [2]}");
+    });
+
+    test('et par .values()', () => {
+        const { read, click } = setup();
+
+        click('mutate_via_values');
+        expect(read('nested')).toBe("{'rows': [3]}");
     });
 
     test("muter un attribut d'instance propage", () => {

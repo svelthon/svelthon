@@ -114,6 +114,10 @@ const MUTATORS = new Set([
     'difference_update', 'symmetric_difference_update'
 ]);
 
+// Methods that hand out a container the caller can then mutate, without any
+// indexing to catch it.
+const VIEWS = new Set(['items', 'values']);
+
 // Make an in-place mutation reactive — `items.append(x)` with nothing after it.
 //
 // Svelte's own answer is to proxy the value in depth, which is unusable here: a
@@ -142,7 +146,25 @@ function installMutationTracking($B) {
     const callAttr = $B.call_attr;
     $B.call_attr = function (obj, attr, ...rest) {
         const result = callAttr(obj, attr, ...rest);
-        if (MUTATORS.has(attr)) notify(obj);
+
+        // The marker is checked first on purpose: this runs on every method
+        // call in the program, and an unwatched object must pay one property
+        // miss, not a set lookup.
+        if (obj !== null && typeof obj === 'object' && obj.$notify !== undefined) {
+            if (MUTATORS.has(attr)) {
+                if (attr === 'setdefault') inherit(obj, result);
+                obj.$notify();
+            } else if (VIEWS.has(attr)) {
+                // `.items()` and `.values()` hand out the children without ever
+                // indexing them. A Brython dict exposes its keys as enumerable
+                // JavaScript properties, so the values are reachable directly —
+                // no need to materialise the view to hand them the watch.
+                for (const key in obj) inherit(obj, obj[key]);
+            } else if (attr === 'get') {
+                inherit(obj, result);
+            }
+        }
+
         return result;
     };
 
