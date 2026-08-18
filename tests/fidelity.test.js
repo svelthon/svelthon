@@ -419,11 +419,22 @@ describe('réactivité — quelles écritures Python propagent', () => {
 
     // Les limitations qui restent, tenues par des tests pour qu'elles ne
     // dérivent pas en silence.
-    test('un conteneur imbriqué ne propage pas', () => {
+    test('un conteneur imbriqué propage', () => {
         const { read, click } = setup();
 
+        // La liste interne est marquée au moment où Python la lit — donc juste
+        // avant de pouvoir la muter.
         click('mutate_nested');
-        expect(read('nested')).toBe("{'rows': []}"); // la liste interne n'est pas marquée
+        expect(read('nested')).toBe("{'rows': [1]}");
+    });
+
+    test("mais pas s'il n'est atteint que par .items()", () => {
+        const { read, click } = setup();
+
+        // .items() rend les mêmes objets sans passer par une indexation : rien
+        // ne les met sous surveillance.
+        click('mutate_via_items');
+        expect(read('nested')).toBe("{'rows': []}");
     });
 
     test("muter un attribut d'instance ne propage pas", () => {

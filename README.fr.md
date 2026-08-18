@@ -278,7 +278,7 @@ proxifié échoue à ses propres vérifications de type. Mais une liste Python *
 un tableau JavaScript : l'objet peut donc porter lui-même une marque non
 énumérable. `$B.get_class` ne lit que `ob_type`, donc `type(items) is list` reste
 vrai et `repr` est intact. Et Brython compile tout appel de méthode en
-`$B.call_attr` et toute écriture indicée en `$B.$setitem` : **deux interceptions
+`$B.call_attr` et toute écriture indicée en `$B.$setitem` : **trois interceptions
 couvrent tout le langage**, et un objet non marqué ne paie qu'un accès manqué.
 
 La marque voyage avec l'objet, ce qu'aucune analyse à la compilation ne saurait

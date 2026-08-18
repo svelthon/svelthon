@@ -301,7 +301,7 @@ fails its own type checks. But a Python list *is* a JavaScript array, so the
 object itself can carry a non-enumerable marker: `$B.get_class` reads only
 `ob_type`, so `type(items) is list` stays true and `repr` is untouched. Brython
 compiles every method call to `$B.call_attr` and every indexed write to
-`$B.$setitem`, so **two interceptions cover the whole language**, and an unmarked
+`$B.$setitem`, so **three interceptions cover the whole language**, and an unmarked
 object pays one property miss.
 
 The marker travels with the object, which no compile-time analysis could match:

@@ -138,9 +138,23 @@ function installMutationTracking($B) {
     };
 
     const setitem = $B.$setitem;
-    $B.$setitem = function (obj, ...rest) {
-        const result = setitem(obj, ...rest);
-        notify(obj);
+    $B.$setitem = function (obj, key, value, ...rest) {
+        const result = setitem(obj, key, value, ...rest);
+        if (obj !== null && typeof obj === 'object' && obj.$notify !== undefined) {
+            inherit(obj, value); // `d["rows"] = rows` puts rows under watch too
+            obj.$notify();
+        }
+        return result;
+    };
+
+    // Reading is where nesting is caught, and it is the hottest of the three:
+    // an unwatched container pays one property miss and nothing else.
+    const getitem = $B.$getitem;
+    $B.$getitem = function (obj, ...rest) {
+        const result = getitem(obj, ...rest);
+        if (obj !== null && typeof obj === 'object' && obj.$notify !== undefined) {
+            inherit(obj, result);
+        }
         return result;
     };
 
@@ -175,21 +189,7 @@ function mutable(value) {
 // The pair is what makes the reactivity a property of the *object* rather than
 // of the place it was declared — duck typing, applied to change notification.
 // Anything holding the value can subscribe to it just by handing it through.
-export function track(value, bump, read) {
-    if (!mutable(value)) return value;
-
-    const existing = value.$notify;
-    if (existing !== undefined) {
-        if (!existing.bumps.includes(bump)) {
-            existing.bumps.push(bump);
-            existing.reads.push(read);
-        }
-        return value;
-    }
-
-    const bumps = [bump];
-    const reads = [read];
-
+function mark(value, bumps, reads) {
     const marker = () => {
         for (const one of bumps) one();
     };
@@ -199,13 +199,59 @@ export function track(value, bump, read) {
         for (const one of reads) one();
     };
 
-    Object.defineProperty(value, '$notify', {
-        value: marker,
-        enumerable: false,
-        configurable: true
-    });
+    try {
+        Object.defineProperty(value, '$notify', {
+            value: marker,
+            enumerable: false,
+            configurable: true
+        });
+    } catch {
+        /* un objet figé n'est pas à nous : on le laisse tel quel */
+    }
 
     return value;
+}
+
+export function track(value, bump, read) {
+    if (value === null || typeof value !== 'object') return value;
+
+    // Cheapest path first: a value already watched is the common case, and it
+    // must not pay a type classification on every write.
+    const own = value.$notify;
+    if (own !== undefined) {
+        if (!own.bumps.includes(bump)) {
+            own.bumps.push(bump);
+            own.reads.push(read);
+        }
+        return value;
+    }
+
+    return mutable(value) ? mark(value, [bump], [read]) : value;
+}
+
+// A container read out of a watched one comes under the same watch. This is
+// what deep proxying buys Svelte, done lazily and without a single proxy: the
+// child is marked the first time Python reaches for it, which is necessarily
+// just before it could be mutated.
+function inherit(parent, child) {
+    if (child === null || typeof child !== 'object') return child;
+
+    const marker = parent.$notify;
+    const own = child.$notify;
+
+    if (own !== undefined) {
+        // Already watched — by another name, or by another parent. Both watches
+        // stand; a mutation tells everyone who is looking.
+        for (let i = 0; i < marker.bumps.length; i++) {
+            if (!own.bumps.includes(marker.bumps[i])) {
+                own.bumps.push(marker.bumps[i]);
+                own.reads.push(marker.reads[i]);
+            }
+        }
+        return child;
+    }
+
+    return mutable(child) ? mark(child, marker.bumps.slice(), marker.reads.slice()) : child;
 }
 
 // Subscribe the caller to the value it is being handed.

@@ -149,9 +149,10 @@
                 <code>items.append(x)</code> reactive by proxying the value in depth, which SVELTHON
                 cannot use: a Python object behind a proxy fails its own type checks. Instead the
                 object carries an invisible marker, and Brython's two dispatch points —
-                <code>call_attr</code> and <code>$setitem</code> — tell the signal it moved. The
-                object keeps its identity, nothing is copied, and <code>type(items) is list</code>
-                stays true.</p>
+                <code>call_attr</code>, <code>$setitem</code> and <code>$getitem</code> — tell the
+                signal it moved. The object keeps its identity, nothing is copied, and
+                <code>type(items) is list</code> stays true. A container read out of a watched one
+                comes under the same watch, so nesting works too — deep proxying, without a proxy.</p>
         </div>
     </article>
 

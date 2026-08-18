@@ -59,6 +59,11 @@ def mutate_nested():
     nested["rows"].append(1)
 
 
+def mutate_via_items():
+    for _, rows in nested.items():
+        rows.append(2)
+
+
 def mutate_attribute():
     box.value += 1
 
@@ -93,4 +98,5 @@ def computed():
 <button data-k="mutate_set" onclick={mutate_set}>mutate_set</button>
 <button data-k="through_helper" onclick={through_helper}>through_helper</button>
 <button data-k="mutate_nested" onclick={mutate_nested}>mutate_nested</button>
+<button data-k="mutate_via_items" onclick={mutate_via_items}>mutate_via_items</button>
 <button data-k="mutate_attribute" onclick={mutate_attribute}>mutate_attribute</button>
