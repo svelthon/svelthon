@@ -353,11 +353,15 @@ Where it stands, each line held by a test:
 | a mutation made inside a helper the compiler cannot see | yes |
 | through a `@derived` that hands back the object, or a component prop | yes |
 | a child reached through `.items()`, `.values()` or `.get()` | yes |
-| a DOM attribute or a spread — `<p {...attrs}>` | no — Svelte compares by identity before writing |
+| `<p {...attrs}>` — a spread | yes |
+| `<p title={items}>` — an attribute carrying the container itself | no — **and neither does JavaScript** |
 
-The one exception is not ours to fix: Svelte compares the value against the one
-it last applied, by identity, inside its own DOM writer, where no signal can
-reach. Everything else propagates, and a test holds each line.
+The last line is host semantics, not a limitation of ours: Svelte compares the
+value against the one it last applied, by identity, inside its own DOM writer,
+where no signal reaches — and a mutated container is the same object. An
+idiomatic Svelte component with `$state` behaves exactly the same, which
+`tests/parity.test.js` proves by running the same component in both languages,
+line for line. Everything else propagates, and a test holds each line.
 
 Accessors live on the namespace's **prototype**, never on the object itself:
 rebinding a global emits `$B.delete_for_reassign(name, locals)`, and a `delete`

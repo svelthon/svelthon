@@ -417,6 +417,7 @@ function compile(
         `bind(__proto, '__truthy', () => py.truthy, () => {});`,
         `bind(__proto, '__text', () => py.str, () => {});`,
         `bind(__proto, '__seq', () => py.seq, () => {});`,
+        `bind(__proto, '__spread', () => py.spread, () => {});`,
         ...(hasContext
             ? []
             : [
@@ -454,7 +455,12 @@ function compile(
                   ...funcs.map((f) => `    ${f.name},`),
                   `};`,
                   ``,
-                  `export default store;`
+                  `export default store;`,
+                  // Named exports too: a `.py` is not only a store. SvelteKit
+                  // looks for `load`, `actions`, `GET` — by name, on the module.
+                  ...(funcs.length
+                      ? [``, `export { ${funcs.map((f) => f.name).join(', ')} };`]
+                      : [])
               ]
             : []),
         // Deliberately *not* untracked: discovering what the body read is the

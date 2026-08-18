@@ -74,6 +74,16 @@ export const py = {
         }
     },
 
+    // `{...attrs}` — Svelte diffe l'objet étalé contre celui du rendu précédent,
+    // et un dict muté en place *est* le même objet. En JavaScript le problème ne
+    // se pose pas : l'étalement d'un proxy $state produit un objet neuf à chaque
+    // évaluation. On rend donc une copie superficielle, pour que le rendu d'un
+    // étalement Python se comporte exactement comme son homologue JavaScript.
+    spread(value) {
+        if (value === null || value === undefined || typeof value !== 'object') return value;
+        return { ...value };
+    },
+
     repr(value) {
         try {
             return _b_.repr(value);

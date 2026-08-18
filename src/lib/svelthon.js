@@ -9,6 +9,9 @@ const { compile, VIRTUAL_PREFIX, VFS_PREFIX } = require('./compile.cjs');
 // Generated modules, keyed by component name. Filled by the preprocessor when
 // Svelte transforms a component, read back when Vite resolves the import that
 // the preprocessor just wrote into that component's script.
+globalThis.__SVELTHON_N = (globalThis.__SVELTHON_N || 0) + 1;
+console.log('### instance svelthon.js n°' + globalThis.__SVELTHON_N);
+
 const generated = new Map();
 
 // Must be unique across the project *and* a valid JS identifier, since Brython
@@ -150,8 +153,10 @@ function pythonExpressions(markup, collect) {
                             : `{${call(inner, '')}}`;
                     } else if (trimmed.startsWith('...')) {
                         // {...attrs} — spreading a Python dict, whose keys are
-                        // JavaScript properties.
-                        out += `{...${call(trimmed.slice(3), '')}}`;
+                        // JavaScript properties. A shallow copy, so that Svelte's
+                        // diff against the previous render sees a mutation: this
+                        // is what a JavaScript spread does by itself.
+                        out += `{...${call(trimmed.slice(3), '__spread')}}`;
                     } else if (/^[A-Za-z_$][\w$]*$/.test(trimmed)) {
                         // {name}, Svelte's shorthand for name={name}. Expanding
                         // it is what routes the read through the namespace, and
@@ -382,8 +387,6 @@ export function vendorQuirks() {
 // created once for the whole application, not per component instance — and is
 // served under a `.svelte.js` identity, which is what makes vite-plugin-svelte
 // compile the runes inside it.
-const STORE_SUFFIX = '.svelte.js';
-
 // The demo shows how many tests back the project. Hard-coding it means letting
 // it drift on every addition, so it is counted when the module is served.
 const STATS_ID = VIRTUAL_PREFIX + 'stats';
@@ -418,10 +421,15 @@ const countTests = () =>
             0
         );
 
+// A compiled store is a rune module: it declares `$state.raw` cells, and only
+// the Svelte compiler turns those into signals. Svelte compiles `.svelte.js`,
+// so that is the name a `.py` has to be served under — the suffix is what makes
+// the runes real, not a cosmetic detail.
+const STORE_SUFFIX = '.svelte.js';
+
 // The Vite plugin that serves those modules.
 export function svelthon() {
     const isVirtual = (id) => id.startsWith(VIRTUAL_PREFIX) || id.startsWith(VFS_PREFIX);
-    const isStore = (id) => id.endsWith('.py' + STORE_SUFFIX);
 
     return {
         name: 'svelthon:modules',
@@ -430,8 +438,10 @@ export function svelthon() {
         enforce: 'pre',
         resolveId(id, importer) {
             if (isVirtual(id)) return '\0' + id;
-            if (id.endsWith('.py') && importer) {
-                return resolve(dirname(importer), id) + STORE_SUFFIX;
+            // Without an importer either: SvelteKit hands its route modules to
+            // Vite as already-resolved entries, with nobody to resolve against.
+            if (id.endsWith('.py')) {
+                return (importer ? resolve(dirname(importer), id) : resolve(id)) + STORE_SUFFIX;
             }
         },
         load(id) {
@@ -441,7 +451,7 @@ export function svelthon() {
                 const entry = generated.get(id.slice(1));
                 return entry && (entry.map ? { code: entry.code, map: entry.map } : entry.code);
             }
-            if (!isStore(id)) return;
+            if (!id.endsWith('.py' + STORE_SUFFIX)) return;
 
             const file = id.slice(0, -STORE_SUFFIX.length);
             const name = nameFor(file);
@@ -488,10 +498,10 @@ export function svelthon() {
 
             for (const prefix of [VIRTUAL_PREFIX, VFS_PREFIX]) forget('\0' + prefix + name);
 
-            // A store's .py is watched, not imported: its compiled module is
-            // served under a different id, and unless that one is invalidated too
-            // its load() never reruns — leaving `generated` holding the previous
-            // body, exactly the staleness this hook exists to prevent.
+            // A store's .py is watched, not imported, so its own module has to
+            // be invalidated too — otherwise its load() never reruns and
+            // `generated` keeps the previous body, exactly the staleness this
+            // hook exists to prevent.
             if (file.endsWith('.py')) forget(file + STORE_SUFFIX);
 
             return [...modules, ...stale];
