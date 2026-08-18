@@ -14,7 +14,7 @@
     // wires it to the DOM.
     import counterSrc from './Counter.svelte?raw';
     import greetingSrc from './Greeting.svelte?raw';
-    import storeSrc from './counter_store.py?raw';
+    import storeSrc from './counter_store.svelte.py?raw';
     import storeDemoSrc from './StoreDemo.svelte?raw';
     import expressionsSrc from './Expressions.svelte?raw';
     import blocksSrc from './Blocks.svelte?raw';

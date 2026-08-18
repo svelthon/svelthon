@@ -9,10 +9,14 @@ const { compile, VIRTUAL_PREFIX, VFS_PREFIX } = require('./compile.cjs');
 // Generated modules, keyed by component name. Filled by the preprocessor when
 // Svelte transforms a component, read back when Vite resolves the import that
 // the preprocessor just wrote into that component's script.
-globalThis.__SVELTHON_N = (globalThis.__SVELTHON_N || 0) + 1;
-console.log('### instance svelthon.js n°' + globalThis.__SVELTHON_N);
-
-const generated = new Map();
+//
+// Held on a global registry rather than in this module, because the two halves
+// do not always land in the same module instance: SvelteKit loads
+// `svelte.config.js` — where the preprocessor is declared — through its own
+// loader, while Vite bundles `vite.config.js`, where the plugin is. This file
+// is then evaluated twice, and a module-level Map would leave the plugin
+// looking in an empty one.
+const generated = (globalThis[Symbol.for('svelthon.generated')] ??= new Map());
 
 // Must be unique across the project *and* a valid JS identifier, since Brython
 // derives its namespace binding (`locals_<name>`) from it.
@@ -344,13 +348,18 @@ export function python(options = {}) {
             // before init() runs, so its namespace is registered by the time
             // Brython looks it up.
             const stores = imports
-                .map((mod) =>
+                .flatMap((mod) =>
                     [dirname(filename || '.'), ...searchPath]
                         // Absolute: the prelude is emitted into a virtual
                         // module, against which a relative specifier would
-                        // resolve to nothing.
-                        .map((directory) => resolve(directory, `${mod}.py`))
-                        .find((candidate) => existsSync(candidate))
+                        // resolve to nothing. Both names are tried, since
+                        // `import counter_store` says nothing about whether the
+                        // module it names is reactive.
+                        .flatMap((directory) => [
+                            resolve(directory, `${mod}.svelte.py`),
+                            resolve(directory, `${mod}.py`)
+                        ])
+                        .find((candidate) => existsSync(candidate)) || []
                 )
                 .filter(Boolean);
 
@@ -395,14 +404,15 @@ const STATS_ID = VIRTUAL_PREFIX + 'stats';
 // expensive half. Keyed on mtime, so an edit still recompiles.
 const compiledStores = new Map();
 
-function compileStore(file) {
+function compilePython(file) {
     const stamp = statSync(file).mtimeMs;
     const cached = compiledStores.get(file);
     if (cached && cached.stamp === stamp) return cached.result;
 
     const source = readFileSync(file, 'utf8');
+    const mode = isReactive(file) ? { store: true } : { plain: true };
     const result = compile(source, nameFor(file), relative(process.cwd(), file), {
-        store: true,
+        ...mode,
         sourceContent: source
     });
 
@@ -421,11 +431,19 @@ const countTests = () =>
             0
         );
 
-// A compiled store is a rune module: it declares `$state.raw` cells, and only
-// the Svelte compiler turns those into signals. Svelte compiles `.svelte.js`,
-// so that is the name a `.py` has to be served under — the suffix is what makes
-// the runes real, not a cosmetic detail.
+// Python follows TypeScript's own convention, the one Svelte already defines:
+// `foo.ts` is an ordinary module and `foo.svelte.ts` is a reactive one. So
+// `foo.py` compiles to ordinary JavaScript, and `foo.svelte.py` to a rune
+// module whose names become signals.
+//
+// A rune module has to be *named* `.svelte.js` — that is the only way the Svelte
+// compiler ever sees it, and without it `$state` is just an undefined variable.
+// An ordinary module needs no such thing, and keeps its own path: which is what
+// lets SvelteKit find a `+page.server.py` in Vite's manifest, where it looks it
+// up by the name it wrote.
 const STORE_SUFFIX = '.svelte.js';
+
+const isReactive = (file) => file.endsWith('.svelte.py');
 
 // The Vite plugin that serves those modules.
 export function svelthon() {
@@ -441,7 +459,8 @@ export function svelthon() {
             // Without an importer either: SvelteKit hands its route modules to
             // Vite as already-resolved entries, with nobody to resolve against.
             if (id.endsWith('.py')) {
-                return (importer ? resolve(dirname(importer), id) : resolve(id)) + STORE_SUFFIX;
+                const file = importer ? resolve(dirname(importer), id) : resolve(id);
+                return isReactive(file) ? file + STORE_SUFFIX : file;
             }
         },
         load(id) {
@@ -451,11 +470,12 @@ export function svelthon() {
                 const entry = generated.get(id.slice(1));
                 return entry && (entry.map ? { code: entry.code, map: entry.map } : entry.code);
             }
-            if (!id.endsWith('.py' + STORE_SUFFIX)) return;
+            const reactive = id.endsWith('.py' + STORE_SUFFIX);
+            if (!reactive && !id.endsWith('.py')) return;
 
-            const file = id.slice(0, -STORE_SUFFIX.length);
+            const file = reactive ? id.slice(0, -STORE_SUFFIX.length) : id;
             const name = nameFor(file);
-            const { script, module, map, stdlib } = compileStore(file);
+            const { script, module, map, stdlib } = compilePython(file);
 
             generated.set(VIRTUAL_PREFIX + name, { code: module, map });
             if (stdlib) generated.set(VFS_PREFIX + name, { code: stdlib, map: null });
@@ -502,7 +522,7 @@ export function svelthon() {
             // be invalidated too — otherwise its load() never reruns and
             // `generated` keeps the previous body, exactly the staleness this
             // hook exists to prevent.
-            if (file.endsWith('.py')) forget(file + STORE_SUFFIX);
+            if (file.endsWith('.py')) forget(isReactive(file) ? file + STORE_SUFFIX : file);
 
             return [...modules, ...stale];
         }

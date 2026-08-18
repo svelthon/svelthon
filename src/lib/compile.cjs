@@ -107,8 +107,29 @@ function sourceMap(generated, source, content, lineOffset) {
     };
 }
 
-// `src/lib/counter_store.py` → `counter_store`, the name Python will import it by.
-const pythonModuleName = (source) => source.split('/').pop().replace(/\.py$/, '');
+// `__all__ = ["load"]` — Python's own way of saying what a module exports, and
+// the closest thing it has to TypeScript's `export` keyword. Read from the AST,
+// so it stays a plain assignment in the source.
+function declaredExports(body) {
+    for (const node of body) {
+        if (!(node instanceof $B.ast.Assign)) continue;
+        if (!node.targets.some((t) => t instanceof $B.ast.Name && t.id === '__all__')) continue;
+
+        const items = node.value?.elts;
+        if (!items) continue;
+
+        return items
+            .map((item) => (item instanceof $B.ast.Constant ? item.value : null))
+            .filter((one) => typeof one === 'string');
+    }
+
+    return null;
+}
+
+// `src/counter_store.svelte.py` → `counter_store`, the name Python imports it by.
+// The `.svelte` marker says the module is reactive; it is not part of its name,
+// any more than it is for a `.svelte.ts`.
+const pythonModuleName = (source) => source.split('/').pop().replace(/(\.svelte)?\.py$/, '');
 
 // Python identifiers that JavaScript will not accept as bindings. They stay
 // perfectly usable inside the component's Python; they simply are not published
@@ -211,7 +232,7 @@ function compile(
     src,
     name = 'Component',
     source = name,
-    { store = false, lineOffset = 0, sourceContent = null } = {}
+    { store = false, plain = false, lineOffset = 0, sourceContent = null } = {}
 ) {
     // The namespace identifier is derived from `filename` alone — `module` and
     // `locals_id` are ignored by js_from_root. Brython maps '.' to '_' but
@@ -226,16 +247,22 @@ function compile(
     }
     let { props, bindables, state, funcs, deriveds, effects } = surface(root._ast.body);
 
-    // A store has no parent, so an annotation there declares plain state — and
-    // $props() would be meaningless at module scope anyway.
-    if (store) {
+    // Neither a store nor a plain module has a parent, so an annotation there
+    // declares plain state — and $props() would be meaningless at module scope.
+    if (store || plain) {
         state = [...props, ...bindables, ...state];
         props = [];
         bindables = [];
-        // $effect needs a component to belong to; a store has none.
+        // $effect needs a component to belong to; neither has one.
         funcs = [...funcs, ...effects];
         effects = [];
     }
+
+    // A plain module has no signals at all, so a @derived cannot be one either:
+    // it becomes a function the accessor calls on every read. Same semantics —
+    // read the name, get the result — minus the memoisation nothing observes.
+    const plainDeriveds = plain ? deriveds : [];
+    if (plain) deriveds = [];
 
     // NOTE — traversing a DOM node from Python (`event.target.value`) resolves
     // the node's class through `$B.imported['browser.html']`, which only a real
@@ -315,7 +342,63 @@ function compile(
     // exactly when the Python module body runs.
     const hasContext = declared.includes('set_context') || declared.includes('get_context');
 
-    const script = [
+    // The plain module: a `.py` compiled to ordinary JavaScript. No runes, so
+    // no need for the Svelte compiler and no need to be renamed `.svelte.js` —
+    // which is what lets SvelteKit find a `+page.server.py` in its manifest. It
+    // is the mirror of a plain `.ts` next to a `.svelte.ts`.
+    // Functions by default — what a framework calls by name. A module that wants
+    // to export values says so with `__all__`, exactly as it would to a Python
+    // caller. SvelteKit is strict about it: a `+page.server.py` exporting
+    // anything but load/actions/prerender/… is refused, and rightly so.
+    const exported = (
+        declaredExports(root._ast.body) ??
+        [...funcs.map((f) => f.name), ...plainDeriveds.map((d) => d.name)]
+    ).filter((n) => /^[A-Za-z_$][\w$]*$/.test(n) && !JS_RESERVED.has(n));
+
+    const plainScript = [
+        `import { init } from ${JSON.stringify(virtualId(name))};`,
+        `import { bind, py, pyError, schedule, NONE, registerModule } from 'svelthon/runtime';`,
+        ``,
+        ...state.map((n) => `let ${n};`),
+        ...[...funcs, ...plainDeriveds].map((f) => `let ${fn(f.name)};`),
+        ``,
+        `const __proto = {};`,
+        ...state.map((n) => `bind(__proto, '${n}', () => ${n}, (v) => { ${n} = v; });`),
+        ...funcs.map(
+            (f) => `bind(__proto, '${f.name}', () => ${fn(f.name)}, (v) => { ${fn(f.name)} = v; });`
+        ),
+        ...plainDeriveds.map(
+            (d) => `bind(__proto, '${d.name}', () => ${fn(d.name)}(), (v) => { ${fn(d.name)} = v; });`
+        ),
+        ...(declared.includes('derived') ? [] : [`bind(__proto, 'derived', () => (f) => f, () => {});`]),
+        ...(declared.includes('bindable') ? [] : [`bind(__proto, 'bindable', () => (v) => v, () => {});`]),
+        ...(declared.includes('effect') ? [] : [`bind(__proto, 'effect', () => (f) => f, () => {});`]),
+        `bind(__proto, '__truthy', () => py.truthy, () => {});`,
+        `bind(__proto, '__text', () => py.str, () => {});`,
+        `bind(__proto, '__seq', () => py.seq, () => {});`,
+        `bind(__proto, '__spread', () => py.spread, () => {});`,
+        ``,
+        `const ${NS} = Object.create(__proto);`,
+        `${NS}.$proxy = true;`,
+        ``,
+        `registerModule(${JSON.stringify(pythonModuleName(source))}, ${NS});`,
+        `init(${NS});`,
+        ``,
+        ...[...funcs, ...plainDeriveds].map(
+            (f) =>
+                `const ${f.name} = (...a) => { try { return schedule(${fn(f.name)}(...a.slice(0, ${f.arity ?? 0})), ${JSON.stringify(`${f.name}() — ${source}`)}, ${lineOffset}); }` +
+                ` catch (err) { throw pyError(err, ${JSON.stringify(`${f.name}() — ${source}`)}, ${lineOffset}); } };`
+        ),
+        ``,
+        // SvelteKit reads `load`, `actions`, `GET`, `prerender` by name off the
+        // module, so values are exported as well as functions.
+        // No default export: SvelteKit refuses one on a route module, and a
+        // Python module has no notion of a default anyway. Named exports are
+        // the whole contract, and `__all__` is where it is written.
+        ...(exported.length ? [`export { ${exported.join(', ')} };`] : [])
+    ].join('\n');
+
+    const componentScript = [
         `import { init } from ${JSON.stringify(virtualId(name))};`,
         // `py` backs the rewritten conditions, and is available to the template
         // for explicit conversions: {py.str(items)} renders ['a', 'b'].
@@ -501,6 +584,8 @@ function compile(
               ]
             : [])
     ].join('\n');
+
+    const script = plain ? plainScript : componentScript;
 
     // Only the modules this component actually imports reach the browser.
     const stdlib = needsStdlib
