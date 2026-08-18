@@ -185,13 +185,14 @@ describe('composition — objets Python et composants enfants', () => {
         expect(cell('tuple')).toBe('[k=1]'); // un tuple est un tableau JS
     });
 
-    test('py.of() donne accès aux attributs d’une instance', () => {
-        // Brython garde les attributs hors des propriétés JS : {o.label} rendrait
-        // du vide. py.of() passe par la recherche d’attributs de Python.
+    test('les attributs d’une instance se lisent depuis le gabarit', () => {
+        // Brython garde les attributs hors des propriétés JS : en JavaScript,
+        // {o.label} rendrait du vide. L'expression est compilée en Python, donc
+        // elle passe par la recherche d'attributs de Python.
         expect(cell('obj')).toBe('[a:1][b:2]');
     });
 
-    test('py.of() respecte le protocole des descripteurs', () => {
+    test('et le protocole des descripteurs est respecté', () => {
         expect(cell('prop')).toBe('[2][4]'); // une @property, pas un attribut
     });
 

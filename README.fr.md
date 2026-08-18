@@ -123,6 +123,22 @@ masquait. `{#if rows}` suit la vérité de Python, donc une liste vide est fauss
 Et un `dict` n'a pas d'attributs : `{d["k"]}` et non `{d.k}` — la sémantique est
 celle de Python, y compris là où elle diffère de JavaScript.
 
+Tout site *lu* par le balisage passe par Python, pas seulement les
+interpolations :
+
+```svelte
+{#each scores.items() as [k, v]}   <!-- un dict, un range, un générateur -->
+  {@const half = (v - 7) // 2}     <!-- -4, là où JavaScript dirait -3,5 -->
+{/each}
+{#key point}                       <!-- comparé par repr(), l'égalité de Python -->
+{@html render(row)}
+```
+
+L'itérable d'un `{#each}` est évalué *hors* du bloc et sa clé *dedans* : chacun
+est donc compilé avec les noms qu'il peut réellement voir. Une clé et un `{#key}`
+se comparent par `repr()` — Svelte comparerait des identités, et aucune valeur
+Python n'en conserve : un `(1, 2)` reconstruit est un autre objet.
+
 **Les directives gardent la langue de l'hôte**, parce qu'elles portent un rappel
 ou une valeur JavaScript, pas un rendu :
 
@@ -135,9 +151,10 @@ transitions restent en JavaScript ; tout autre attribut, prop de composant
 compris, est du Python. Un composant sans Python à lui — un consommateur de store
 — conserve le gabarit JavaScript et les helpers `py.str()` / `py.truthy()`.
 
-Ça coûte environ **1,3× sur le rendu** face à un composant JavaScript
-(`npm run bench`), contre 0,6× auparavant : un appel Python par expression et par
-rendu. C'est le prix du gabarit en Python.
+Ça coûte **1,3× à 1,7× sur le rendu** face à un composant JavaScript
+(`npm run bench` — l'écart entre les deux est ce qu'un portable modeste mesure
+d'un jour à l'autre), contre 0,6× auparavant : un appel Python par expression et
+par rendu. C'est le prix du gabarit en Python.
 
 ## Composition
 
@@ -157,16 +174,13 @@ rows = [Item("a", 1), Item("b", 2)]
 {#each rows as r}<Row row={r} />{/each}
 ```
 
-Un objet Python se passe en prop sans conversion. Dans le gabarit, dicts et
-tuples se lisent directement — les clés d'un dict Brython sont exposées comme
-propriétés JS, un tuple *est* un tableau. Les **instances de classe** font
-exception : Brython garde leurs attributs hors des propriétés JS, donc
-`{o.label}` rendrait du vide. `py.of()` passe par la recherche d'attributs de
-Python, protocole des descripteurs compris :
+Un objet Python se passe en prop sans conversion, et se relit en Python —
+attributs et descripteurs compris, puisque les expressions du gabarit sont
+compilées en Python :
 
 ```svelte
-{py.of(item).label}    <!-- attribut -->
-{py.of(item).double}   <!-- @property, évaluée -->
+{item.label}     <!-- attribut -->
+{item.double}    <!-- @property, évaluée -->
 ```
 
 ## Valeurs dérivées et liaisons
@@ -250,7 +264,7 @@ La même règle se décline à trois niveaux, et c'est la seule à retenir —
 | collection | `items.append(x)` | `items.append(x)` + `publish("items")` |
 | élément d'une liste à clé | `it.label = …` | `items[i] = Item(it.id, …)` |
 
-Le troisième cas surprend : dans un `{#each items as it (py.of(it).id)}`, muter
+Le troisième cas surprend : dans un `{#each items as it (it.id)}`, muter
 un attribut d'un élément ne re-rend rien même après `publish()`, parce que
 l'élément a gardé son identité. Le remplacer met à jour le rendu **et** réutilise
 le nœud DOM, puisque la clé, elle, n'a pas bougé.
@@ -448,7 +462,8 @@ runtime navigateur (`self`, `addEventListener`) ; `src/lib/globals.js` les pose
 désormais, et c'était tout l'obstacle.
 
 Couvert par `src/ssr.test.js` : composants, props, composition avec composants
-enfants et `py.of()`, et les valeurs Python elles-mêmes — `-7 // 2` rend bien
+enfants et l'accès d'attribut, et les valeurs Python elles-mêmes — `-7 // 2`
+rend bien
 `-4` côté serveur.
 
 **Le seul vrai piège, et il n'est pas propre à SVELTHON.** L'état d'un store vit

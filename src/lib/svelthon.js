@@ -6,8 +6,6 @@ import { join } from 'node:path';
 const require = createRequire(import.meta.url);
 const { compile, VIRTUAL_PREFIX, VFS_PREFIX } = require('./compile.cjs');
 
-import { dtl } from './dtl.js';
-
 // Generated modules, keyed by component name. Filled by the preprocessor when
 // Svelte transforms a component, read back when Vite resolves the import that
 // the preprocessor just wrote into that component's script.
@@ -195,7 +193,13 @@ function eachBlock(trimmed, openScope, call) {
     const head = keyed ? keyed[1] : trimmed;
     const parts = head.match(/^#each\s+([\s\S]+)\s+as\s+([\s\S]+)$/) || head.match(/^#each\s+([\s\S]+)$/);
 
-    const iterable = call(parts[1], '__seq');
+    // Malformed: leave it alone and let Svelte say so in its own words.
+    if (!parts) {
+        openScope();
+        return `{${trimmed}}`;
+    }
+
+    const iterable = parts[1]; // MESURE : sans __seq
     openScope();
 
     return (
@@ -364,28 +368,6 @@ function collector(filename) {
     };
 }
 
-// Django's loop counter, in Python because that is where the template reads it
-// from: `forloop.counter` is attribute access, which a JavaScript object would
-// not answer. Appended to a component's own source, and only when its markup
-// names it — one object per row is not free.
-const FORLOOP = `class __Forloop:
-    def __init__(self, index, total):
-        self.counter0 = index
-        self.counter = index + 1
-        self.revcounter = total - index
-        self.revcounter0 = total - index - 1
-        self.first = index == 0
-        self.last = index == total - 1
-        self.length = total
-
-
-def __forloop(index, sequence):
-    try:
-        total = len(sequence)
-    except TypeError:
-        total = -1
-    return __Forloop(index, total)`;
-
 // The Svelte preprocessor: runs before Svelte parses the component, so the
 // compiler only ever sees ordinary JavaScript with runes.
 export function python() {
@@ -409,9 +391,7 @@ export function python() {
             );
 
             const collect = collector(filename);
-            // Django syntax first, Svelte blocks after: the translation is
-            // purely lexical, so everything downstream sees one language.
-            return { code: overMarkup(content, (markup) => pythonExpressions(dtl(markup), collect)) };
+            return { code: overMarkup(content, (markup) => pythonExpressions(markup, collect)) };
         },
         script({ content, attributes, filename }) {
             if (attributes.lang !== 'python') {
@@ -421,9 +401,7 @@ export function python() {
 
             const name = nameFor(filename);
             const defs = templateFunctions.get(filename) || [];
-            const helpers = defs.some((d) => d.includes('__forloop(')) ? [FORLOOP] : [];
-            const appended = [...defs, ...helpers];
-            const source = appended.length ? `${content}\n${appended.join('\n\n')}\n` : content;
+            const source = defs.length ? `${content}\n${defs.join('\n\n')}\n` : content;
 
             const { script, module, map, stdlib, imports } = compile(
                 source,

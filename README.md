@@ -151,6 +151,21 @@ paper over. `{#if rows}` follows Python's truth, so an empty list is false. And 
 `dict` has no attributes: `{d["k"]}`, not `{d.k}` — the semantics are Python's,
 including where that differs from JavaScript.
 
+Every site the markup *reads* goes through Python, not only interpolations:
+
+```svelte
+{#each scores.items() as [k, v]}   <!-- a dict, a range, a generator: not arrays -->
+  {@const half = (v - 7) // 2}     <!-- -4, where JavaScript would say -3.5 -->
+{/each}
+{#key point}                       <!-- compared by repr(), Python's own equality -->
+{@html render(row)}
+```
+
+The `{#each}` iterable is evaluated *outside* the block and the key inside it, so
+each is compiled against the names it can actually see. A key and `{#key}` compare
+by `repr()`: identity is what Svelte would use, and no Python value keeps one —
+`(1, 2)` rebuilt is a different object.
+
 **Directives keep the host language**, because they carry a callback or a
 JavaScript value rather than a rendering:
 
@@ -163,9 +178,10 @@ stay JavaScript; every other attribute, component prop included, is Python. A
 component with no Python of its own — a store consumer — keeps the JavaScript
 template and the `py.str()` / `py.truthy()` helpers.
 
-It costs about **1.3× on rendering** against a JavaScript component (`npm run
-bench`), against 0.6× before: one Python call per expression per render. That is
-the price of the template being Python.
+It costs **1.3× to 1.7× on rendering** against a JavaScript component (`npm run
+bench`, the spread being what a modest laptop measures from one day to the next),
+against 0.6× before: one Python call per expression per render. That is the price
+of the template being Python.
 
 ## Composition
 
@@ -271,7 +287,7 @@ The same rule holds at three levels, and it is the only one to remember —
 | collection | `items.append(x)` | `items.append(x)` + `publish("items")` |
 | item of a keyed list | `it.label = …` | `items[i] = Item(it.id, …)` |
 
-The third case surprises: in `{#each items as it (py.of(it).id)}`, mutating an
+The third case surprises: in `{#each items as it (it.id)}`, mutating an
 item's attribute re-renders nothing even after `publish()`, because the item kept
 its identity. Replacing it updates the render **and** still reuses the DOM node,
 since the key did not move.
@@ -449,7 +465,8 @@ from the browser runtime (`self`, `addEventListener`); `src/lib/globals.js` now
 sets them, and that was the whole obstacle.
 
 Covered by `src/ssr.test.js`: components, props, composition with child
-components and `py.of()`, and the Python values themselves — `-7 // 2` still
+components and attribute access, and the Python values themselves — `-7 // 2`
+still
 renders `-4` server-side.
 
 **The one real trap, and it is not specific to SVELTHON.** A store's state lives

@@ -162,3 +162,25 @@ export function dtl(markup) {
         .replace(TAG, (_whole, inner, offset) => translate(inner, offset, stripped))
         .replace(VARIABLE, (_whole, expression) => `{${expression}}`);
 }
+
+// Django's loop counter, in Python because that is where the template reads it
+// from: `forloop.counter` is attribute access, which a JavaScript object would
+// not answer. Appended to a component's own source, and only when its markup
+// names it — one object per row is not free.
+export const FORLOOP = \`class __Forloop:
+    def __init__(self, index, total):
+        self.counter0 = index
+        self.counter = index + 1
+        self.revcounter = total - index
+        self.revcounter0 = total - index - 1
+        self.first = index == 0
+        self.last = index == total - 1
+        self.length = total
+
+
+def __forloop(index, sequence):
+    try:
+        total = len(sequence)
+    except TypeError:
+        total = -1
+    return __Forloop(index, total)`;

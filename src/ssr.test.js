@@ -44,7 +44,7 @@ describe('rendu serveur', () => {
         expect(html).toContain('apple, apricot, banana');
     });
 
-    test('la composition et py.of() traversent aussi', () => {
+    test('la composition et les attributs d’instance traversent aussi', () => {
         const html = text(render(Composition));
 
         expect(html).toContain('[a:1][b:2]'); // attributs d'instance
