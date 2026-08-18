@@ -402,7 +402,22 @@ describe('réactivité — quelles écritures Python propagent', () => {
         expect(read('items')).toBe("['helper']");
     });
 
-    // Les deux limitations qui restent, tenues par des tests pour qu'elles ne
+    test('un @derived qui rend l’objet muté propage aussi', () => {
+        const { read, click } = setup();
+
+        expect(read('passthrough')).toBe('[]');
+        expect(read('computed')).toBe('0');
+
+        click('mutate_list');
+
+        // Le dérivé rend le même tableau : sa valeur ne change pas au sens ===,
+        // et Svelte s'arrêterait là. C'est l'objet lui-même qui abonne son
+        // lecteur, par la marque qu'il porte.
+        expect(read('passthrough')).toBe('[0]');
+        expect(read('computed')).toBe('1');
+    });
+
+    // Les limitations qui restent, tenues par des tests pour qu'elles ne
     // dérivent pas en silence.
     test('un conteneur imbriqué ne propage pas', () => {
         const { read, click } = setup();

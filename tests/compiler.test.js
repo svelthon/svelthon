@@ -41,7 +41,7 @@ describe('compilateur', () => {
         expect(script).toContain('let __rev_items = $state.raw(0)');
         expect(script).toContain('const __bump_items = () => { __rev_items += 1; }');
         expect(script).toContain("bind(__proto, 'items', () => (__rev_items, items)");
-        expect(script).toContain('track(v, __bump_items)');
+        expect(script).toContain('track(v, __bump_items, __read_items)');
     });
 
     test('un store replie les annotations en état et s’enregistre pour Python', () => {

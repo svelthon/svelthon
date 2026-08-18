@@ -294,6 +294,7 @@ function compile(
     // so nothing is copied and the object keeps its identity.
     const rev = (name) => `__rev_${name}`;
     const bump = (name) => `__bump_${name}`;
+    const read = (name) => `__read_${name}`;
 
     // Lifecycle by convention, mapped onto a single $effect: its body runs once
     // after the DOM exists, its teardown when the component goes away. Both
@@ -318,7 +319,7 @@ function compile(
         `import { init } from ${JSON.stringify(virtualId(name))};`,
         // `py` backs the rewritten conditions, and is available to the template
         // for explicit conversions: {py.str(items)} renders ['a', 'b'].
-        `import { bind, py, track, pyError, schedule, NONE${store ? ', registerModule' : ''} } from 'svelthon/runtime';`,
+        `import { bind, py, track, follow, pyError, schedule, NONE${store ? ', registerModule' : ''} } from 'svelthon/runtime';`,
         `import { ${['getContext', 'setContext']
             .concat(lifecycle('on_mount') || lifecycle('on_destroy') ? ['untrack'] : [])
             .join(', ')} } from 'svelte';`,
@@ -329,7 +330,8 @@ function compile(
                       ` $props();`,
                   ...bindables.flatMap((b) => [
                       `let ${rev(b)} = $state.raw(0);`,
-                      `const ${bump(b)} = () => { ${rev(b)} += 1; };`
+                      `const ${bump(b)} = () => { ${rev(b)} += 1; };`,
+                      `const ${read(b)} = () => { ${rev(b)}; };`
                   ]),
                   // The module body applies the annotation's default by writing
                   // to the name — and that write must not travel up to the
@@ -351,7 +353,8 @@ function compile(
         ...state.flatMap((n) => [
             `let ${n} = $state.raw(undefined);`,
             `let ${rev(n)} = $state.raw(0);`,
-            `const ${bump(n)} = () => { ${rev(n)} += 1; };`
+            `const ${bump(n)} = () => { ${rev(n)} += 1; };`,
+            `const ${read(n)} = () => { ${rev(n)}; };`
         ]),
         ...funcs.map((f) => `let ${fn(f.name)} = $state.raw(undefined);`),
         ...effects.map((e) => `let ${fn(e.name)} = $state.raw(undefined);`),
@@ -377,19 +380,22 @@ function compile(
         ...bindables.map(
             (b) =>
                 `bind(__proto, '${b}', () => (${rev(b)}, ${b} ?? NONE),` +
-                ` (v) => { if (!__initialising || ${b} === undefined) ${b} = track(v, ${bump(b)}); });`
+                ` (v) => { if (!__initialising || ${b} === undefined) ${b} = track(v, ${bump(b)}, ${read(b)}); });`
         ),
         // Reading the revision alongside the value is what registers the
         // dependency: an in-place mutation then invalidates every reader,
         // without the value ever changing identity.
         ...state.map(
             (n) =>
-                `bind(__proto, '${n}', () => (${rev(n)}, ${n}), (v) => { ${n} = track(v, ${bump(n)}); });`
+                `bind(__proto, '${n}', () => (${rev(n)}, ${n}), (v) => { ${n} = track(v, ${bump(n)}, ${read(n)}); });`
         ),
         ...funcs.map((f) => `bind(__proto, '${f.name}', () => ${fn(f.name)}, (v) => { ${fn(f.name)} = v; });`),
         ...effects.map((e) => `bind(__proto, '${e.name}', () => ${fn(e.name)}, (v) => { ${fn(e.name)} = v; });`),
+        // follow(): a @derived that hands back a container it was given is the one
+        // place the revision cannot travel by itself — Svelte memoises the
+        // derived on `===`, so the reader subscribes to the object instead.
         ...deriveds.map(
-            (d) => `bind(__proto, '${d.name}', () => ${d.name}, (v) => { ${fn(d.name)} = v; });`
+            (d) => `bind(__proto, '${d.name}', () => follow(${d.name}), (v) => { ${fn(d.name)} = v; });`
         ),
         ``,
         `const ${NS} = Object.create(__proto);`,
@@ -443,8 +449,8 @@ function compile(
                   // reactive at the call site.
                   `export const store = {`,
                   ...state.map((n) => `    get ${n}() { return (${rev(n)}, ${n}); },`),
-                  ...state.map((n) => `    set ${n}(v) { ${n} = track(v, ${bump(n)}); },`),
-                  ...deriveds.map((d) => `    get ${d.name}() { return ${d.name}; },`),
+                  ...state.map((n) => `    set ${n}(v) { ${n} = track(v, ${bump(n)}, ${read(n)}); },`),
+                  ...deriveds.map((d) => `    get ${d.name}() { return follow(${d.name}); },`),
                   ...funcs.map((f) => `    ${f.name},`),
                   `};`,
                   ``,

@@ -168,28 +168,59 @@ function mutable(value) {
     }
 }
 
-// Attach `bump` to the value stored under a module-level name. One object may
-// be bound to two names; both are then told.
-export function track(value, bump) {
+// Attach a marker to the value stored under a module-level name: `bump` says it
+// moved, `read` subscribes whoever is asking to the signal that says so. One
+// object may be bound to two names; both are then told, and both watched.
+//
+// The pair is what makes the reactivity a property of the *object* rather than
+// of the place it was declared — duck typing, applied to change notification.
+// Anything holding the value can subscribe to it just by handing it through.
+export function track(value, bump, read) {
     if (!mutable(value)) return value;
 
-    const marker = Object.getOwnPropertyDescriptor(value, '$notify');
-    if (marker) {
-        if (!marker.value.bumps.includes(bump)) marker.value.bumps.push(bump);
+    const existing = value.$notify;
+    if (existing !== undefined) {
+        if (!existing.bumps.includes(bump)) {
+            existing.bumps.push(bump);
+            existing.reads.push(read);
+        }
         return value;
     }
 
     const bumps = [bump];
-    const fire = () => {
+    const reads = [read];
+
+    const marker = () => {
         for (const one of bumps) one();
     };
-    fire.bumps = bumps;
+    marker.bumps = bumps;
+    marker.reads = reads;
+    marker.follow = () => {
+        for (const one of reads) one();
+    };
 
     Object.defineProperty(value, '$notify', {
-        value: fire,
+        value: marker,
         enumerable: false,
         configurable: true
     });
+
+    return value;
+}
+
+// Subscribe the caller to the value it is being handed.
+//
+// Every other accessor reads the revision of its own name, which is enough. A
+// `@derived` is not: Svelte memoises it on `===`, so a derived that returns the
+// very object it was given propagates nothing when that object is mutated in
+// place — the computation re-runs, the value compares equal, and the chain stops
+// there. Reading the marker re-establishes it at the far end, where the reader
+// is, rather than trying to defeat the memoisation.
+export function follow(value) {
+    if (value !== null && typeof value === 'object') {
+        const marker = value.$notify;
+        if (marker !== undefined) marker.follow();
+    }
 
     return value;
 }

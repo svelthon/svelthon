@@ -61,6 +61,18 @@ def mutate_nested():
 
 def mutate_attribute():
     box.value += 1
+
+
+@derived
+def passthrough():
+    # Rend l'objet lui-même : Svelte mémoïse le dérivé sur `===`, donc rien ne
+    # propagerait sans que le lecteur s'abonne à l'objet.
+    return items
+
+
+@derived
+def computed():
+    return len(items)
 </script>
 
 <p data-k="count">{count}</p>
@@ -69,6 +81,8 @@ def mutate_attribute():
 <p data-k="tags">{tags}</p>
 <p data-k="nested">{nested}</p>
 <p data-k="attr">{box.value}</p>
+<p data-k="passthrough">{passthrough}</p>
+<p data-k="computed">{computed}</p>
 
 <button data-k="rebind" onclick={rebind}>rebind</button>
 <button data-k="augment" onclick={augment}>augment</button>
