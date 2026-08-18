@@ -448,19 +448,17 @@ export function plainData(value) {
     if (typeof value !== 'object') return value;
     if (Array.isArray(value)) return value.map(plainData); // list, tuple
 
-    const cls = globalThis.__BRYTHON__.get_class(value);
-
-    if (cls === _b_.dict) {
-        const out = {};
-        for (const key in value) out[key] = plainData(value[key]);
-        return out;
-    }
-
-    if (cls === _b_.set || cls === _b_.frozenset) {
-        return _b_.list.$factory(value).map(plainData);
-    }
-
-    return value; // anything else is the caller's business
+    // Own string keys only, and never a class lookup: `get_class` probes the
+    // object's symbols, and SvelteKit wraps `event.params` in a proxy that
+    // records every key read — including the symbols we would have introduced,
+    // which its serialiser then refuses. A Brython dict exposes its keys as
+    // ordinary properties, so this reads both sides of the bridge.
+    //
+    // A set has no key to copy: `list(mon_set)` is the Python way to hand one
+    // over, and it is what any serialiser would want anyway.
+    const out = {};
+    for (const key of Object.keys(value)) out[key] = plainData(value[key]);
+    return out;
 }
 
 // A store's namespace, published under its Python module name, so a component's

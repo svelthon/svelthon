@@ -377,6 +377,8 @@ function compile(
         `bind(__proto, '__text', () => py.str, () => {});`,
         `bind(__proto, '__seq', () => py.seq, () => {});`,
         `bind(__proto, '__spread', () => py.spread, () => {});`,
+        // Le pont retour : une valeur JavaScript rendue lisible en Python.
+        `bind(__proto, 'to_python', () => plainData, () => {});`,
         ``,
         `const ${NS} = Object.create(__proto);`,
         `${NS}.$proxy = true;`,
@@ -402,7 +404,7 @@ function compile(
         `import { init } from ${JSON.stringify(virtualId(name))};`,
         // `py` backs the rewritten conditions, and is available to the template
         // for explicit conversions: {py.str(items)} renders ['a', 'b'].
-        `import { bind, py, track, follow, pyError, schedule, NONE${store ? ', registerModule' : ''} } from 'svelthon/runtime';`,
+        `import { bind, py, track, follow, pyError, schedule, plainData, NONE${store ? ', registerModule' : ''} } from 'svelthon/runtime';`,
         `import { ${['getContext', 'setContext']
             .concat(lifecycle('on_mount') || lifecycle('on_destroy') ? ['untrack'] : [])
             .join(', ')} } from 'svelte';`,
@@ -501,6 +503,7 @@ function compile(
         `bind(__proto, '__text', () => py.str, () => {});`,
         `bind(__proto, '__seq', () => py.seq, () => {});`,
         `bind(__proto, '__spread', () => py.spread, () => {});`,
+        `bind(__proto, 'to_python', () => plainData, () => {});`,
         ...(hasContext
             ? []
             : [
