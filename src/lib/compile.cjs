@@ -402,6 +402,7 @@ function compile(
         // from bind:this — on which Brython's classifier trips. These fall back.
         `bind(__proto, '__truthy', () => py.truthy, () => {});`,
         `bind(__proto, '__text', () => py.str, () => {});`,
+        `bind(__proto, '__seq', () => py.seq, () => {});`,
         ...(hasContext
             ? []
             : [

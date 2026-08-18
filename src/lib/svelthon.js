@@ -6,6 +6,8 @@ import { join } from 'node:path';
 const require = createRequire(import.meta.url);
 const { compile, VIRTUAL_PREFIX, VFS_PREFIX } = require('./compile.cjs');
 
+import { dtl } from './dtl.js';
+
 // Generated modules, keyed by component name. Filled by the preprocessor when
 // Svelte transforms a component, read back when Vite resolves the import that
 // the preprocessor just wrote into that component's script.
@@ -184,6 +186,26 @@ function declaredBy(inner) {
     return found ? identifiers(found[1]) : [];
 }
 
+// `{#each xs as x, i (key)}`. The iterable is evaluated outside the block, so it
+// is compiled before the block's names exist; the key is evaluated inside it.
+// Both matter: a Python iterable that is not a list — a dict, a range, the
+// result of .items() — has to become an array for Svelte to walk it.
+function eachBlock(trimmed, openScope, call) {
+    const keyed = trimmed.match(/^([\s\S]*?)\s*\(([^()]*)\)\s*$/);
+    const head = keyed ? keyed[1] : trimmed;
+    const parts = head.match(/^#each\s+([\s\S]+)\s+as\s+([\s\S]+)$/) || head.match(/^#each\s+([\s\S]+)$/);
+
+    const iterable = call(parts[1], '__seq');
+    openScope();
+
+    return (
+        `{#each ${iterable}` +
+        (parts[2] ? ` as ${parts[2].trim()}` : '') +
+        (keyed ? ` (${call(keyed[2], 'repr')})` : '') +
+        '}'
+    );
+}
+
 function pythonExpressions(markup, collect) {
     let out = '';
     let index = 0;
@@ -256,19 +278,18 @@ function pythonExpressions(markup, collect) {
         const trimmed = inner.trim();
 
         if (trimmed.startsWith('#')) {
-            scopes.push(declaredBy(trimmed));
-
             if (trimmed.startsWith('#if ')) {
+                scopes.push([]);
                 out += `{#if ${call(trimmed.slice(4), '__truthy')}}`;
             } else if (trimmed.startsWith('#each ')) {
-                // The key sees the block's own names, so it is compiled after
-                // the scope is pushed. Keyed lists of Python objects need it:
-                // `(item.id)` is attribute access on an instance.
-                const keyed = trimmed.match(/^(#each\s+.*?)\(([^()]*)\)\s*$/s);
-                out += keyed
-                    ? `{${keyed[1]}(${call(keyed[2], 'repr')})}`
-                    : markup.slice(index, end + 1);
+                out += eachBlock(trimmed, () => scopes.push(declaredBy(trimmed)), call);
+            } else if (trimmed.startsWith('#key ')) {
+                // Svelte re-creates the block when the value changes, by
+                // identity — which no Python value keeps. repr() gives one.
+                scopes.push([]);
+                out += `{#key ${call(trimmed.slice(5), 'repr')}}`;
             } else {
+                scopes.push(declaredBy(trimmed));
                 out += markup.slice(index, end + 1);
             }
         } else if (trimmed.startsWith('/')) {
@@ -283,8 +304,20 @@ function pythonExpressions(markup, collect) {
                 ? `{:else if ${call(trimmed.replace(/^:else\s+if\s/, ''), '__truthy')}}`
                 : markup.slice(index, end + 1);
         } else if (trimmed.startsWith('@')) {
-            if (trimmed.startsWith('@const')) scopes[scopes.length - 1]?.push(...declaredBy(trimmed));
-            out += markup.slice(index, end + 1);
+            const assigned = trimmed.match(/^@const\s+([^=]+)=([\s\S]+)$/);
+
+            if (assigned) {
+                // Compiled before the name it declares enters scope: a const may
+                // read the block's names and the consts before it, never itself.
+                out += `{@const ${assigned[1].trim()} = ${call(assigned[2], '')}}`;
+                scopes[scopes.length - 1]?.push(...declaredBy(trimmed));
+            } else if (trimmed.startsWith('@html ')) {
+                out += `{@html ${call(trimmed.slice(6), '__text')}}`;
+            } else {
+                // {@render} calls a snippet, which is a JavaScript function, and
+                // {@debug} takes names rather than an expression.
+                out += markup.slice(index, end + 1);
+            }
         } else {
             out += `{${call(inner, '__text')}}`;
         }
@@ -331,6 +364,28 @@ function collector(filename) {
     };
 }
 
+// Django's loop counter, in Python because that is where the template reads it
+// from: `forloop.counter` is attribute access, which a JavaScript object would
+// not answer. Appended to a component's own source, and only when its markup
+// names it — one object per row is not free.
+const FORLOOP = `class __Forloop:
+    def __init__(self, index, total):
+        self.counter0 = index
+        self.counter = index + 1
+        self.revcounter = total - index
+        self.revcounter0 = total - index - 1
+        self.first = index == 0
+        self.last = index == total - 1
+        self.length = total
+
+
+def __forloop(index, sequence):
+    try:
+        total = len(sequence)
+    except TypeError:
+        total = -1
+    return __Forloop(index, total)`;
+
 // The Svelte preprocessor: runs before Svelte parses the component, so the
 // compiler only ever sees ordinary JavaScript with runes.
 export function python() {
@@ -354,7 +409,9 @@ export function python() {
             );
 
             const collect = collector(filename);
-            return { code: overMarkup(content, (markup) => pythonExpressions(markup, collect)) };
+            // Django syntax first, Svelte blocks after: the translation is
+            // purely lexical, so everything downstream sees one language.
+            return { code: overMarkup(content, (markup) => pythonExpressions(dtl(markup), collect)) };
         },
         script({ content, attributes, filename }) {
             if (attributes.lang !== 'python') {
@@ -364,7 +421,9 @@ export function python() {
 
             const name = nameFor(filename);
             const defs = templateFunctions.get(filename) || [];
-            const source = defs.length ? `${content}\n${defs.join('\n\n')}\n` : content;
+            const helpers = defs.some((d) => d.includes('__forloop(')) ? [FORLOOP] : [];
+            const appended = [...defs, ...helpers];
+            const source = appended.length ? `${content}\n${appended.join('\n\n')}\n` : content;
 
             const { script, module, map, stdlib, imports } = compile(
                 source,

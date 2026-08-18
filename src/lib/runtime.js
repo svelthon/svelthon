@@ -48,6 +48,23 @@ export const py = {
         }
     },
 
+    // `{#each}` walks a JavaScript array. A Python list or tuple already is one,
+    // but a dict, a set, a range, a generator or the result of .items() is not —
+    // and iterating those is the whole point of writing the loop in Python.
+    seq(value) {
+        if (Array.isArray(value)) return value;
+        if (value === undefined || value === null) return [];
+
+        try {
+            return _b_.list.$factory(value);
+        } catch (error) {
+            // A foreign JavaScript iterable — a NodeList from bind:this — is not
+            // Python's to convert, but Svelte can still walk it.
+            if (value && typeof value[Symbol.iterator] === 'function') return value;
+            throw error;
+        }
+    },
+
     repr(value) {
         try {
             return _b_.repr(value);
