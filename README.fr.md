@@ -176,8 +176,15 @@ La règle : `on*`, `bind:`, `use:`, `class:`, `style:` et la famille des
 transitions restent en JavaScript ; tout autre attribut, prop de composant
 compris, est du Python — de même que le raccourci `{nom}` et l'étalement
 `{...attrs}`, développés pour que la lecture passe par le namespace au lieu de
-le contourner. Un composant sans Python à lui — un consommateur de store
-— conserve le gabarit JavaScript et les helpers `py.str()` / `py.truthy()`.
+le contourner.
+
+**Le langage du gabarit suit le langage du script, sans troisième mode.** Un
+composant sans `lang="python"` est un composant JavaScript et le reste, même
+s'il importe un store `.py` : son `{valeur}` est le `{valeur}` de Svelte, et une
+liste Python s'y rend comme JavaScript la rend. Rien n'est injecté dans le dos de
+l'auteur — exactement comme TypeScript ne fuit pas dans un fichier `.js`.
+`py.str()`, `py.truthy()` et `py.of()` restent exportés du runtime pour un
+composant JavaScript qui *veut* la sémantique Python et les importe exprès.
 
 Ça coûte **1,3× à 1,7× sur le rendu** face à un composant JavaScript
 (`npm run bench` — l'écart entre les deux est ce qu'un portable modeste mesure

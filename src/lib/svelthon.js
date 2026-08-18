@@ -54,109 +54,6 @@ function overMarkup(content, transform) {
     return out + transform(content.slice(cut));
 }
 
-// Text interpolation is `String(value)`, which renders a Python list as `a,b,c`
-// and a dict as `[object Object]`. Lists are literally JS arrays, so no
-// prototype can be patched — the interpolation itself has to go through
-// Python's str(). Attribute values and component props are left alone: those
-// carry the value, not its rendering.
-function pythonText(markup) {
-    let out = '';
-    let i = 0;
-    let inTag = false;
-    let quote = null;
-
-    while (i < markup.length) {
-        const c = markup[i];
-
-        if (inTag) {
-            if (quote) {
-                if (c === quote) quote = null;
-            } else if (c === '"' || c === "'") {
-                quote = c;
-            } else if (c === '{') {
-                // An attribute expression: keep the value as it is.
-                const end = closingBrace(markup, i);
-                if (end !== -1) {
-                    out += markup.slice(i, end + 1);
-                    i = end + 1;
-                    continue;
-                }
-            } else if (c === '>') {
-                inTag = false;
-            }
-
-            out += c;
-            i++;
-            continue;
-        }
-
-        if (c === '<') {
-            inTag = true;
-            out += c;
-            i++;
-            continue;
-        }
-
-        if (c === '{') {
-            const end = closingBrace(markup, i);
-            if (end === -1) {
-                out += c;
-                i++;
-                continue;
-            }
-
-            const inner = markup.slice(i + 1, end);
-            // Blocks and tags — {#if}, {:else}, {/each}, {@html} — are not values.
-            out += '#/:@'.includes(inner.trimStart()[0])
-                ? markup.slice(i, end + 1)
-                : `{py.str(${inner.trim()})}`;
-
-            i = end + 1;
-            continue;
-        }
-
-        out += c;
-        i++;
-    }
-
-    return out;
-}
-
-// `{#if items}` is a JavaScript condition, so an empty list — an object — reads
-// as true where Python reads false. Same for an empty dict and for None. Route
-// every condition through Python's own bool().
-function pythonConditions(markup) {
-    const opener = /\{(#if|:else\s+if)\s+/g;
-    let out = '';
-    let cut = 0;
-    let match;
-
-    while ((match = opener.exec(markup))) {
-        const exprStart = match.index + match[0].length;
-        const end = closingBrace(markup, match.index);
-        if (end === -1) continue;
-
-        out += markup.slice(cut, exprStart) + `py.truthy(${markup.slice(exprStart, end).trim()})`;
-        cut = end;
-        opener.lastIndex = end;
-    }
-
-    return out + markup.slice(cut);
-}
-
-// Template expressions compiled as Python.
-//
-// Each site becomes a hidden Python function appended to the module, and the
-// markup calls it. The function reads the component's names through the
-// namespace accessors, so Svelte discovers its dependencies exactly as it does
-// for @derived — nothing to declare. The *kind* of site decides the wrapper:
-// text renders with str(), a condition with bool(), which is why neither
-// py.str() nor py.truthy() appears in the output any more.
-//
-// Only the two sites where a Python value is *read* are converted. Attribute
-// values and event handlers stay JavaScript: they carry a value or a callback,
-// not a rendering — the same boundary py.str() already drew.
-
 // Directives carry a callback or a JavaScript value, never a rendering, so they
 // keep the host language: `onclick={increment}`, `bind:value={name}`,
 // `use:action={opts}`, the transition family. Every other attribute — including
@@ -360,13 +257,6 @@ function pythonExpressions(markup, collect) {
 }
 
 const HAS_PYTHON_SCRIPT = /<script[^>]*\blang=["']python["']/;
-const IMPORTS_STORE = /from\s+["'][^"']+\.py["']/;
-
-// A component that only *consumes* a store has no Python script of its own, yet
-// its markup still renders Python values and needs the same rewriting — so it
-// needs `py` in scope too.
-const needsRuntime = new Set();
-
 // Python line numbers count from the start of the <script> body; the file counts
 // from its first line. The gap is the number of lines before the opening tag.
 const lineOffsets = new Map();
@@ -397,20 +287,22 @@ function collector(filename) {
 
 // The Svelte preprocessor: runs before Svelte parses the component, so the
 // compiler only ever sees ordinary JavaScript with runes.
-export function python() {
+// `path` mirrors PYTHONPATH: the directories searched for the `.py` a component
+// imports, after its own. Without it, `import counter_store` only ever resolves
+// to a sibling file — and a component that reached the module some other way
+// would appear to work purely by load order.
+export function python(options = {}) {
+    const searchPath = options.path || [];
+
     return {
         name: 'svelthon',
         markup({ content, filename }) {
-            const isPython = HAS_PYTHON_SCRIPT.test(content);
-            if (!isPython && !IMPORTS_STORE.test(content)) return;
-
-            // A component with no Python of its own — a store consumer — has
-            // nowhere to put the hidden functions, so its markup keeps the
-            // JavaScript path. The template language follows the script language.
-            if (!isPython) {
-                needsRuntime.add(filename);
-                return { code: overMarkup(content, (markup) => pythonText(pythonConditions(markup))) };
-            }
+            // The template language follows the script language, with no third
+            // mode: a component without `lang="python"` is a JavaScript
+            // component and stays one, exactly as a .js file is untouched by
+            // TypeScript. Python semantics are opt-in, per file, by declaring
+            // Python — never injected behind an author's back.
+            if (!HAS_PYTHON_SCRIPT.test(content)) return;
 
             lineOffsets.set(
                 filename,
@@ -421,10 +313,7 @@ export function python() {
             return { code: overMarkup(content, (markup) => pythonExpressions(markup, collect)) };
         },
         script({ content, attributes, filename }) {
-            if (attributes.lang !== 'python') {
-                if (!needsRuntime.delete(filename)) return;
-                return { code: `import { py } from 'svelthon/runtime';\n${content}` };
-            }
+            if (attributes.lang !== 'python') return;
 
             const name = nameFor(filename);
             const defs = templateFunctions.get(filename) || [];
@@ -441,12 +330,20 @@ export function python() {
                 }
             );
 
-            // `import counter_store` in a component resolves to a sibling .py.
-            // The store module has to be evaluated before init() runs, so its
-            // namespace is registered by the time Brython looks it up.
+            // `import counter_store` in a component resolves to a .py file, its
+            // own directory first, then `path`. The module has to be evaluated
+            // before init() runs, so its namespace is registered by the time
+            // Brython looks it up.
             const stores = imports
-                .map((mod) => join(dirname(filename || '.'), `${mod}.py`))
-                .filter((path) => existsSync(path));
+                .map((mod) =>
+                    [dirname(filename || '.'), ...searchPath]
+                        // Absolute: the prelude is emitted into a virtual
+                        // module, against which a relative specifier would
+                        // resolve to nothing.
+                        .map((directory) => resolve(directory, `${mod}.py`))
+                        .find((candidate) => existsSync(candidate))
+                )
+                .filter(Boolean);
 
             const prelude = stores.map((path) => `import ${JSON.stringify(path)};`).join('\n');
 

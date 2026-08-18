@@ -15,16 +15,16 @@ test('un état Python partagé entre deux composants', () => {
     const click = (k) => { t.querySelector(`button[data-k="${k}"]`).click(); flushSync(); };
 
     expect(read('a')).toBe('A:0:[]');
-    expect(read('b')).toBe('B:0');
+    expect(read('b')).toBe('B:0:');
 
     click('inc');
     click('inc');
     expect(read('a')).toBe('A:2:[1, 2]');
-    expect(read('b')).toBe('B:2');   // l'autre composant suit
+    expect(read('b')).toBe('B:2:1,2');   // l'autre composant suit
 
     click('reset');
     expect(read('a')).toBe('A:0:[]');
-    expect(read('b')).toBe('B:0');
+    expect(read('b')).toBe('B:0:');
 });
 
 test('l’état d’un store survit au démontage', () => {
@@ -55,11 +55,11 @@ test('le Python d’un composant importe le store', () => {
 
     t.querySelector('button[data-k="reset"]').click();
     flushSync();
-    expect(t.querySelector('p[data-k="b"]').textContent).toBe('B:0');
+    expect(t.querySelector('p[data-k="b"]').textContent).toBe('B:0:');
 
     t.querySelector('button[data-k="bump"]').click();
     flushSync();
 
     expect(t.querySelector('p[data-k="seen"]').textContent).toBe('2'); // lu depuis Python
-    expect(t.querySelector('p[data-k="b"]').textContent).toBe('B:2');  // vu par l'autre composant
+    expect(t.querySelector('p[data-k="b"]').textContent).toBe('B:2:1,2');  // vu par l'autre composant
 });

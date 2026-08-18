@@ -1,6 +1,10 @@
-<script module>
-    import { store } from '../../src/lib/counter_store.py';
+<script lang="python">
+import counter_store
+
+
+def inc():
+    counter_store.increment()
 </script>
 
-<p data-k="a">A:{store.count}:{store.history}</p>
-<button data-k="inc" onclick={store.increment}>+</button>
+<p data-k="a">A:{counter_store.count}:{counter_store.history}</p>
+<button data-k="inc" onclick={inc}>+</button>

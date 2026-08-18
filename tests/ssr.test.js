@@ -13,7 +13,7 @@ import Semantics from './Semantics.svelte';
 import StoreDemo from './StoreDemo.svelte';
 import Composition from './fixtures/Composition.svelte';
 import CtxHost from './fixtures/CtxHost.svelte';
-import { store } from '../src/lib/counter_store.py';
+import { store } from '../src/counter_store.py';
 
 // Svelte parsème le HTML de marqueurs d'hydratation ; seul le texte nous importe.
 const text = (result) => result.body.replace(/<!--[^>]*-->/g, '');

@@ -1,7 +1,15 @@
-<script module>
-    import { store } from './lib/counter_store.py';
+<script lang="python">
+import counter_store
+
+
+def increment():
+    counter_store.increment()
+
+
+def reset():
+    counter_store.reset()
 </script>
 
-<button onclick={store.increment}>increment()</button>
-<button onclick={store.reset}>reset()</button>
-<output>{store.count} · {store.history}</output>
+<button onclick={increment}>increment()</button>
+<button onclick={reset}>reset()</button>
+<output>{counter_store.count} · {counter_store.history}</output>

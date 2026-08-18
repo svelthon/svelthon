@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { python, svelthon, vendorQuirks } from './src/lib/svelthon.js';
 
 export default defineConfig({
-    plugins: [svelthon(), vendorQuirks(), svelte({ preprocess: [python()] })],
+    plugins: [svelthon(), vendorQuirks(), svelte({ preprocess: [python({ path: ['src'] })] })],
     resolve: {
         alias: {
             'svelthon/runtime': fileURLToPath(new URL('./src/lib/runtime.js', import.meta.url))

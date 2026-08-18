@@ -202,9 +202,15 @@ JavaScript value rather than a rendering:
 The rule: `on*`, `bind:`, `use:`, `class:`, `style:` and the transition family
 stay JavaScript; every other attribute, component prop included, is Python — and
 so are the shorthand `{name}` and the spread `{...attrs}`, which are expanded so
-that the read goes through the namespace rather than around it. A
-component with no Python of its own — a store consumer — keeps the JavaScript
-template and the `py.str()` / `py.truthy()` helpers.
+that the read goes through the namespace rather than around it.
+
+**The template language follows the script language, with no third mode.** A
+component without `lang="python"` is a JavaScript component and stays one, even
+when it imports a `.py` store: its `{value}` is Svelte's `{value}`, and a Python
+list renders as JavaScript renders it. Nothing is injected behind an author's
+back — exactly as TypeScript does not leak into a `.js` file. `py.str()`,
+`py.truthy()` and `py.of()` remain exported from the runtime for a JavaScript
+component that *wants* Python semantics and imports them on purpose.
 
 It costs **1.3× to 1.7× on rendering** against a JavaScript component (`npm run
 bench`, the spread being what a modest laptop measures from one day to the next),
