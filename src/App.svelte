@@ -111,7 +111,7 @@
                 application — both components below read the same counter.</p>
         </div>
         <div class="body">
-            <div class="files"><div class="code"><span class="tag">counter_store.py</span><pre><code><Highlight file="counter_store.py" code={storeSrc} /></code></pre></div><div class="code"><span class="tag">StoreDemo.svelte — how a component uses it</span><pre><code><Highlight file="StoreDemo.svelte" code={storeDemoSrc} /></code></pre></div></div>
+            <div class="files"><div class="code"><span class="tag">counter_store.svelte.py</span><pre><code><Highlight file="counter_store.svelte.py" code={storeSrc} /></code></pre></div><div class="code"><span class="tag">StoreDemo.svelte — how a component uses it</span><pre><code><Highlight file="StoreDemo.svelte" code={storeDemoSrc} /></code></pre></div></div>
             <div class="live pair">
                 <div><span class="tag">instance A</span><div class="row"><StoreDemo /></div></div>
                 <div><span class="tag">instance B</span><div class="row"><StoreDemo /></div></div>

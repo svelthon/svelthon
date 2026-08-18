@@ -437,6 +437,32 @@ export function schedule(result, where, lineOffset = 0) {
     return undefined;
 }
 
+// What an exported function hands back to the framework.
+//
+// SvelteKit serialises whatever `load()` returns, and a Brython dict carries
+// symbol-keyed internals (`Symbol(OB_TYPE)`) that its serialiser refuses
+// outright. So the boundary converts: Python containers become plain JavaScript
+// data, which is the only shape anything outside Python can read anyway.
+export function plainData(value) {
+    if (value === undefined || value === null || value === NONE) return null;
+    if (typeof value !== 'object') return value;
+    if (Array.isArray(value)) return value.map(plainData); // list, tuple
+
+    const cls = globalThis.__BRYTHON__.get_class(value);
+
+    if (cls === _b_.dict) {
+        const out = {};
+        for (const key in value) out[key] = plainData(value[key]);
+        return out;
+    }
+
+    if (cls === _b_.set || cls === _b_.frozenset) {
+        return _b_.list.$factory(value).map(plainData);
+    }
+
+    return value; // anything else is the caller's business
+}
+
 // A store's namespace, published under its Python module name, so a component's
 // own Python can `import counter_store` and reach the very same signals the
 // template reads. Without it the bridge would only run one way.
