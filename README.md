@@ -314,12 +314,26 @@ def add():
     fill(items)          # reactive all the same
 ```
 
-Two limits remain, both held by tests:
+Nesting comes for free from the same marker. Reading a container out of a watched
+one puts it under the same watch — which is what deep proxying buys Svelte, done
+lazily and without a single proxy: the child is marked the first time Python
+reaches for it, which is necessarily just before it could be mutated.
+
+```python
+data = {"rows": []}
+data["rows"].append(x)   # reactive: reading data["rows"] put it under watch
+```
+
+Measured on `$B.$getitem`, the hottest of the three interceptions: **+4% on
+`xs[i]`**, and +4% again when the marker actually travels.
+
+What is left, each held by a test:
 
 | | propagates |
 |---|---|
 | `items.append(x)`, `table[k] = v`, `del table[k]`, `tags.add(x)` | yes |
-| a nested container — `data["rows"].append(x)` | no — only the outer object is marked |
+| `data["rows"].append(x)` — a nested container | yes |
+| a child reached only through `.items()` or `.values()` | no — nothing indexed it |
 | an instance attribute — `box.value += 1` | no — attribute writes are not intercepted |
 | an item of a keyed list — `it.label = …` | no — replace the item: `items[i] = Item(…)` |
 
