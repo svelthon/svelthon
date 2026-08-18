@@ -153,6 +153,22 @@ comprehension has had its own scope since Python 3.0. Verified against CPython
 SVELTHON's suite marks this with a `test.fails`, so the day it is fixed upstream
 the test speaks up rather than silently passing.
 
+### `FSTRING_MIDDLE` reports the position of the token that opened the f-string
+
+```python
+seen = f"{len(items)} items"
+```
+
+The tokenizer emits, in order, `FSTRING_START` `f"` at columns 7–9, then the
+tokens of `{len(items)}` at 9–21, then `FSTRING_MIDDLE` `" items"` at **7–13**,
+then `FSTRING_END` at 27–28. The middle chunk's own text sits at 21–27; the
+positions reported are those of the start token.
+
+Anything consuming the token stream positionally — a syntax highlighter, an
+editor, a formatter — walks backwards at that point and re-emits text it has
+already seen. SVELTHON's demo highlighter (`src/Highlight.svelte`) works around
+it by ignoring a token that starts before the cursor.
+
 ## Rough edges worth smoothing
 
 Not bugs, but each cost real debugging time because the failure gave no clue.

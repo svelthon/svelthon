@@ -484,7 +484,9 @@ const countTests = () =>
         .filter((name) => name.endsWith('.test.js'))
         .reduce(
             (total, name) =>
-                total + (readFileSync(`src/${name}`, 'utf8').match(/\btest\(/g) || []).length,
+                // Anchored: a `/re/.test(x)` elsewhere in a file is not a test,
+                // and `test.fails()` — the failures we expect — is one.
+                total + (readFileSync(`src/${name}`, 'utf8').match(/^\s*test(\.fails)?\(/gm) || []).length,
             0
         );
 

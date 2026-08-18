@@ -45,6 +45,34 @@ Le motif attendu est seulement *vérifié* à la compilation : si un futur codeg
 cessait de l'émettre, le build échoue bruyamment au lieu de livrer un composant
 sans réactivité.
 
+## L'API, et ce qu'elle remplace
+
+Six noms, et rien à importer : ils sont injectés dans le namespace du module, et
+un composant qui définit le sien le garde. Chacun se tient là où se tient une
+rune en JavaScript.
+
+| Python | Svelte 5 |
+|---|---|
+| `count = 0` | `let count = $state(0)` |
+| `name: str` | `let { name } = $props()` |
+| `size: int = 3` | `let { size = 3 } = $props()` |
+| `value: str = bindable()` | `let { value = $bindable() } = $props()` |
+| `@derived` | `$derived.by(…)` |
+| `@effect` | `$effect(…)` |
+| `def on_mount()` / `on_destroy()` | `onMount()` / `onDestroy()` |
+| `set_context(k, v)` / `get_context(k)` | `setContext(k, v)` / `getContext(k)` |
+| `publish("items")` | *rien — `$state` proxifie en profondeur* |
+
+La dernière ligne est la seule qui ajoute quelque chose au lieu de le renommer.
+Svelte rend `items.push(x)` réactif en proxifiant la valeur en profondeur, ce que
+SVELTHON ne peut pas utiliser : un objet Python derrière un proxy échoue à ses
+propres vérifications de type (`repr((1, 2))` lève). Une mutation est donc
+republiée par son nom, et c'est la réaffectation qui propage.
+
+Il n'y a pas d'équivalent de `$state` à écrire, parce qu'il n'y a rien à
+déclarer : une affectation au niveau du module *est* la déclaration, et le
+compilateur la lit dans l'AST.
+
 ## Chaîne de compilation
 
 ```

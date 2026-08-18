@@ -59,6 +59,7 @@
         const parts = [];
         let cursor = 0;
         let previous = null;
+        let fstring = 0;
 
         try {
             for (const token of globalThis.__BRYTHON__.tokenizer(`${code}\n`, '<demo>', 'file')) {
@@ -68,8 +69,19 @@
                 const to = Math.min(starts[token.end_lineno - 1] + token.end_col_offset, code.length);
                 if (from >= code.length) break;
 
-                if (from > cursor) parts.push({ cls: null, text: code.slice(cursor, from) });
+                // Brython bug: FSTRING_MIDDLE reports the position of the token
+                // that opened the f-string, not its own, so it points backwards
+                // into text already emitted. Skipping it loses nothing — the gap
+                // between tokens is sliced from the source anyway.
+                if (from < cursor) continue;
+
+                // That gap is part of the literal when it falls inside one.
+                if (from > cursor)
+                    parts.push({ cls: fstring ? 'str' : null, text: code.slice(cursor, from) });
                 parts.push({ cls: classifyPython(token, previous), text: code.slice(from, to) });
+
+                if (token.type === FSTRING[0]) fstring++;
+                else if (token.type === FSTRING[2]) fstring--;
 
                 cursor = to;
                 if (token.string.trim()) previous = token;

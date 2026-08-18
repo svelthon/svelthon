@@ -73,6 +73,34 @@ import creates its namespace through the same function. The expected pattern is
 only *checked* at compile time — if a future code generator stopped emitting it,
 the build fails loudly instead of shipping a component with no reactivity.
 
+## The API, and what it replaces
+
+Six names, and nothing to import: they are injected into the module's namespace,
+and a component that defines its own keeps it. Each one stands where a rune
+stands in JavaScript.
+
+| Python | Svelte 5 |
+|---|---|
+| `count = 0` | `let count = $state(0)` |
+| `name: str` | `let { name } = $props()` |
+| `size: int = 3` | `let { size = 3 } = $props()` |
+| `value: str = bindable()` | `let { value = $bindable() } = $props()` |
+| `@derived` | `$derived.by(…)` |
+| `@effect` | `$effect(…)` |
+| `def on_mount()` / `on_destroy()` | `onMount()` / `onDestroy()` |
+| `set_context(k, v)` / `get_context(k)` | `setContext(k, v)` / `getContext(k)` |
+| `publish("items")` | *nothing — `$state` proxies deeply* |
+
+The last row is the only one that adds something rather than renaming it. Svelte
+makes `items.push(x)` reactive by proxying the value in depth, which SVELTHON
+cannot use: a Python object behind a proxy fails its own type checks
+(`repr((1, 2))` raises). So a mutation is republished by name, and rebinding is
+what propagates.
+
+There is no `$state` equivalent to write, because there is nothing to declare: a
+module-level assignment already *is* the declaration, and the compiler reads it
+from the AST.
+
 ## Compilation pipeline
 
 ```
@@ -558,7 +586,7 @@ Validated by `npm test` — 101 tests, plus 2 expected failures (below):
   Every expected value was produced by running the component's Python through
   CPython 3.12 as-is, never written by hand. Brython matches CPython on **39 of
   40 points**;
-- production build: **248 KB gzip**, Brython runtime included.
+- production build: **250 KB gzip**, Brython runtime included.
 
 The grid doubles as an acceptance bench for optimising code generators: one that
 drops call frames breaks `Frames`, one that unboxes integers breaks `Integers`,
@@ -633,7 +661,7 @@ deep-proxies the objects inside a `$state` array; SVELTHON's names are
 itself exactly where a real application spends its time.
 
 Loading is the real price: **1.2 s to interactive** for the production demo on
-this laptop, against 0.5 s for the same page without Brython — 248 KB gzip
+this laptop, against 0.5 s for the same page without Brython — 250 KB gzip
 instead of 13 KB. Paid once per session, not per page, since the app never
 reloads.
 

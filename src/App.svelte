@@ -3,6 +3,7 @@
     import Greeting from './Greeting.svelte';
     import Expressions from './Expressions.svelte';
     import Blocks from './Blocks.svelte';
+    import Decorators from './Decorators.svelte';
     import Semantics from './Semantics.svelte';
     import StoreDemo from './StoreDemo.svelte';
     import Highlight from './Highlight.svelte';
@@ -17,6 +18,7 @@
     import storeDemoSrc from './StoreDemo.svelte?raw';
     import expressionsSrc from './Expressions.svelte?raw';
     import blocksSrc from './Blocks.svelte?raw';
+    import decoratorsSrc from './Decorators.svelte?raw';
     import semanticsSrc from './Semantics.svelte?raw';
 </script>
 
@@ -117,8 +119,41 @@
         </div>
     </article>
 
+    <article class="demo">
+        <div class="head">
+            <h2>The API, and what it replaces</h2>
+            <p>Six names, and nothing to import: they are injected into the module's namespace, and
+                a component that defines its own keeps it. Each one stands where a rune stands in
+                JavaScript — the mapping is one to one, except for <code>publish()</code>.</p>
+        </div>
+        <div class="body">
+            <div class="files"><div class="code"><span class="tag">Decorators.svelte</span><pre><code><Highlight file="Decorators.svelte" code={decoratorsSrc} /></code></pre></div></div>
+            <div class="live stack"><Decorators /></div>
+        </div>
+        <div class="api">
+            <table>
+                <thead><tr><th>Python</th><th>Svelte 5</th></tr></thead>
+                <tbody>
+                    <tr><td>count = 0</td><td>let count = $state(0)</td></tr>
+                    <tr><td>name: str</td><td>let &lbrace; name &rbrace; = $props()</td></tr>
+                    <tr><td>size: int = 3</td><td>let &lbrace; size = 3 &rbrace; = $props()</td></tr>
+                    <tr><td>value: str = bindable()</td><td>let &lbrace; value = $bindable() &rbrace; = $props()</td></tr>
+                    <tr><td>@derived</td><td>$derived.by(…)</td></tr>
+                    <tr><td>@effect</td><td>$effect(…)</td></tr>
+                    <tr><td>def on_mount() / on_destroy()</td><td>onMount() / onDestroy()</td></tr>
+                    <tr><td>set_context(k, v) / get_context(k)</td><td>setContext(k, v) / getContext(k)</td></tr>
+                    <tr><td>publish("items")</td><td class="none">nothing — $state proxies deeply</td></tr>
+                </tbody>
+            </table>
+            <p>The last row is the only one that adds something. Svelte makes
+                <code>items.push(x)</code> reactive by proxying the value in depth, which SVELTHON
+                cannot use: a Python object behind a proxy fails its own type checks. So a mutation
+                is republished by name, and rebinding is what propagates.</p>
+        </div>
+    </article>
+
     <footer>
-        <span><strong>248 KB</strong> gzip, runtime included</span>
+        <span><strong>250 KB</strong> gzip, runtime included</span>
         <span><strong>{tests}</strong> tests</span>
         <span><strong>0 ms</strong> compiling at load</span>
     </footer>
@@ -300,6 +335,51 @@
         background: var(--code-bg);
         border-radius: 4px;
         font-size: 0.86em;
+    }
+
+    .api {
+        padding: 1.15rem 1.4rem 1.3rem;
+        border-top: 1px solid var(--border);
+        overflow-x: auto;
+    }
+
+    .api table {
+        border-collapse: collapse;
+        width: 100%;
+        font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+        font-size: 0.82rem;
+    }
+
+    .api th {
+        text-align: left;
+        font-weight: 600;
+        font-size: 0.72rem;
+        letter-spacing: 0.02em;
+        color: var(--muted);
+        padding-bottom: 0.4rem;
+    }
+
+    .api td {
+        padding: 0.3rem 1.5rem 0.3rem 0;
+        border-top: 1px solid var(--border);
+        white-space: nowrap;
+    }
+
+    .api td:first-child {
+        color: var(--accent);
+    }
+
+    .api .none {
+        color: var(--muted);
+        font-style: italic;
+    }
+
+    .api p {
+        margin: 1rem 0 0;
+        max-width: 46rem;
+        font-size: 0.9rem;
+        color: var(--muted);
+        text-wrap: pretty;
     }
 
     .live {
