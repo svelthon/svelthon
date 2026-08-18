@@ -437,10 +437,10 @@ describe('réactivité — quelles écritures Python propagent', () => {
         expect(read('nested')).toBe("{'rows': []}");
     });
 
-    test("muter un attribut d'instance ne propage pas", () => {
+    test("muter un attribut d'instance propage", () => {
         const { read, click } = setup();
 
         click('mutate_attribute');
-        expect(read('attr')).toBe('0');
+        expect(read('attr')).toBe('1');
     });
 });

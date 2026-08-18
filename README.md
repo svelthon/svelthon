@@ -309,7 +309,7 @@ fails its own type checks. But a Python list *is* a JavaScript array, so the
 object itself can carry a non-enumerable marker: `$B.get_class` reads only
 `ob_type`, so `type(items) is list` stays true and `repr` is untouched. Brython
 compiles every method call to `$B.call_attr` and every indexed write to
-`$B.$setitem`, so **three interceptions cover the whole language**, and an unmarked
+`$B.$setitem`, so **seven dispatch points cover the whole language**, and an unmarked
 object pays one property miss.
 
 The marker travels with the object, which no compile-time analysis could match:
@@ -332,22 +332,33 @@ data = {"rows": []}
 data["rows"].append(x)   # reactive: reading data["rows"] put it under watch
 ```
 
-Measured on `$B.$getitem`, the hottest of the three interceptions: **+4% on
+Measured on `$B.$getitem`, the hottest of them: **+4% on
 `xs[i]`**, and +4% again when the marker actually travels.
 
-What is left, each held by a test:
+Attributes work the same way — `$setattr`, `$setattr1` and `$delattr` — and
+`{#each}` hands the watch down to its rows, so a row's block subscribes to the
+row itself. Which closes the surprising case: in `{#each items as it (it.id)}`,
+`it.label = "…"` re-renders the row **and** keeps its DOM node, since the key did
+not move.
+
+Where it stands, each line held by a test:
 
 | | propagates |
 |---|---|
 | `items.append(x)`, `table[k] = v`, `del table[k]`, `tags.add(x)` | yes |
 | `data["rows"].append(x)` — a nested container | yes |
+| `box.value += 1` — an instance attribute | yes |
+| `it.label = …` — an item of a keyed list | yes |
+| a mutation made inside a helper the compiler cannot see | yes |
+| through a `@derived` that hands back the object, or a component prop | yes |
 | a child reached only through `.items()` or `.values()` | no — nothing indexed it |
-| an instance attribute — `box.value += 1` | no — attribute writes are not intercepted |
-| an item of a keyed list — `it.label = …` | no — replace the item: `items[i] = Item(…)` |
+| a DOM attribute or a spread — `<p {...attrs}>` | no — Svelte compares by identity before writing |
 
-The last case surprises: in `{#each items as it (it.id)}`, mutating an item's
-attribute re-renders nothing, because the item kept its identity. Replacing it
-updates the render **and** still reuses the DOM node, since the key did not move.
+The last two are of different kinds. The first is the price of laziness: the
+watch is handed over when Python reaches for a child, and `.items()` reaches for
+nothing. The second is not ours to fix — Svelte compares the value against the
+one it last applied, by identity, inside its own DOM writer, where no signal can
+reach.
 
 Accessors live on the namespace's **prototype**, never on the object itself:
 rebinding a global emits `$B.delete_for_reassign(name, locals)`, and a `delete`

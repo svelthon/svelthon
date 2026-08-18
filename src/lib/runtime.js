@@ -52,7 +52,16 @@ export const py = {
     // but a dict, a set, a range, a generator or the result of .items() is not —
     // and iterating those is the whole point of writing the loop in Python.
     seq(value) {
-        if (Array.isArray(value)) return value;
+        if (Array.isArray(value)) {
+            // Hand the watch down to the rows: {#each} walks the array in
+            // JavaScript, never through $getitem, so this is the only path by
+            // which an item can come under watch before its block reads it.
+            if (value.$notify !== undefined) {
+                for (const item of value) inherit(value, item);
+            }
+
+            return value;
+        }
         if (value === undefined || value === null) return [];
 
         try {
@@ -164,6 +173,28 @@ function installMutationTracking($B) {
         notify(obj);
         return result;
     };
+
+    // `box.value = 1` and `del box.value`. Brython compiles an attribute write
+    // through one of two entry points depending on the statement, and both have
+    // to be covered or the rule would hold only half the time.
+    for (const name of ['$setattr', '$setattr1']) {
+        const setattr = $B[name];
+        $B[name] = function (obj, attr, value, ...rest) {
+            const result = setattr(obj, attr, value, ...rest);
+            if (obj !== null && typeof obj === 'object' && obj.$notify !== undefined) {
+                inherit(obj, value); // an attribute holding a container is watched too
+                obj.$notify();
+            }
+            return result;
+        };
+    }
+
+    const delattr = $B.$delattr;
+    $B.$delattr = function (obj, ...rest) {
+        const result = delattr(obj, ...rest);
+        notify(obj);
+        return result;
+    };
 }
 
 installMutationTracking(globalThis.__BRYTHON__);
@@ -173,10 +204,12 @@ installMutationTracking(globalThis.__BRYTHON__);
 function mutable(value) {
     if (value === null || value === undefined || typeof value !== 'object') return false;
     if (Array.isArray(value)) return true; // list — a tuple is one too, and immutable
+    if (value === NONE) return false; // a singleton shared by the whole program
 
     try {
         const cls = globalThis.__BRYTHON__.get_class(value);
-        return cls === _b_.dict || cls === _b_.set;
+        // A class object is not data — and a function is not an object here.
+        return cls !== undefined && cls !== _b_.type;
     } catch {
         return false; // a foreign JavaScript value is not ours to mark
     }
