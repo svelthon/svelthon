@@ -222,6 +222,21 @@ function mutable(value) {
 // The pair is what makes the reactivity a property of the *object* rather than
 // of the place it was declared — duck typing, applied to change notification.
 // Anything holding the value can subscribe to it just by handing it through.
+// Brython keeps an instance's attributes under a private symbol, not as JS
+// properties — so they have to be found once, from the first object carrying it.
+let DICT;
+
+function ownAttributes(value) {
+    if (Array.isArray(value)) return undefined;
+
+    if (DICT === undefined) {
+        DICT = Object.getOwnPropertySymbols(value).find((symbol) => symbol.description === 'DICT');
+        if (DICT === undefined) return undefined;
+    }
+
+    return value[DICT];
+}
+
 function mark(value, bumps, reads) {
     const marker = () => {
         for (const one of bumps) one();
@@ -240,6 +255,16 @@ function mark(value, bumps, reads) {
         });
     } catch {
         /* un objet figé n'est pas à nous : on le laisse tel quel */
+        return value;
+    }
+
+    // A container already sitting in an attribute — `self.rows = []` written in
+    // __init__ — was put there before the object came under watch. Hand it the
+    // watch now. inherit() marks in turn, so depth follows on its own, and a
+    // cycle stops at the first object that already carries a marker.
+    const attributes = ownAttributes(value);
+    if (attributes !== undefined) {
+        for (const key in attributes) inherit(value, attributes[key]);
     }
 
     return value;

@@ -123,7 +123,7 @@ function pythonExpressions(markup, collect) {
         // follow() on the block's own names: a row of an {#each} is a plain
         // JavaScript value, not a signal, so reading `it.label` registers
         // nothing by itself. This is what subscribes the row's block to the row.
-        return `${name}(${args.join(', ')})`; // MESURE : sans follow
+        return `${name}(${args.map((arg) => `follow(${arg})`).join(', ')})`;
     };
 
     while (index < markup.length) {

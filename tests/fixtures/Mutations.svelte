@@ -4,14 +4,19 @@ items = []
 table = {}
 tags = set()
 nested = {"rows": []}
+nothing = None
+Alias = None
 
 
 class Box:
     def __init__(self):
         self.value = 0
+        self.rows = []
+        self.extra = "là"
 
 
 box = Box()
+Alias = Box
 
 
 def rebind():
@@ -68,6 +73,18 @@ def mutate_attribute():
     box.value += 1
 
 
+def drop_attribute():
+    del box.extra
+
+
+def replace_rows():
+    box.rows = []
+
+
+def add_row():
+    box.rows.append(len(box.rows))
+
+
 @derived
 def passthrough():
     # Rend l'objet lui-même : Svelte mémoïse le dérivé sur `===`, donc rien ne
@@ -86,6 +103,10 @@ def computed():
 <p data-k="tags">{tags}</p>
 <p data-k="nested">{nested}</p>
 <p data-k="attr">{box.value}</p>
+<p data-k="extra">{hasattr(box, "extra")}</p>
+<p data-k="rows">{box.rows}</p>
+<p data-k="nothing">{nothing}</p>
+<p data-k="alias">{Alias.__name__}</p>
 <p data-k="passthrough">{passthrough}</p>
 <p data-k="computed">{computed}</p>
 
@@ -100,3 +121,6 @@ def computed():
 <button data-k="mutate_nested" onclick={mutate_nested}>mutate_nested</button>
 <button data-k="mutate_via_items" onclick={mutate_via_items}>mutate_via_items</button>
 <button data-k="mutate_attribute" onclick={mutate_attribute}>mutate_attribute</button>
+<button data-k="drop_attribute" onclick={drop_attribute}>drop_attribute</button>
+<button data-k="replace_rows" onclick={replace_rows}>replace_rows</button>
+<button data-k="add_row" onclick={add_row}>add_row</button>

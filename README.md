@@ -307,10 +307,10 @@ Detecting the mutation is the other half, and it is where Python pays off. Svelt
 proxies the value in depth, which is unusable here — a proxied Brython object
 fails its own type checks. But a Python list *is* a JavaScript array, so the
 object itself can carry a non-enumerable marker: `$B.get_class` reads only
-`ob_type`, so `type(items) is list` stays true and `repr` is untouched. Brython
-compiles every method call to `$B.call_attr` and every indexed write to
-`$B.$setitem`, so **seven dispatch points cover the whole language**, and an unmarked
-object pays one property miss.
+`ob_type`, so `type(items) is list` stays true and `repr` is untouched. Brython routes
+every write through a handful of functions — method call, indexed write and read,
+attribute write, `del` — so **seven dispatch points cover the whole language**, and
+an unmarked object pays one property miss.
 
 The marker travels with the object, which no compile-time analysis could match:
 
@@ -347,7 +347,8 @@ Where it stands, each line held by a test:
 |---|---|
 | `items.append(x)`, `table[k] = v`, `del table[k]`, `tags.add(x)` | yes |
 | `data["rows"].append(x)` — a nested container | yes |
-| `box.value += 1` — an instance attribute | yes |
+| `box.value += 1`, `del box.extra` — an instance attribute | yes |
+| `box.rows.append(x)` — a container held in an attribute, even one set in `__init__` | yes |
 | `it.label = …` — an item of a keyed list | yes |
 | a mutation made inside a helper the compiler cannot see | yes |
 | through a `@derived` that hands back the object, or a component prop | yes |

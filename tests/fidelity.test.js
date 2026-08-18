@@ -417,6 +417,37 @@ describe('réactivité — quelles écritures Python propagent', () => {
         expect(read('computed')).toBe('1');
     });
 
+    test('supprimer un attribut propage', () => {
+        const { read, click } = setup();
+
+        expect(read('extra')).toBe('True');
+        click('drop_attribute');
+        expect(read('extra')).toBe('False');
+    });
+
+    test('un conteneur tenu dans un attribut propage', () => {
+        const { read, click } = setup();
+
+        // Posé dans __init__, donc *avant* que l'objet passe sous garde : c'est
+        // le marquage de l'objet qui la transmet à ses attributs.
+        expect(read('rows')).toBe('[]');
+        click('add_row');
+        expect(read('rows')).toBe('[0]');
+    });
+
+    // Sûreté : ce qu'il ne faut surtout pas marquer.
+    test('None n’est jamais marqué', () => {
+        setup();
+
+        // C'est un singleton partagé par tout le programme : lui accrocher des
+        // abonnés le ferait grossir sans fin, et à travers tous les composants.
+        expect(globalThis.__BRYTHON__.builtins.None.$notify).toBeUndefined();
+    });
+
+    test('une classe rangée dans un nom d’état reste utilisable', () => {
+        expect(setup().read('alias')).toBe('Box');
+    });
+
     // Les limitations qui restent, tenues par des tests pour qu'elles ne
     // dérivent pas en silence.
     test('un conteneur imbriqué propage', () => {
