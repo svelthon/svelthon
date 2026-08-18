@@ -461,6 +461,43 @@ export function plainData(value) {
     return out;
 }
 
+// What the framework hands *in* to an exported function.
+//
+// SvelteKit's request event carries `params` and `url` wrapped in proxies that
+// record every key read, so it knows what a `load()` depended on. Brython probes
+// an object's symbols when it wraps it for Python, those symbols land in the
+// recorded set, and SvelteKit's serialiser then refuses them. Python must
+// therefore never touch the proxy: the boundary reads it here, in JavaScript,
+// and hands over a snapshot Python can rummage through freely.
+//
+// Duck-typed, and the identity for anything else — a module called from
+// ordinary JavaScript keeps its arguments untouched.
+function pyDict(entries) {
+    const $B = globalThis.__BRYTHON__;
+    const out = _b_.dict.$factory();
+
+    for (const [key, value] of entries) $B.$setitem(out, key, value);
+    return out;
+}
+
+export function pyArg(value) {
+    if (value === null || typeof value !== 'object') return value;
+    if (!value.params || !value.url || !value.request) return value;
+
+    // Real dicts, not JavaScript objects: Python reaches for `.get()` and
+    // `.items()`, and a JSObj has neither.
+    return pyDict([
+        ['params', pyDict(Object.entries({ ...value.params }))],
+        ['query', pyDict([...value.url.searchParams])],
+        ['url', String(value.url)],
+        ['method', value.request.method],
+        ['route', value.route && value.route.id],
+        // The event itself, for whatever the snapshot does not cover — cookies,
+        // fetch, setHeaders. It is a JavaScript object and stays one.
+        ['js', value]
+    ]);
+}
+
 // A store's namespace, published under its Python module name, so a component's
 // own Python can `import counter_store` and reach the very same signals the
 // template reads. Without it the bridge would only run one way.

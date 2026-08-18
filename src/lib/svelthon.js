@@ -119,6 +119,7 @@ function pythonExpressions(markup, collect) {
     let index = 0;
     let inTag = false;
     let quote = null;
+    let quotedAttribute = null;
     const scopes = [];
 
     const inScope = () => [...new Set(scopes.flat())];
@@ -138,9 +139,23 @@ function pythonExpressions(markup, collect) {
 
         if (inTag) {
             if (quote) {
+                // `class="badge {statut.lower()}"` — an interpolation inside a
+                // quoted attribute value. Svelte concatenates it into a string,
+                // so it renders like any other text and goes through __text.
+                if (char === '{') {
+                    const end = closingBrace(markup, index);
+
+                    if (end !== -1 && !DIRECTIVE.test(quotedAttribute || '')) {
+                        out += `{${call(markup.slice(index + 1, end), '__text')}}`;
+                        index = end + 1;
+                        continue;
+                    }
+                }
+
                 if (char === quote) quote = null;
             } else if (char === '"' || char === "'") {
                 quote = char;
+                quotedAttribute = (out.match(/([^\s=]+)=$/) || [])[1];
             } else if (char === '{') {
                 const end = closingBrace(markup, index);
                 if (end !== -1) {
@@ -307,6 +322,11 @@ function collector(filename) {
 export function python(options = {}) {
     const searchPath = options.path || [];
 
+    // Shared with the plugin, which compiles the `.py` files themselves and has
+    // to resolve their imports the same way. The two halves may not be the same
+    // module instance — see the registry above.
+    globalThis[Symbol.for('svelthon.path')] = searchPath;
+
     return {
         name: 'svelthon',
         markup({ content, filename }) {
@@ -347,23 +367,9 @@ export function python(options = {}) {
             // own directory first, then `path`. The module has to be evaluated
             // before init() runs, so its namespace is registered by the time
             // Brython looks it up.
-            const stores = imports
-                .flatMap((mod) =>
-                    [dirname(filename || '.'), ...searchPath]
-                        // Absolute: the prelude is emitted into a virtual
-                        // module, against which a relative specifier would
-                        // resolve to nothing. Both names are tried, since
-                        // `import counter_store` says nothing about whether the
-                        // module it names is reactive.
-                        .flatMap((directory) => [
-                            resolve(directory, `${mod}.svelte.py`),
-                            resolve(directory, `${mod}.py`)
-                        ])
-                        .find((candidate) => existsSync(candidate)) || []
-                )
-                .filter(Boolean);
-
-            const prelude = stores.map((path) => `import ${JSON.stringify(path)};`).join('\n');
+            // The imported modules have to be evaluated before init() runs, so
+            // their namespaces are registered by the time Brython looks them up.
+            const prelude = pythonImports(imports, dirname(filename || '.'));
 
             generated.set(VIRTUAL_PREFIX + name, {
                 code: `${prelude}\n${module}`,
@@ -431,6 +437,25 @@ const countTests = () =>
             0
         );
 
+// `import peps` → the file it names, looked up in the importer's own directory
+// first, then along the configured path. Both spellings are tried, since the
+// statement says nothing about whether the module it names is reactive.
+function pythonImports(names, fromDirectory) {
+    const searchPath = globalThis[Symbol.for('svelthon.path')] || [];
+
+    return names
+        .flatMap((mod) =>
+            [fromDirectory, ...searchPath]
+                .flatMap((directory) => [
+                    resolve(directory, `${mod}.svelte.py`),
+                    resolve(directory, `${mod}.py`)
+                ])
+                .find((candidate) => existsSync(candidate)) || []
+        )
+        .map((path) => `import ${JSON.stringify(path)};`)
+        .join('\n');
+}
+
 // Python follows TypeScript's own convention, the one Svelte already defines:
 // `foo.ts` is an ordinary module and `foo.svelte.ts` is a reactive one. So
 // `foo.py` compiles to ordinary JavaScript, and `foo.svelte.py` to a rune
@@ -475,9 +500,16 @@ export function svelthon() {
 
             const file = reactive ? id.slice(0, -STORE_SUFFIX.length) : id;
             const name = nameFor(file);
-            const { script, module, map, stdlib } = compilePython(file);
+            const { script, module, map, stdlib, imports } = compilePython(file);
 
-            generated.set(VIRTUAL_PREFIX + name, { code: module, map });
+            // A `.py` may import another one — a route module reaching for its
+            // data layer. Same prelude a component gets.
+            const prelude = pythonImports(imports, dirname(file));
+
+            generated.set(VIRTUAL_PREFIX + name, {
+                code: prelude ? `${prelude}\n${module}` : module,
+                map: prelude ? { ...map, mappings: `;${map.mappings}` } : map
+            });
             if (stdlib) generated.set(VFS_PREFIX + name, { code: stdlib, map: null });
 
             this.addWatchFile(file);
