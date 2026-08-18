@@ -1,6 +1,6 @@
 import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from 'svelte';
-import CtxHost from './fidelity/CtxHost.svelte';
+import CtxHost from './fixtures/CtxHost.svelte';
 
 // Le contexte est par sous-arbre, là où un store est par application : deux
 // instances du même composant peuvent en porter des valeurs différentes. C'est

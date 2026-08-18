@@ -1,10 +1,10 @@
 import { test, expect, describe } from 'vitest';
 import { mount, flushSync, tick } from 'svelte';
 
-import SvBlocks from './fidelity/SvBlocks.svelte';
-import SvBindings from './fidelity/SvBindings.svelte';
-import SvDirectives from './fidelity/SvDirectives.svelte';
-import SvShell from './fidelity/SvShell.svelte';
+import SvBlocks from './fixtures/SvBlocks.svelte';
+import SvBindings from './fixtures/SvBindings.svelte';
+import SvDirectives from './fixtures/SvDirectives.svelte';
+import SvShell from './fixtures/SvShell.svelte';
 
 // Quelle part de Svelte fonctionne dans un composant Python ? Ce fichier répond
 // par des faits plutôt que par des suppositions. Les fonctionnalités qui ne

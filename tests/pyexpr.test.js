@@ -1,6 +1,6 @@
 import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from 'svelte';
-import PyExpr from './fidelity/PyExpr.svelte';
+import PyExpr from './fixtures/PyExpr.svelte';
 
 // Les expressions du gabarit sont compilées en Python, pas laissées au parseur
 // JavaScript. Chaque site devient une fonction Python cachée que le balisage

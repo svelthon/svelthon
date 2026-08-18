@@ -1,7 +1,7 @@
 import { test, expect, describe, beforeEach } from 'vitest';
 import { mount, flushSync } from 'svelte';
 
-import Revision from './fidelity/Revision.svelte';
+import Revision from './fixtures/Revision.svelte';
 
 // Spike : une mutation en place peut-elle se propager par un signal de révision
 // séparé, plutôt qu'en réaffectant une copie comme le fait publish() ?

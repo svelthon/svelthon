@@ -1,6 +1,6 @@
 import { test, expect, describe } from 'vitest';
 import { mount, unmount, flushSync } from 'svelte';
-import Lifecycle from './fidelity/Lifecycle.svelte';
+import Lifecycle from './fixtures/Lifecycle.svelte';
 
 // on_mount / on_destroy par convention de nom, adossés à un unique $effect :
 // le corps s'exécute une fois le DOM en place, le nettoyage à la destruction.

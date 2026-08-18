@@ -47,7 +47,7 @@ sans réactivité.
 
 ## L'API, et ce qu'elle remplace
 
-Six noms, et rien à importer : ils sont injectés dans le namespace du module, et
+Cinq noms, et rien à importer : ils sont injectés dans le namespace du module, et
 un composant qui définit le sien le garde. Chacun se tient là où se tient une
 rune en JavaScript.
 
@@ -61,13 +61,11 @@ rune en JavaScript.
 | `@effect` | `$effect(…)` |
 | `def on_mount()` / `on_destroy()` | `onMount()` / `onDestroy()` |
 | `set_context(k, v)` / `get_context(k)` | `setContext(k, v)` / `getContext(k)` |
-| `publish("items")` | *rien — `$state` proxifie en profondeur* |
+| `items.append(x)` | `items.push(x)` — `$state` proxifie en profondeur |
 
-La dernière ligne est la seule qui ajoute quelque chose au lieu de le renommer.
-Svelte rend `items.push(x)` réactif en proxifiant la valeur en profondeur, ce que
-SVELTHON ne peut pas utiliser : un objet Python derrière un proxy échoue à ses
-propres vérifications de type (`repr((1, 2))` lève). Une mutation est donc
-republiée par son nom, et c'est la réaffectation qui propage.
+La dernière ligne est la seule qui coûte du travail plutôt qu'un renommage —
+voir [Réactivité](#réactivité--un-signal-par-nom) pour la façon dont une mutation
+en place est attrapée sans proxy.
 
 Il n'y a pas d'équivalent de `$state` à écrire, parce qu'il n'y a rien à
 déclarer : une affectation au niveau du module *est* la déclaration, et le
@@ -260,42 +258,53 @@ vérifications de type — `repr((1, 2))` lève « descriptor `__repr__` require
 reçoit son propre `$state.raw`, publié vers Brython par un accesseur : les
 valeurs Python restent opaques à Svelte.
 
-Conséquence à connaître : **c'est la réaffectation d'un nom qui est réactive**,
-pas la mutation en place d'une valeur.
+Réaffecter un nom est réactif, et muter un conteneur en place l'est aussi :
 
 ```python
 count += 1          # réactif — réaffecte `count`
 items = items + [x] # réactif — réaffecte `items`
-items.append(x)     # PAS réactif — mute sans réaffecter
-box.value += 1      # PAS réactif — mute un attribut
+items.append(x)     # réactif — l'objet le signale lui-même
+table["k"] = v      # réactif
 ```
 
-Pour muter en place sans renoncer à `{#each items}`, `publish(nom)` est injecté
-dans chaque composant. Il rend au gabarit une identité neuve — une copie
-superficielle pour une liste, un dict ou un set — ce qui suffit à franchir la
-comparaison `===` de Svelte :
+Le second signal explique comment. Chaque nom porte une valeur **et** un compteur
+de révision, et l'accesseur lit les deux — donc tout lecteur dépend aussi du
+compteur. Une mutation n'incrémente que lui : rien n'est copié, et l'objet garde
+son identité.
+
+Détecter la mutation est l'autre moitié, et c'est là que Python paie. Svelte
+proxifie la valeur en profondeur, ce qui est inutilisable ici — un objet Brython
+proxifié échoue à ses propres vérifications de type. Mais une liste Python *est*
+un tableau JavaScript : l'objet peut donc porter lui-même une marque non
+énumérable. `$B.get_class` ne lit que `ob_type`, donc `type(items) is list` reste
+vrai et `repr` est intact. Et Brython compile tout appel de méthode en
+`$B.call_attr` et toute écriture indicée en `$B.$setitem` : **deux interceptions
+couvrent tout le langage**, et un objet non marqué ne paie qu'un accès manqué.
+
+La marque voyage avec l'objet, ce qu'aucune analyse à la compilation ne saurait
+faire :
 
 ```python
+def fill(target):
+    target.append("x")   # le compilateur ne voit rien ici
+
 def add():
-    items.append(len(items))
-    publish("items")
+    fill(items)          # réactif quand même
 ```
 
-Un composant qui définit son propre `publish` garde le sien.
+Deux limites subsistent, toutes deux tenues par des tests :
 
-La même règle se décline à trois niveaux, et c'est la seule à retenir —
-**réaffecter, pas muter** :
+| | propage |
+|---|---|
+| `items.append(x)`, `table[k] = v`, `del table[k]`, `tags.add(x)` | oui |
+| un conteneur imbriqué — `data["rows"].append(x)` | non — seul l'objet extérieur est marqué |
+| un attribut d'instance — `box.value += 1` | non — les écritures d'attribut ne sont pas interceptées |
+| un élément d'une liste à clé — `it.label = …` | non — remplacer l'élément : `items[i] = Item(…)` |
 
-| niveau | ne propage pas | propage |
-|---|---|---|
-| nom | — | `count += 1` |
-| collection | `items.append(x)` | `items.append(x)` + `publish("items")` |
-| élément d'une liste à clé | `it.label = …` | `items[i] = Item(it.id, …)` |
-
-Le troisième cas surprend : dans un `{#each items as it (it.id)}`, muter
-un attribut d'un élément ne re-rend rien même après `publish()`, parce que
-l'élément a gardé son identité. Le remplacer met à jour le rendu **et** réutilise
-le nœud DOM, puisque la clé, elle, n'a pas bougé.
+Le dernier cas surprend : dans un `{#each items as it (it.id)}`, muter un
+attribut d'un élément ne re-rend rien, parce que l'élément a gardé son identité.
+Le remplacer met à jour le rendu **et** réutilise le nœud DOM, puisque la clé,
+elle, n'a pas bougé.
 
 Les accesseurs vivent sur le **prototype** du namespace, jamais sur l'objet
 lui-même : réaffecter un global émet `$B.delete_for_reassign(name, locals)`, et
@@ -331,7 +340,6 @@ def increment():
     global count
     count += 1
     history.append(count)
-    publish("history")
 ```
 
 ```svelte
@@ -447,7 +455,7 @@ synchrone ajoute.
 ## Contexte
 
 `set_context` et `get_context` sont injectés dans chaque composant, comme
-`publish` et `derived`. Les deux doivent s'exécuter pendant l'initialisation
+`derived` et `effect`. Les deux doivent s'exécuter pendant l'initialisation
 d'une instance — soit exactement au moment où tourne le corps du module Python,
 si bien que rien d'autre n'a été nécessaire.
 
@@ -489,7 +497,7 @@ sous Node — ce que le compilateur fait déjà au build. Il manquait deux shims
 runtime navigateur (`self`, `addEventListener`) ; `src/lib/globals.js` les pose
 désormais, et c'était tout l'obstacle.
 
-Couvert par `src/ssr.test.js` : composants, props, composition avec composants
+Couvert par `tests/ssr.test.js` : composants, props, composition avec composants
 enfants et l'accès d'attribut, et les valeurs Python elles-mêmes — `-7 // 2`
 rend bien
 `-4` côté serveur.
@@ -566,7 +574,7 @@ portée propre.
 
 ## Surface Svelte couverte
 
-Mesuré, pas supposé (`src/svelte-surface.test.js`) — tout ceci fonctionne dans
+Mesuré, pas supposé (`tests/svelte-surface.test.js`) — tout ceci fonctionne dans
 un composant Python :
 
 | | |
@@ -604,7 +612,7 @@ injection de grammaire livrée comme petite extension d'éditeur.
 Le runner de Svelte exécute chaque échantillon dans trois modes — client, serveur,
 **hydratation** — et c'est le troisième qui exige que les deux moitiés
 s'accordent, puisque le corps Python tourne des deux côtés. Couvert par
-`src/hydration.test.js` :
+`tests/hydration.test.js` :
 
 - les nœuds du serveur sont **repris, pas reconstruits** — leur identité survit,
   ce qui prouve que l'hydratation a bien eu lieu ;
@@ -613,7 +621,7 @@ s'accordent, puisque le corps Python tourne des deux côtés. Couvert par
   avertissement. Un composant non déterministe — l'heure, un aléa, une session —
   ne plantera pas : il affichera une valeur puis basculera sur l'autre.
 
-La sortie serveur exacte, marqueurs compris, est affirmée dans `src/ssr.test.js`
+La sortie serveur exacte, marqueurs compris, est affirmée dans `tests/ssr.test.js`
 pour que les deux fichiers ne puissent pas diverger.
 
 ## Ce que ça coûte à l'exécution

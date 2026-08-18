@@ -1,6 +1,6 @@
 import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from 'svelte';
-import BindHost from './fidelity/BindHost.svelte';
+import BindHost from './fixtures/BindHost.svelte';
 
 // Une annotation dont la valeur est un appel à bindable() déclare un prop
 // bidirectionnel :  value: str = bindable()   /   tag: str = bindable("default")

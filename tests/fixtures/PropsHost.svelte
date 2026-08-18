@@ -1,5 +1,5 @@
 <script>
-    import Greeting from '../Greeting.svelte';
+    import Greeting from '../../src/Greeting.svelte';
 
     let who = $state('Pierre');
 </script>

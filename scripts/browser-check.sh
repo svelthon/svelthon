@@ -47,7 +47,7 @@ fi
 # La démo entière, rendue pour de bon : réactivité, prop à défaut Python, store
 # partagé entre deux instances, et sémantique CPython.
 APP=$(chromium --headless --no-sandbox --disable-gpu \
-    --virtual-time-budget=15000 --dump-dom "http://localhost:$PORT/" 2>/dev/null)
+    --virtual-time-budget=40000 --dump-dom "http://localhost:$PORT/" 2>/dev/null)
 
 # Les deux dernières lignes couvrent le gabarit : une compréhension rendue avec
 # str() de Python, et un {#each} qui parcourt les paires d'un dict.

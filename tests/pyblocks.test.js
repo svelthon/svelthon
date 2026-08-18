@@ -1,7 +1,7 @@
 import { test, expect, describe, beforeEach } from 'vitest';
 import { mount, flushSync } from 'svelte';
 
-import PyBlocks from './fidelity/PyBlocks.svelte';
+import PyBlocks from './fixtures/PyBlocks.svelte';
 
 // Les expressions du gabarit sont du Python — y compris aux quatre endroits qui
 // n'étaient pas des interpolations : ce que l'on itère, ce qui sert de clé, ce

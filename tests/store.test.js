@@ -1,8 +1,8 @@
 import { test, expect } from 'vitest';
 import { mount, unmount, flushSync } from 'svelte';
-import StoreA from './fidelity/StoreA.svelte';
-import StoreB from './fidelity/StoreB.svelte';
-import StoreFromPython from './fidelity/StoreFromPython.svelte';
+import StoreA from './fixtures/StoreA.svelte';
+import StoreB from './fixtures/StoreB.svelte';
+import StoreFromPython from './fixtures/StoreFromPython.svelte';
 
 // Un store est du Python au niveau module : ses signaux existent une fois pour
 // toute l'application, là où l'état d'un composant naît et meurt avec chaque

@@ -1,7 +1,7 @@
 import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from 'svelte';
-import Async from './fidelity/Async.svelte';
-import AsyncError from './fidelity/AsyncError.svelte';
+import Async from './fixtures/Async.svelte';
+import AsyncError from './fixtures/AsyncError.svelte';
 
 // Calling an `async def` from JavaScript returns a coroutine nobody runs — the
 // handler would appear to do nothing at all. Brython has its own event loop, so

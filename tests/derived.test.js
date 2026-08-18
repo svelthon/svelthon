@@ -1,6 +1,6 @@
 import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from 'svelte';
-import Derived from './fidelity/Derived.svelte';
+import Derived from './fixtures/Derived.svelte';
 
 // @derived transforme une fonction en valeur : Python lit le nom et obtient le
 // résultat, comme une @property. Le corps s'exécute dans $derived.by, et chaque

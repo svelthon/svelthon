@@ -95,18 +95,103 @@ export const py = {
     }
 };
 
-// Rebinding is what propagates, and a mutated container is still the same
-// object — Svelte drops a write that === the previous value. Returning a copy
-// gives it a new identity, which is the whole point of publish().
-export function republish(value) {
-    const $B = globalThis.__BRYTHON__;
+// Methods that change a container. `__setitem__` and `__delitem__` are not
+// here: Brython compiles `d[k] = v` and `del d[k]` to their own calls, caught
+// below.
+const MUTATORS = new Set([
+    'append', 'extend', 'insert', 'remove', 'pop', 'clear', 'sort', 'reverse',
+    'add', 'discard', 'update', 'setdefault', 'popitem', 'appendleft',
+    'extendleft', 'popleft', 'rotate', 'intersection_update',
+    'difference_update', 'symmetric_difference_update'
+]);
 
-    if (Array.isArray(value)) return value.slice(); // list
-    const cls = $B.get_class(value);
-    if (cls === _b_.dict) return _b_.dict.$factory(value);
-    if (cls === _b_.set) return _b_.set.$factory(value);
+// Make an in-place mutation reactive — `items.append(x)` with nothing after it.
+//
+// Svelte's own answer is to proxy the value in depth, which is unusable here: a
+// Python object behind a JavaScript proxy fails Brython's own type checks
+// (`repr((1, 2))` raises "requires a 'tuple' object but received a 'tuple'").
+//
+// A Python list *is* a JavaScript array, so the object itself can carry a
+// non-enumerable marker instead — `$B.get_class` reads only `ob_type`, so
+// `type(items) is list` stays true, `repr` is untouched, and nothing that walks
+// the value can see the marker. Brython compiles every method call to
+// `$B.call_attr` and every indexed write to `$B.$setitem`, so two interceptions
+// cover the whole language, and an unmarked object pays one property miss.
+//
+// The marker travels with the object: a list handed to a helper that mutates it
+// deep inside a function still notifies, which no static analysis could do.
+function installMutationTracking($B) {
+    if ($B.$svelthonTracking) return;
+    $B.$svelthonTracking = true;
 
-    return value; // scalars already propagate on assignment
+    const notify = (obj) => {
+        if (obj !== null && typeof obj === 'object' && obj.$notify !== undefined) obj.$notify();
+    };
+
+    // Rest arguments rather than `arguments` + apply: these three sit on the
+    // hottest path Brython has, and the old form blocks V8's optimiser.
+    const callAttr = $B.call_attr;
+    $B.call_attr = function (obj, attr, ...rest) {
+        const result = callAttr(obj, attr, ...rest);
+        if (MUTATORS.has(attr)) notify(obj);
+        return result;
+    };
+
+    const setitem = $B.$setitem;
+    $B.$setitem = function (obj, ...rest) {
+        const result = setitem(obj, ...rest);
+        notify(obj);
+        return result;
+    };
+
+    const delitem = $B.$delitem;
+    $B.$delitem = function (obj, ...rest) {
+        const result = delitem(obj, ...rest);
+        notify(obj);
+        return result;
+    };
+}
+
+installMutationTracking(globalThis.__BRYTHON__);
+
+// Only a container can be mutated in place; a scalar propagates by rebinding,
+// which the accessor already handles.
+function mutable(value) {
+    if (value === null || value === undefined || typeof value !== 'object') return false;
+    if (Array.isArray(value)) return true; // list — a tuple is one too, and immutable
+
+    try {
+        const cls = globalThis.__BRYTHON__.get_class(value);
+        return cls === _b_.dict || cls === _b_.set;
+    } catch {
+        return false; // a foreign JavaScript value is not ours to mark
+    }
+}
+
+// Attach `bump` to the value stored under a module-level name. One object may
+// be bound to two names; both are then told.
+export function track(value, bump) {
+    if (!mutable(value)) return value;
+
+    const marker = Object.getOwnPropertyDescriptor(value, '$notify');
+    if (marker) {
+        if (!marker.value.bumps.includes(bump)) marker.value.bumps.push(bump);
+        return value;
+    }
+
+    const bumps = [bump];
+    const fire = () => {
+        for (const one of bumps) one();
+    };
+    fire.bumps = bumps;
+
+    Object.defineProperty(value, '$notify', {
+        value: fire,
+        enumerable: false,
+        configurable: true
+    });
+
+    return value;
 }
 
 // A Brython exception reaching JavaScript carries no `message` and no `stack`,

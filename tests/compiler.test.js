@@ -6,7 +6,7 @@ import { test, expect, describe } from 'vitest';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { compile } = require('./lib/compile.cjs');
+const { compile } = require('../src/lib/compile.cjs');
 
 // Le compilateur n'était testé qu'à travers des composants montés — donc
 // uniquement par ses chemins heureux. Ceux-ci ne passent par aucun rendu.
@@ -33,12 +33,15 @@ describe('compilateur', () => {
         expect(script).not.toMatch(/let new =/); // sinon le JS ne compilerait pas
     });
 
-    test('un composant qui définit son propre publish garde le sien', () => {
-        const mine = compile('def publish(k):\n    pass\n', 'P', 'P.svelte').script;
-        const injected = compile('x = 1\n', 'Q', 'Q.svelte').script;
+    test('chaque nom d’état reçoit son signal de révision', () => {
+        // Deux signaux par nom : la valeur, et un compteur que le getter lit —
+        // c'est lui qui rend une mutation en place visible sans copie.
+        const { script } = compile('items = []\n', 'R', 'R.svelte');
 
-        expect(mine).not.toContain('const __publish =');
-        expect(injected).toContain('const __publish =');
+        expect(script).toContain('let __rev_items = $state.raw(0)');
+        expect(script).toContain('const __bump_items = () => { __rev_items += 1; }');
+        expect(script).toContain("bind(__proto, 'items', () => (__rev_items, items)");
+        expect(script).toContain('track(v, __bump_items)');
     });
 
     test('un store replie les annotations en état et s’enregistre pour Python', () => {

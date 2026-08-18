@@ -1,5 +1,5 @@
 <script module>
-    import { store } from '../lib/counter_store.py';
+    import { store } from '../../src/lib/counter_store.py';
 </script>
 
 <p data-k="b">B:{store.count}</p>

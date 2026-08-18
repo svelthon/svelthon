@@ -1,19 +1,19 @@
 import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from 'svelte';
 
-import Integers from './fidelity/Integers.svelte';
-import Text from './fidelity/Text.svelte';
-import Protocols from './fidelity/Protocols.svelte';
-import Flow from './fidelity/Flow.svelte';
-import Frames from './fidelity/Frames.svelte';
-import Mutations from './fidelity/Mutations.svelte';
-import Template from './fidelity/Template.svelte';
-import Events from './fidelity/Events.svelte';
-import Composition from './fidelity/Composition.svelte';
-import Keyed from './fidelity/Keyed.svelte';
-import Errors from './fidelity/Errors.svelte';
-import InitError from './fidelity/InitError.svelte';
-import OffsetError from './fidelity/OffsetError.svelte';
+import Integers from './fixtures/Integers.svelte';
+import Text from './fixtures/Text.svelte';
+import Protocols from './fixtures/Protocols.svelte';
+import Flow from './fixtures/Flow.svelte';
+import Frames from './fixtures/Frames.svelte';
+import Mutations from './fixtures/Mutations.svelte';
+import Template from './fixtures/Template.svelte';
+import Events from './fixtures/Events.svelte';
+import Composition from './fixtures/Composition.svelte';
+import Keyed from './fixtures/Keyed.svelte';
+import Errors from './fixtures/Errors.svelte';
+import InitError from './fixtures/InitError.svelte';
+import OffsetError from './fixtures/OffsetError.svelte';
 
 // Grille de fidélité sémantique.
 //
@@ -367,42 +367,54 @@ describe('réactivité — quelles écritures Python propagent', () => {
         expect(read('items')).not.toBe(before);
     });
 
-    test('muter en place ne propage pas — limitation assumée', () => {
+    test('muter une liste en place propage', () => {
         const { read, click } = setup();
 
-        const before = read('items');
-        click('mutate_only');
-        expect(read('items')).toBe(before);
-
-        click('attribute_only');
-        expect(read('depth')).toBe('0');
+        expect(read('items')).toBe('[]');
+        click('mutate_list');
+        expect(read('items')).toBe('[0]');
     });
 
-    // publish(nom) rend au gabarit une identité neuve après une mutation en
-    // place, sans que le composant entretienne une valeur publiée en parallèle.
-    test('publish() rattache une liste mutée', () => {
-        const { read, click } = setup();
-
-        const before = read('items');
-        click('mutate_then_publish');
-        expect(read('items')).not.toBe(before);
-    });
-
-    test('publish() rattache un dict muté', () => {
+    test('muter un dict en place propage, et del aussi', () => {
         const { read, click } = setup();
 
         expect(read('table')).toBe('{}');
-        click('dict_then_publish');
+        click('mutate_dict');
         expect(read('table')).toBe("{'k': 0}");
+        click('drop_key');
+        expect(read('table')).toBe('{}');
     });
 
-    test('muter puis publier propage', () => {
+    test('muter un set en place propage', () => {
         const { read, click } = setup();
 
-        click('mutate_and_publish');
-        expect(read('size')).toBe('1');
+        expect(read('tags')).toBe('set()');
+        click('mutate_set');
+        expect(read('tags')).toBe('{0}');
+    });
 
-        click('attribute_and_publish');
-        expect(read('depth')).toBe('1');
+    // Le point que ne pourrait pas tenir une détection à la compilation : la
+    // marque est portée par l'objet, pas par le site d'appel.
+    test('une fonction tierce qui mute la liste propage aussi', () => {
+        const { read, click } = setup();
+
+        click('through_helper');
+        expect(read('items')).toBe("['helper']");
+    });
+
+    // Les deux limitations qui restent, tenues par des tests pour qu'elles ne
+    // dérivent pas en silence.
+    test('un conteneur imbriqué ne propage pas', () => {
+        const { read, click } = setup();
+
+        click('mutate_nested');
+        expect(read('nested')).toBe("{'rows': []}"); // la liste interne n'est pas marquée
+    });
+
+    test("muter un attribut d'instance ne propage pas", () => {
+        const { read, click } = setup();
+
+        click('mutate_attribute');
+        expect(read('attr')).toBe('0');
     });
 });

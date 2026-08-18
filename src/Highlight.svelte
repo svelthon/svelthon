@@ -21,7 +21,7 @@
 
     // Builtins the demos use, plus the two names SVELTHON injects.
     const BUILTINS = new Set(
-        'len range str int float list dict set tuple sorted sum print publish derived'.split(' ')
+        'len range str int float list dict set tuple sorted sum print derived'.split(' ')
     );
 
     const JS_KEYWORDS = new Set(

@@ -480,13 +480,13 @@ function compileStore(file) {
 }
 
 const countTests = () =>
-    readdirSync('src')
+    readdirSync('tests')
         .filter((name) => name.endsWith('.test.js'))
         .reduce(
             (total, name) =>
                 // Anchored: a `/re/.test(x)` elsewhere in a file is not a test,
                 // and `test.fails()` — the failures we expect — is one.
-                total + (readFileSync(`src/${name}`, 'utf8').match(/^\s*test(\.fails)?\(/gm) || []).length,
+                total + (readFileSync(`tests/${name}`, 'utf8').match(/^\s*test(\.fails)?\(/gm) || []).length,
             0
         );
 

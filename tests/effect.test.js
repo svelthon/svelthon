@@ -1,6 +1,6 @@
 import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from 'svelte';
-import Effects from './fidelity/Effects.svelte';
+import Effects from './fixtures/Effects.svelte';
 
 // @effect rejoue le corps quand un nom qu'il a *lu* change. Rien à déclarer :
 // les globals passent par les accesseurs du namespace, donc leurs lectures sont

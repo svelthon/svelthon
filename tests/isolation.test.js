@@ -1,6 +1,6 @@
 import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from 'svelte';
-import Isolated from './fidelity/Isolated.svelte';
+import Isolated from './fixtures/Isolated.svelte';
 
 // Le corps du module Python est ré-exécuté pour chaque instance, et chaque nom
 // reçoit son propre signal. Rien ne doit fuir d'une instance à l'autre — y

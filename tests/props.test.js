@@ -1,8 +1,8 @@
 import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from 'svelte';
 import Greeting from './Greeting.svelte';
-import PropsHost from './fidelity/PropsHost.svelte';
-import PropsInit from './fidelity/PropsInit.svelte';
+import PropsHost from './fixtures/PropsHost.svelte';
+import PropsInit from './fixtures/PropsInit.svelte';
 
 // Une annotation déclare un prop, une affectation nue de l'état interne :
 //     name: str          → prop requis

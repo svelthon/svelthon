@@ -290,6 +290,10 @@ function compile(
     // identity — too high a price for a rule that is easy to state instead.
     const fn = (name) => `__fn_${name}`;
     const local = (name) => `__local_${name}`;
+    // Second signal per name: a mutation bumps it without touching the value,
+    // so nothing is copied and the object keeps its identity.
+    const rev = (name) => `__rev_${name}`;
+    const bump = (name) => `__bump_${name}`;
 
     // Lifecycle by convention, mapped onto a single $effect: its body runs once
     // after the DOM exists, its teardown when the component goes away. Both
@@ -300,7 +304,6 @@ function compile(
     const declared = [...props, ...bindables, ...state, ...funcs, ...deriveds, ...effects].map(
         (n) => n.name || n
     );
-    const hasPublish = declared.includes('publish');
     const hasDerived = declared.includes('derived');
     const hasBindable = declared.includes('bindable');
     const hasEffect = declared.includes('effect');
@@ -315,7 +318,7 @@ function compile(
         `import { init } from ${JSON.stringify(virtualId(name))};`,
         // `py` backs the rewritten conditions, and is available to the template
         // for explicit conversions: {py.str(items)} renders ['a', 'b'].
-        `import { bind, py, republish, pyError, schedule, NONE${store ? ', registerModule' : ''} } from 'svelthon/runtime';`,
+        `import { bind, py, track, pyError, schedule, NONE${store ? ', registerModule' : ''} } from 'svelthon/runtime';`,
         `import { ${['getContext', 'setContext']
             .concat(lifecycle('on_mount') || lifecycle('on_destroy') ? ['untrack'] : [])
             .join(', ')} } from 'svelte';`,
@@ -324,6 +327,10 @@ function compile(
             ? [
                   `let { ${bindables.map((b) => `${b} = $bindable()`).join(', ')}, ...__props } =` +
                       ` $props();`,
+                  ...bindables.flatMap((b) => [
+                      `let ${rev(b)} = $state.raw(0);`,
+                      `const ${bump(b)} = () => { ${rev(b)} += 1; };`
+                  ]),
                   // The module body applies the annotation's default by writing
                   // to the name — and that write must not travel up to the
                   // parent. Only writes made after init() are real ones.
@@ -341,7 +348,11 @@ function compile(
             `let ${local(n)} = $state.raw(undefined);`,
             `const ${n} = $derived(('${n}' in __props ? __props.${n} : ${local(n)}) ?? NONE);`
         ]),
-        ...state.map((n) => `let ${n} = $state.raw(undefined);`),
+        ...state.flatMap((n) => [
+            `let ${n} = $state.raw(undefined);`,
+            `let ${rev(n)} = $state.raw(0);`,
+            `const ${bump(n)} = () => { ${rev(n)} += 1; };`
+        ]),
         ...funcs.map((f) => `let ${fn(f.name)} = $state.raw(undefined);`),
         ...effects.map((e) => `let ${fn(e.name)} = $state.raw(undefined);`),
         // A @derived name reads as its result — on both sides. The body runs
@@ -365,10 +376,16 @@ function compile(
         ),
         ...bindables.map(
             (b) =>
-                `bind(__proto, '${b}', () => ${b} ?? NONE,` +
-                ` (v) => { if (!__initialising || ${b} === undefined) ${b} = v; });`
+                `bind(__proto, '${b}', () => (${rev(b)}, ${b} ?? NONE),` +
+                ` (v) => { if (!__initialising || ${b} === undefined) ${b} = track(v, ${bump(b)}); });`
         ),
-        ...state.map((n) => `bind(__proto, '${n}', () => ${n}, (v) => { ${n} = v; });`),
+        // Reading the revision alongside the value is what registers the
+        // dependency: an in-place mutation then invalidates every reader,
+        // without the value ever changing identity.
+        ...state.map(
+            (n) =>
+                `bind(__proto, '${n}', () => (${rev(n)}, ${n}), (v) => { ${n} = track(v, ${bump(n)}); });`
+        ),
         ...funcs.map((f) => `bind(__proto, '${f.name}', () => ${fn(f.name)}, (v) => { ${fn(f.name)} = v; });`),
         ...effects.map((e) => `bind(__proto, '${e.name}', () => ${fn(e.name)}, (v) => { ${fn(e.name)} = v; });`),
         ...deriveds.map(
@@ -382,16 +399,7 @@ function compile(
         // walks the prototype chain, where our accessors live. It is the only
         // place in Brython that consults this flag.
         `${NS}.$proxy = true;`,
-        // publish("items") gives back a rendering-visible identity after an
-        // in-place mutation, so `{#each items}` keeps working without the
-        // component having to maintain a parallel published value.
-        ...(hasPublish
-            ? []
-            : [
-                  ``,
-                  `const __publish = (key) => { ${NS}[key] = republish(${NS}[key]); };`,
-                  `bind(__proto, 'publish', () => __publish, () => {});`
-              ]),
+
         // The decorator only marks; the compiler did the work already.
         ...(hasDerived ? [] : [`bind(__proto, 'derived', () => (f) => f, () => {});`]),
         // bindable() only marks the annotation; the compiler read it already.
@@ -434,8 +442,8 @@ function compile(
                   // $state binding directly — and a getter is what keeps the read
                   // reactive at the call site.
                   `export const store = {`,
-                  ...state.map((n) => `    get ${n}() { return ${n}; },`),
-                  ...state.map((n) => `    set ${n}(v) { ${n} = v; },`),
+                  ...state.map((n) => `    get ${n}() { return (${rev(n)}, ${n}); },`),
+                  ...state.map((n) => `    set ${n}(v) { ${n} = track(v, ${bump(n)}); },`),
                   ...deriveds.map((d) => `    get ${d.name}() { return ${d.name}; },`),
                   ...funcs.map((f) => `    ${f.name},`),
                   `};`,

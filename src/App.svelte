@@ -122,9 +122,9 @@
     <article class="demo">
         <div class="head">
             <h2>The API, and what it replaces</h2>
-            <p>Six names, and nothing to import: they are injected into the module's namespace, and
+            <p>Five names, and nothing to import: they are injected into the module's namespace, and
                 a component that defines its own keeps it. Each one stands where a rune stands in
-                JavaScript — the mapping is one to one, except for <code>publish()</code>.</p>
+                JavaScript — and the mapping is one to one, with nothing left over.</p>
         </div>
         <div class="body">
             <div class="files"><div class="code"><span class="tag">Decorators.svelte</span><pre><code><Highlight file="Decorators.svelte" code={decoratorsSrc} /></code></pre></div></div>
@@ -142,13 +142,16 @@
                     <tr><td>@effect</td><td>$effect(…)</td></tr>
                     <tr><td>def on_mount() / on_destroy()</td><td>onMount() / onDestroy()</td></tr>
                     <tr><td>set_context(k, v) / get_context(k)</td><td>setContext(k, v) / getContext(k)</td></tr>
-                    <tr><td>publish("items")</td><td class="none">nothing — $state proxies deeply</td></tr>
+                    <tr><td>items.append(x)</td><td>items.push(x) <span class="none">— $state proxies deeply</span></td></tr>
                 </tbody>
             </table>
-            <p>The last row is the only one that adds something. Svelte makes
-                <code>items.push(x)</code> reactive by proxying the value in depth, which SVELTHON
-                cannot use: a Python object behind a proxy fails its own type checks. So a mutation
-                is republished by name, and rebinding is what propagates.</p>
+            <p>The last row is the one that costs work. Svelte makes
+                <code>items.append(x)</code> reactive by proxying the value in depth, which SVELTHON
+                cannot use: a Python object behind a proxy fails its own type checks. Instead the
+                object carries an invisible marker, and Brython's two dispatch points —
+                <code>call_attr</code> and <code>$setitem</code> — tell the signal it moved. The
+                object keeps its identity, nothing is copied, and <code>type(items) is list</code>
+                stays true.</p>
         </div>
     </article>
 

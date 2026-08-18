@@ -1,6 +1,6 @@
 import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from 'svelte';
-import Bound from './fidelity/Bound.svelte';
+import Bound from './fixtures/Bound.svelte';
 
 // Un nom d'état est un `let` réactif ordinaire, donc `bind:` fonctionne sans que
 // SVELTHON ait à s'en mêler : Svelte écrit dans le signal, Python le relit par
