@@ -578,13 +578,22 @@ vite-plugin-svelte, which applies the preprocessor declared in
 is needed, and it is one SvelteKit already provides for exactly this:
 
 ```js
-// svelte.config.js
-export default {
-    preprocess: [python({ path: ['src/lib'] })],
-    // so `panier.svelte.py` is compiled like a `panier.svelte.ts`
-    vitePlugin: { experimental: { compileModule: { extensions: ['.js', '.ts', '.py'] } } },
-    kit: { moduleExtensions: ['.js', '.ts', '.py'] }
-};
+// vite.config.js — SvelteKit 3 configures everything from here
+export default defineConfig({
+    plugins: [
+        svelthon(),
+        vendorQuirks(),
+        sveltekit({
+            preprocess: [python({ path: ['src/lib'] })],
+
+            // route modules may be Python
+            moduleExtensions: ['.js', '.ts', '.py'],
+
+            // and a reactive module is compiled like a `.svelte.ts`
+            experimental: { compileModule: { extensions: ['.js', '.ts', '.py'] } }
+        })
+    ]
+});
 ```
 
 That makes the router see `.py` route modules. What then works, measured on a
