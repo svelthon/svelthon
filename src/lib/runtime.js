@@ -370,6 +370,15 @@ export function pyError(error, where, lineOffset = 0) {
 
     if (!error || typeof error !== 'object' || error.message !== undefined) return error;
 
+    // Not ours to describe: a JavaScript value thrown through a Python frame —
+    // SvelteKit's own `error()` and `redirect()` do exactly that — must come out
+    // the other side untouched, or the framework will not recognise it.
+    try {
+        if (globalThis.__BRYTHON__.get_class(error) === undefined) return error;
+    } catch {
+        return error;
+    }
+
     let described;
     try {
         // Not `cls.__name__`: a Brython class keeps it out of its JS properties,
@@ -448,6 +457,11 @@ export function plainData(value) {
     if (typeof value !== 'object') return value;
     if (Array.isArray(value)) return value.map(plainData); // list, tuple
 
+    // Anything with a constructor of its own is not ours to flatten: a Response,
+    // a URL, a Date, a Map, a Promise — a Python `load()` may hand any of those
+    // straight back to the framework, and copying their keys would destroy them.
+    if (value.constructor !== undefined && value.constructor !== Object) return value;
+
     // Own string keys only, and never a class lookup: `get_class` probes the
     // object's symbols, and SvelteKit wraps `event.params` in a proxy that
     // records every key read — including the symbols we would have introduced,
@@ -519,6 +533,37 @@ export function scheduleAsync(result, where, lineOffset = 0) {
             (error) => reject(pyError(error, where, lineOffset))
         );
     });
+}
+
+// One Python function, made callable from JavaScript: arguments converted on the
+// way in, coroutines awaited, containers converted on the way out.
+export function pyCall(fn, where, lineOffset = 0) {
+    return (...args) => {
+        try {
+            const result = scheduleAsync(fn(...args.map(pyArg)), where, lineOffset);
+            return result instanceof Promise ? result.then(plainData) : plainData(result);
+        } catch (error) {
+            throw pyError(error, where, lineOffset);
+        }
+    };
+}
+
+// A value a module exports. A dict of functions — which is what SvelteKit's
+// `actions` is — becomes an object of *wrapped* functions, so a form action gets
+// the same boundary treatment as a `load()`. Anything else is plain data.
+export function pyExport(value, where, lineOffset = 0) {
+    if (value === null || typeof value !== 'object') return value;
+    if (Array.isArray(value)) return plainData(value);
+
+    const keys = Object.keys(value);
+
+    if (keys.length && keys.every((key) => typeof value[key] === 'function')) {
+        const out = {};
+        for (const key of keys) out[key] = pyCall(value[key], `${where}.${key}`, lineOffset);
+        return out;
+    }
+
+    return plainData(value);
 }
 
 // A store's namespace, published under its Python module name, so a component's

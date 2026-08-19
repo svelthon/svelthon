@@ -126,6 +126,34 @@ function declaredExports(body) {
     return null;
 }
 
+// `__js__ = {"@sveltejs/kit": ["error", "redirect"]}` — the JavaScript a module
+// needs. Python has no way to import from npm, and a plain `.py` has no
+// `<script module>` to do it for them; this is its equivalent, written as an
+// ordinary assignment and read from the AST like `__all__`.
+function declaredJsImports(body) {
+    for (const node of body) {
+        if (!(node instanceof $B.ast.Assign)) continue;
+        if (!node.targets.some((t) => t instanceof $B.ast.Name && t.id === '__js__')) continue;
+        if (!node.value || !node.value.keys) continue;
+
+        const modules = [];
+
+        node.value.keys.forEach((key, index) => {
+            const names = (node.value.values[index].elts || [])
+                .map((one) => (one instanceof $B.ast.Constant ? one.value : null))
+                .filter((one) => typeof one === 'string' && /^[A-Za-z_$][\w$]*$/.test(one));
+
+            if (key instanceof $B.ast.Constant && names.length) {
+                modules.push({ from: key.value, names });
+            }
+        });
+
+        return modules;
+    }
+
+    return [];
+}
+
 // `src/counter_store.svelte.py` → `counter_store`, the name Python imports it by.
 // The `.svelte` marker says the module is reactive; it is not part of its name,
 // any more than it is for a `.svelte.ts`.
@@ -315,6 +343,9 @@ function compile(
     // drop a write whose value is unchanged by ===. Propagating it would mean
     // handing the template a fresh copy on every render, at the cost of object
     // identity — too high a price for a rule that is easy to state instead.
+    const jsImports = declaredJsImports(root._ast.body);
+    const jsImported = jsImports.flatMap((one) => one.names);
+
     const fn = (name) => `__fn_${name}`;
     const local = (name) => `__local_${name}`;
     // Second signal per name: a mutation bumps it without touching the value,
@@ -355,9 +386,13 @@ function compile(
         [...funcs.map((f) => f.name), ...plainDeriveds.map((d) => d.name)]
     ).filter((n) => /^[A-Za-z_$][\w$]*$/.test(n) && !JS_RESERVED.has(n));
 
+    const isFunction = (name) =>
+        funcs.some((f) => f.name === name) || plainDeriveds.some((d) => d.name === name);
+
     const plainScript = [
         `import { init } from ${JSON.stringify(virtualId(name))};`,
         `import { bind, py, pyError, scheduleAsync, plainData, pyArg, NONE, registerModule } from 'svelthon/runtime';`,
+        ...jsImports.map((one) => `import { ${one.names.join(', ')} } from ${JSON.stringify(one.from)};`),
         ``,
         ...state.map((n) => `let ${n};`),
         ...[...funcs, ...plainDeriveds].map((f) => `let ${fn(f.name)};`),
@@ -377,8 +412,13 @@ function compile(
         `bind(__proto, '__text', () => py.str, () => {});`,
         `bind(__proto, '__seq', () => py.seq, () => {});`,
         `bind(__proto, '__spread', () => py.spread, () => {});`,
-        // Le pont retour : une valeur JavaScript rendue lisible en Python.
+        // Le pont sortant : une valeur Python rendue lisible en JavaScript.
         `bind(__proto, 'to_python', () => plainData, () => {});`,
+        // Le pont aller : les globales JavaScript, telles quelles.
+        `bind(__proto, 'js', () => globalThis, () => {});`,
+        ...jsImported
+            .filter((n) => !declared.includes(n))
+            .map((n) => `bind(__proto, '${n}', () => ${n}, () => {});`),
         ``,
         `const ${NS} = Object.create(__proto);`,
         `${NS}.$proxy = true;`,
@@ -394,11 +434,26 @@ function compile(
         ),
         ``,
         // SvelteKit reads `load`, `actions`, `GET`, `prerender` by name off the
-        // module, so values are exported as well as functions.
+        // module, so values are exported as well as functions — and a value goes
+        // through the boundary too: `actions` is a dict of Python functions, each
+        // of them called by the framework.
+        //
         // No default export: SvelteKit refuses one on a route module, and a
         // Python module has no notion of a default anyway. Named exports are
         // the whole contract, and `__all__` is where it is written.
-        ...(exported.length ? [`export { ${exported.join(', ')} };`] : [])
+        ...exported
+            .filter((n) => !isFunction(n))
+            .map(
+                (n) =>
+                    `const __export_${n} = pyExport(${n}, ${JSON.stringify(`${n} — ${source}`)}, ${lineOffset});`
+            ),
+        ...(exported.length
+            ? [
+                  `export { ${exported
+                      .map((n) => (isFunction(n) ? n : `__export_${n} as ${n}`))
+                      .join(', ')} };`
+              ]
+            : [])
     ].join('\n');
 
     const componentScript = [
@@ -406,6 +461,7 @@ function compile(
         // `py` backs the rewritten conditions, and is available to the template
         // for explicit conversions: {py.str(items)} renders ['a', 'b'].
         `import { bind, py, track, follow, pyError, schedule, plainData, NONE${store ? ', registerModule' : ''} } from 'svelthon/runtime';`,
+        ...jsImports.map((one) => `import { ${one.names.join(', ')} } from ${JSON.stringify(one.from)};`),
         `import { ${['getContext', 'setContext']
             .concat(lifecycle('on_mount') || lifecycle('on_destroy') ? ['untrack'] : [])
             .join(', ')} } from 'svelte';`,
@@ -505,6 +561,11 @@ function compile(
         `bind(__proto, '__seq', () => py.seq, () => {});`,
         `bind(__proto, '__spread', () => py.spread, () => {});`,
         `bind(__proto, 'to_python', () => plainData, () => {});`,
+        // Le pont aller : les globales JavaScript, telles quelles.
+        `bind(__proto, 'js', () => globalThis, () => {});`,
+        ...jsImported
+            .filter((n) => !declared.includes(n))
+            .map((n) => `bind(__proto, '${n}', () => ${n}, () => {});`),
         // What the component imported in its `<script module>`, published so
         // Python can read it. A name Python declares itself wins.
         ...jsNames
