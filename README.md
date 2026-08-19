@@ -581,41 +581,58 @@ production build with `adapter-node`:
 | `+page.svelte`, `+layout.svelte`, `+error.svelte` | in Python, server-rendered then hydrated |
 | `+page.server.py`, `+layout.server.py` | `load()` in Python, its data merged as usual |
 | `async def load()` | awaited by the framework |
+| `+server.py` | a pure-Python endpoint, building its own `Response` |
+| form actions | `actions = {"default": noter}`, with `await request.formData()` |
+| `error()`, `redirect()`, `fail()` | called from Python |
 | dynamic routes | `event["params"]["numero"]` |
 | a `.py` imported from JavaScript | by its named exports |
 
-**The event is converted at the boundary.** SvelteKit wraps `params` and `url` in
-proxies that record every key read, so it knows what a `load()` depended on — and
-Brython probes an object's symbols as it wraps it for Python, which lands symbols
-in that record and makes SvelteKit's serialiser refuse it. Python therefore never
-touches the proxy: the boundary reads it in JavaScript and hands over a Python
-dict.
+### The two bridges
+
+Python cannot import from npm, and a plain `.py` has no `<script module>` to do
+it for it. It declares what it needs the same way it declares what it exports —
+an ordinary assignment, read from the AST:
+
+```python
+__js__ = {"@sveltejs/kit": ["error", "fail"]}
+__all__ = ["load", "actions"]
+```
+
+For the platform itself, `js` is the JavaScript globals and `to_js()` converts a
+Python container into something a Web API will accept:
+
+```python
+def GET(event):
+    corps = js.JSON.stringify(to_js(chercher(event["query"].get("q", ""))))
+    return js.Response.new(corps, to_js({"headers": {"content-type": "application/json"}}))
+```
+
+### The boundary converts, both ways
+
+SvelteKit wraps `params` and `url` in proxies that record every key read, so it
+knows what a `load()` depended on — and Brython probes an object's symbols as it
+wraps it for Python, which lands symbols in that record and makes SvelteKit's
+serialiser refuse it. Python therefore never touches the proxy: the boundary
+reads it in JavaScript and hands over a Python dict.
 
 ```python
 def load(event):
     numero = event["params"]["numero"]
     requete = event["query"].get("q", "")
-    return {"pep": trouver(numero)}      # a dict, converted on the way out
+
+    if not (fiche := trouver(numero)):
+        error(404, "rien sous ce numéro")     # SvelteKit 2 throws it itself
+
+    return {"pep": fiche}                     # a dict, converted on the way out
 ```
 
 `event` carries `params`, `query`, `url`, `method`, `route`, and `js` — the raw
-event, for cookies, `fetch` and `setHeaders`, which stay JavaScript objects.
+event, for cookies, `fetch` and `setHeaders`.
 
-What is returned is converted too: a Brython dict carries symbol-keyed internals
-that no serialiser will take, so containers become ordinary JavaScript data on
-the way out.
-
-**Not covered.** A pure-Python `+server.py` has to return a `Response`, a
-JavaScript global, and Python has no bridge to those — `from browser import
-window` does not work under Node. An endpoint stays a few lines of JavaScript
-importing a Python module:
-
-```js
-import { json } from '@sveltejs/kit';
-import { chercher } from '$lib/peps.py';
-
-export const GET = ({ url }) => json(chercher(url.searchParams.get('q') ?? ''));
-```
+The same treatment reaches inside an exported **dict of functions**, which is
+what `actions` is: each one gets its arguments converted, its coroutine awaited
+and its result converted back. What is *not* a Python container — a `Response`,
+a `Promise`, an `ActionFailure` — is passed through untouched.
 
 ## Server-side rendering
 
@@ -825,9 +842,6 @@ reloads.
 
 **Worth deciding**
 
-- **A bridge to JavaScript globals.** Without one, a `+server.py` cannot build
-  the `Response` it must return, and any Web API is out of reach from Python.
-  `<script module>` covers a component's needs; a plain module has no equivalent.
 - **Django template syntax.** `{% if %}` / `{% for %}` over the Svelte blocks,
   for the audience that has it in their fingers. Written and unwired in
   `src/lib/dtl.js`; the decision is one of positioning, not of technique.

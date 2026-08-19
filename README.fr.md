@@ -579,42 +579,58 @@ build de production avec `adapter-node` :
 | `+page.svelte`, `+layout.svelte`, `+error.svelte` | en Python, rendus côté serveur puis hydratés |
 | `+page.server.py`, `+layout.server.py` | `load()` en Python, ses données fusionnées comme d'habitude |
 | `async def load()` | attendu par le framework |
+| `+server.py` | un endpoint entièrement Python, qui construit sa `Response` |
+| actions de formulaire | `actions = {"default": noter}`, avec `await request.formData()` |
+| `error()`, `redirect()`, `fail()` | appelés depuis Python |
 | routes dynamiques | `event["params"]["numero"]` |
 | un `.py` importé depuis JavaScript | par ses exports nommés |
 
-**L'événement est converti à la frontière.** SvelteKit enveloppe `params` et
-`url` dans des proxies qui enregistrent chaque clé lue, pour savoir de quoi un
-`load()` dépend — et Brython sonde les symboles d'un objet en l'emballant pour
-Python, ce qui fait atterrir des symboles dans cet enregistrement et fait refuser
-le tout par son sérialiseur. Python ne touche donc jamais le proxy : la frontière
-le lit en JavaScript et rend un dict Python.
+### Les deux ponts
+
+Python ne sait pas importer depuis npm, et un `.py` ordinaire n'a pas de
+`<script module>` pour le faire à sa place. Il déclare donc ce dont il a besoin
+comme il déclare ce qu'il exporte — une affectation ordinaire, lue dans l'AST :
+
+```python
+__js__ = {"@sveltejs/kit": ["error", "fail"]}
+__all__ = ["load", "actions"]
+```
+
+Pour la plateforme elle-même, `js` donne les globales JavaScript et `to_js()`
+convertit un conteneur Python en quelque chose qu'une API Web acceptera :
+
+```python
+def GET(event):
+    corps = js.JSON.stringify(to_js(chercher(event["query"].get("q", ""))))
+    return js.Response.new(corps, to_js({"headers": {"content-type": "application/json"}}))
+```
+
+### La frontière convertit, dans les deux sens
+
+SvelteKit enveloppe `params` et `url` dans des proxies qui enregistrent chaque
+clé lue, pour savoir de quoi un `load()` dépend — et Brython sonde les symboles
+d'un objet en l'emballant pour Python, ce qui fait atterrir des symboles dans cet
+enregistrement et fait refuser le tout par son sérialiseur. Python ne touche donc
+jamais le proxy : la frontière le lit en JavaScript et rend un dict Python.
 
 ```python
 def load(event):
     numero = event["params"]["numero"]
     requete = event["query"].get("q", "")
-    return {"pep": trouver(numero)}      # un dict, converti au retour
+
+    if not (fiche := trouver(numero)):
+        error(404, "rien sous ce numéro")     # SvelteKit 2 lève lui-même
+
+    return {"pep": fiche}                     # un dict, converti au retour
 ```
 
 `event` porte `params`, `query`, `url`, `method`, `route` et `js` — l'événement
-brut, pour les cookies, `fetch` et `setHeaders`, qui restent des objets
-JavaScript.
+brut, pour les cookies, `fetch` et `setHeaders`.
 
-Ce qui est renvoyé est converti aussi : un dict Brython porte des clés
-symboliques qu'aucun sérialiseur n'accepte, donc les conteneurs deviennent des
-données JavaScript ordinaires au retour.
-
-**Non couvert.** Un `+server.py` pur doit rendre un `Response`, une globale
-JavaScript, et Python n'a pas de pont vers celles-ci — `from browser import
-window` ne marche pas sous Node. Un endpoint reste quelques lignes de JavaScript
-important un module Python :
-
-```js
-import { json } from '@sveltejs/kit';
-import { chercher } from '$lib/peps.py';
-
-export const GET = ({ url }) => json(chercher(url.searchParams.get('q') ?? ''));
-```
+Le même traitement descend **dans un dict de fonctions exporté**, ce qu'est
+`actions` : chacune reçoit ses arguments convertis, voit sa coroutine attendue et
+son résultat reconverti. Ce qui n'est **pas** un conteneur Python — une
+`Response`, une `Promise`, un `ActionFailure` — passe intact.
 
 ## Rendu côté serveur
 
@@ -814,10 +830,6 @@ l'application ne recharge jamais.
 
 **À décider**
 
-- **Un pont vers les globales JavaScript.** Sans lui, un `+server.py` ne peut pas
-  construire le `Response` qu'il doit rendre, et aucune API Web n'est atteignable
-  depuis Python. Le `<script module>` couvre le besoin d'un composant ; un module
-  ordinaire n'a pas d'équivalent.
 - **La syntaxe de gabarit de Django.** `{% if %}` / `{% for %}` par-dessus les
   blocs de Svelte, pour le public qui l'a dans les doigts. Écrite et débranchée
   dans `src/lib/dtl.js` ; la décision est de positionnement, pas de technique.
