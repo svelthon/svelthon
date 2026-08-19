@@ -579,6 +579,7 @@ build de production avec `adapter-node` :
 | `+page.svelte`, `+layout.svelte`, `+error.svelte` | en Python, rendus côté serveur puis hydratés |
 | `+page.server.py`, `+layout.server.py` | `load()` en Python, ses données fusionnées comme d'habitude |
 | `async def load()` | attendu par le framework |
+| `+page.py` | un `load()` universel — serveur, puis navigateur lors d'une navigation client |
 | `+server.py` | un endpoint entièrement Python, qui construit sa `Response` |
 | actions de formulaire | `actions = {"default": noter}`, avec `await request.formData()` |
 | `error()`, `redirect()`, `fail()` | appelés depuis Python |

@@ -75,7 +75,7 @@ the build fails loudly instead of shipping a component with no reactivity.
 
 ## The API, and what it replaces
 
-Six names, and nothing to import: they are injected into the module's namespace,
+Seven names, and nothing to import: they are injected into the module's namespace,
 and a component that defines its own keeps it. Each one stands where a rune
 stands in JavaScript.
 
@@ -89,7 +89,8 @@ stands in JavaScript.
 | `@effect` | `$effect(…)` |
 | `def on_mount()` / `on_destroy()` | `onMount()` / `onDestroy()` |
 | `set_context(k, v)` / `get_context(k)` | `setContext(k, v)` / `getContext(k)` |
-| `to_python(value)` | — a JavaScript value made readable from Python |
+| `to_js(value)` | — a Python container made readable from JavaScript |
+| `js` | — the JavaScript globals: `js.Response`, `js.JSON`, `js.URL` |
 | `items.append(x)` | `items.push(x)` — `$state` proxies deeply |
 
 The last row is the one that costs work rather than a rename — see
@@ -581,6 +582,7 @@ production build with `adapter-node`:
 | `+page.svelte`, `+layout.svelte`, `+error.svelte` | in Python, server-rendered then hydrated |
 | `+page.server.py`, `+layout.server.py` | `load()` in Python, its data merged as usual |
 | `async def load()` | awaited by the framework |
+| `+page.py` | a universal `load()` — on the server, then in the browser on a client navigation |
 | `+server.py` | a pure-Python endpoint, building its own `Response` |
 | form actions | `actions = {"default": noter}`, with `await request.formData()` |
 | `error()`, `redirect()`, `fail()` | called from Python |
