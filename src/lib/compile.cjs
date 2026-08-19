@@ -391,7 +391,7 @@ function compile(
 
     const plainScript = [
         `import { init } from ${JSON.stringify(virtualId(name))};`,
-        `import { bind, py, pyError, scheduleAsync, plainData, pyArg, NONE, registerModule } from 'svelthon/runtime';`,
+        `import { bind, py, pyError, scheduleAsync, plainData, pyArg, pyExport, NONE, registerModule } from 'svelthon/runtime';`,
         ...jsImports.map((one) => `import { ${one.names.join(', ')} } from ${JSON.stringify(one.from)};`),
         ``,
         ...state.map((n) => `let ${n};`),
@@ -413,7 +413,7 @@ function compile(
         `bind(__proto, '__seq', () => py.seq, () => {});`,
         `bind(__proto, '__spread', () => py.spread, () => {});`,
         // Le pont sortant : une valeur Python rendue lisible en JavaScript.
-        `bind(__proto, 'to_python', () => plainData, () => {});`,
+        `bind(__proto, 'to_js', () => plainData, () => {});`,
         // Le pont aller : les globales JavaScript, telles quelles.
         `bind(__proto, 'js', () => globalThis, () => {});`,
         ...jsImported
@@ -560,7 +560,7 @@ function compile(
         `bind(__proto, '__text', () => py.str, () => {});`,
         `bind(__proto, '__seq', () => py.seq, () => {});`,
         `bind(__proto, '__spread', () => py.spread, () => {});`,
-        `bind(__proto, 'to_python', () => plainData, () => {});`,
+        `bind(__proto, 'to_js', () => plainData, () => {});`,
         // Le pont aller : les globales JavaScript, telles quelles.
         `bind(__proto, 'js', () => globalThis, () => {});`,
         ...jsImported
