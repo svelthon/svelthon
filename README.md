@@ -659,7 +659,14 @@ def load(event):
 ```
 
 `event` carries `params`, `query`, `url`, `method`, `route`, and `js` — the raw
-event, for cookies, `fetch` and `setHeaders`.
+event. That last one is the escape hatch, and it is enough on its own:
+
+```python
+biscuits = event["js"].cookies
+theme = str(biscuits.get("theme") or "clair")
+biscuits.set("theme", "sombre", to_js({"path": "/"}))
+event["js"].setHeaders(to_js({"x-svelthon": "bonjour"}))
+```
 
 The same treatment reaches inside an exported **dict of functions**, which is
 what `actions` is: each one gets its arguments converted, its coroutine awaited

@@ -658,7 +658,14 @@ def load(event):
 ```
 
 `event` porte `params`, `query`, `url`, `method`, `route` et `js` — l'événement
-brut, pour les cookies, `fetch` et `setHeaders`.
+brut. Ce dernier est l'échappatoire, et il se suffit à lui-même :
+
+```python
+biscuits = event["js"].cookies
+theme = str(biscuits.get("theme") or "clair")
+biscuits.set("theme", "sombre", to_js({"path": "/"}))
+event["js"].setHeaders(to_js({"x-svelthon": "bonjour"}))
+```
 
 Le même traitement descend **dans un dict de fonctions exporté**, ce qu'est
 `actions` : chacune reçoit ses arguments convertis, voit sa coroutine attendue et
