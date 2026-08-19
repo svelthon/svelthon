@@ -584,6 +584,8 @@ production build with `adapter-node`:
 | `async def load()` | awaited by the framework |
 | streaming | a coroutine in the returned data becomes a promise SvelteKit streams |
 | page options | `prerender`, `ssr`, `csr` — exported through `__all__` |
+| cookies, `setHeaders` | through `event["js"]`, no bridge of ours involved |
+| `handle`, `handleError` | in Python, behind a two-line JavaScript shim |
 | `+page.py` | a universal `load()` — on the server, then in the browser on a client navigation |
 | `+server.py` | a pure-Python endpoint, building its own `Response` |
 | form actions | `actions = {"default": noter}`, with `await request.formData()` |
@@ -672,6 +674,24 @@ The same treatment reaches inside an exported **dict of functions**, which is
 what `actions` is: each one gets its arguments converted, its coroutine awaited
 and its result converted back. What is *not* a Python container — a `Response`,
 a `Promise`, an `ActionFailure` — is passed through untouched.
+
+### The one place SvelteKit is hard-coded
+
+Hooks are found by `resolve_entry`, which matches `/\.(js|ts)$/` and ignores
+`moduleExtensions` — so `src/hooks.server.py` is never seen. A two-line shim
+bridges it, and everything else stays Python:
+
+```js
+// src/hooks.server.js
+export { handle, handleError } from './hooks.server.py';
+```
+
+```python
+async def handle(entree):
+    reponse = await entree.resolve(entree.event)
+    reponse.headers.set("x-python-handle", "1")
+    return reponse
+```
 
 ## Server-side rendering
 
