@@ -4,7 +4,12 @@ import { fileURLToPath } from 'node:url';
 import { python, svelthon, vendorQuirks } from './src/lib/svelthon.js';
 
 export default defineConfig({
-    plugins: [svelthon(), vendorQuirks(), svelte({ preprocess: [python({ path: ['src'] })] })],
+    plugins: [svelthon(), vendorQuirks(), svelte({
+            preprocess: [python({ path: ['src'] })],
+            // Le filtre de modules de vite-plugin-svelte, élargi au Python : un
+            // `.svelte.py` est compilé comme un `.svelte.ts`, sous son propre nom.
+            experimental: { compileModule: { extensions: ['.js', '.ts', '.py'] } }
+        })],
     resolve: {
         alias: {
             'svelthon/runtime': fileURLToPath(new URL('./src/lib/runtime.js', import.meta.url))

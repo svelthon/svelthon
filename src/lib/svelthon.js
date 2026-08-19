@@ -532,13 +532,16 @@ function pythonImports(names, fromDirectory) {
 // `foo.py` compiles to ordinary JavaScript, and `foo.svelte.py` to a rune
 // module whose names become signals.
 //
-// A rune module has to be *named* `.svelte.js` — that is the only way the Svelte
-// compiler ever sees it, and without it `$state` is just an undefined variable.
-// An ordinary module needs no such thing, and keeps its own path: which is what
-// lets SvelteKit find a `+page.server.py` in Vite's manifest, where it looks it
-// up by the name it wrote.
-const STORE_SUFFIX = '.svelte.js';
-
+// A rune module is only compiled by the Svelte plugin if its name matches that
+// plugin's own filter — which is configurable, and which the project widens:
+//
+//     svelte({ experimental: { compileModule: { extensions: ['.js', '.ts', '.py'] } } })
+//
+// The filter is an infix (`.svelte.`) followed by one of those extensions, so
+// `panier.svelte.py` matches and `peps.py` does not — exactly the line we wanted
+// to draw. Both keep their own path, which is also what lets SvelteKit find a
+// `+page.server.py` in Vite's manifest, where it looks it up by the name it
+// wrote.
 const isReactive = (file) => file.endsWith('.svelte.py');
 
 // The Vite plugin that serves those modules.
@@ -554,9 +557,11 @@ export function svelthon() {
             if (isVirtual(id)) return '\0' + id;
             // Without an importer either: SvelteKit hands its route modules to
             // Vite as already-resolved entries, with nobody to resolve against.
-            if (id.endsWith('.py')) {
-                const file = importer ? resolve(dirname(importer), id) : resolve(id);
-                return isReactive(file) ? file + STORE_SUFFIX : file;
+            // Only a path we can resolve ourselves. A bare or aliased specifier —
+            // `#lib/peps.py` — belongs to whoever defined the alias, and reaches
+            // load() as an absolute path once they have.
+            if (id.endsWith('.py') && (id.startsWith('.') || id.startsWith('/'))) {
+                return importer ? resolve(dirname(importer), id) : resolve(id);
             }
         },
         load(id) {
@@ -566,10 +571,9 @@ export function svelthon() {
                 const entry = generated.get(id.slice(1));
                 return entry && (entry.map ? { code: entry.code, map: entry.map } : entry.code);
             }
-            const reactive = id.endsWith('.py' + STORE_SUFFIX);
-            if (!reactive && !id.endsWith('.py')) return;
+            if (!id.endsWith('.py')) return;
 
-            const file = reactive ? id.slice(0, -STORE_SUFFIX.length) : id;
+            const file = id;
             const name = nameFor(file);
             const { script, module, map, stdlib, imports } = compilePython(file);
 
@@ -625,7 +629,7 @@ export function svelthon() {
             // be invalidated too — otherwise its load() never reruns and
             // `generated` keeps the previous body, exactly the staleness this
             // hook exists to prevent.
-            if (file.endsWith('.py')) forget(isReactive(file) ? file + STORE_SUFFIX : file);
+            if (file.endsWith('.py')) forget(file);
 
             return [...modules, ...stale];
         }

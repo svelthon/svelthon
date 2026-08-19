@@ -567,12 +567,14 @@ réglage est nécessaire, et c'est un réglage que SvelteKit prévoit pour ça :
 // svelte.config.js
 export default {
     preprocess: [python({ path: ['src/lib'] })],
+    // pour qu'un `panier.svelte.py` soit compilé comme un `panier.svelte.ts`
+    vitePlugin: { experimental: { compileModule: { extensions: ['.js', '.ts', '.py'] } } },
     kit: { moduleExtensions: ['.js', '.ts', '.py'] }
 };
 ```
 
 Le routeur voit alors les modules de route en `.py`. Ce qui marche, mesuré sur un
-build de production avec `adapter-node` :
+build de production avec `adapter-node`, contre **SvelteKit 3** :
 
 | | |
 |---|---|

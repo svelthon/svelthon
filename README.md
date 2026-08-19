@@ -428,11 +428,22 @@ def increment():
 <button onclick={store.increment}>+</button>
 ```
 
-It is served under a `.svelte.js` identity, which is precisely what makes
-vite-plugin-svelte compile the runes inside it — the suffix is load-bearing, not
-cosmetic. Names are exported through accessors: Svelte forbids exporting a
-reassigned `$state` binding, and a getter is what keeps the read reactive at the
-call site anyway.
+Its runes are compiled by vite-plugin-svelte, whose module filter the project
+widens to accept the extension — one setting, and the same shape the filter
+already had for `.svelte.ts`:
+
+```js
+svelte({
+    preprocess: [python()],
+    experimental: { compileModule: { extensions: ['.js', '.ts', '.py'] } }
+})
+```
+
+The filter is an infix — `.svelte.` — followed by one of those extensions, so
+`panier.svelte.py` matches and `peps.py` does not: exactly the line the two kinds
+draw. Names are exported through accessors: Svelte forbids exporting a reassigned
+`$state` binding, and a getter is what keeps the read reactive at the call site
+anyway.
 
 The bridge runs both ways: a component's Python imports the module as an ordinary
 Python module and reaches the same signals.
@@ -570,12 +581,14 @@ is needed, and it is one SvelteKit already provides for exactly this:
 // svelte.config.js
 export default {
     preprocess: [python({ path: ['src/lib'] })],
+    // so `panier.svelte.py` is compiled like a `panier.svelte.ts`
+    vitePlugin: { experimental: { compileModule: { extensions: ['.js', '.ts', '.py'] } } },
     kit: { moduleExtensions: ['.js', '.ts', '.py'] }
 };
 ```
 
 That makes the router see `.py` route modules. What then works, measured on a
-production build with `adapter-node`:
+production build with `adapter-node`, against **SvelteKit 3**:
 
 | | |
 |---|---|
