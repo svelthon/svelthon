@@ -232,7 +232,7 @@ function compile(
     src,
     name = 'Component',
     source = name,
-    { store = false, plain = false, lineOffset = 0, sourceContent = null } = {}
+    { store = false, plain = false, jsNames = [], lineOffset = 0, sourceContent = null } = {}
 ) {
     // The namespace identifier is derived from `filename` alone — `module` and
     // `locals_id` are ignored by js_from_root. Brython maps '.' to '_' but
@@ -505,6 +505,11 @@ function compile(
         `bind(__proto, '__seq', () => py.seq, () => {});`,
         `bind(__proto, '__spread', () => py.spread, () => {});`,
         `bind(__proto, 'to_python', () => plainData, () => {});`,
+        // What the component imported in its `<script module>`, published so
+        // Python can read it. A name Python declares itself wins.
+        ...jsNames
+            .filter((n) => !declared.includes(n))
+            .map((n) => `bind(__proto, '${n}', () => ${n}, () => {});`),
         ...(hasContext
             ? []
             : [

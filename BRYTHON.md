@@ -63,8 +63,31 @@ Token type codes read off the tokenizer: `NAME 1`, `NUMBER 2`, `STRING 3`,
 | | |
 |---|---|
 | `$B.$getattr(obj, name)` | Python attribute protocol |
-| `$B.get_class(obj)` | class of a Python object |
-| `$B.builtins` | `str.$factory`, `bool.$factory`, `dict.$factory`, `set.$factory`, `repr`, `None` |
+| `$B.get_class(obj)` | class of a Python object — **it probes the object's symbols**, so it must never be called on a foreign proxy that records reads |
+| `$B.builtins` | `str.$factory`, `bool.$factory`, `dict.$factory`, `set.$factory`, `list.$factory`, `repr`, `None`, `type` |
+| `$B.coroutine` | compared against `get_class` to spot a coroutine without calling `aio.iscoroutine` |
+
+### Dispatch points, for reactivity
+
+Every write a Python program makes goes through one of these, which is what lets
+an in-place mutation become reactive without proxying anything. An object that
+carries no marker pays one property miss.
+
+| | |
+|---|---|
+| `$B.call_attr(obj, name, nargs, ...)` | every method call |
+| `$B.$setitem(obj, key, value)` / `$B.$delitem` | `d[k] = v`, `del d[k]` |
+| `$B.$getitem(obj, key)` | every indexed read — the hottest of them, and where a nested container comes under watch |
+| `$B.$setattr(obj, name, value)` / `$B.$setattr1` | attribute writes; Brython emits one or the other depending on the statement, and both have to be covered |
+| `$B.$delattr(obj, name)` | `del obj.attr` |
+
+Wrap them with rest arguments — `function (a, b, ...rest)` — and never with
+`arguments` + `apply`: these are the hottest functions Brython has, and the old
+form blocks V8's optimiser enough to be visible on a page load.
+
+An instance's attributes live under a **private symbol** (`Symbol('DICT')`, not
+`Symbol.for`), so it has to be discovered once from an object and cached. A
+dict's keys, by contrast, are ordinary enumerable JavaScript properties.
 
 ### Modules
 

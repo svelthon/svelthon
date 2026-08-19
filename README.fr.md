@@ -22,6 +22,34 @@ Pas de rune côté Python, pas d'API de réactivité à apprendre : du Python nu
 Le navigateur ne reçoit que du JavaScript — plus aucune transcompilation au
 chargement de la page.
 
+## Pourquoi
+
+Python est le langage le plus utilisé au monde, et le faire tourner dans un
+navigateur a été promis bien des fois — Brython, Skulpt, Transcrypt, PyScript.
+L'obstacle n'a jamais été le langage. C'était la chaîne de travail : pas de
+composants, pas de props, pas de rechargement à chaud, un compilateur livré à
+chaque visiteur, et une page qui passait sa première seconde à compiler.
+
+SVELTHON laisse la chaîne frontend moderne intacte. Composants, props, styles
+scopés, listes à clé, HMR, tree-shaking — tout — avec Python comme langage de
+composant et **aucune pénalité au chargement**, puisque la compilation a déjà eu
+lieu.
+
+## Démarrer
+
+```sh
+npm install
+npm run dev
+```
+
+```sh
+npm test             # 137 tests : sémantique, props, réactivité, surface Svelte
+npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
+npm run test:hmr     # invalidation des modules virtuels, composant et store
+npm run bench        # Python contre JavaScript, même composant, vrai navigateur
+npm run build
+```
+
 ## L'idée
 
 Brython range l'état d'un module Python dans un **objet namespace**, jamais dans
@@ -47,7 +75,7 @@ sans réactivité.
 
 ## L'API, et ce qu'elle remplace
 
-Cinq noms, et rien à importer : ils sont injectés dans le namespace du module, et
+Six noms, et rien à importer : ils sont injectés dans le namespace du module, et
 un composant qui définit le sien le garde. Chacun se tient là où se tient une
 rune en JavaScript.
 
@@ -61,6 +89,7 @@ rune en JavaScript.
 | `@effect` | `$effect(…)` |
 | `def on_mount()` / `on_destroy()` | `onMount()` / `onDestroy()` |
 | `set_context(k, v)` / `get_context(k)` | `setContext(k, v)` / `getContext(k)` |
+| `to_python(valeur)` | — une valeur JavaScript rendue lisible en Python |
 | `items.append(x)` | `items.push(x)` — `$state` proxifie en profondeur |
 
 La dernière ligne est la seule qui coûte du travail plutôt qu'un renommage —
@@ -334,14 +363,47 @@ et souffrait du même mal en pire : son propre module `.svelte.js` devait être
 invalidé lui aussi, faute de quoi son `load()` ne rejouait jamais et le cache
 gardait l'ancien corps.
 
-## État partagé : un simple fichier `.py`
+## Deux sortes de `.py`, comme TypeScript a deux sortes de `.ts`
 
-L'équivalent Python d'un `.svelte.ts`. Le fichier est du Python ordinaire ; ses
-noms de niveau module deviennent des signaux créés **une fois pour toute
-l'application**, là où l'état d'un composant naît et meurt avec chaque instance.
+Svelte trace déjà cette ligne pour TypeScript, et Python la suit sans rien
+changer :
+
+| TypeScript | Python | compilé en |
+|---|---|---|
+| `outils.ts` | `outils.py` | un module JavaScript ordinaire |
+| `panier.svelte.ts` | `panier.svelte.py` | un module réactif — ses noms deviennent des signaux |
+| `+page.server.ts` | `+page.server.py` | un module ordinaire, ce qu'est un module de route |
+
+Rien ici n'est de notre invention. Un `.ts` ne devient réactif que nommé
+`.svelte.ts`, et le marqueur ne fait pas partie du nom du module :
+`panier.svelte.py` s'importe depuis Python par `import panier`.
+
+**Un module ordinaire** est du Python compilé en JavaScript, et rien d'autre.
+Pas de rune, pas de signal, aucun coût pour une réactivité dont il ne fait rien.
+Ses fonctions sont ses exports ; `__all__` dit autre chose quand on le souhaite :
 
 ```python
-# counter_store.py
+# peps.py
+__all__ = ["chercher", "trouver"]
+
+def chercher(requete=""):
+    return [p for p in CATALOGUE if requete in p["titre"]]
+```
+
+`__all__` est la façon dont Python dit lui-même ce qu'un module exporte, et c'est
+ce qu'il a de plus proche du mot-clé `export` de TypeScript. JavaScript importe
+ces noms directement :
+
+```js
+import { chercher } from '$lib/peps.py';
+```
+
+**Un module réactif** est celui de l'état partagé. Ses noms de niveau module
+deviennent des signaux créés **une fois pour toute l'application**, là où l'état
+d'un composant naît et meurt avec chaque instance :
+
+```python
+# counter_store.svelte.py
 count = 0
 history = []
 
@@ -353,25 +415,21 @@ def increment():
 
 ```svelte
 <script module>
-    import { store } from './counter_store.py';
+    import { store } from './counter_store.svelte.py';
 </script>
 
 <p>{store.count} — {store.history}</p>
 <button onclick={store.increment}>+</button>
 ```
 
-Le store est servi sous une identité `.svelte.js`, ce qui est précisément ce qui
-décide vite-plugin-svelte à en compiler les runes. Les noms sont exportés par
-des accesseurs : Svelte interdit d'exporter directement une liaison `$state`
-réaffectée, et un getter est de toute façon ce qui garde la lecture réactive
-chez l'appelant.
+Il est servi sous une identité `.svelte.js`, ce qui est précisément ce qui fait
+compiler ses runes par vite-plugin-svelte — le suffixe porte la charge, il n'est
+pas décoratif. Les noms sont exportés par des accesseurs : Svelte interdit
+d'exporter une liaison `$state` réaffectée, et un getter est de toute façon ce
+qui garde la lecture réactive au point d'appel.
 
-Un composant qui *consomme* un store sans avoir de Python à lui reçoit quand
-même les réécritures de gabarit et `py` en portée — sinon `{store.history}`
-retomberait sur le rendu JavaScript.
-
-Le pont va dans les deux sens : le Python d'un composant importe le store comme
-un module Python ordinaire et atteint les mêmes signaux.
+Le pont marche dans les deux sens : le Python d'un composant importe le module
+comme un module Python ordinaire et atteint les mêmes signaux.
 
 ```python
 import counter_store
@@ -381,12 +439,12 @@ def bump():
     return counter_store.count
 ```
 
-Le namespace du store est publié dans `$B.imported` sous son nom de module, et
-le module virtuel du composant importe le store en tête — pour qu'il soit
-enregistré avant que le corps du composant ne tourne.
-
-Le plugin est en `enforce: 'pre'` : sans ça, le résolveur de Vite réclame
-`./store.py` comme un fichier ordinaire et livre son Python au parseur JS.
+`import counter_store` cherche `counter_store.svelte.py`, puis `counter_store.py`,
+dans le répertoire du fichier importateur puis le long de
+`python({ path: [...] })` — qui joue le rôle de PYTHONPATH. Le namespace est
+publié dans `$B.imported` sous son nom de module, et le module virtuel de
+l'importateur l'importe en premier, si bien qu'il est enregistré quand le corps
+s'exécute.
 
 ## Effets
 
@@ -498,6 +556,66 @@ générées qui l'implémentent. Un test décode la carte et vérifie qu'une
 instruction connue atterrit sur sa vraie ligne — une carte qui pointe à côté
 étant pire que pas de carte du tout.
 
+## SvelteKit
+
+Une dépendance, pas un fork. SvelteKit délègue les `.svelte` à
+vite-plugin-svelte, qui applique le préprocesseur déclaré dans
+`svelte.config.js`, et notre plugin Vite se met à côté de `sveltekit()`. Un seul
+réglage est nécessaire, et c'est un réglage que SvelteKit prévoit pour ça :
+
+```js
+// svelte.config.js
+export default {
+    preprocess: [python({ path: ['src/lib'] })],
+    kit: { moduleExtensions: ['.js', '.ts', '.py'] }
+};
+```
+
+Le routeur voit alors les modules de route en `.py`. Ce qui marche, mesuré sur un
+build de production avec `adapter-node` :
+
+| | |
+|---|---|
+| `+page.svelte`, `+layout.svelte`, `+error.svelte` | en Python, rendus côté serveur puis hydratés |
+| `+page.server.py`, `+layout.server.py` | `load()` en Python, ses données fusionnées comme d'habitude |
+| `async def load()` | attendu par le framework |
+| routes dynamiques | `event["params"]["numero"]` |
+| un `.py` importé depuis JavaScript | par ses exports nommés |
+
+**L'événement est converti à la frontière.** SvelteKit enveloppe `params` et
+`url` dans des proxies qui enregistrent chaque clé lue, pour savoir de quoi un
+`load()` dépend — et Brython sonde les symboles d'un objet en l'emballant pour
+Python, ce qui fait atterrir des symboles dans cet enregistrement et fait refuser
+le tout par son sérialiseur. Python ne touche donc jamais le proxy : la frontière
+le lit en JavaScript et rend un dict Python.
+
+```python
+def load(event):
+    numero = event["params"]["numero"]
+    requete = event["query"].get("q", "")
+    return {"pep": trouver(numero)}      # un dict, converti au retour
+```
+
+`event` porte `params`, `query`, `url`, `method`, `route` et `js` — l'événement
+brut, pour les cookies, `fetch` et `setHeaders`, qui restent des objets
+JavaScript.
+
+Ce qui est renvoyé est converti aussi : un dict Brython porte des clés
+symboliques qu'aucun sérialiseur n'accepte, donc les conteneurs deviennent des
+données JavaScript ordinaires au retour.
+
+**Non couvert.** Un `+server.py` pur doit rendre un `Response`, une globale
+JavaScript, et Python n'a pas de pont vers celles-ci — `from browser import
+window` ne marche pas sous Node. Un endpoint reste quelques lignes de JavaScript
+important un module Python :
+
+```js
+import { json } from '@sveltejs/kit';
+import { chercher } from '$lib/peps.py';
+
+export const GET = ({ url }) => json(chercher(url.searchParams.get('q') ?? ''));
+```
+
 ## Rendu côté serveur
 
 Ça fonctionne. Svelte compile une seconde version de chaque composant qui rend
@@ -559,7 +677,7 @@ C'est le même mécanisme qui accueillera les `.wasm` de Wasthon.
 
 ## État
 
-Validé par `npm test` — 101 tests, plus 2 échecs attendus (voir plus bas) :
+Validé par `npm test` — 137 tests, plus 3 échecs attendus (voir plus bas) :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
 - props : défaut Python, priorité du parent, lisibilité pendant l'init,
@@ -574,12 +692,15 @@ La grille sert de banc d'acceptation aux codegens optimisés (wasthonf) : un
 codegen qui supprime les cadres d'appel casse `Frames`, qui déballe les entiers
 casse `Integers`, qui court-circuite `augm_assign` casse `Protocols`.
 
-### Divergence connue
+### Divergences connues
 
-Une seule, signalée par un `test.fails` qui alertera le jour où elle sera
-corrigée : la variable d'une compréhension **fuit dans la portée module**
-(`[q for q in range(3)]` laisse `q` défini), alors que Python 3 lui donne une
-portée propre.
+Trois, chacune signalée par un `test.fails` qui alertera le jour où elle
+changera. Deux sont de Brython : la variable d'une compréhension **fuit dans la
+portée englobante** (`[q for q in range(3)]` laisse `q` défini), au niveau module
+comme dans une fonction. La troisième est de Svelte, et ce n'est pas un bug : un
+`$derived` qui rend l'objet qu'on lui a donné se compare égal à lui-même, donc
+rien n'en propage — c'est pourquoi un lecteur s'abonne à l'objet plutôt qu'au
+dérivé (voir [Réactivité](#réactivité--un-signal-par-nom)).
 
 ## Surface Svelte couverte
 
@@ -596,8 +717,17 @@ un composant Python :
 | éléments | `<svelte:window>` `<svelte:head>` `<svelte:boundary>` |
 | styles | `<style>` scopé |
 
-Rappel : **les expressions de gabarit sont du JavaScript.** `{node is not None}`
-ne compile pas ; c'est `{py.truthy(node)}`.
+Les expressions de gabarit sont du Python de bout en bout, y compris dans les
+recoins qui ne sont pas des interpolations : l'itérable d'un `{#each}`, sa clé,
+`{#key}`, le membre droit d'un `{@const}`, `{@html}`, le raccourci `{nom}`,
+l'étalement `{...attrs}`, et une interpolation dans un attribut entre guillemets
+— `class="tag {statut.lower()}"`.
+
+Deux graphies de Python sont acceptées là où Svelte a la sienne :
+`{#each d.items() as (k, v)}` déstructure un tuple, et `{#each xs as x, i}` garde
+le sens de Svelte — élément et index. Ce qu'un composant importe ou déclare dans
+son `<script module>` se lit aussi depuis Python, et c'est ainsi qu'un composant
+Python atteint une bibliothèque JavaScript.
 
 ## Tests
 
@@ -676,7 +806,21 @@ l'application ne recharge jamais.
 
 - **Empaquetage.** `src/lib/` est le framework, mêlé à la démo. L'utiliser
   ailleurs demande d'en faire un paquet npm installable. Rien ne s'y oppose
-  techniquement : c'est le seul point de cette liste qui soit du pur travail.
+  techniquement : c'est le seul point de cette liste qui soit du pur travail. Le
+  spike SvelteKit a déjà montré la forme que ça doit prendre : le préprocesseur
+  et le plugin doivent partager leur registre par `globalThis`, parce que
+  SvelteKit charge `svelte.config.js` et Vite charge `vite.config.js` par des
+  loaders différents, si bien que ce fichier est évalué **deux fois**.
+
+**À décider**
+
+- **Un pont vers les globales JavaScript.** Sans lui, un `+server.py` ne peut pas
+  construire le `Response` qu'il doit rendre, et aucune API Web n'est atteignable
+  depuis Python. Le `<script module>` couvre le besoin d'un composant ; un module
+  ordinaire n'a pas d'équivalent.
+- **La syntaxe de gabarit de Django.** `{% if %}` / `{% for %}` par-dessus les
+  blocs de Svelte, pour le public qui l'a dans les doigts. Écrite et débranchée
+  dans `src/lib/dtl.js` ; la décision est de positionnement, pas de technique.
 
 
 **En amont, chez Brython**
@@ -719,3 +863,18 @@ volée, ce qui laisse le fichier vendu identique à l'amont.
 `vendor/brython.js` est une copie de `www/src/brython.js` (3.14 dev). Le dossier
 porte un `package.json` marqué `commonjs` : Node doit le charger comme script
 classique, alors que la racine est en `type: module`.
+
+## La pile plus large
+
+SVELTHON tient debout tout seul — un framework frontend Python, rien d'autre
+n'est requis. Mais parce qu'il tourne sur Brython plutôt que sur un interpréteur
+en bac à sable, tout ce qui est bâti pour Brython est disponible dans un
+composant : notamment [Wasthon](https://github.com/fgallaire/wasthon), qui amène
+les vrais modules d'extension C de CPython dans le navigateur en WebAssembly, et
+[NumBry](https://github.com/fgallaire/numbry), qui construit la pile scientifique
+— NumPy, pandas, SciPy, matplotlib, Pillow, SymPy — par-dessus.
+
+Ça compte pour ce qu'on livre. Là où un runtime CPython-en-WebAssembly complet
+arrive en une seule grosse charge, ce sont ici des `.wasm` par module — et
+SVELTHON sait déjà exactement quels modules un composant importe : le
+tree-shaking qui taille la bibliothèque standard s'y applique tel quel.

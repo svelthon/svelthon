@@ -45,7 +45,7 @@ npm run dev
 ```
 
 ```sh
-npm test             # 101 tests: semantics, props, reactivity, Svelte surface
+npm test             # 137 tests: semantics, props, reactivity, Svelte surface
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
 npm run bench        # Python vs JavaScript, same component, real browser
@@ -75,7 +75,7 @@ the build fails loudly instead of shipping a component with no reactivity.
 
 ## The API, and what it replaces
 
-Five names, and nothing to import: they are injected into the module's namespace,
+Six names, and nothing to import: they are injected into the module's namespace,
 and a component that defines its own keeps it. Each one stands where a rune
 stands in JavaScript.
 
@@ -89,6 +89,7 @@ stands in JavaScript.
 | `@effect` | `$effect(…)` |
 | `def on_mount()` / `on_destroy()` | `onMount()` / `onDestroy()` |
 | `set_context(k, v)` / `get_context(k)` | `setContext(k, v)` / `getContext(k)` |
+| `to_python(value)` | — a JavaScript value made readable from Python |
 | `items.append(x)` | `items.push(x)` — `$state` proxies deeply |
 
 The last row is the one that costs work rather than a rename — see
@@ -368,14 +369,46 @@ rebinding a global emits `$B.delete_for_reassign(name, locals)`, and a `delete`
 on an own accessor would drop it for good — silently unhooking the signal after
 the very first write.
 
-## Shared state: a plain `.py` file
+## Two kinds of `.py`, the way TypeScript has two kinds of `.ts`
 
-The Python equivalent of a `.svelte.ts`. The file is ordinary Python; its
-module-level names become signals created **once for the whole application**,
-where a component's state is born and dies with each instance.
+Svelte already draws this line for TypeScript, and Python follows it unchanged:
+
+| TypeScript | Python | compiles to |
+|---|---|---|
+| `helpers.ts` | `helpers.py` | an ordinary JavaScript module |
+| `panier.svelte.ts` | `panier.svelte.py` | a reactive module — its names become signals |
+| `+page.server.ts` | `+page.server.py` | an ordinary module, which is what a route module is |
+
+Nothing here is our invention. A `.ts` becomes reactive only when it is named
+`.svelte.ts`, and the marker is not part of the module's name — `panier.svelte.py`
+is imported from Python as `import panier`.
+
+**An ordinary module** is Python compiled to JavaScript, and nothing else. No
+runes, no signals, no cost for reactivity it does not use. Its functions are its
+exports; `__all__` says otherwise when you want it to:
 
 ```python
-# counter_store.py
+# peps.py
+__all__ = ["chercher", "trouver"]
+
+def chercher(requete=""):
+    return [p for p in CATALOGUE if requete in p["titre"]]
+```
+
+`__all__` is Python's own way of saying what a module exports, and it is the
+closest thing the language has to TypeScript's `export` keyword. JavaScript
+imports those names directly:
+
+```js
+import { chercher } from '$lib/peps.py';
+```
+
+**A reactive module** is the shared-state one. Its module-level names become
+signals created **once for the whole application**, where a component's state is
+born and dies with each instance:
+
+```python
+# counter_store.svelte.py
 count = 0
 history = []
 
@@ -387,23 +420,20 @@ def increment():
 
 ```svelte
 <script module>
-    import { store } from './counter_store.py';
+    import { store } from './counter_store.svelte.py';
 </script>
 
 <p>{store.count} — {store.history}</p>
 <button onclick={store.increment}>+</button>
 ```
 
-The store is served under a `.svelte.js` identity, which is precisely what makes
-vite-plugin-svelte compile the runes inside it. Names are exported through
-accessors: Svelte forbids exporting a reassigned `$state` binding, and a getter
-is what keeps the read reactive at the call site anyway.
+It is served under a `.svelte.js` identity, which is precisely what makes
+vite-plugin-svelte compile the runes inside it — the suffix is load-bearing, not
+cosmetic. Names are exported through accessors: Svelte forbids exporting a
+reassigned `$state` binding, and a getter is what keeps the read reactive at the
+call site anyway.
 
-A component that only *consumes* a store, with no Python of its own, still gets
-the markup rewrites and `py` in scope — otherwise `{store.history}` would fall
-back to JavaScript rendering.
-
-The bridge runs both ways: a component's Python imports the store as an ordinary
+The bridge runs both ways: a component's Python imports the module as an ordinary
 Python module and reaches the same signals.
 
 ```python
@@ -414,9 +444,11 @@ def bump():
     return counter_store.count
 ```
 
-The store's namespace is published in `$B.imported` under its module name, and
-the component's virtual module imports the store first, so it is registered by
-the time the component body runs.
+`import counter_store` looks for `counter_store.svelte.py`, then `counter_store.py`,
+in the importing file's own directory and then along `python({ path: [...] })` —
+which plays the part of PYTHONPATH. The namespace is published in `$B.imported`
+under its module name, and the importer's virtual module imports it first, so it
+is registered by the time the body runs.
 
 ## Effects
 
@@ -526,6 +558,65 @@ lines that implement it. A test decodes the map and checks a known statement
 lands on its real line, because a map that points at the wrong place is worse
 than no map at all.
 
+## SvelteKit
+
+A dependency, not a fork. SvelteKit delegates `.svelte` files to
+vite-plugin-svelte, which applies the preprocessor declared in
+`svelte.config.js`, and our Vite plugin sits alongside `sveltekit()`. One setting
+is needed, and it is one SvelteKit already provides for exactly this:
+
+```js
+// svelte.config.js
+export default {
+    preprocess: [python({ path: ['src/lib'] })],
+    kit: { moduleExtensions: ['.js', '.ts', '.py'] }
+};
+```
+
+That makes the router see `.py` route modules. What then works, measured on a
+production build with `adapter-node`:
+
+| | |
+|---|---|
+| `+page.svelte`, `+layout.svelte`, `+error.svelte` | in Python, server-rendered then hydrated |
+| `+page.server.py`, `+layout.server.py` | `load()` in Python, its data merged as usual |
+| `async def load()` | awaited by the framework |
+| dynamic routes | `event["params"]["numero"]` |
+| a `.py` imported from JavaScript | by its named exports |
+
+**The event is converted at the boundary.** SvelteKit wraps `params` and `url` in
+proxies that record every key read, so it knows what a `load()` depended on — and
+Brython probes an object's symbols as it wraps it for Python, which lands symbols
+in that record and makes SvelteKit's serialiser refuse it. Python therefore never
+touches the proxy: the boundary reads it in JavaScript and hands over a Python
+dict.
+
+```python
+def load(event):
+    numero = event["params"]["numero"]
+    requete = event["query"].get("q", "")
+    return {"pep": trouver(numero)}      # a dict, converted on the way out
+```
+
+`event` carries `params`, `query`, `url`, `method`, `route`, and `js` — the raw
+event, for cookies, `fetch` and `setHeaders`, which stay JavaScript objects.
+
+What is returned is converted too: a Brython dict carries symbol-keyed internals
+that no serialiser will take, so containers become ordinary JavaScript data on
+the way out.
+
+**Not covered.** A pure-Python `+server.py` has to return a `Response`, a
+JavaScript global, and Python has no bridge to those — `from browser import
+window` does not work under Node. An endpoint stays a few lines of JavaScript
+importing a Python module:
+
+```js
+import { json } from '@sveltejs/kit';
+import { chercher } from '$lib/peps.py';
+
+export const GET = ({ url }) => json(chercher(url.searchParams.get('q') ?? ''));
+```
+
 ## Server-side rendering
 
 It works. Svelte compiles a second version of each component that returns an
@@ -614,12 +705,20 @@ a Python component:
 | elements | `<svelte:window>` `<svelte:head>` `<svelte:boundary>` |
 | styles | scoped `<style>` |
 
-Reminder: **template expressions are JavaScript.** `{node is not None}` does not
-compile; write `{py.truthy(node)}`.
+Template expressions are Python throughout, including the corners that are not
+interpolations: the iterable of an `{#each}`, its key, `{#key}`, the right-hand
+side of an `{@const}`, `{@html}`, the shorthand `{name}`, the spread `{...attrs}`,
+and an interpolation inside a quoted attribute — `class="tag {statut.lower()}"`.
+
+Two Python spellings are accepted where Svelte has its own: `{#each d.items() as
+(k, v)}` destructures a tuple, and `{#each xs as x, i}` keeps Svelte's meaning of
+item and index. What a component imports or declares in its `<script module>` is
+readable from Python too, which is how a Python component reaches a JavaScript
+library at all.
 
 ## Status
 
-Validated by `npm test` — 101 tests, plus 2 expected failures (below):
+Validated by `npm test` — 137 tests, plus 3 expected failures (below):
 
 - end-to-end reactivity, and which write paths propagate;
 - props: Python defaults, parent precedence, readability during init, parent
@@ -634,11 +733,15 @@ The grid doubles as an acceptance bench for optimising code generators: one that
 drops call frames breaks `Frames`, one that unboxes integers breaks `Integers`,
 one that short-circuits `augm_assign` breaks `Protocols`.
 
-### Known divergence
+### Known divergences
 
-One, flagged by a `test.fails` that will speak up the day it is fixed: a
-comprehension's variable **leaks into module scope** (`[q for q in range(3)]`
-leaves `q` defined), where Python 3 gives it a scope of its own.
+Three, each flagged by a `test.fails` that will speak up the day it changes. Two
+are Brython's: a comprehension's variable **leaks into the enclosing scope**
+(`[q for q in range(3)]` leaves `q` defined), at module level and inside a
+function alike. The third is Svelte's, and it is not a bug: a `$derived` that
+hands back the object it was given compares equal to itself, so nothing
+propagates from it — which is why a reader subscribes to the object rather than
+to the derived (see [Reactivity](#reactivity-one-signal-per-name)).
 
 ## Testing
 
@@ -714,7 +817,20 @@ reloads.
 - **Packaging.** `src/lib/` is the framework, mixed in with the demo. Using it
   anywhere else means turning it into an installable npm package. Nothing
   technical stands in the way — it is the one item on this list that is pure
-  work.
+  work. The SvelteKit spike already showed the shape it has to take: the
+  preprocessor and the plugin must share their registry through
+  `globalThis`, because SvelteKit loads `svelte.config.js` and Vite loads
+  `vite.config.js` through different loaders, and this file is then evaluated
+  twice.
+
+**Worth deciding**
+
+- **A bridge to JavaScript globals.** Without one, a `+server.py` cannot build
+  the `Response` it must return, and any Web API is out of reach from Python.
+  `<script module>` covers a component's needs; a plain module has no equivalent.
+- **Django template syntax.** `{% if %}` / `{% for %}` over the Svelte blocks,
+  for the audience that has it in their fingers. Written and unwired in
+  `src/lib/dtl.js`; the decision is one of positioning, not of technique.
 
 
 **Upstream, in Brython**

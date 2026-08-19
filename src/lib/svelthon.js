@@ -313,8 +313,53 @@ const HAS_PYTHON_SCRIPT = /<script[^>]*\blang=["']python["']/;
 // from its first line. The gap is the number of lines before the opening tag.
 const lineOffsets = new Map();
 
+// Names a component imports in its `<script module>`. They live in JavaScript,
+// and Python cannot import them — but they are in scope for the generated code,
+// so publishing them into the namespace makes them readable from Python. That
+// is what lets a Python component reach `page` from `$app/state`, or any npm
+// library at all.
+const MODULE_SCRIPT = /<script[^>]*\b(?:module|context=["']module["'])[^>]*>([\s\S]*?)<\/script>/i;
+const IMPORT = /import\s+([\s\S]*?)\s+from\s+['"]/g;
+
+// Whatever the block declares in its own right — a constant, a helper, a class.
+const DECLARED = /^\s*(?:export\s+)?(?:const|let|var|function|class)\s+([A-Za-z_$][\w$]*)/gm;
+
+function moduleImports(content) {
+    const block = content.match(MODULE_SCRIPT);
+    if (!block) return [];
+
+    const names = [];
+    let one;
+
+    while ((one = IMPORT.exec(block[1]))) {
+        const clause = one[1];
+        const braced = clause.match(/\{([\s\S]*)\}/);
+
+        // `import Default, { a as b }` — the part before the brace is a default
+        // binding, and each entry inside is renamed by its own `as`.
+        for (const piece of (braced ? clause.slice(0, braced.index) : clause).split(',')) {
+            const bare = piece.replace(/\*\s*as\s+/, '').trim();
+            if (/^[A-Za-z_$][\w$]*$/.test(bare)) names.push(bare);
+        }
+
+        if (braced) {
+            for (const entry of braced[1].split(',')) {
+                const local = entry.split(/\s+as\s+/).pop().trim();
+                if (/^[A-Za-z_$][\w$]*$/.test(local)) names.push(local);
+            }
+        }
+    }
+
+    let declaration;
+    while ((declaration = DECLARED.exec(block[1]))) names.push(declaration[1]);
+
+    return [...new Set(names)];
+}
+
 // The hidden functions the markup of each file needs, appended to its Python.
 const templateFunctions = new Map();
+
+const jsNames = new Map();
 
 // Appended, never prepended: the Python's own line numbers stay true, which is
 // what keeps error messages and source maps pointing at the right place.
@@ -361,6 +406,7 @@ export function python(options = {}) {
             // Python — never injected behind an author's back.
             if (!HAS_PYTHON_SCRIPT.test(content)) return;
 
+            jsNames.set(filename, moduleImports(content));
             lineOffsets.set(
                 filename,
                 content.slice(0, content.search(HAS_PYTHON_SCRIPT)).split('\n').length - 1
@@ -381,6 +427,7 @@ export function python(options = {}) {
                 name,
                 relative(process.cwd(), filename || 'Component'),
                 {
+                    jsNames: jsNames.get(filename) ?? [],
                     lineOffset: lineOffsets.get(filename) ?? 0,
                     // The whole file, so a debugger opens the .svelte itself.
                     sourceContent: filename ? readFileSync(filename, 'utf8') : content
