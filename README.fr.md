@@ -579,12 +579,30 @@ build de production avec `adapter-node` :
 | `+page.svelte`, `+layout.svelte`, `+error.svelte` | en Python, rendus côté serveur puis hydratés |
 | `+page.server.py`, `+layout.server.py` | `load()` en Python, ses données fusionnées comme d'habitude |
 | `async def load()` | attendu par le framework |
+| streaming | une coroutine dans les données rendues devient une promesse que SvelteKit diffuse |
 | `+page.py` | un `load()` universel — serveur, puis navigateur lors d'une navigation client |
 | `+server.py` | un endpoint entièrement Python, qui construit sa `Response` |
 | actions de formulaire | `actions = {"default": noter}`, avec `await request.formData()` |
 | `error()`, `redirect()`, `fail()` | appelés depuis Python |
 | routes dynamiques | `event["params"]["numero"]` |
 | un `.py` importé depuis JavaScript | par ses exports nommés |
+
+Le streaming tombe de la même règle. Une coroutine rendue au framework devient
+une promesse — et ce vers quoi elle résout fait la même traversée :
+
+```python
+async def _lentes():
+    await js.Promise.new(lambda ok, ko: js.setTimeout(ok, 400))
+    return chercher("", "Final")[:5]
+
+def load(event):
+    return {"immediat": compter(), "lentes": _lentes()}   # diffusé
+```
+
+Python y attend une promesse JavaScript, ce qui marche parce que c'est la boucle
+d'événements de Brython qui exécute la coroutine. Seul un `load()` **serveur**
+diffuse ; un load universel se rejoue dans le navigateur, ce qui est la règle de
+SvelteKit, pas la nôtre.
 
 ### Les deux ponts
 

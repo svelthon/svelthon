@@ -582,12 +582,29 @@ production build with `adapter-node`:
 | `+page.svelte`, `+layout.svelte`, `+error.svelte` | in Python, server-rendered then hydrated |
 | `+page.server.py`, `+layout.server.py` | `load()` in Python, its data merged as usual |
 | `async def load()` | awaited by the framework |
+| streaming | a coroutine in the returned data becomes a promise SvelteKit streams |
 | `+page.py` | a universal `load()` — on the server, then in the browser on a client navigation |
 | `+server.py` | a pure-Python endpoint, building its own `Response` |
 | form actions | `actions = {"default": noter}`, with `await request.formData()` |
 | `error()`, `redirect()`, `fail()` | called from Python |
 | dynamic routes | `event["params"]["numero"]` |
 | a `.py` imported from JavaScript | by its named exports |
+
+Streaming falls out of the same rule. A coroutine handed to the framework
+becomes a promise — and what it resolves to makes the same crossing:
+
+```python
+async def _lentes():
+    await js.Promise.new(lambda ok, ko: js.setTimeout(ok, 400))
+    return chercher("", "Final")[:5]
+
+def load(event):
+    return {"immediat": compter(), "lentes": _lentes()}   # streamed
+```
+
+Python awaits a JavaScript promise there, which works because Brython's own event
+loop is what runs the coroutine. Only a **server** `load()` streams; a universal
+one re-runs in the browser instead, which is SvelteKit's rule, not ours.
 
 ### The two bridges
 

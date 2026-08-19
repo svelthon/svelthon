@@ -455,6 +455,14 @@ export function schedule(result, where, lineOffset = 0) {
 export function plainData(value) {
     if (value === undefined || value === null || value === NONE) return null;
     if (typeof value !== 'object') return value;
+
+    // A coroutine handed to the framework becomes a promise. That is what lets a
+    // `load()` stream: `{"lentes": chercher_lentement()}` returns a coroutine,
+    // and SvelteKit waits on the promise it turns into.
+    if (globalThis.__BRYTHON__.get_class(value) === globalThis.__BRYTHON__.coroutine) {
+        return scheduleAsync(value, 'coroutine');
+    }
+
     if (Array.isArray(value)) return value.map(plainData); // list, tuple
 
     // Anything with a constructor of its own is not ours to flatten: a Response,
