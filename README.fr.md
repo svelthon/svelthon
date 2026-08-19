@@ -580,6 +580,7 @@ build de production avec `adapter-node` :
 | `+page.server.py`, `+layout.server.py` | `load()` en Python, ses données fusionnées comme d'habitude |
 | `async def load()` | attendu par le framework |
 | streaming | une coroutine dans les données rendues devient une promesse que SvelteKit diffuse |
+| options de page | `prerender`, `ssr`, `csr` — exportées par `__all__` |
 | `+page.py` | un `load()` universel — serveur, puis navigateur lors d'une navigation client |
 | `+server.py` | un endpoint entièrement Python, qui construit sa `Response` |
 | actions de formulaire | `actions = {"default": noter}`, avec `await request.formData()` |
@@ -603,6 +604,19 @@ Python y attend une promesse JavaScript, ce qui marche parce que c'est la boucle
 d'événements de Brython qui exécute la coroutine. Seul un `load()` **serveur**
 diffuse ; un load universel se rejoue dans le navigateur, ce qui est la règle de
 SvelteKit, pas la nôtre.
+
+Les options de page marchent comme partout ailleurs, ce qui a une conséquence
+qui mérite d'être nommée :
+
+```python
+__all__ = ["load", "csr"]
+
+csr = False
+```
+
+Cette page n'envoie **aucun JavaScript** — donc pas de Brython non plus. Un
+composant écrit en Python, livré en HTML nu. Avec `prerender = True` à la place,
+le Python tourne au build et la page est un fichier sur disque.
 
 ### Les deux ponts
 

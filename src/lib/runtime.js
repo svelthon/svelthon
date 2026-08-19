@@ -460,7 +460,8 @@ export function plainData(value) {
     // `load()` stream: `{"lentes": chercher_lentement()}` returns a coroutine,
     // and SvelteKit waits on the promise it turns into.
     if (globalThis.__BRYTHON__.get_class(value) === globalThis.__BRYTHON__.coroutine) {
-        return scheduleAsync(value, 'coroutine');
+        // What it resolves to is Python too, and has to make the same crossing.
+        return scheduleAsync(value, 'coroutine').then(plainData);
     }
 
     if (Array.isArray(value)) return value.map(plainData); // list, tuple
@@ -506,11 +507,26 @@ export function pyArg(value) {
     if (value === null || typeof value !== 'object') return value;
     if (!value.params || !value.url || !value.request) return value;
 
+    // Reading the framework's own searchParams is what registers the dependency,
+    // so it is tried first — but it throws while prerendering, where a query
+    // string cannot exist. Parsing the URL again is the fallback, and it touches
+    // nothing SvelteKit guards.
+    let query;
+    try {
+        query = [...value.url.searchParams];
+    } catch {
+        try {
+            query = [...new URL(String(value.url)).searchParams];
+        } catch {
+            query = [];
+        }
+    }
+
     // Real dicts, not JavaScript objects: Python reaches for `.get()` and
     // `.items()`, and a JSObj has neither.
     return pyDict([
         ['params', pyDict(Object.entries({ ...value.params }))],
-        ['query', pyDict([...value.url.searchParams])],
+        ['query', pyDict(query)],
         ['url', String(value.url)],
         ['method', value.request.method],
         ['route', value.route && value.route.id],
