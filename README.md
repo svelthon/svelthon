@@ -608,6 +608,8 @@ production build with `adapter-node`, against **SvelteKit 3**:
 | page options | `prerender`, `ssr`, `csr` — exported through `__all__` |
 | cookies, `setHeaders` | through `event["js"]`, no bridge of ours involved |
 | `handle`, `handleError` | in Python, behind a two-line JavaScript shim |
+| `reroute`, client `handleError` | likewise — universal and client hooks |
+| nested layouts | `+layout.server.py` at each level, data merged |
 | `+page.py` | a universal `load()` — on the server, then in the browser on a client navigation |
 | `+server.py` | a pure-Python endpoint, building its own `Response` |
 | form actions | `actions = {"default": noter}`, with `await request.formData()` |
