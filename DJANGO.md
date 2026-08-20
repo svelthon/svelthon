@@ -33,13 +33,27 @@ every tutorial and every answer online applies to Svelthon with one substitution
 | `{% include "card.html" %}` | `<Card />` |
 | `{% extends "base.html" %}` | a `+layout.svelte` above the page |
 | `{% block content %}…{% endblock %}` | `{@render children()}` in the layout |
-| `{% comment %}…{% endcomment %}` | `<!-- … -->` |
+| `{% comment %}…{% endcomment %}` | `<!-- … -->` — see below |
 | `{% csrf_token %}` | nothing to write — see below |
 | `{% url 'pep' n %}` | `href="/pep/{n}"` — see below |
 
 Autoescaping works the same way in both, which is worth knowing before you look
 for a setting: everything is escaped, and `{@html}` is the deliberate way out,
 exactly as `|safe` is in Django.
+
+Two lines of that table need a word. The first is the comment.
+
+In Django the distinction matters: `{% comment %}` is stripped at render, while
+`<!-- … -->` is passed through and lands in the page source — which is exactly
+why `{% comment %}` exists. Svelte has no such split. An authored `<!-- … -->` is
+removed from the output, on the server and in the browser alike, so it *is* the
+template comment; only Svelte's own hydration markers survive. Measured on
+5.56.9: a component whose template holds a comment renders `<!--[--><p>1</p><!--]-->`.
+
+Which leaves the other half of Django's pair with no default: to put a real
+comment in the delivered HTML you have to force it, either with
+`{@html "<!-- … -->"}` or by turning on the compiler's `preserveComments`. Rarely
+what anyone wants, and worth knowing before you go looking for the setting.
 
 One line of that table has a catch. `{% with %}` goes anywhere; `{@const}` must be
 the immediate child of a block — `{#if}`, `{#each}`, `{#snippet}`, `{:then}`, a

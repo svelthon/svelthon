@@ -389,6 +389,9 @@
         <code class="dj"><b class="d">{%</b> comment <b class="d">%}</b>…<b class="d">{%</b> endcomment <b class="d">%}</b></code>
         <code class="sv">&lt;!-- … --&gt;</code>
 
+        <code class="dj">&lt;!-- … --&gt; <span style="color:var(--faint)">(reaches the browser)</span></code>
+        <code class="sv"><b class="s">{@html</b> "&lt;!-- … --&gt;"<b class="s">}</b></code>
+
         <code class="dj"><b class="d">{%</b> csrf_token <b class="d">%}</b></code>
         <code class="sv">nothing to write</code>
 
@@ -399,6 +402,22 @@
     <p class="note"><strong>Autoescaping works the same way in both</strong>, which is worth knowing
         before you go looking for a setting: everything is escaped, and <code class="inline">{@html}</code>
         is the deliberate way out, exactly as <code class="inline">|safe</code> is in Django.</p>
+
+    <div class="caveat">
+        <p class="label">The comment row is not the swap it looks like</p>
+        <h3>Svelte has no second kind of comment</h3>
+        <p>In Django the distinction earns its keep: <code class="inline">{% comment %}</code> is
+            stripped at render, <code class="inline">&lt;!-- … --&gt;</code> is passed through and
+            lands in the page source. That is why <code class="inline">{% comment %}</code> exists at
+            all. Svelte has no such split — an authored <code class="inline">&lt;!-- … --&gt;</code>
+            is removed from the output, on the server and in the browser alike, so it <em>is</em> the
+            template comment. Only Svelte's own hydration markers survive.</p>
+        <p style="margin-top:1rem">Which leaves the other half of Django's pair with no default: a
+            real comment in the delivered HTML has to be forced, with
+            <code class="inline">{@html}</code> or the compiler's
+            <code class="inline">preserveComments</code>. Rarely what anyone wants — but worth knowing
+            before you go looking for the setting.</p>
+    </div>
 
     <div class="caveat">
         <p class="label">One line of that table has a catch</p>
