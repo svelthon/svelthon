@@ -450,7 +450,15 @@ export function python(options = {}) {
             });
             if (stdlib) generated.set(VFS_PREFIX + name, { code: stdlib, map: null });
 
-            return { code: script };
+            // The content is JavaScript now, so the tag must stop claiming
+            // otherwise. Leaving `lang="python"` in place is invisible to the
+            // Svelte compiler, which parses the content as JavaScript either
+            // way — but every tool downstream reads the attribute and refuses:
+            // `svelte-check`, installed by 93% of SvelteKit projects, reported
+            // dozens of parse errors per component until this line existed.
+            const { lang, ...rest } = attributes;
+
+            return { code: script, attributes: rest };
         }
     };
 }
