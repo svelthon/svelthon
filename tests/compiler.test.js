@@ -95,4 +95,27 @@ def increment():
         expect(generated).toBeGreaterThan(0);
         expect(lineFor[generated]).toBe(5); // 0-indexé : ligne 6 du fichier
     });
+
+    // La frontière vers JavaScript est posée à la compilation ; ce qu'elle fait
+    // ensuite est vérifié dans boundary.test.js.
+    test('un import JavaScript est enveloppé une fois, pas à chaque lecture', () => {
+        const { script } = compile(
+            '__js__ = {"@sveltejs/kit": ["error"]}\n__all__ = ["load"]\n\ndef load():\n    return {}\n',
+            'M',
+            'src/routes/+page.server.py',
+            { plain: true }
+        );
+
+        expect(script).toContain('const __js_error = jsCall(error);');
+        expect(script).toContain("bind(__proto, 'error', () => __js_error");
+    });
+
+    test('un composant importe le pyArg dont dépend to_python', () => {
+        // Il était lié sans être importé : une ReferenceError à la première
+        // lecture de to_python, et à celle-là seulement.
+        const { script } = compile('x = 1\n', 'C', 'src/C.svelte');
+
+        expect(script).toMatch(/import \{[^}]*\bpyArg\b[^}]*\} from 'svelthon\/runtime'/);
+        expect(script).toContain("bind(__proto, 'to_python', () => pyArg");
+    });
 });

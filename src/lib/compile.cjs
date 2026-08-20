@@ -348,6 +348,9 @@ function compile(
 
     const fn = (name) => `__fn_${name}`;
     const local = (name) => `__local_${name}`;
+    // An imported JavaScript name, once it has been given a Python-aware
+    // boundary — see `jsCall` in the runtime.
+    const js = (name) => `__js_${name}`;
     // Second signal per name: a mutation bumps it without touching the value,
     // so nothing is copied and the object keeps its identity.
     const rev = (name) => `__rev_${name}`;
@@ -391,7 +394,7 @@ function compile(
 
     const plainScript = [
         `import { init } from ${JSON.stringify(virtualId(name))};`,
-        `import { bind, py, pyError, scheduleAsync, plainData, pyArg, pyExport, NONE, registerModule } from 'svelthon/runtime';`,
+        `import { bind, py, pyError, scheduleAsync, plainData, pyArg, pyExport, jsCall, NONE, registerModule } from 'svelthon/runtime';`,
         ...jsImports.map((one) => `import { ${one.names.join(', ')} } from ${JSON.stringify(one.from)};`),
         ``,
         ...state.map((n) => `let ${n};`),
@@ -414,11 +417,17 @@ function compile(
         `bind(__proto, '__spread', () => py.spread, () => {});`,
         // Le pont sortant : une valeur Python rendue lisible en JavaScript.
         `bind(__proto, 'to_js', () => plainData, () => {});`,
+        `bind(__proto, 'to_python', () => pyArg, () => {});`,
         // Le pont aller : les globales JavaScript, telles quelles.
         `bind(__proto, 'js', () => globalThis, () => {});`,
+        // Wrapped once, not on every read: a name Python compares by identity —
+        // `handler is on_click` — has to answer the same object twice.
+        ...[...new Set(jsImported)]
+            .filter((n) => !declared.includes(n))
+            .map((n) => `const ${js(n)} = jsCall(${n});`),
         ...jsImported
             .filter((n) => !declared.includes(n))
-            .map((n) => `bind(__proto, '${n}', () => ${n}, () => {});`),
+            .map((n) => `bind(__proto, '${n}', () => ${js(n)}, () => {});`),
         ``,
         `const ${NS} = Object.create(__proto);`,
         `${NS}.$proxy = true;`,
@@ -460,7 +469,7 @@ function compile(
         `import { init } from ${JSON.stringify(virtualId(name))};`,
         // `py` backs the rewritten conditions, and is available to the template
         // for explicit conversions: {py.str(items)} renders ['a', 'b'].
-        `import { bind, py, track, follow, pyError, schedule, plainData, NONE${store ? ', registerModule' : ''} } from 'svelthon/runtime';`,
+        `import { bind, py, track, follow, pyError, schedule, plainData, pyArg, jsCall, NONE${store ? ', registerModule' : ''} } from 'svelthon/runtime';`,
         ...jsImports.map((one) => `import { ${one.names.join(', ')} } from ${JSON.stringify(one.from)};`),
         `import { ${['getContext', 'setContext']
             .concat(lifecycle('on_mount') || lifecycle('on_destroy') ? ['untrack'] : [])
@@ -561,16 +570,22 @@ function compile(
         `bind(__proto, '__seq', () => py.seq, () => {});`,
         `bind(__proto, '__spread', () => py.spread, () => {});`,
         `bind(__proto, 'to_js', () => plainData, () => {});`,
+        `bind(__proto, 'to_python', () => pyArg, () => {});`,
         // Le pont aller : les globales JavaScript, telles quelles.
         `bind(__proto, 'js', () => globalThis, () => {});`,
+        // Wrapped once, not on every read: a name Python compares by identity
+        // has to answer the same object twice.
+        ...[...new Set([...jsImported, ...jsNames])]
+            .filter((n) => !declared.includes(n))
+            .map((n) => `const ${js(n)} = jsCall(${n});`),
         ...jsImported
             .filter((n) => !declared.includes(n))
-            .map((n) => `bind(__proto, '${n}', () => ${n}, () => {});`),
+            .map((n) => `bind(__proto, '${n}', () => ${js(n)}, () => {});`),
         // What the component imported in its `<script module>`, published so
         // Python can read it. A name Python declares itself wins.
         ...jsNames
             .filter((n) => !declared.includes(n))
-            .map((n) => `bind(__proto, '${n}', () => ${n}, () => {});`),
+            .map((n) => `bind(__proto, '${n}', () => ${js(n)}, () => {});`),
         ...(hasContext
             ? []
             : [

@@ -717,6 +717,10 @@ async def handle(entree):
     return reponse
 ```
 
+Param matchers are the exception: SvelteKit imports `src/params` with Node's own
+loader rather than through Vite, so a shim re-exporting from a `.py` fails with
+`ERR_UNKNOWN_FILE_EXTENSION`. They stay JavaScript — one file, a few lines.
+
 ## Server-side rendering
 
 It works. Svelte compiles a second version of each component that returns an

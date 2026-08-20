@@ -561,15 +561,63 @@ export function scheduleAsync(result, where, lineOffset = 0) {
 
 // One Python function, made callable from JavaScript: arguments converted on the
 // way in, coroutines awaited, containers converted on the way out.
-export function pyCall(fn, where, lineOffset = 0) {
+//
+// The arity matters. JavaScript calls with whatever it has — SvelteKit hands a
+// query handler the validated payload whether or not the handler wants one —
+// where Python raises on a positional argument it never declared. So the call is
+// trimmed to the signature, which is what `def load():` beside `def load(event):`
+// has always been allowed to mean.
+export function pyCall(fn, where, lineOffset = 0, arity = Infinity) {
     return (...args) => {
         try {
-            const result = scheduleAsync(fn(...args.map(pyArg)), where, lineOffset);
+            const given = args.slice(0, arity).map(pyArg);
+            const result = scheduleAsync(fn(...given), where, lineOffset);
+
             return result instanceof Promise ? result.then(plainData) : plainData(result);
         } catch (error) {
             throw pyError(error, where, lineOffset);
         }
     };
+}
+
+// A Python function seen from JavaScript, wrapped by reading its own signature
+// rather than a declaration we made — the layout is Brython's `$function_infos`:
+// [2] the qualified name, [3] the file, [8] the `*args` name if there is one,
+// [10] how many positional parameters were declared.
+//
+// Anything that is not a Python function comes back untouched.
+export function pyHandler(value) {
+    if (typeof value !== 'function' || !Array.isArray(value.$function_infos)) return value;
+
+    const infos = value.$function_infos;
+
+    return pyCall(value, `${infos[2]}() — ${infos[3]}`, 0, infos[8] ? Infinity : infos[10]);
+}
+
+// A JavaScript function a Python module reached for — named in `__js__`, or
+// imported by the component's own `<script module>`. Python calls it with Python
+// values, and the one JavaScript genuinely cannot use is a Python callable: it
+// refuses arguments it never declared and answers in Python objects.
+//
+// So every callable argument crosses the boundary the way an exported function
+// does. That is what makes `query(accepted)` in Python read exactly like
+// `query(accepted)` in TypeScript — no wrapper for the author to remember.
+// A proxy rather than a wrapper function, because the name has to stay the thing
+// it was: its own properties, its prototype, `instanceof`, and construction with
+// `new` all still reach the original. Only a call made through it is adapted.
+//
+// The two directions are the same crossing an exported function makes, in
+// reverse: a callable becomes JavaScript-callable, and everything else becomes
+// plain data — `fail(400, {"missing": True})` reaching JavaScript as an object
+// it can serialise, not as a Brython dict full of symbols.
+const outbound = (value) => (typeof value === 'function' ? pyHandler(value) : plainData(value));
+
+export function jsCall(value) {
+    if (typeof value !== 'function') return value;
+
+    return new Proxy(value, {
+        apply: (target, self, args) => Reflect.apply(target, self, args.map(outbound))
+    });
 }
 
 // A value a module exports. A dict of functions — which is what SvelteKit's
