@@ -452,7 +452,7 @@ export function schedule(result, where, lineOffset = 0) {
 // symbol-keyed internals (`Symbol(OB_TYPE)`) that its serialiser refuses
 // outright. So the boundary converts: Python containers become plain JavaScript
 // data, which is the only shape anything outside Python can read anyway.
-export function plainData(value) {
+export function plainData(value, seen) {
     if (value === undefined || value === null || value === NONE) return null;
     if (typeof value !== 'object') return value;
 
@@ -464,12 +464,44 @@ export function plainData(value) {
         return scheduleAsync(value, 'coroutine').then(plainData);
     }
 
-    if (Array.isArray(value)) return value.map(plainData); // list, tuple
+    // A graph that loops back on itself would otherwise recurse until the stack
+    // gives out, and the message names neither the file nor the value. What is
+    // tracked is the *branch being walked*, not everything already converted:
+    // the same object twice in one list is shared, not circular, and has to come
+    // out twice. Note that `map` passes an index as its second argument, so every
+    // recursive call below is written out rather than passing this function by
+    // reference.
+    seen ??= new Set();
+    if (seen.has(value)) return null;
+    seen.add(value);
+
+    try {
+        return branch(value, seen);
+    } finally {
+        seen.delete(value);
+    }
+}
+
+function branch(value, seen) {
+    if (Array.isArray(value)) return value.map((one) => plainData(one, seen)); // list, tuple
 
     // Anything with a constructor of its own is not ours to flatten: a Response,
     // a URL, a Date, a Map, a Promise — a Python `load()` may hand any of those
     // straight back to the framework, and copying their keys would destroy them.
     if (value.constructor !== undefined && value.constructor !== Object) return value;
+
+    // A class instance keeps its attributes under a private symbol rather than as
+    // JavaScript properties, so walking its own keys finds almost nothing and
+    // wanders into the class object instead. Its `__dict__` is what a reader
+    // wants, and it is what JavaScript itself would serialise from a class
+    // instance: the fields, not the getters on the prototype.
+    const attributes = ownAttributes(value);
+
+    if (attributes !== undefined && attributes !== null && typeof attributes === 'object') {
+        const fields = {};
+        for (const key of Object.keys(attributes)) fields[key] = plainData(attributes[key], seen);
+        return fields;
+    }
 
     // Own string keys only, and never a class lookup: `get_class` probes the
     // object's symbols, and SvelteKit wraps `event.params` in a proxy that
@@ -480,7 +512,7 @@ export function plainData(value) {
     // A set has no key to copy: `list(mon_set)` is the Python way to hand one
     // over, and it is what any serialiser would want anyway.
     const out = {};
-    for (const key of Object.keys(value)) out[key] = plainData(value[key]);
+    for (const key of Object.keys(value)) out[key] = plainData(value[key], seen);
     return out;
 }
 
