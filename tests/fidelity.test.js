@@ -89,7 +89,7 @@ describe('protocols — the dispatch shortcut canary', () => {
 
 describe('control flow', () => {
     test('generators, closures, finally and exception chaining', () => {
-        const { leaked, leaked_in_func, ...rest } = report(Flow);
+        const { leaked, leaked_in_func, kept, leaked_forms, ...rest } = report(Flow);
 
         expect(rest).toEqual({
             squares: '[0, 1, 4, 9]',
@@ -102,18 +102,27 @@ describe('control flow', () => {
         });
     });
 
-    // A known Brython divergence, not a SVELTHON regression: a comprehension's
-    // variable leaks into module scope, where Python 3 gives it a scope of its
-    // own. This test passes *because it fails*; the day Brython fixes it,
-    // vitest will say so.
-    test.fails('a comprehension variable must not leak, at module level', () => {
+    // A Brython divergence, repaired in the vendored build: the iteration
+    // variable stayed bound in the enclosing scope, where Python 3 gives the
+    // comprehension a scope of its own. Both of these were `test.fails` until
+    // the patch landed — see BRYTHON.md. They now guard it: lose the patch and
+    // they go red.
+    test('a comprehension variable does not leak, at module level', () => {
         expect(report(Flow).leaked).toBe('False');
     });
 
-    // It leaks inside a function too — a comprehension has had its own scope
-    // since Python 3.0. Checked against CPython 3.12 (see BRYTHON.md).
-    test.fails('nor inside a function', () => {
+    test('nor inside a function', () => {
         expect(report(Flow).leaked_in_func).toBe('False');
+    });
+
+    test('and not from any comprehension form', () => {
+        // A second list comprehension, a dict one, a set one, a generator
+        // expression, and both levels of a nested one.
+        expect(report(Flow).leaked_forms).toBe("''");
+    });
+
+    test('a name that existed before is handed back untouched', () => {
+        expect(report(Flow).kept).toBe("'before'");
     });
 });
 

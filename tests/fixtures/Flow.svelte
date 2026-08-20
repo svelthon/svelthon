@@ -44,6 +44,27 @@ try:
 except NameError:
     leaked = False
 
+# The name existed before: the comprehension must hand it back untouched.
+kept = "before"
+_ = [kept for kept in range(3)]
+
+# Every other form binds a name too, and none of them may leak either.
+_ = [r for r in range(2)]
+_ = {s: s for s in range(2)}
+_ = {t for t in range(2)}
+_ = list(u for u in range(2))
+_ = [[a for a in range(2)] for b in range(2)]
+
+forms = []
+for one in ("r", "s", "t", "u", "a", "b"):
+    try:
+        globals()[one]
+        forms.append(one)
+    except KeyError:
+        pass
+
+leaked_forms = ",".join(forms)
+
 def scoped():
     [w for w in range(3)]
     try:
@@ -73,6 +94,8 @@ report = "\n".join([
     f"ret={ret!r}",
     f"flow={flow!r}",
     f"leaked={leaked!r}",
+    f"kept={kept!r}",
+    f"leaked_forms={leaked_forms!r}",
     f"leaked_in_func={leaked_in_func!r}",
     f"cause={cause!r}",
 ])

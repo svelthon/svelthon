@@ -14797,6 +14797,16 @@ nb_paren++
 for(let _if of comprehension.ifs){nb_paren++}}
 if(this instanceof $B.ast.DictComp){var key=$B.js_from_ast(this.key,scopes),value=$B.js_from_ast(this.value,scopes)}else{var elt=$B.js_from_ast(this.elt,scopes)}
 if(save_target_flags){$B.str_dict_set(comp_scope_symbols,target_name,save_target_flags)}
+/* SVELTHON patch, see BRYTHON.md: a comprehension's iteration variable is
+   recorded in the enclosing block too, flagged DEF_COMP_ITER, so a later bare
+   read compiles as an unguarded local and yields undefined instead of raising
+   NameError. Since Python 3 the comprehension owns that name; demoting the
+   enclosing entry to an implicit global makes the read resolve — and fail —
+   the way CPython does. */
+for(var comp_name of bindings){var comp_flags=$B.str_dict_get(comp_scope_symbols,comp_name)
+console.log('SONDE',comp_name,comp_flags,comp_flags===$B.NULL?'NULL':(comp_flags & SF.DEF_COMP_ITER)?'COMP_ITER':'autre')
+if(comp_flags!==$B.NULL && (comp_flags & SF.DEF_COMP_ITER)){
+$B.str_dict_set(comp_scope_symbols,comp_name,(SF.GLOBAL_IMPLICIT << SF.SCOPE_OFF)|SF.USE)}}
 var final_nb_await_in_scope=upper_comp_scope.nb_await===undefined ? 0 :
 upper_comp_scope.nb_await
 var has_await=final_nb_await_in_scope > initial_nb_await_in_scope
@@ -14815,6 +14825,19 @@ dedent()
 js+=prefix+`}\n`+
 (has_await ? prefix+`\n$B.restore_frame_obj(save_frame_obj, ${comp.locals_name});` :'')
 for(var name of save_locals){js+=prefix+`${name_reference(name, scopes)} = save_${name}\n`}
+/* SVELTHON patch, see BRYTHON.md: a comprehension's iteration variable stayed
+   bound in the enclosing scope — the store registered it in that scope's
+   `locals`, so a later bare read compiled to a direct reference and yielded
+   undefined instead of raising NameError. Since Python 3 the comprehension owns
+   that name. Names that already existed are saved and restored just above; the
+   ones the comprehension introduced are dropped here, in both senses: the
+   binding at run time, and the scope entry that decides how a later read
+   compiles. */
+for(var comp_name of bindings){if(! save_locals.has(comp_name)){
+js+=prefix+`delete ${comp.locals_name}.${comp_name}\n`
+var comp_s=comp_scope
+while(comp_s){comp_s.locals.delete(comp_name)
+comp_s=comp_s.parent}}}
 /* SVELTHON patch, see BRYTHON.md: a name the comprehension introduced has
    nothing to restore, so it stayed bound in the enclosing scope. Since Python 3
    a comprehension has a scope of its own; dropping the binding is the closest

@@ -174,16 +174,26 @@ It leaks **both** at module level and inside a function — the loop variable of
 comprehension has had its own scope since Python 3.0. Verified against CPython
 3.12.3, where both cases raise `NameError`.
 
-SVELTHON's suite marks this with a `test.fails`, so the day it is fixed upstream
-the test speaks up rather than silently passing.
+**Patched in the vendored build.** Two things had to change together, which is
+why a first attempt at only the first appeared to do nothing:
 
-**Cannot be hacked in the vendored build; it was tried.** `make_comp` already
-saves and restores any binding that existed before the comprehension, so only a
-*new* name leaks — and dropping it afterwards (`delete <locals>.<name>`) changes
-nothing observable. The binding is not the problem: the symtable records the name
-as a local of the enclosing scope, so a later bare read compiles to an unguarded
-`locals_X.q`, which yields `undefined` rather than raising `NameError`. Giving
-the comprehension its own symtable block is the fix, and it belongs upstream.
+- **The binding.** `make_comp` already saves and restores any name that existed
+  before the comprehension, so only a name it *introduced* survives. That one is
+  now deleted from the namespace after the loop.
+- **The scope entry.** Storing the iteration variable registers it in the
+  enclosing scope's `locals`, and that set is what `name_scope` consults: a later
+  bare read compiled to a direct `locals_X.q`, which yields `undefined` instead
+  of raising. Dropping the name from `locals` makes the read compile to
+  `$B.resolve_in_scopes`, exactly as for a name never assigned.
+
+Anchoring matters. Both belong at the *late* site, beside the `save_locals`
+restore loop. The `save_target_flags` restore that appears earlier in `make_comp`
+runs before the loop body has been assembled, so appending there puts the
+statement inside the loop.
+
+Covered by four tests in `tests/fidelity.test.js` — module level, inside a
+function, six comprehension forms, and a name that existed beforehand. Two of
+them were `test.fails` until the patch landed; they now guard it.
 
 ### `FSTRING_MIDDLE` reports the position of the token that opened the f-string
 
@@ -268,19 +278,21 @@ Both are worth carrying upstream — the first is a deleted line, the second
 belongs in `www/src/js_objects.js` where it can be written against the readable
 source.
 
-### The one edit made in the file itself
+### The two edits made in the file itself
 
-`qualified_scope_name` is patched **in `vendor/brython.js` directly**, marked
-with a `/* SVELTHON patch */` comment. It cannot go through `VENDOR_PATCHES`,
-which is a Vite plugin: this code runs in the *compiler*, which `compile.cjs`
-loads with a plain `require` under Node, where no Vite transform applies.
+These live in the *compiler*, which `compile.cjs` loads with a plain `require`
+under Node — no Vite transform applies, so `VENDOR_PATCHES` cannot reach them.
+Both are edited in `vendor/brython.js` and marked with a `/* SVELTHON patch */`
+comment, the only way to find them again in 4.6 MB.
 
-A direct edit is lost silently when a newer Brython is vendored, so the guard is
-a test rather than a build-time check — *a path builds a valid identifier, and
-`__file__` keeps the real path*, in `tests/compiler.test.js`. It fails the moment
-the patch is gone. What it buys: `compile.cjs` passes the real path, so
-`__file__` names the actual file and a traceback reads
-`src/routes/+page.server.py` instead of a slug.
+| Edited in place | What it buys |
+|---|---|
+| `qualified_scope_name` neutralises every character invalid in an identifier | `compile.cjs` passes the real path, so `__file__` names the actual file and a traceback reads `src/routes/+page.server.py` rather than a slug |
+| `make_comp` drops the bindings a comprehension introduced | a comprehension no longer leaks its iteration variable |
+
+A direct edit is lost silently when a newer Brython is vendored, so the guard for
+each is a **test** rather than a build-time check. Losing the first turns
+`tests/compiler.test.js` red, the second `tests/fidelity.test.js`.
 
 ## Rough edges worth smoothing
 
