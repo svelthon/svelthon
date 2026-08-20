@@ -239,20 +239,18 @@ match.
 | Patched | Why |
 |---|---|
 | the debug `console.log` in `$B.JSClass.tp_getattro` | it fires on every attribute access on a JavaScript class from Python and dumps the class object; two requests through `js.*` filled the server log with hundreds of lines |
+| the `Symbol(PYOBJ)` back-reference, moved to a `WeakMap` | a stamped container is refused by any Web API taking a WebIDL record, `new Response(body, {headers})` first among them |
 
-### Not patched, deliberately: the `Symbol(PYOBJ)` stamp
+The second is nine sites — five writes and four reads, one of them through
+`Object.hasOwn` — so each is its own entry with its own expected count. The
+symbol stays declared and published as `$B.PYOBJ`; only the reads and writes move
+to `$B.$svelthonPyobj`, keyed by the JavaScript object. The round-trip cache
+behaves as before, and `scripts/browser-check.sh` covers the DOM node path, which
+is the one where identity across the boundary is observable.
 
-The bug above it is real, but the repair is not worth making here. The
-back-reference is written at five sites and read at four — one of them through
-`Object.hasOwn`, which a `WeakMap` cannot express as directly — all inside a
-minified 4.6 MB bundle. Getting one of the nine wrong breaks Brython's JS
-identity cache silently, and what it buys is a single `to_js()` call at a single
-site.
-
-It belongs upstream, in `www/src/js_objects.js`, where it can be written against
-the readable source and covered by Brython's own suite. Until then, the
-workaround is to convert with `to_js` whatever goes to a Web API that takes a
-record — see `src/routes/api/py/+server.py` in the demo.
+Both are worth carrying upstream — the first is a deleted line, the second
+belongs in `www/src/js_objects.js` where it can be written against the readable
+source.
 
 ## Rough edges worth smoothing
 

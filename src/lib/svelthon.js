@@ -468,8 +468,60 @@ const VENDOR_PATCHES = [
         // JavaScript class from Python — `js.Response.new` is enough — and
         // dumping the whole class object each time.
         what: 'debug console.log in $B.JSClass.tp_getattro',
-        find: "$B.JSClass.tp_getattro=function(self,attr){console.log('JSClass DISPARU',self,attr)\n",
+        find: "$B.JSClass.tp_getattro=function(self,attr){console.log('JSClass getatro',self,attr)\n",
         replace: '$B.JSClass.tp_getattro=function(self,attr){\n',
+        times: 1
+    },
+
+    // Converting a container to JavaScript leaves a back-reference on the
+    // result — `jsobj[PYOBJ] = pyobj` — which any Web API taking a WebIDL
+    // record then refuses, because a record conversion rejects an own symbol
+    // key. `new Response(body, {headers})` is the everyday case. The
+    // back-reference is a round-trip cache, so a WeakMap keyed by the JavaScript
+    // object serves exactly the same purpose while leaving the object clean.
+    //
+    // The symbol itself stays defined: it is published as `$B.PYOBJ`, and
+    // nothing outside these sites should start reading an empty slot.
+    {
+        what: 'the PYOBJ back-reference: declare the WeakMap beside the symbol',
+        find: "const PYOBJ=$B.PYOBJ=Symbol('PYOBJ')\n",
+        replace: "const PYOBJ=$B.PYOBJ=Symbol('PYOBJ')\nconst PYOBJ_MAP=$B.$svelthonPyobj=new WeakMap()\n",
+        times: 1
+    },
+    {
+        what: 'the PYOBJ back-reference: the DOM node write',
+        find: 'jsobj[PYOBJ]=res\n',
+        replace: 'PYOBJ_MAP.set(jsobj,res)\n',
+        times: 1
+    },
+    {
+        what: 'the PYOBJ back-reference: the list, dict, function and coroutine writes',
+        find: 'jsobj[PYOBJ]=pyobj\n',
+        replace: 'PYOBJ_MAP.set(jsobj,pyobj)\n',
+        times: 4
+    },
+    {
+        what: 'the PYOBJ back-reference: the read in jsobj2pyobj',
+        find: 'let pyobj=jsobj[PYOBJ]\n',
+        replace: 'let pyobj=PYOBJ_MAP.get(jsobj)\n',
+        times: 1
+    },
+    {
+        what: 'the PYOBJ back-reference: the read in list_eq',
+        find: 'if(other[$B.PYOBJ]){other=other[$B.PYOBJ]}',
+        replace: 'if($B.$svelthonPyobj.get(other)){other=$B.$svelthonPyobj.get(other)}',
+        times: 1
+    },
+    {
+        what: 'the PYOBJ back-reference: the read in js_array.append',
+        find: 'if(self[PYOBJ]){self[PYOBJ].push(x)}',
+        replace: 'if(PYOBJ_MAP.get(self)){PYOBJ_MAP.get(self).push(x)}',
+        times: 1
+    },
+    {
+        what: 'the PYOBJ back-reference: the read in the attribute lookup',
+        find: 'if(Object.hasOwn(res,$B.PYOBJ)){return res[$B.PYOBJ]}',
+        replace: 'if($B.$svelthonPyobj.has(res)){return $B.$svelthonPyobj.get(res)}',
         times: 1
     }
 ];
