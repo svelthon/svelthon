@@ -18,3 +18,15 @@ const base = globalThis.location?.href ?? 'http://localhost/';
 
 globalThis.__BRYTHON__ ??= { brython_path: new URL('/brython/', base).href };
 globalThis.$B = globalThis.__BRYTHON__;
+
+// Under Node, brython.js installs its own `document`, `location`, `HTMLElement`,
+// `MutationObserver` and `customElements` — stubs its bootstrap needs, with three
+// keys between them. They are also a trap: half the ecosystem decides it is in a
+// browser with `typeof document !== "undefined"`, then reaches for `window`,
+// which nothing defines. Bits UI does exactly that and takes server rendering
+// down with a bare `ReferenceError: window is not defined`.
+//
+// So the names present before Brython loads are recorded here, and boot.js
+// removes whatever it added — but only off a real browser, where these globals
+// belong to the page and are none of our business.
+globalThis.$B.$svelthonGlobalsBefore ??= new Set(Object.getOwnPropertyNames(globalThis));
