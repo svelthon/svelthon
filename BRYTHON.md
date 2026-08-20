@@ -177,6 +177,14 @@ comprehension has had its own scope since Python 3.0. Verified against CPython
 SVELTHON's suite marks this with a `test.fails`, so the day it is fixed upstream
 the test speaks up rather than silently passing.
 
+**Cannot be hacked in the vendored build; it was tried.** `make_comp` already
+saves and restores any binding that existed before the comprehension, so only a
+*new* name leaks — and dropping it afterwards (`delete <locals>.<name>`) changes
+nothing observable. The binding is not the problem: the symtable records the name
+as a local of the enclosing scope, so a later bare read compiles to an unguarded
+`locals_X.q`, which yields `undefined` rather than raising `NameError`. Giving
+the comprehension its own symtable block is the fix, and it belongs upstream.
+
 ### `FSTRING_MIDDLE` reports the position of the token that opened the f-string
 
 ```python
@@ -192,6 +200,13 @@ Anything consuming the token stream positionally — a syntax highlighter, an
 editor, a formatter — walks backwards at that point and re-emits text it has
 already seen. SVELTHON's demo highlighter (`src/Highlight.svelte`) works around
 it by ignoring a token that starts before the cursor.
+
+**Not hacked in the vendored build.** The three emission sites pass `ft_start`,
+the position of the opening token, where a running `pos` is available — but the
+chunk's own start is not `pos - ft_buffer.length`, because `{{` adds one
+character to the buffer for two in the source, and escapes do the same. It needs
+a start position recorded wherever the buffer is reset, at every site. That is
+tokenizer work, not a substitution.
 
 ### `pyobj2jsobj` stamps every converted container with `Symbol(PYOBJ)`
 

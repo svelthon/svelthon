@@ -14815,6 +14815,11 @@ dedent()
 js+=prefix+`}\n`+
 (has_await ? prefix+`\n$B.restore_frame_obj(save_frame_obj, ${comp.locals_name});` :'')
 for(var name of save_locals){js+=prefix+`${name_reference(name, scopes)} = save_${name}\n`}
+/* SVELTHON patch, see BRYTHON.md: a name the comprehension introduced has
+   nothing to restore, so it stayed bound in the enclosing scope. Since Python 3
+   a comprehension has a scope of its own; dropping the binding is the closest
+   this codegen gets to that without a real scope. */
+for(var name of bindings){if(! save_locals.has(name)){js+=prefix+`delete ${comp.locals_name}.${name}\n`}}
 if(comp_iter_scope.found){js+=prefix+`${name_reference(comp_iter, scopes)} = save_comp_iter\n`}
 js+=prefix+`return result_${id}\n`
 dedent()
