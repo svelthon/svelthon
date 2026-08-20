@@ -927,11 +927,17 @@ reloads.
   `vite.config.js` through different loaders, and this file is then evaluated
   twice.
 
-**Worth deciding**
+**Decided against**
 
-- **Django template syntax.** `{% if %}` / `{% for %}` over the Svelte blocks,
-  for the audience that has it in their fingers. Written and unwired in
-  `src/lib/dtl.js`; the decision is one of positioning, not of technique.
+- **Django template syntax.** `{% if %}` / `{% for %}` over the Svelte blocks was
+  written and left unwired in `src/lib/dtl.js`, then ruled out. Svelthon is
+  Svelte in Python, not Django in Svelte. The whole of Svelte's documentation
+  applies here with one substitution — JavaScript for Python — and that is the
+  asset a second block syntax would spend. The friction was never `{#if}`; it was
+  `items.length` against `len(items)`, and template expressions already settled
+  it. Django also has no key for a loop, no `{#await}`, no `{#snippet}`: a
+  faithful translation hits a wall within three constructs and has to invent, at
+  which point it is a dialect rather than a familiar syntax.
 
 
 **Upstream, in Brython**

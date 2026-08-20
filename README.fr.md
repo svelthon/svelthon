@@ -870,11 +870,18 @@ l'application ne recharge jamais.
   SvelteKit charge `svelte.config.js` et Vite charge `vite.config.js` par des
   loaders différents, si bien que ce fichier est évalué **deux fois**.
 
-**À décider**
+**Écarté**
 
 - **La syntaxe de gabarit de Django.** `{% if %}` / `{% for %}` par-dessus les
-  blocs de Svelte, pour le public qui l'a dans les doigts. Écrite et débranchée
-  dans `src/lib/dtl.js` ; la décision est de positionnement, pas de technique.
+  blocs de Svelte a été écrite puis laissée débranchée dans `src/lib/dtl.js`,
+  avant d'être écartée. Svelthon, c'est Svelte en Python, pas Django dans Svelte.
+  Toute la documentation de Svelte s'applique ici à une substitution près —
+  JavaScript pour Python — et c'est précisément l'actif qu'une seconde syntaxe de
+  blocs dépenserait. Le frottement n'a jamais été `{#if}` : il était dans
+  `items.length` contre `len(items)`, et les expressions de gabarit l'ont réglé.
+  Django n'a par ailleurs ni clé de boucle, ni `{#await}`, ni `{#snippet}` : une
+  traduction fidèle bute au bout de trois constructions et doit inventer — c'est
+  alors un dialecte, plus une syntaxe familière.
 
 
 **En amont, chez Brython**
