@@ -33,7 +33,8 @@ every tutorial and every answer online applies to Svelthon with one substitution
 | `{% include "card.html" %}` | `<Card />` |
 | `{% extends "base.html" %}` | a `+layout.svelte` above the page |
 | `{% block content %}…{% endblock %}` | `{@render children()}` in the layout |
-| `{% comment %}…{% endcomment %}` | `<!-- … -->` — see below |
+| `{% comment %}…{% endcomment %}` *stripped* | `<!-- … -->` *stripped* |
+| `<!-- … -->` *delivered* | `{@html "<!-- … -->"}` *delivered* |
 | `{% csrf_token %}` | nothing to write — see below |
 | `{% url 'pep' n %}` | `href="/pep/{n}"` — see below |
 

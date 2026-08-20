@@ -199,6 +199,14 @@
     .map code.dj { border-left: 2px solid var(--django); background: var(--django-wash) }
     .map code.sv { border-left: 2px solid var(--svelte); background: var(--svelte-wash) }
 
+    /* Outcome qualifiers, so a pair of rows reads as a pair. */
+    .map code .q {
+        color: var(--faint);
+        font-weight: 400;
+        font-style: italic;
+        margin-left: 1.5rem;
+    }
+
     /* Only the delimiters are coloured — they are the whole difference. */
     b.d { font-weight: 600; color: var(--django) }
     b.s { font-weight: 600; color: var(--svelte) }
@@ -386,11 +394,11 @@
         <code class="dj"><b class="d">{%</b> block content <b class="d">%}</b></code>
         <code class="sv"><b class="s">{@render</b> children()<b class="s">}</b> in the layout</code>
 
-        <code class="dj"><b class="d">{%</b> comment <b class="d">%}</b>…<b class="d">{%</b> endcomment <b class="d">%}</b></code>
-        <code class="sv">&lt;!-- … --&gt;</code>
+        <code class="dj"><b class="d">{%</b> comment <b class="d">%}</b>…<b class="d">{%</b> endcomment <b class="d">%}</b><span class="q">stripped</span></code>
+        <code class="sv">&lt;!-- … --&gt;<span class="q">stripped</span></code>
 
-        <code class="dj">&lt;!-- … --&gt; <span style="color:var(--faint)">(reaches the browser)</span></code>
-        <code class="sv"><b class="s">{@html</b> "&lt;!-- … --&gt;"<b class="s">}</b></code>
+        <code class="dj">&lt;!-- … --&gt;<span class="q">delivered</span></code>
+        <code class="sv"><b class="s">{@html</b> "&lt;!-- … --&gt;"<b class="s">}</b><span class="q">delivered</span></code>
 
         <code class="dj"><b class="d">{%</b> csrf_token <b class="d">%}</b></code>
         <code class="sv">nothing to write</code>
