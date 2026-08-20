@@ -1,0 +1,584 @@
+<title>Django to Svelthon</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bitter:wght@500;600&family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500&display=swap">
+
+<style>
+    :root {
+        --ground: #F6F7F4;
+        --surface: #FFFFFF;
+        --ink: #191F1C;
+        --soft: #5C655F;
+        --faint: #8A938C;
+        --rule: #DFE4DE;
+        --django: #0C4B33;
+        --svelte: #C93409;
+        --django-wash: #0C4B330F;
+        --svelte-wash: #C934090F;
+
+        --display: Bitter, Georgia, serif;
+        --body: "IBM Plex Sans", system-ui, sans-serif;
+        --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+            --ground: #111614;
+            --surface: #181E1B;
+            --ink: #E7ECE8;
+            --soft: #9DA79F;
+            --faint: #737D76;
+            --rule: #29312C;
+            --django: #5FB694;
+            --svelte: #FF8358;
+            --django-wash: #5FB69414;
+            --svelte-wash: #FF835814;
+        }
+    }
+
+    :root[data-theme="dark"] {
+        --ground: #111614;
+        --surface: #181E1B;
+        --ink: #E7ECE8;
+        --soft: #9DA79F;
+        --faint: #737D76;
+        --rule: #29312C;
+        --django: #5FB694;
+        --svelte: #FF8358;
+        --django-wash: #5FB69414;
+        --svelte-wash: #FF835814;
+    }
+
+    * { box-sizing: border-box }
+
+    body {
+        margin: 0;
+        background: var(--ground);
+        color: var(--ink);
+        font-family: var(--body);
+        font-size: 16.5px;
+        line-height: 1.65;
+        -webkit-font-smoothing: antialiased;
+    }
+
+    .page {
+        max-width: 60rem;
+        margin: 0 auto;
+        padding: 0 1.75rem 6rem;
+    }
+
+    /* ---- masthead ---------------------------------------------------- */
+
+    header {
+        padding: 4.5rem 0 3rem;
+        border-bottom: 1px solid var(--rule);
+        margin-bottom: 3.5rem;
+    }
+
+    .eyebrow {
+        font-family: var(--mono);
+        font-size: 0.72rem;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--faint);
+        margin: 0 0 1.25rem;
+    }
+
+    h1 {
+        font-family: var(--display);
+        font-weight: 600;
+        font-size: clamp(2.4rem, 6vw, 3.6rem);
+        line-height: 1.05;
+        letter-spacing: -0.015em;
+        margin: 0 0 1.25rem;
+        text-wrap: balance;
+    }
+
+    h1 .arrow { color: var(--faint); font-weight: 500 }
+    h1 .to { color: var(--svelte) }
+
+    .standfirst {
+        font-size: 1.15rem;
+        color: var(--soft);
+        max-width: 34em;
+        margin: 0;
+    }
+
+    /* ---- the two rules ----------------------------------------------- */
+
+    .rules {
+        display: grid;
+        gap: 1.25rem;
+        grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+        margin: 2.5rem 0 0;
+        padding: 0;
+        list-style: none;
+        counter-reset: rule;
+    }
+
+    .rules li {
+        border-top: 2px solid var(--ink);
+        padding-top: 0.9rem;
+        counter-increment: rule;
+    }
+
+    .rules li::before {
+        content: counter(rule);
+        display: block;
+        font-family: var(--mono);
+        font-size: 0.72rem;
+        color: var(--faint);
+        margin-bottom: 0.4rem;
+    }
+
+    .rules strong { font-weight: 500 }
+    .rules p { margin: 0.35rem 0 0; color: var(--soft); font-size: 0.95rem }
+
+    /* ---- sections ---------------------------------------------------- */
+
+    section { margin-bottom: 4rem }
+
+    h2 {
+        font-family: var(--display);
+        font-weight: 600;
+        font-size: 1.6rem;
+        letter-spacing: -0.01em;
+        margin: 0 0 0.5rem;
+        text-wrap: balance;
+    }
+
+    h3 {
+        font-family: var(--body);
+        font-weight: 500;
+        font-size: 1.05rem;
+        margin: 2.25rem 0 0.4rem;
+    }
+
+    .lede { color: var(--soft); max-width: 38em; margin: 0 0 2rem }
+    p { max-width: 38em }
+    p + p { margin-top: 1rem }
+
+    a { color: var(--svelte); text-underline-offset: 0.2em }
+    a:focus-visible { outline: 2px solid var(--svelte); outline-offset: 3px; border-radius: 2px }
+
+    /* ---- the mapping ------------------------------------------------- */
+
+    .map {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1px;
+        background: var(--rule);
+        border: 1px solid var(--rule);
+        border-radius: 3px;
+        overflow: hidden;
+    }
+
+    .map .head {
+        background: var(--surface);
+        font-family: var(--mono);
+        font-size: 0.7rem;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        padding: 0.7rem 1rem;
+    }
+
+    .map .head.dj { color: var(--django) }
+    .map .head.sv { color: var(--svelte) }
+
+    .map code {
+        display: block;
+        background: var(--surface);
+        font-family: var(--mono);
+        font-size: 0.82rem;
+        line-height: 1.5;
+        padding: 0.75rem 1rem;
+        overflow-x: auto;
+        white-space: pre;
+    }
+
+    .map code.dj { border-left: 2px solid var(--django); background: var(--django-wash) }
+    .map code.sv { border-left: 2px solid var(--svelte); background: var(--svelte-wash) }
+
+    /* Only the delimiters are coloured — they are the whole difference. */
+    b.d { font-weight: 600; color: var(--django) }
+    b.s { font-weight: 600; color: var(--svelte) }
+
+    .note {
+        font-size: 0.9rem;
+        color: var(--soft);
+        margin: 1.25rem 0 0;
+        max-width: 40em;
+    }
+
+    /* ---- side by side ------------------------------------------------ */
+
+    .pair {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+        gap: 1.5rem;
+    }
+
+    .panel {
+        border: 1px solid var(--rule);
+        border-radius: 3px;
+        background: var(--surface);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .panel > .label {
+        font-family: var(--mono);
+        font-size: 0.7rem;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        padding: 0.7rem 1.1rem;
+        border-bottom: 1px solid var(--rule);
+    }
+
+    .panel.dj > .label { color: var(--django); background: var(--django-wash) }
+    .panel.sv > .label { color: var(--svelte); background: var(--svelte-wash) }
+
+    .panel pre {
+        margin: 0;
+        padding: 1.1rem;
+        overflow-x: auto;
+        font-family: var(--mono);
+        font-size: 0.82rem;
+        line-height: 1.6;
+        flex: 1;
+    }
+
+    .count {
+        font-family: var(--mono);
+        font-size: 0.7rem;
+        color: var(--faint);
+        padding: 0 1.1rem 0.9rem;
+        font-variant-numeric: tabular-nums;
+    }
+
+    /* ---- a standalone snippet ---------------------------------------- */
+
+    pre.solo {
+        border: 1px solid var(--rule);
+        border-left: 2px solid var(--svelte);
+        border-radius: 3px;
+        background: var(--surface);
+        padding: 1.1rem;
+        overflow-x: auto;
+        font-family: var(--mono);
+        font-size: 0.82rem;
+        line-height: 1.6;
+        margin: 1.25rem 0;
+    }
+
+    /* ---- the caveat --------------------------------------------------- */
+
+    .caveat {
+        border: 1px solid var(--rule);
+        border-radius: 3px;
+        padding: 1.5rem 1.6rem;
+        background: var(--surface);
+        margin-top: 1.5rem;
+    }
+
+    .caveat .label {
+        font-family: var(--mono);
+        font-size: 0.7rem;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--django);
+        margin: 0 0 0.6rem;
+    }
+
+    .caveat h3 { margin-top: 0 }
+    .caveat p { margin-bottom: 0 }
+
+    code.inline {
+        font-family: var(--mono);
+        font-size: 0.86em;
+        background: var(--django-wash);
+        padding: 0.1em 0.35em;
+        border-radius: 2px;
+    }
+
+    footer {
+        border-top: 1px solid var(--rule);
+        padding-top: 2rem;
+        color: var(--faint);
+        font-size: 0.88rem;
+    }
+
+    footer p { max-width: 42em }
+
+    @media (max-width: 34rem) {
+        .map { grid-template-columns: 1fr }
+        .map .head.sv { border-top: 1px solid var(--rule) }
+    }
+</style>
+
+<div class="page">
+
+<header>
+    <p class="eyebrow">Svelthon · template reference</p>
+    <h1>Django templates, <span class="arrow">in</span> <span class="to">Svelthon</span></h1>
+    <p class="standfirst">If you write Django or Flask templates, you already know most of this page.
+        Here is the whole translation — there is not much of it, and nothing to install for it.</p>
+
+    <ol class="rules">
+        <li>
+            <strong>An expression is Python.</strong>
+            <p><code class="inline">{{ x }}</code> becomes <code class="inline">{x}</code>, and what
+            goes inside is the Python you would write anywhere else — <code class="inline">len(items)</code>,
+            <code class="inline">x.upper()</code>. No filter language, no restricted subset.</p>
+        </li>
+        <li>
+            <strong>A block is a Svelte block.</strong>
+            <p><code class="inline">{% if %}</code> becomes <code class="inline">{#if}</code>.
+            The <code class="inline">#</code> opens, the <code class="inline">/</code> closes,
+            the <code class="inline">:</code> continues.</p>
+        </li>
+    </ol>
+</header>
+
+<section>
+    <h2>The whole mapping</h2>
+    <p class="lede">Only the delimiters are coloured below, because they are the only thing that
+        changes. Everything between them is Python you already write.</p>
+
+    <div class="map">
+        <div class="head dj">Django</div>
+        <div class="head sv">Svelthon</div>
+
+        <code class="dj"><b class="d">{{</b> pep.title <b class="d">}}</b></code>
+        <code class="sv"><b class="s">{</b>pep.title<b class="s">}</b></code>
+
+        <code class="dj"><b class="d">{{</b> pep.title|upper <b class="d">}}</b></code>
+        <code class="sv"><b class="s">{</b>pep.title.upper()<b class="s">}</b></code>
+
+        <code class="dj"><b class="d">{{</b> note|default:"—" <b class="d">}}</b></code>
+        <code class="sv"><b class="s">{</b>note or "—"<b class="s">}</b></code>
+
+        <code class="dj"><b class="d">{{</b> body|safe <b class="d">}}</b></code>
+        <code class="sv"><b class="s">{@html</b> body<b class="s">}</b></code>
+
+        <code class="dj"><b class="d">{%</b> if a <b class="d">%}</b>…<b class="d">{%</b> elif b <b class="d">%}</b>…<b class="d">{%</b> endif <b class="d">%}</b></code>
+        <code class="sv"><b class="s">{#if</b> a<b class="s">}</b>…<b class="s">{:else if</b> b<b class="s">}</b>…<b class="s">{/if}</b></code>
+
+        <code class="dj"><b class="d">{%</b> for x in xs <b class="d">%}</b>…<b class="d">{%</b> endfor <b class="d">%}</b></code>
+        <code class="sv"><b class="s">{#each</b> xs as x<b class="s">}</b>…<b class="s">{/each}</b></code>
+
+        <code class="dj"><b class="d">{%</b> empty <b class="d">%}</b></code>
+        <code class="sv"><b class="s">{:else}</b></code>
+
+        <code class="dj"><b class="d">{{</b> forloop.counter <b class="d">}}</b></code>
+        <code class="sv"><b class="s">{#each</b> xs as x, i<b class="s">}</b> → <b class="s">{</b>i + 1<b class="s">}</b></code>
+
+        <code class="dj"><b class="d">{%</b> with n=xs.count <b class="d">%}</b></code>
+        <code class="sv"><b class="s">{@const</b> n = len(xs)<b class="s">}</b></code>
+
+        <code class="dj"><b class="d">{%</b> include "card.html" <b class="d">%}</b></code>
+        <code class="sv">&lt;Card /&gt;</code>
+
+        <code class="dj"><b class="d">{%</b> extends "base.html" <b class="d">%}</b></code>
+        <code class="sv">a +layout.svelte above the page</code>
+
+        <code class="dj"><b class="d">{%</b> block content <b class="d">%}</b></code>
+        <code class="sv"><b class="s">{@render</b> children()<b class="s">}</b> in the layout</code>
+
+        <code class="dj"><b class="d">{%</b> comment <b class="d">%}</b>…<b class="d">{%</b> endcomment <b class="d">%}</b></code>
+        <code class="sv">&lt;!-- … --&gt;</code>
+
+        <code class="dj"><b class="d">{%</b> csrf_token <b class="d">%}</b></code>
+        <code class="sv">nothing to write</code>
+
+        <code class="dj"><b class="d">{%</b> url 'pep' n <b class="d">%}</b></code>
+        <code class="sv">href="/pep/<b class="s">{</b>n<b class="s">}</b>"</code>
+    </div>
+
+    <p class="note"><strong>Autoescaping works the same way in both</strong>, which is worth knowing
+        before you go looking for a setting: everything is escaped, and <code class="inline">{@html}</code>
+        is the deliberate way out, exactly as <code class="inline">|safe</code> is in Django.</p>
+
+    <div class="caveat">
+        <p class="label">One line of that table has a catch</p>
+        <h3>{@const} is not as free as {% with %}</h3>
+        <p>It must be the immediate child of a block — <code class="inline">{#if}</code>,
+            <code class="inline">{#each}</code>, <code class="inline">{#snippet}</code>, a component —
+            and Svelte refuses it at the top level of a file. Rarely a problem, because the place you
+            reach for <code class="inline">{% with %}</code> is usually inside a loop anyway. When it
+            is, the value belongs in the script as a <code class="inline">@derived</code>.</p>
+    </div>
+</section>
+
+<section>
+    <h2>A page, side by side</h2>
+    <p class="lede">A list with a filter, a counter and an empty state — the template every project
+        writes on its first day.</p>
+
+    <div class="pair">
+        <div class="panel dj">
+            <div class="label">Django</div>
+<pre>{% extends "base.html" %}
+
+{% block content %}
+&lt;h1&gt;{{ status|default:"All" }} PEPs&lt;/h1&gt;
+
+&lt;ul&gt;
+  {% for pep in peps %}
+    &lt;li&gt;
+      {{ forloop.counter }}.
+      &lt;a href="{% url 'pep' pep.number %}"&gt;PEP {{ pep.number }}&lt;/a&gt;
+      — {{ pep.title }}
+    &lt;/li&gt;
+  {% empty %}
+    &lt;li&gt;Nothing here.&lt;/li&gt;
+  {% endfor %}
+&lt;/ul&gt;
+
+&lt;p&gt;{{ peps|length }} shown&lt;/p&gt;
+{% endblock %}</pre>
+            <p class="count">renders once, to a string</p>
+        </div>
+
+        <div class="panel sv">
+            <div class="label">Svelthon</div>
+<pre>&lt;script lang="python"&gt;
+peps: list
+status: str
+&lt;/script&gt;
+
+&lt;h1&gt;{status or "All"} PEPs&lt;/h1&gt;
+
+&lt;ul&gt;
+  {#each peps as pep, i}
+    &lt;li&gt;
+      {i + 1}.
+      &lt;a href="/pep/{pep.number}"&gt;PEP {pep.number}&lt;/a&gt;
+      — {pep.title}
+    &lt;/li&gt;
+  {:else}
+    &lt;li&gt;Nothing here.&lt;/li&gt;
+  {/each}
+&lt;/ul&gt;
+
+&lt;p&gt;{len(peps)} shown&lt;/p&gt;</pre>
+            <p class="count">renders, then keeps running</p>
+        </div>
+    </div>
+
+    <p class="note"><code class="inline">{% extends %}</code> has no counterpart in the file because
+        layouts are a directory convention: a <code class="inline">+layout.svelte</code> beside the
+        page wraps it, with no declaration on either side. The two annotations at the top are what a
+        Django view passed in its context — here they are the component's inputs, and they are
+        ordinary Python annotations. No rune, no decorator.</p>
+</section>
+
+<section>
+    <h2>Where Svelthon does it differently</h2>
+
+    <h3>Template inheritance</h3>
+    <p>Django names a parent and fills its blocks. Svelthon nests by directory: a
+        <code class="inline">+layout.svelte</code> wraps every page below it and renders the page with
+        <code class="inline">{@render children()}</code>. Layouts nest, so a section can add its own
+        without the pages knowing.</p>
+
+<pre class="solo">&lt;script lang="python"&gt;
+children: object
+&lt;/script&gt;
+
+&lt;header&gt;…&lt;/header&gt;
+&lt;main&gt;{@render children()}&lt;/main&gt;</pre>
+
+    <p>For a single hole this is about even. For several — Django's named blocks — you pass snippets
+        as props, which is more machinery than <code class="inline">{% block %}</code>. It is also
+        more capable, since a snippet takes arguments.</p>
+
+    <h3>Filters</h3>
+    <p>A Django filter is a small language: <code class="inline">{{ x|striptags|truncatewords:20 }}</code>.
+        In Svelthon it is Python, so it is functions and methods — often shorter, sometimes less pretty
+        when it nests. The gain is that there is nothing to learn and nothing to register: any function
+        your module can import, the template can call.</p>
+
+    <div class="caveat">
+        <p class="label">An honest regression</p>
+        <h3>You will miss {% url %}</h3>
+        <p><code class="inline">{% url 'pep' pep.number %}</code> resolves a <em>named</em> route, so
+            renaming a URL does not break templates. SvelteKit has no named routes: you write
+            <code class="inline">/pep/{pep.number}</code>, and renaming the directory means grepping
+            for the path. If your project leans on <code class="inline">{% url %}</code> heavily, this
+            is the thing you will notice missing.</p>
+    </div>
+
+    <h3>CSRF</h3>
+    <p><code class="inline">{% csrf_token %}</code> has no equivalent because SvelteKit does not use a
+        token: it compares the request's <code class="inline">Origin</code> to the app's own and
+        refuses a cross-site form post. Nothing to write in the form — but the origin must be right,
+        or every POST comes back <code class="inline">403</code>.</p>
+</section>
+
+<section>
+    <h2>What Svelte adds, and Django never needed</h2>
+    <p class="lede">A Django template renders once, to a string, and the page is done. A Svelthon
+        template also renders on the server — then keeps running in the browser, and that changes
+        what the syntax has to express.</p>
+
+    <h3>Keys</h3>
+    <p><code class="inline">{#each rows as row (row.id)}</code> tells Svelte which DOM node belongs to
+        which row, so a reordered list moves nodes instead of rewriting them. Django never needed this,
+        having no DOM to keep. It is optional, and it is the first thing to reach for when a list
+        updates.</p>
+
+    <h3>Awaiting</h3>
+    <p><code class="inline">{#await rows}…{:then rows}…{:catch e}…{/await}</code> renders the three
+        states of a promise. A Django template has no such thing, because the view resolved everything
+        before rendering.</p>
+
+    <h3>Reactivity</h3>
+    <p>This is the real difference, and it is not in the template at all. Assign to a module-level
+        name in Python, and everything reading it re-renders.</p>
+
+<pre class="solo">&lt;script lang="python"&gt;
+count = 0
+
+def increment():
+    global count
+    count += 1
+&lt;/script&gt;
+
+&lt;button onclick={increment}&gt;{count}&lt;/button&gt;</pre>
+
+    <p>No rune, no decorator, no <code class="inline">setState</code>. That is the whole feature — and
+        it is why the template can afford to look like Svelte's rather than Django's. The parts that
+        would have been familiar are not where the work is.</p>
+</section>
+
+<section>
+    <h2>Where a Svelthon template is genuinely different</h2>
+
+    <h3>It is not a restricted language</h3>
+    <p>Django deliberately limits templates to keep logic in views. Svelthon does not:
+        <code class="inline">{len([p for p in peps if p.year &gt; 2020])}</code> compiles and runs.
+        Whether that is freedom or rope is a matter of taste, and the old advice still applies — a
+        <code class="inline">@derived</code> in the script reads better than a comprehension in the
+        markup.</p>
+
+    <h3>It runs in the browser too</h3>
+    <p>The Python in a component is compiled to JavaScript by Brython at build time and shipped. A
+        <code class="inline">+page.server.py</code> stays on the server, exactly as a Django view does.
+        A component does not.</p>
+
+    <h3>Its data is not a context dict</h3>
+    <p>A Django view returns a context; a Svelthon page declares its inputs as annotations, and a
+        <code class="inline">+page.server.py</code> returns them from <code class="inline">load()</code>.
+        Same idea, and the names line up.</p>
+</section>
+
+<footer>
+    <p>Every snippet on this page is a test fixture. The side-by-side example is mounted verbatim in
+        <code class="inline">tests/django.test.js</code>, which checks the default, the one-based
+        counter, the interpolated <code class="inline">href</code>, <code class="inline">len()</code>
+        and the empty state — so this page cannot drift into fiction.</p>
+</footer>
+
+</div>

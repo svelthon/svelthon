@@ -950,11 +950,6 @@ The bugs, the internals Svelthon depends on, and the error messages that cost
 the most debugging time are written up in **[BRYTHON.md](BRYTHON.md)** — the
 contract between the two projects, with a minimal reproduction for each.
 
-Five were found, and all five are repaired in the vendored Brython — two through
-`VENDOR_PATCHES`, which fails the build if a patch stops matching, and three by
-editing `vendor/brython.js` itself, each guarded by a test that goes red if the
-edit is lost. None of them is fixed upstream yet.
-
 ## Running
 
 ```sh
