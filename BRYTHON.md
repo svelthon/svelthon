@@ -192,6 +192,42 @@ editor, a formatter — walks backwards at that point and re-emits text it has
 already seen. SVELTHON's demo highlighter (`src/Highlight.svelte`) works around
 it by ignoring a token that starts before the cursor.
 
+### `pyobj2jsobj` stamps every converted container with `Symbol(PYOBJ)`
+
+Converting a `dict` or a `list` to JavaScript leaves a back-reference on the
+result — `jsobj[PYOBJ] = pyobj`. Any Web API whose argument is a WebIDL
+`record<K, V>` then rejects it, because a record conversion refuses an own symbol
+key:
+
+```python
+js.Response.new(body, {"headers": {"content-type": "application/json"}})
+```
+
+```
+TypeError: Key Symbol(PYOBJ) in undefined.headers is a symbol,
+           which cannot be converted to a ByteString.
+```
+
+`Headers` and `URLSearchParams` both throw; a *list* of pairs is accepted, and so
+are `JSON.stringify` and `Object.assign`, which ignore symbol keys. Making the
+property non-enumerable does **not** help — measured: a record conversion walks
+own keys before it filters on enumerability. Holding the back-reference in a
+`WeakMap` keyed by the JavaScript object, instead of as a property on it, would
+fix it without changing the caching behaviour.
+
+SVELTHON works around it by converting such arguments itself (`to_js`, i.e.
+`plainData`), which produces a plain object carrying no symbol.
+
+### A debug `console.log` is left in `$B.JSClass.tp_getattro`
+
+```js
+$B.JSClass.tp_getattro = function(self, attr){ console.log('JSClass getatro', self, attr)
+```
+
+It fires on **every** attribute access on a JavaScript class from Python —
+`js.Response.new` is enough — and dumps the class object, which is hundreds of
+lines. Note the typo in the message. Removing the line is the whole fix.
+
 ## Rough edges worth smoothing
 
 Not bugs, but each cost real debugging time because the failure gave no clue.
