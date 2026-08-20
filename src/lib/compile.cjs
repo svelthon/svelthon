@@ -34,6 +34,12 @@ const NS = '__py';
 // instead of producing a component with no reactivity at all.
 const namespaceCall = (name) => `$B.namespace('${name}')`;
 
+// The module id Brython derives from a filename: only '.' becomes '_'. It ends
+// up as a *string* — the argument to $B.namespace and the frame name — so a '/'
+// is harmless there. The identifier built beside it is a different matter, and
+// the vendored build is patched so that one stays valid (see BRYTHON.md).
+const namespaceFor = (filename) => filename.replace(/\./g, '_');
+
 // A Brython exception carries neither `message` nor `stack`, so a Python syntax
 // error would reach Vite as an empty object and be reported as nothing at all.
 function pythonError(error, source, lineOffset) {
@@ -263,13 +269,18 @@ function compile(
     { store = false, plain = false, jsNames = [], lineOffset = 0, sourceContent = null } = {}
 ) {
     // The namespace identifier is derived from `filename` alone — `module` and
-    // `locals_id` are ignored by js_from_root. Brython maps '.' to '_' but
-    // leaves '/' alone, so a real path would emit `locals_src/Counter_svelte`,
-    // which is not valid JavaScript. Pass an identifier-safe name instead; the
-    // cost is that Python's __file__ says "Counter" rather than the full path.
+    // `locals_id` are ignored by js_from_root. Upstream Brython maps only '.' to
+    // '_', so a real path emitted `locals_src/Counter_svelte`, which is not
+    // valid JavaScript; the vendored build is patched to neutralise every
+    // character that cannot appear in an identifier (see BRYTHON.md). So the
+    // real path can be passed, and Python's __file__ names the actual file —
+    // which is what a traceback shows.
+    //
+    // The identifier Brython then derives is `nameFor()`'s own output, so the
+    // namespace interception is unaffected.
     let root;
     try {
-        root = $B.py2js({ src, filename: name }, name, [name]);
+        root = $B.py2js({ src, filename: source }, name, [name]);
     } catch (error) {
         throw pythonError(error, source, lineOffset);
     }
@@ -302,9 +313,14 @@ function compile(
     // `from browser import html`, verified by scripts/browser-check.sh.
     const js = root.to_js();
 
-    if (!js.includes(namespaceCall(name))) {
+    // Brython derives the namespace identifier from the filename, neutralising
+    // whatever cannot appear in a JavaScript identifier — so the name to hook is
+    // a function of the file, not of `name`.
+    const namespace = namespaceFor(source);
+
+    if (!js.includes(namespaceCall(namespace))) {
         throw new Error(
-            `svelthon: the code generated for ${name} never calls ${namespaceCall(name)} — ` +
+            `svelthon: the code generated for ${source} never calls ${namespaceCall(namespace)} — ` +
                 `Brython's codegen no longer exposes the module namespace where SVELTHON hooks it`
         );
     }
@@ -321,7 +337,7 @@ function compile(
         ``,
         `export function init(${NS}) {`,
         `  try {`,
-        `    return withNamespace('${name}', ${NS}, () => {`,
+        `    return withNamespace('${namespace}', ${NS}, () => {`,
         js,
         `    });`,
         `  } catch (err) { throw pyError(err, ${JSON.stringify(source)}, ${lineOffset}); }`,

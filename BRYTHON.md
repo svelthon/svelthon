@@ -155,12 +155,13 @@ var $B = __BRYTHON__,
 ```
 
 Any real path triggers it, silently, since the failure only appears when the
-generated code is evaluated. SVELTHON works around it by passing a flattened
-identifier, at the cost of `__file__` no longer being the real path — which
-degrades tracebacks.
+generated code is evaluated.
 
-Neutralising every character that is not valid in a JS identifier, as `.` already
-is, would fix it.
+**Patched in the vendored build.** `qualified_scope_name` now neutralises every
+character that cannot appear in an identifier, not just `.` — see below. Note
+that the *module id* beside it (the argument to `$B.namespace`, and the frame
+name) keeps the `/`: it is a string, so it is valid as it stands, and leaving it
+alone keeps `__name__` recognisable.
 
 ### A comprehension's variable leaks into the enclosing scope
 
@@ -251,6 +252,20 @@ is the one where identity across the boundary is observable.
 Both are worth carrying upstream — the first is a deleted line, the second
 belongs in `www/src/js_objects.js` where it can be written against the readable
 source.
+
+### The one edit made in the file itself
+
+`qualified_scope_name` is patched **in `vendor/brython.js` directly**, marked
+with a `/* SVELTHON patch */` comment. It cannot go through `VENDOR_PATCHES`,
+which is a Vite plugin: this code runs in the *compiler*, which `compile.cjs`
+loads with a plain `require` under Node, where no Vite transform applies.
+
+A direct edit is lost silently when a newer Brython is vendored, so the guard is
+a test rather than a build-time check — *a path builds a valid identifier, and
+`__file__` keeps the real path*, in `tests/compiler.test.js`. It fails the moment
+the patch is gone. What it buys: `compile.cjs` passes the real path, so
+`__file__` names the actual file and a traceback reads
+`src/routes/+page.server.py` instead of a slug.
 
 ## Rough edges worth smoothing
 

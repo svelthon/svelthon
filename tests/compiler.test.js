@@ -96,6 +96,23 @@ def increment():
         expect(lineFor[generated]).toBe(5); // 0-indexed: line 6 of the file
     });
 
+    // `vendor/brython.js` is patched in place for this one — it cannot go
+    // through VENDOR_PATCHES, which is a Vite plugin, where the compiler runs
+    // under Node. A direct edit is lost silently when a newer Brython is
+    // vendored, so this test is the guard: it fails the moment the patch is
+    // gone. See BRYTHON.md.
+    test('a path builds a valid identifier, and __file__ keeps the real path', () => {
+        const { module } = compile('x = 1\n', 'C', 'src/routes/+page.server.py');
+
+        // Upstream neutralises only '.', so this read `locals_src/routes/…`,
+        // which is a SyntaxError — and only when the generated code was run.
+        expect(module).toContain('locals_src_routes__page_server_py = $B.namespace(');
+        expect(module).not.toMatch(/locals_[\w$]*\//);
+
+        // The point of the patch: a traceback naming the file, not a slug.
+        expect(module).toContain("__file__ = 'src/routes/+page.server.py'");
+    });
+
     // The boundary towards JavaScript is laid down at compile time; what it
     // then does is checked in boundary.test.js.
     test('a JavaScript import is wrapped once, not on every read', () => {
