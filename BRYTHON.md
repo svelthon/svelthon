@@ -195,6 +195,12 @@ Covered by four tests in `tests/fidelity.test.js` — module level, inside a
 function, six comprehension forms, and a name that existed beforehand. Two of
 them were `test.fails` until the patch landed; they now guard it.
 
+With this one repaired, `BRYTHON.md` lists no open bug and the suite carries no
+`test.fails` at all. That marker means one thing here — *upstream is wrong, say
+so the day it is fixed* — and nothing currently qualifies. A third party's
+deliberate behaviour, such as Svelte memoising a `$derived` on `===`, is asserted
+as it stands instead.
+
 ### `FSTRING_MIDDLE` reports the position of the token that opened the f-string
 
 ```python
