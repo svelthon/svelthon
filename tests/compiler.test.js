@@ -113,6 +113,28 @@ def increment():
         expect(module).toContain("__file__ = 'src/routes/+page.server.py'");
     });
 
+    // The other edit made in `vendor/brython.js` itself. Upstream reported the
+    // position of the token that *opened* the f-string for every FSTRING_MIDDLE
+    // chunk, so anything walking the stream positionally went backwards and
+    // re-emitted text it had already seen. See BRYTHON.md.
+    test('an f-string chunk reports its own position', () => {
+        const $B = globalThis.__BRYTHON__;
+        const FSTRING_MIDDLE = 60;
+
+        const chunks = (src) =>
+            [...$B.tokenizer(src, 't.py', 'file')]
+                .filter((token) => token.type === FSTRING_MIDDLE)
+                .map((token) => src.slice(token.col_offset, token.end_col_offset));
+
+        // The span is the source, so `{{` counts for two characters where the
+        // token's own text holds one — which is why this compares slices rather
+        // than token strings.
+        expect(chunks('seen = f"{len(items)} items"\n')).toEqual([' items']);
+        expect(chunks('x = f"a{v}b"\n')).toEqual(['a', 'b']);
+        expect(chunks('z = f"""multi {v} line"""\n')).toEqual(['multi ', ' line']);
+        expect(chunks('y = f"{{literal}} {v:>5} tail"\n')).toEqual(['{{literal}} ', '>5', ' tail']);
+    });
+
     // The boundary towards JavaScript is laid down at compile time; what it
     // then does is checked in boundary.test.js.
     test('a JavaScript import is wrapped once, not on every read', () => {

@@ -841,7 +841,7 @@ var lines=src.split('\n'),linenum=0,line_at={}
 for(let i=0,len=src.length;i < len;i++){line_at[i]=linenum
 if(src[i]=='\n'){linenum++}}
 function get_line_at(pos){return lines[line_at[pos]]+'\n'}
-var state="line_start",char,cp,mo,pos=0,quote,triple_quote,escaped=false,string_start,string,prefix,name,number,num_type,comment,indent,indent_before_continuation=0,indents=[],braces=[],line,line_num=0,line_start=1,token_modes=['regular'],token_mode='regular',save_mode=token_mode,format_specifier,ft_type,ft_buffer,ft_start,ft_expr_start,ft_escape,ft_format_spec
+var state="line_start",char,cp,mo,pos=0,quote,triple_quote,escaped=false,string_start,string,prefix,name,number,num_type,comment,indent,indent_before_continuation=0,indents=[],braces=[],line,line_num=0,line_start=1,token_modes=['regular'],token_mode='regular',save_mode=token_mode,format_specifier,ft_type,ft_buffer,ft_start,ft_expr_start,ft_escape,ft_format_spec,ft_chunk_start
 if(parser){parser.braces=braces}
 t.push(Token('ENCODING','utf-8',0,0,0,0,''))
 while(pos < src.length){char=src[pos]
@@ -852,7 +852,9 @@ char=src.substr(pos,2)
 pos++}
 pos++
 if(token_mode !=save_mode){if(token_mode=='ft'){ft_buffer=''
-ft_escape=false}else if(token_mode=='format_specifier'){format_specifier=''}}
+/* SVELTHON patch, see BRYTHON.md */ ft_chunk_start=pos-line_start-char.length+1
+ft_escape=false}else if(token_mode=='format_specifier'){format_specifier=''
+/* SVELTHON patch */ ft_chunk_start=pos-line_start-char.length+1}}
 save_mode=token_mode
 if(token_mode=='ft'){
 if(char==token_mode.quote){if(ft_escape){ft_buffer+='\\'+char
@@ -863,7 +865,7 @@ continue}
 char=token_mode.quote.repeat(3)
 pos+=2}
 if(ft_buffer.length > 0){
-t.push(Token(FT_MIDDLE[ft_type],ft_buffer,line_num,ft_start,line_num,ft_start+ft_buffer.length,line))}
+t.push(Token(FT_MIDDLE[ft_type],ft_buffer,line_num,ft_chunk_start,line_num,pos-line_start-char.length+1,line))}
 t.push(Token(FT_END[ft_type],char,line_num,pos-line_start,line_num,pos-line_start+1,line))
 token_modes.pop()
 token_mode=$B.last(token_modes)
@@ -872,7 +874,7 @@ continue}else if(char=='{'){if(src.charAt(pos)=='{'){
 ft_buffer+=char
 pos++
 continue}else{
-if(ft_buffer.length > 0){t.push(Token(FT_MIDDLE[ft_type],ft_buffer,line_num,ft_start,line_num,ft_start+ft_buffer.length,line))}
+if(ft_buffer.length > 0){t.push(Token(FT_MIDDLE[ft_type],ft_buffer,line_num,ft_chunk_start,line_num,pos-line_start-char.length+1,line))}
 token_mode='regular_within_ft'
 ft_expr_start=pos-line_start
 state=null
@@ -888,16 +890,16 @@ ft_buffer+=char
 ft_escape=false
 if(char=='\n'){line_num++}
 continue}}else if(token_mode=='format_specifier'){if(char==quote){if(format_specifier.length > 0){
-t.push(Token(FT_MIDDLE[ft_type],format_specifier,line_num,ft_start,line_num,ft_start+format_specifier.length,line))
+t.push(Token(FT_MIDDLE[ft_type],format_specifier,line_num,ft_chunk_start,line_num,pos-line_start-char.length+1,line))
 token_modes.pop()
 token_mode=$B.last(token_modes)
 continue}}else if(char=='{'){
-t.push(Token(FT_MIDDLE[ft_type],format_specifier,line_num,ft_start,line_num,ft_start+format_specifier.length,line))
+t.push(Token(FT_MIDDLE[ft_type],format_specifier,line_num,ft_chunk_start,line_num,pos-line_start-char.length+1,line))
 token_mode='regular_within_ft'
 ft_expr_start=pos-line_start
 state=null
 token_modes.push(token_mode)}else if(char=='}'){
-t.push(Token(FT_MIDDLE[ft_type],format_specifier,line_num,ft_start,line_num,ft_start+format_specifier.length,line))
+t.push(Token(FT_MIDDLE[ft_type],format_specifier,line_num,ft_chunk_start,line_num,pos-line_start-char.length+1,line))
 t.push(Token('OP',char,line_num,pos-line_start,line_num,pos-line_start+1,line))
 if(braces.length==0 ||$B.last(braces).char !=='{'){throw Error('wrong braces')}
 braces.pop()

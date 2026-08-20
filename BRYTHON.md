@@ -208,15 +208,24 @@ positions reported are those of the start token.
 
 Anything consuming the token stream positionally — a syntax highlighter, an
 editor, a formatter — walks backwards at that point and re-emits text it has
-already seen. SVELTHON's demo highlighter (`src/Highlight.svelte`) works around
-it by ignoring a token that starts before the cursor.
+already seen.
 
-**Not hacked in the vendored build.** The three emission sites pass `ft_start`,
-the position of the opening token, where a running `pos` is available — but the
-chunk's own start is not `pos - ft_buffer.length`, because `{{` adds one
-character to the buffer for two in the source, and escapes do the same. It needs
-a start position recorded wherever the buffer is reset, at every site. That is
-tokenizer work, not a substitution.
+**Patched in the vendored build.** The chunk's start cannot be derived from the
+buffer: `{{` adds one character to it for two in the source, and escapes do the
+same. So it is recorded where a chunk *begins* — the single point where
+`ft_buffer` (or `format_specifier`) is reset, on the first iteration after the
+tokenizer enters that mode — and each of the five emissions then reports its own
+span.
+
+The column of the character just consumed is `pos - line_start - char.length + 1`:
+`pos` has already moved past it, `line_start` starts at 1, and `char` holds two
+code units for a surrogate pair and three for a closing triple quote. That one
+expression covers every site.
+
+Covered by *an f-string chunk reports its own position* in
+`tests/compiler.test.js`, which slices the source at the reported offsets and
+compares — including a `{{literal}}`, where the span is legitimately wider than
+the token's decoded text.
 
 ### `pyobj2jsobj` stamps every converted container with `Symbol(PYOBJ)`
 
@@ -278,21 +287,22 @@ Both are worth carrying upstream — the first is a deleted line, the second
 belongs in `www/src/js_objects.js` where it can be written against the readable
 source.
 
-### The two edits made in the file itself
+### The three edits made in the file itself
 
 These live in the *compiler*, which `compile.cjs` loads with a plain `require`
 under Node — no Vite transform applies, so `VENDOR_PATCHES` cannot reach them.
-Both are edited in `vendor/brython.js` and marked with a `/* SVELTHON patch */`
+All three are edited in `vendor/brython.js` and marked with a `/* SVELTHON patch */`
 comment, the only way to find them again in 4.6 MB.
 
 | Edited in place | What it buys |
 |---|---|
 | `qualified_scope_name` neutralises every character invalid in an identifier | `compile.cjs` passes the real path, so `__file__` names the actual file and a traceback reads `src/routes/+page.server.py` rather than a slug |
 | `make_comp` drops the bindings a comprehension introduced | a comprehension no longer leaks its iteration variable |
+| the tokenizer records where each f-string chunk begins | `FSTRING_MIDDLE` reported the position of the token that opened the f-string |
 
 A direct edit is lost silently when a newer Brython is vendored, so the guard for
-each is a **test** rather than a build-time check. Losing the first turns
-`tests/compiler.test.js` red, the second `tests/fidelity.test.js`.
+each is a **test** rather than a build-time check: losing any of them turns
+`tests/compiler.test.js` or `tests/fidelity.test.js` red.
 
 ## Rough edges worth smoothing
 

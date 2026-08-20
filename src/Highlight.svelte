@@ -69,10 +69,10 @@
                 const to = Math.min(starts[token.end_lineno - 1] + token.end_col_offset, code.length);
                 if (from >= code.length) break;
 
-                // Brython bug: FSTRING_MIDDLE reports the position of the token
-                // that opened the f-string, not its own, so it points backwards
-                // into text already emitted. Skipping it loses nothing — the gap
-                // between tokens is sliced from the source anyway.
+                // A token that points backwards into text already emitted would
+                // duplicate it. FSTRING_MIDDLE used to do exactly that, until the
+                // vendored Brython was patched (see BRYTHON.md); the guard stays
+                // because nothing else here would survive a token out of order.
                 if (from < cursor) continue;
 
                 // That gap is part of the literal when it falls inside one.
