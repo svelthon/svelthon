@@ -1,5 +1,5 @@
-<!-- Un composant Python n'a qu'un <script> d'instance : les enfants s'importent
-     dans un <script module>, dont les déclarations sont visibles du gabarit. -->
+<!-- A Python component has a single instance <script>: children are imported in
+     a <script module>, whose declarations the template can see. -->
 <script module>
     import Row from './Row.svelte';
 </script>

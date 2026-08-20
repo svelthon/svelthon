@@ -22,6 +22,6 @@ def grab(el):
 <p data-k="this" bind:this={node}>ancre</p>
 <p data-k="thisv">{node}</p>
 
-<Card title="Bonjour">
-    {#snippet children()}<em>contenu</em>{/snippet}
+<Card title="Hello">
+    {#snippet children()}<em>content</em>{/snippet}
 </Card>

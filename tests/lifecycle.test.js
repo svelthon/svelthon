@@ -2,18 +2,18 @@ import { test, expect, describe } from 'vitest';
 import { mount, unmount, flushSync } from 'svelte';
 import Lifecycle from './fixtures/Lifecycle.svelte';
 
-// on_mount / on_destroy par convention de nom, adossés à un unique $effect :
-// le corps s'exécute une fois le DOM en place, le nettoyage à la destruction.
-describe('cycle de vie', () => {
-    test('on_mount s’exécute après le montage', () => {
+// on_mount / on_destroy by naming convention, backed by a single $effect: the
+// body runs once the DOM is in place, the cleanup when the component goes away.
+describe('lifecycle', () => {
+    test('on_mount runs after mounting', () => {
         const target = document.body.appendChild(document.createElement('div'));
         mount(Lifecycle, { target });
         flushSync();
 
-        expect(target.querySelector('p[data-k="started"]').textContent).toBe('oui');
+        expect(target.querySelector('p[data-k="started"]').textContent).toBe('yes');
     });
 
-    test('on_destroy s’exécute au démontage, avec l’état final', () => {
+    test('on_destroy runs on unmount, with the final state', () => {
         const seen = [];
         const target = document.body.appendChild(document.createElement('div'));
         const app = mount(Lifecycle, { target, props: { notify: (msg) => seen.push(msg) } });
@@ -28,12 +28,12 @@ describe('cycle de vie', () => {
         unmount(app);
         flushSync();
 
-        expect(seen).toEqual(['détruit après 2 tick(s)']);
+        expect(seen).toEqual(['destroyed after 2 tick(s)']);
     });
 
-    test('on_mount ne rejoue pas quand l’état change', () => {
-        // Le risque réel : l'$effect lit les signaux des fonctions, et rejouerait
-        // à chaque écriture s'il en suivait un qui change.
+    test('on_mount does not replay when state changes', () => {
+        // The real risk: the $effect reads the functions' signals, and would
+        // replay on every write if it tracked one that changes.
         const target = document.body.appendChild(document.createElement('div'));
         mount(Lifecycle, { target });
         flushSync();

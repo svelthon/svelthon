@@ -74,11 +74,11 @@ export const py = {
         }
     },
 
-    // `{...attrs}` — Svelte diffe l'objet étalé contre celui du rendu précédent,
-    // et un dict muté en place *est* le même objet. En JavaScript le problème ne
-    // se pose pas : l'étalement d'un proxy $state produit un objet neuf à chaque
-    // évaluation. On rend donc une copie superficielle, pour que le rendu d'un
-    // étalement Python se comporte exactement comme son homologue JavaScript.
+    // `{...attrs}` — Svelte diffs the spread object against the one from the
+    // previous render, and a dict mutated in place *is* the same object. In
+    // JavaScript the problem does not arise: spreading a $state proxy produces a
+    // fresh object on every evaluation. So a shallow copy is returned, and a
+    // Python spread renders exactly like its JavaScript counterpart.
     spread(value) {
         if (value === null || value === undefined || typeof value !== 'object') return value;
         return { ...value };
@@ -286,7 +286,7 @@ function mark(value, bumps, reads) {
             configurable: true
         });
     } catch {
-        /* un objet figé n'est pas à nous : on le laisse tel quel */
+        /* a frozen object is not ours: leave it alone */
         return value;
     }
 
@@ -409,7 +409,7 @@ export function pyError(error, where, lineOffset = 0) {
         error.message = `${described} (${at})`;
         if (error.stack === undefined) error.stack = `${error.message}\n    at ${at}`;
     } catch {
-        /* exception figée : tant pis, on la relaie telle quelle */
+        /* a frozen exception: pass it on as it stands */
     }
 
     return error;

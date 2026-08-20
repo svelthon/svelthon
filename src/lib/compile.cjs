@@ -44,7 +44,7 @@ function pythonError(error, source, lineOffset) {
         const name = $B.$getattr($B.get_class(error), '__name__');
         described = `${name}: ${$B.builtins.str.$factory(error)}`;
     } catch {
-        /* pas une exception Brython : on garde le libellé générique */
+        /* not a Brython exception: keep the generic label */
     }
 
     try {
@@ -350,7 +350,7 @@ function compile(
     const local = (name) => `__local_${name}`;
     // An imported JavaScript name, once it has been given a Python-aware
     // boundary — see `jsCall` in the runtime.
-    const js = (name) => `__js_${name}`;
+    const jsBound = (name) => `__js_${name}`;
     // Second signal per name: a mutation bumps it without touching the value,
     // so nothing is copied and the object keeps its identity.
     const rev = (name) => `__rev_${name}`;
@@ -415,19 +415,19 @@ function compile(
         `bind(__proto, '__text', () => py.str, () => {});`,
         `bind(__proto, '__seq', () => py.seq, () => {});`,
         `bind(__proto, '__spread', () => py.spread, () => {});`,
-        // Le pont sortant : une valeur Python rendue lisible en JavaScript.
+        // The outbound bridge: a Python value made readable from JavaScript.
         `bind(__proto, 'to_js', () => plainData, () => {});`,
         `bind(__proto, 'to_python', () => pyArg, () => {});`,
-        // Le pont aller : les globales JavaScript, telles quelles.
+        // The inbound bridge: the JavaScript globals, as they are.
         `bind(__proto, 'js', () => globalThis, () => {});`,
         // Wrapped once, not on every read: a name Python compares by identity —
         // `handler is on_click` — has to answer the same object twice.
         ...[...new Set(jsImported)]
             .filter((n) => !declared.includes(n))
-            .map((n) => `const ${js(n)} = jsCall(${n});`),
+            .map((n) => `const ${jsBound(n)} = jsCall(${n});`),
         ...jsImported
             .filter((n) => !declared.includes(n))
-            .map((n) => `bind(__proto, '${n}', () => ${js(n)}, () => {});`),
+            .map((n) => `bind(__proto, '${n}', () => ${jsBound(n)}, () => {});`),
         ``,
         `const ${NS} = Object.create(__proto);`,
         `${NS}.$proxy = true;`,
@@ -571,21 +571,21 @@ function compile(
         `bind(__proto, '__spread', () => py.spread, () => {});`,
         `bind(__proto, 'to_js', () => plainData, () => {});`,
         `bind(__proto, 'to_python', () => pyArg, () => {});`,
-        // Le pont aller : les globales JavaScript, telles quelles.
+        // The inbound bridge: the JavaScript globals, as they are.
         `bind(__proto, 'js', () => globalThis, () => {});`,
         // Wrapped once, not on every read: a name Python compares by identity
         // has to answer the same object twice.
         ...[...new Set([...jsImported, ...jsNames])]
             .filter((n) => !declared.includes(n))
-            .map((n) => `const ${js(n)} = jsCall(${n});`),
+            .map((n) => `const ${jsBound(n)} = jsCall(${n});`),
         ...jsImported
             .filter((n) => !declared.includes(n))
-            .map((n) => `bind(__proto, '${n}', () => ${js(n)}, () => {});`),
+            .map((n) => `bind(__proto, '${n}', () => ${jsBound(n)}, () => {});`),
         // What the component imported in its `<script module>`, published so
         // Python can read it. A name Python declares itself wins.
         ...jsNames
             .filter((n) => !declared.includes(n))
-            .map((n) => `bind(__proto, '${n}', () => ${js(n)}, () => {});`),
+            .map((n) => `bind(__proto, '${n}', () => ${jsBound(n)}, () => {});`),
         ...(hasContext
             ? []
             : [

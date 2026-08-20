@@ -4,7 +4,7 @@
 
 <script lang="python">
 shown = True
-title = "titre"
+title = "title"
 </script>
 
 <svelte:head><title>{title}</title></svelte:head>
@@ -12,6 +12,6 @@ title = "titre"
 {#if shown}<p data-k="fade" transition:fade>visible</p>{/if}
 
 <svelte:boundary>
-    <p data-k="inside">dans la frontière</p>
-    {#snippet failed(error)}<p data-k="failed">rattrapé</p>{/snippet}
+    <p data-k="inside">inside the boundary</p>
+    {#snippet failed(error)}<p data-k="failed">caught</p>{/snippet}
 </svelte:boundary>

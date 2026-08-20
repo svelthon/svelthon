@@ -3,7 +3,7 @@ count = 0
 message = "-"
 
 def deep():
-    raise ValueError("cassé au fond")
+    raise ValueError("broken at the bottom")
 
 def boom():
     deep()

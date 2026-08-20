@@ -1,6 +1,6 @@
 <script lang="python">
-# Les quatre sites de gabarit qui restaient en JavaScript après le passage des
-# expressions en Python : l'itérable d'un {#each}, {#key}, {@const}, {@html}.
+# The four template sites that were still JavaScript once expressions had moved
+# to Python: an {#each} iterable, {#key}, {@const}, {@html}.
 
 scores = {"b": 2, "a": 1}
 pair = (1, 2)
@@ -11,7 +11,8 @@ def squares():
 
 
 def rebuild():
-    # Égal au précédent, mais un objet neuf : en JavaScript, une identité neuve.
+    # Equal to the previous one, but a fresh object: in JavaScript, a fresh
+    # identity.
     global pair
     pair = (1, 2)
 

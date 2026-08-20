@@ -15,13 +15,13 @@ import Errors from './fixtures/Errors.svelte';
 import InitError from './fixtures/InitError.svelte';
 import OffsetError from './fixtures/OffsetError.svelte';
 
-// Grille de fidélité sémantique.
+// Semantic fidelity grid.
 //
-// Chaque valeur attendue a été produite par CPython 3.12 en exécutant le code
-// Python du composant tel quel (`python3 fichier.py`) — jamais écrite à la main.
-// Un codegen qui optimise trop casse ces lignes avant tout le reste : supprimer
-// les frames tue `Frames`, déballer les entiers tue `Integers`, court-circuiter
-// `augm_assign` tue `Protocols`.
+// Every expected value was produced by CPython 3.12 running the component's
+// Python as it stands (`python3 file.py`) — never written by hand. A codegen
+// that optimises too far breaks these lines before anything else: dropping
+// frames kills `Frames`, unboxing integers kills `Integers`, short-circuiting
+// `augm_assign` kills `Protocols`.
 
 function render(Component) {
     const target = document.body.appendChild(document.createElement('div'));
@@ -39,8 +39,8 @@ function report(Component) {
     );
 }
 
-describe('entiers — canari du déballage', () => {
-    test('précision arbitraire et division euclidienne', () => {
+describe('integers — the unboxing canary', () => {
+    test('arbitrary precision and floor division', () => {
         expect(report(Integers)).toEqual({
             big: '1180591620717411303424',
             mul: '9223372037000250000',
@@ -55,8 +55,8 @@ describe('entiers — canari du déballage', () => {
     });
 });
 
-describe('texte — canari de la représentation des chaînes', () => {
-    test('unicode, tranches et mini-langage de format', () => {
+describe('text — the string representation canary', () => {
+    test('unicode, slices and the format mini-language', () => {
         expect(report(Text)).toEqual({
             emoji_len: '1',
             emoji_ord: '128512',
@@ -66,14 +66,14 @@ describe('texte — canari de la représentation des chaînes', () => {
             pad: "'   42'",
             sign: "'+7'",
             sharp: "'STRASSE'",
-            joined: "'abricot, banane, pomme'",
+            joined: "'apple, apricot, banana'",
             mult: "'ababab'"
         });
     });
 });
 
-describe('protocoles — canari des raccourcis de dispatch', () => {
-    test('opérateurs, descripteurs et slots', () => {
+describe('protocols — the dispatch shortcut canary', () => {
+    test('operators, descriptors and slots', () => {
         expect(report(Protocols)).toEqual({
             inplace: 'Acc(21)',
             plain: 'Acc(3)',
@@ -87,8 +87,8 @@ describe('protocoles — canari des raccourcis de dispatch', () => {
     });
 });
 
-describe('flot de contrôle', () => {
-    test('générateurs, fermetures, finally et chaînage d’exceptions', () => {
+describe('control flow', () => {
+    test('generators, closures, finally and exception chaining', () => {
         const { leaked, leaked_in_func, ...rest } = report(Flow);
 
         expect(rest).toEqual({
@@ -102,23 +102,23 @@ describe('flot de contrôle', () => {
         });
     });
 
-    // Divergence Brython connue, pas une régression de SVELTHON : la variable
-    // d'une compréhension fuit dans la portée module, alors que Python 3 lui
-    // donne une portée propre. Ce test passe *parce qu'il échoue* ; le jour où
-    // Brython corrige, vitest le signalera.
-    test.fails('la variable de compréhension ne doit pas fuir, au niveau module', () => {
+    // A known Brython divergence, not a SVELTHON regression: a comprehension's
+    // variable leaks into module scope, where Python 3 gives it a scope of its
+    // own. This test passes *because it fails*; the day Brython fixes it,
+    // vitest will say so.
+    test.fails('a comprehension variable must not leak, at module level', () => {
         expect(report(Flow).leaked).toBe('False');
     });
 
-    // Elle fuit aussi dans une fonction — la compréhension a sa propre portée
-    // depuis Python 3.0. Vérifié contre CPython 3.12 (voir BRYTHON.md).
-    test.fails('ni dans une fonction', () => {
+    // It leaks inside a function too — a comprehension has had its own scope
+    // since Python 3.0. Checked against CPython 3.12 (see BRYTHON.md).
+    test.fails('nor inside a function', () => {
         expect(report(Flow).leaked_in_func).toBe('False');
     });
 });
 
-describe('frames — canari de la suppression des cadres d’appel', () => {
-    test('introspection et profondeur de traceback', () => {
+describe('frames — the call-frame elision canary', () => {
+    test('introspection and traceback depth', () => {
         expect(report(Frames)).toEqual({
             name: "'own_name'",
             caller: "'outer'",
@@ -129,82 +129,82 @@ describe('frames — canari de la suppression des cadres d’appel', () => {
     });
 });
 
-// Dans un gabarit Svelte on est en JavaScript, pas en Python — et les deux
-// langages ne sont pas d'accord. JS tient tout objet pour vrai, donc `{#if}` sur
-// une liste vide, un dict vide ou None dirait vrai là où Python dit faux. Le
-// préprocesseur réécrit les conditions vers le bool() de Python.
-describe('gabarit — frontière Python/JavaScript', () => {
+// Inside a Svelte template you are in JavaScript, not Python — and the two
+// languages disagree. JS holds every object true, so `{#if}` on an empty list,
+// an empty dict or None would say true where Python says false. The
+// preprocessor rewrites conditions to Python's own bool().
+describe('template — the Python/JavaScript boundary', () => {
     const cell = (k) => render(Template).querySelector(`[data-k="${k}"]`).textContent;
 
-    test('les valeurs vides sont fausses comme en Python', () => {
-        expect(cell('empty')).toBe('faux'); // []
-        expect(cell('empty_dict')).toBe('faux'); // {}
-        expect(cell('none')).toBe('faux'); // None
-        expect(cell('zero')).toBe('faux'); // 0
-        expect(cell('text')).toBe('faux'); // ""
-        expect(cell('items')).toBe('vrai'); // ["a", "b", "c"]
+    test('empty values are false, as in Python', () => {
+        expect(cell('empty')).toBe('false'); // []
+        expect(cell('empty_dict')).toBe('false'); // {}
+        expect(cell('none')).toBe('false'); // None
+        expect(cell('zero')).toBe('false'); // 0
+        expect(cell('text')).toBe('false'); // ""
+        expect(cell('items')).toBe('true'); // ["a", "b", "c"]
     });
 
-    test('la réécriture tient sur {:else if} et les {#if} imbriqués', () => {
+    test('the rewrite holds on {:else if} and nested {#if}', () => {
         expect(cell('elseif')).toBe('b');
         expect(cell('nested')).toBe('y');
     });
 
-    test('{#each} itère nativement sur une liste Python', () => {
+    test('{#each} iterates a Python list natively', () => {
         expect(cell('each')).toBe('abc');
     });
 
-    test('py.str() rend les valeurs à la façon de Python', () => {
-        expect(cell('str_list')).toBe("['a', 'b', 'c']"); // JS dirait "a,b,c"
-        expect(cell('str_dict')).toBe("{'x': 1}"); // JS dirait "[object Object]"
+    test('py.str() renders values the Python way', () => {
+        expect(cell('str_list')).toBe("['a', 'b', 'c']"); // JS would say "a,b,c"
+        expect(cell('str_dict')).toBe("{'x': 1}"); // JS would say "[object Object]"
     });
 
-    // Le préprocesseur enveloppe les interpolations de *texte* dans py.str().
-    test('une interpolation nue rend déjà à la façon de Python', () => {
+    // The preprocessor wraps *text* interpolations in py.str().
+    test('a bare interpolation already renders the Python way', () => {
         expect(cell('raw_list')).toBe("['a', 'b', 'c']");
         expect(cell('raw_dict')).toBe("{'x': 1}");
         expect(cell('raw_none')).toBe('None');
     });
 
-    test('la réécriture survit aux accolades et aux chevrons', () => {
-        expect(cell('brace')).toBe('a}b'); // '}' dans une chaîne, pas une fermeture
-        expect(cell('gt')).toBe('dans une balise'); // '>' dans un attribut cité
+    test('the rewrite survives braces and angle brackets', () => {
+        expect(cell('brace')).toBe('a}b'); // '}' inside a string, not a closer
+        expect(cell('gt')).toBe('inside a tag'); // '>' inside a quoted attribute
     });
 
-    test('une valeur d’attribut garde la valeur, pas son rendu', () => {
+    test('an attribute value keeps the value, not its rendering', () => {
         const el = render(Template).querySelector('[data-k="attr"]');
-        expect(el.dataset.v).toBe('a,b,c'); // non enveloppé : c'est la liste elle-même
+        expect(el.dataset.v).toBe('a,b,c'); // unwrapped: the list itself
     });
 });
 
-describe('composition — objets Python et composants enfants', () => {
+describe('composition — Python objects and child components', () => {
     const cell = (k) => render(Composition).querySelector(`[data-k="${k}"]`).textContent;
 
-    test('dicts et tuples traversent le gabarit sans aide', () => {
-        expect(cell('dict')).toBe('[x|9]'); // clés exposées comme propriétés JS
-        expect(cell('tuple')).toBe('[k=1]'); // un tuple est un tableau JS
+    test('dicts and tuples cross the template unaided', () => {
+        expect(cell('dict')).toBe('[x|9]'); // keys exposed as JS properties
+        expect(cell('tuple')).toBe('[k=1]'); // a tuple is a JS array
     });
 
-    test('les attributs d’une instance se lisent depuis le gabarit', () => {
-        // Brython garde les attributs hors des propriétés JS : en JavaScript,
-        // {o.label} rendrait du vide. L'expression est compilée en Python, donc
-        // elle passe par la recherche d'attributs de Python.
+    test('an instance’s attributes are readable from the template', () => {
+        // Brython keeps attributes out of JS properties: in JavaScript,
+        // {o.label} would render nothing. The expression is compiled as Python,
+        // so it goes through Python's own attribute lookup.
         expect(cell('obj')).toBe('[a:1][b:2]');
     });
 
-    test('et le protocole des descripteurs est respecté', () => {
-        expect(cell('prop')).toBe('[2][4]'); // une @property, pas un attribut
+    test('and the descriptor protocol is honoured', () => {
+        expect(cell('prop')).toBe('[2][4]'); // a @property, not an attribute
     });
 
-    test('un objet Python se passe en prop à un composant enfant', () => {
-        expect(cell('child')).toBe('>a=1>b=2'); // prefix laissé à son défaut
+    test('a Python object passes as a prop to a child component', () => {
+        expect(cell('child')).toBe('>a=1>b=2'); // prefix left at its default
         expect(cell('child_prop')).toBe('-a=1-b=2');
     });
 });
 
-// `{#each}` avec clé est le cas où l'identité des objets Python compte
-// vraiment : la copie que fait publish() ne doit pas casser la réconciliation.
-describe('{#each} avec clé', () => {
+// A keyed `{#each}` is where the identity of Python objects really counts: the
+// copy publish() used to make must not break reconciliation.
+describe('keyed {#each}', () => {
     const setup = () => {
         const target = render(Keyed);
         return {
@@ -221,7 +221,7 @@ describe('{#each} avec clé', () => {
         };
     };
 
-    test('insertion et suppression réconcilient sur la clé Python', () => {
+    test('insertion and removal reconcile on the Python key', () => {
         const { list, node, click } = setup();
         const kept = node(2);
 
@@ -229,35 +229,49 @@ describe('{#each} avec clé', () => {
 
         click('prepend');
         expect(list()).toBe('3:c,1:a,2:b');
-        expect(node(2)).toBe(kept); // nœud réutilisé, pas recréé
+        expect(node(2)).toBe(kept); // node reused, not recreated
 
         click('drop_first');
         expect(list()).toBe('1:a,2:b');
         expect(node(2)).toBe(kept);
     });
 
-    test('muter un attribut d’un élément ne re-rend pas', () => {
-        const { list, click } = setup();
+    test('a Python tuple destructures inside the {#each}', () => {
+        const { target } = setup();
 
-        click('relabel'); // it.label = it.label.upper() + publish("items")
-        expect(list()).toBe('1:a,2:b'); // inchangé : l'élément a la même identité
+        // `as (rank, it)`: Python's syntax, translated into JavaScript
+        // destructuring — a tuple *is* an array. Not to be confused with
+        // `as it, i`, which is Svelte's index.
+        expect(
+            [...target.querySelector('[data-k="pairs"]').children].map((n) => n.textContent).join('|')
+        ).toBe('0:a|1:b');
     });
 
-    test('remplacer l’élément re-rend, et garde le nœud', () => {
+    test('mutating an item’s attribute re-renders', () => {
+        const { list, click } = setup();
+
+        // The item keeps its identity, so Svelte would re-render nothing: it is
+        // {#each} that passes the mark to the rows, and follow() on the block
+        // variable that subscribes the row's block to the row itself.
+        click('relabel'); // it.label = it.label.upper()
+        expect(list()).toBe('1:a,2:B');
+    });
+
+    test('replacing the item re-renders, and keeps the node', () => {
         const { list, node, click } = setup();
         const kept = node(2);
 
         click('replace'); // items[i] = Item(it.id, ...)
         expect(list()).toBe('1:a,2:B');
-        expect(node(2)).toBe(kept); // la clé n'a pas changé
+        expect(node(2)).toBe(kept); // the key has not changed
     });
 });
 
-// Une exception Brython arrive en JavaScript sans `message` ni `stack` : les
-// devtools et l'overlay de Vite n'afficheraient rien. Le texte existe pourtant,
-// dans l'objet Python, là où rien de JS ne va le chercher.
-describe('erreurs Python', () => {
-    test('une exception non rattrapée est lisible côté JavaScript', () => {
+// A Brython exception reaches JavaScript with neither `message` nor `stack`:
+// devtools and Vite's overlay would show nothing. The text does exist, inside
+// the Python object, where nothing in JS goes looking for it.
+describe('Python errors', () => {
+    test('an uncaught exception is readable from JavaScript', () => {
         const target = render(Errors);
         let captured = null;
         window.addEventListener('error', (ev) => (captured = ev), { once: true });
@@ -266,14 +280,14 @@ describe('erreurs Python', () => {
         flushSync();
 
         expect(captured).not.toBeNull();
-        // La ligne vient de la traceback Python, recalée sur le fichier.
+        // The line comes from the Python traceback, realigned on the file.
         expect(captured.error.message).toBe(
-            'ValueError: cassé au fond (boom() — src/fidelity/Errors.svelte:6)'
+            'ValueError: broken at the bottom (boom() — tests/fixtures/Errors.svelte:6)'
         );
-        expect(captured.error.stack).toContain('boom() — src/fidelity/Errors.svelte:6');
+        expect(captured.error.stack).toContain('boom() — tests/fixtures/Errors.svelte:6');
     });
 
-    test('le composant survit à une exception', () => {
+    test('the component survives an exception', () => {
         const target = render(Errors);
         window.addEventListener('error', () => {}, { once: true });
 
@@ -285,18 +299,18 @@ describe('erreurs Python', () => {
         expect(target.querySelector('p[data-k="count"]').textContent).toBe('1');
     });
 
-    test('un try/except Python reste un try/except Python', () => {
+    test('a Python try/except stays a Python try/except', () => {
         const target = render(Errors);
 
         target.querySelector('button[data-k="caught"]').click();
         flushSync();
 
         expect(target.querySelector('p[data-k="message"]').textContent).toBe(
-            'ValueError: cassé au fond'
+            'ValueError: broken at the bottom'
         );
     });
 
-    test('la ligne reste juste quand un autre script précède le Python', () => {
+    test('the line stays right when another script precedes the Python', () => {
         const target = render(OffsetError);
         let captured = null;
         window.addEventListener('error', (ev) => (captured = ev), { once: true });
@@ -305,28 +319,28 @@ describe('erreurs Python', () => {
         flushSync();
 
         expect(captured.error.message).toBe(
-            "KeyError: 'décalé' (boom() — src/fidelity/OffsetError.svelte:11)"
+            "KeyError: 'shifted' (boom() — tests/fixtures/OffsetError.svelte:11)"
         );
     });
 
-    test('une erreur dans le corps du module nomme le fichier', () => {
+    test('an error in the module body names the file', () => {
         expect(() => render(InitError)).toThrow(/ZeroDivisionError.*InitError\.svelte/);
     });
 });
 
-describe('événements — la frontière avec le DOM', () => {
-    test('une valeur extraite dans le gabarit arrive en Python', () => {
+describe('events — the boundary with the DOM', () => {
+    test('a value pulled out in the template arrives in Python', () => {
         const target = render(Events);
         const input = target.querySelector('input');
 
-        input.value = 'bonjour';
-        input.dispatchEvent(new window.Event('input', { bubbles: true })); // Svelte délègue
+        input.value = 'hello';
+        input.dispatchEvent(new window.Event('input', { bubbles: true })); // Svelte delegates
         flushSync();
 
-        expect(target.querySelector('p[data-k="typed"]').textContent).toBe('BONJOUR');
+        expect(target.querySelector('p[data-k="typed"]').textContent).toBe('HELLO');
     });
 
-    test('un handler qui déclare un paramètre reçoit l’événement emballé', () => {
+    test('a handler declaring a parameter receives the wrapped event', () => {
         const target = render(Events);
 
         target.querySelector('button').click();
@@ -336,10 +350,10 @@ describe('événements — la frontière avec le DOM', () => {
     });
 });
 
-// Ce bloc ne teste pas Python mais SVELTHON lui-même : quelles écritures Python
-// déclenchent un rendu. Un signal par nom de module ⇒ c'est le *rebinding* d'un
-// nom qui est réactif, jamais la mutation en place d'une valeur.
-describe('réactivité — quelles écritures Python propagent', () => {
+// This block does not test Python but SVELTHON itself: which Python writes
+// trigger a render. One signal per module name ⇒ it is *rebinding* a name that
+// is reactive, never mutating a value in place.
+describe('reactivity — which Python writes propagate', () => {
     const setup = () => {
         const target = render(Mutations);
         const read = (k) => target.querySelector(`p[data-k="${k}"]`).textContent;
@@ -350,17 +364,17 @@ describe('réactivité — quelles écritures Python propagent', () => {
         return { read, click };
     };
 
-    test('réaffecter un nom propage', () => {
+    test('rebinding a name propagates', () => {
         const { read, click } = setup();
 
         expect(read('count')).toBe('0');
         click('rebind');
         expect(read('count')).toBe('1');
-        click('augment'); // `global count; count += 10` est aussi une réaffectation
+        click('augment'); // `global count; count += 10` is a rebinding too
         expect(read('count')).toBe('11');
     });
 
-    test('réaffecter une liste propage', () => {
+    test('rebinding a list propagates', () => {
         const { read, click } = setup();
 
         const before = read('items');
@@ -368,7 +382,7 @@ describe('réactivité — quelles écritures Python propagent', () => {
         expect(read('items')).not.toBe(before);
     });
 
-    test('muter une liste en place propage', () => {
+    test('mutating a list in place propagates', () => {
         const { read, click } = setup();
 
         expect(read('items')).toBe('[]');
@@ -376,7 +390,7 @@ describe('réactivité — quelles écritures Python propagent', () => {
         expect(read('items')).toBe('[0]');
     });
 
-    test('muter un dict en place propage, et del aussi', () => {
+    test('mutating a dict in place propagates, and so does del', () => {
         const { read, click } = setup();
 
         expect(read('table')).toBe('{}');
@@ -386,7 +400,7 @@ describe('réactivité — quelles écritures Python propagent', () => {
         expect(read('table')).toBe('{}');
     });
 
-    test('muter un set en place propage', () => {
+    test('mutating a set in place propagates', () => {
         const { read, click } = setup();
 
         expect(read('tags')).toBe('set()');
@@ -394,16 +408,16 @@ describe('réactivité — quelles écritures Python propagent', () => {
         expect(read('tags')).toBe('{0}');
     });
 
-    // Le point que ne pourrait pas tenir une détection à la compilation : la
-    // marque est portée par l'objet, pas par le site d'appel.
-    test('une fonction tierce qui mute la liste propage aussi', () => {
+    // The point compile-time detection could never hold: the mark is carried by
+    // the object, not by the call site.
+    test('a third-party function mutating the list propagates too', () => {
         const { read, click } = setup();
 
         click('through_helper');
         expect(read('items')).toBe("['helper']");
     });
 
-    test('un @derived qui rend l’objet muté propage aussi', () => {
+    test('a @derived returning the mutated object propagates too', () => {
         const { read, click } = setup();
 
         expect(read('passthrough')).toBe('[]');
@@ -411,14 +425,14 @@ describe('réactivité — quelles écritures Python propagent', () => {
 
         click('mutate_list');
 
-        // Le dérivé rend le même tableau : sa valeur ne change pas au sens ===,
-        // et Svelte s'arrêterait là. C'est l'objet lui-même qui abonne son
-        // lecteur, par la marque qu'il porte.
+        // The derived returns the same array: its value does not change in the
+        // === sense, and Svelte would stop there. It is the object itself that
+        // subscribes its reader, through the mark it carries.
         expect(read('passthrough')).toBe('[0]');
         expect(read('computed')).toBe('1');
     });
 
-    test('supprimer un attribut propage', () => {
+    test('deleting an attribute propagates', () => {
         const { read, click } = setup();
 
         expect(read('extra')).toBe('True');
@@ -426,58 +440,58 @@ describe('réactivité — quelles écritures Python propagent', () => {
         expect(read('extra')).toBe('False');
     });
 
-    test('un conteneur tenu dans un attribut propage', () => {
+    test('a container held in an attribute propagates', () => {
         const { read, click } = setup();
 
-        // Posé dans __init__, donc *avant* que l'objet passe sous garde : c'est
-        // le marquage de l'objet qui la transmet à ses attributs.
+        // Set in __init__, so *before* the object came under guard: it is the
+        // marking of the object that passes it on to its attributes.
         expect(read('rows')).toBe('[]');
         click('add_row');
         expect(read('rows')).toBe('[0]');
     });
 
-    // Sûreté : ce qu'il ne faut surtout pas marquer.
-    test('None n’est jamais marqué', () => {
+    // Safety: what must never be marked.
+    test('None is never marked', () => {
         setup();
 
-        // C'est un singleton partagé par tout le programme : lui accrocher des
-        // abonnés le ferait grossir sans fin, et à travers tous les composants.
+        // It is a singleton shared by the whole program: hanging subscribers on
+        // it would grow it without end, and across every component.
         expect(globalThis.__BRYTHON__.builtins.None.$notify).toBeUndefined();
     });
 
-    test('une classe rangée dans un nom d’état reste utilisable', () => {
+    test('a class stored in a state name stays usable', () => {
         expect(setup().read('alias')).toBe('Box');
     });
 
-    // Les limitations qui restent, tenues par des tests pour qu'elles ne
-    // dérivent pas en silence.
-    test('un conteneur imbriqué propage', () => {
+    // The limitations that remain, held by tests so they cannot drift in
+    // silence.
+    test('a nested container propagates', () => {
         const { read, click } = setup();
 
-        // La liste interne est marquée au moment où Python la lit — donc juste
-        // avant de pouvoir la muter.
+        // The inner list is marked the moment Python reads it — so just before
+        // it could be mutated.
         click('mutate_nested');
         expect(read('nested')).toBe("{'rows': [1]}");
     });
 
-    test("y compris s'il n'est atteint que par .items()", () => {
+    test('including one only reached through .items()', () => {
         const { read, click } = setup();
 
-        // .items() rend les enfants sans jamais les indexer. Un dict Brython
-        // expose ses clés comme propriétés JavaScript, donc la garde leur est
-        // transmise sans matérialiser la vue.
+        // .items() returns the children without ever indexing them. A Brython
+        // dict exposes its keys as JavaScript properties, so the guard is
+        // passed on without materialising the view.
         click('mutate_via_items');
         expect(read('nested')).toBe("{'rows': [2]}");
     });
 
-    test('et par .values()', () => {
+    test('and through .values()', () => {
         const { read, click } = setup();
 
         click('mutate_via_values');
         expect(read('nested')).toBe("{'rows': [3]}");
     });
 
-    test("muter un attribut d'instance propage", () => {
+    test('mutating an instance attribute propagates', () => {
         const { read, click } = setup();
 
         click('mutate_attribute');

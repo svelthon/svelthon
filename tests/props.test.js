@@ -4,10 +4,10 @@ import Greeting from './Greeting.svelte';
 import PropsHost from './fixtures/PropsHost.svelte';
 import PropsInit from './fixtures/PropsInit.svelte';
 
-// Une annotation déclare un prop, une affectation nue de l'état interne :
-//     name: str          → prop requis
-//     punct: str = "!"   → prop avec défaut
-//     greeting = "..."   → état interne
+// An annotation declares a prop, a bare assignment declares internal state:
+//     name: str          → required prop
+//     punct: str = "!"   → prop with a default
+//     greeting = "..."   → internal state
 
 function render(Component, props) {
     const target = document.body.appendChild(document.createElement('div'));
@@ -16,23 +16,23 @@ function render(Component, props) {
 }
 
 describe('props', () => {
-    test('le défaut Python s’applique quand le parent ne passe rien', () => {
+    test('the Python default applies when the parent passes nothing', () => {
         expect(render(Greeting, { name: 'Pierre' })('line')).toBe('Hello Pierre!');
     });
 
-    test('la valeur du parent l’emporte sur le défaut', () => {
+    test('the parent’s value wins over the default', () => {
         expect(render(Greeting, { name: 'Pierre', punct: '?' })('line')).toBe('Hello Pierre?');
     });
 
-    test('un prop est lisible pendant l’exécution du corps du module', () => {
+    test('a prop is readable while the module body runs', () => {
         expect(render(PropsInit, { name: 'Ada' })('initial')).toBe('Hello Ada');
     });
 
-    test('un prop requis non fourni vaut None, pas undefined', () => {
+    test('a required prop that was not supplied is None, not undefined', () => {
         expect(render(Greeting, {})('line')).toBe('Hello None!');
     });
 
-    test('l’état interne reste réactif à côté des props', () => {
+    test('internal state stays reactive alongside props', () => {
         const target = document.body.appendChild(document.createElement('div'));
         mount(Greeting, { target, props: { name: 'Pierre' } });
 
@@ -42,7 +42,7 @@ describe('props', () => {
         expect(target.querySelector('output').textContent).toBe('HELLO Pierre!');
     });
 
-    test('une mise à jour du parent traverse jusqu’au Python', () => {
+    test('an update from the parent reaches the Python', () => {
         const target = document.body.appendChild(document.createElement('div'));
         mount(PropsHost, { target });
 

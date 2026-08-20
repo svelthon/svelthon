@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# Ce que jsdom ne peut pas couvrir : l'emballage DOM de Brython. `from browser
-# import html` s'y bloque alors qu'il fonctionne en navigateur, donc cette
-# vérification tourne dans un Chromium headless.
+# What jsdom cannot cover: Brython's DOM wrapping. `from browser import html`
+# hangs there while it works in a browser, so this check runs inside a headless
+# Chromium.
 set -uo pipefail
 
 PORT=${PORT:-5199}
 URL="http://localhost:$PORT/probe.html"
 EXPECTED='import_html=OK imported | doc=OK DOMNode | create=OK INPUT | tagName=OK INPUT'
 
-# Un profil par lancement : deux Chromium coup sur coup se disputent le verrou du
-# profil par défaut, et le second rend une page incomplète — au hasard.
+# One profile per launch: two Chromiums back to back fight over the default
+# profile's lock, and the second renders an incomplete page — at random.
 PROFILES=$(mktemp -d)
 cleanup() {
     pkill -f "vite --port $PORT" 2>/dev/null
@@ -19,9 +19,9 @@ trap cleanup EXIT
 
 cleanup
 
-# pkill rend la main avant que le port soit rendu. Sans cette attente, le vite
-# suivant échoue en silence (--strictPort) et le script interroge l'ancien
-# serveur, en train de s'éteindre — d'où des échecs qui changent à chaque fois.
+# pkill returns before the port is released. Without this wait, the next vite
+# fails silently (--strictPort) and the script queries the old server on its way
+# out — hence failures that change every time.
 for _ in $(seq 40); do
     ss -ltn 2>/dev/null | grep -q ":$PORT " || break
     sleep 0.25
@@ -34,17 +34,17 @@ for _ in $(seq 40); do
     curl -sf -o /dev/null "$URL" && break
 done
 
-# Répondre 200 ne veut pas dire prêt : la première requête déclenche la
-# compilation du graphe, qui dépasse le budget de temps de Chromium sur une
-# machine modeste. On préchauffe les deux pages avant de mesurer.
+# Answering 200 does not mean ready: the first request triggers compilation of
+# the graph, which overruns Chromium's time budget on a modest machine. Both
+# pages are warmed up before measuring.
 curl -sf -o /dev/null "$URL"
 curl -sf -o /dev/null "http://localhost:$PORT/"
-# La coquille HTML répond tout de suite ; c'est le module d'entrée qui déclenche
-# la compilation du graphe, et c'est elle qu'il faut attendre.
+# The HTML shell answers at once; it is the entry module that triggers the
+# graph's compilation, and that is what has to be waited for.
 curl -sf -o /dev/null "http://localhost:$PORT/src/probe.js"
 curl -sf -o /dev/null "http://localhost:$PORT/src/main.js"
-# Le gros morceau : 4,6 Mo que Vite doit transformer avant de les servir. Tant
-# qu'il n'est pas en cache, un rendu peut dépasser le budget du navigateur.
+# The big one: 4.6 MB Vite has to transform before serving. Until it is cached,
+# a render can overrun the browser's budget.
 curl -sf -o /dev/null "http://localhost:$PORT/vendor/brython.js"
 curl -sf -o /dev/null "http://localhost:$PORT/src/App.svelte"
 
@@ -55,18 +55,18 @@ REPORT=$(chromium --headless --no-sandbox --disable-gpu --user-data-dir="$PROFIL
 status=0
 
 if [ "$REPORT" = "$EXPECTED" ]; then
-    echo "✓ interop DOM en navigateur — $REPORT"
+    echo "✓ DOM interop in a browser — $REPORT"
 else
-    echo "✗ interop DOM"
-    echo "  attendu : $EXPECTED"
-    echo "  obtenu  : ${REPORT:-<vide>}"
+    echo "✗ DOM interop"
+    echo "  expected: $EXPECTED"
+    echo "  got     : ${REPORT:-<empty>}"
     status=1
 fi
 
-# La démo entière, rendue pour de bon. Sur une machine modeste, un premier rendu
-# peut manquer un morceau — le serveur de dev compile encore. On redemande donc
-# la page tant qu'il manque quelque chose, dans une limite bornée : ce qui compte
-# est que la page finisse complète, pas qu'elle le soit du premier coup.
+# The whole demo, rendered for real. On a modest machine a first render can miss
+# a piece — the dev server is still compiling. So the page is asked for again as
+# long as something is missing, within a bounded limit: what matters is that the
+# page ends up complete, not that it is complete on the first try.
 expected=("increment()" "Hello Ada!" "0 · []" "1180591620717411303424" \
     "['apple', 'pear']" "pear · ▪" "let count = \$state(0)")
 
@@ -85,9 +85,9 @@ done
 
 for one in "${expected[@]}"; do
     if printf '%s' "$APP" | grep -qF -- "$one"; then
-        echo "✓ démo — $one"
+        echo "✓ demo — $one"
     else
-        echo "✗ démo — introuvable : $one"
+        echo "✗ demo — not found: $one"
         status=1
     fi
 done

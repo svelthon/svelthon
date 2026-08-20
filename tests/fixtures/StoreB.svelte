@@ -1,7 +1,7 @@
 <script module>
-    // Un composant JavaScript, délibérément : il consomme un store Python sans
-    // déclarer Python, et garde donc la sémantique JavaScript sur ses valeurs —
-    // exactement comme un .js consommant un module .ts.
+    // A JavaScript component, deliberately: it consumes a Python store without
+    // declaring Python, and so keeps JavaScript semantics on its values —
+    // exactly like a .js consuming a .ts module.
     import { store } from '../../src/counter_store.svelte.py';
 </script>
 

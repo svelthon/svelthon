@@ -2,13 +2,13 @@ import { mount, flushSync } from 'svelte';
 import BenchPy from './BenchPy.svelte';
 import BenchJs from './BenchJs.svelte';
 
-// Mesuré dans un vrai navigateur, en temps réel : jsdom donnerait des chiffres
-// sans rapport, et le temps virtuel de Chromium fausserait l'horloge.
+// Measured in a real browser, in real time: jsdom would give unrelated numbers,
+// and Chromium's virtual time would skew the clock.
 //
-// Le coût de dispatch d'un clic est identique des deux côtés : l'écart entre les
-// colonnes est donc bien imputable au handler. On alterne Python et JavaScript à
-// chaque tour pour annuler la dérive de la machine, et on retient le minimum —
-// la mesure la moins polluée, pas la moyenne des interruptions.
+// The dispatch cost of a click is identical on both sides, so the gap between
+// the columns really is the handler's. Python and JavaScript alternate on every
+// round to cancel the machine's drift, and the minimum is kept — the least
+// polluted measurement, not the average of the interruptions.
 const ROUNDS = 7;
 
 function run(Component) {
@@ -38,8 +38,8 @@ const best = (results) =>
         ['mount', 'tick', 'heavy', 'fill'].map((k) => [k, Math.min(...results.map((r) => r[k]))])
     );
 
-// Le premier montage en dev ne mesurerait que la compilation à la volée de
-// Vite : le coût de chargement se mesure sur le bundle de production, à part.
+// The first mount in dev would measure nothing but Vite's on-the-fly
+// compilation: load cost is measured on the production bundle, separately.
 run(BenchPy);
 
 const py = [];
@@ -55,14 +55,14 @@ const ms = (v) => `${v.toFixed(1)} ms`;
 const ratio = (a, b) => (b < 0.05 ? '—' : `${(a / b).toFixed(1)}×`);
 
 const rows = [
-    ['montage à chaud', ms(p.mount), ms(j.mount), ratio(p.mount, j.mount)],
-    ['2000 appels de handler', ms(p.tick), ms(j.tick), ratio(p.tick, j.tick)],
-    ['1500 × somme de 500 carrés', ms(p.heavy), ms(j.heavy), ratio(p.heavy, j.heavy)],
-    ['rendu d’une liste de 500 lignes', ms(p.fill), ms(j.fill), ratio(p.fill, j.fill)]
+    ['warm mount', ms(p.mount), ms(j.mount), ratio(p.mount, j.mount)],
+    ['2000 handler calls', ms(p.tick), ms(j.tick), ratio(p.tick, j.tick)],
+    ['1500 × sum of 500 squares', ms(p.heavy), ms(j.heavy), ratio(p.heavy, j.heavy)],
+    ['rendering a 500-row list', ms(p.fill), ms(j.fill), ratio(p.fill, j.fill)]
 ];
 
 document.getElementById('out').textContent =
-    `${''.padEnd(44)} ${'Python'.padStart(10)} ${'JS'.padStart(10)} ${'écart'.padStart(7)}\n` +
+    `${''.padEnd(44)} ${'Python'.padStart(10)} ${'JS'.padStart(10)} ${'ratio'.padStart(7)}\n` +
     rows
         .map(([label, a, b, r]) => `${label.padEnd(44)} ${a.padStart(10)} ${b.padStart(10)} ${r.padStart(7)}`)
         .join('\n');

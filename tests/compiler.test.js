@@ -1,41 +1,41 @@
 // @vitest-environment node
 //
-// Le compilateur est du code de build : jsdom n'a rien à y faire, et son
-// `document.currentScript` nul casserait le bootstrap de Brython.
+// The compiler is build-time code: jsdom has no business here, and its null
+// `document.currentScript` would break Brython's bootstrap.
 import { test, expect, describe } from 'vitest';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
 const { compile } = require('../src/lib/compile.cjs');
 
-// Le compilateur n'était testé qu'à travers des composants montés — donc
-// uniquement par ses chemins heureux. Ceux-ci ne passent par aucun rendu.
-describe('compilateur', () => {
-    test('une erreur de syntaxe Python est lisible', () => {
-        // Sans traitement, une exception Brython arrive avec message: undefined
-        // et Vite ne rapporte rien du tout.
+// The compiler used to be tested only through mounted components — so only
+// along its happy paths. These go through no rendering at all.
+describe('compiler', () => {
+    test('a Python syntax error is readable', () => {
+        // Untreated, a Brython exception arrives with message: undefined and
+        // Vite reports nothing whatsoever.
         expect(() => compile('\ncount = 0\n\ndef broken(\n    return count\n', 'S', 'src/S.svelte'))
             .toThrow(/SyntaxError: '\(' was never closed \(src\/S\.svelte:4\)/);
     });
 
-    test('l’erreur nomme la ligne du fichier, pas celle du script', () => {
+    test('the error names the file’s line, not the script’s', () => {
         expect(() => compile('\nx = )\n', 'S', 'src/S.svelte', { lineOffset: 10 })).toThrow(
             /src\/S\.svelte:12/
         );
     });
 
-    test('un nom Python réservé en JS reste utilisable, sans être publié', () => {
-        // `class` et `new` sont des identifiants Python valides.
+    test('a Python name reserved in JS stays usable, without being published', () => {
+        // `class` and `new` are valid Python identifiers.
         const { script } = compile('class_ = 1\nnew = 2\nok = 3\n', 'R', 'R.svelte');
 
         expect(script).toContain('let ok = $state.raw');
         expect(script).toContain('let class_ = $state.raw');
-        expect(script).not.toMatch(/let new =/); // sinon le JS ne compilerait pas
+        expect(script).not.toMatch(/let new =/); // otherwise the JS would not compile
     });
 
-    test('chaque nom d’état reçoit son signal de révision', () => {
-        // Deux signaux par nom : la valeur, et un compteur que le getter lit —
-        // c'est lui qui rend une mutation en place visible sans copie.
+    test('every state name gets its revision signal', () => {
+        // Two signals per name: the value, and a counter the getter reads — it
+        // is the counter that makes an in-place mutation visible without a copy.
         const { script } = compile('items = []\n', 'R', 'R.svelte');
 
         expect(script).toContain('let __rev_items = $state.raw(0)');
@@ -44,10 +44,10 @@ describe('compilateur', () => {
         expect(script).toContain('track(v, __bump_items, __read_items)');
     });
 
-    test('un store replie les annotations en état et s’enregistre pour Python', () => {
+    test('a store folds annotations into state and registers itself for Python', () => {
         const { script } = compile('n: int = 0\n', 'S', 'src/lib/shop.py', { store: true });
 
-        expect(script).not.toContain('$props()'); // pas de parent à un store
+        expect(script).not.toContain('$props()'); // a store has no parent
         expect(script).toContain('let n = $state.raw');
         expect(script).toContain('registerModule("shop"');
     });
@@ -55,7 +55,7 @@ describe('compilateur', () => {
     // Brython scatters `$B.set_lineno(frame, N)` through its output, which is
     // enough to map generated lines back to Python ones. A map that points at
     // the wrong line is worse than no map, so decode it and check.
-    test('la source map renvoie à la bonne ligne Python', () => {
+    test('the source map points at the right Python line', () => {
         const file = `<script lang="python">
 count = 0
 
@@ -70,14 +70,14 @@ def increment():
         expect(map.sources).toEqual(['src/C.svelte']);
         expect(map.sourcesContent[0]).toBe(file);
 
-        // Décodage VLQ minimal : un segment par ligne générée, delta-encodé.
+        // Minimal VLQ decoding: one segment per generated line, delta-encoded.
         const CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
         let sourceLine = 0;
         const lineFor = map.mappings.split(';').map((segment) => {
             if (!segment) return null;
             let value = 0;
             let shift = 0;
-            let index = 2; // on saute colonne générée et index de source
+            let index = 2; // skip the generated column and the source index
             for (;;) {
                 const digit = CHARS.indexOf(segment[index++]);
                 value += (digit & 31) << shift;
@@ -88,17 +88,17 @@ def increment():
             return sourceLine;
         });
 
-        // `count += 1` est ligne 6 du fichier ; on retrouve la ligne générée qui
-        // porte son marqueur et on vérifie où la carte l'envoie.
+        // `count += 1` is line 6 of the file; find the generated line carrying
+        // its marker and check where the map sends it.
         const generated = module.split('\n').findIndex((l) => /set_lineno\(frame, 6\)/.test(l));
 
         expect(generated).toBeGreaterThan(0);
-        expect(lineFor[generated]).toBe(5); // 0-indexé : ligne 6 du fichier
+        expect(lineFor[generated]).toBe(5); // 0-indexed: line 6 of the file
     });
 
-    // La frontière vers JavaScript est posée à la compilation ; ce qu'elle fait
-    // ensuite est vérifié dans boundary.test.js.
-    test('un import JavaScript est enveloppé une fois, pas à chaque lecture', () => {
+    // The boundary towards JavaScript is laid down at compile time; what it
+    // then does is checked in boundary.test.js.
+    test('a JavaScript import is wrapped once, not on every read', () => {
         const { script } = compile(
             '__js__ = {"@sveltejs/kit": ["error"]}\n__all__ = ["load"]\n\ndef load():\n    return {}\n',
             'M',
@@ -110,9 +110,9 @@ def increment():
         expect(script).toContain("bind(__proto, 'error', () => __js_error");
     });
 
-    test('un composant importe le pyArg dont dépend to_python', () => {
-        // Il était lié sans être importé : une ReferenceError à la première
-        // lecture de to_python, et à celle-là seulement.
+    test('a component imports the pyArg that to_python depends on', () => {
+        // It was bound without being imported: a ReferenceError on the first
+        // read of to_python, and on that one alone.
         const { script } = compile('x = 1\n', 'C', 'src/C.svelte');
 
         expect(script).toMatch(/import \{[^}]*\bpyArg\b[^}]*\} from 'svelthon\/runtime'/);

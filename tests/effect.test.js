@@ -2,13 +2,13 @@ import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from 'svelte';
 import Effects from './fixtures/Effects.svelte';
 
-// @effect rejoue le corps quand un nom qu'il a *lu* change. Rien à déclarer :
-// les globals passent par les accesseurs du namespace, donc leurs lectures sont
-// des lectures de signaux, et Svelte en déduit les dépendances.
+// @effect replays the body when a name it *read* changes. Nothing to declare:
+// globals go through the namespace accessors, so reading them reads signals, and
+// Svelte infers the dependencies.
 //
-// Piège propre à ce modèle : `runs += 1` sur un nom de niveau module **lit**
-// avant d'écrire, donc un compteur incrémenté dans un effet le rend dépendant
-// de ce qu'il écrit — et Svelte boucle. Une affectation simple ne lit rien.
+// A trap that belongs to this model: `runs += 1` on a module-level name **reads**
+// before it writes, so a counter incremented inside an effect makes the effect
+// depend on what it writes — and Svelte loops. A plain assignment reads nothing.
 describe('@effect', () => {
     const setup = () => {
         const target = document.body.appendChild(document.createElement('div'));
@@ -23,33 +23,33 @@ describe('@effect', () => {
         };
     };
 
-    test('le corps s’exécute au montage', () => {
+    test('the body runs on mount', () => {
         const { read } = setup();
 
         expect(read('seen')).toBe('count=0');
-        expect(read('torn')).toBe('-'); // rien à démonter encore
+        expect(read('torn')).toBe('-'); // nothing to tear down yet
     });
 
-    test('il rejoue quand une dépendance change', () => {
+    test('it replays when a dependency changes', () => {
         const { read, click } = setup();
 
         click('bump');
         expect(read('seen')).toBe('count=1');
     });
 
-    test('la fonction rendue sert de nettoyage, avant chaque reprise', () => {
+    test('the returned function is the cleanup, before every replay', () => {
         const { read, click } = setup();
 
         click('bump');
-        expect(read('torn')).toBe('torn at 0'); // fermé sur la valeur précédente
+        expect(read('torn')).toBe('torn at 0'); // closed over the previous value
     });
 
-    test('il ne rejoue pas pour un nom qu’il ne lit pas', () => {
+    test('it does not replay for a name it never reads', () => {
         const { read, click } = setup();
 
         click('other');
         expect(read('seen')).toBe('count=0');
         expect(read('torn')).toBe('-');
-        expect(read('other')).toBe('1'); // le nom a bien changé
+        expect(read('other')).toBe('1'); // the name did change
     });
 });

@@ -4,10 +4,9 @@ import StoreA from './fixtures/StoreA.svelte';
 import StoreB from './fixtures/StoreB.svelte';
 import StoreFromPython from './fixtures/StoreFromPython.svelte';
 
-// Un store est du Python au niveau module : ses signaux existent une fois pour
-// toute l'application, là où l'état d'un composant naît et meurt avec chaque
-// instance.
-test('un état Python partagé entre deux composants', () => {
+// A store is Python at module level: its signals exist once for the whole
+// application, where a component's state is born and dies with every instance.
+test('Python state shared between two components', () => {
     const t = document.body.appendChild(document.createElement('div'));
     mount(StoreA, { target: t });
     mount(StoreB, { target: t });
@@ -20,14 +19,14 @@ test('un état Python partagé entre deux composants', () => {
     click('inc');
     click('inc');
     expect(read('a')).toBe('A:2:[1, 2]');
-    expect(read('b')).toBe('B:2:1,2');   // l'autre composant suit
+    expect(read('b')).toBe('B:2:1,2');   // the other component follows
 
     click('reset');
     expect(read('a')).toBe('A:0:[]');
     expect(read('b')).toBe('B:0:');
 });
 
-test('l’état d’un store survit au démontage', () => {
+test('a store’s state survives unmounting', () => {
     const t = document.body.appendChild(document.createElement('div'));
     const first = mount(StoreA, { target: t });
     t.querySelector('button[data-k="inc"]').click();
@@ -46,9 +45,9 @@ test('l’état d’un store survit au démontage', () => {
     flushSync();
 });
 
-// Le pont dans l'autre sens : le Python d'un composant importe le store et
-// atteint les mêmes signaux que le gabarit.
-test('le Python d’un composant importe le store', () => {
+// The bridge in the other direction: a component's Python imports the store and
+// reaches the very same signals as the template.
+test('a component’s Python imports the store', () => {
     const t = document.body.appendChild(document.createElement('div'));
     mount(StoreB, { target: t });
     mount(StoreFromPython, { target: t });
@@ -60,6 +59,6 @@ test('le Python d’un composant importe le store', () => {
     t.querySelector('button[data-k="bump"]').click();
     flushSync();
 
-    expect(t.querySelector('p[data-k="seen"]').textContent).toBe('2'); // lu depuis Python
-    expect(t.querySelector('p[data-k="b"]').textContent).toBe('B:2:1,2');  // vu par l'autre composant
+    expect(t.querySelector('p[data-k="seen"]').textContent).toBe('2'); // read from Python
+    expect(t.querySelector('p[data-k="b"]').textContent).toBe('B:2:1,2');  // seen by the other component
 });

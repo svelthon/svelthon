@@ -7,12 +7,12 @@ torn = "-"
 
 @effect
 def watch():
-    # Lire `count` suffit à s'y abonner : rien à déclarer.
+    # Reading `count` is enough to subscribe to it: nothing to declare.
     global seen
     seen = f"count={count}"
 
     def cleanup():
-        # Affectation simple : elle n'a pas à relire le nom qu'elle écrit.
+        # A plain assignment: it need not read back the name it writes.
         global torn
         torn = f"torn at {count}"
 

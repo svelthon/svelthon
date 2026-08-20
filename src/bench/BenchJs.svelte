@@ -1,5 +1,5 @@
 <script>
-    // Le même composant, à l'identique, en JavaScript : c'est la référence.
+    // The very same component, identical, in JavaScript: the reference.
     let total = $state(0);
     let items = $state([]);
 

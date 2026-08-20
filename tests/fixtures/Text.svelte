@@ -7,7 +7,7 @@ prec = f"{3.14159:.2f}"
 pad = f"{42:>5}"
 sign = f"{7:+d}"
 sharp = "straße".upper()
-joined = ", ".join(sorted({"pomme", "abricot", "banane"}))
+joined = ", ".join(sorted({"apple", "apricot", "banana"}))
 mult = "ab" * 3
 
 report = "\n".join([

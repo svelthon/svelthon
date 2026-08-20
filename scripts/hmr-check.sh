@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Le code généré vit dans un module virtuel, entrée distincte du graphe Vite que
-# rien ne relie au fichier source. Sans invalidation explicite, éditer le Python
-# re-transforme la surface mais continue de servir l'ancien corps généré.
-# Régression invisible à l'œil — d'où ce contrôle, sur les deux chemins :
-# le composant (via le préprocesseur) et le store (via load()).
+# Generated code lives in a virtual module, a distinct entry of the Vite graph
+# that nothing links back to the source file. Without explicit invalidation,
+# editing the Python re-transforms the surface but keeps serving the old
+# generated body. A regression invisible to the eye — hence this check, on both
+# paths: the component (through the preprocessor) and the store (through load()).
 set -uo pipefail
 
 PORT=${PORT:-5197}
@@ -29,7 +29,7 @@ for _ in $(seq 30); do
     curl -sf -o /dev/null "$V/" && break
 done
 
-# Lit la valeur de `count` dans le corps généré, quel que soit le module virtuel.
+# Reads the value of `count` in the generated body, whichever virtual module.
 generated() { curl -s "$V/@id/__x00__virtual:svelthon/$1" | grep -o '\.count = [0-9]*' | head -1 | grep -o '[0-9]*'; }
 
 status=0
@@ -47,17 +47,17 @@ check() {
     after=$(generated "$virtual")
 
     if [ "$before" = "0" ] && [ "$after" = "7" ]; then
-        echo "✓ HMR $label — le module virtuel suit l'édition ($before → $after)"
+        echo "✓ HMR $label — the virtual module follows the edit ($before → $after)"
     else
-        echo "✗ HMR $label — attendu 0 → 7, obtenu ${before:-<vide>} → ${after:-<vide>}"
+        echo "✗ HMR $label — expected 0 → 7, got ${before:-<empty>} → ${after:-<empty>}"
         status=1
     fi
 }
 
-check "composant" src/Counter.svelte src_Counter_svelte src/Counter.svelte
+check "component" src/Counter.svelte src_Counter_svelte src/Counter.svelte
 
-# Le store n'est servi qu'une fois entré dans le graphe : on tire d'abord le
-# composant qui l'importe.
+# The store is only served once it has entered the graph: pull the component
+# that imports it first.
 curl -s "$V/src/StoreDemo.svelte" >/dev/null
 check "store" src/lib/counter_store.py src_lib_counter_store_py src/lib/counter_store.py.svelte.js
 

@@ -12,7 +12,7 @@ class Box:
     def __init__(self):
         self.value = 0
         self.rows = []
-        self.extra = "là"
+        self.extra = "here"
 
 
 box = Box()
@@ -55,8 +55,8 @@ def fill(target):
 
 
 def through_helper():
-    # La marque voyage avec l'objet : le compilateur ne voit rien ici, et la
-    # mutation propage quand même.
+    # The mark travels with the object: the compiler sees nothing here, and
+    # the mutation propagates anyway.
     fill(items)
 
 
@@ -92,8 +92,8 @@ def add_row():
 
 @derived
 def passthrough():
-    # Rend l'objet lui-même : Svelte mémoïse le dérivé sur `===`, donc rien ne
-    # propagerait sans que le lecteur s'abonne à l'objet.
+    # Returns the object itself: Svelte memoises a derived on `===`, so
+    # nothing would propagate unless the reader subscribes to the object.
     return items
 
 

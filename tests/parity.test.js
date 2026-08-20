@@ -4,11 +4,11 @@ import { mount, flushSync } from 'svelte';
 import JsAttrs from './fixtures/JsAttrs.svelte';
 import PyAttrs from './fixtures/PyAttrs.svelte';
 
-// Ce fichier ne vérifie pas ce que SVELTHON fait, mais qu'il fait *la même chose*
-// que Svelte. Les deux composants sont mot pour mot les mêmes, l'un en Python
-// avec un dict et une liste mutés en place, l'autre en JavaScript avec un $state
-// proxifié en profondeur. Toute ligne qui divergerait ici est un bug — sauf à
-// être une divergence choisie, et alors elle se documente.
+// This file does not check what SVELTHON does, but that it does *the same thing*
+// as Svelte. The two components are word for word the same, one in Python with a
+// dict and a list mutated in place, the other in JavaScript with a deeply
+// proxied $state. Any line that diverged here is a bug — unless the divergence
+// was chosen, and then it gets documented.
 
 const render = (Component) => {
     const target = document.body.appendChild(document.createElement('div'));
@@ -27,8 +27,8 @@ const render = (Component) => {
 describe.each([
     ['JavaScript', JsAttrs],
     ['Python', PyAttrs]
-])('mutation en place, attributs — %s', (_language, Component) => {
-    test('un étalement propage', () => {
+])('in-place mutation, attributes — %s', (_language, Component) => {
+    test('a spread propagates', () => {
         const { el, mutate } = render(Component);
 
         expect(el('spread').getAttribute('data-n')).toBe('0');
@@ -36,7 +36,7 @@ describe.each([
         expect(el('spread').getAttribute('data-n')).toBe('1');
     });
 
-    test('un attribut dont la valeur est calculée propage', () => {
+    test('an attribute whose value is computed propagates', () => {
         const { el, mutate } = render(Component);
 
         expect(el('attr').getAttribute('title')).toBe('a');
@@ -44,13 +44,13 @@ describe.each([
         expect(el('attr').getAttribute('title')).toBe('a,b');
     });
 
-    test('un attribut portant le conteneur lui-même ne propage pas', () => {
+    test('an attribute carrying the container itself does not propagate', () => {
         const { el, mutate } = render(Component);
 
-        // Ni ici ni en JavaScript : Svelte compare la valeur à celle qu'il a
-        // écrite la fois d'avant, par identité, et un conteneur muté est le même
-        // objet. Ce n'est pas une limite de SVELTHON, c'est la sémantique de
-        // l'hôte — et ce test est là pour le prouver des deux côtés.
+        // Neither here nor in JavaScript: Svelte compares the value to the one
+        // it wrote last time, by identity, and a mutated container is the same
+        // object. This is not a SVELTHON limitation, it is the host's own
+        // semantics — and this test is here to prove it on both sides.
         expect(el('raw').getAttribute('title')).toBe('a');
         mutate();
         expect(el('raw').getAttribute('title')).toBe('a');

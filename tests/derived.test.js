@@ -2,10 +2,10 @@ import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from 'svelte';
 import Derived from './fixtures/Derived.svelte';
 
-// @derived transforme une fonction en valeur : Python lit le nom et obtient le
-// résultat, comme une @property. Le corps s'exécute dans $derived.by, et chaque
-// global qu'il touche passe par un accesseur du namespace — Svelte découvre donc
-// les dépendances tout seul, sans qu'on les déclare.
+// @derived turns a function into a value: Python reads the name and gets the
+// result, like a @property. The body runs inside $derived.by, and every global
+// it touches goes through a namespace accessor — so Svelte discovers the
+// dependencies by itself, with nothing declared.
 describe('@derived', () => {
     const setup = () => {
         const t = document.body.appendChild(document.createElement('div'));
@@ -19,12 +19,12 @@ describe('@derived', () => {
         };
     };
 
-    test('la valeur est calculée à la lecture', () => {
+    test('the value is computed on read', () => {
         const { read } = setup();
         expect(read('full')).toBe('Ada Lovelace');
     });
 
-    test('elle se recalcule quand une dépendance change', () => {
+    test('it recomputes when a dependency changes', () => {
         const { read, rename } = setup();
 
         expect(read('full')).toBe('Ada Lovelace');
@@ -32,7 +32,7 @@ describe('@derived', () => {
         expect(read('full')).toBe('Grace Lovelace');
     });
 
-    test('un @derived peut en lire un autre, par son nom', () => {
+    test('a @derived can read another one, by name', () => {
         const { read, rename } = setup();
 
         expect(read('shouted')).toBe('ADA LOVELACE');

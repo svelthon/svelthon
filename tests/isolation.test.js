@@ -2,10 +2,10 @@ import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from 'svelte';
 import Isolated from './fixtures/Isolated.svelte';
 
-// Le corps du module Python est ré-exécuté pour chaque instance, et chaque nom
-// reçoit son propre signal. Rien ne doit fuir d'une instance à l'autre — y
-// compris les valeurs mutables créées à l'initialisation.
-describe('isolation entre instances', () => {
+// The Python module body is re-executed for every instance, and every name gets
+// a signal of its own. Nothing may leak from one instance to another — mutable
+// values created during initialisation included.
+describe('isolation between instances', () => {
     const mountOne = (tag) => {
         const target = document.body.appendChild(document.createElement('div'));
         mount(Isolated, { target, props: { tag } });
@@ -18,7 +18,7 @@ describe('isolation entre instances', () => {
         };
     };
 
-    test('deux instances ne partagent ni état ni défaut mutable', () => {
+    test('two instances share neither state nor a mutable default', () => {
         const a = mountOne('a');
         const b = mountOne('b');
 
@@ -29,7 +29,7 @@ describe('isolation entre instances', () => {
         a.bump();
 
         expect(a.read()).toBe('a:2:[1, 2]');
-        expect(b.read()).toBe('b:0:[]'); // intacte
+        expect(b.read()).toBe('b:0:[]'); // untouched
 
         b.bump();
 

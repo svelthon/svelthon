@@ -407,7 +407,7 @@
         overflow-wrap: anywhere;
     }
 
-    /* Une ligne de résultat par ligne de source : le rythme suit celui du code. */
+    /* One result line per source line: the rhythm follows the code's. */
     .stack {
         gap: 0.3rem;
     }

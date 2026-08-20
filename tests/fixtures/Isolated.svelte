@@ -2,13 +2,12 @@
 tag: str = "?"
 
 count = 0
-items = []          # défaut mutable : chaque instance doit avoir le sien
+items = []          # mutable default: every instance must get its own
 
 def bump():
     global count
     count += 1
     items.append(count)
-    publish("items")
 </script>
 
 <p data-k="state">{tag}:{count}:{items}</p>

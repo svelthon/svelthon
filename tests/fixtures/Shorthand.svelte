@@ -5,7 +5,7 @@
 <script lang="python">
 attrs = {"data-n": "0"}
 labels = []
-mot = "Actif"
+word = "Active"
 rows = []
 
 
@@ -17,10 +17,11 @@ def mutate_rows():
     rows.append("x")
 </script>
 
-<!-- Une apostrophe — aujourd'hui — ne doit rien casser en dessous. -->
+<!-- An apostrophe — don't break — must break nothing below. -->
 <p data-k="text">{labels}</p>
-<p data-k="cite" class="tag {mot.lower()}" title="n={len(labels)}">cité</p>
-<p data-k="spread" {...attrs}>étalé</p>
+<p data-k="cite" class="tag {word.lower()}" title="n={len(labels)}">quoted</p>
+<p data-k="witness">{attrs}</p>
+<p data-k="spread" {...attrs}>spread</p>
 <p data-k="parent">{rows}</p>
 <ShorthandChild {rows} />
 

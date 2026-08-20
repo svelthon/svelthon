@@ -1,16 +1,16 @@
 <script module>
-    // Le côté JavaScript de la frontière, tel que SvelteKit l'exerce : une
-    // fonction qui rappelle son argument avec plus d'arguments qu'une signature
-    // Python n'en déclare, et une autre qui sérialise ce qu'on lui passe.
+    // The JavaScript side of the boundary, the way SvelteKit exercises it: one
+    // function that calls its argument back with more arguments than a Python
+    // signature declares, and one that serialises whatever it is handed.
     function twice(handler) {
-        return handler(1, 'de trop') + handler(2, 'de trop');
+        return handler(1, 'too many') + handler(2, 'too many');
     }
 
     function serialise(value) {
         return JSON.stringify(value);
     }
 
-    function reste(handler) {
+    function spread(handler) {
         return handler('a', 'b', 'c');
     }
 </script>
@@ -20,17 +20,17 @@ def double(n):
     return n * 10
 
 
-def joint(*morceaux):
-    return "-".join(morceaux)
+def joined(*pieces):
+    return "-".join(pieces)
 
 
 total = twice(double)
-charge = serialise({"a": [1, 2], "b": None})
-etoile = reste(joint)
+payload = serialise({"a": [1, 2], "b": None})
+starred = spread(joined)
 </script>
 
 <p data-k="total">{total}</p>
-<p data-k="charge">{charge}</p>
-<p data-k="etoile">{etoile}</p>
-<p data-k="identite">{"oui" if twice is twice else "non"}</p>
-<p data-k="to_python">{"oui" if to_python else "non"}</p>
+<p data-k="payload">{payload}</p>
+<p data-k="starred">{starred}</p>
+<p data-k="identity">{"yes" if twice is twice else "no"}</p>
+<p data-k="to_python">{"yes" if to_python else "no"}</p>

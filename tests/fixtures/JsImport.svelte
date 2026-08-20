@@ -2,17 +2,17 @@
     import { untrack } from 'svelte';
     import * as svelte from 'svelte';
 
-    const ETIQUETTE = 'venu du JavaScript';
+    const LABEL = 'came from JavaScript';
 </script>
 
 <script lang="python">
-# Des noms JavaScript, lus depuis Python.
+# JavaScript names, read from Python.
 @derived
-def majuscules():
-    return ETIQUETTE.upper()
+def shouted():
+    return LABEL.upper()
 </script>
 
-<p data-k="direct">{ETIQUETTE}</p>
-<p data-k="derive">{majuscules}</p>
-<p data-k="fonction">{"oui" if untrack else "non"}</p>
-<p data-k="etoile">{"oui" if svelte else "non"}</p>
+<p data-k="direct">{LABEL}</p>
+<p data-k="derived">{shouted}</p>
+<p data-k="function">{"yes" if untrack else "no"}</p>
+<p data-k="star">{"yes" if svelte else "no"}</p>

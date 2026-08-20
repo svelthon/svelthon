@@ -5,7 +5,7 @@ state = "-"
 
 async def boom():
     await aio.sleep(0)
-    raise ValueError("cassé dans la coroutine")
+    raise ValueError("broken inside the coroutine")
 
 async def fine():
     global state

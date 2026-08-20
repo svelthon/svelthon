@@ -1,9 +1,9 @@
 // @vitest-environment node
 //
-// Rendu côté serveur : Svelte compile une seconde version du composant qui rend
-// une chaîne HTML au lieu de créer des nœuds DOM. Le corps Python s'exécute donc
-// sous Node — ce que le compilateur fait déjà au build, à deux shims près
-// (`self`, `addEventListener`) posés par src/lib/globals.js.
+// Server-side rendering: Svelte compiles a second version of the component that
+// returns an HTML string instead of creating DOM nodes. The Python body
+// therefore runs under Node — which the compiler already does at build time,
+// bar two shims (`self`, `addEventListener`) laid down by src/lib/globals.js.
 import { test, expect, describe } from 'vitest';
 import { render } from 'svelte/server';
 
@@ -15,28 +15,28 @@ import Composition from './fixtures/Composition.svelte';
 import CtxHost from './fixtures/CtxHost.svelte';
 import { store } from '../src/counter_store.svelte.py';
 
-// Svelte parsème le HTML de marqueurs d'hydratation ; seul le texte nous importe.
+// Svelte sprinkles hydration markers through the HTML; only the text matters here.
 const text = (result) => result.body.replace(/<!--[^>]*-->/g, '');
 
-describe('rendu serveur', () => {
-    test('un composant Python rend du HTML sans DOM', () => {
+describe('server rendering', () => {
+    test('a Python component renders HTML with no DOM', () => {
         expect(text(render(Counter))).toBe('<button>increment()</button> <output>0</output>');
     });
 
-    // src/hydration.test.js repart de cette chaîne exacte, marqueurs compris :
-    // l'affirmer ici interdit aux deux fichiers de diverger en silence.
-    test('les marqueurs d’hydratation sont ceux attendus par le client', () => {
+    // tests/hydration.test.js starts from this exact string, markers included:
+    // asserting it here forbids the two files from drifting apart in silence.
+    test('the hydration markers are the ones the client expects', () => {
         expect(render(Counter).body).toBe(
             '<!--[--><button>increment()</button> <output>0</output><!--]-->'
         );
     });
 
-    test('les props sont résolues côté serveur', () => {
+    test('props are resolved on the server', () => {
         expect(text(render(Greeting, { props: { name: 'Ada' } }))).toContain('Hello Ada!');
     });
 
-    test('les valeurs Python sont calculées, pas approximées', () => {
-        // Le même canari que côté client : ces trois valeurs seraient fausses en JS.
+    test('Python values are computed, not approximated', () => {
+        // The same canary as on the client: all three would be wrong in JS.
         const html = text(render(Semantics));
 
         expect(html).toContain('-4');
@@ -44,18 +44,18 @@ describe('rendu serveur', () => {
         expect(html).toContain('apple, pear');
     });
 
-    test('la composition et les attributs d’instance traversent aussi', () => {
+    test('composition and instance attributes cross over too', () => {
         const html = text(render(Composition));
 
-        expect(html).toContain('[a:1][b:2]'); // attributs d'instance
-        expect(html).toContain('[2][4]'); // @property évaluée
-        expect(html).toContain('<li>>a=1</li>'); // composant enfant
+        expect(html).toContain('[a:1][b:2]'); // instance attributes
+        expect(html).toContain('[2][4]'); // an evaluated @property
+        expect(html).toContain('<li>>a=1</li>'); // a child component
     });
 
-    // Le contexte, lui, vit dans l'arbre de composants — recréé à chaque rendu,
-    // donc sans fuite d'une requête à l'autre. C'est la réponse de Svelte au
-    // problème ci-dessous.
-    test('le contexte reste propre à chaque rendu', () => {
+    // Context, by contrast, lives in the component tree — rebuilt on every
+    // render, so nothing leaks from one request to the next. It is Svelte's
+    // answer to the problem below.
+    test('context stays private to each render', () => {
         const first = text(render(CtxHost));
         const second = text(render(CtxHost));
 
@@ -64,12 +64,12 @@ describe('rendu serveur', () => {
         expect(second).toBe(first);
     });
 
-    // Le piège du rendu serveur, et il n'est pas propre à SVELTHON : l'état d'un
-    // module vit dans le processus, donc il est partagé par toutes les requêtes.
-    // Svelte pose exactement le même avertissement pour un `$state` de niveau
-    // module dans un `.svelte.js`. Sans danger au prérendu — une seule passe,
-    // aucun utilisateur concurrent —, à proscrire en rendu par requête.
-    test('l’état d’un store persiste d’un rendu au suivant', () => {
+    // The server-rendering trap, and it is not SVELTHON's own: a module's state
+    // lives in the process, so it is shared by every request. Svelte carries
+    // exactly the same warning for a module-level `$state` in a `.svelte.js`.
+    // Harmless while prerendering — one pass, no concurrent users — and to be
+    // avoided under per-request rendering.
+    test('a store’s state persists from one render to the next', () => {
         expect(text(render(StoreDemo))).toContain('0 · []');
 
         store.increment();

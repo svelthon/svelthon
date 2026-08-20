@@ -2,5 +2,5 @@
     import CtxLeaf from './CtxLeaf.svelte';
 </script>
 
-<!-- Ce composant ignore tout du contexte : il ne fait que le laisser passer. -->
+<!-- This component knows nothing of the context: it only lets it through. -->
 <div><CtxLeaf /></div>

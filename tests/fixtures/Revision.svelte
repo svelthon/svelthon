@@ -1,11 +1,11 @@
 <script>
-    // Le mécanisme candidat, écrit à la main en JavaScript : deux signaux par
-    // nom — la valeur, et un compteur de révision que le *lecteur* consulte.
-    // Muter en place n'incrémente que le compteur, sans copier ni réaffecter.
+    // The candidate mechanism, written by hand in JavaScript: two signals per
+    // name — the value, and a revision counter the *reader* consults. Mutating
+    // in place only increments the counter, with no copy and no reassignment.
     let items = $state.raw([1, 2]);
     let revision = $state.raw(0);
 
-    // Ce que ferait l'accesseur du namespace.
+    // What the namespace accessor would do.
     const read = () => {
         revision;
         return items;
@@ -13,7 +13,7 @@
 
     const total = $derived.by(() => read().reduce((a, b) => a + b, 0));
 
-    // Le cas dur : un dérivé qui rend *le même objet*.
+    // The hard case: a derived that returns *the same object*.
     const same = $derived.by(() => read());
 
     function mutate() {
@@ -22,7 +22,7 @@
     }
 
     function silently() {
-        items.push(99); // sans toucher au compteur : témoin
+        items.push(99); // without touching the counter: the control
     }
 </script>
 

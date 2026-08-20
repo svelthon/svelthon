@@ -1,6 +1,6 @@
 <script>
-    // Svelte idiomatique : $state proxifie en profondeur, donc muter une clé
-    // notifie. La question est de savoir si l'attribut du DOM en tient compte.
+    // Idiomatic Svelte: $state proxies deeply, so mutating a key notifies. The
+    // question is whether the DOM attribute takes that into account.
     const attrs = $state({ 'data-n': '0' });
     const list = $state(['a']);
 
@@ -10,9 +10,9 @@
     }
 </script>
 
-<p data-k="spread" {...attrs}>étalé</p>
-<p data-k="attr" title={list.join(',')}>attribut calculé</p>
-<p data-k="raw" title={list}>attribut brut</p>
+<p data-k="spread" {...attrs}>spread</p>
+<p data-k="attr" title={list.join(',')}>computed attribute</p>
+<p data-k="raw" title={list}>raw attribute</p>
 <p data-k="witness">{JSON.stringify(attrs)} {list.length}</p>
 
 <button data-k="mutate" onclick={mutate}>go</button>
