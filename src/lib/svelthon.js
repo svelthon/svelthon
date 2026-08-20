@@ -455,16 +455,52 @@ export function python(options = {}) {
     };
 }
 
-// Brython loads JS modules named from Python at runtime, with an `import()`
+// Defects in the vendored Brython, repaired as it is served rather than in the
+// file. `vendor/brython.js` therefore stays byte-identical to the upstream
+// build, and dropping a newer one in makes a patch that no longer matches fail
+// loudly at build time instead of silently doing nothing.
+//
+// Each of these is described in BRYTHON.md, which is also where the ones we
+// decided *not* to patch are written down, with the reason.
+const VENDOR_PATCHES = [
+    {
+        // A debug print left in, firing on every attribute access on a
+        // JavaScript class from Python — `js.Response.new` is enough — and
+        // dumping the whole class object each time.
+        what: 'debug console.log in $B.JSClass.tp_getattro',
+        find: "$B.JSClass.tp_getattro=function(self,attr){console.log('JSClass DISPARU',self,attr)\n",
+        replace: '$B.JSClass.tp_getattro=function(self,attr){\n',
+        times: 1
+    }
+];
+
+// Brython also loads JS modules named from Python at runtime, with an `import()`
 // whose argument is a variable. Vite cannot analyse that and says so, twice, on
-// every start. Marking the calls keeps the vendored file byte-identical to
-// upstream while silencing a warning that describes intended behaviour.
+// every start. Marking the calls silences a warning that describes intended
+// behaviour.
 export function vendorQuirks() {
     return {
         name: 'svelthon:vendor-quirks',
         transform(code, id) {
             if (!id.endsWith('vendor/brython.js')) return;
-            return { code: code.replace(/(^|[^.\w])import\(/g, '$1import(/* @vite-ignore */ '), map: null };
+
+            let patched = code.replace(/(^|[^.\w])import\(/g, '$1import(/* @vite-ignore */ ');
+
+            for (const patch of VENDOR_PATCHES) {
+                const found = patched.split(patch.find).length - 1;
+
+                if (found !== patch.times) {
+                    throw new Error(
+                        `svelthon: the vendored Brython patch for ${patch.what} matched ` +
+                            `${found} time(s), expected ${patch.times}. The vendored build has ` +
+                            `changed — check BRYTHON.md and update the patch.`
+                    );
+                }
+
+                patched = patched.split(patch.find).join(patch.replace);
+            }
+
+            return { code: patched, map: null };
         }
     };
 }

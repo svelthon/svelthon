@@ -228,6 +228,32 @@ It fires on **every** attribute access on a JavaScript class from Python —
 `js.Response.new` is enough — and dumps the class object, which is hundreds of
 lines. Note the typo in the message. Removing the line is the whole fix.
 
+## Patches applied to the vendored build
+
+`vendor/brython.js` is byte-identical to upstream. Repairs are applied as it is
+served, by `VENDOR_PATCHES` in `src/lib/svelthon.js`, so that dropping in a newer
+Brython makes a patch that no longer matches **fail the build** rather than
+silently do nothing. Each entry states what it repairs and how many times it must
+match.
+
+| Patched | Why |
+|---|---|
+| the debug `console.log` in `$B.JSClass.tp_getattro` | it fires on every attribute access on a JavaScript class from Python and dumps the class object; two requests through `js.*` filled the server log with hundreds of lines |
+
+### Not patched, deliberately: the `Symbol(PYOBJ)` stamp
+
+The bug above it is real, but the repair is not worth making here. The
+back-reference is written at five sites and read at four — one of them through
+`Object.hasOwn`, which a `WeakMap` cannot express as directly — all inside a
+minified 4.6 MB bundle. Getting one of the nine wrong breaks Brython's JS
+identity cache silently, and what it buys is a single `to_js()` call at a single
+site.
+
+It belongs upstream, in `www/src/js_objects.js`, where it can be written against
+the readable source and covered by Brython's own suite. Until then, the
+workaround is to convert with `to_js` whatever goes to a Web API that takes a
+record — see `src/routes/api/py/+server.py` in the demo.
+
 ## Rough edges worth smoothing
 
 Not bugs, but each cost real debugging time because the failure gave no clue.
