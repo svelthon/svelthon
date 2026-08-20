@@ -890,11 +890,10 @@ Les deux bugs, les internes dont SVELTHON dépend et les messages d'erreur qui o
 coûté le plus de débogage sont réunis dans **[BRYTHON.md](BRYTHON.md)** — le
 contrat entre les deux projets, avec une reproduction minimale pour chacun.
 
-- **`__file__` aplati.** Brython dérive son identifiant de namespace du
-  `filename` et n'y neutralise que les `.`, pas les `/` : un chemin réel produit
-  `locals_src/Counter_svelte`, du JS invalide. On passe donc un nom aplati, au
-  prix de la lisibilité des tracebacks.
-- **Fuite de compréhension**, la divergence connue ci-dessus.
+Cinq ont été trouvés, et les cinq sont réparés dans la Brython vendorée — deux
+par `VENDOR_PATCHES`, qui casse le build si un motif ne correspond plus, et trois
+en éditant `vendor/brython.js` lui-même, chacun gardé par un test qui rougit si
+l'édition disparaît. Aucun n'est encore corrigé en amont.
 
 ## Lancer
 
