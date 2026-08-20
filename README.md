@@ -940,6 +940,11 @@ reloads.
   which point it is a dialect rather than a familiar syntax.
 
 
+**Design notes** — [notes/directives.md](notes/directives.md) on why a directive's
+value stays JavaScript and what moving `on*` to Python would involve, and
+[notes/dicts-and-objects.md](notes/dicts-and-objects.md) on what a dict and a class
+instance each cost at the boundary.
+
 **Coming from Django or Flask?** [DJANGO.md](DJANGO.md) maps every everyday
 template construct onto its Svelthon counterpart — the whole translation fits on
 one page, and its worked example is a test fixture, so it cannot drift.
