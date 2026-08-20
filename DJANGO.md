@@ -56,6 +56,15 @@ comment in the delivered HTML you have to force it, either with
 `{@html "<!-- … -->"}` or by turning on the compiler's `preserveComments`. Rarely
 what anyone wants, and worth knowing before you go looking for the setting.
 
+Neither framework chose this. Django's lexer recognises three things — `{{ }}`,
+`{% %}`, `{# #}` — and re-emits everything else verbatim, so a comment *cannot*
+disappear, and a second form had to be invented for the case where you want it
+to. Svelte parses to a tree and emits only what has rendering semantics, so a
+comment cannot survive; it also uses comments as its own hydration markers, which
+makes the character one it has already spent. The axis is not server against
+client — Svelte drops them under server rendering too. What looks like a feature
+on one side and a gap on the other is the shape of the engine, twice.
+
 One line of that table has a catch. `{% with %}` goes anywhere; `{@const}` must be
 the immediate child of a block — `{#if}`, `{#each}`, `{#snippet}`, `{:then}`, a
 component — and Svelte refuses it at the top level of a file. Which is rarely a

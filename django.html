@@ -425,6 +425,12 @@
             <code class="inline">{@html}</code> or the compiler's
             <code class="inline">preserveComments</code>. Rarely what anyone wants — but worth knowing
             before you go looking for the setting.</p>
+        <p style="margin-top:1rem">Neither framework chose this. Django's lexer recognises three
+            things and re-emits everything else verbatim, so a comment <em>cannot</em> disappear — and
+            a second form had to be invented for the case where you want it to. Svelte parses to a
+            tree and emits only what has rendering semantics, so a comment cannot survive. The axis is
+            not server against client: Svelte drops them under server rendering too. What looks like a
+            feature on one side and a gap on the other is the shape of the engine, twice.</p>
     </div>
 
     <div class="caveat">
