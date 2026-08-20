@@ -19,6 +19,22 @@ import { store } from '../src/counter_store.svelte.py';
 const text = (result) => result.body.replace(/<!--[^>]*-->/g, '');
 
 describe('server rendering', () => {
+    // Under Node, brython.js installs `document`, `location`, `HTMLElement`,
+    // `MutationObserver` and `customElements` — stubs with three keys between
+    // them, for its own bootstrap. Half the ecosystem decides it is in a browser
+    // with `typeof document !== "undefined"` and then reaches for `window`, which
+    // nothing defines: Bits UI does exactly that, and took server rendering down
+    // with a bare `ReferenceError: window is not defined`. boot.js removes them
+    // once the bootstrap is over.
+    test('no browser global is left behind', () => {
+        for (const name of ['document', 'window', 'location', 'HTMLElement', 'customElements']) {
+            expect(typeof globalThis[name], `${name} must not exist on the server`).toBe('undefined');
+        }
+
+        // And Brython still works, which is the whole point of removing them late.
+        expect(typeof globalThis.__BRYTHON__.py2js).toBe('function');
+    });
+
     test('a Python component renders HTML with no DOM', () => {
         expect(text(render(Counter))).toBe('<button>increment()</button> <output>0</output>');
     });
