@@ -1,4 +1,4 @@
-# SVELTHON
+# Svelthon
 
 **Svelte components written in Python, compiled at build time.**
 
@@ -22,7 +22,7 @@ page loads.
 
 *[Version française](README.fr.md).*
 
-![The SVELTHON demo page: Python source next to the running component](docs/demo.png)
+![The Svelthon demo page: Python source next to the running component](docs/demo.png)
 
 ## Why
 
@@ -32,7 +32,7 @@ was never the language. It was the workflow: no components, no props, no hot
 reload, a compiler shipped to every visitor, and a page that spent its first
 second compiling.
 
-SVELTHON keeps the modern frontend chain intact. Components, props, scoped
+Svelthon keeps the modern frontend chain intact. Components, props, scoped
 styles, keyed lists, HMR, tree-shaking — all of it — with Python as the
 component language and **no runtime penalty at load**, because the compilation
 already happened.
@@ -734,11 +734,11 @@ components and attribute access, and the Python values themselves — `-7 // 2`
 still
 renders `-4` server-side.
 
-**The one real trap, and it is not specific to SVELTHON.** A store's state lives
+**The one real trap, and it is not specific to Svelthon.** A store's state lives
 in the module, so it is shared by every request the process serves. Svelte warns
 about exactly this for module-level `$state` in a `.svelte.js`. Harmless when
 **prerendering** — one pass, no concurrent users — and a data leak under
-per-request rendering. Svelte's answer is context, which SVELTHON does not
+per-request rendering. Svelte's answer is context, which Svelthon does not
 expose to Python yet, so the two gaps compound: per-request SSR needs context
 first.
 
@@ -855,7 +855,7 @@ in parallel against under one sequentially.
 
 ## Editor support
 
-Not a gap in SVELTHON, but worth knowing: the Svelte TextMate grammar falls back
+Not a gap in Svelthon, but worth knowing: the Svelte TextMate grammar falls back
 to **JavaScript** for an unrecognised `lang`, so `<script lang="python">` is not
 left uncoloured — it is coloured wrongly, `#` comments included.
 
@@ -905,7 +905,7 @@ Keep hot loops out of a component, or reach for the C extensions
 [Wasthon](https://github.com/fgallaire/wasthon) compiles to WebAssembly.
 
 **Rendering is not slower — it is faster.** Consistently, across every run. Svelte
-deep-proxies the objects inside a `$state` array; SVELTHON's names are
+deep-proxies the objects inside a `$state` array; Svelthon's names are
 `$state.raw`, so Python values are never proxied. The reactivity design pays for
 itself exactly where a real application spends its time.
 
@@ -936,7 +936,7 @@ reloads.
 
 **Upstream, in Brython**
 
-Both bugs, the internals SVELTHON depends on, and the error messages that cost
+Both bugs, the internals Svelthon depends on, and the error messages that cost
 the most debugging time are written up in **[BRYTHON.md](BRYTHON.md)** — the
 contract between the two projects, with a minimal reproduction for each.
 
@@ -977,7 +977,7 @@ script, while the root is `type: module`.
 
 ## The wider stack
 
-SVELTHON stands on its own — a Python frontend framework, nothing more required.
+Svelthon stands on its own — a Python frontend framework, nothing more required.
 But because it runs on Brython rather than a sandboxed interpreter, everything
 built for Brython is available to a component: notably
 [Wasthon](https://github.com/fgallaire/wasthon), which brings CPython's real C
@@ -986,6 +986,6 @@ extension modules to the browser as WebAssembly, and
 — NumPy, pandas, SciPy, matplotlib, Pillow, SymPy — on top of it.
 
 That matters for how much you ship. Where a full CPython-in-WebAssembly runtime
-arrives as one large payload, these are per-module `.wasm` files, and SVELTHON
+arrives as one large payload, these are per-module `.wasm` files, and Svelthon
 already knows exactly which modules a component imports — the same tree-shaking
 that trims the standard library applies to them.

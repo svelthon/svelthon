@@ -19,7 +19,7 @@
          with yield`.split(/\s+/)
     );
 
-    // Builtins the demos use, plus the two names SVELTHON injects.
+    // Builtins the demos use, plus the two names Svelthon injects.
     const BUILTINS = new Set(
         'len range str int float list dict set tuple sorted sum print derived'.split(' ')
     );

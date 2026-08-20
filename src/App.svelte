@@ -25,7 +25,7 @@
 <main>
     <header class="hero">
         <p class="eyebrow">Python · Svelte 5 · Vite</p>
-        <h1>SVELTHON</h1>
+        <h1>Svelthon</h1>
         <p class="lede">
             Svelte components written in Python, compiled at build time. No runes, no reactivity
             API — plain Python. The browser receives only JavaScript.
@@ -146,7 +146,7 @@
                 </tbody>
             </table>
             <p>The last row is the one that costs work. Svelte makes
-                <code>items.append(x)</code> reactive by proxying the value in depth, which SVELTHON
+                <code>items.append(x)</code> reactive by proxying the value in depth, which Svelthon
                 cannot use: a Python object behind a proxy fails its own type checks. Instead the
                 object carries an invisible marker, and Brython's two dispatch points —
                 <code>call_attr</code>, <code>$setitem</code>, <code>$getitem</code>,

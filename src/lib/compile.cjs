@@ -1,6 +1,6 @@
 'use strict';
 
-// Build-time half of SVELTHON: run Brython's compiler under Node and split the
+// Build-time half of Svelthon: run Brython's compiler under Node and split the
 // result in two — a plain ES module holding the generated code, and a Svelte
 // component script that wires it to runes.
 //
@@ -321,7 +321,7 @@ function compile(
     if (!js.includes(namespaceCall(namespace))) {
         throw new Error(
             `svelthon: the code generated for ${source} never calls ${namespaceCall(namespace)} — ` +
-                `Brython's codegen no longer exposes the module namespace where SVELTHON hooks it`
+                `Brython's codegen no longer exposes the module namespace where Svelthon hooks it`
         );
     }
 

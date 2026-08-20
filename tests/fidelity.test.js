@@ -359,7 +359,7 @@ describe('events — the boundary with the DOM', () => {
     });
 });
 
-// This block does not test Python but SVELTHON itself: which Python writes
+// This block does not test Python but Svelthon itself: which Python writes
 // trigger a render. One signal per module name ⇒ it is *rebinding* a name that
 // is reactive, never mutating a value in place.
 describe('reactivity — which Python writes propagate', () => {

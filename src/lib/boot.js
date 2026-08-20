@@ -1,5 +1,5 @@
 // Initialise the runtime once per page. `ipy_id: []` keeps brython() from
-// scanning the document for <script type="text/python"> — SVELTHON components
+// scanning the document for <script type="text/python"> — Svelthon components
 // are already compiled, there is nothing left to find.
 const $B = globalThis.__BRYTHON__;
 
