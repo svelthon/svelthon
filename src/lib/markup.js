@@ -290,6 +290,72 @@ export function pythonExpressions(markup, collect) {
     return out;
 }
 
+// Names a component imports or declares in its `<script module>`. They live in
+// JavaScript, and Python cannot import them — but they are in scope for the
+// generated code, so publishing them into the namespace makes them readable
+// from Python. That is what lets a Python component reach `page` from
+// `$app/state`, or any npm library at all.
+const MODULE_SCRIPT = /<script[^>]*\b(?:module|context=["']module["'])[^>]*>([\s\S]*?)<\/script>/i;
+const IMPORT = /import\s+([\s\S]*?)\s+from\s+['"]/g;
+
+// Whatever the block declares in its own right — a constant, a helper, a class.
+const DECLARED = /^([ \t]*)(?:export\s+)?(?:const|let|var|function|class)\s+([A-Za-z_$][\w$]*)/gm;
+
+// Only what the module script declares at its *own* level. `^\s*` with the `m`
+// flag matches any indentation, so a `const` inside a function body was
+// published as a module name and the component referenced something that does
+// not exist there — a ReferenceError at render, for a variable the author had
+// scoped correctly.
+function topLevelIndent(block) {
+    const lines = block.split('\n').filter((line) => line.trim());
+    if (!lines.length) return '';
+
+    return lines.reduce((least, line) => {
+        const indent = line.match(/^[ \t]*/)[0];
+        return indent.length < least.length ? indent : least;
+    }, lines[0].match(/^[ \t]*/)[0]);
+}
+
+export function moduleImports(content) {
+    const block = content.match(MODULE_SCRIPT);
+    if (!block) return [];
+
+    const names = [];
+    let one;
+
+    IMPORT.lastIndex = 0;
+
+    while ((one = IMPORT.exec(block[1]))) {
+        const clause = one[1];
+        const braced = clause.match(/\{([\s\S]*)\}/);
+
+        // `import Default, { a as b }` — the part before the brace is a default
+        // binding, and each entry inside is renamed by its own `as`.
+        for (const piece of (braced ? clause.slice(0, braced.index) : clause).split(',')) {
+            const bare = piece.replace(/\*\s*as\s+/, '').trim();
+            if (/^[A-Za-z_$][\w$]*$/.test(bare)) names.push(bare);
+        }
+
+        if (braced) {
+            for (const entry of braced[1].split(',')) {
+                const local = entry.split(/\s+as\s+/).pop().trim();
+                if (/^[A-Za-z_$][\w$]*$/.test(local)) names.push(local);
+            }
+        }
+    }
+
+    const base = topLevelIndent(block[1]);
+    let declaration;
+
+    DECLARED.lastIndex = 0;
+
+    while ((declaration = DECLARED.exec(block[1]))) {
+        if (declaration[1] === base) names.push(declaration[2]);
+    }
+
+    return [...new Set(names)];
+}
+
 // The hidden Python functions a template needs, one per distinct expression.
 // Appended to the component's own Python, never prepended, so its line numbers
 // stay true — which is what keeps error messages and source maps honest.

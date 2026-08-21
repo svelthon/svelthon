@@ -236,6 +236,66 @@ function surface(body) {
     return { props, bindables, state, funcs, deriveds, effects };
 }
 
+// The modules a `from x import y` names.
+//
+// Brython's own bookkeeping — `root.imports` — records `import x` and nothing
+// else, so half of every module's imports were invisible to the two things that
+// read that list: the standard-library closure below, and the prelude that
+// resolves a sibling `.py`. `from fractions import Fraction` compiled cleanly
+// and then failed in the browser with a module the VFS had never been given.
+//
+// Walked rather than read off the top level, because an import inside a function
+// or a `try` is still an import.
+// The same question asked of the text. The walk below is the precise answer and
+// is what a `from x import y` inside a function or a `try` needs — but it leans
+// on Brython's AST classes, and a build that reaches the browser through a
+// bundler ends up with a second set of them, where the walk quietly matches
+// nothing. Losing the standard library is too expensive a failure to leave to
+// one mechanism, and the cost of asking twice is a module bundled that was
+// already going to be.
+const FROM_IMPORT = /^[ \t]*from\s+([A-Za-z_][\w.]*)\s+import\s/gm;
+
+function fromImportsInSource(src) {
+    const found = new Set();
+    let match;
+
+    FROM_IMPORT.lastIndex = 0;
+    while ((match = FROM_IMPORT.exec(src))) found.add(match[1]);
+
+    return [...found];
+}
+
+function fromImports(ast) {
+    const found = new Set();
+    const BODIES = ['body', 'orelse', 'finalbody', 'handlers', 'cases', 'items'];
+
+    const walk = (node) => {
+        if (!node || typeof node !== 'object') return;
+
+        if (Array.isArray(node)) {
+            node.forEach(walk);
+            return;
+        }
+
+        // Recognised by shape, not by class. Brython builds its AST classes with
+        // `eval`, and a bundled build ends up with a second set: `instanceof`
+        // then answers false for a node that is plainly an ImportFrom, and the
+        // standard library silently stopped travelling with any component
+        // compiled in a browser. An ImportFrom is the only node carrying a
+        // module name, an alias list and a level together — and a relative
+        // import (`from . import x`) names no module.
+        const importFrom =
+            typeof node.module === 'string' && Array.isArray(node.names) && typeof node.level === 'number';
+
+        if (importFrom) found.add(node.module);
+
+        for (const key of BODIES) if (node[key]) walk(node[key]);
+    };
+
+    walk(ast.body);
+    return [...found];
+}
+
 // Transitive closure of a component's imports over the build-time stdlib.
 // Anything already living in the runtime (sys's `_sys`, `browser`, builtins)
 // is absent from the VFS and simply drops out.
@@ -328,7 +388,10 @@ function compile(
     // Svelte reserves the '$' prefix for *every* scope inside a component, and
     // Brython's codegen opens with `var $B = __BRYTHON__`. So the generated
     // code lives in its own module, which Svelte never parses.
-    const vfs = stdlibClosure(Object.keys(root.imports));
+    const imported = [
+        ...new Set([...Object.keys(root.imports), ...fromImports(root._ast), ...fromImportsInSource(src)])
+    ];
+    const vfs = stdlibClosure(imported);
     const needsStdlib = Object.keys(vfs).length > 0;
 
     const module = [
@@ -572,6 +635,12 @@ function compile(
         // walks the prototype chain, where our accessors live. It is the only
         // place in Brython that consults this flag.
         `${NS}.$proxy = true;`,
+        // Every namespace Brython makes for itself carries the module's own
+        // name, and `from x import y` reads it off the *importing* module to
+        // work out what package it sits in. Ours had none, so the lookup asked
+        // for a module called `undefined` — and said so, in a component where
+        // `import x` on the line above had worked perfectly.
+        `${NS}.__name__ = '${namespace}';`,
 
         // The decorator only marks; the compiler did the work already.
         ...(hasDerived ? [] : [`bind(__proto, 'derived', () => (f) => f, () => {});`]),
@@ -703,7 +772,7 @@ function compile(
         module,
         map: sourceMap(module, source, sourceContent ?? src, lineOffset),
         stdlib,
-        imports: Object.keys(root.imports)
+        imports: imported
     };
 }
 
