@@ -654,6 +654,32 @@ export function pyCall(fn, where, lineOffset = 0, arity = Infinity) {
 // [10] how many positional parameters were declared.
 //
 // Anything that is not a Python function comes back untouched.
+// The same wrapping, for a DOM handler rather than an exported function.
+//
+// The difference is what happens to a coroutine. An exported function is
+// awaited by whoever called it, so `scheduleAsync` hands back a promise. A DOM
+// handler's return value is dropped on the floor, so it goes through `schedule`
+// — which runs the coroutine, and reports a failure nobody observed by throwing
+// it rather than leaving a rejected promise nobody will ever look at.
+export function pyEvent(value, lineOffset = 0) {
+    if (typeof value !== 'function' || !Array.isArray(value.$function_infos)) return value;
+
+    const infos = value.$function_infos;
+    const where = `${infos[2]}() — ${infos[3]}`;
+    const arity = infos[8] ? Infinity : infos[10];
+
+    // The offset is the number of lines before `<script lang="python">`, known
+    // only to the generated script — without it an error in a handler names a
+    // line counted from the tag rather than from the top of the file.
+    return (...args) => {
+        try {
+            return schedule(value(...args.slice(0, arity).map(pyArg)), where, lineOffset);
+        } catch (error) {
+            throw pyError(error, where, lineOffset);
+        }
+    };
+}
+
 export function pyHandler(value) {
     if (typeof value !== 'function' || !Array.isArray(value.$function_infos)) return value;
 

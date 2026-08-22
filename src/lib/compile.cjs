@@ -493,6 +493,7 @@ function compile(
         ...state.map((n) => `let ${n};`),
         ...[...funcs, ...plainDeriveds].map((f) => `let ${fn(f.name)};`),
         ``,
+        `const __event = (fn) => pyEvent(fn, ${lineOffset});`,
         `const __proto = {};`,
         ...state.map((n) => `bind(__proto, '${n}', () => ${n}, (v) => { ${n} = v; });`),
         ...funcs.map(
@@ -562,7 +563,7 @@ function compile(
         // expressions were JavaScript and an author wrote `py.str(items)` in the
         // markup — short on purpose. Now that only generated code touches it,
         // short is exactly wrong, and `py` is a name an author may want.
-        `import { bind, __pybridge, track, follow, pyError, schedule, inTemplate, plainData, pyArg, jsCall, NONE${store ? ', registerModule' : ''} } from 'svelthon/runtime';`,
+        `import { bind, __pybridge, track, follow, pyError, schedule, inTemplate, pyEvent, plainData, pyArg, jsCall, NONE${store ? ', registerModule' : ''} } from 'svelthon/runtime';`,
         ...jsImports.map((one) => `import { ${one.names.join(', ')} } from ${JSON.stringify(one.from)};`),
         `import { ${['getContext', 'setContext']
             .concat(lifecycle('on_mount') || lifecycle('on_destroy') ? ['untrack'] : [])
@@ -610,6 +611,7 @@ function compile(
             `const ${d.name} = $derived.by(() => ${fn(d.name)}());`
         ]),
         ``,
+        `const __event = (fn) => pyEvent(fn, ${lineOffset});`,
         `const __proto = {};`,
         // Python may write to a prop; the write lands in the local fallback and
         // is shadowed for as long as the parent supplies a value, which is

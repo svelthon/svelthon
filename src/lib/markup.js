@@ -43,11 +43,36 @@ export function overMarkup(content, transform) {
     return out + transform(content.slice(cut));
 }
 
-// Directives carry a callback or a JavaScript value, never a rendering, so they
-// keep the host language: `onclick={increment}`, `bind:value={name}`,
-// `use:action={opts}`, the transition family. Every other attribute — including
-// a component prop — carries a Python value and is compiled as one.
-const DIRECTIVE = /^(?:on[a-z]|(?:on|use|bind|transition|animate|in|out|class|style):)/;
+// The one directive that genuinely needs the host language.
+//
+// `bind:value={name}` wants an *assignable reference*, not an expression:
+// Svelte compiles it to a getter and a setter, and a call has no setter. Which
+// also means the question of language barely arises — a reference is a name,
+// and a name is written the same way in both. The gap is `bind:value={obj.field}`,
+// a member expression, and so JavaScript's.
+//
+// Everything else that used to sit here — `use:`, the transition family,
+// `class:`, `style:` — takes an ordinary *value*, and now takes a Python one.
+// `use:action={opts}` and `transition:fly={opts}` name their function in the
+// directive, never in the value, so there was nothing in the way.
+const DIRECTIVE = /^bind:/;
+
+// A handler takes a *callable*, and Python's is `lambda`. So its value is
+// compiled as Python like everything else, and what the expression yields is
+// wrapped for JavaScript: `pyHandler` reads the signature Brython recorded,
+// trims the call to the arity the author declared and converts the arguments —
+// which is what lets `lambda: choose(pep)` ignore the DOM event it is handed
+// while `lambda e: read(e.target.value)` receives it.
+const HANDLER = /^(?:on[a-z]|on:)/;
+
+// The wrapper the generated script defines for handlers. Named here and emitted
+// there, so the two have to agree — it exists to carry the component's line
+// offset, which the markup pass runs too early to know.
+const EVENT_WRAPPER = '__event';
+
+// `class:many={…}` is read for truthiness, so it needs Python's — an empty list
+// is false here and true in JavaScript, exactly as in `{#if}`.
+const CLASS_DIRECTIVE = /^class:/;
 
 // Names a block introduces, which are not module globals and must therefore be
 // passed in as arguments.
@@ -151,7 +176,9 @@ export function pythonExpressions(markup, collect) {
                 if (char === '{') {
                     const end = closingBrace(markup, index);
 
-                    if (end !== -1 && !DIRECTIVE.test(quotedAttribute || '')) {
+                    const named = quotedAttribute || '';
+
+                    if (end !== -1 && !DIRECTIVE.test(named) && !HANDLER.test(named)) {
                         out += `{${call(markup.slice(index + 1, end), '__text')}}`;
                         index = end + 1;
                         continue;
@@ -170,12 +197,19 @@ export function pythonExpressions(markup, collect) {
                     const trimmed = inner.trim();
 
                     if (attribute) {
-                        // A directive carries a callback or a JavaScript value;
-                        // every other named attribute, component prop included,
-                        // carries a Python one.
-                        out += DIRECTIVE.test(attribute[1])
-                            ? markup.slice(index, end + 1)
-                            : `{${call(inner, '')}}`;
+                        // Three cases. A directive that needs the host language
+                        // keeps its text. A handler is Python, and what it
+                        // yields is made callable from JavaScript. Everything
+                        // else — a component prop included — is Python.
+                        if (DIRECTIVE.test(attribute[1])) {
+                            out += markup.slice(index, end + 1);
+                        } else if (HANDLER.test(attribute[1])) {
+                            out += `{${EVENT_WRAPPER}(${call(inner, '')})}`;
+                        } else if (CLASS_DIRECTIVE.test(attribute[1])) {
+                            out += `{${call(inner, '__truthy')}}`;
+                        } else {
+                            out += `{${call(inner, '')}}`;
+                        }
                     } else if (trimmed.startsWith('...')) {
                         // {...attrs} — spreading a Python dict, whose keys are
                         // JavaScript properties. A shallow copy, so that Svelte's
