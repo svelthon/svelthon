@@ -751,3 +751,4 @@ export function bind(proto, key, get, set) {
         configurable: true
     });
 }
+

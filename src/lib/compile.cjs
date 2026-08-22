@@ -171,8 +171,7 @@ const pythonModuleName = (source) => source.split('/').pop().replace(/(\.svelte)
 const JS_RESERVED = new Set(`break case catch class const continue debugger default delete do else
 enum export extends false function if implements in instanceof interface let new null package
 private protected public return static super switch this throw true typeof var void while with
-yield arguments eval
-py`.split(/\s+/));
+yield arguments eval`.split(/\s+/));
 
 // Module-level names, read off the AST rather than the generated JS — the
 // codegen mangles function names (`increment941818`) but the AST has the truth.
