@@ -175,6 +175,18 @@ enum export extends false function if implements in instanceof interface let new
 private protected public return static super switch this throw true typeof var void while with
 yield arguments eval`.split(/\s+/));
 
+// The hidden functions the markup pass appends, one per expression it compiled.
+// The name is chosen in `markup.js`; the two have to agree.
+const EXPR_PREFIX = '__expr_';
+
+// Inside a template expression, and only there, the dot finds a key as well as
+// an attribute — `{pep.title}` reads a dict. The same text in the `<script>`
+// stays plain Python and raises, which is the seam this marks.
+const templateCall = (f, fn) => {
+    const call = `${fn(f.name)}(...a.slice(0, ${f.arity}))`;
+    return f.name.startsWith(EXPR_PREFIX) ? `inTemplate(() => ${call})` : call;
+};
+
 const injections = (declared, component) =>
     INJECTED.filter((one) => (component || !one.component) && !declared.includes(one.name)).map(
         (one) => `bind(__proto, '${one.name}', ${one.value}, () => {});`
@@ -550,7 +562,7 @@ function compile(
         // expressions were JavaScript and an author wrote `py.str(items)` in the
         // markup — short on purpose. Now that only generated code touches it,
         // short is exactly wrong, and `py` is a name an author may want.
-        `import { bind, __pybridge, track, follow, pyError, schedule, plainData, pyArg, jsCall, NONE${store ? ', registerModule' : ''} } from 'svelthon/runtime';`,
+        `import { bind, __pybridge, track, follow, pyError, schedule, inTemplate, plainData, pyArg, jsCall, NONE${store ? ', registerModule' : ''} } from 'svelthon/runtime';`,
         ...jsImports.map((one) => `import { ${one.names.join(', ')} } from ${JSON.stringify(one.from)};`),
         `import { ${['getContext', 'setContext']
             .concat(lifecycle('on_mount') || lifecycle('on_destroy') ? ['untrack'] : [])
@@ -677,7 +689,7 @@ function compile(
         // pyError fills them in, naming the function and the file it came from.
         ...funcs.map(
             (f) =>
-                `const ${f.name} = (...a) => { try { return schedule(${fn(f.name)}(...a.slice(0, ${f.arity})), ${JSON.stringify(`${f.name}() — ${source}`)}, ${lineOffset}); }` +
+                `const ${f.name} = (...a) => { try { return schedule(${templateCall(f, fn)}, ${JSON.stringify(`${f.name}() — ${source}`)}, ${lineOffset}); }` +
                 ` catch (err) { throw pyError(err, ${JSON.stringify(`${f.name}() — ${source}`)}, ${lineOffset}); } };`
         ),
         ...(store

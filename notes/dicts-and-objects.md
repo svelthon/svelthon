@@ -54,24 +54,27 @@ def url(pep):
 
 <ul>
     {#each peps as pep}
-        <li><a href={url(pep)}>PEP {pep["number"]}</a> — {pep["title"]} ({pep["year"]})</li>
+        <li><a href={url(pep)}>PEP {pep.number}</a> — {pep.title} ({pep.year})</li>
     {/each}
 </ul>
 ```
 
-Three things are visible at once, and they are the whole trade in miniature. The
-data is shorter as dicts and the class is eleven lines of ceremony for three
-fields. The markup is quieter as objects — `{pep.title}` against
-`{pep["title"]}`, four times over, and the difference grows with every field read.
-And the computed field changes side: a `@property` reads like any other field in
-the markup, where the dict has to call a function that takes the record back as
-an argument.
+Two things are visible at once, and they are the trade in miniature. The data is
+shorter as dicts — the class is eleven lines of ceremony for three fields. And
+the computed field changes side: a `@property` reads like any other field in the
+markup, where the dict has to call a function that takes the record back as an
+argument.
+
+What is *not* visible any more is the markup, and that is deliberate: the dict
+version reads `{pep.title}` too. The dot in a template expression finds a key as
+well as an attribute — see below — so the two shapes are written the same way at
+every read site. `{pep["title"]}` still works and means exactly the same thing.
 
 ## Side by side
 
 | | object | dict |
 | --- | --- | --- |
-| read in the markup | `{p.title}` | `{p["title"]}` |
+| read in the markup | `{p.title}` | `{p.title}`, or `{p["title"]}` |
 | read inside an attribute | works | works |
 | computed field (`@property`) in the markup | works | impossible |
 | mutated in place, reactively | works | works |
@@ -181,34 +184,49 @@ So: not in a component. In a `+page.server.py`, which never reaches a client, a
 dataclass costs nothing at all and the ceremony is worth removing. The rule is
 not about the shape, it is about which side of the wire the module lives on.
 
-## Open: one dot for both
+## One dot for both
 
-Neither shape is comfortable to read. The object is long to declare, the dict is
-noisy at every read — `{pep["title"]}` four times in six lines above. The obvious
-relief is the one template languages have already chosen: let the dot find a key
-as well as an attribute.
+The dot in a template expression finds an attribute first and a key second.
+`{pep.title}` reads a class instance or a dict, and `{pep["title"]}` still means
+what it always did. Implemented in `runtime.js` as `inTemplate`, exercised by
+`tests/dot.test.js`.
 
-Jinja does exactly that, symmetrically: `foo.bar` tries the attribute then the
-item, `foo['bar']` the item then the attribute, and its documentation says the
-two are interchangeable. Django's template language goes further — dictionary
-lookup, then attribute or method, then numeric index — but for a different
-reason, which is worth not confusing: DTL has no `[]` and no `()` at all, so its
-dot is forced to carry every kind of access. Jinja has both and unifies anyway.
-Jinja is our precedent; Django is not.
+This is what Jinja does — `foo.bar` tries the attribute then the item, and its
+documentation says the two spellings are interchangeable. Django's template
+language goes further still, dictionary then attribute then numeric index, but
+for a different reason worth not confusing: DTL has no `[]` and no `()` at all,
+so its dot is forced to carry every kind of access. Jinja has both and unifies
+anyway, out of regard for whoever writes the template. That is our situation.
 
-The argument for it is strong. It is technically settled, thirty years of
-practice back it, and anyone arriving from Django or Flask already knows the
-behaviour. The failure mode stays loud, too: `pep.titel` on a dict would try the
-attribute, fail, try the key, fail — an error, where Jinja's own `Undefined`
-would have rendered nothing.
+**It is not a new kind of divergence.** A template expression already differs
+from the same text in the script, and by more than this: `{#if items}` compiles
+through `__truthy`, so an empty list is false the Python way rather than the
+JavaScript way; `{items}` through `__text`, so it renders `['a', 'b']` and not
+`a,b`; an iterable through `__seq`, a spread through `__spread`, a `{#key}`
+through `repr()`. Four implicit wrappers were already there, deliberately. The
+dot is the fifth, and the smallest of them.
 
-The argument against is one thing, and it is ours alone. A Jinja template
-contains no Python; its expressions only look like it. A Svelthon component
-contains Python on both sides of the `</script>`, and the fallback would make
-`pep.title` mean one thing above the tag and another below it — an
-`AttributeError` in the script, a key lookup in the markup. Moving a line from
-one to the other would change its meaning silently. That is the whole decision,
-and it has not been taken.
+**A typo stays loud.** `{pep.titel}` tries the attribute, fails, tries the key,
+fails, and raises the `AttributeError` it always raised — with its position. This
+is the one place Jinja is weaker: its `Undefined` renders nothing at all.
+
+**A real attribute wins over a key of the same name.** `{d.items}` is the dict's
+own method, not a key called `items`; `{d["items"]}` is the key. That is Jinja's
+order, and it is what keeps the subscript worth having.
+
+**How far it reaches**, pinned by a test rather than assumed: the fallback lasts
+for the length of one expression, so a helper the markup calls gets it too, and
+the same helper called from `on_mount` does not. That is the seam, and it is the
+price of the feature — a function that works from the markup and raises from a
+lifecycle hook. It is the same shape as `__truthy`: `{#if items}` and `if items:`
+have never meant quite the same thing either.
+
+**It costs nothing when it is not used.** Brython's generated code reads
+`$B.$getattr_pep657` off the object at every call, so the fallback is installed
+by swapping that one function for the length of an expression and restoring it
+after — two property writes per expression, and every attribute access in the
+rest of the program untouched. The same technique as `withNamespace`. A miss
+costs no exception either: the probe passes a default rather than catching.
 
 ## The one thing to avoid
 

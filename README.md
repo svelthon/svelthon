@@ -175,9 +175,11 @@ So the template is Python, with no helpers:
 ```
 
 `{item.label}` on a class instance works — that was the wart `py.of()` used to
-paper over. `{#if rows}` follows Python's truth, so an empty list is false. And a
-`dict` has no attributes: `{d["k"]}`, not `{d.k}` — the semantics are Python's,
-including where that differs from JavaScript.
+paper over. `{#if rows}` follows Python's truth, so an empty list is false. And
+the dot finds a key as well as an attribute: `{d.k}` reads a dict, exactly as
+Jinja's does, while `{d["k"]}` still means the same thing. A real attribute wins
+over a key of the same name, and a name that is neither raises rather than
+rendering nothing.
 
 Every site the markup *reads* goes through Python, not only interpolations:
 

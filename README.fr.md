@@ -175,8 +175,10 @@ Le gabarit est donc du Python, sans aucun helper :
 
 `{item.label}` sur une instance fonctionne — c'était la verrue que `py.of()`
 masquait. `{#if rows}` suit la vérité de Python, donc une liste vide est fausse.
-Et un `dict` n'a pas d'attributs : `{d["k"]}` et non `{d.k}` — la sémantique est
-celle de Python, y compris là où elle diffère de JavaScript.
+Et le point trouve une clé aussi bien qu'un attribut : `{d.k}` lit un dict,
+exactement comme chez Jinja, tandis que `{d["k"]}` veut toujours dire la même
+chose. Un vrai attribut l'emporte sur une clé de même nom, et un nom qui n'est
+ni l'un ni l'autre lève au lieu de ne rien rendre.
 
 Tout site *lu* par le balisage passe par Python, pas seulement les
 interpolations :

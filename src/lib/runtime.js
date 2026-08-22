@@ -737,6 +737,53 @@ export function withNamespace(name, namespace, run) {
     }
 }
 
+// `pep.title` inside the markup, on a dict.
+//
+// A template's expressions already differ from the same text in the script: a
+// `{#if}` goes through `__truthy` so an empty list is false the Python way, an
+// interpolation through `__text` so a list renders `['a', 'b']`, an iterable
+// through `__seq`, a spread through `__spread`. The dot joins them — it finds an
+// attribute, and failing that a key, which is what Jinja does with `foo.bar` and
+// what anyone arriving from Django or Flask already expects.
+//
+// Attribute first, so a dict's real methods keep winning: `{d.items}` is the
+// method, not a key called "items". And a name that is neither raises the
+// AttributeError it always did — the fallback never turns a typo into silence,
+// which is the one place Jinja is weaker, its `Undefined` rendering nothing.
+//
+// The swap is what keeps this free. Brython's generated code reads
+// `$B.$getattr_pep657` off the object at every call, so replacing it for the
+// length of one expression costs two property writes and leaves every attribute
+// access in the rest of the program untouched. Same technique as
+// `withNamespace` above.
+const MISSING = Symbol('svelthon.missing');
+
+export function inTemplate(run) {
+    const $B = globalThis.__BRYTHON__;
+    const original = $B.$getattr_pep657;
+
+    $B.$getattr_pep657 = (obj, attr, inum) => {
+        // With a default, so a miss costs no exception — building one on every
+        // field read of every dict would be the whole cost of this feature.
+        const found = $B.$getattr(obj, attr, MISSING);
+        if (found !== MISSING) return found;
+
+        try {
+            return $B.$getitem(obj, attr);
+        } catch {
+            /* no such key either: let the real lookup raise, with its position */
+        }
+
+        return original(obj, attr, inum);
+    };
+
+    try {
+        return run();
+    } finally {
+        $B.$getattr_pep657 = original;
+    }
+}
+
 // Expose one component-level signal as a property of the namespace Brython
 // writes into. Values pass through untouched — never wrapped, never proxied —
 // which is the point: a Svelte state proxy around a Brython object breaks its
