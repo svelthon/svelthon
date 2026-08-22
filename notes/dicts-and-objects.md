@@ -159,6 +159,57 @@ everywhere and carries a computed `url`; `notes.NOTES` is a dict because it is
 keyed by PEP number; and a `load()` returns a dict, because what a route hands
 its page is a bag of named things, not a record.
 
+## Shortening the object side: `@dataclass`, and what it costs
+
+The obvious answer to the eleven lines of ceremony is a dataclass, and it works —
+fields, a `@property` beside them, generated `__eq__` and `__repr__`, a field
+mutated in place still reactive. `tests/dataclass.test.js` holds all five.
+
+What it costs was measured on the same component:
+
+| | stdlib modules bundled | shipped |
+| --- | --- | --- |
+| `@dataclass` | 212 | 2.9 MB |
+| `class` with an `__init__` | 0 | 0 |
+
+`dataclasses` pulls in `inspect`, `copy`, `types`, `re`, `enum` and their whole
+closure, and a component's standard library travels to the browser with it. Seven
+lines saved against 2.9 MB delivered is not a trade, and the same closure is what
+makes that component take seconds to mount the first time.
+
+So: not in a component. In a `+page.server.py`, which never reaches a client, a
+dataclass costs nothing at all and the ceremony is worth removing. The rule is
+not about the shape, it is about which side of the wire the module lives on.
+
+## Open: one dot for both
+
+Neither shape is comfortable to read. The object is long to declare, the dict is
+noisy at every read — `{pep["title"]}` four times in six lines above. The obvious
+relief is the one template languages have already chosen: let the dot find a key
+as well as an attribute.
+
+Jinja does exactly that, symmetrically: `foo.bar` tries the attribute then the
+item, `foo['bar']` the item then the attribute, and its documentation says the
+two are interchangeable. Django's template language goes further — dictionary
+lookup, then attribute or method, then numeric index — but for a different
+reason, which is worth not confusing: DTL has no `[]` and no `()` at all, so its
+dot is forced to carry every kind of access. Jinja has both and unifies anyway.
+Jinja is our precedent; Django is not.
+
+The argument for it is strong. It is technically settled, thirty years of
+practice back it, and anyone arriving from Django or Flask already knows the
+behaviour. The failure mode stays loud, too: `pep.titel` on a dict would try the
+attribute, fail, try the key, fail — an error, where Jinja's own `Undefined`
+would have rendered nothing.
+
+The argument against is one thing, and it is ours alone. A Jinja template
+contains no Python; its expressions only look like it. A Svelthon component
+contains Python on both sides of the `</script>`, and the fallback would make
+`pep.title` mean one thing above the tag and another below it — an
+`AttributeError` in the script, a key lookup in the markup. Moving a line from
+one to the other would change its meaning silently. That is the whole decision,
+and it has not been taken.
+
 ## The one thing to avoid
 
 Do not choose per site. A codebase where the same record is a dict in one module
