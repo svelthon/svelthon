@@ -173,6 +173,40 @@ enum export extends false function if implements in instanceof interface let new
 private protected public return static super switch this throw true typeof var void while with
 yield arguments eval`.split(/\s+/));
 
+// Everything the compiler publishes into a module's namespace, in one place —
+// the counterpart of JS_RESERVED above, and readable the same way.
+//
+// One rule for all of them: an injection is skipped when the module already
+// declares a name of that spelling. The author's own always wins, exactly as a
+// Python module that defines `list` shadows the builtin — and loses it.
+//
+// The filter is what makes that true, and it is not optional: these are bound
+// after the author's own names, onto the same prototype, so without it the
+// compiler's binding silently replaces theirs.
+const INJECTED = [
+    // The decorators only mark; the compiler has read them off the AST already.
+    { name: 'derived', value: '() => (f) => f' },
+    { name: 'bindable', value: '() => (v) => v' },
+    { name: 'effect', value: '() => (f) => f' },
+
+    // The outbound bridge: a Python value made readable from JavaScript.
+    { name: 'to_js', value: '() => plainData' },
+    { name: 'to_python', value: '() => pyArg' },
+
+    // The inbound bridge: the JavaScript globals, as they are.
+    { name: 'js', value: '() => globalThis' },
+
+    // Context belongs to a component instance; a plain module has none.
+    { name: 'set_context', value: '() => setContext', component: true },
+    // A missing key is `undefined` in Svelte; Python expects None.
+    { name: 'get_context', value: '() => (key) => getContext(key) ?? NONE', component: true }
+];
+
+const injections = (declared, component) =>
+    INJECTED.filter((one) => (component || !one.component) && !declared.includes(one.name)).map(
+        (one) => `bind(__proto, '${one.name}', ${one.value}, () => {});`
+    );
+
 // Module-level names, read off the AST rather than the generated JS — the
 // codegen mangles function names (`increment941818`) but the AST has the truth.
 const isBindable = (node) =>
@@ -486,18 +520,15 @@ function compile(
         ...plainDeriveds.map(
             (d) => `bind(__proto, '${d.name}', () => ${fn(d.name)}(), (v) => { ${fn(d.name)} = v; });`
         ),
-        ...(declared.includes('derived') ? [] : [`bind(__proto, 'derived', () => (f) => f, () => {});`]),
-        ...(declared.includes('bindable') ? [] : [`bind(__proto, 'bindable', () => (v) => v, () => {});`]),
-        ...(declared.includes('effect') ? [] : [`bind(__proto, 'effect', () => (f) => f, () => {});`]),
+        ...injections(declared, false),
+
+        // The four a compiled template expression calls. Always injected, never
+        // guarded: an author who shadowed one would silently take over every
+        // interpolation in their own markup.
         `bind(__proto, '__truthy', () => __pybridge.truthy, () => {});`,
         `bind(__proto, '__text', () => __pybridge.str, () => {});`,
         `bind(__proto, '__seq', () => __pybridge.seq, () => {});`,
         `bind(__proto, '__spread', () => __pybridge.spread, () => {});`,
-        // The outbound bridge: a Python value made readable from JavaScript.
-        `bind(__proto, 'to_js', () => plainData, () => {});`,
-        `bind(__proto, 'to_python', () => pyArg, () => {});`,
-        // The inbound bridge: the JavaScript globals, as they are.
-        `bind(__proto, 'js', () => globalThis, () => {});`,
         // Wrapped once, not on every read: a name Python compares by identity —
         // `handler is on_click` — has to answer the same object twice.
         ...[...new Set(jsImported)]
@@ -644,11 +675,8 @@ function compile(
         // `import x` on the line above had worked perfectly.
         `${NS}.__name__ = '${namespace}';`,
 
-        // The decorator only marks; the compiler did the work already.
-        ...(hasDerived ? [] : [`bind(__proto, 'derived', () => (f) => f, () => {});`]),
-        // bindable() only marks the annotation; the compiler read it already.
-        ...(hasBindable ? [] : [`bind(__proto, 'bindable', () => (v) => v, () => {});`]),
-        ...(hasEffect ? [] : [`bind(__proto, 'effect', () => (f) => f, () => {});`]),
+        ...injections(declared, true),
+
         // Wrappers for compiled template expressions. Not Python's own bool()
         // and str(): a template may hold a foreign JavaScript value — a DOM node
         // from bind:this — on which Brython's classifier trips. These fall back.
@@ -656,10 +684,6 @@ function compile(
         `bind(__proto, '__text', () => __pybridge.str, () => {});`,
         `bind(__proto, '__seq', () => __pybridge.seq, () => {});`,
         `bind(__proto, '__spread', () => __pybridge.spread, () => {});`,
-        `bind(__proto, 'to_js', () => plainData, () => {});`,
-        `bind(__proto, 'to_python', () => pyArg, () => {});`,
-        // The inbound bridge: the JavaScript globals, as they are.
-        `bind(__proto, 'js', () => globalThis, () => {});`,
         // Wrapped once, not on every read: a name Python compares by identity
         // has to answer the same object twice.
         ...[...new Set([...jsImported, ...jsNames])]
@@ -673,13 +697,6 @@ function compile(
         ...jsNames
             .filter((n) => !declared.includes(n))
             .map((n) => `bind(__proto, '${n}', () => ${jsBound(n)}, () => {});`),
-        ...(hasContext
-            ? []
-            : [
-                  `bind(__proto, 'set_context', () => setContext, () => {});`,
-                  // A missing key is `undefined` in Svelte; Python expects None.
-                  `bind(__proto, 'get_context', () => (key) => getContext(key) ?? NONE, () => {});`
-              ]),
         ``,
         `init(${NS});`,
         ...(bindables.length ? [`__initialising = false;`] : []),
