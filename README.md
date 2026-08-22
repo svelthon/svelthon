@@ -210,9 +210,7 @@ that the read goes through the namespace rather than around it.
 component without `lang="python"` is a JavaScript component and stays one, even
 when it imports a `.py` store: its `{value}` is Svelte's `{value}`, and a Python
 list renders as JavaScript renders it. Nothing is injected behind an author's
-back — exactly as TypeScript does not leak into a `.js` file. `py.str()`,
-`py.truthy()` and `py.of()` remain exported from the runtime for a JavaScript
-component that *wants* Python semantics and imports them on purpose.
+back — exactly as TypeScript does not leak into a `.js` file.
 
 It costs **1.3× to 1.7× on rendering** against a JavaScript component (`npm run
 bench`, the spread being what a modest laptop measures from one day to the next),

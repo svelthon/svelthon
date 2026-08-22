@@ -21,9 +21,15 @@ Object.defineProperty(NONE, 'toString', {
 const _b_ = globalThis.__BRYTHON__.builtins;
 
 // Inside a Svelte template you are in JavaScript, not Python — and the two
-// disagree. `py` is the bridge, injected into every component that uses
-// `<script lang="python">`.
-export const py = {
+// disagree. This is the bridge behind `__truthy`, `__text`, `__seq` and
+// `__spread`, the four names a compiled template expression actually calls.
+//
+// It was called `py` while a template's expressions were still JavaScript and an
+// author wrote `py.str(items)` in the markup — short, on purpose, because it was
+// typed by hand. Nothing types it now but generated code, so the short name was
+// pure cost: it occupied `py` in every component's scope, and had to be kept out
+// of reach through JS_RESERVED for that reason alone.
+export const __pybridge = {
     // JS calls every object truthy, so `{#if items}` would be true for an empty
     // list, an empty dict, or None. Conditions are rewritten to go through this.
     truthy(value) {
@@ -102,7 +108,7 @@ export const py = {
         return new Proxy(Object.create(null), {
             get(_target, prop) {
                 if (typeof prop !== 'string') return undefined;
-                if (prop === 'toString') return () => py.str(value);
+                if (prop === 'toString') return () => __pybridge.str(value);
 
                 try {
                     return $B.$getattr(value, prop);
