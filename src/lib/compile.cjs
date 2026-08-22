@@ -472,7 +472,7 @@ function compile(
 
     const plainScript = [
         `import { init } from ${JSON.stringify(virtualId(name))};`,
-        `import { bind, py, pyError, scheduleAsync, plainData, pyArg, pyExport, jsCall, NONE, registerModule } from 'svelthon/runtime';`,
+        `import { bind, py as __pybridge, pyError, scheduleAsync, plainData, pyArg, pyExport, jsCall, NONE, registerModule } from 'svelthon/runtime';`,
         ...jsImports.map((one) => `import { ${one.names.join(', ')} } from ${JSON.stringify(one.from)};`),
         ``,
         ...state.map((n) => `let ${n};`),
@@ -489,10 +489,10 @@ function compile(
         ...(declared.includes('derived') ? [] : [`bind(__proto, 'derived', () => (f) => f, () => {});`]),
         ...(declared.includes('bindable') ? [] : [`bind(__proto, 'bindable', () => (v) => v, () => {});`]),
         ...(declared.includes('effect') ? [] : [`bind(__proto, 'effect', () => (f) => f, () => {});`]),
-        `bind(__proto, '__truthy', () => py.truthy, () => {});`,
-        `bind(__proto, '__text', () => py.str, () => {});`,
-        `bind(__proto, '__seq', () => py.seq, () => {});`,
-        `bind(__proto, '__spread', () => py.spread, () => {});`,
+        `bind(__proto, '__truthy', () => __pybridge.truthy, () => {});`,
+        `bind(__proto, '__text', () => __pybridge.str, () => {});`,
+        `bind(__proto, '__seq', () => __pybridge.seq, () => {});`,
+        `bind(__proto, '__spread', () => __pybridge.spread, () => {});`,
         // The outbound bridge: a Python value made readable from JavaScript.
         `bind(__proto, 'to_js', () => plainData, () => {});`,
         `bind(__proto, 'to_python', () => pyArg, () => {});`,
@@ -545,9 +545,12 @@ function compile(
 
     const componentScript = [
         `import { init } from ${JSON.stringify(virtualId(name))};`,
-        // `py` backs the rewritten conditions, and is available to the template
-        // for explicit conversions: {py.str(items)} renders ['a', 'b'].
-        `import { bind, py, track, follow, pyError, schedule, plainData, pyArg, jsCall, NONE${store ? ', registerModule' : ''} } from 'svelthon/runtime';`,
+        // The bridge behind `__truthy` and the three beside it. Imported under a
+        // name no one would type: it was called `py` back when a template's
+        // expressions were JavaScript and an author wrote `py.str(items)` in the
+        // markup — short on purpose. Now that only generated code touches it,
+        // short is exactly wrong, and `py` is a name an author may want.
+        `import { bind, py as __pybridge, track, follow, pyError, schedule, plainData, pyArg, jsCall, NONE${store ? ', registerModule' : ''} } from 'svelthon/runtime';`,
         ...jsImports.map((one) => `import { ${one.names.join(', ')} } from ${JSON.stringify(one.from)};`),
         `import { ${['getContext', 'setContext']
             .concat(lifecycle('on_mount') || lifecycle('on_destroy') ? ['untrack'] : [])
@@ -649,10 +652,10 @@ function compile(
         // Wrappers for compiled template expressions. Not Python's own bool()
         // and str(): a template may hold a foreign JavaScript value — a DOM node
         // from bind:this — on which Brython's classifier trips. These fall back.
-        `bind(__proto, '__truthy', () => py.truthy, () => {});`,
-        `bind(__proto, '__text', () => py.str, () => {});`,
-        `bind(__proto, '__seq', () => py.seq, () => {});`,
-        `bind(__proto, '__spread', () => py.spread, () => {});`,
+        `bind(__proto, '__truthy', () => __pybridge.truthy, () => {});`,
+        `bind(__proto, '__text', () => __pybridge.str, () => {});`,
+        `bind(__proto, '__seq', () => __pybridge.seq, () => {});`,
+        `bind(__proto, '__spread', () => __pybridge.spread, () => {});`,
         `bind(__proto, 'to_js', () => plainData, () => {});`,
         `bind(__proto, 'to_python', () => pyArg, () => {});`,
         // The inbound bridge: the JavaScript globals, as they are.
