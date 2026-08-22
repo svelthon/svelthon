@@ -5,6 +5,68 @@ the differences are not where they look like they are. The table is backed by
 `tests/shapes.test.js`, which puts one record in both shapes through every place
 it can be read or handed on.*
 
+## The same page, both ways
+
+Same output, down to the markup — `tests/shapes.test.js` renders both and
+compares. What differs is what you write.
+
+**As objects:**
+
+```svelte
+<script lang="python">
+class Pep:
+    def __init__(self, number, title, year):
+        self.number = number
+        self.title = title
+        self.year = year
+
+    @property
+    def url(self):
+        return "https://peps.python.org/pep-{:04d}/".format(self.number)
+
+
+peps = [
+    Pep(8, "Style Guide for Python Code", 2001),
+    Pep(703, "Making the GIL Optional", 2023),
+]
+</script>
+
+<ul>
+    {#each peps as pep}
+        <li><a href={pep.url}>PEP {pep.number}</a> — {pep.title} ({pep.year})</li>
+    {/each}
+</ul>
+```
+
+**As dicts:**
+
+```svelte
+<script lang="python">
+peps = [
+    {"number": 8, "title": "Style Guide for Python Code", "year": 2001},
+    {"number": 703, "title": "Making the GIL Optional", "year": 2023},
+]
+
+
+def url(pep):
+    return "https://peps.python.org/pep-{:04d}/".format(pep["number"])
+</script>
+
+<ul>
+    {#each peps as pep}
+        <li><a href={url(pep)}>PEP {pep["number"]}</a> — {pep["title"]} ({pep["year"]})</li>
+    {/each}
+</ul>
+```
+
+Three things are visible at once, and they are the whole trade in miniature. The
+data is shorter as dicts and the class is eleven lines of ceremony for three
+fields. The markup is quieter as objects — `{pep.title}` against
+`{pep["title"]}`, four times over, and the difference grows with every field read.
+And the computed field changes side: a `@property` reads like any other field in
+the markup, where the dict has to call a function that takes the record back as
+an argument.
+
 ## Side by side
 
 | | object | dict |

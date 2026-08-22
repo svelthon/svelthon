@@ -941,7 +941,8 @@ reloads.
 **Design notes** — [notes/directives.md](notes/directives.md) on why a directive's
 value stays JavaScript and what moving `on*` to Python would involve, and
 [notes/dicts-and-objects.md](notes/dicts-and-objects.md) on what a dict and a class
-instance each cost at the boundary.
+instance each cost at the boundary — measured side by side, and backed by
+`tests/shapes.test.js`.
 
 **Coming from Django or Flask?** [DJANGO.md](DJANGO.md) maps every everyday
 template construct onto its Svelthon counterpart — the whole translation fits on
