@@ -22,6 +22,8 @@ $B.brython({ ipy_id: [] });
 // [ext, source, deps, is_package], so the dependency graph is already computed.
 require('../../vendor/brython_stdlib.js');
 
+const { INJECTED } = require('./injected.cjs');
+
 // Name the generated module gives to the reactive namespace it receives.
 const NS = '__py';
 
@@ -172,35 +174,6 @@ const JS_RESERVED = new Set(`break case catch class const continue debugger defa
 enum export extends false function if implements in instanceof interface let new null package
 private protected public return static super switch this throw true typeof var void while with
 yield arguments eval`.split(/\s+/));
-
-// Everything the compiler publishes into a module's namespace, in one place —
-// the counterpart of JS_RESERVED above, and readable the same way.
-//
-// One rule for all of them: an injection is skipped when the module already
-// declares a name of that spelling. The author's own always wins, exactly as a
-// Python module that defines `list` shadows the builtin — and loses it.
-//
-// The filter is what makes that true, and it is not optional: these are bound
-// after the author's own names, onto the same prototype, so without it the
-// compiler's binding silently replaces theirs.
-const INJECTED = [
-    // The decorators only mark; the compiler has read them off the AST already.
-    { name: 'derived', value: '() => (f) => f' },
-    { name: 'bindable', value: '() => (v) => v' },
-    { name: 'effect', value: '() => (f) => f' },
-
-    // The outbound bridge: a Python value made readable from JavaScript.
-    { name: 'to_js', value: '() => plainData' },
-    { name: 'to_python', value: '() => pyArg' },
-
-    // The inbound bridge: the JavaScript globals, as they are.
-    { name: 'js', value: '() => globalThis' },
-
-    // Context belongs to a component instance; a plain module has none.
-    { name: 'set_context', value: '() => setContext', component: true },
-    // A missing key is `undefined` in Svelte; Python expects None.
-    { name: 'get_context', value: '() => (key) => getContext(key) ?? NONE', component: true }
-];
 
 const injections = (declared, component) =>
     INJECTED.filter((one) => (component || !one.component) && !declared.includes(one.name)).map(
@@ -478,15 +451,11 @@ function compile(
     const declared = [...props, ...bindables, ...state, ...funcs, ...deriveds, ...effects].map(
         (n) => n.name || n
     );
-    const hasDerived = declared.includes('derived');
-    const hasBindable = declared.includes('bindable');
-    const hasEffect = declared.includes('effect');
 
     // Context is per component subtree, where a store is per application — and
     // it is the only per-request-safe place to put state under server
     // rendering. Both must be called while an instance initialises, which is
     // exactly when the Python module body runs.
-    const hasContext = declared.includes('set_context') || declared.includes('get_context');
 
     // The plain module: a `.py` compiled to ordinary JavaScript. No runes, so
     // no need for the Svelte compiler and no need to be renamed `.svelte.js` —

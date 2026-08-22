@@ -4,9 +4,9 @@ import { createRequire } from 'node:module';
 import Shadowed from './fixtures/Shadowed.svelte';
 
 const require = createRequire(import.meta.url);
-const { INJECTED } = require('../src/lib/compile.cjs');
+const { INJECTED } = require('../src/lib/injected.cjs');
 
-// One test per name the compiler publishes, taken from the compiler's own table
+// One test per name the compiler publishes, taken from the table itself
 // rather than written out here. A name added to it without a line in the fixture
 // fails immediately, which is the point: the guarantee is that *every*
 // injection steps aside, not that the two or three anyone thought to check do.

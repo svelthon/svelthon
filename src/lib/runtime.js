@@ -713,6 +713,8 @@ export function registerModule(name, namespace) {
     const $B = globalThis.__BRYTHON__;
 
     namespace.__name__ = name;
+
+
     $B.imported[name] = namespace;
 }
 
