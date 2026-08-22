@@ -429,21 +429,51 @@ export function schedule(result, where, lineOffset = 0) {
     // here costs more than the check saves.
     if ($B.get_class(result) !== $B.coroutine) return result;
 
+    // What the caller gets back is a promise, so an `async def` can be awaited
+    // by whoever called it — `{#await greet()}` in a template above all, which
+    // received `undefined` for as long as this returned nothing.
+    //
     // run(coro, onsuccess, onerror). Its default onerror only logs, so an
     // exception raised inside a coroutine reaches nothing at all — no error
-    // event, no overlay. Rethrowing from a timeout turns it into a genuine
-    // uncaught error, the way the synchronous path already behaves.
-    $B.$getattr(aio, 'run')(
-        result,
-        () => $B.leave_frame(), // what Brython's own default does
-        (error) => {
-            setTimeout(() => {
-                throw pyError(error, where, lineOffset);
-            });
-        }
-    );
+    // event, no overlay.
+    let watched = false;
 
-    return undefined;
+    const promise = new Promise((resolve, reject) => {
+        $B.$getattr(aio, 'run')(
+            result,
+            (value) => {
+                $B.leave_frame(); // what Brython's own default does
+                resolve(value);
+            },
+            (error) => {
+                const failure = pyError(error, where, lineOffset);
+                reject(failure);
+
+                // An event handler's return value is dropped on the floor, so
+                // nobody is there to catch this one. Rethrowing from a timeout
+                // turns it into a genuine uncaught error, the way the
+                // synchronous path already behaves — but only when the caller
+                // really did ignore the promise, or a template that awaits and
+                // renders `{:catch}` would report the failure twice.
+                setTimeout(() => {
+                    if (!watched) throw failure;
+                });
+            }
+        );
+    });
+
+    const settle = promise.then.bind(promise);
+
+    // Handled here so the browser does not *also* report an unhandled
+    // rejection: reporting is this function's job, and it does it above.
+    settle(undefined, () => {});
+
+    promise.then = (...handlers) => {
+        watched = true;
+        return settle(...handlers);
+    };
+
+    return promise;
 }
 
 // What an exported function hands back to the framework.
