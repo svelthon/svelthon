@@ -18,8 +18,11 @@ describe('a handler written as a lambda', () => {
                 target.querySelector(`button[data-k="${k}"]`).click();
                 flushSync();
             },
-            press: (k) => {
-                target.querySelector(`button[data-k="${k}"]`).click();
+            type: (k, value) => {
+                const input = target.querySelector(`input[data-k="${k}"]`);
+
+                input.value = value;
+                input.dispatchEvent(new window.Event('input', { bubbles: true }));
                 flushSync();
             }
         };
@@ -39,13 +42,13 @@ describe('a handler written as a lambda', () => {
         expect(read('picked')).toBe('PEP 484');
     });
 
-    // A lambda that reads the *event* — `lambda e: on_text(e.target.value)` —
-    // needs `from browser import html`, which jsdom cannot import: Brython's
-    // `get_class` looks a DOM node's tag up in that module to find its Python
-    // class. Covered in a real browser instead, never here.
-    test('one written beside an ordinary call', () => {
-        const { read, press } = setup();
-        press('say');
-        expect(read('typed')).toBe('said');
+    // The other shape: a lambda that takes the event and walks it. Brython's
+    // `get_class` gives `e.target` its Python class from `browser.html`, so this
+    // is also the check that the module is there without anyone importing it.
+    test('one that reads the event it is given', () => {
+        const { read, type } = setup();
+
+        type('text', 'hello');
+        expect(read('typed')).toBe('hello');
     });
 });

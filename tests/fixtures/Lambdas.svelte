@@ -22,5 +22,5 @@ def on_text(value):
 {/each}
 
 <p data-k="picked">{picked}</p>
-<button data-k="say" onclick={lambda: on_text("said")}>say</button>
+<input data-k="text" oninput={lambda e: on_text(e.target.value)} />
 <p data-k="typed">{typed}</p>

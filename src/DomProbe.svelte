@@ -7,7 +7,13 @@ def step(label, fn):
     except Exception as e:
         steps.append(f"{label}=ERR {type(e).__name__}: {e}")
 
-step("import_html", lambda: __import__("browser.html") and "imported")
+# Nothing imports `browser.html`: brython.js registers it as it loads, provided
+# it recognised a DOM. That is what makes `event.target.value` work from Python
+# with no import to remember — checked here in a real browser, and under jsdom by
+# tests/lambdas.test.js.
+import sys
+
+step("preloaded", lambda: "browser.html" in sys.modules)
 
 from browser import document
 

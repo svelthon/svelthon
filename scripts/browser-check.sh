@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# What jsdom cannot cover: Brython's DOM wrapping. `from browser import html`
-# hangs there while it works in a browser, so this check runs inside a headless
-# Chromium.
+# Brython's DOM wrapping, checked where it is real. `browser.html` is registered
+# by brython.js itself, but only by the browser half it installs when it does not
+# think it is running under Node — so what this asserts is that a browser needs
+# no import at all, which is also what globals.js arranges for jsdom.
 set -uo pipefail
 
 PORT=${PORT:-5199}
 URL="http://localhost:$PORT/probe.html"
-EXPECTED='import_html=OK imported | doc=OK DOMNode | create=OK INPUT | tagName=OK INPUT'
+EXPECTED='preloaded=OK True | doc=OK DOMNode | create=OK INPUT | tagName=OK INPUT'
 
 # One profile per launch: two Chromiums back to back fight over the default
 # profile's lock, and the second renders an incomplete page — at random.
@@ -77,14 +78,18 @@ for attempt in 1 2 3; do
 
     missing=()
     for one in "${expected[@]}"; do
-        printf '%s' "$APP" | grep -qF -- "$one" || missing+=("$one")
+        # A here-string rather than a pipe: `grep -q` exits on its first match,
+        # `printf` is then killed by SIGPIPE, and `pipefail` reports the whole
+        # pipeline as failed — so a marker found *early* in the page counted as
+        # missing, at random, depending on how much was left to write.
+        grep -qF -- "$one" <<< "$APP" || missing+=("$one")
     done
 
     [ ${#missing[@]} -eq 0 ] && break
 done
 
 for one in "${expected[@]}"; do
-    if printf '%s' "$APP" | grep -qF -- "$one"; then
+    if grep -qF -- "$one" <<< "$APP"; then
         echo "✓ demo — $one"
     else
         echo "✗ demo — not found: $one"

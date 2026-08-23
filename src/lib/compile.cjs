@@ -394,15 +394,6 @@ function compile(
     // read the name, get the result — minus the memoisation nothing observes.
     const plainDeriveds = plain ? deriveds : [];
     if (plain) deriveds = [];
-
-    // NOTE — traversing a DOM node from Python (`event.target.value`) resolves
-    // the node's class through `$B.imported['browser.html']`, which only a real
-    // import registers; it cannot be done at boot either, since $B.$import reads
-    // $B.frame_obj, null until a module body runs. Injecting the import for any
-    // component with a parameterised handler was considered and dropped: the
-    // module builds a class per HTML tag, which is a real cost for the many
-    // handlers that never touch a node. Components that need it write
-    // `from browser import html`, verified by scripts/browser-check.sh.
     const js = root.to_js();
 
     // Brython derives the namespace identifier from the filename, neutralising

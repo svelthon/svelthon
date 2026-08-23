@@ -339,11 +339,9 @@ describe('Python errors', () => {
 
 describe('events — the boundary with the DOM', () => {
     // The value used to be pulled out of the event by a JavaScript arrow in the
-    // markup. Handlers are Python now, and reading a DOM node's attributes from
-    // Python needs `from browser import html`, which jsdom cannot import — so
-    // what is checked here is that a handler's argument reaches Python, and the
-    // DOM read itself is covered in a real browser.
-    test('a value handed to a handler arrives in Python', () => {
+    // markup. Handlers are Python now, and `event.target.value` is read from
+    // Python — a DOM node given its Python class by Brython's `browser.html`.
+    test('a handler reads the node the event came from', () => {
         const target = render(Events);
         const input = target.querySelector('input');
 
@@ -351,7 +349,7 @@ describe('events — the boundary with the DOM', () => {
         input.dispatchEvent(new window.Event('input', { bubbles: true })); // Svelte delegates
         flushSync();
 
-        expect(target.querySelector('p[data-k="typed"]').textContent).toBe('TYPED');
+        expect(target.querySelector('p[data-k="typed"]').textContent).toBe('HELLO');
     });
 
     test('a handler declaring a parameter receives the wrapped event', () => {

@@ -95,7 +95,8 @@ dict's keys, by contrast, are ordinary enumerable JavaScript properties.
 |---|---|
 | `$B.imported[name]` | module registry; a store publishes its namespace here so component Python can `import` it |
 | `$B.VFS`, `$B.update_VFS(scripts)`, `$B.use_VFS` | entries are `[ext, source, deps, is_package]`; the precomputed `deps` make the transitive closure of a component's imports exact without reparsing |
-| `$B.imported['browser.html']` | consulted to pick a DOM node's Python class from its tagName |
+| `$B.imported['browser.html']` | consulted to pick a DOM node's Python class from its tagName; registered by brython.js itself, but only by its browser half |
+| `$B.isNode` | `typeof process !== 'undefined' && process.release.name === 'node'`, decided at load. It picks which half of brython.js is installed — the browser half is the one that defines `browser.html`, `browser.window` and the DOM wrappers |
 | `browser.aio` | `run(coro, onsuccess, onerror)`, `iscoroutine`, `sleep` |
 
 ## Representation choices SVELTHON relies on
@@ -319,10 +320,11 @@ Not bugs, but each cost real debugging time because the failure gave no clue.
 which is null at that point. It brings the whole runtime down. A guarded error
 naming the cause would save the next person an hour.
 
-**Wrapping a DOM node while `browser.html` is unimported** dies with
+**Wrapping a DOM node while `browser.html` is unregistered** dies with
 `Cannot read properties of undefined (reading 'Symbol(DICT)')`, from
 `$B.module_getattr($B.imported['browser.html'], obj.tagName)`. The message points
-nowhere near the cause, which is a missing import.
+nowhere near the cause, which is that brython.js installed its Node half rather
+than its browser one — see `$B.isNode` below.
 
 **A `type` mismatch message can contradict itself.** A proxied tuple produces
 *requires a 'tuple' object but received a 'tuple'* — accurate about the class

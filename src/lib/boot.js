@@ -3,6 +3,13 @@
 // are already compiled, there is nothing left to find.
 const $B = globalThis.__BRYTHON__;
 
+// globals.js shadowed `process` so that brython.js would see the DOM jsdom
+// provides rather than the Node process behind it. Its load is over.
+if ($B.$svelthonRealProcess) {
+    globalThis.process = $B.$svelthonRealProcess;
+    delete $B.$svelthonRealProcess;
+}
+
 // What brython.js adds to the global scope when it finds no browser.
 const DOM_STUBS = new Set(['document', 'location', 'HTMLElement', 'MutationObserver', 'customElements']);
 
@@ -22,9 +29,3 @@ if (!$B.$svelthon_booted) {
         }
     }
 }
-
-// Traversing a DOM node from Python (`event.target.value`) needs
-// `$B.imported['browser.html']`, which picks a node's Python class from its
-// tagName. It ships inside brython.js but is only registered by a real `import`,
-// and $B.$import cannot run here — it reads $B.frame_obj, null until a module
-// body executes. A component that needs it writes `from browser import html`.

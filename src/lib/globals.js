@@ -30,3 +30,25 @@ globalThis.$B = globalThis.__BRYTHON__;
 // removes whatever it added — but only off a real browser, where these globals
 // belong to the page and are none of our business.
 globalThis.$B.$svelthonGlobalsBefore ??= new Set(Object.getOwnPropertyNames(globalThis));
+
+// brython.js splits itself in two at load time and picks a half from the process
+// alone — `isNode = typeof process !== 'undefined' && process.release.name ===
+// 'node'` (vendor/brython.js:16). The browser half is what builds `browser.html`,
+// the module `$B.get_class` reads to give a DOM node its Python class; the Node
+// half never defines it, and `node.value` from Python then dies inside
+// `get_dict` on an undefined module.
+//
+// jsdom is the case where the question and its test disagree: it provides a DOM
+// *and* a Node process. What brython.js means to ask is whether a DOM exists, so
+// that is the question answered here — by shadowing the process object for the
+// length of the load with one that inherits everything except the name being
+// tested. boot.js puts the real one back.
+if (globalThis.document && globalThis.process?.release?.name === 'node') {
+    const real = globalThis.process;
+    const shadow = Object.create(real);
+
+    Object.defineProperty(shadow, 'release', { value: { ...real.release, name: 'jsdom' } });
+
+    globalThis.$B.$svelthonRealProcess = real;
+    globalThis.process = shadow;
+}

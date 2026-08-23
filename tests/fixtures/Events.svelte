@@ -1,20 +1,21 @@
 <script lang="python">
+# Both handlers are Python, and the first one walks the DOM — `event.target` is
+# a node, and reading `.value` off it goes through Brython's `browser.html`.
+# Nothing imports that module here: brython.js registers it on its own, as long
+# as it recognises a DOM. See globals.js.
 typed = ""
 kind = ""
 
-def on_text(value):
+def on_text(event):
     global typed
-    typed = value.upper()
+    typed = event.target.value.upper()
 
 def on_click(event):
     global kind
     kind = type(event).__name__
 </script>
 
-<!-- Both handlers are Python. Reading the event's own attributes needs
-     `from browser import html`, which jsdom cannot import — so the value comes
-     from a lambda's argument here, and the DOM read is covered in a browser. -->
-<input oninput={lambda: on_text("typed")} />
+<input oninput={on_text} />
 <button onclick={on_click}>click</button>
 
 <p data-k="typed">{typed}</p>

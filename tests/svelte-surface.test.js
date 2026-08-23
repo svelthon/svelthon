@@ -64,9 +64,8 @@ describe('bindings and snippets', () => {
     });
 
     test('bind:this writes the node into a Python name', () => {
-        // A raw DOM node is not a Python object until browser.html is imported
-        // — like event.target. So we observe it with no Python operation: the
-        // rendering falls back to the JavaScript conversion.
+        // The node is observed with no Python operation on it: interpolation
+        // falls back to the JavaScript conversion, which names the constructor.
         expect(render(SvBindings).querySelector('[data-k="thisv"]').textContent).toContain(
             'HTMLParagraph'
         );
