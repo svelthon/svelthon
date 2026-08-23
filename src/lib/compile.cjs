@@ -12,6 +12,14 @@ globalThis.addEventListener ??= () => {}; // idem
 globalThis.__BRYTHON__ ??= {};
 globalThis.$B ??= globalThis.__BRYTHON__; // the codegen's eval() resolves $B globally
 
+// The same snapshot `globals.js` takes, taken here too because this file loads
+// Brython without it. Off a browser, brython.js installs `document`, `location`
+// and three more, and `boot.js` removes whatever it added — by comparing against
+// this set. Recorded too late, the stubs count as pre-existing and survive, and
+// then every library that tests `typeof document` takes the browser path and
+// dies on `window is not defined`.
+globalThis.$B.$svelthonGlobalsBefore ??= new Set(Object.getOwnPropertyNames(globalThis));
+
 require('../../vendor/brython.js');
 
 const $B = globalThis.__BRYTHON__;
