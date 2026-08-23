@@ -319,7 +319,23 @@ export function svelthon() {
             // `#lib/peps.py` — belongs to whoever defined the alias, and reaches
             // load() as an absolute path once they have.
             if (id.endsWith('.py') && (id.startsWith('.') || id.startsWith('/'))) {
-                return importer ? resolve(dirname(importer), id) : resolve(id);
+                const direct = importer ? resolve(dirname(importer), id) : resolve(id);
+                if (existsSync(direct)) return direct;
+
+                // A leading slash means two different things. An alias has
+                // already produced a real filesystem path; SvelteKit's own route
+                // entries are relative to the **project root** —
+                // `/src/routes/+page.server.py` — which no filesystem has. Note
+                // that `resolve(dir, '/x')` ignores `dir` entirely, so having an
+                // importer does not help here: only trying the file tells the
+                // two apart, and getting it wrong reads as
+                // `ENOENT: stat '/src/routes/+page.server.py'`.
+                if (id.startsWith('/')) {
+                    const fromRoot = resolve(process.cwd(), `.${id}`);
+                    if (existsSync(fromRoot)) return fromRoot;
+                }
+
+                return direct;
             }
         },
         load(id) {

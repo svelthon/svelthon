@@ -45,6 +45,12 @@ const namespaceFor = (filename) => filename.replace(/\./g, '_');
 // A Brython exception carries neither `message` nor `stack`, so a Python syntax
 // error would reach Vite as an empty object and be reported as nothing at all.
 function pythonError(error, source, lineOffset) {
+    // A JavaScript Error is not ours to describe: it already carries a message
+    // and a stack, and wrapping it produced the useless
+    // `JSObject: <Javascript object: [object Error]>` — which hid what actually
+    // went wrong behind our own formatting.
+    if (error instanceof Error) return error;
+
     let described = 'PythonError';
     let where = source;
 
