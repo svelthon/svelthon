@@ -196,18 +196,20 @@ est donc compilé avec les noms qu'il peut réellement voir. Une clé et un `{#k
 se comparent par `repr()` — Svelte comparerait des identités, et aucune valeur
 Python n'en conserve : un `(1, 2)` reconstruit est un autre objet.
 
-**Les directives gardent la langue de l'hôte**, parce qu'elles portent un rappel
-ou une valeur JavaScript, pas un rendu :
+**Les directives prennent du Python aussi.** Un gestionnaire est un `lambda`,
+`class:` se lit avec la vérité de Python, et une liaison nomme quelque chose à
+quoi Python sait affecter :
 
 ```svelte
-<input oninput={(e) => on_text(e.target.value)} bind:value={name} use:action />
+<input oninput={lambda e: on_text(e.target.value)} bind:value={row["label"]} use:action={opts} />
 ```
 
-La règle : `on*`, `bind:`, `use:`, `class:`, `style:` et la famille des
-transitions restent en JavaScript ; tout autre attribut, prop de composant
-compris, est du Python — de même que le raccourci `{nom}` et l'étalement
-`{...attrs}`, développés pour que la lecture passe par le namespace au lieu de
-le contourner.
+La règle : tout est du Python dans un gabarit — chaque attribut, prop de
+composant compris, la valeur de chaque directive, ainsi que le raccourci `{nom}`
+et l'étalement `{...attrs}`, développés pour que la lecture passe par le
+namespace au lieu de le contourner. `bind:group` est la seule exception, et elle
+vient de Svelte : il y veut un identifiant ou une expression membre, jamais une
+paire — un nom simple y marche, rien d'autre.
 
 **Le langage du gabarit suit le langage du script, sans troisième mode.** Un
 composant sans `lang="python"` est un composant JavaScript et le reste, même
@@ -269,9 +271,12 @@ namespace : **Svelte découvre les dépendances tout seul**, rien à déclarer. 
 `@derived` peut en lire un autre. Il doit être **pur** — écrire de l'état dans un
 dérivé est refusé par Svelte, à juste titre.
 
-`bind:` ne demande rien : un nom d'état est un `let` réactif ordinaire, donc
-`bind:value={name}` fonctionne dans les deux sens et Python relit la valeur
-saisie.
+`bind:` doit lire *et* écrire, ce qu'aucune expression ne fait seule : sa valeur
+est donc compilée deux fois — en expression, puis en cible d'affectation — pour
+former la paire que Svelte accepte précisément pour ça
+(`bind:value={() => v, (n) => v = n}`). C'est ce qui fait marcher
+`bind:value={row.label}` sur un dictionnaire : le point trouve la clé à l'aller
+et y écrit au retour.
 
 `bindable()` sur une annotation déclare un prop bidirectionnel — l'enfant peut y
 écrire et la variable du parent suit :

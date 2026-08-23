@@ -43,19 +43,24 @@ export function overMarkup(content, transform) {
     return out + transform(content.slice(cut));
 }
 
-// The one directive that genuinely needs the host language.
-//
-// `bind:value={name}` wants an *assignable reference*, not an expression:
-// Svelte compiles it to a getter and a setter, and a call has no setter. Which
-// also means the question of language barely arises — a reference is a name,
-// and a name is written the same way in both. The gap is `bind:value={obj.field}`,
-// a member expression, and so JavaScript's.
+// `bind:` needs to read *and* write, which no single expression can do. Svelte
+// takes a pair for exactly that — `bind:value={() => v, (n) => v = n}` — so the
+// value is compiled twice: once as an expression, once as an assignment target.
+// A bare name barely notices, being written the same way in both languages; what
+// this buys is `bind:value={row.name}`, a member expression that used to be
+// JavaScript's and silently missed a dict.
 //
 // Everything else that used to sit here — `use:`, the transition family,
-// `class:`, `style:` — takes an ordinary *value*, and now takes a Python one.
-// `use:action={opts}` and `transition:fly={opts}` name their function in the
-// directive, never in the value, so there was nothing in the way.
+// `class:`, `style:` — takes an ordinary *value*, and takes a Python one.
 const DIRECTIVE = /^bind:/;
+
+// The one exception, and Svelte's own: `bind:group` refuses the pair and insists
+// on an identifier or a member expression. A bare name still works — it is the
+// same word in both languages — and `bind:group={obj.field}` stays JavaScript.
+const GROUP_DIRECTIVE = /^bind:group\b/;
+
+// The setter's parameter. Generated, so it only has to avoid the author's names.
+const BOUND_VALUE = '__value';
 
 // A handler takes a *callable*, and Python's is `lambda`. So its value is
 // compiled as Python like everything else, and what the expression yields is
@@ -165,6 +170,16 @@ export function pythonExpressions(markup, collect) {
         return `${name}(${args.map((arg) => `follow(${arg})`).join(', ')})`;
     };
 
+    // The write half of a binding: the same text, compiled as an assignment
+    // target rather than as an expression.
+    const assign = (expr) => {
+        const args = inScope();
+        const name = collect(expr.trim(), '', args, true);
+        const rest = args.map((arg) => `follow(${arg})`);
+
+        return `${name}(${[BOUND_VALUE, ...rest].join(', ')})`;
+    };
+
     while (index < markup.length) {
         const char = markup[index];
 
@@ -197,12 +212,15 @@ export function pythonExpressions(markup, collect) {
                     const trimmed = inner.trim();
 
                     if (attribute) {
-                        // Three cases. A directive that needs the host language
-                        // keeps its text. A handler is Python, and what it
-                        // yields is made callable from JavaScript. Everything
-                        // else — a component prop included — is Python.
-                        if (DIRECTIVE.test(attribute[1])) {
+                        // A binding becomes a read/write pair; `bind:group` is
+                        // the one Svelte will not take a pair for and keeps its
+                        // text. A handler is Python, and what it yields is made
+                        // callable from JavaScript. Everything else — a
+                        // component prop included — is Python.
+                        if (GROUP_DIRECTIVE.test(attribute[1])) {
                             out += markup.slice(index, end + 1);
+                        } else if (DIRECTIVE.test(attribute[1])) {
+                            out += `{() => ${call(inner, '')}, (${BOUND_VALUE}) => ${assign(inner)}}`;
                         } else if (HANDLER.test(attribute[1])) {
                             out += `{${EVENT_WRAPPER}(${call(inner, '')})}`;
                         } else if (CLASS_DIRECTIVE.test(attribute[1])) {
@@ -396,15 +414,33 @@ export function moduleImports(content) {
 export function collector(defs) {
     const seen = new Map();
 
-    return (expression, wrapper, args) => {
-        const key = `${wrapper}|${args.join(',')}|${expression}`;
+    return (expression, wrapper, args, assign = false) => {
+        const key = `${assign ? 'set' : 'get'}|${wrapper}|${args.join(',')}|${expression}`;
         if (seen.has(key)) return seen.get(key);
 
-        const name = `__expr_${defs.length}`;
+        // Both kinds keep the `__expr_` prefix: it is what makes the generated
+        // wrapper evaluate them the way a template expression is evaluated.
+        const name = `__expr_${assign ? 'set_' : ''}${defs.length}`;
         seen.set(key, name);
-        defs.push(
-            `def ${name}(${args.join(', ')}):\n    return ${wrapper ? `${wrapper}(${expression})` : expression}`
-        );
+
+        if (assign) {
+            // A module name assigned inside a function is local unless declared
+            // — Python's rule, and the binding would otherwise write into a
+            // frame nobody reads. A block's own name is already a parameter.
+            const bare = /^[A-Za-z_]\w*$/.test(expression) && !args.includes(expression);
+
+            defs.push(
+                [
+                    `def ${name}(${[BOUND_VALUE, ...args].join(', ')}):`,
+                    ...(bare ? [`    global ${expression}`] : []),
+                    `    ${expression} = ${BOUND_VALUE}`
+                ].join('\n')
+            );
+        } else {
+            defs.push(
+                `def ${name}(${args.join(', ')}):\n    return ${wrapper ? `${wrapper}(${expression})` : expression}`
+            );
+        }
 
         return name;
     };

@@ -196,17 +196,19 @@ each is compiled against the names it can actually see. A key and `{#key}` compa
 by `repr()`: identity is what Svelte would use, and no Python value keeps one —
 `(1, 2)` rebuilt is a different object.
 
-**Directives keep the host language**, because they carry a callback or a
-JavaScript value rather than a rendering:
+**Directives take Python as well.** A handler is a `lambda`, `class:` is read for
+Python's truthiness, and a binding names something Python can assign to:
 
 ```svelte
-<input oninput={(e) => on_text(e.target.value)} bind:value={name} use:action />
+<input oninput={lambda e: on_text(e.target.value)} bind:value={row["label"]} use:action={opts} />
 ```
 
-The rule: `on*`, `bind:`, `use:`, `class:`, `style:` and the transition family
-stay JavaScript; every other attribute, component prop included, is Python — and
-so are the shorthand `{name}` and the spread `{...attrs}`, which are expanded so
-that the read goes through the namespace rather than around it.
+The rule: everything in a template is Python — every attribute, component prop
+included, every directive's value, and the shorthand `{name}` and the spread
+`{...attrs}`, which are expanded so that the read goes through the namespace
+rather than around it. `bind:group` is the one exception, and Svelte's own: it
+takes an identifier or a member expression, never a pair, so a bare name works
+there and nothing else does.
 
 **The template language follows the script language, with no third mode.** A
 component without `lang="python"` is a JavaScript component and stays one, even
@@ -265,8 +267,11 @@ the dependencies by itself** — nothing to declare. A `@derived` may read anoth
 It must be **pure**: writing state inside a derived is rejected by Svelte, and
 rightly so.
 
-`bind:` needs no support code at all: a state name is an ordinary reactive `let`,
-so `bind:value={name}` works both ways and Python reads back what was typed.
+`bind:` has to read *and* write, which no single expression does, so its value is
+compiled twice — once as an expression, once as an assignment target — into the
+pair Svelte takes for exactly this (`bind:value={() => v, (n) => v = n}`). That
+is what makes `bind:value={row.label}` work on a dict: the dot finds the key on
+the way in and writes to it on the way out.
 
 `bindable()` on an annotation declares a two-way prop — the child may write to
 it and the parent's own variable follows:
@@ -940,8 +945,8 @@ reloads.
   which point it is a dialect rather than a familiar syntax.
 
 
-**Design notes** — [notes/directives.md](notes/directives.md) on why a directive's
-value stays JavaScript and what moving `on*` to Python would involve, and
+**Design notes** — [notes/directives.md](notes/directives.md) on the four ways a
+directive's value becomes Python, and the two things left over, and
 [notes/dicts-and-objects.md](notes/dicts-and-objects.md) on what a dict and a class
 instance each cost at the boundary — measured side by side, and backed by
 `tests/shapes.test.js` — and [notes/one-interpreter.md](notes/one-interpreter.md)

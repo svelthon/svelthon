@@ -787,6 +787,7 @@ const MISSING = Symbol('svelthon.missing');
 export function inTemplate(run) {
     const $B = globalThis.__BRYTHON__;
     const original = $B.$getattr_pep657;
+    const originalSet = $B.$setattr1;
 
     $B.$getattr_pep657 = (obj, attr, inum) => {
         // With a default, so a miss costs no exception — building one on every
@@ -803,10 +804,29 @@ export function inTemplate(run) {
         return original(obj, attr, inum);
     };
 
+    // `bind:value={row.label}` writes where the same dot read from. Without
+    // this the read finds the key and the write sets a JavaScript property on
+    // the dict — no error, no effect, and the field snaps back on the next
+    // render. Only where the read already succeeded: an *existing* key. What a
+    // missing one should do is still open, so it keeps Python's own answer.
+    $B.$setattr1 = (obj, attr, value, inum) => {
+        if ($B.$getattr(obj, attr, MISSING) === MISSING) {
+            try {
+                $B.$getitem(obj, attr);
+                return $B.$setitem(obj, attr, value);
+            } catch {
+                /* no such key: the real assignment decides */
+            }
+        }
+
+        return originalSet(obj, attr, value, inum);
+    };
+
     try {
         return run();
     } finally {
         $B.$getattr_pep657 = original;
+        $B.$setattr1 = originalSet;
     }
 }
 

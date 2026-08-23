@@ -1,91 +1,78 @@
-# Directives keep the host language
+# Directives take Python
 
-*Open. Nothing has been decided; this note records what is true today, what it
-costs, and what changing it would involve.*
+*Closed, but for one line that belongs to Svelte and one question that belongs to
+the project.*
 
-## What happens
+## Where it stands
 
-A directive's value is handed to Svelte untouched, as JavaScript. Everything else
-in the markup — text interpolations, attribute values, block iterables, keys,
-`{@const}`, `{@html}` — is compiled as Python.
-
-```svelte
-<button onclick={toggle}>            <!-- works -->
-<button onclick={lambda: choose(x)}> <!-- does not compile -->
-<p class:many={flag}>                <!-- works -->
-<p class:many={len(items) > 2}>      <!-- does not compile -->
-<p style:color={"red" if flag else "blue"}>   <!-- does not compile -->
-```
-
-The rule lives in one regular expression in `src/lib/svelthon.js`:
-
-```js
-const DIRECTIVE = /^(?:on[a-z]|(?:on|use|bind|transition|animate|in|out|class|style):)/;
-```
-
-The failures above are JavaScript parse errors, raised by Svelte's own parser
-after our preprocessor has left the expression alone — so the message names a
-token, not the seam.
-
-## Why the bare names work
-
-`onclick={toggle}` and `class:many={flag}` are not exceptions to the rule; they
-are Python that happens to be valid JavaScript *and* to name something the
-generated component declares. `compile.cjs` emits a JavaScript `const` for every
-exported Python function — the wrapper that trims arity, converts arguments and
-converts the return — and a `let` for every state name. So a bare identifier
-resolves. An expression does not.
-
-That is why the seam is invisible until the day you write a per-item handler in a
-loop, which is exactly where it was found.
-
-## The list splits in two
-
-**Genuinely JavaScript, and should stay:**
-
-- `bind:value={name}` needs an *assignable reference*, not an expression.
-  Compiling it to a call would break the write-back half of the binding.
-- `use:action={options}` — the action is a JavaScript function Svelte calls with
-  the node.
-- `transition:`, `in:`, `out:`, `animate:` — same, plus an options object.
-
-**Ordinary values, which could be Python:**
-
-- `class:name={…}` and `style:prop={…}` take a value, evaluated for truthiness or
-  stringified. There is no reason it must be JavaScript.
-- `on*={…}` takes a *callable*. Python's is `lambda`, and the boundary that makes
-  a Python callable safe for JavaScript already exists: `pyHandler` in
-  `runtime.js` reads the signature from Brython's `$function_infos`, trims the
-  arity and converts the arguments. It was written for remote functions.
-
-## The cost of leaving it
-
-A Python component contains JavaScript:
+Every directive's value is compiled as Python, like every other expression in a
+template. What used to be the seam — a Python component containing a JavaScript
+arrow — is gone:
 
 ```svelte
-<button onclick={() => choose(one)}>{one}</button>
+<button onclick={lambda: choose(one)}>{one}</button>
+<p class:many={len(items) > 2}>
+<p style:color={"red" if flag else "blue"}>
+<div use:action={{"delay": 200}}>
+<div transition:fly={{"y": 20}}>
+<input bind:value={row["label"]}>
 ```
 
-That is the documented workaround, used by `tests/fixtures/Events.svelte` since
-the beginning and by the DaisyUI page in the demo. It works, and it contradicts
-the project's own rule that a `.py` should behave like a `.ts` — a TypeScript
-component does not contain a second language.
+Four mechanisms, not one, because the directives do not all take the same kind of
+thing.
 
-## What changing it would involve
+**A handler takes a callable.** `on*` compiles as Python and what the expression
+yields is wrapped for JavaScript by `pyEvent`, which reads the signature Brython
+recorded in `$function_infos`, trims the call to the declared arity and converts
+the arguments. That is what lets `lambda: choose(pep)` ignore the DOM event it is
+handed while `lambda e: read(e.target.value)` receives it. The wrapper is named
+`__event` in the markup pass and emitted by the compiler, which is what carries
+the component's line offset — the markup pass runs too early to know it.
 
-Move `on*`, `class:` and `style:` out of `DIRECTIVE` so their values compile as
-Python expressions, then wrap what an `on*` yields in `pyHandler` before handing
-it to Svelte. `onclick={toggle}` keeps working: the compiled expression returns
-the same wrapper it returns today.
+**`class:` takes a truth value**, so it goes through `__truthy`: an empty list is
+false here and true in JavaScript, exactly as in `{#if}`. `style:` takes a value
+and is stringified like any other.
 
-Two things to check rather than assume:
+**`use:` and the transition family name their function in the directive**, never
+in the value — `use:action={options}`, `transition:fly={options}`. So the value
+is an ordinary options object, and a Brython dict already exposes its keys as
+JavaScript properties. There was nothing in the way.
 
-- Svelte's parser reads a directive value as an expression at *parse* time; the
-  compiled form `__expr_0(follow(one))` is a call expression, which is fine
-  syntactically, but `class:` and `style:` are also read by the CSS pruning pass.
-- An `on*` value is compared by identity when Svelte updates an element. A
-  wrapper built fresh on every read would detach and reattach the listener on
-  every render, exactly as `jsCall` would have done before it was memoised.
+**`bind:` reads and writes**, which no single expression does. Svelte takes a
+pair for exactly that — `bind:value={() => v, (n) => v = n}`, since 5.9 — so the
+value is compiled twice: once as an expression, once as an assignment target. A
+bare name barely notices, being the same word in both languages; what it buys is
+`bind:value={row.label}`, which used to be a JavaScript member expression and
+silently missed a dict.
 
-`bind:` stays as it is, and that asymmetry then needs saying in the README: three
-directives out of eight are Python, five are not.
+The setter is generated, not written, so Python's one-expression rule for
+`lambda` does not apply to it: the compiler emits a `def`, with a `global` when
+the target is a module name — otherwise the assignment would land in a frame
+nobody reads.
+
+## The one exception
+
+`bind:group` refuses the pair:
+
+```
+`bind:group` can only bind to an Identifier or MemberExpression
+```
+
+So it keeps its text. A bare name works there, because a name is written the same
+way in both languages; `bind:group={obj.field}` is JavaScript's member expression
+and misses a dict, as all of them used to.
+
+## The one open question
+
+A template expression's dot finds a key as well as an attribute, and the write
+has to land where the read came from — otherwise `bind:value={sizes.width}` reads
+the key and writes a JavaScript property onto the dict: no error, no effect, and
+the field snaps back on the next render. That was measured, not assumed.
+
+`inTemplate` therefore swaps `$B.$setattr1` alongside `$B.$getattr_pep657`, and
+redirects the write to the item **only where the read already succeeded** — an
+existing key.
+
+What a *missing* key should do is undecided, and deliberately so: creating one on
+write is a real choice, and Jinja has no opinion to lend us since it never
+writes. Until then it keeps Python's own answer.
