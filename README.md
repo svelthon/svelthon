@@ -944,7 +944,8 @@ reloads.
 value stays JavaScript and what moving `on*` to Python would involve, and
 [notes/dicts-and-objects.md](notes/dicts-and-objects.md) on what a dict and a class
 instance each cost at the boundary — measured side by side, and backed by
-`tests/shapes.test.js`.
+`tests/shapes.test.js` — and [notes/one-interpreter.md](notes/one-interpreter.md)
+on why Brython loads twice in one process and what it would take to load it once.
 
 **Coming from Django or Flask?** [DJANGO.md](DJANGO.md) maps every everyday
 template construct onto its Svelthon counterpart — the whole translation fits on
