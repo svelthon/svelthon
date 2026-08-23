@@ -210,6 +210,28 @@ rather than around it. `bind:group` is the one exception, and Svelte's own: it
 takes an identifier or a member expression, never a pair, so a bare name works
 there and nothing else does.
 
+**A handler that assigns is written with the walrus.** `onclick={() => (open =
+!open)}` is the commonest line in a Svelte template, and Python has no short twin
+for it: a `lambda` holds an expression, and `open = not open` is a statement.
+`(open := not open)` *is* an expression — Python's own answer to this exact
+problem — so that is the spelling:
+
+```svelte
+<button onclick={lambda: (open := not open)}>menu</button>
+<button onclick={lambda: (count := count + 1)}>+1</button>
+{#each tabs as one}
+    <button onclick={lambda: (tab := one)}>{one}</button>
+{/each}
+```
+
+The meaning is bent, deliberately: PEP 572 binds in the enclosing *function*, and
+a lambda is one, so plain Python would write into a scope that dies with the
+call — silently. In a template the walrus writes the component's name, through
+the namespace and therefore through the signal. It is the fifth thing a template
+expression means differently from a script, after `__truthy`, `__text`, `__seq`
+and `__spread`, and it applies to handlers only: a render must not write state,
+and Svelte says so itself.
+
 **The template language follows the script language, with no third mode.** A
 component without `lang="python"` is a JavaScript component and stays one, even
 when it imports a `.py` store: its `{value}` is Svelte's `{value}`, and a Python

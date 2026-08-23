@@ -29,6 +29,23 @@ handed while `lambda e: read(e.target.value)` receives it. The wrapper is named
 `__event` in the markup pass and emitted by the compiler, which is what carries
 the component's line offset — the markup pass runs too early to know it.
 
+**A handler that assigns takes the walrus.** `onclick={() => (open = !open)}` has
+no short Python twin — a `lambda` holds an expression, `open = not open` is a
+statement — and `(open := not open)` is the only assignment Python allows inside
+an expression. Its own meaning is useless here: PEP 572 binds in the enclosing
+function, a lambda is one, so the write dies with the call, silently. Measured
+before it was changed: the click ran, the value did not move, nothing was
+reported.
+
+So the markup pass rewrites a parenthesised walrus into `__assign("name", value)`
+— pure string work, in `markup.js`, because `py2js` hands back a *copy* of the
+AST and mutating it changes nothing in the generated code (measured too).
+`__assign` writes through the namespace, so through the accessor, so the signal
+fires. Handlers only: a render must not write state, and Svelte rejects it.
+
+`f(x := 1)` keeps Python's meaning — a temporary the call consumes — because the
+rewrite requires the parentheses Python's own grammar forces in a lambda.
+
 **`class:` takes a truth value**, so it goes through `__truthy`: an empty list is
 false here and true in JavaScript, exactly as in `{#if}`. `style:` takes a value
 and is stringified like any other.

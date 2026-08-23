@@ -27,6 +27,86 @@ function closingBrace(source, start) {
     return -1;
 }
 
+// The ')' closing the '(' that opens at `start`, ignoring parentheses inside
+// string literals.
+function closingParen(source, start) {
+    let depth = 0;
+    let quote = null;
+
+    for (let i = start; i < source.length; i++) {
+        const c = source[i];
+
+        if (quote) {
+            if (c === '\\') i++;
+            else if (c === quote) quote = null;
+            continue;
+        }
+
+        if (c === '"' || c === "'") quote = c;
+        else if (c === '(') depth++;
+        else if (c === ')' && --depth === 0) return i;
+    }
+
+    return -1;
+}
+
+const WALRUS = /^\s*([A-Za-z_]\w*)\s*:=\s*/;
+
+// `(name := value)` is the one assignment Python allows inside an expression,
+// and therefore the only one a `lambda` can hold — which is exactly what a
+// handler needs, since `onclick={() => (open = !open)}` has no Python twin.
+//
+// Its own meaning is useless here: PEP 572 binds in the enclosing *function*,
+// and a lambda is one, so the write dies with the call — silently, which is
+// worse than an error. A template is not plain Python either; it already has
+// `{#if}`, `{:else}` and four implicit wrappers. So here the walrus writes the
+// component's name, through the namespace and therefore through the signal.
+//
+// Only the parenthesised form, which is the one Python's own grammar forces in
+// a lambda. `f(x := 1)` keeps its meaning: a temporary the call consumes.
+export function walrus(expression) {
+    let out = '';
+    let index = 0;
+    let quote = null;
+
+    while (index < expression.length) {
+        const char = expression[index];
+
+        if (quote) {
+            out += char;
+            if (char === '\\') out += expression[++index] ?? '';
+            else if (char === quote) quote = null;
+            index++;
+            continue;
+        }
+
+        if (char === '"' || char === "'") {
+            quote = char;
+            out += char;
+            index++;
+            continue;
+        }
+
+        if (char === '(') {
+            const found = expression.slice(index + 1).match(WALRUS);
+            const close = found ? closingParen(expression, index) : -1;
+
+            if (close !== -1) {
+                const value = expression.slice(index + 1 + found[0].length, close);
+
+                out += `__assign("${found[1]}", ${walrus(value)})`;
+                index = close + 1;
+                continue;
+            }
+        }
+
+        out += char;
+        index++;
+    }
+
+    return out;
+}
+
 // Only the markup, never a <script> or <style> body — Python is full of braces
 // (dict literals, f-strings) and rewriting them would be catastrophic.
 export function overMarkup(content, transform) {
@@ -222,7 +302,11 @@ export function pythonExpressions(markup, collect) {
                         } else if (DIRECTIVE.test(attribute[1])) {
                             out += `{() => ${call(inner, '')}, (${BOUND_VALUE}) => ${assign(inner)}}`;
                         } else if (HANDLER.test(attribute[1])) {
-                            out += `{${EVENT_WRAPPER}(${call(inner, '')})}`;
+                            // A handler is the one place a template expression
+                            // is allowed to write: it runs on an event, not
+                            // during a render — where Svelte rejects a write to
+                            // state, and rightly so.
+                            out += `{${EVENT_WRAPPER}(${call(walrus(inner), '')})}`;
                         } else if (CLASS_DIRECTIVE.test(attribute[1])) {
                             out += `{${call(inner, '__truthy')}}`;
                         } else {

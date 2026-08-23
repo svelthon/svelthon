@@ -2,10 +2,10 @@ import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from 'svelte';
 import Bound from './fixtures/Bound.svelte';
 
-// Un nom d'état est un `let` réactif ordinaire, donc `bind:` fonctionne sans que
-// SVELTHON ait à s'en mêler : Svelte écrit dans le signal, Python le relit par
-// l'accesseur du namespace. (Un *prop* est un $derived, donc en lecture seule —
-// c'est déjà la règle de Svelte pour les props non `$bindable`.)
+// A binding on a bare name, the simplest target there is: the value is compiled
+// as an expression and as an assignment, and both are the same word. (A *prop* is
+// a $derived, hence read-only — already Svelte's own rule for props that are not
+// `$bindable`.) Other targets are in `bind-targets.test.js`.
 describe('bind:', () => {
     const setup = () => {
         const t = document.body.appendChild(document.createElement('div'));
@@ -20,13 +20,13 @@ describe('bind:', () => {
         };
     };
 
-    test('la valeur initiale vient de Python', () => {
+    test('the initial value comes from Python', () => {
         const { input, echo } = setup();
         expect(input.value).toBe('ada');
         expect(echo()).toBe('ada/0');
     });
 
-    test('la saisie remonte jusqu’à Python', () => {
+    test('typing travels up to Python', () => {
         const { input, echo, shout } = setup();
 
         input.value = 'grace';
@@ -34,11 +34,11 @@ describe('bind:', () => {
         flushSync();
         expect(echo()).toBe('grace/0');
 
-        shout(); // name.upper() en Python, sur la valeur saisie
+        shout(); // name.upper() in Python, on the typed value
         expect(echo()).toBe('GRACE/0');
     });
 
-    test('une écriture Python redescend dans le champ', () => {
+    test('a Python write comes back down into the field', () => {
         const { input, shout } = setup();
 
         shout();

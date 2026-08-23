@@ -499,6 +499,10 @@ function compile(
         ...[...funcs, ...plainDeriveds].map((f) => `let ${fn(f.name)};`),
         ``,
         `const __event = (fn) => pyEvent(fn, ${lineOffset});`,
+        // What `(name := value)` in a handler compiles to. The write goes
+        // through the namespace, so it goes through the accessor, so the signal
+        // fires — which is the whole reason the walrus can mean this here.
+        `const __assign = (name, value) => { ${NS}[name] = value; return value; };`,
         `const __proto = {};`,
         ...state.map((n) => `bind(__proto, '${n}', () => ${n}, (v) => { ${n} = v; });`),
         ...funcs.map(
@@ -509,13 +513,14 @@ function compile(
         ),
         ...injections(declared, false),
 
-        // The four a compiled template expression calls. Always injected, never
+        // The five a compiled template expression calls. Always injected, never
         // guarded: an author who shadowed one would silently take over every
         // interpolation in their own markup.
         `bind(__proto, '__truthy', () => __pybridge.truthy, () => {});`,
         `bind(__proto, '__text', () => __pybridge.str, () => {});`,
         `bind(__proto, '__seq', () => __pybridge.seq, () => {});`,
         `bind(__proto, '__spread', () => __pybridge.spread, () => {});`,
+        `bind(__proto, '__assign', () => __assign, () => {});`,
         // Wrapped once, not on every read: a name Python compares by identity —
         // `handler is on_click` — has to answer the same object twice.
         ...[...new Set(jsImported)]
@@ -617,6 +622,10 @@ function compile(
         ]),
         ``,
         `const __event = (fn) => pyEvent(fn, ${lineOffset});`,
+        // What `(name := value)` in a handler compiles to. The write goes
+        // through the namespace, so it goes through the accessor, so the signal
+        // fires — which is the whole reason the walrus can mean this here.
+        `const __assign = (name, value) => { ${NS}[name] = value; return value; };`,
         `const __proto = {};`,
         // Python may write to a prop; the write lands in the local fallback and
         // is shadowed for as long as the parent supplies a value, which is
@@ -672,6 +681,7 @@ function compile(
         `bind(__proto, '__text', () => __pybridge.str, () => {});`,
         `bind(__proto, '__seq', () => __pybridge.seq, () => {});`,
         `bind(__proto, '__spread', () => __pybridge.spread, () => {});`,
+        `bind(__proto, '__assign', () => __assign, () => {});`,
         // Wrapped once, not on every read: a name Python compares by identity
         // has to answer the same object twice.
         ...[...new Set([...jsImported, ...jsNames])]

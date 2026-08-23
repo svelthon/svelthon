@@ -211,6 +211,28 @@ namespace au lieu de le contourner. `bind:group` est la seule exception, et elle
 vient de Svelte : il y veut un identifiant ou une expression membre, jamais une
 paire — un nom simple y marche, rien d'autre.
 
+**Un gestionnaire qui affecte s'écrit avec le morse.** `onclick={() => (open =
+!open)}` est la ligne la plus courante d'un gabarit Svelte, et Python n'en a pas
+d'équivalent court : un `lambda` tient une expression, et `open = not open` est
+une instruction. `(open := not open)`, elle, *est* une expression — la réponse de
+Python à ce problème précis — donc c'est l'écriture retenue :
+
+```svelte
+<button onclick={lambda: (open := not open)}>menu</button>
+<button onclick={lambda: (count := count + 1)}>+1</button>
+{#each tabs as one}
+    <button onclick={lambda: (tab := one)}>{one}</button>
+{/each}
+```
+
+Le sens est infléchi, délibérément : PEP 572 lie dans la fonction englobante, et
+un `lambda` en est une, donc le Python ordinaire écrirait dans une portée qui
+meurt avec l'appel — sans rien dire. Dans un gabarit, le morse écrit le nom du
+composant, par le namespace et donc par le signal. C'est la cinquième chose
+qu'une expression de gabarit dit autrement qu'un script, après `__truthy`,
+`__text`, `__seq` et `__spread`, et elle ne vaut que pour les gestionnaires : un
+rendu ne doit pas écrire d'état, et Svelte le dit lui-même.
+
 **Le langage du gabarit suit le langage du script, sans troisième mode.** Un
 composant sans `lang="python"` est un composant JavaScript et le reste, même
 s'il importe un store `.py` : son `{valeur}` est le `{valeur}` de Svelte, et une
