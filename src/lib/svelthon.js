@@ -222,7 +222,30 @@ export function vendorQuirks() {
                 patched = patched.split(patch.find).join(patch.replace);
             }
 
-            return { code: patched, map: null };
+            // One interpreter per process.
+            //
+            // The compiler loads Brython through `require`, and a server-rendered
+            // component loads it again through `import` — Node keeps those as two
+            // instances of the same file, so the second run rebuilds `$B.ast` and
+            // the classes the compiler is already holding lose their `to_js`.
+            // Compiling a `.py` after that dies on `ast_root.to_js is not a
+            // function`, naming nothing that would lead you here.
+            //
+            // Two instances are not fatal by themselves — the test suite has them
+            // and stays green. What is fatal is the *order*: the second run
+            // landing between two compilations. This makes the order stop
+            // mattering. Only the served copy is guarded, so the one the compiler
+            // requires is always the one that wins, and the runtime shares it.
+            //
+            // `var` keeps its module scope inside a block, which is what lets the
+            // whole file be wrapped without touching a line of it.
+            const guarded = [
+                'if (!(globalThis.__BRYTHON__ && globalThis.__BRYTHON__.ast)) {',
+                patched,
+                '}'
+            ].join('\n');
+
+            return { code: guarded, map: null };
         }
     };
 }
