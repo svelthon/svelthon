@@ -231,35 +231,44 @@ meurt avec l'appel — sans rien dire. Dans un gabarit, le morse écrit le nom d
 composant, par le namespace et donc par le signal. Elle ne vaut que pour les
 gestionnaires : un rendu ne doit pas écrire d'état, et Svelte le dit lui-même.
 
-### Les sept choses qu'un gabarit fait et qu'un script ne fait pas
+### Les deux endroits où un gabarit n'est pas du Python
 
-Le même texte veut dire la même chose des deux côtés, à sept exceptions près.
-Cinq sont des conversions appliquées à ce que l'expression rend ; deux infléchissent
-le sens de Python. C'est toute la différence — il n'y en a pas de huitième.
+Tout ce qu'un gabarit lit est compilé en Python et veut dire ce que Python veut
+dire. Deux choses non, et les deux sont délibérées :
 
-| | Où | Ce qui change | Pourquoi |
+| | Où | Python ferait | Un gabarit fait |
 |---|---|---|---|
-| `__truthy` | `{#if}`, `{:else if}`, `class:` | la vérité de Python, pas celle de JavaScript | `[]`, `{}` et `0.0` sont faux en Python et vrais en JavaScript |
-| `__text` | `{x}`, `{@html}`, `class="a {x}"` | `str(x)`, pas `String(x)` | `None` rendrait `[object Object]`, une liste `1,2` au lieu de `[1, 2]` |
-| `__seq` | l'itérable d'un `{#each}` | `list(x)` | un dict, un `range`, un générateur, `.items()` : aucun n'est un tableau JavaScript |
-| `__spread` | `{...attrs}` | une copie de surface | Svelte compare au rendu précédent par identité, donc un dict muté paraîtrait inchangé |
-| `repr()` | `{#key x}` et la clé d'un `{#each}` | comparaison par `repr(x)` | Svelte compare par identité, et aucune valeur Python n'en garde une — un `(1, 2)` reconstruit est un autre objet |
-| le point | toute expression | `d.k` lit une clé aussi bien qu'un attribut, et `bind:` écrit au même endroit | la règle de Jinja, celle que l'auteur de gabarits connaît déjà ; un vrai attribut l'emporte toujours |
-| le morse | gestionnaires seulement | `(x := v)` écrit le nom du composant | un `lambda` ne tient qu'une expression, donc c'est la seule affectation qu'il puisse contenir — et le sens propre de PEP 572 écrirait dans une portée qui meurt avec l'appel |
+| le point | toute expression | `d.k` sur un dict lève `AttributeError` | il trouve aussi la clé, et `bind:` réécrit au même endroit — la règle de Jinja, un vrai attribut l'emportant toujours |
+| le morse | gestionnaires seulement | `(x := v)` dans un `lambda` lie un local qui meurt avec l'appel | il écrit le nom du composant, par le namespace et donc par le signal |
 
-Les cinq premières sont des enveloppes que la passe de balisage pose autour de
-l'expression compilée ; les deux dernières sont des échanges installés le temps
-d'une évaluation, donc sans coût ailleurs.
+Les deux sont des échanges installés le temps d'une évaluation, donc sans coût
+ailleurs, et aucun n'atteint le `<script>` : le même texte y reste du Python nu,
+et lève.
 
-Tout le reste est du Python tel qu'écrit — les opérateurs, les tranches, les
-compréhensions, les f-strings, la vérité d'un objet qui définit `__bool__`.
+### Cinq adaptateurs, qui ne sont pas des exceptions
 
-Deux choses ressemblent à une huitième sans en être une. Un gestionnaire est
+Il y a une seconde liste, et elle est de nature inverse. Le moteur de Svelte a été
+bâti pour des valeurs JavaScript ; on lui tend une valeur Python, il la lit comme
+du JavaScript. Ces cinq-là font que Python reste Python — les retirer rendrait le
+gabarit *moins* fidèle, pas plus :
+
+| | Où | Sans lui |
+|---|---|---|
+| `__truthy` | `{#if}`, `{:else if}`, `class:` | `{#if []}` serait vrai, comme en JavaScript |
+| `__text` | `{x}`, `{@html}`, `class="a {x}"` | `None` rendrait `[object Object]`, une liste `1,2` au lieu de `[1, 2]` |
+| `__seq` | l'itérable d'un `{#each}` | un dict, un `range`, un générateur ou `.items()` ne se parcourrait pas du tout |
+| `__spread` | `{...attrs}` | Svelte compare par identité, donc un dict muté paraîtrait inchangé |
+| `repr()` | `{#key x}` et la clé d'un `{#each}` | les clés se compareraient par identité, qu'aucune valeur Python ne conserve — un `(1, 2)` reconstruit est un autre objet |
+
+Deux autres choses ressemblent à des exceptions sans en être. Un gestionnaire est
 appelé avec les arguments qu'il déclare, donc `lambda: choose(x)` ignore
-l'événement DOM là où `lambda e: read(e.target.value)` le reçoit — mais c'est la
+l'événement DOM là où `lambda e: read(e.target.value)` le reçoit — c'est la
 frontière Python/JavaScript, et une fonction exportée est appelée pareil. Et
 `bind:` compile sa valeur deux fois, en expression puis en cible d'affectation :
 le même texte lu dans les deux sens, pas lu autrement.
+
+Tout le reste est du Python tel qu'écrit — les opérateurs, les tranches, les
+compréhensions, les f-strings, la vérité d'un objet qui définit `__bool__`.
 
 **Le langage du gabarit suit le langage du script, sans troisième mode.** Un
 composant sans `lang="python"` est un composant JavaScript et le reste, même
