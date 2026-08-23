@@ -28,7 +28,7 @@ every tutorial and every answer online applies to Svelthon with one substitution
 | `{% if a %}…{% elif b %}…{% else %}…{% endif %}` | `{#if a}…{:else if b}…{:else}…{/if}` |
 | `{% for x in xs %}…{% endfor %}` | `{#each xs as x}…{/each}` |
 | `{% for x in xs %}…{% empty %}…{% endfor %}` | `{#each xs as x}…{:else}…{/each}` |
-| `{{ forloop.counter }}` | `{#each xs as x, i}` then `{i + 1}` |
+| `{{ forloop.counter }}`, `forloop.first`, `forloop.last` | `{#each xs as x, i}` then `{i + 1}`, `i == 0`, `i == len(xs) - 1` — see below |
 | `{% with n=xs.count %}…{% endwith %}` | `{@const n = len(xs)}`, inside a block — see below |
 | `{% include "card.html" %}` | `<Card />` |
 | `{% extends "base.html" %}` | a `+layout.svelte` above the page |
@@ -163,6 +163,72 @@ children: object
 For a single hole this is about even. For several — Django's named blocks — you
 pass snippets as props, which is more machinery than `{% block %}`. It is also
 more capable, since a snippet takes arguments.
+
+### The loop, and the object it does not have
+
+Django gives a loop a `forloop` object, Jinja a `loop`. Svelthon has neither, and
+this is the one place where the difference is worth a section rather than a row.
+
+The position comes from the block header, exactly as `enumerate` gives it in
+Python or `.map((x, i) => …)` in JavaScript:
+
+```svelte
+{#each rows as row, i}
+    <li>{i + 1}. {row.title}</li>
+{/each}
+```
+
+Everything `forloop` carries is then an expression:
+
+| Django | Jinja | Svelthon |
+|---|---|---|
+| `forloop.counter0` | `loop.index0` | `i` |
+| `forloop.counter` | `loop.index` | `i + 1` |
+| `forloop.first` | `loop.first` | `i == 0` |
+| `forloop.last` | `loop.last` | `i == len(rows) - 1` |
+| `forloop.revcounter` | `loop.revindex` | `len(rows) - i` |
+| — | `loop.length` | `len(rows)` |
+| `{% cycle "a" "b" %}` | `loop.cycle("a", "b")` | `["a", "b"][i % 2]` — but see below |
+| `{% ifchanged %}` | `loop.changed(row.cat)` | `i == 0 or rows[i - 1]["cat"] != row["cat"]` |
+| — | `loop.previtem` | `rows[i - 1] if i else None` |
+| `forloop.parentloop` | `loop.parent` | name the outer index: `{#each xs as x, i}{#each x.ys as y, j}` |
+
+**Reach for CSS before any of these.** A component carries its own scoped
+stylesheet, which a Django or Jinja template never does — so striping a table,
+dropping the last separator or numbering the rows is presentation, and belongs in
+the `<style>` block:
+
+```svelte
+<ul>
+    {#each rows as row}
+        <li>{row.title}</li>
+    {/each}
+</ul>
+
+<style>
+    ul { counter-reset: n }
+    li { counter-increment: n }                    /* forloop.counter */
+    li::before { content: counter(n) ". " }
+    li:nth-child(even) { background: #f6f6f6 }     /* {% cycle %} */
+    li:not(:last-child)::after { content: " · " }  /* forloop.last */
+</style>
+```
+
+This survives a filtered list, an item removed, a row inserted in the middle —
+none of which an index-based test does without care.
+
+**Why no `loop` object.** Django and Jinja render once, top to bottom, into a
+string: when the engine reaches item *n* it already knows the length and the
+items before, so `loop.last` and `loop.previtem` are free. Svelte does not render,
+it updates — each row is a block that re-runs when what it reads changes. There,
+`loop.last` makes every row depend on the list's *length*, and `loop.previtem`
+makes each row depend on its neighbour, so editing one row invalidates two more.
+The index is the smallest reactive unit, and it lets you choose the dependency
+instead of inheriting it.
+
+That is also why every incremental renderer landed in the same place — Vue's
+`v-for="(item, index) in xs"`, React's `xs.map((item, index) => …)`, Angular's
+`let i = $index`. None of them reintroduced `forloop`.
 
 ### Filters
 
