@@ -73,6 +73,33 @@ for real. Around ten lines in the plugin.
 
 The second is smaller and lower risk. Neither is done.
 
+## Three things that worked for reasons nobody had chosen
+
+Clearing `node_modules/.vite` broke three things at once, and none of them was a
+regression in the ordinary sense. Each had been resting on a property that was
+true but unwritten.
+
+**The order of the two Brython loads.** Described above. The cache decided when
+the served copy executed, and it happened to execute before it could do harm.
+
+**The removal of Brython's DOM stubs.** `globals.js` records the globals that
+exist before Brython loads, and `boot.js` removes whatever it added — that is what
+stops a library testing `typeof document` from taking the browser path and dying
+on `window is not defined`. But the compiler loads Brython through `require`,
+without `globals.js`, so its stubs were never in the snapshot. It worked because
+the *served* copy re-executed after the snapshot was taken, and boot could see
+those stubs. Guarding that re-execution removed the accident along with the bug.
+The compiler now takes the same snapshot itself, before its own load — a reason
+rather than a coincidence.
+
+**The demo's own playground page.** It has no `+page.js`, so SvelteKit rendered
+it on the server, although it imports `compile.cjs` — CommonJS. It worked because
+SSR loaded that file natively rather than converting it, so `require` existed.
+That is an inference, not a measurement: what is measured is that clearing the
+cache produced `require is not defined`. The page now declares `ssr = false`,
+which states what was always true — the compiler runs in the browser — instead of
+depending on how Vite treats a `.cjs` on a given day.
+
 ## What made this expensive to find
 
 Our own error reporting hid it. `pythonError` in `compile.cjs` assumed every
