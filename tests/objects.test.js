@@ -4,7 +4,7 @@
 // functions the framework calls by name. Node rather than jsdom, because that is
 // where a `load()` actually runs.
 import { test, expect, describe } from 'vitest';
-import { one, nested, looping, empty, mixed } from './fixtures/objects.py';
+import { one, nested, looping, empty, mixed, dumped, indented, plain } from './fixtures/objects.py';
 
 // Brython keeps an instance's attributes under a private symbol rather than as
 // JavaScript properties. Walking the object's own keys therefore found almost
@@ -59,5 +59,21 @@ describe('a graph that loops back', () => {
 
         expect(seen.number).toBe(8);
         expect(seen.itself).toBeNull();
+    });
+});
+
+// Jinja's `|tojson`: the same need, and the same reason it cannot be
+// `json.dumps` — an instance's fields are not where a Python dump looks.
+describe('to_json', () => {
+    test('an instance becomes its fields', () => {
+        expect(JSON.parse(dumped())).toEqual({ number: 703, tags: ['gil'] });
+    });
+
+    test('an indent is honoured', () => {
+        expect(indented()).toBe('{\n  "a": 1\n}');
+    });
+
+    test('and None, True and a list keep JSON\'s spelling', () => {
+        expect(plain()).toBe('[1,"two",null,true]');
     });
 });

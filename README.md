@@ -75,7 +75,7 @@ the build fails loudly instead of shipping a component with no reactivity.
 
 ## The API, and what it replaces
 
-Seven names, and nothing to import: they are injected into the module's namespace,
+Nine names, and nothing to import: they are injected into the module's namespace,
 and a component that defines its own keeps it. Each one stands where a rune
 stands in JavaScript.
 
@@ -90,6 +90,7 @@ stands in JavaScript.
 | `def on_mount()` / `on_destroy()` | `onMount()` / `onDestroy()` |
 | `set_context(k, v)` / `get_context(k)` | `setContext(k, v)` / `getContext(k)` |
 | `to_js(value)` | — a Python container made readable from JavaScript |
+| `to_json(value, indent=None)` | — the same, dumped; Jinja spells it `\|tojson` |
 | `js` | — the JavaScript globals: `js.Response`, `js.JSON`, `js.URL` |
 | `items.append(x)` | `items.push(x)` — `$state` proxies deeply |
 

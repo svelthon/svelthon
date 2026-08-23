@@ -4,7 +4,7 @@ Everything here crosses the boundary through the export wrapper, which is what a
 `load()`, an action or a `+server.py` handler goes through.
 """
 
-__all__ = ["one", "nested", "looping", "empty", "mixed"]
+__all__ = ["one", "nested", "looping", "empty", "mixed", "dumped", "indented", "plain"]
 
 
 class Pep:
@@ -44,3 +44,17 @@ def empty():
 def mixed():
     pep = Pep(484, ["typing"])
     return {"count": 2, "peps": [pep, pep], "none": None}
+
+
+def dumped():
+    # `to_json` is `to_js` with the dump attached: `json.dumps` would walk the
+    # raw Brython object and never find the fields.
+    return to_json(Pep(703, ["gil"]))
+
+
+def indented():
+    return to_json({"a": 1}, 2)
+
+
+def plain():
+    return to_json([1, "two", None, True])
