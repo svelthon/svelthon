@@ -173,12 +173,8 @@ Le gabarit est donc du Python, sans aucun helper :
 {item.label}                 {mapping["key"]}        {[x.upper() for x in xs]}
 ```
 
-`{item.label}` sur une instance fonctionne — c'était la verrue que `py.of()`
-masquait. `{#if rows}` suit la vérité de Python, donc une liste vide est fausse.
-Et le point trouve une clé aussi bien qu'un attribut : `{d.k}` lit un dict,
-exactement comme chez Jinja, tandis que `{d["k"]}` veut toujours dire la même
-chose. Un vrai attribut l'emporte sur une clé de même nom, et un nom qui n'est
-ni l'un ni l'autre lève au lieu de ne rien rendre.
+`{item.label}` sur une instance fonctionne, et `{#if rows}` suit la vérité de
+Python, donc une liste vide est fausse.
 
 Tout site *lu* par le balisage passe par Python, pas seulement les
 interpolations :
@@ -192,9 +188,7 @@ interpolations :
 ```
 
 L'itérable d'un `{#each}` est évalué *hors* du bloc et sa clé *dedans* : chacun
-est donc compilé avec les noms qu'il peut réellement voir. Une clé et un `{#key}`
-se comparent par `repr()` — Svelte comparerait des identités, et aucune valeur
-Python n'en conserve : un `(1, 2)` reconstruit est un autre objet.
+est donc compilé avec les noms qu'il peut réellement voir.
 
 **Les directives prennent du Python aussi.** Un gestionnaire est un `lambda`,
 `class:` se lit avec la vérité de Python, et une liaison nomme quelque chose à
@@ -211,11 +205,35 @@ namespace au lieu de le contourner. `bind:group` est la seule exception, et elle
 vient de Svelte : il y veut un identifiant ou une expression membre, jamais une
 paire — un nom simple y marche, rien d'autre.
 
-**Un gestionnaire qui affecte s'écrit avec le morse.** `onclick={() => (open =
-!open)}` est la ligne la plus courante d'un gabarit Svelte, et Python n'en a pas
-d'équivalent court : un `lambda` tient une expression, et `open = not open` est
-une instruction. `(open := not open)`, elle, *est* une expression — la réponse de
-Python à ce problème précis — donc c'est l'écriture retenue :
+### Les deux choses à savoir
+
+Un gabarit se lit comme du Python et veut dire ce que Python veut dire, à deux
+exceptions délibérées près. Les deux existent pour que la ligne de tous les jours
+tienne sur une ligne, et les deux méritent d'être sues avant d'écrire un
+composant.
+
+**Le point trouve une clé.** `{row.label}` lit un dict aussi bien qu'un objet,
+exactement comme le point de Jinja — la forme de vos données cesse donc de dicter
+celle de votre balisage, et un dict venu d'une API se rend comme un dataclass :
+
+```svelte
+{pep.title}                        <!-- un dict ou une instance, la même ligne -->
+<input bind:value={row.label} />   <!-- et une liaison réécrit dans la clé -->
+```
+
+Un vrai attribut l'emporte toujours sur une clé de même nom, et un nom qui n'est
+ni l'un ni l'autre lève au lieu de ne rien rendre. Dans le `<script>`, le même
+texte reste du Python nu et lève : c'est une règle de gabarit, pas un changement
+de langage.
+
+**Le morse affecte.** `onclick={() => (open = !open)}` est la ligne la plus
+courante d'un gabarit Svelte, et Python n'en a pas d'équivalent court : un
+`lambda` tient une expression, et `open = not open` est une instruction.
+`(open := not open)`, elle, *est* une expression — la réponse de Python à ce
+problème précis — et dans un gabarit elle écrit le nom du composant. Le Python
+ordinaire y lierait un local qui meurt avec l'appel, PEP 572 liant dans la
+fonction englobante et un `lambda` en étant une : la lecture habituelle n'y sert
+à rien, et le gabarit lui donne la seule qui vaille :
 
 ```svelte
 <button onclick={lambda: (open := not open)}>menu</button>
@@ -225,50 +243,14 @@ Python à ce problème précis — donc c'est l'écriture retenue :
 {/each}
 ```
 
-Le sens est infléchi, délibérément : PEP 572 lie dans la fonction englobante, et
-un `lambda` en est une, donc le Python ordinaire écrirait dans une portée qui
-meurt avec l'appel — sans rien dire. Dans un gabarit, le morse écrit le nom du
-composant, par le namespace et donc par le signal. Elle ne vaut que pour les
-gestionnaires : un rendu ne doit pas écrire d'état, et Svelte le dit lui-même.
+Gestionnaires seulement : un rendu ne doit pas écrire d'état, et Svelte le dit
+lui-même.
 
-### Les deux endroits où un gabarit n'est pas du Python
-
-Tout ce qu'un gabarit lit est compilé en Python et veut dire ce que Python veut
-dire. Deux choses non, et les deux sont délibérées :
-
-| | Où | Python ferait | Un gabarit fait |
-|---|---|---|---|
-| le point | toute expression | `d.k` sur un dict lève `AttributeError` | il trouve aussi la clé, et `bind:` réécrit au même endroit — la règle de Jinja, un vrai attribut l'emportant toujours |
-| le morse | gestionnaires seulement | `(x := v)` dans un `lambda` lie un local qui meurt avec l'appel | il écrit le nom du composant, par le namespace et donc par le signal |
-
-Les deux sont des échanges installés le temps d'une évaluation, donc sans coût
-ailleurs, et aucun n'atteint le `<script>` : le même texte y reste du Python nu,
-et lève.
-
-### Cinq adaptateurs, qui ne sont pas des exceptions
-
-Il y a une seconde liste, et elle est de nature inverse. Le moteur de Svelte a été
-bâti pour des valeurs JavaScript ; on lui tend une valeur Python, il la lit comme
-du JavaScript. Ces cinq-là font que Python reste Python — les retirer rendrait le
-gabarit *moins* fidèle, pas plus :
-
-| | Où | Sans lui |
-|---|---|---|
-| `__truthy` | `{#if}`, `{:else if}`, `class:` | `{#if []}` serait vrai, comme en JavaScript |
-| `__text` | `{x}`, `{@html}`, `class="a {x}"` | `None` rendrait `[object Object]`, une liste `1,2` au lieu de `[1, 2]` |
-| `__seq` | l'itérable d'un `{#each}` | un dict, un `range`, un générateur ou `.items()` ne se parcourrait pas du tout |
-| `__spread` | `{...attrs}` | Svelte compare par identité, donc un dict muté paraîtrait inchangé |
-| `repr()` | `{#key x}` et la clé d'un `{#each}` | les clés se compareraient par identité, qu'aucune valeur Python ne conserve — un `(1, 2)` reconstruit est un autre objet |
-
-Deux autres choses ressemblent à des exceptions sans en être. Un gestionnaire est
-appelé avec les arguments qu'il déclare, donc `lambda: choose(x)` ignore
-l'événement DOM là où `lambda e: read(e.target.value)` le reçoit — c'est la
-frontière Python/JavaScript, et une fonction exportée est appelée pareil. Et
-`bind:` compile sa valeur deux fois, en expression puis en cible d'affectation :
-le même texte lu dans les deux sens, pas lu autrement.
-
-Tout le reste est du Python tel qu'écrit — les opérateurs, les tranches, les
-compréhensions, les f-strings, la vérité d'un objet qui définit `__bool__`.
+C'est tout. Tout le reste est du Python tel qu'écrit — les opérateurs, les
+tranches, les compréhensions, les f-strings, la vérité d'un objet qui définit
+`__bool__`. Les enveloppes qui font qu'une valeur Python se comporte en valeur
+Python dans le moteur de Svelte sont de la plomberie, et vivent dans
+[notes/template.md](notes/template.md).
 
 **Le langage du gabarit suit le langage du script, sans troisième mode.** Un
 composant sans `lang="python"` est un composant JavaScript et le reste, même

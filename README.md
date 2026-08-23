@@ -174,12 +174,8 @@ So the template is Python, with no helpers:
 {item.label}                 {mapping["key"]}        {[x.upper() for x in xs]}
 ```
 
-`{item.label}` on a class instance works — that was the wart `py.of()` used to
-paper over. `{#if rows}` follows Python's truth, so an empty list is false. And
-the dot finds a key as well as an attribute: `{d.k}` reads a dict, exactly as
-Jinja's does, while `{d["k"]}` still means the same thing. A real attribute wins
-over a key of the same name, and a name that is neither raises rather than
-rendering nothing.
+`{item.label}` on a class instance works, and `{#if rows}` follows Python's
+truth, so an empty list is false.
 
 Every site the markup *reads* goes through Python, not only interpolations:
 
@@ -192,9 +188,7 @@ Every site the markup *reads* goes through Python, not only interpolations:
 ```
 
 The `{#each}` iterable is evaluated *outside* the block and the key inside it, so
-each is compiled against the names it can actually see. A key and `{#key}` compare
-by `repr()`: identity is what Svelte would use, and no Python value keeps one —
-`(1, 2)` rebuilt is a different object.
+each is compiled against the names it can actually see.
 
 **Directives take Python as well.** A handler is a `lambda`, `class:` is read for
 Python's truthiness, and a binding names something Python can assign to:
@@ -210,11 +204,32 @@ rather than around it. `bind:group` is the one exception, and Svelte's own: it
 takes an identifier or a member expression, never a pair, so a bare name works
 there and nothing else does.
 
-**A handler that assigns is written with the walrus.** `onclick={() => (open =
-!open)}` is the commonest line in a Svelte template, and Python has no short twin
-for it: a `lambda` holds an expression, and `open = not open` is a statement.
-`(open := not open)` *is* an expression — Python's own answer to this exact
-problem — so that is the spelling:
+### The two things to know
+
+A template reads as Python and means what Python means, with two deliberate
+exceptions. Both exist so that the everyday line stays one line, and both are
+worth knowing before writing a component.
+
+**The dot finds a key.** `{row.label}` reads a dict as well as an object, exactly
+as Jinja's dot does — so the shape of your data stops dictating the shape of your
+markup, and a dict from an API renders like a dataclass:
+
+```svelte
+{pep.title}                        <!-- a dict or an instance, the same line -->
+<input bind:value={row.label} />   <!-- and a binding writes back to the key -->
+```
+
+A real attribute still wins over a key of the same name, and a name that is
+neither raises rather than rendering nothing. In the `<script>` the same text is
+plain Python and raises: this is a template rule, not a language change.
+
+**The walrus assigns.** `onclick={() => (open = !open)}` is the commonest line in
+a Svelte template, and Python has no short twin: a `lambda` holds an expression,
+and `open = not open` is a statement. `(open := not open)` *is* an expression —
+Python's own answer to this exact problem — and in a template it writes the
+component's name. Plain Python would bind a local that dies with the call, since
+PEP 572 binds in the enclosing function and a `lambda` is one, so the ordinary
+reading is useless here and the template gives it the only one worth having:
 
 ```svelte
 <button onclick={lambda: (open := not open)}>menu</button>
@@ -224,50 +239,13 @@ problem — so that is the spelling:
 {/each}
 ```
 
-The meaning is bent, deliberately: PEP 572 binds in the enclosing *function*, and
-a lambda is one, so plain Python would write into a scope that dies with the
-call — silently. In a template the walrus writes the component's name, through
-the namespace and therefore through the signal. It applies to handlers only: a
-render must not write state, and Svelte says so itself.
+Handlers only: a render must not write state, and Svelte says so itself.
 
-### The two places a template is not Python
-
-Everything a template reads is compiled as Python and means what Python means.
-Two things do not, and both are deliberate:
-
-| | Where | Python would | A template does |
-|---|---|---|---|
-| the dot | every expression | `d.k` on a dict raises `AttributeError` | it finds the key as well, and `bind:` writes back to the same place — Jinja's rule, and a real attribute still wins |
-| the walrus | handlers only | `(x := v)` inside a `lambda` binds a local that dies with the call | it assigns the component's name, through the namespace and therefore through the signal |
-
-Both are swaps installed for the length of one evaluation, so they cost nothing
-anywhere else, and neither reaches the `<script>`: the same text there is plain
-Python and raises.
-
-### Five adapters, which are not exceptions
-
-There is a second list, and it is the opposite kind of thing. Svelte's engine was
-built for JavaScript values; handed a Python one it would read it as JavaScript.
-These five keep Python being Python — remove them and the template becomes *less*
-faithful, not more:
-
-| | Where | Without it |
-|---|---|---|
-| `__truthy` | `{#if}`, `{:else if}`, `class:` | `{#if []}` would be true, as it is in JavaScript |
-| `__text` | `{x}`, `{@html}`, `class="a {x}"` | `None` would render `[object Object]`, a list `1,2` instead of `[1, 2]` |
-| `__seq` | the `{#each}` iterable | a dict, a `range`, a generator or `.items()` would not iterate at all |
-| `__spread` | `{...attrs}` | Svelte diffs by identity, so a mutated dict would look unchanged |
-| `repr()` | `{#key x}` and an `{#each}` key | keys would compare by identity, which no Python value keeps — `(1, 2)` rebuilt is another object |
-
-Two more things look like exceptions and are neither. A handler is called with the
-arguments it declared, so `lambda: choose(x)` ignores the DOM event while
-`lambda e: read(e.target.value)` receives it — that is the Python/JavaScript
-boundary, and an exported function is called the same way. And `bind:` compiles
-its value twice, once as an expression and once as an assignment target: the same
-text read in both directions, not read differently.
-
-Everything else is Python as written — the operators, the slices, the
-comprehensions, the f-strings, the truth of an object with `__bool__`.
+That is the whole of it. Everything else is Python as written — the operators,
+the slices, the comprehensions, the f-strings, the truth of an object with
+`__bool__`. The wrappers that make a Python value behave like a Python value
+inside Svelte's engine are plumbing, and live in
+[notes/template.md](notes/template.md).
 
 **The template language follows the script language, with no third mode.** A
 component without `lang="python"` is a JavaScript component and stays one, even
@@ -1003,8 +981,10 @@ reloads.
   which point it is a dialect rather than a familiar syntax.
 
 
-**Design notes** — [notes/directives.md](notes/directives.md) on the four ways a
-directive's value becomes Python, and the two things left over, and
+**Design notes** — [notes/template.md](notes/template.md) on what a template
+expression is compiled into and the five adapters under it,
+[notes/directives.md](notes/directives.md) on the four ways a directive's value
+becomes Python and the two things left over, and
 [notes/dicts-and-objects.md](notes/dicts-and-objects.md) on what a dict and a class
 instance each cost at the boundary — measured side by side, and backed by
 `tests/shapes.test.js` — and [notes/one-interpreter.md](notes/one-interpreter.md)
