@@ -228,10 +228,38 @@ Python à ce problème précis — donc c'est l'écriture retenue :
 Le sens est infléchi, délibérément : PEP 572 lie dans la fonction englobante, et
 un `lambda` en est une, donc le Python ordinaire écrirait dans une portée qui
 meurt avec l'appel — sans rien dire. Dans un gabarit, le morse écrit le nom du
-composant, par le namespace et donc par le signal. C'est la cinquième chose
-qu'une expression de gabarit dit autrement qu'un script, après `__truthy`,
-`__text`, `__seq` et `__spread`, et elle ne vaut que pour les gestionnaires : un
-rendu ne doit pas écrire d'état, et Svelte le dit lui-même.
+composant, par le namespace et donc par le signal. Elle ne vaut que pour les
+gestionnaires : un rendu ne doit pas écrire d'état, et Svelte le dit lui-même.
+
+### Les sept choses qu'un gabarit fait et qu'un script ne fait pas
+
+Le même texte veut dire la même chose des deux côtés, à sept exceptions près.
+Cinq sont des conversions appliquées à ce que l'expression rend ; deux infléchissent
+le sens de Python. C'est toute la différence — il n'y en a pas de huitième.
+
+| | Où | Ce qui change | Pourquoi |
+|---|---|---|---|
+| `__truthy` | `{#if}`, `{:else if}`, `class:` | la vérité de Python, pas celle de JavaScript | `[]`, `{}` et `0.0` sont faux en Python et vrais en JavaScript |
+| `__text` | `{x}`, `{@html}`, `class="a {x}"` | `str(x)`, pas `String(x)` | `None` rendrait `[object Object]`, une liste `1,2` au lieu de `[1, 2]` |
+| `__seq` | l'itérable d'un `{#each}` | `list(x)` | un dict, un `range`, un générateur, `.items()` : aucun n'est un tableau JavaScript |
+| `__spread` | `{...attrs}` | une copie de surface | Svelte compare au rendu précédent par identité, donc un dict muté paraîtrait inchangé |
+| `repr()` | `{#key x}` et la clé d'un `{#each}` | comparaison par `repr(x)` | Svelte compare par identité, et aucune valeur Python n'en garde une — un `(1, 2)` reconstruit est un autre objet |
+| le point | toute expression | `d.k` lit une clé aussi bien qu'un attribut, et `bind:` écrit au même endroit | la règle de Jinja, celle que l'auteur de gabarits connaît déjà ; un vrai attribut l'emporte toujours |
+| le morse | gestionnaires seulement | `(x := v)` écrit le nom du composant | un `lambda` ne tient qu'une expression, donc c'est la seule affectation qu'il puisse contenir — et le sens propre de PEP 572 écrirait dans une portée qui meurt avec l'appel |
+
+Les cinq premières sont des enveloppes que la passe de balisage pose autour de
+l'expression compilée ; les deux dernières sont des échanges installés le temps
+d'une évaluation, donc sans coût ailleurs.
+
+Tout le reste est du Python tel qu'écrit — les opérateurs, les tranches, les
+compréhensions, les f-strings, la vérité d'un objet qui définit `__bool__`.
+
+Deux choses ressemblent à une huitième sans en être une. Un gestionnaire est
+appelé avec les arguments qu'il déclare, donc `lambda: choose(x)` ignore
+l'événement DOM là où `lambda e: read(e.target.value)` le reçoit — mais c'est la
+frontière Python/JavaScript, et une fonction exportée est appelée pareil. Et
+`bind:` compile sa valeur deux fois, en expression puis en cible d'affectation :
+le même texte lu dans les deux sens, pas lu autrement.
 
 **Le langage du gabarit suit le langage du script, sans troisième mode.** Un
 composant sans `lang="python"` est un composant JavaScript et le reste, même

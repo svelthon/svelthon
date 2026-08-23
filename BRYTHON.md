@@ -1,6 +1,6 @@
-# What SVELTHON asks of Brython
+# What Svelthon asks of Brython
 
-SVELTHON compiles Python to JavaScript with Brython and wires the result to
+Svelthon compiles Python to JavaScript with Brython and wires the result to
 Svelte's signals. Almost none of what it touches is a public API — it is the
 shape of Brython's internals. This file is the contract, so that a Brython change
 can be checked against it, and so that whoever reads `src/lib/` knows which
@@ -17,7 +17,7 @@ locals_Counter.count = 0
 
 Brython keeps a module's state in a **namespace object**, never in lexical
 bindings — Python semantics require it, for `globals()`, `exec`, and dynamic name
-resolution. SVELTHON replaces that object with one whose every property is an
+resolution. Svelthon replaces that object with one whose every property is an
 accessor onto a Svelte signal, and every assignment the code generator already
 emits becomes a reactive write.
 
@@ -25,7 +25,7 @@ The substitution happens at run time, by swapping `$B.namespace` for the duratio
 of the module body (and only for the requested name, since an import during
 initialisation creates its own namespace through the same function).
 
-**If this shape changed, SVELTHON would stop working entirely.** It is the only
+**If this shape changed, Svelthon would stop working entirely.** It is the only
 assumption checked at compile time: the build fails loudly when the expected call
 is absent, rather than shipping a component with no reactivity.
 
@@ -99,7 +99,7 @@ dict's keys, by contrast, are ordinary enumerable JavaScript properties.
 | `$B.isNode` | `typeof process !== 'undefined' && process.release.name === 'node'`, decided at load. It picks which half of brython.js is installed — the browser half is the one that defines `browser.html`, `browser.window` and the DOM wrappers |
 | `browser.aio` | `run(coro, onsuccess, onerror)`, `iscoroutine`, `sleep` |
 
-## Representation choices SVELTHON relies on
+## Representation choices Svelthon relies on
 
 These are what make the Python/JavaScript boundary usable at all, and each one
 had to be discovered by measurement.
@@ -117,13 +117,13 @@ no `message` and no `stack`, but does carry `__traceback__`, `lineno` and `args`
 
 **Never wrap a Brython value in a JS Proxy.** A proxied object fails Brython's own
 type checks — `repr((1, 2))` raises *descriptor `__repr__` requires a 'tuple'
-object but received a 'tuple'*. This is why SVELTHON stores Python values in
+object but received a 'tuple'*. This is why Svelthon stores Python values in
 `$state.raw` and publishes them through accessors rather than handing Svelte a
 `$state` proxy.
 
 ## Bootstrap outside a browser
 
-`brython.js` is a classic browser script. To run it under Node — which SVELTHON
+`brython.js` is a classic browser script. To run it under Node — which Svelthon
 does at build time, and again for server-side rendering — four things must be in
 place **before** it is evaluated:
 
@@ -257,7 +257,7 @@ own keys before it filters on enumerability. Holding the back-reference in a
 `WeakMap` keyed by the JavaScript object, instead of as a property on it, would
 fix it without changing the caching behaviour.
 
-SVELTHON works around it by converting such arguments itself (`to_js`, i.e.
+Svelthon works around it by converting such arguments itself (`to_js`, i.e.
 `plainData`), which produces a plain object carrying no symbol.
 
 ### A debug `console.log` is left in `$B.JSClass.tp_getattro`

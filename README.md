@@ -227,10 +227,38 @@ problem — so that is the spelling:
 The meaning is bent, deliberately: PEP 572 binds in the enclosing *function*, and
 a lambda is one, so plain Python would write into a scope that dies with the
 call — silently. In a template the walrus writes the component's name, through
-the namespace and therefore through the signal. It is the fifth thing a template
-expression means differently from a script, after `__truthy`, `__text`, `__seq`
-and `__spread`, and it applies to handlers only: a render must not write state,
-and Svelte says so itself.
+the namespace and therefore through the signal. It applies to handlers only: a
+render must not write state, and Svelte says so itself.
+
+### The seven things a template does that a script does not
+
+The same text means the same thing in both places, with seven exceptions. Five
+are conversions applied to what the expression returns; two bend Python's own
+meaning. They are the whole of the difference — there is no eighth.
+
+| | Where | What changes | Why |
+|---|---|---|---|
+| `__truthy` | `{#if}`, `{:else if}`, `class:` | Python's truth, not JavaScript's | `[]` and `{}` and `0.0` are false in Python and true in JavaScript |
+| `__text` | `{x}`, `{@html}`, `class="a {x}"` | `str(x)`, not `String(x)` | `None` would render `[object Object]`, a list `1,2` instead of `[1, 2]` |
+| `__seq` | the `{#each}` iterable | `list(x)` | a dict, a `range`, a generator, `.items()` — none of them is a JavaScript array |
+| `__spread` | `{...attrs}` | a shallow copy | Svelte diffs against the previous render by identity, so a mutated dict would look unchanged |
+| `repr()` | `{#key x}` and an `{#each}` key | compared by `repr(x)` | Svelte compares by identity, and no Python value keeps one — `(1, 2)` rebuilt is another object |
+| the dot | every expression | `d.k` reads a key as well as an attribute, and `bind:` writes to the same place | Jinja's rule, and the one a template author already knows; a real attribute still wins |
+| the walrus | handlers only | `(x := v)` assigns the component's name | a `lambda` holds an expression, so this is the only assignment it can hold — and PEP 572's own meaning would write into a scope that dies with the call |
+
+The first five are wrappers the markup pass emits around the compiled
+expression; the last two are swaps installed for the length of one evaluation, so
+they cost nothing anywhere else.
+
+Everything else is Python as written — the operators, the slices, the
+comprehensions, the f-strings, the truth of an object with `__bool__`.
+
+Two things look like an eighth and are not. A handler is called with the
+arguments it declared, so `lambda: choose(x)` ignores the DOM event while
+`lambda e: read(e.target.value)` receives it — but that is the Python/JavaScript
+boundary, and an exported function is called the same way. And `bind:` compiles
+its value twice, once as an expression and once as an assignment target — the
+same text, read in both directions, not read differently.
 
 **The template language follows the script language, with no third mode.** A
 component without `lang="python"` is a JavaScript component and stays one, even
