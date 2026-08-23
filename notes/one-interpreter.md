@@ -39,19 +39,27 @@ So the bug was latent for as long as nobody disturbed the order. Clearing
 
 ## What is in place
 
-`vendorQuirks()` wraps the copy Vite serves so that it does nothing when an
-interpreter already exists:
+The file guards itself: `vendor/brython.js` opens with
 
 ```js
 if (!(globalThis.__BRYTHON__ && globalThis.__BRYTHON__.ast)) { …the whole file… }
 ```
 
-Only the served copy is guarded, so the one the compiler requires always wins and
-the runtime shares it. `var` keeps its module scope inside a block, which is what
-lets the file be wrapped without touching a line of it.
+and `var` keeps its module scope inside a block, which is what lets 4.6 MB be
+wrapped by adding two lines. The order stops mattering: whichever instance runs
+first wins, and the second declines.
 
-This makes the order stop mattering. It does not remove the second load: Vite
-still transforms and serves 1.4 MB for a module that then declines to run.
+This started life in a Vite plugin, patching the copy it served. That was wrong
+in a way that took a real bug to see: the plugin only ever reached the *browser's*
+copy, so the compiler — which loads the same file with `require` under Node — ran
+on an unrepaired Brython. Everything else the plugin patched was in the same
+position, and `/api/py` in the demo, an endpoint that builds its own `Response`,
+returned 500 on a defect that was supposedly fixed. The plugin is gone; every
+repair is an edit in the file, listed in `BRYTHON.md` and held by
+`tests/vendor.test.js`.
+
+It still does not remove the second load: Vite transforms and serves 1.4 MB for a
+module that then declines to run.
 
 ## Two ways to finish, and what each costs
 

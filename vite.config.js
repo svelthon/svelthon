@@ -1,10 +1,10 @@
 import { defineConfig } from 'vitest/config';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { fileURLToPath } from 'node:url';
-import { python, svelthon, vendorQuirks } from './src/lib/svelthon.js';
+import { python, svelthon } from './src/lib/svelthon.js';
 
 export default defineConfig({
-    plugins: [svelthon(), vendorQuirks(), svelte({
+    plugins: [svelthon(), svelte({
             preprocess: [python({ path: ['src'] })],
             // Le filtre de modules de vite-plugin-svelte, élargi au Python : un
             // `.svelte.py` est compilé comme un `.svelte.ts`, sous son propre nom.

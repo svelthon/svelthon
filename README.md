@@ -609,7 +609,6 @@ is needed, and it is one SvelteKit already provides for exactly this:
 export default defineConfig({
     plugins: [
         svelthon(),
-        vendorQuirks(),
         sveltekit({
             preprocess: [python({ path: ['src/lib'] })],
 
@@ -1003,10 +1002,12 @@ hands the Python to a JavaScript parser, then fails on `./store.py`, which no
 file of that name is meant to serve. Its only job here is to discover bare
 imports, so the scan is skipped and the one package worth pre-bundling is named.
 
-`vendorQuirks()` — Brython loads JS modules named from Python through an
-`import()` whose argument is a variable. Vite cannot analyse it and says so on
-every start; the plugin marks those calls with `@vite-ignore` on the fly, which
-leaves the vendored file byte-identical to upstream.
+The vendored Brython carries a handful of repairs, each an edit in the file
+itself marked `/* SVELTHON patch */` and held by a test — `BRYTHON.md` lists
+them. They used to be split between the file and a Vite plugin that patched the
+copy it served; the half the plugin owned never reached the compiler, which loads
+the same file with `require` under Node, so server-side rendering ran on an
+unrepaired Brython.
 
 `vendor/brython.js` is a copy of `www/src/brython.js` (3.14 dev). The folder
 carries a `package.json` marked `commonjs`: Node must load it as a classic

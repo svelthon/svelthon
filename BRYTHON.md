@@ -272,44 +272,51 @@ lines. Note the typo in the message. Removing the line is the whole fix.
 
 ## Patches applied to the vendored build
 
-`vendor/brython.js` is byte-identical to upstream. Repairs are applied as it is
-served, by `VENDOR_PATCHES` in `src/lib/svelthon.js`, so that dropping in a newer
-Brython makes a patch that no longer matches **fail the build** rather than
-silently do nothing. Each entry states what it repairs and how many times it must
-match.
+Every repair is an edit in `vendor/brython.js` itself, marked with a
+`/* SVELTHON patch, see BRYTHON.md */` comment — the only way to find one again
+in 4.6 MB.
 
-| Patched | Why |
-|---|---|
-| the debug `console.log` in `$B.JSClass.tp_getattro` | it fires on every attribute access on a JavaScript class from Python and dumps the class object; two requests through `js.*` filled the server log with hundreds of lines |
-| the `Symbol(PYOBJ)` back-reference, moved to a `WeakMap` | a stamped container is refused by any Web API taking a WebIDL record, `new Response(body, {headers})` first among them |
-
-The second is nine sites — five writes and four reads, one of them through
-`Object.hasOwn` — so each is its own entry with its own expected count. The
-symbol stays declared and published as `$B.PYOBJ`; only the reads and writes move
-to `$B.$svelthonPyobj`, keyed by the JavaScript object. The round-trip cache
-behaves as before, and `scripts/browser-check.sh` covers the DOM node path, which
-is the one where identity across the boundary is observable.
-
-Both are worth carrying upstream — the first is a deleted line, the second
-belongs in `www/src/js_objects.js` where it can be written against the readable
-source.
-
-### The three edits made in the file itself
-
-These live in the *compiler*, which `compile.cjs` loads with a plain `require`
-under Node — no Vite transform applies, so `VENDOR_PATCHES` cannot reach them.
-All three are edited in `vendor/brython.js` and marked with a `/* SVELTHON patch */`
-comment, the only way to find them again in 4.6 MB.
+They used to be split: three in the file, two applied as Vite served it. That
+split had a hole, and it was not theoretical. The served copy is the *browser's*;
+the compiler loads the same file with `require` under Node, where no Vite
+transform applies — so server-side rendering ran on an unrepaired Brython. It
+worked only for as long as the served copy re-executed on top, which stopped
+being true the day that second execution was guarded. `/api/py` in the demo, an
+endpoint that builds its own `Response`, then returned 500 with
+`Key Symbol(PYOBJ) in undefined.headers`.
 
 | Edited in place | What it buys |
 |---|---|
 | `qualified_scope_name` neutralises every character invalid in an identifier | `compile.cjs` passes the real path, so `__file__` names the actual file and a traceback reads `src/routes/+page.server.py` rather than a slug |
 | `make_comp` drops the bindings a comprehension introduced | a comprehension no longer leaks its iteration variable |
 | the tokenizer records where each f-string chunk begins | `FSTRING_MIDDLE` reported the position of the token that opened the f-string |
+| the debug `console.log` in `$B.JSClass.tp_getattro` | it fires on every attribute access on a JavaScript class from Python and dumps the class object; two requests through `js.*` filled the server log with hundreds of lines |
+| the `Symbol(PYOBJ)` back-reference, moved to a `WeakMap` | a stamped container is refused by any Web API taking a WebIDL record, `new Response(body, {headers})` first among them |
+| the whole file wrapped in `if (!(globalThis.__BRYTHON__ && globalThis.__BRYTHON__.ast))` | a second execution in one process rebuilds `$B.ast`, and the classes the compiler holds lose the `to_js()` the code generator attached |
+| `/* @vite-ignore */` on the eighteen dynamic imports | Brython loads JS modules named from Python with `import(variable)`, which Vite cannot analyse and warns about twice on every start |
 
-A direct edit is lost silently when a newer Brython is vendored, so the guard for
-each is a **test** rather than a build-time check: losing any of them turns
-`tests/compiler.test.js` or `tests/fidelity.test.js` red.
+The `PYOBJ` one is nine sites — five writes and four reads, one of them through
+`Object.hasOwn`. The symbol stays declared and published as `$B.PYOBJ`; only the
+reads and writes move to `$B.$svelthonPyobj`, keyed by the JavaScript object.
+
+Wrapping the file works because `var` keeps its module scope inside a block, so
+the 4.6 MB below is untouched — two added lines, top and bottom.
+
+The first five are worth carrying upstream. The last two are Svelthon's own
+arrangements and belong here.
+
+### How they are guarded
+
+A direct edit is lost silently when a newer Brython is vendored, so each is held
+by a **test** rather than by a build-time check:
+
+| Edit | Turns red |
+|---|---|
+| `qualified_scope_name`, `make_comp`, the tokenizer | `tests/compiler.test.js`, `tests/fidelity.test.js` |
+| the debug print, `Symbol(PYOBJ)`, the guard | `tests/vendor.test.js` |
+
+`scripts/browser-check.sh` covers the DOM node path as well, which is where
+identity across the boundary is observable.
 
 ## Rough edges worth smoothing
 

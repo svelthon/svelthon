@@ -939,10 +939,12 @@ le pipeline de plugins : il lit les entrées HTML, tombe sur
 unique rôle ici étant de découvrir les imports nus, on le court-circuite et on
 nomme le seul paquet qui mérite d'être pré-bundlé.
 
-`vendorQuirks()` — Brython charge des modules JS nommés depuis Python par un
-`import()` dont l'argument est une variable. Vite ne sait pas l'analyser et le
-dit à chaque démarrage ; le plugin marque ces appels d'un `@vite-ignore` à la
-volée, ce qui laisse le fichier vendu identique à l'amont.
+Le Brython vendu porte quelques réparations, chacune écrite dans le fichier
+lui-même, marquée `/* SVELTHON patch */` et tenue par un test — `BRYTHON.md` les
+liste. Elles étaient auparavant partagées entre le fichier et un plugin Vite qui
+corrigeait la copie servie ; la moitié détenue par le plugin n'atteignait jamais
+le compilateur, qui charge le même fichier par `require` sous Node — le rendu
+serveur tournait donc sur un Brython non réparé.
 
 `vendor/brython.js` est une copie de `www/src/brython.js` (3.14 dev). Le dossier
 porte un `package.json` marqué `commonjs` : Node doit le charger comme script
