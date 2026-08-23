@@ -36,4 +36,11 @@ describe('from x import y', () => {
     test('the plain import beside it still works', () => {
         expect(setup()('tau')).toBe('6.2832');
     });
+
+    // `itertools.batched` is Jinja's `|batch`, and Python's own since 3.12 —
+    // which is why Svelthon injects no helper for it. Documented in DJANGO.md.
+    test('an iterator from the stdlib feeds an {#each} directly', () => {
+        const read = setup();
+        expect([read('chunk-0'), read('chunk-1')]).toEqual(['abc', 'de']);
+    });
 });
