@@ -19,6 +19,7 @@ date = "mine date"
 fromnow = "mine fromnow"
 slugify = "mine slugify"
 striptags = "mine striptags"
+urlencode = "mine urlencode"
 set_context = "mine set_context"
 get_context = "mine get_context"
 </script>
@@ -35,5 +36,6 @@ get_context = "mine get_context"
 <p data-k="fromnow">{fromnow}</p>
 <p data-k="slugify">{slugify}</p>
 <p data-k="striptags">{striptags}</p>
+<p data-k="urlencode">{urlencode}</p>
 <p data-k="set_context">{set_context}</p>
 <p data-k="get_context">{get_context}</p>

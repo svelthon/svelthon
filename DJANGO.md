@@ -468,6 +468,37 @@ showing `caf&eacute;` and correcting it after hydration. A page that needs the
 text on the server should strip it where the data is prepared, not where it is
 displayed.
 
+### Encoding a value into a URL
+
+`{{ tag|urlencode }}` keeps its word — Liquid, Django and Jinja all spell it that
+way — and takes Jinja's shape, a value or a mapping:
+
+```svelte
+<a href="/search?{urlencode({"q": query, "page": n})}">…</a>
+<a href="/tag/{urlencode(tag)}">…</a>
+```
+
+There is no `urldecode`, and that is not an omission. Encoding is what a template
+does; decoding is what happens *before* one. Django and Jinja have no decoder
+either — only Liquid, because a Shopify theme is data and a template with no code
+in front of it. Here SvelteKit has already decoded: `page.url.searchParams.get("q")`
+hands back the plain value.
+
+**One deliberate difference.** Django and Jinja both leave `/` unquoted in the
+string form, so `/tag/{urlencode(tag)}` on a tag of `a/b` yields `/tag/a/b` —
+two path segments where one was meant. Jinja gives a reason for it, that HTTP
+servers treat `/` and `%2F` alike in paths, and the reason does not hold: Apache
+answers 404 on an encoded slash unless `AllowEncodedSlashes` is on, nginx decodes
+it, and the two differ by design.
+
+Jinja does not agree with itself either — `|urlencode("a/b")` gives `a/b` while
+`|urlencode({"p": "a/b"})` gives `p=a%2Fb`, the two forms reaching different
+helpers. Taking its shape therefore meant choosing one of its two answers;
+escaping in both is the only reading that holds together.
+
+The cost is a query string that reads `?path=%2Fa%2Fb` instead of `?path=/a/b`.
+The gain is a path segment that stays one segment.
+
 ### URLs — an honest regression
 
 `{% url 'pep' pep.number %}` resolves a *named* route, so renaming a URL does not

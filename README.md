@@ -75,7 +75,7 @@ the build fails loudly instead of shipping a component with no reactivity.
 
 ## The API, and what it replaces
 
-Fourteen names, and nothing to import: they are injected into the module's namespace,
+Fifteen names, and nothing to import: they are injected into the module's namespace,
 and a component that defines its own keeps it. Each one stands where a rune
 stands in JavaScript.
 
@@ -96,6 +96,7 @@ stands in JavaScript.
 | `fromnow(value)` | — "3 days ago" or "in 2 hours", kept right as time passes |
 | `slugify(text)` | — a title made into a URL segment, as Django's `\|slugify` |
 | `striptags(html)` | — HTML shown as text, parsed rather than pattern-matched |
+| `urlencode(value)` | — a value, or a mapping, encoded into a URL |
 | `js` | — the JavaScript globals: `js.Response`, `js.JSON`, `js.URL` |
 | `items.append(x)` | `items.push(x)` — `$state` proxies deeply |
 

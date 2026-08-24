@@ -75,7 +75,7 @@ sans réactivité.
 
 ## L'API, et ce qu'elle remplace
 
-Quatorze noms, et rien à importer : ils sont injectés dans le namespace du module, et
+Quinze noms, et rien à importer : ils sont injectés dans le namespace du module, et
 un composant qui définit le sien le garde. Chacun se tient là où se tient une
 rune en JavaScript.
 
@@ -96,6 +96,7 @@ rune en JavaScript.
 | `fromnow(valeur)` | — « il y a 3 jours » ou « dans 2 heures », et ça reste juste |
 | `slugify(texte)` | — un titre transformé en segment d'URL, comme le `\|slugify` de Django |
 | `striptags(html)` | — du HTML affiché en texte, analysé et non filtré par motif |
+| `urlencode(valeur)` | — une valeur, ou un dict, encodés dans une URL |
 | `js` | — les globales JavaScript : `js.Response`, `js.JSON`, `js.URL` |
 | `items.append(x)` | `items.push(x)` — `$state` proxifie en profondeur |
 

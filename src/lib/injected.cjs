@@ -220,6 +220,37 @@ const INJECTED = [
         }`
     },
 
+    // The word all three engines use — Liquid, Django and Jinja — for the one
+    // thing a template genuinely does with a URL: build one. Decoding is an
+    // *input* operation and belongs before the template; only Liquid ships a
+    // decoder, because a Shopify theme has no code in front of it.
+    //
+    // Jinja's shape: a string, or a mapping that becomes a whole query string.
+    // Not Jinja's behaviour, and not Django's either — both leave `/` unquoted,
+    // which quietly turns `/tag/{urlencode(t)}` into two path segments. Jinja
+    // states a reason for it ("HTTP servers treat / and %2F equivalently in
+    // paths") and the reason is untrue: Apache answers 404 on an encoded slash
+    // unless AllowEncodedSlashes is on, nginx decodes it, and the two differ by
+    // design.
+    //
+    // Jinja does not even agree with itself: `|urlencode("a/b")` yields `a/b`
+    // while `|urlencode({"p": "a/b"})` yields `p=a%2Fb`, because the two forms
+    // reach different helpers. Escaping in both is the only reading that holds.
+    {
+        name: 'urlencode',
+        value: `() => (value) => {
+            if (value !== null && typeof value === 'object' && !(value instanceof Date)) {
+                const pairs = new URLSearchParams();
+
+                for (const key of Object.keys(value)) pairs.append(key, __pybridge.str(value[key]));
+
+                return pairs.toString();
+            }
+
+            return encodeURIComponent(__pybridge.str(value));
+        }`
+    },
+
     // Context belongs to a component instance; a plain module has none.
     { name: 'set_context', value: '() => setContext', component: true },
     // A missing key is `undefined` in Svelte; Python expects None.
