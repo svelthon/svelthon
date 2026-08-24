@@ -34,8 +34,20 @@ describe('fromnow', () => {
         expect(setup({ when: ago(3 * 86400) })()).toBe('il y a 3 jours');
     });
 
+    test('the future needs no second name, unlike Django', () => {
+        // `|timesince` and `|timeuntil` both answer `0 minutes` for a date on
+        // the wrong side; Intl formats a signed gap, so one name is enough.
+        expect(setup({ when: new Date(Date.now() + 3 * 86400 * 1000).toISOString() })()).toBe('dans 3 jours');
+    });
+
     test('another language, same date', () => {
         expect(setup({ when: ago(3 * 86400), locale: 'en-GB' })()).toBe('3 days ago');
+    });
+
+    // The three the name has to be true for: behind, on, and ahead of now.
+    test('and the present, which is the third case', () => {
+        expect(setup({ when: new Date().toISOString() })()).toBe('maintenant');
+        expect(setup({ when: new Date().toISOString(), locale: 'en-GB' })()).toBe('now');
     });
 
     test('and the future', () => {
