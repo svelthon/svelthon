@@ -12,6 +12,7 @@ box = Box("a")
 
 tags = []
 sheet = {"tags": []}
+basket = Box([])
 
 rows = [{"pick": "a"}, {"pick": "b"}]
 </script>
@@ -41,6 +42,11 @@ rows = [{"pick": "a"}, {"pick": "b"}]
     <input data-k="s-{one}" type="checkbox" bind:group={sheet.tags} value={one} />
 {/each}
 <p data-k="sheet">{sheet["tags"]}</p>
+
+{#each ["a", "b", "c"] as one}
+    <input data-k="k-{one}" type="checkbox" bind:group={basket.pick} value={one} />
+{/each}
+<p data-k="basket">{basket.pick}</p>
 
 {#each rows as row, i}
     {#each ["a", "b", "c"] as one}

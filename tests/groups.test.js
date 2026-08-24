@@ -85,6 +85,14 @@ describe('bind:group', () => {
         expect(read('sheet')).toBe("['b']");
     });
 
+    test('a checkbox group on an attribute of an object', () => {
+        const { read, click } = setup();
+
+        click('k-a');
+        click('k-b');
+        expect(read('basket')).toBe("['a', 'b']");
+    });
+
     test('one group per row of an {#each}', () => {
         const { read, click, filled } = setup();
 
