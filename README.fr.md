@@ -75,7 +75,7 @@ sans réactivité.
 
 ## L'API, et ce qu'elle remplace
 
-Treize noms, et rien à importer : ils sont injectés dans le namespace du module, et
+Quatorze noms, et rien à importer : ils sont injectés dans le namespace du module, et
 un composant qui définit le sien le garde. Chacun se tient là où se tient une
 rune en JavaScript.
 
@@ -95,6 +95,7 @@ rune en JavaScript.
 | `date(valeur, style)` | — une date lue dans la langue du visiteur, comme le `\|date` de Django |
 | `timesince(valeur)` | — « il y a 3 jours », et ça reste juste à mesure que le temps passe |
 | `slugify(texte)` | — un titre transformé en segment d'URL, comme le `\|slugify` de Django |
+| `striptags(html)` | — du HTML affiché en texte, analysé et non filtré par motif |
 | `js` | — les globales JavaScript : `js.Response`, `js.JSON`, `js.URL` |
 | `items.append(x)` | `items.push(x)` — `$state` proxifie en profondeur |
 

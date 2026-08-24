@@ -1,0 +1,58 @@
+import { test, expect, describe } from 'vitest';
+import { mount, flushSync } from 'svelte';
+import Stripped from './fixtures/Stripped.svelte';
+
+// Jinja's `|striptags`, done with the browser's parser instead of a regex.
+// Every case below is one the regex — Django's and Jinja's — gets wrong, and
+// two of them are ordinary content rather than an edge case: entities are left
+// undecoded, and markup escapes through an attribute holding a `>`.
+describe('striptags', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+    mount(Stripped, { target });
+    flushSync();
+
+    const out = (i) => target.querySelector(`p[data-k="out-${i}"]`).textContent;
+
+    test('tags go, text stays', () => {
+        expect(out(0)).toBe('Bonjour le monde');
+    });
+
+    test('entities are decoded — the regex leaves `caf&eacute;`', () => {
+        expect(out(1)).toBe('café & thé');
+    });
+
+    test('an attribute holding a `>` does not leak markup', () => {
+        // The regex gives `b" src="x"> suite`.
+        expect(out(2)).toBe('suite');
+    });
+
+    test('a script keeps neither its tags nor its source', () => {
+        // The regex gives `alert("x") après`.
+        expect(out(3)).toBe('après');
+    });
+
+    test('a bare `<` in the text is not a tag', () => {
+        // The regex truncates at it: `a &lt; b et 3 `.
+        expect(out(4)).toBe('a < b et 3 < 4');
+    });
+
+    test('a comment goes', () => {
+        expect(out(5)).toBe('visible');
+    });
+
+    test('runs of whitespace collapse, as Jinja does', () => {
+        expect(out(6)).toBe('Bonjour le monde');
+    });
+
+    test('and no separator is invented between blocks, as Jinja does not', () => {
+        expect(out(7)).toBe('ab');
+    });
+
+    test('text without markup is left alone', () => {
+        expect(out(8)).toBe('texte sans balise');
+    });
+
+    test('a value that is not a string goes through str() first', () => {
+        expect(target.querySelector('p[data-k="number"]').textContent).toBe('703');
+    });
+});

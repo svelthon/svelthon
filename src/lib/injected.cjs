@@ -185,6 +185,35 @@ const INJECTED = [
             .replace(/^-+|-+$/g, '')`
     },
 
+    // Jinja's `|striptags`: HTML shown as text — an excerpt from a feed, a
+    // preview of an imported document, content nobody here wrote.
+    //
+    // The browser's own parser does it, and nothing else does it correctly. The
+    // regex Django and Jinja ship leaves entities undecoded (`caf&eacute;`),
+    // lets markup escape through an attribute holding a `>`, and drops the tags
+    // around a `<script>` while keeping its source. Django's documentation warns
+    // that the output is not safe; measured, it is not even right.
+    //
+    // Which is why there is no fallback: off a browser this returns nothing
+    // rather than something wrong. A first render shows less and then shows the
+    // text, instead of showing `caf&eacute;` and correcting it — and a page that
+    // needs the text on the server should strip it where the data is prepared.
+    //
+    // Whitespace is collapsed, as Jinja does. Neither inserts a separator
+    // between blocks: `<p>a</p><p>b</p>` is `ab` there too.
+    {
+        name: 'striptags',
+        value: `() => (value) => {
+            if (typeof DOMParser === 'undefined') return '';
+
+            const text = new DOMParser()
+                .parseFromString(__pybridge.str(value), 'text/html')
+                .body.textContent;
+
+            return (text || '').replace(/\\s+/g, ' ').trim();
+        }`
+    },
+
     // Context belongs to a component instance; a plain module has none.
     { name: 'set_context', value: '() => setContext', component: true },
     // A missing key is `undefined` in Svelte; Python expects None.

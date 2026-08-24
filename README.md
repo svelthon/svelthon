@@ -75,7 +75,7 @@ the build fails loudly instead of shipping a component with no reactivity.
 
 ## The API, and what it replaces
 
-Thirteen names, and nothing to import: they are injected into the module's namespace,
+Fourteen names, and nothing to import: they are injected into the module's namespace,
 and a component that defines its own keeps it. Each one stands where a rune
 stands in JavaScript.
 
@@ -95,6 +95,7 @@ stands in JavaScript.
 | `date(value, style)` | — a date read in the visitor's language, as Django's `\|date` |
 | `timesince(value)` | — "3 days ago", and it keeps itself right as time passes |
 | `slugify(text)` | — a title made into a URL segment, as Django's `\|slugify` |
+| `striptags(html)` | — HTML shown as text, parsed rather than pattern-matched |
 | `js` | — the JavaScript globals: `js.Response`, `js.JSON`, `js.URL` |
 | `items.append(x)` | `items.push(x)` — `$state` proxies deeply |
 

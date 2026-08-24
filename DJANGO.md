@@ -421,6 +421,42 @@ look identical and must give **one** URL. And it keeps combining marks, which is
 not decoration: a Devanagari vowel sign has no composed form, so dropping marks
 turns `हिन्दी भाषा` into `ह-न-द-भ-ष-` — not a folded word, a shredded one.
 
+### HTML shown as text
+
+`{{ body|striptags }}` keeps its word and changes its engine — the browser's own
+parser, not a regular expression:
+
+```svelte
+<p class="excerpt">{striptags(entry.summary)}</p>
+```
+
+The case is content nobody here wrote: a feed, an API answer, an imported
+document. For your own pages you already hold the plain text.
+
+**The regex both Django and Jinja ship is not merely imprecise, it is wrong on
+ordinary input** — measured:
+
+| | regex | Svelthon |
+|---|---|---|
+| `<p>caf&eacute; &amp; th&eacute;</p>` | `caf&eacute; &amp; th&eacute;` | `café & thé` |
+| `<img alt="a>b" src="x"> suite` | `b" src="x"> suite` | `suite` |
+| `<script>alert("x")</script> après` | `alert("x") après` | `après` |
+| `<p>a &lt; b et 3 < 4</p>` | `a &lt; b et 3 ` | `a < b et 3 < 4` |
+
+Entities left undecoded, markup escaping through an attribute that holds a `>`,
+and the source of a `<script>` landing in the excerpt. Django's own documentation
+warns that the output is not safe; what the table shows is that it is not even
+right.
+
+Whitespace is collapsed as Jinja does, and no separator is invented between
+blocks — `<p>a</p><p>b</p>` gives `ab` there too.
+
+**Off a browser it returns nothing.** There is no parser under Node, and no
+fallback either: a first render shows less and then shows the text, rather than
+showing `caf&eacute;` and correcting it after hydration. A page that needs the
+text on the server should strip it where the data is prepared, not where it is
+displayed.
+
 ### URLs — an honest regression
 
 `{% url 'pep' pep.number %}` resolves a *named* route, so renaming a URL does not
