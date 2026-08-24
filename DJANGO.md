@@ -25,6 +25,7 @@ every tutorial and every answer online applies to Svelthon with one substitution
 | `{{ pep.title\|upper }}` | `{pep.title.upper()}` |
 | `{{ note\|default:"—" }}` | `{note or "—"}` |
 | `{{ body\|safe }}` | `{@html body}` |
+| `{{ comment\|linebreaks }}` | `white-space: pre-wrap`, or split — see below |
 | `{% if a %}…{% elif b %}…{% else %}…{% endif %}` | `{#if a}…{:else if b}…{:else}…{/if}` |
 | `{% for x in xs %}…{% endfor %}` | `{#each xs as x}…{/each}` |
 | `{% for x in xs %}…{% empty %}…{% endfor %}` | `{#each xs as x}…{:else}…{/each}` |
@@ -331,6 +332,47 @@ did — so this is the same move as `{% cycle %}` and `forloop.last` above. Wher
 the truncation is genuinely semantic — a meta description, an excerpt sent
 somewhere else — it is three lines in a `@derived`, and that is logic rather than
 presentation.
+
+### Line breaks in user text
+
+`{{ comment|linebreaks }}` has no Svelthon helper, and the reason is worth a
+section: **both answers here produce no HTML at all**, so the escaping problem
+Django's filter exists to solve does not arise.
+
+The case is real — a comment or a bio typed into a `<textarea>` arrives with
+newlines, and HTML collapses them. Two ways out, depending on what you want:
+
+```svelte
+<!-- keep the line breaks as they were typed -->
+<p class="comment">{comment}</p>
+
+<!-- or real paragraphs -->
+{#each comment.split("\n\n") as para}
+    <p>{para}</p>
+{/each}
+
+<style>
+    .comment { white-space: pre-wrap }
+</style>
+```
+
+The second renders `<p>Première ligne.</p><p>Nouveau paragraphe &lt;b&gt;…</p>` —
+proper elements, escaping done by Svelte, and not a single `{@html}`. Django's
+filter has to escape first and then insert tags precisely because it builds HTML
+from a string; here nothing builds HTML, so there is nothing to get wrong.
+
+**Jinja has no `linebreaks` either**, which is the tell. Its template language can
+call a method with an argument, so `{{ comment.split("\n\n") }}` was always
+available and the filter never had a reason to exist. Django's cannot —
+`{{ comment.split }}` calls `split()` with no argument — so it needed one.
+
+That is the rule behind this whole page, and it is worth stating once: *a template
+needs a filter when its host cannot do the job in an expression*. Django's extra
+filters answer a weak expression language. Jinja's 54 answer what no Python
+expression does in one go — regex work, chunking, serialising, wrapping. Ours
+answer a third constraint, which is that the standard library costs 2.9 MB to
+import, and that is why `batch` and `tojson` echo Jinja's list while `date`,
+`timesince` and `slugify` echo Django's.
 
 ### Slugs
 
