@@ -262,6 +262,57 @@ function pattern(target) {
     return `[${inner}]${trimmed.slice(close + 1)}`;
 }
 
+// The key that trails an `{#each}` target: `[target, key]`, or null when the line
+// carries none.
+//
+// A key is an expression, so it holds parentheses of its own — a call, a builtin,
+// a tuple. Matching it with `\(([^()]*)\)$` therefore failed on exactly those, and
+// failed *silently*: the whole line was taken for the target, so the key travelled
+// into the generated markup uncompiled — JavaScript, in a template where nothing
+// else is — and the names inside it were declared as the block's own. Measured
+// before this existed: `(str(r.id))` reached the browser as `ReferenceError: str
+// is not defined`, and a tuple key, which is how Python writes a composite one,
+// could not be written at all.
+//
+// So the group is found by balance rather than by content, ignoring parentheses
+// inside a string. Forward, not backwards: only a forward scan can tell an escaped
+// quote from a real one.
+function trailingKey(text) {
+    let depth = 0;
+    let quote = null;
+    let opens = -1;
+
+    for (let i = 0; i < text.length; i++) {
+        const c = text[i];
+
+        if (quote) {
+            if (c === '\\') i++;
+            else if (c === quote) quote = null;
+            continue;
+        }
+
+        if (c === '"' || c === "'") quote = c;
+        else if (c === '(') {
+            if (depth === 0) opens = i;
+            depth++;
+        } else if (c === ')') {
+            // Unbalanced: not something to guess at, and Svelte will report it.
+            if (--depth < 0) return null;
+            if (depth > 0) continue;
+
+            // Only a group with nothing after it is the key. Anything trailing it
+            // means the parentheses belonged to the target instead.
+            if (text.slice(i + 1).trim()) continue;
+
+            // And the part before has to be non-empty, or `as (statut, combien)`
+            // — a tuple target — would read as a key with no target at all.
+            return text.slice(0, opens).trim() ? [text.slice(0, opens), text.slice(opens + 1, i)] : null;
+        }
+    }
+
+    return null;
+}
+
 function eachBlock(trimmed, declare, call) {
     const split = trimmed.match(/^#each\s+([\s\S]+?)\s+as\s+([\s\S]+)$/);
 
@@ -272,15 +323,13 @@ function eachBlock(trimmed, declare, call) {
         return alone ? `{#each ${call(alone[1], '__seq')}}` : `{${trimmed}}`;
     }
 
-    // A key trails the target, so the part before it has to be non-empty —
-    // otherwise `as (statut, combien)` would read as a key with no target.
-    const keyed = split[2].match(/^([\s\S]*\S)\s*\(([^()]*)\)\s*$/);
-    const target = pattern(keyed ? keyed[1] : split[2]);
+    const keyed = trailingKey(split[2]);
+    const target = pattern(keyed ? keyed[0] : split[2]);
 
     const iterable = call(split[1], '__seq');
     declare(identifiers(target));
 
-    return `{#each ${iterable} as ${target}` + (keyed ? ` (${call(keyed[2], 'repr')})` : '') + '}';
+    return `{#each ${iterable} as ${target}` + (keyed ? ` (${call(keyed[1], 'repr')})` : '') + '}';
 }
 
 export function pythonExpressions(markup, collect) {
