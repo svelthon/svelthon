@@ -93,7 +93,7 @@ rune en JavaScript.
 | `tojson(valeur, indent=None)` | — le même, sérialisé, sous le mot de Jinja |
 | `batch(xs, n)` | — une liste plate groupée en lignes de `n`, comme le `\|batch` de Jinja |
 | `date(valeur, style)` | — une date lue dans la langue du visiteur, comme le `\|date` de Django |
-| `timesince(valeur)` | — « il y a 3 jours », et ça reste juste à mesure que le temps passe |
+| `fromnow(valeur)` | — « il y a 3 jours » ou « dans 2 heures », et ça reste juste |
 | `slugify(texte)` | — un titre transformé en segment d'URL, comme le `\|slugify` de Django |
 | `striptags(html)` | — du HTML affiché en texte, analysé et non filtré par motif |
 | `js` | — les globales JavaScript : `js.Response`, `js.JSON`, `js.URL` |

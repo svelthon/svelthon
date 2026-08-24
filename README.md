@@ -93,7 +93,7 @@ stands in JavaScript.
 | `tojson(value, indent=None)` | — the same, dumped, under Jinja's own word |
 | `batch(xs, n)` | — a flat list grouped into rows of `n`, as Jinja's `\|batch` |
 | `date(value, style)` | — a date read in the visitor's language, as Django's `\|date` |
-| `timesince(value)` | — "3 days ago", and it keeps itself right as time passes |
+| `fromnow(value)` | — "3 days ago" or "in 2 hours", kept right as time passes |
 | `slugify(text)` | — a title made into a URL segment, as Django's `\|slugify` |
 | `striptags(html)` | — HTML shown as text, parsed rather than pattern-matched |
 | `js` | — the JavaScript globals: `js.Response`, `js.JSON`, `js.URL` |

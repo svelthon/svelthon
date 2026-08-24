@@ -7,7 +7,7 @@ import Since from './fixtures/Since.svelte';
 // component stays on screen, so this one wakes itself when the display would
 // change — and asks for the delay the display needs, so it slows down as the
 // date ages instead of beating at a fixed rate.
-describe('timesince', () => {
+describe('fromnow', () => {
     let mounted = null;
 
     // The clock is shared by the whole document, and its timer is cleared when

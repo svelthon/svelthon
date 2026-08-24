@@ -120,21 +120,27 @@ const INJECTED = [
         }`
     },
 
-    // Django's `|timesince`, and the one helper here that Django could not have.
-    // A rendered page is finished, so "3 minutes ago" is true once and then
-    // wrong; a component stays on screen, and this one keeps itself right.
+    // Django's `|timesince` and `|timeuntil` in one, which is why it carries
+    // neither word: `Intl` formats a *signed* gap, so the direction is in the
+    // value rather than in the name. `fromnow` is the JavaScript world's word
+    // for it — moment and dayjs both spell it that way — and it stays true in
+    // both directions where "since" would lie half the time.
+    //
+    // It is also the one helper here that Django could not have had at all. A
+    // rendered page is finished, so "3 minutes ago" is true once and then wrong;
+    // a component stays on screen, and this one keeps itself right.
     //
     // Reading it registers the block with a shared clock, and the delay asked
     // for is what the *display* needs — a second while it counts seconds, an
     // hour once it counts days. So it slows down on its own as a date ages,
     // which is why nothing has to switch it off.
     {
-        name: 'timesince',
+        name: 'fromnow',
         value: `() => (value, locale) => {
             const at = value instanceof Date ? value : new Date(value);
 
             if (Number.isNaN(at.getTime())) {
-                throw new Error('timesince(): ' + JSON.stringify(value) + ' is not a date');
+                throw new Error('fromnow(): ' + JSON.stringify(value) + ' is not a date');
             }
 
             const UNITS = [

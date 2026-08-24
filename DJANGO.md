@@ -26,6 +26,8 @@ every tutorial and every answer online applies to Svelthon with one substitution
 | `{{ note\|default:"—" }}` | `{note or "—"}` |
 | `{{ body\|safe }}` | `{@html body}` |
 | `{{ comment\|linebreaks }}` | `white-space: pre-wrap`, or split — see below |
+| `{{ d\|timesince }}` | `{fromnow(d)}` — see below |
+| `{{ d\|timeuntil }}` | `{fromnow(d)}`, the same one — see below |
 | `{% if a %}…{% elif b %}…{% else %}…{% endif %}` | `{#if a}…{:else if b}…{:else}…{/if}` |
 | `{% for x in xs %}…{% endfor %}` | `{#each xs as x}…{/each}` |
 | `{% for x in xs %}…{% empty %}…{% endfor %}` | `{#each xs as x}…{:else}…{/each}` |
@@ -281,13 +283,22 @@ there.
 
 ### Relative time, which keeps itself right
 
-`{{ pep.created|timesince }}` keeps its word, and gains the one thing Django
-could not give it:
+`{{ pep.created|timesince }}` and `{{ pep.launch|timeuntil }}` are **one name
+here**, and it is neither of theirs:
 
 ```svelte
-{timesince(pep.created)}              <!-- il y a 3 jours -->
-{timesince(pep.created, "en-GB")}     <!-- 3 days ago -->
+{fromnow(pep.created)}              <!-- il y a 3 jours -->
+{fromnow(pep.launch)}               <!-- dans 2 heures -->
+{fromnow(pep.created, "en-GB")}     <!-- 3 days ago -->
 ```
+
+Django needs two filters because it measures an absolute duration and puts the
+direction in the name — each one answers `0 minutes` for a date on the wrong
+side. `Intl` formats a **signed** gap, so the direction rides in the value and
+`since` would lie half the time. `fromnow` is what the JavaScript world calls it,
+in `moment` and `dayjs` alike.
+
+It also gains the one thing Django could not give either filter:
 
 A Django page is finished when it is sent, so "3 minutes ago" is true once and
 wrong a minute later. A component stays on screen, so this one **wakes itself**
