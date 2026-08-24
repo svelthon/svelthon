@@ -47,14 +47,14 @@ def mixed():
 
 
 def dumped():
-    # `to_json` is `to_js` with the dump attached: `json.dumps` would walk the
+    # `tojson` is `to_js` with the dump attached: `json.dumps` would walk the
     # raw Brython object and never find the fields.
-    return to_json(Pep(703, ["gil"]))
+    return tojson(Pep(703, ["gil"]))
 
 
 def indented():
-    return to_json({"a": 1}, 2)
+    return tojson({"a": 1}, 2)
 
 
 def plain():
-    return to_json([1, "two", None, True])
+    return tojson([1, "two", None, True])

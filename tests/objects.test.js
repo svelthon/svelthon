@@ -64,7 +64,7 @@ describe('a graph that loops back', () => {
 
 // Jinja's `|tojson`: the same need, and the same reason it cannot be
 // `json.dumps` — an instance's fields are not where a Python dump looks.
-describe('to_json', () => {
+describe('tojson', () => {
     test('an instance becomes its fields', () => {
         expect(JSON.parse(dumped())).toEqual({ number: 703, tags: ['gil'] });
     });

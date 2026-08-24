@@ -249,6 +249,30 @@ That is also why every incremental renderer landed in the same place — Vue's
 `v-for="(item, index) in xs"`, React's `xs.map((item, index) => …)`, Angular's
 `let i = $index`. None of them reintroduced `forloop`.
 
+### Relative time, which keeps itself right
+
+`{{ pep.created|timesince }}` keeps its word, and gains the one thing Django
+could not give it:
+
+```svelte
+{timesince(pep.created)}              <!-- il y a 3 jours -->
+{timesince(pep.created, "en-GB")}     <!-- 3 days ago -->
+```
+
+A Django page is finished when it is sent, so "3 minutes ago" is true once and
+wrong a minute later. A component stays on screen, so this one **wakes itself**
+when the shown value would change — nothing to write, no `setInterval`, no
+`{% now %}` passed through the context.
+
+It asks for exactly the delay the display needs: a second while it counts
+seconds, an hour once it counts days. So it slows down on its own as a date ages,
+and one timer serves the whole document however many dates are shown — a tick
+re-runs the blocks that read a relative time, and nothing else.
+
+This is the direction reversed. Everywhere else on this page Django lends
+Svelthon a word; here Svelte gives the filter something a template engine that
+renders once cannot have.
+
 ### Filters
 
 A Django filter is a small language: `{{ x|striptags|truncatewords:20 }}`. In

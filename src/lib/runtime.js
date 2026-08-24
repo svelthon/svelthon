@@ -3,6 +3,7 @@
 import './globals.js';
 import '../../vendor/brython.js';
 import './boot.js';
+import { createSubscriber } from 'svelte/reactivity';
 
 // Python's None, so a prop the parent never passed reads as None rather than
 // leaking JavaScript's undefined into Python.
@@ -836,6 +837,73 @@ export function inTemplate(run) {
         $B.$getattr_pep657 = original;
         $B.$setattr1 = originalSet;
     }
+}
+
+// A shared clock, for the values that go stale on their own — `timesince` is the
+// one, and Django never needed it because a rendered page is finished. A
+// component stays on screen, so "3 minutes ago" has to become "4 minutes ago"
+// without anyone touching the page.
+//
+// One timer for the whole document, not one per date: every reader registers
+// through the same subscriber, so a tick re-runs exactly the blocks that read a
+// relative time and nothing else. `createSubscriber` is a no-op on the server,
+// which is what stops a render from arming anything.
+//
+// The delay is what the *display* needs, not a fixed beat: a value shown in
+// seconds asks to be woken in a second, one shown in days asks for a day. So it
+// slows down on its own as the dates age, and the cap keeps a timer that would
+// otherwise be set for months down to an hour — which never sleeps, and costs
+// nothing.
+const AT_MOST = 3600 * 1000;
+
+let announce = null;
+let armed = null;
+let wanted = Infinity;
+
+// `createSubscriber` hands `update` to a *render effect*, so it arrives on the
+// next flush rather than on the line after the call. The delay asked for is
+// therefore recorded first and armed whenever arming becomes possible — once
+// here, once from `start`. Getting that backwards leaves the timer unset and the
+// value frozen, with nothing to show for it.
+const clock = createSubscriber((update) => {
+    announce = update;
+    arm();
+
+    return () => {
+        announce = null;
+        if (armed) clearTimeout(armed.timer);
+        armed = null;
+        wanted = Infinity;
+    };
+});
+
+function arm() {
+    if (announce === null || wanted === Infinity) return;
+
+    const at = Date.now() + wanted;
+
+    // Keep the soonest of everything asked for since the last tick.
+    if (armed && armed.at <= at) return;
+    if (armed) clearTimeout(armed.timer);
+
+    armed = {
+        at,
+        timer: setTimeout(() => {
+            armed = null;
+            wanted = Infinity;
+            announce?.();
+        }, wanted)
+    };
+}
+
+export function ticking(after) {
+    // Registers the dependency: the block calling this re-runs on the next tick.
+    clock();
+
+    if (!(after > 0)) return;
+
+    wanted = Math.min(wanted, after, AT_MOST);
+    arm();
 }
 
 // Expose one component-level signal as a property of the namespace Brython
