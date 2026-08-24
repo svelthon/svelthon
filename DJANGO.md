@@ -193,27 +193,24 @@ Everything `forloop` carries is then an expression:
 | — | `loop.previtem` | `rows[i - 1] if i else None` |
 | `forloop.parentloop` | `loop.parent` | name the outer index: `{#each xs as x, i}{#each x.ys as y, j}` |
 
-**Grouping into rows** is the one thing an index does not give you — Jinja spells
-it `items|batch(3)`. It is in the standard library, since Python 3.12:
+**Grouping into rows** is the one thing an index does not give you — Django has no
+answer, Jinja spells it `items|batch(3)`, and Svelthon injects `chunks`:
 
 ```svelte
-<script lang="python">
-from itertools import batched
-</script>
-
-{#each batched(items, 3) as row}
+{#each chunks(items, 3) as row}
     <tr>{#each row as cell}<td>{cell}</td>{/each}</tr>
 {/each}
 ```
 
-Nothing is injected for it, and nothing needs to be: `batched` is Python's own,
-and the block turns its iterator into a list on the way in. Worth knowing that
-JavaScript has no equivalent at all — a Svelte component chunks with
-`Array.from({ length: Math.ceil(n / 3) }, …)` or installs lodash — so this is one
-of the places where the Python side reads better than the language it compiles
-to. And before reaching for it: a grid of three columns is
-`grid-template-columns: repeat(3, 1fr)` on a flat list, not a grouping in the
-markup.
+A third argument pads the last row, which is what keeps a table's columns
+aligned — `chunks(items, 3, "")`, positional as in Jinja.
+
+Python has `itertools.batched` and it works here, but it is not free: `itertools`
+is 10 KB of standard library and pulls `operator` behind it, for a component that
+wanted three columns. It is also a lazy iterator, so a name holding one comes back
+empty the second time it is read. `chunks` returns a list of lists, takes any
+iterable — a generator included, which a slicing comprehension cannot — and needs
+no import. JavaScript, for its part, has no equivalent at all.
 
 **Reach for CSS before any of these.** A component carries its own scoped
 stylesheet, which a Django or Jinja template never does — so striping a table,

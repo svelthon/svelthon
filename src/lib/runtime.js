@@ -54,6 +54,14 @@ export const __pybridge = {
         }
     },
 
+    // A JavaScript array handed back to Python. A list *is* an array in Brython,
+    // but not every array is a list: one built here — by `.slice()`, say — reads
+    // as a `JavascriptArray`, which prints `[A, B]` where Python prints
+    // `['A', 'B']`. Anything a helper hands to Python goes through this.
+    list(items) {
+        return _b_.list.$factory(items);
+    },
+
     // `{#each}` walks a JavaScript array. A Python list or tuple already is one,
     // but a dict, a set, a range, a generator or the result of .items() is not —
     // and iterating those is the whole point of writing the loop in Python.

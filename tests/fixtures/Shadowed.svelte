@@ -14,6 +14,7 @@ to_js = "mine to_js"
 to_python = "mine to_python"
 to_json = "mine to_json"
 js = "mine js"
+chunks = "mine chunks"
 set_context = "mine set_context"
 get_context = "mine get_context"
 </script>
@@ -25,5 +26,6 @@ get_context = "mine get_context"
 <p data-k="to_python">{to_python}</p>
 <p data-k="to_json">{to_json}</p>
 <p data-k="js">{js}</p>
+<p data-k="chunks">{chunks}</p>
 <p data-k="set_context">{set_context}</p>
 <p data-k="get_context">{get_context}</p>
