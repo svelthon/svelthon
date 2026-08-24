@@ -194,23 +194,25 @@ Everything `forloop` carries is then an expression:
 | `forloop.parentloop` | `loop.parent` | name the outer index: `{#each xs as x, i}{#each x.ys as y, j}` |
 
 **Grouping into rows** is the one thing an index does not give you — Django has no
-answer, Jinja spells it `items|batch(3)`, and Svelthon injects `chunks`:
+answer, Jinja spells it `items|batch(3)`, and Svelthon injects `batch`:
 
 ```svelte
-{#each chunks(items, 3) as row}
+{#each batch(items, 3) as row}
     <tr>{#each row as cell}<td>{cell}</td>{/each}</tr>
 {/each}
 ```
 
-A third argument pads the last row, which is what keeps a table's columns
-aligned — `chunks(items, 3, "")`, positional as in Jinja.
+Without a third argument the last row is simply short. Passing one pads it, which
+is what keeps a table's columns aligned — `batch(items, 3, "")`, positional as in
+Jinja. `None` there means no padding, like every other helper on this page.
 
-Python has `itertools.batched` and it works here, but it is not free: `itertools`
-is 10 KB of standard library and pulls `operator` behind it, for a component that
-wanted three columns. It is also a lazy iterator, so a name holding one comes back
-empty the second time it is read. `chunks` returns a list of lists, takes any
-iterable — a generator included, which a slicing comprehension cannot — and needs
-no import. JavaScript, for its part, has no equivalent at all.
+Python has `itertools.batched` and it works here, but it is not an option:
+**any** import of the standard library ships its whole transitive closure, and
+this one measures **2.9 MB** — `operator`, `functools`, `collections`, and from
+there `pdb`, `pydoc`, `argparse`, `tarfile`. Only `math` is cheap, at 83 KB.
+`batch` needs no import, returns a list of lists rather than a lazy iterator, and
+takes any iterable — a generator included, which a slicing comprehension cannot.
+JavaScript, for its part, has no equivalent at all.
 
 **Reach for CSS before any of these.** A component carries its own scoped
 stylesheet, which a Django or Jinja template never does — so striping a table,
@@ -248,6 +250,33 @@ instead of inheriting it.
 That is also why every incremental renderer landed in the same place — Vue's
 `v-for="(item, index) in xs"`, React's `xs.map((item, index) => …)`, Angular's
 `let i = $index`. None of them reintroduced `forloop`.
+
+### Dates
+
+`{{ pep.created|date:"j F Y" }}` keeps its word and changes what stands behind it:
+
+```svelte
+{date(pep.created)}                      <!-- 24 août 2026 -->
+{date(pep.created, "full")}              <!-- lundi 24 août 2026 -->
+{date(pep.created, "short", "short")}    <!-- 24/08/2026, 10:30 -->
+{date(pep.created, "long", None, "en-US")}
+```
+
+Four styles — `short`, `medium`, `long`, `full` — instead of Django's format
+letters, because they come from the platform's `Intl` and answer **in the
+reader's own language**. `|date:"j F Y"` never did: its month names are whatever
+the server was configured for.
+
+The value is whatever a component actually receives: an ISO string, a date alone,
+a timestamp, a JavaScript `Date`. Which matters, because a date crossing from a
+`load()` or a `fetch` arrives as a string, and there is no `datetime` to parse it
+with — importing one would ship 2.9 MB.
+
+**Under server rendering, pass the locale.** Without it the server formats in its
+own language and time zone, the browser reformats in the visitor's, and Svelte
+reports a hydration mismatch. The same holds for the time zone, which `Intl`
+takes from the runtime; for anything beyond these four styles, `js.Intl` is
+there.
 
 ### Relative time, which keeps itself right
 
