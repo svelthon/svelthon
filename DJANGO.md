@@ -303,6 +303,35 @@ the truncation is genuinely semantic — a meta description, an excerpt sent
 somewhere else — it is three lines in a `@derived`, and that is logic rather than
 presentation.
 
+### Slugs
+
+`{{ title|slugify }}` keeps its word, and loses its option:
+
+```svelte
+<h2 id={slugify(pep.title)}>{pep.title}</h2>
+<a href="/pep/{pep.number}-{slugify(pep.title)}">…</a>
+```
+
+One rule: decompose, drop the combining marks, keep every letter and digit. On
+Latin script that is Django's own output to the character — accents folded, `C++
+& Rust!` giving `c-rust`, runs of spaces collapsing to one dash.
+
+The difference is what happens to the rest:
+
+| | Django | Svelthon |
+|---|---|---|
+| `Été à Paris` | `ete-a-paris` | `ete-a-paris` |
+| `Straße` | `strae` | `straße` |
+| `Łódź` | `odz` | `łodz` |
+| `Привет мир` | `""` | `привет-мир` |
+| `日本語` | `""` | `日本語` |
+
+Django needs `allow_unicode=True` for the bottom half, and its default is a
+silent failure rather than an edge case: a site written in Russian or Japanese
+gets the *same empty slug for every article*. URLs have carried unicode for years
+— a browser shows `wiki/Привет` decoded and encodes it on the wire — so keeping
+the letters costs nothing and there is no option to turn on.
+
 ### URLs — an honest regression
 
 `{% url 'pep' pep.number %}` resolves a *named* route, so renaming a URL does not
