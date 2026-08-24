@@ -280,6 +280,29 @@ Svelthon it is Python, so it is functions and methods — often shorter, sometim
 less pretty when it nests. The gain is that there is nothing to learn and nothing
 to register: any function your module can import, the template can call.
 
+The handful with no Python one-liner have a helper of their own, listed in the
+README: `tojson`, `batch`, `date`, `timesince`.
+
+**`|truncatewords` is a stylesheet, not a filter.** Cutting at twenty words cuts
+at an arbitrary place: depending on the width it overflows or leaves a gap.
+Clamping by *rendered lines* is what you actually wanted, it adds the ellipsis
+itself, and it follows a resize:
+
+```css
+.summary {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+```
+
+A component carries its own scoped stylesheet, which a Django template never
+did — so this is the same move as `{% cycle %}` and `forloop.last` above. Where
+the truncation is genuinely semantic — a meta description, an excerpt sent
+somewhere else — it is three lines in a `@derived`, and that is logic rather than
+presentation.
+
 ### URLs — an honest regression
 
 `{% url 'pep' pep.number %}` resolves a *named* route, so renaming a URL does not
