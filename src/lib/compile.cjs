@@ -176,6 +176,163 @@ function declaredJsImports(body) {
     return [];
 }
 
+// `importjs` — a component's JavaScript imports, written where its Python is.
+//
+// `__js__` covers a plain `.py`, and only the named form, which is all a module
+// ever asks for: `error`, `redirect`, `query`, `browser`. A component asks for
+// three more, and every one of them is a template concern — the default export,
+// which is how a `.svelte` child is imported and by far the commonest (25 of the
+// 65 imports measured across the three projects); a stylesheet, imported for its
+// effect; and a namespace, which is what `<Dialog.Root>` needs. None of the three
+// can occur in a module with no markup, which is why the dialect stops at the
+// component and a `.py` keeps parsing as Python.
+//
+// A keyword rather than another declaration read from the AST. `__all__` is real
+// Python and the compiler only reads it; `__js__` wears the same costume without
+// the language behind it, and a dict literal invites being computed — which
+// parses, raises nothing, and does not work. A keyword makes that unwriteable
+// instead of merely wrong, the same way the walrus works in the markup: the
+// syntax says what the thing is.
+//
+// The clause is JavaScript's own, since the keyword has already announced that
+// much. There is nothing new to learn, and no ambiguity to invent between a
+// default import and a named one.
+const IMPORTJS = /^importjs\b/;
+const IMPORTJS_ANYWHERE = /^[ \t]+importjs\b/;
+const IMPORTJS_CLAUSE = /^importjs\s+([\s\S]*?)\s+from\s+(['"])([^'"]+)\2\s*$/;
+const IMPORTJS_EFFECT = /^importjs\s+(['"])([^'"]+)\1\s*$/;
+const JS_NAME = /^[A-Za-z_$][\w$]*$/;
+
+// The triple-quote state after `line`. Only a triple-quoted string survives a
+// line break, so it is the only thing that can hide an `importjs` further down —
+// the trap a regex over the whole source would walk straight into.
+function endQuote(line, quote) {
+    for (let i = 0; i < line.length; i++) {
+        const three = line.slice(i, i + 3);
+
+        if (quote) {
+            if (three === quote) {
+                quote = null;
+                i += 2;
+            } else if (line[i] === '\\') i++;
+            continue;
+        }
+
+        if (three === '"""' || three === "'''") {
+            quote = three;
+            i += 2;
+            continue;
+        }
+
+        if (line[i] === '#') return quote; // a comment runs to the end of the line
+
+        if (line[i] === '"' || line[i] === "'") {
+            const one = line[i];
+            for (i++; i < line.length; i++) {
+                if (line[i] === '\\') i++;
+                else if (line[i] === one) break;
+            }
+        }
+    }
+
+    return quote;
+}
+
+function importJsClause(line, where) {
+    const bare = line.match(IMPORTJS_EFFECT);
+    if (bare) return { from: bare[2], kind: 'effect', entries: [] };
+
+    const found = line.match(IMPORTJS_CLAUSE);
+    if (!found) {
+        throw new SyntaxError(
+            `svelthon — importjs expects \`importjs <clause> from "module"\` or ` +
+                `\`importjs "module"\`, on one line (${where})`
+        );
+    }
+
+    const clause = found[1].trim();
+    const from = found[3];
+
+    const star = clause.match(/^\*\s+as\s+([A-Za-z_$][\w$]*)$/);
+    if (star) return { from, kind: 'namespace', entries: [{ name: null, local: star[1] }] };
+
+    const braced = clause.match(/^\{([\s\S]*)\}$/);
+    if (braced) {
+        const entries = braced[1]
+            .split(',')
+            .map((one) => one.trim())
+            .filter(Boolean)
+            .map((one) => {
+                const renamed = one.match(/^([A-Za-z_$][\w$]*)\s+as\s+([A-Za-z_$][\w$]*)$/);
+                if (renamed) return { name: renamed[1], local: renamed[2] };
+                if (JS_NAME.test(one)) return { name: one, local: one };
+
+                throw new SyntaxError(`svelthon — importjs: \`${one}\` is not a name (${where})`);
+            });
+
+        if (!entries.length) throw new SyntaxError(`svelthon — importjs: empty {} (${where})`);
+        return { from, kind: 'named', entries };
+    }
+
+    if (JS_NAME.test(clause)) return { from, kind: 'default', entries: [{ name: null, local: clause }] };
+
+    throw new SyntaxError(`svelthon — importjs: \`${clause}\` is not an import clause (${where})`);
+}
+
+// Lift every `importjs` out of the source, leaving the line blank behind it.
+//
+// Blank rather than removed, and on the same line rather than rewritten into a
+// call: the source map is line-level — `sourceMap()` emits column zero on both
+// sides — so a line-preserving pass costs the debugger, the tracebacks and
+// `$B.set_lineno` exactly nothing.
+function takeImportJs(src, where, lineOffset, allowed) {
+    const lines = src.split('\n');
+    const imports = [];
+    const kept = [];
+    let quote = null;
+
+    for (let n = 0; n < lines.length; n++) {
+        const line = lines[n];
+        const at = `${where}:${n + 1 + lineOffset}`;
+
+        if (quote === null && IMPORTJS_ANYWHERE.test(line)) {
+            // A JavaScript import is hoisted and static; there is no such thing
+            // as one inside a branch, and silently hoisting it would be a lie.
+            throw new SyntaxError(`svelthon — importjs must start the line, at the top level (${at})`);
+        }
+
+        if (quote === null && IMPORTJS.test(line)) {
+            if (!allowed) {
+                throw new SyntaxError(
+                    `svelthon — importjs belongs to a component; a .py module declares its ` +
+                        `JavaScript with __js__ = {"module": ["name"]} (${at})`
+                );
+            }
+
+            imports.push(importJsClause(line.trim(), at));
+            kept.push('');
+            continue;
+        }
+
+        kept.push(line);
+        quote = endQuote(line, quote);
+    }
+
+    return { source: kept.join('\n'), imports };
+}
+
+// One import statement, in whichever of the four shapes it was declared.
+function jsImportLine(one) {
+    const from = JSON.stringify(one.from);
+
+    if (one.kind === 'effect') return `import ${from};`;
+    if (one.kind === 'namespace') return `import * as ${one.entries[0].local} from ${from};`;
+    if (one.kind === 'default') return `import ${one.entries[0].local} from ${from};`;
+
+    const names = one.entries.map((e) => (e.name === e.local ? e.local : `${e.name} as ${e.local}`));
+    return `import { ${names.join(', ')} } from ${from};`;
+}
+
 // `src/counter_store.svelte.py` → `counter_store`, the name Python imports it by.
 // The `.svelte` marker says the module is reactive; it is not part of its name,
 // any more than it is for a `.svelte.ts`.
@@ -370,6 +527,14 @@ function compile(
     //
     // The identifier Brython then derives is `nameFor()`'s own output, so the
     // namespace interception is unaffected.
+    // A component has markup, so it has the dialect; a module is a module and
+    // keeps parsing as Python. Lifted before py2js, since `importjs` is not
+    // Python and Brython would rightly refuse it.
+    const component = !store && !plain;
+    const lifted = takeImportJs(src, source, lineOffset, component);
+
+    src = lifted.source;
+
     let root;
     try {
         root = $B.py2js({ src, filename: source }, name, [name]);
@@ -445,8 +610,17 @@ function compile(
     // drop a write whose value is unchanged by ===. Propagating it would mean
     // handing the template a fresh copy on every render, at the cost of object
     // identity — too high a price for a rule that is easy to state instead.
-    const jsImports = declaredJsImports(root._ast.body);
-    const jsImported = jsImports.flatMap((one) => one.names);
+    // The two declarations meet here, in one shape: `__js__` is the module's and
+    // only ever names, `importjs` is the component's and covers the four forms.
+    const jsImports = [
+        ...declaredJsImports(root._ast.body).map((one) => ({
+            from: one.from,
+            kind: 'named',
+            entries: one.names.map((n) => ({ name: n, local: n }))
+        })),
+        ...lifted.imports
+    ];
+    const jsImported = jsImports.flatMap((one) => one.entries.map((e) => e.local));
 
     const fn = (name) => `__fn_${name}`;
     const local = (name) => `__local_${name}`;
@@ -493,7 +667,7 @@ function compile(
     const plainScript = [
         `import { init } from ${JSON.stringify(virtualId(name))};`,
         `import { bind, __pybridge, pyError, scheduleAsync, plainData, pyArg, pyExport, jsCall, ticking, group, NONE, registerModule } from 'svelthon/runtime';`,
-        ...jsImports.map((one) => `import { ${one.names.join(', ')} } from ${JSON.stringify(one.from)};`),
+        ...jsImports.map(jsImportLine),
         ``,
         ...state.map((n) => `let ${n};`),
         ...[...funcs, ...plainDeriveds].map((f) => `let ${fn(f.name)};`),
@@ -576,7 +750,7 @@ function compile(
         // markup — short on purpose. Now that only generated code touches it,
         // short is exactly wrong, and `py` is a name an author may want.
         `import { bind, __pybridge, track, follow, pyError, schedule, inTemplate, pyEvent, plainData, pyArg, jsCall, ticking, group, NONE${store ? ', registerModule' : ''} } from 'svelthon/runtime';`,
-        ...jsImports.map((one) => `import { ${one.names.join(', ')} } from ${JSON.stringify(one.from)};`),
+        ...jsImports.map(jsImportLine),
         `import { ${['getContext', 'setContext']
             .concat(lifecycle('on_mount') || lifecycle('on_destroy') ? ['untrack'] : [])
             .join(', ')} } from 'svelte';`,

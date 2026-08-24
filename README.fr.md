@@ -736,14 +736,39 @@ le Python tourne au build et la page est un fichier sur disque.
 
 ### Les deux ponts
 
-Python ne sait pas importer depuis npm, et un `.py` ordinaire n'a pas de
-`<script module>` pour le faire à sa place. Il déclare donc ce dont il a besoin
-comme il déclare ce qu'il exporte — une affectation ordinaire, lue dans l'AST :
+Python ne sait pas importer depuis npm. Un **composant** le déclare avec
+`importjs`, dans le même script que le reste de son Python :
+
+```python
+importjs Star from "#lib/Star.svelte"
+importjs {fade, fly} from "svelte/transition"
+importjs * as Dialog from "#lib/ui/dialog"
+importjs "./theme.css"
+```
+
+La clause est celle de JavaScript, puisque le mot-clé a déjà dit de quel langage
+il s'agit — rien de neuf à apprendre, et aucune ambiguïté à inventer entre un
+import par défaut et un import nommé. `Star` est ensuite un composant que le
+balisage emploie et un nom que Python lit.
+
+Un mot-clé plutôt qu'une déclaration, pour une raison : un import est statique,
+et un mot-clé rend l'import calculé **inécrivable** au lieu de simplement faux.
+C'est aussi le seul endroit où le script d'un composant s'écarte de Python, et il
+s'en écarte visiblement — le même marché que le balisage passe déjà avec `{#if}`
+et le morse.
+
+Un `.py` ordinaire n'a pas de balisage : il n'importe jamais de composant enfant,
+ni de feuille de style, ni d'espace de noms — il appelle le framework, rien de
+plus. Il garde donc `__js__`, et continue de parser comme du Python — une
+affectation ordinaire lue dans l'AST, exactement comme le `__all__` d'à côté :
 
 ```python
 __js__ = {"@sveltejs/kit": ["error", "fail"]}
 __all__ = ["load", "actions"]
 ```
+
+Une règle, en une phrase : **un fichier qui a un gabarit a le dialecte ; un
+module est du Python.**
 
 Pour la plateforme elle-même, `js` donne les globales JavaScript et `to_js()`
 convertit un conteneur Python en quelque chose qu'une API Web acceptera :

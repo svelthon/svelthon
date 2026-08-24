@@ -701,14 +701,38 @@ Python runs at build time and the page is a file on disk.
 
 ### The two bridges
 
-Python cannot import from npm, and a plain `.py` has no `<script module>` to do
-it for it. It declares what it needs the same way it declares what it exports —
-an ordinary assignment, read from the AST:
+Python cannot import from npm. A **component** says so with `importjs`, in the
+same script as the rest of its Python:
+
+```python
+importjs Star from "#lib/Star.svelte"
+importjs {fade, fly} from "svelte/transition"
+importjs * as Dialog from "#lib/ui/dialog"
+importjs "./theme.css"
+```
+
+The clause is JavaScript's own, because the keyword has already said which
+language it names — there is nothing new to learn, and no ambiguity to invent
+between a default import and a named one. `Star` is then a component the markup
+can use and a name Python can read.
+
+It is a keyword rather than a declaration for one reason: an import is static,
+and a keyword makes a computed one **unwriteable** instead of merely wrong. It is
+also the only place a component's script departs from Python, and it departs
+visibly — the same trade the markup already makes with `{#if}` and the walrus.
+
+A plain `.py` has no markup, so it never imports a child component, a stylesheet
+or a namespace: it only ever calls the framework. It therefore keeps `__js__`,
+and keeps parsing as Python — an ordinary assignment read from the AST, exactly
+like the `__all__` beside it:
 
 ```python
 __js__ = {"@sveltejs/kit": ["error", "fail"]}
 __all__ = ["load", "actions"]
 ```
+
+One rule, in one line: **a file with a template has the dialect; a module is
+Python.**
 
 For the platform itself, `js` is the JavaScript globals and `to_js()` converts a
 Python container into something a Web API will accept:
