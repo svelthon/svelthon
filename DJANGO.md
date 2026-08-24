@@ -312,25 +312,43 @@ presentation.
 <a href="/pep/{pep.number}-{slugify(pep.title)}">…</a>
 ```
 
-One rule: decompose, drop the combining marks, keep every letter and digit. On
-Latin script that is Django's own output to the character — accents folded, `C++
-& Rust!` giving `c-rust`, runs of spaces collapsing to one dash.
+One rule: compose, lowercase, keep every letter, digit and mark, turn everything
+else into a dash. Punctuation and runs of spaces collapse the way Django's do,
+and an underscore survives as it does there.
 
-The difference is what happens to the rest:
+Where it parts company is the letters themselves:
 
 | | Django | Svelthon |
 |---|---|---|
-| `Été à Paris` | `ete-a-paris` | `ete-a-paris` |
+| `Été à Paris` | `ete-a-paris` | `été-à-paris` |
 | `Straße` | `strae` | `straße` |
-| `Łódź` | `odz` | `łodz` |
+| `Łódź` | `odz` | `łódź` |
+| `Tiếng Việt` | `tieng-viet` | `tiếng-việt` |
+| `Đường Đồng Khởi` | `uong-ong-khoi` | `đường-đồng-khởi` |
+| `हिन्दी भाषा` | `""` | `हिन्दी-भाषा` |
 | `Привет мир` | `""` | `привет-мир` |
 | `日本語` | `""` | `日本語` |
 
-Django needs `allow_unicode=True` for the bottom half, and its default is a
-silent failure rather than an edge case: a site written in Russian or Japanese
-gets the *same empty slug for every article*. URLs have carried unicode for years
-— a browser shows `wiki/Привет` decoded and encodes it on the wire — so keeping
-the letters costs nothing and there is no option to turn on.
+Django folds what folds to ASCII and drops the rest, which needs
+`allow_unicode=True` to stop being destructive — and its default is a silent
+failure rather than an edge case, since a site written in Russian or Japanese
+gets the *same empty slug for every article*.
+
+A URL has carried unicode for years: a browser shows `wiki/Привет` decoded and
+encodes it on the wire. Once that is granted, folding `é` while keeping `本` has
+no reading that holds together — so the accents stay too, and there is no option
+to turn on.
+
+The Vietnamese row is the one to look at twice. `Đ` is a **letter** of that
+alphabet, not a D wearing an accent, so it does not decompose and Django does not
+fold it — it deletes it. A street named Đồng Khởi comes out as `ong-khoi`, and
+`đ` is a common consonant, so it happens in every other word.
+
+Two details make the rule work rather than merely look right. It composes first
+(NFC), because `é` written as one code point and as `e` plus a combining acute
+look identical and must give **one** URL. And it keeps combining marks, which is
+not decoration: a Devanagari vowel sign has no composed form, so dropping marks
+turns `हिन्दी भाषा` into `ह-न-द-भ-ष-` — not a folded word, a shredded one.
 
 ### URLs — an honest regression
 

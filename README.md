@@ -75,7 +75,7 @@ the build fails loudly instead of shipping a component with no reactivity.
 
 ## The API, and what it replaces
 
-Ten names, and nothing to import: they are injected into the module's namespace,
+Thirteen names, and nothing to import: they are injected into the module's namespace,
 and a component that defines its own keeps it. Each one stands where a rune
 stands in JavaScript.
 
@@ -90,8 +90,11 @@ stands in JavaScript.
 | `def on_mount()` / `on_destroy()` | `onMount()` / `onDestroy()` |
 | `set_context(k, v)` / `get_context(k)` | `setContext(k, v)` / `getContext(k)` |
 | `to_js(value)` | — a Python container made readable from JavaScript |
-| `to_json(value, indent=None)` | — the same, dumped; Jinja spells it `\|tojson` |
-| `chunks(xs, n)` | — a flat list grouped into rows of `n`; Jinja spells it `\|batch` |
+| `tojson(value, indent=None)` | — the same, dumped, under Jinja's own word |
+| `batch(xs, n)` | — a flat list grouped into rows of `n`, as Jinja's `\|batch` |
+| `date(value, style)` | — a date read in the visitor's language, as Django's `\|date` |
+| `timesince(value)` | — "3 days ago", and it keeps itself right as time passes |
+| `slugify(text)` | — a title made into a URL segment, as Django's `\|slugify` |
 | `js` | — the JavaScript globals: `js.Response`, `js.JSON`, `js.URL` |
 | `items.append(x)` | `items.push(x)` — `$state` proxies deeply |
 

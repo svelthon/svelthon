@@ -1,4 +1,4 @@
-# SVELTHON
+# Svelthon
 
 > Version française. La documentation de référence est le [README anglais](README.md).
 
@@ -30,7 +30,7 @@ L'obstacle n'a jamais été le langage. C'était la chaîne de travail : pas de
 composants, pas de props, pas de rechargement à chaud, un compilateur livré à
 chaque visiteur, et une page qui passait sa première seconde à compiler.
 
-SVELTHON laisse la chaîne frontend moderne intacte. Composants, props, styles
+Svelthon laisse la chaîne frontend moderne intacte. Composants, props, styles
 scopés, listes à clé, HMR, tree-shaking — tout — avec Python comme langage de
 composant et **aucune pénalité au chargement**, puisque la compilation a déjà eu
 lieu.
@@ -75,7 +75,7 @@ sans réactivité.
 
 ## L'API, et ce qu'elle remplace
 
-Six noms, et rien à importer : ils sont injectés dans le namespace du module, et
+Treize noms, et rien à importer : ils sont injectés dans le namespace du module, et
 un composant qui définit le sien le garde. Chacun se tient là où se tient une
 rune en JavaScript.
 
@@ -89,7 +89,13 @@ rune en JavaScript.
 | `@effect` | `$effect(…)` |
 | `def on_mount()` / `on_destroy()` | `onMount()` / `onDestroy()` |
 | `set_context(k, v)` / `get_context(k)` | `setContext(k, v)` / `getContext(k)` |
-| `to_python(valeur)` | — une valeur JavaScript rendue lisible en Python |
+| `to_js(valeur)` | — un conteneur Python rendu lisible par JavaScript |
+| `tojson(valeur, indent=None)` | — le même, sérialisé, sous le mot de Jinja |
+| `batch(xs, n)` | — une liste plate groupée en lignes de `n`, comme le `\|batch` de Jinja |
+| `date(valeur, style)` | — une date lue dans la langue du visiteur, comme le `\|date` de Django |
+| `timesince(valeur)` | — « il y a 3 jours », et ça reste juste à mesure que le temps passe |
+| `slugify(texte)` | — un titre transformé en segment d'URL, comme le `\|slugify` de Django |
+| `js` | — les globales JavaScript : `js.Response`, `js.JSON`, `js.URL` |
 | `items.append(x)` | `items.push(x)` — `$state` proxifie en profondeur |
 
 La dernière ligne est la seule qui coûte du travail plutôt qu'un renommage —
@@ -257,8 +263,6 @@ composant sans `lang="python"` est un composant JavaScript et le reste, même
 s'il importe un store `.py` : son `{valeur}` est le `{valeur}` de Svelte, et une
 liste Python s'y rend comme JavaScript la rend. Rien n'est injecté dans le dos de
 l'auteur — exactement comme TypeScript ne fuit pas dans un fichier `.js`.
-`py.str()`, `py.truthy()` et `py.of()` restent exportés du runtime pour un
-composant JavaScript qui *veut* la sémantique Python et les importe exprès.
 
 Ça coûte **1,3× à 1,7× sur le rendu** face à un composant JavaScript
 (`npm run bench` — l'écart entre les deux est ce qu'un portable modeste mesure
@@ -363,9 +367,10 @@ proxifie la valeur en profondeur, ce qui est inutilisable ici — un objet Bryth
 proxifié échoue à ses propres vérifications de type. Mais une liste Python *est*
 un tableau JavaScript : l'objet peut donc porter lui-même une marque non
 énumérable. `$B.get_class` ne lit que `ob_type`, donc `type(items) is list` reste
-vrai et `repr` est intact. Et Brython compile tout appel de méthode en
-`$B.call_attr` et toute écriture indicée en `$B.$setitem` : **trois interceptions
-couvrent tout le langage**, et un objet non marqué ne paie qu'un accès manqué.
+vrai et `repr` est intact. Et Brython fait passer chaque écriture par une
+poignée de fonctions — appel de méthode, écriture et lecture indicées, écriture
+d'attribut, `del` : **sept points de répartition couvrent tout le langage**, et un
+objet non marqué ne paie qu'un accès manqué.
 
 La marque voyage avec l'objet, ce qu'aucune analyse à la compilation ne saurait
 faire :
@@ -378,19 +383,48 @@ def add():
     fill(items)          # réactif quand même
 ```
 
-Deux limites subsistent, toutes deux tenues par des tests :
+L'imbrication tombe de la même marque. Un conteneur lu **hors** d'un conteneur
+surveillé passe sous la même garde — ce que la proxification profonde achète à
+Svelte, obtenu paresseusement et sans un seul proxy : l'enfant est marqué la
+première fois que Python le saisit, c'est-à-dire nécessairement juste avant de
+pouvoir le muter.
+
+```python
+data = {"rows": []}
+data["rows"].append(x)   # réactif : lire data["rows"] l'a mis sous garde
+```
+
+Mesuré sur `$B.$getitem`, le plus chaud d'entre eux : **+4 % sur
+`xs[i]`**, et +4 % encore quand la marque voyage réellement.
+
+Les attributs marchent pareil — `$setattr`, `$setattr1` et `$delattr` — et
+`{#each}` passe la garde à ses lignes, si bien que le bloc d'une ligne s'abonne à
+la ligne elle-même. Ce qui referme le cas qui surprenait : dans un
+`{#each items as it (it.id)}`, `it.label = "…"` re-rend la ligne **et** garde son
+nœud DOM, puisque la clé n'a pas bougé.
+
+Où on en est, chaque ligne tenue par un test :
 
 | | propage |
 |---|---|
 | `items.append(x)`, `table[k] = v`, `del table[k]`, `tags.add(x)` | oui |
-| un conteneur imbriqué — `data["rows"].append(x)` | non — seul l'objet extérieur est marqué |
-| un attribut d'instance — `box.value += 1` | non — les écritures d'attribut ne sont pas interceptées |
-| un élément d'une liste à clé — `it.label = …` | non — remplacer l'élément : `items[i] = Item(…)` |
+| `data["rows"].append(x)` — un conteneur imbriqué | oui |
+| `box.value += 1`, `del box.extra` — un attribut d'instance | oui |
+| `box.rows.append(x)` — un conteneur tenu dans un attribut, même posé dans `__init__` | oui |
+| `it.label = …` — un élément d'une liste à clé | oui |
+| une mutation faite dans une fonction que le compilateur ne voit pas | oui |
+| à travers un `@derived` qui rend l'objet, ou un prop de composant | oui |
+| un enfant atteint par `.items()`, `.values()` ou `.get()` | oui |
+| `<p {...attrs}>` — un étalement | oui |
+| `<p title={items}>` — un attribut portant le conteneur lui-même | non — **et JavaScript non plus** |
 
-Le dernier cas surprend : dans un `{#each items as it (it.id)}`, muter un
-attribut d'un élément ne re-rend rien, parce que l'élément a gardé son identité.
-Le remplacer met à jour le rendu **et** réutilise le nœud DOM, puisque la clé,
-elle, n'a pas bougé.
+La dernière ligne est la sémantique de l'hôte, pas une limite à nous : Svelte
+compare la valeur à celle qu'il a appliquée la fois d'avant, par identité, dans
+son propre écrivain DOM, où aucun signal n'atteint — et un conteneur muté est le
+même objet. Un composant Svelte idiomatique avec `$state` se comporte exactement
+pareil, ce que `tests/parity.test.js` démontre en faisant tourner le même
+composant dans les deux langages, ligne pour ligne. Tout le reste propage, et
+chaque ligne est tenue par un test.
 
 Les accesseurs vivent sur le **prototype** du namespace, jamais sur l'objet
 lui-même : réaffecter un global émet `$B.delete_for_reassign(name, locals)`, et
@@ -470,9 +504,20 @@ def increment():
 <button onclick={store.increment}>+</button>
 ```
 
-Il est servi sous une identité `.svelte.js`, ce qui est précisément ce qui fait
-compiler ses runes par vite-plugin-svelte — le suffixe porte la charge, il n'est
-pas décoratif. Les noms sont exportés par des accesseurs : Svelte interdit
+Ses runes sont compilées par vite-plugin-svelte, dont on élargit le filtre de
+modules à l'extension — un réglage, et c'est la forme que ce filtre avait déjà
+pour `.svelte.ts` :
+
+```js
+svelte({
+    preprocess: [python()],
+    experimental: { compileModule: { extensions: ['.js', '.ts', '.py'] } }
+})
+```
+
+Le filtre est un infixe — `.svelte.` — suivi d'une de ces extensions, donc
+`panier.svelte.py` correspond et `peps.py` non : exactement la ligne que tracent
+les deux sortes. Les noms sont exportés par des accesseurs : Svelte interdit
 d'exporter une liaison `$state` réaffectée, et un getter est de toute façon ce
 qui garde la lecture réactive au point d'appel.
 
@@ -612,13 +657,21 @@ vite-plugin-svelte, qui applique le préprocesseur déclaré dans
 réglage est nécessaire, et c'est un réglage que SvelteKit prévoit pour ça :
 
 ```js
-// svelte.config.js
-export default {
-    preprocess: [python({ path: ['src/lib'] })],
-    // pour qu'un `panier.svelte.py` soit compilé comme un `panier.svelte.ts`
-    vitePlugin: { experimental: { compileModule: { extensions: ['.js', '.ts', '.py'] } } },
-    kit: { moduleExtensions: ['.js', '.ts', '.py'] }
-};
+// vite.config.js — en SvelteKit 3, tout se configure d'ici
+export default defineConfig({
+    plugins: [
+        svelthon(),
+        sveltekit({
+            preprocess: [python({ path: ['src/lib'] })],
+
+            // un module de route peut être en Python
+            moduleExtensions: ['.js', '.ts', '.py'],
+
+            // et un module réactif est compilé comme un `.svelte.ts`
+            experimental: { compileModule: { extensions: ['.js', '.ts', '.py'] } }
+        })
+    ]
+});
 ```
 
 Le routeur voit alors les modules de route en `.py`. Ce qui marche, mesuré sur un
@@ -631,6 +684,10 @@ build de production avec `adapter-node`, contre **SvelteKit 3** :
 | `async def load()` | attendu par le framework |
 | streaming | une coroutine dans les données rendues devient une promesse que SvelteKit diffuse |
 | options de page | `prerender`, `ssr`, `csr` — exportées par `__all__` |
+| cookies, `setHeaders` | par `event["js"]`, sans aucun pont de notre part |
+| `handle`, `handleError` | en Python, derrière une amorce JavaScript de deux lignes |
+| `reroute`, `handleError` client | de même — hooks universels et client |
+| layouts imbriqués | un `+layout.server.py` par niveau, données fusionnées |
 | `+page.py` | un `load()` universel — serveur, puis navigateur lors d'une navigation client |
 | `+server.py` | un endpoint entièrement Python, qui construit sa `Response` |
 | actions de formulaire | `actions = {"default": noter}`, avec `await request.formData()` |
@@ -722,6 +779,29 @@ Le même traitement descend **dans un dict de fonctions exporté**, ce qu'est
 son résultat reconverti. Ce qui n'est **pas** un conteneur Python — une
 `Response`, une `Promise`, un `ActionFailure` — passe intact.
 
+### Le seul endroit où SvelteKit code en dur
+
+Les hooks sont trouvés par `resolve_entry`, qui filtre sur `/\.(js|ts)$/` et
+ignore `moduleExtensions` — un `src/hooks.server.py` n'est donc jamais vu. Une
+amorce de deux lignes fait le pont, et tout le reste reste du Python :
+
+```js
+// src/hooks.server.js
+export { handle, handleError } from './hooks.server.py';
+```
+
+```python
+async def handle(entree):
+    reponse = await entree.resolve(entree.event)
+    reponse.headers.set("x-python-handle", "1")
+    return reponse
+```
+
+Les matchers de paramètres font exception : SvelteKit importe `src/params` avec
+le chargeur de Node plutôt qu'à travers Vite, donc une amorce qui réexporte d'un
+`.py` échoue en `ERR_UNKNOWN_FILE_EXTENSION`. Ils restent en JavaScript — un
+fichier, quelques lignes.
+
 ## Rendu côté serveur
 
 Ça fonctionne. Svelte compile une seconde version de chaque composant qui rend
@@ -735,12 +815,12 @@ enfants et l'accès d'attribut, et les valeurs Python elles-mêmes — `-7 // 2`
 rend bien
 `-4` côté serveur.
 
-**Le seul vrai piège, et il n'est pas propre à SVELTHON.** L'état d'un store vit
+**Le seul vrai piège, et il n'est pas propre à Svelthon.** L'état d'un store vit
 dans le module, donc il est partagé par toutes les requêtes servies par le
 processus. Svelte pose exactement le même avertissement pour un `$state` de
 niveau module dans un `.svelte.js`. Sans danger au **prérendu** — une seule
 passe, aucun utilisateur concurrent — et fuite de données en rendu par requête.
-La réponse de Svelte est le contexte, que SVELTHON n'expose pas encore au
+La réponse de Svelte est le contexte, que Svelthon n'expose pas encore au
 Python : les deux manques se composent.
 
 Le prérendu est donc la cible atteignable : aucun serveur nécessaire, il tient
@@ -792,7 +872,7 @@ Validé par `npm test` — 137 tests, plus 3 échecs attendus (voir plus bas) :
   contrôle et frames. Chaque valeur attendue a été produite par CPython 3.12 en
   exécutant le code du composant tel quel, jamais écrite à la main. Brython
   reproduit CPython sur **39 des 40 points** ;
-- build de production : **244 Ko gzip**, runtime Brython compris.
+- build de production : **250 Ko gzip**, runtime Brython compris.
 
 La grille sert de banc d'acceptation aux codegens optimisés (wasthonf) : un
 codegen qui supprime les cadres d'appel casse `Frames`, qui déballe les entiers
@@ -843,7 +923,7 @@ pour son compte au lieu de partager le travail. Mesuré sur ce projet à plus de
 
 ## Support éditeur
 
-Ce n'est pas un manque de SVELTHON, mais autant le savoir : la grammaire
+Ce n'est pas un manque de Svelthon, mais autant le savoir : la grammaire
 TextMate de Svelte rabat un `lang` inconnu sur **JavaScript**. `<script
 lang="python">` n'est donc pas laissé sans coloration — il est colorié faux,
 commentaires `#` compris.
@@ -897,12 +977,12 @@ en WebAssembly.
 
 **Le rendu n'est pas plus lent — il est plus rapide.** De façon constante, à
 chaque exécution. Svelte proxifie en profondeur les objets d'un tableau `$state` ;
-les noms de SVELTHON sont des `$state.raw`, donc les valeurs Python ne sont jamais
+les noms de Svelthon sont des `$state.raw`, donc les valeurs Python ne sont jamais
 proxifiées. Le choix de conception de la réactivité se rembourse précisément là
 où une vraie application passe son temps.
 
 Le vrai prix est au chargement : **1,2 s jusqu'à l'interactivité** pour la démo de
-production sur ce portable, contre 0,5 s pour la même page sans Brython — 244 Ko
+production sur ce portable, contre 0,5 s pour la même page sans Brython — 250 Ko
 gzip au lieu de 13. Payé une fois par session, pas par page, puisque
 l'application ne recharge jamais.
 
@@ -932,9 +1012,23 @@ l'application ne recharge jamais.
   alors un dialecte, plus une syntaxe familière.
 
 
+**Notes de conception** — [notes/template.md](notes/template.md) sur ce en quoi
+une expression de gabarit est compilée et les cinq adaptateurs qui la tiennent,
+[notes/directives.md](notes/directives.md) sur les quatre façons dont la valeur
+d'une directive devient du Python et sur les deux points qui restent, et [notes/dicts-and-objects.md](notes/dicts-and-objects.md) sur ce que
+valent un dict et une instance de classe à la frontière — mesuré côte à côte, et
+tenu par `tests/shapes.test.js` — et [notes/one-interpreter.md](notes/one-interpreter.md)
+sur les deux chargements de Brython dans un même processus, et ce que coûterait
+de n'en faire qu'un.
+
+**Vous venez de Django ou de Flask ?** [DJANGO.md](DJANGO.md) met en regard
+chaque construction de gabarit courante et son équivalent Svelthon — toute la
+traduction tient sur une page, et son exemple complet est une fixture de test,
+donc il ne peut pas dériver.
+
 **En amont, chez Brython**
 
-Les deux bugs, les internes dont SVELTHON dépend et les messages d'erreur qui ont
+Les bugs, les internes dont Svelthon dépend et les messages d'erreur qui ont
 coûté le plus de débogage sont réunis dans **[BRYTHON.md](BRYTHON.md)** — le
 contrat entre les deux projets, avec une reproduction minimale pour chacun.
 
@@ -971,7 +1065,7 @@ classique, alors que la racine est en `type: module`.
 
 ## La pile plus large
 
-SVELTHON tient debout tout seul — un framework frontend Python, rien d'autre
+Svelthon tient debout tout seul — un framework frontend Python, rien d'autre
 n'est requis. Mais parce qu'il tourne sur Brython plutôt que sur un interpréteur
 en bac à sable, tout ce qui est bâti pour Brython est disponible dans un
 composant : notamment [Wasthon](https://github.com/fgallaire/wasthon), qui amène
@@ -981,5 +1075,5 @@ les vrais modules d'extension C de CPython dans le navigateur en WebAssembly, et
 
 Ça compte pour ce qu'on livre. Là où un runtime CPython-en-WebAssembly complet
 arrive en une seule grosse charge, ce sont ici des `.wasm` par module — et
-SVELTHON sait déjà exactement quels modules un composant importe : le
+Svelthon sait déjà exactement quels modules un composant importe : le
 tree-shaking qui taille la bibliothèque standard s'y applique tel quel.

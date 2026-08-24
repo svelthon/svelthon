@@ -2,10 +2,10 @@ import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from 'svelte';
 import Slugs from './fixtures/Slugs.svelte';
 
-// Django's `|slugify`, with the one difference that removes its option: a letter
-// that does not fold to ASCII is kept rather than dropped. On Latin script the
-// output is Django's to the character; elsewhere Django returns an empty slug
-// for every title on the site.
+// Django's `|slugify`, taken to its conclusion: a URL carries unicode, so the
+// letters stay — all of them, not only the ones that happen not to decompose.
+// Django folds accents to ASCII and drops what will not fold, which turns a
+// Russian or Japanese site into one empty slug per article.
 describe('slugify', () => {
     const target = document.body.appendChild(document.createElement('div'));
     mount(Slugs, { target });
@@ -18,21 +18,35 @@ describe('slugify', () => {
         expect(slug(0)).toBe('making-the-gil-optional');
     });
 
-    test('accents fold to ASCII, exactly as Django does it', () => {
-        expect(slug(1)).toBe('ete-a-paris');
-        expect(slug(9)).toBe('deja-vu');
+    test('accents are kept, where Django folds them', () => {
+        // Django: `ete-a-paris`.
+        expect(slug(1)).toBe('été-à-paris');
     });
 
-    test('a letter that does not fold is kept, not dropped', () => {
-        // Django gives `strae` and `odz` here — the first letter of Łódź is lost.
+    test('a letter that does not fold at all', () => {
+        // Django: `strae` and `odz` — the first letter of Łódź is lost.
         expect(slug(2)).toBe('straße');
-        expect(slug(3)).toBe('łodz');
+        expect(slug(3)).toBe('łódź');
     });
 
-    test('a title in another script keeps being a title', () => {
-        // Django gives "" for both, so every article on the site shares a slug.
+    test('another script keeps being a title', () => {
+        // Django: "" for both.
         expect(slug(4)).toBe('привет-мир');
         expect(slug(5)).toBe('日本語');
+    });
+
+    test('a combining mark is a letter\'s half, not punctuation', () => {
+        // A Devanagari vowel sign has no composed form: dropping marks would
+        // give `ह-न-द-भ-ष-`, which is not a folded word but a shredded one.
+        expect(slug(9)).toBe('tiếng-việt');
+        expect(slug(11)).toBe('हिन्दी-भाषा');
+    });
+
+    test('a letter that only looks like an accented one', () => {
+        // `Đ` is a letter of the Vietnamese alphabet, not a D with a stroke, so
+        // it does not decompose and Django deletes it: the street Đồng Khởi
+        // comes out as `uong-ong-khoi`.
+        expect(slug(10)).toBe('đường-đồng-khởi');
     });
 
     test('punctuation and runs of spaces collapse to one dash', () => {
@@ -40,8 +54,18 @@ describe('slugify', () => {
         expect(slug(7)).toBe('espaces-multiples');
     });
 
+    test('an underscore stays, as it does in Django', () => {
+        expect(slug(12)).toBe('a_b-c');
+    });
+
     test('nothing to keep gives an empty slug', () => {
         expect(slug(8)).toBe('');
+    });
+
+    // Composing first is what stops one title from having two URLs.
+    test('composed and decomposed give one slug', () => {
+        expect(read('composed').textContent).toBe('été');
+        expect(read('decomposed').textContent).toBe('été');
     });
 
     test('a value that is not a string goes through str() first', () => {
