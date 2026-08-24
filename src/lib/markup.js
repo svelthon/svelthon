@@ -50,6 +50,49 @@ function closingParen(source, start) {
     return -1;
 }
 
+// Walk `text` at depth zero, ignoring anything inside a string, a bracket or a
+// parenthesis. Used to find where an expression ends — a comma between two
+// arguments, or the `then` of an await block — without parsing Python.
+function atTopLevel(text, visit) {
+    let depth = 0;
+    let quote = null;
+
+    for (let i = 0; i < text.length; i++) {
+        const c = text[i];
+
+        if (quote) {
+            if (c === '\\') i++;
+            else if (c === quote) quote = null;
+            continue;
+        }
+
+        if (c === '"' || c === "'") quote = c;
+        else if (c === '(' || c === '[' || c === '{') depth++;
+        else if (c === ')' || c === ']' || c === '}') depth--;
+        else if (depth === 0 && visit(i) === true) return i;
+    }
+
+    return -1;
+}
+
+// `f(a, b)` → ['a', 'b'], with a comma inside a literal or a call left alone.
+function arguments_(text) {
+    const parts = [];
+    let from = 0;
+
+    atTopLevel(text, (i) => {
+        if (text[i] !== ',') return false;
+        parts.push(text.slice(from, i));
+        from = i + 1;
+        return false;
+    });
+
+    const last = text.slice(from);
+    if (last.trim() || parts.length) parts.push(last);
+
+    return parts;
+}
+
 const WALRUS = /^\s*([A-Za-z_]\w*)\s*:=\s*/;
 
 // `(name := value)` is the one assignment Python allows inside an expression,
@@ -400,6 +443,19 @@ export function pythonExpressions(markup, collect) {
                 // identity — which no Python value keeps. repr() gives one.
                 scopes.push([]);
                 out += `{#key ${call(trimmed.slice(5), 'repr')}}`;
+            } else if (trimmed.startsWith('#await ')) {
+                // The awaited expression is Python like any other — a coroutine
+                // included, since the wrapper hands one back as a promise. What
+                // follows it is a name the block declares, never an expression:
+                // `{#await f() then row}`. The split is made at depth zero so
+                // that `{#await f("then")}` is not cut inside its own string.
+                const rest = trimmed.slice(7);
+                const at = atTopLevel(rest, (i) => /^\s(?:then|catch)\s/.test(rest.slice(i)));
+                const awaited = at === -1 ? rest : rest.slice(0, at);
+                const tail = at === -1 ? '' : rest.slice(at);
+
+                scopes.push(declaredBy(trimmed));
+                out += `{#await ${call(awaited, '')}${tail}}`;
             } else {
                 scopes.push(declaredBy(trimmed));
                 out += markup.slice(index, end + 1);
@@ -425,8 +481,20 @@ export function pythonExpressions(markup, collect) {
                 scopes[scopes.length - 1]?.push(...declaredBy(trimmed));
             } else if (trimmed.startsWith('@html ')) {
                 out += `{@html ${call(trimmed.slice(6), '__text')}}`;
+            } else if (trimmed.startsWith('@render ')) {
+                // The snippet itself is a JavaScript function and stays one —
+                // what it is *given* is Python. Arguments are split at depth
+                // zero, so a comma inside a call or a literal stays put.
+                const called = trimmed.slice(8).trim();
+                const opens = called.indexOf('(');
+                const closes = opens === -1 ? -1 : closingParen(called, opens);
+
+                out += closes === -1
+                    ? markup.slice(index, end + 1)
+                    : `{@render ${called.slice(0, opens)}(${arguments_(called.slice(opens + 1, closes))
+                          .map((one) => (one.trim() ? call(one, '') : one))
+                          .join(', ')})${called.slice(closes + 1)}}`;
             } else {
-                // {@render} calls a snippet, which is a JavaScript function, and
                 // {@debug} takes names rather than an expression.
                 out += markup.slice(index, end + 1);
             }
