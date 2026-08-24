@@ -208,9 +208,16 @@ quoi Python sait affecter :
 La règle : tout est du Python dans un gabarit — chaque attribut, prop de
 composant compris, la valeur de chaque directive, ainsi que le raccourci `{nom}`
 et l'étalement `{...attrs}`, développés pour que la lecture passe par le
-namespace au lieu de le contourner. `bind:group` est la seule exception, et elle
-vient de Svelte : il y veut un identifiant ou une expression membre, jamais une
-paire — un nom simple y marche, rien d'autre.
+namespace au lieu de le contourner — sans plus aucune exception.
+
+`bind:group` était la dernière, et elle a pris une autre forme qu'une paire :
+Svelte n'y accepte pas de lecteur et d'écrivain, parce qu'il détermine quels
+`<input>` forment un groupe à partir du **texte** de l'expression. Elle compile
+donc en action, et le groupe cesse d'avoir besoin d'une identité — chaque
+`<input>` calcule son propre `checked` depuis la même cible. C'est aussi ce qui la
+fait marcher sur un champ de dict, sur un attribut d'objet, et une fois par ligne
+d'un `{#each}`, ce que la version de Svelte ne réussit ici dans aucun des trois
+cas.
 
 ### Les deux choses à savoir
 

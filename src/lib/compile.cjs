@@ -492,7 +492,7 @@ function compile(
 
     const plainScript = [
         `import { init } from ${JSON.stringify(virtualId(name))};`,
-        `import { bind, __pybridge, pyError, scheduleAsync, plainData, pyArg, pyExport, jsCall, ticking, NONE, registerModule } from 'svelthon/runtime';`,
+        `import { bind, __pybridge, pyError, scheduleAsync, plainData, pyArg, pyExport, jsCall, ticking, group, NONE, registerModule } from 'svelthon/runtime';`,
         ...jsImports.map((one) => `import { ${one.names.join(', ')} } from ${JSON.stringify(one.from)};`),
         ``,
         ...state.map((n) => `let ${n};`),
@@ -503,6 +503,8 @@ function compile(
         // through the namespace, so it goes through the accessor, so the signal
         // fires — which is the whole reason the walrus can mean this here.
         `const __assign = (name, value) => { ${NS}[name] = value; return value; };`,
+        // What `bind:group` becomes: a directive whose value is Python.
+        `const __group = group;`,
         `const __proto = {};`,
         ...state.map((n) => `bind(__proto, '${n}', () => ${n}, (v) => { ${n} = v; });`),
         ...funcs.map(
@@ -573,7 +575,7 @@ function compile(
         // expressions were JavaScript and an author wrote `py.str(items)` in the
         // markup — short on purpose. Now that only generated code touches it,
         // short is exactly wrong, and `py` is a name an author may want.
-        `import { bind, __pybridge, track, follow, pyError, schedule, inTemplate, pyEvent, plainData, pyArg, jsCall, ticking, NONE${store ? ', registerModule' : ''} } from 'svelthon/runtime';`,
+        `import { bind, __pybridge, track, follow, pyError, schedule, inTemplate, pyEvent, plainData, pyArg, jsCall, ticking, group, NONE${store ? ', registerModule' : ''} } from 'svelthon/runtime';`,
         ...jsImports.map((one) => `import { ${one.names.join(', ')} } from ${JSON.stringify(one.from)};`),
         `import { ${['getContext', 'setContext']
             .concat(lifecycle('on_mount') || lifecycle('on_destroy') ? ['untrack'] : [])
@@ -626,6 +628,8 @@ function compile(
         // through the namespace, so it goes through the accessor, so the signal
         // fires — which is the whole reason the walrus can mean this here.
         `const __assign = (name, value) => { ${NS}[name] = value; return value; };`,
+        // What `bind:group` becomes: a directive whose value is Python.
+        `const __group = group;`,
         `const __proto = {};`,
         // Python may write to a prop; the write lands in the local fallback and
         // is shadowed for as long as the parent supplies a value, which is

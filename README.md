@@ -206,9 +206,15 @@ Python's truthiness, and a binding names something Python can assign to:
 The rule: everything in a template is Python — every attribute, component prop
 included, every directive's value, and the shorthand `{name}` and the spread
 `{...attrs}`, which are expanded so that the read goes through the namespace
-rather than around it. `bind:group` is the one exception, and Svelte's own: it
-takes an identifier or a member expression, never a pair, so a bare name works
-there and nothing else does.
+rather than around it — with no exception left.
+
+`bind:group` was the last one, and it took a different shape rather than a pair:
+Svelte will not accept a getter and a setter there, because it works out which
+inputs form one group from the *text* of the expression. So it compiles to an
+action, and the group stops needing an identity — each input computes its own
+`checked` from the same target. Which is also what makes it work on a dict field,
+on an object's attribute, and once per row of an `{#each}`, none of which
+Svelte's own version manages here.
 
 ### The two things to know
 

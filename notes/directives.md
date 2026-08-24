@@ -1,7 +1,7 @@
 # Directives take Python
 
-*Closed, but for one line that belongs to Svelte and one question that belongs to
-the project.*
+*Closed. One question is left, and it belongs to the project rather than to
+Svelte.*
 
 ## Where it stands
 
@@ -18,7 +18,7 @@ arrow — is gone:
 <input bind:value={row["label"]}>
 ```
 
-Four mechanisms, not one, because the directives do not all take the same kind of
+Five mechanisms, not one, because the directives do not all take the same kind of
 thing.
 
 **A handler takes a callable.** `on*` compiles as Python and what the expression
@@ -67,7 +67,7 @@ The setter is generated, not written, so Python's one-expression rule for
 the target is a module name — otherwise the assignment would land in a frame
 nobody reads.
 
-## The one exception
+## The one that took a different shape
 
 `bind:group` refuses the pair:
 
@@ -75,9 +75,38 @@ nobody reads.
 `bind:group` can only bind to an Identifier or MemberExpression
 ```
 
-So it keeps its text. A bare name works there, because a name is written the same
-way in both languages; `bind:group={obj.field}` is JavaScript's member expression
-and misses a dict, as all of them used to.
+The refusal is structural rather than arbitrary: Svelte works out which inputs
+form one group from the **identifiers of the expression**, statically, and two
+anonymous functions have no text to compare. It is also the only binding where
+several elements have to be recognised as aiming at one target.
+
+So it does not become a pair — it becomes an **action**, and the pair rides along
+as its parameter:
+
+```svelte
+bind:group={form.pick}
+  →  use:__group={[form["pick"], (v) => form["pick"] = v]}
+```
+
+Which removes the need for a group identity altogether: each input computes its
+own `checked` from the same target, so exactly one radio stays filled and a row
+of an `{#each}` keeps its own answer — something Svelte's static keypath cannot
+express here, since two rows produce the same text.
+
+**And that is what repairs it.** Svelte's own version writes with a plain
+JavaScript assignment. It lands on the object — a dict's keys are ordinary
+writable properties — but it never reaches `$B.$setitem`, which is where Svelthon
+catches a mutation. Measured before the change: the value moved, nothing
+re-rendered, and both radios stayed filled because the effect that unfills the
+others never re-ran. An attribute of a class instance failed earlier still, being
+invisible from JavaScript. Both work now, along with a checkbox group, which
+arrives as a Python `list` rather than the `JavascriptArray` Svelte's version
+assigned.
+
+The element is never inspected: `type` and `value` are read off the node at run
+time, which is why this needed no lookahead over the attributes. The value is
+therefore the DOM's, and the DOM's is text — `value={5}` binds `"5"`, exactly as
+a plain HTML form hands it over. Covered by `tests/groups.test.js`.
 
 ## The one open question
 

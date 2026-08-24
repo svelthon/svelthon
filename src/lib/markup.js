@@ -134,10 +134,20 @@ export function overMarkup(content, transform) {
 // `class:`, `style:` — takes an ordinary *value*, and takes a Python one.
 const DIRECTIVE = /^bind:/;
 
-// The one exception, and Svelte's own: `bind:group` refuses the pair and insists
-// on an identifier or a member expression. A bare name still works — it is the
-// same word in both languages — and `bind:group={obj.field}` stays JavaScript.
+// `bind:group` refuses the pair — Svelte works out which inputs form one group
+// from the *text* of the expression, and two anonymous functions have none. So it
+// does not become a pair, it becomes an action, and the group stops needing an
+// identity at all: each input computes its own `checked` from the same target.
+//
+// That is also what fixes it. Svelte's own version writes the value with a plain
+// JavaScript assignment, which lands on the object but never reaches
+// `$B.$setitem` — so nothing re-renders, not even Svelte's effect that unfills
+// the others. Going through the pair puts the write back on Python's path.
 const GROUP_DIRECTIVE = /^bind:group\b/;
+
+// The action the generated script defines for it. Named here and emitted there,
+// like `__event`.
+const GROUP_ACTION = '__group';
 
 // The setter's parameter. Generated, so it only has to avoid the author's names.
 const BOUND_VALUE = '__value';
@@ -298,7 +308,11 @@ export function pythonExpressions(markup, collect) {
                         // callable from JavaScript. Everything else — a
                         // component prop included — is Python.
                         if (GROUP_DIRECTIVE.test(attribute[1])) {
-                            out += markup.slice(index, end + 1);
+                            // The tag is never inspected: `type` and `value` are
+                            // read off the node at run time, which is why this
+                            // needs no lookahead over the attributes.
+                            out = out.replace(/[^\s=]+=$/, '') +
+                                `use:${GROUP_ACTION}={[${call(inner, '')}, (${BOUND_VALUE}) => ${assign(inner)}]}`;
                         } else if (DIRECTIVE.test(attribute[1])) {
                             out += `{() => ${call(inner, '')}, (${BOUND_VALUE}) => ${assign(inner)}}`;
                         } else if (HANDLER.test(attribute[1])) {

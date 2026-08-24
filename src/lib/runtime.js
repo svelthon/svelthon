@@ -839,6 +839,55 @@ export function inTemplate(run) {
     }
 }
 
+// `bind:group`, which Svelte will not take a getter/setter pair for: it works
+// out which inputs form one group from the *text* of the expression, and two
+// anonymous functions have none. So the markup pass turns it into this action
+// instead — a directive whose value *is* Python, like every other one.
+//
+// The group then needs no identity at all. Each input computes its own `checked`
+// from the same target, so exactly one radio stays filled and rows of an
+// `{#each}` keep their own answer, both of which Svelte's own machinery gets
+// wrong here for want of a notification.
+//
+// What the element carries is read off the node — `type` and `value` — so the
+// markup pass never has to look at the rest of the tag. The value is therefore
+// the DOM's, which is text: `value={5}` binds "5", exactly as a plain HTML form
+// would hand it over.
+export function group(node, [current, write]) {
+    const boxes = node.type === 'checkbox';
+
+    const show = (value) => {
+        node.checked = boxes
+            ? Array.from(value ?? []).includes(node.value)
+            : String(value) === node.value;
+    };
+
+    const changed = () => {
+        if (!boxes) return write(node.value);
+
+        // A checkbox group is a list, and it has to arrive as Python's: an array
+        // built here reads as a JavascriptArray, which prints `[a, c]` where
+        // Python prints `['a', 'c']` and refuses a slice.
+        const kept = Array.from(node.$svelthonGroup ?? []).filter((one) => one !== node.value);
+
+        write(__pybridge.list(node.checked ? [...kept, node.value] : kept));
+    };
+
+    node.$svelthonGroup = current;
+    node.addEventListener('change', changed);
+    show(current);
+
+    return {
+        update([next]) {
+            node.$svelthonGroup = next;
+            show(next);
+        },
+        destroy() {
+            node.removeEventListener('change', changed);
+        }
+    };
+}
+
 // A shared clock, for the values that go stale on their own — `timesince` is the
 // one, and Django never needed it because a rendered page is finished. A
 // component stays on screen, so "3 minutes ago" has to become "4 minutes ago"
