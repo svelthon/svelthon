@@ -29,7 +29,14 @@ describe('props', () => {
     });
 
     test('a required prop that was not supplied is None, not undefined', () => {
-        expect(render(Greeting, {})('line')).toBe('Hello None!');
+        // Asked in Python, because the markup no longer answers it: a template's
+        // default failure is absence, so None renders as nothing there and would
+        // look exactly like undefined. `is None` separates them.
+        expect(render(PropsInit, {})('is-none')).toBe('True');
+    });
+
+    test('and it renders as nothing rather than the word "None"', () => {
+        expect(render(Greeting, {})('line')).toBe('Hello !');
     });
 
     test('internal state stays reactive alongside props', () => {

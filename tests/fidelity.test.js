@@ -172,7 +172,9 @@ describe('template — the Python/JavaScript boundary', () => {
     test('a bare interpolation already renders the Python way', () => {
         expect(cell('raw_list')).toBe("['a', 'b', 'c']");
         expect(cell('raw_dict')).toBe("{'x': 1}");
-        expect(cell('raw_none')).toBe('None');
+        // None is the exception: a template's default failure is absence,
+        // so it renders as nothing rather than as a word meaning nothing.
+        expect(cell('raw_none')).toBe('');
     });
 
     test('the rewrite survives braces and angle brackets', () => {

@@ -464,7 +464,14 @@ export function pythonExpressions(markup, collect, onPython) {
                         } else if (CLASS_DIRECTIVE.test(attribute[1])) {
                             out += `{${call(inner, '__truthy')}}`;
                         } else {
-                            out += `{${call(inner, '')}}`;
+                            // `href={website}` with nothing to show: None goes
+                            // out as undefined so Svelte drops the attribute
+                            // rather than writing the word "None" into it. In a
+                            // template the default failure is absence. The same
+                            // wrapper the bindings use — the boundary is the
+                            // same one, and a prop passed to a child is read
+                            // back as None on the other side regardless.
+                            out += `{${call(inner, '__bound')}}`;
                         }
                     } else if (trimmed.startsWith('...')) {
                         // {...attrs} — spreading a Python dict, whose keys are

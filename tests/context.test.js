@@ -11,22 +11,27 @@ describe('context', () => {
         const target = document.body.appendChild(document.createElement('div'));
         mount(CtxHost, { target });
         flushSync();
-        return (k) => target.querySelector(`[data-k="${k}"] [data-k="leaf"]`).textContent;
+        return (k, cell = 'leaf') =>
+            target.querySelector(`[data-k="${k}"] [data-k="${cell}"]`).textContent;
     };
 
     test('a descendant reads what an ancestor set', () => {
-        // CtxMiddle separates the two and knows nothing of the context.
-        expect(setup()('a')).toBe('dark/None');
+        // CtxMiddle separates the two and knows nothing of the context. The
+        // trailing slash is the missing key, which renders as nothing.
+        expect(setup()('a')).toBe('dark/');
     });
 
     test('two subtrees carry independent values', () => {
         const leaf = setup();
 
-        expect(leaf('a')).toBe('dark/None');
-        expect(leaf('b')).toBe('light/None');
+        expect(leaf('a')).toBe('dark/');
+        expect(leaf('b')).toBe('light/');
     });
 
     test('a missing key is None, not undefined', () => {
-        expect(setup()('a').split('/')[1]).toBe('None');
+        // Asked in Python: the markup renders None as nothing, so there it is
+        // indistinguishable from undefined. `is None` is the question that
+        // still separates them.
+        expect(setup()('a', 'is-none')).toBe('True');
     });
 });

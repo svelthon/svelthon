@@ -75,8 +75,8 @@ describe('server rendering', () => {
         const first = text(render(CtxHost));
         const second = text(render(CtxHost));
 
-        expect(first).toContain('dark/None');
-        expect(first).toContain('light/None');
+        expect(first).toContain('dark/');
+        expect(first).toContain('light/');
         expect(second).toBe(first);
     });
 

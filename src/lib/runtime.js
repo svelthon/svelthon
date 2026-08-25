@@ -46,8 +46,15 @@ export const __pybridge = {
     },
 
     // Python's str(), for interpolation: `['a', 'b']` rather than `a,b`.
+    //
+    // None renders as nothing, like null and undefined beside it. In a template
+    // the default failure is absence — not an error, and not printing a word
+    // that means nothing to whoever is reading the page. `str(None)` is still
+    // "None" in the script, where a developer is the reader; this is the markup,
+    // where they are not. Svelte renders null and undefined as empty for the
+    // same reason, and a prop the parent never passed arrives here as None.
     str(value) {
-        if (value === undefined || value === null) return '';
+        if (value === undefined || value === null || value === NONE) return '';
         try {
             return _b_.str.$factory(value);
         } catch {
@@ -89,11 +96,13 @@ export const __pybridge = {
         }
     },
 
-    // What a `bind:` hands *out* to the DOM. Python's None is an object, so
-    // Svelte would write it straight into the property it binds: an `<input>`
-    // shows the word "None", and `bind:files` fails outright with
+    // What Python hands *out* to a DOM boundary — a `bind:`, and an attribute
+    // or prop written `href={value}`. Python's None is an object, so Svelte
+    // would write it straight through: an `<input>` shows the word "None",
+    // `href` becomes the string "None", and `bind:files` fails outright with
     // `Failed to convert value to FileList`. Undefined is what JavaScript means
-    // by "nothing here yet", and it is what Svelte's own bindings expect.
+    // by "nothing here yet" — Svelte drops an attribute set to it, and its own
+    // bindings expect it.
     //
     // Only None. Zero, an empty string and False are values a binding must keep.
     bound(value) {
