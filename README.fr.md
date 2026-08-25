@@ -43,7 +43,7 @@ npm run dev
 ```
 
 ```sh
-npm test             # 137 tests : sémantique, props, réactivité, surface Svelte
+npm test             # 331 tests : sémantique, props, réactivité, surface Svelte
 npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
 npm run bench        # Python contre JavaScript, même composant, vrai navigateur
@@ -942,7 +942,7 @@ C'est le même mécanisme qui accueillera les `.wasm` de Wasthon.
 
 ## État
 
-Validé par `npm test` — 137 tests, plus 3 échecs attendus (voir plus bas) :
+Validé par `npm test` — 331 tests, plus 3 échecs attendus (voir plus bas) :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
 - props : défaut Python, priorité du parent, lisibilité pendant l'init,
