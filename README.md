@@ -716,6 +716,14 @@ language it names — there is nothing new to learn, and no ambiguity to invent
 between a default import and a named one. `Star` is then a component the markup
 can use and a name Python can read.
 
+**Calling one converts in both directions.** A Python callable handed to a
+JavaScript function crosses as a JavaScript one, and what comes back crosses the
+other way: `cubicOut(0.5)` is a Python `float` you can round and format, not a
+foreign number. The conversion is deliberately conservative — a plain object, an
+array and a promise are returned untouched — so a value you hand straight back to
+JavaScript is not mangled on the way through, and an awaited promise still
+awaits.
+
 It is a keyword rather than a declaration for one reason: an import is static,
 and a keyword makes a computed one **unwriteable** instead of merely wrong. It is
 also the only place a component's script departs from Python, and it departs

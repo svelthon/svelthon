@@ -751,6 +751,14 @@ il s'agit — rien de neuf à apprendre, et aucune ambiguïté à inventer entre
 import par défaut et un import nommé. `Star` est ensuite un composant que le
 balisage emploie et un nom que Python lit.
 
+**L'appel convertit dans les deux sens.** Un appelable Python passé à une
+fonction JavaScript traverse en fonction JavaScript, et ce qui revient traverse
+en sens inverse : `cubicOut(0.5)` est un `float` Python qu'on arrondit et qu'on
+formate, pas un nombre étranger. La conversion est délibérément conservatrice —
+un objet ordinaire, un tableau et une promesse ressortent intacts — de sorte
+qu'une valeur qu'on repasse ensuite à JavaScript n'est pas abîmée au passage, et
+qu'une promesse attendue s'attend toujours.
+
 Un mot-clé plutôt qu'une déclaration, pour une raison : un import est statique,
 et un mot-clé rend l'import calculé **inécrivable** au lieu de simplement faux.
 C'est aussi le seul endroit où le script d'un composant s'écarte de Python, et il

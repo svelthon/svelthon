@@ -715,11 +715,26 @@ export function pyHandler(value) {
 // it can serialise, not as a Brython dict full of symbols.
 const outbound = (value) => (typeof value === 'function' ? pyHandler(value) : plainData(value));
 
+// And what comes *back*. Only the outbound half existed, and the asymmetry was
+// silent for as long as nobody looked at the answer: a value returned by an
+// `importjs` function arrived as a raw JavaScript one, so `cubicOut(0.5)` could
+// not be rounded, formatted, or even multiplied — `x * 2` raised
+// JavascriptError. The same call written `js.Math.sqrt(2)` gives a Python float,
+// because Brython's own JSObject machinery converts and this proxy did not.
+//
+// `jsobj2pyobj` is that machinery, and it is conservative in exactly the way
+// this needs: a number becomes an int or a float, a string a Python string, a
+// function a Python-callable one, a DOM node a DOMNode — and everything else,
+// plain objects and Promises included, is returned untouched. So a result handed
+// straight back to JavaScript crosses unchanged, and an awaited promise still
+// awaits.
+const inbound = (value) => globalThis.__BRYTHON__.jsobj2pyobj(value);
+
 export function jsCall(value) {
     if (typeof value !== 'function') return value;
 
     return new Proxy(value, {
-        apply: (target, self, args) => Reflect.apply(target, self, args.map(outbound))
+        apply: (target, self, args) => inbound(Reflect.apply(target, self, args.map(outbound)))
     });
 }
 
