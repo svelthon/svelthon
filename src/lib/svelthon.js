@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { overMarkup, pythonExpressions, collector, moduleImports } from './markup.js';
 
 const require = createRequire(import.meta.url);
-const { compile, pythonSource, VIRTUAL_PREFIX, VFS_PREFIX } = require('./compile.cjs');
+const { compile, VIRTUAL_PREFIX, VFS_PREFIX } = require('./compile.cjs');
 
 // Generated modules, keyed by component name. Filled by the preprocessor when
 // Svelte transforms a component, read back when Vite resolves the import that
@@ -81,14 +81,12 @@ export function python(options = {}) {
             if (attributes.lang !== 'python') return;
 
             const name = nameFor(filename);
-            const defs = templateFunctions.get(filename) || [];
-            const source = pythonSource(content, defs);
-
             const { script, module, map, stdlib, imports } = compile(
-                source,
+                content,
                 name,
                 relative(process.cwd(), filename || 'Component'),
                 {
+                    defs: templateFunctions.get(filename) || [],
                     jsNames: jsNames.get(filename) ?? [],
                     lineOffset: lineOffsets.get(filename) ?? 0,
                     // The whole file, so a debugger opens the .svelte itself.
