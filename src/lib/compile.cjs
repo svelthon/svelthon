@@ -747,6 +747,7 @@ function compile(
         `bind(__proto, '__text', () => __pybridge.str, () => {});`,
         `bind(__proto, '__seq', () => __pybridge.seq, () => {});`,
         `bind(__proto, '__spread', () => __pybridge.spread, () => {});`,
+        `bind(__proto, '__bound', () => __pybridge.bound, () => {});`,
         `bind(__proto, '__assign', () => __assign, () => {});`,
         // Wrapped once, not on every read: a name Python compares by identity —
         // `handler is on_click` — has to answer the same object twice.
@@ -910,6 +911,7 @@ function compile(
         `bind(__proto, '__text', () => __pybridge.str, () => {});`,
         `bind(__proto, '__seq', () => __pybridge.seq, () => {});`,
         `bind(__proto, '__spread', () => __pybridge.spread, () => {});`,
+        `bind(__proto, '__bound', () => __pybridge.bound, () => {});`,
         `bind(__proto, '__assign', () => __assign, () => {});`,
         // Wrapped once, not on every read: a name Python compares by identity
         // has to answer the same object twice.

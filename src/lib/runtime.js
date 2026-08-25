@@ -89,6 +89,17 @@ export const __pybridge = {
         }
     },
 
+    // What a `bind:` hands *out* to the DOM. Python's None is an object, so
+    // Svelte would write it straight into the property it binds: an `<input>`
+    // shows the word "None", and `bind:files` fails outright with
+    // `Failed to convert value to FileList`. Undefined is what JavaScript means
+    // by "nothing here yet", and it is what Svelte's own bindings expect.
+    //
+    // Only None. Zero, an empty string and False are values a binding must keep.
+    bound(value) {
+        return value === NONE ? undefined : value;
+    },
+
     // `{...attrs}` — Svelte diffs the spread object against the one from the
     // previous render, and a dict mutated in place *is* the same object. In
     // JavaScript the problem does not arise: spreading a $state proxy produces a

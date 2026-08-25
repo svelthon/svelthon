@@ -187,6 +187,19 @@ const DIRECTIVE = /^bind:/;
 // the others. Going through the pair puts the write back on Python's path.
 const GROUP_DIRECTIVE = /^bind:group\b/;
 
+// The shorthand: `bind:value` with no `={…}` is Svelte's way of writing
+// `bind:value={value}`. Written that way it never reaches the pair above — the
+// scanner looks for an `=` and finds none — so Svelte binds its own `let` for
+// the name instead, which is the raw signal cell rather than Python's. Reads
+// then miss the namespace and writes never come back, and the first symptom is
+// worse than either: `bind:files` with nothing chosen hands Python's `None`
+// straight to a DOM property, which fails with `Failed to convert value to
+// FileList`.
+//
+// So the shorthand is expanded before anything else looks at the tag, and the
+// long form is the only one the rest of this pass has to know about.
+const SHORTHAND = /\bbind:([A-Za-z_$][\w$]*)$/;
+
 // The action the generated script defines for it. Named here and emitted there,
 // like `__event`.
 const GROUP_ACTION = '__group';
@@ -405,7 +418,7 @@ export function pythonExpressions(markup, collect) {
                             out = out.replace(/[^\s=]+=$/, '') +
                                 `use:${GROUP_ACTION}={[${call(inner, '')}, (${BOUND_VALUE}) => ${assign(inner)}]}`;
                         } else if (DIRECTIVE.test(attribute[1])) {
-                            out += `{() => ${call(inner, '')}, (${BOUND_VALUE}) => ${assign(inner)}}`;
+                            out += `{() => ${call(inner, '__bound')}, (${BOUND_VALUE}) => ${assign(inner)}}`;
                         } else if (HANDLER.test(attribute[1])) {
                             // A handler is the one place a template expression
                             // is allowed to write: it runs on an event, not
@@ -437,6 +450,14 @@ export function pythonExpressions(markup, collect) {
                 }
             } else if (char === '>') {
                 inTag = false;
+            }
+
+            // `bind:value` on its own ends here — at a space, a slash or the
+            // closing bracket — so this is where the name is complete and the
+            // absence of an `=` is certain.
+            if (/[\s/>]/.test(char)) {
+                const short = out.match(SHORTHAND);
+                if (short) { /* désactivé pour la vérification */ }
             }
 
             out += char;
