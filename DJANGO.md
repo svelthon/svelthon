@@ -322,7 +322,11 @@ less pretty when it nests. The gain is that there is nothing to learn and nothin
 to register: any function your module can import, the template can call.
 
 The handful with no Python one-liner have a helper of their own, listed in the
-README: `tojson`, `batch`, `date`, `timesince`.
+README: `tojson`, `batch`, `date`, `fromnow`, `slugify`, `striptags`,
+`urlencode`. Every one of them rests on a browser primitive — `JSON.stringify`,
+`Intl`, `DOMParser`, `URLSearchParams` — which is why none of them needs the
+Python standard library, and why a template can be written without ever
+importing it.
 
 **`|truncatewords` is a stylesheet, not a filter.** Cutting at twenty words cuts
 at an arbitrary place: depending on the width it overflows or leaves a gap.
