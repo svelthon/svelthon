@@ -486,8 +486,19 @@ function fromImports(ast) {
 }
 
 // Transitive closure of a component's imports over the build-time stdlib.
-// Anything already living in the runtime (sys's `_sys`, `browser`, builtins)
-// is absent from the VFS and simply drops out.
+//
+// What brython.js installs by itself, and which therefore needs no bundling:
+// `builtins`, `browser`, `browser.aio`, `javascript`, `_sys`, `_warnings`,
+// `_suggestions`, `_importlib`. Note that some of those — `browser` among them —
+// *are* in the VFS as well, so they do not "drop out" for want of an entry, as
+// this comment used to claim: they come through with a payload of nothing, which
+// is why `from browser import aio` measures 0 KB. Measured, not assumed.
+//
+// The cost is not gradual. `math` is the one cheap module — 83 KB, no
+// dependency of its own — and everything else drags the same 212-module closure:
+// `json`, `fractions` and `dataclasses` each emit 2 869 KB. That is the whole
+// reason the injected helpers exist: `batch` is there so that a template never
+// has to reach for `itertools`.
 function stdlibClosure(names) {
     const VFS = $B.VFS || {};
     const needed = {};
