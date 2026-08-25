@@ -3,8 +3,6 @@
 // browser playground compiles components client-side and needs exactly this,
 // while the file next door needs `fs` and `path` and cannot be loaded there.
 
-
-
 // Find the '}' closing the block that opens at `start`, ignoring braces inside
 // string literals.
 function closingBrace(source, start) {

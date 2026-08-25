@@ -177,7 +177,6 @@ export const FORLOOP = \`class __Forloop:
         self.last = index == total - 1
         self.length = total
 
-
 def __forloop(index, sequence):
     try:
         total = len(sequence)

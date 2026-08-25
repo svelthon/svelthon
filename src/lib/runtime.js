@@ -764,7 +764,6 @@ export function registerModule(name, namespace) {
 
     namespace.__name__ = name;
 
-
     $B.imported[name] = namespace;
 }
 

@@ -176,7 +176,6 @@ function declaredJsImports(body) {
     return [];
 }
 
-
 // `importjs` — a component's JavaScript imports, written where its Python is.
 //
 // `__js__` covers a plain `.py`, and only the named form, which is all a module
