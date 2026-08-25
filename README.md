@@ -85,7 +85,8 @@ stands in JavaScript.
 | `name: str` | `let { name } = $props()` |
 | `size: int = 3` | `let { size = 3 } = $props()` |
 | `value: str = bindable()` | `let { value = $bindable() } = $props()` |
-| `@derived` | `$derived.by(…)` |
+| `doubled => count * 2` | `let doubled = $derived(count * 2)` |
+| `@derived` on a `def` | `$derived.by(…)` |
 | `@effect` | `$effect(…)` |
 | `def on_mount()` / `on_destroy()` | `onMount()` / `onDestroy()` |
 | `set_context(k, v)` / `get_context(k)` | `setContext(k, v)` / `getContext(k)` |
@@ -259,6 +260,9 @@ A template reads as Python and means what Python means, with two deliberate
 exceptions. Both exist so that the everyday line stays one line, and both are
 worth knowing before writing a component.
 
+*(The script has two of its own — `importjs` and `=>`. The four are gathered at
+the end of this section.)*
+
 **The dot finds a key.** `{row.label}` reads a dict as well as an object, exactly
 as Jinja's dot does — so the shape of your data stops dictating the shape of your
 markup, and a dict from an API renders like a dataclass:
@@ -307,6 +311,25 @@ bench`, the spread being what a modest laptop measures from one day to the next)
 against 0.6× before: one Python call per expression per render. That is the price
 of the template being Python.
 
+### The whole dialect, in one table
+
+Four places read as something other than plain Python. Two are in the markup,
+two in the script, and there are no others — everything else in a component is
+Python that means what Python means.
+
+| | Where | Reads as | Because |
+|---|---|---|---|
+| `{row.label}` | markup | a key as well as an attribute | the shape of your data should not dictate the shape of your markup |
+| `(open := not open)` | markup, handlers only | an assignment inside an expression | `onclick={() => (open = !open)}` has no Python twin |
+| `importjs X from "…"` | script | a JavaScript import | an import is static, and a keyword makes a computed one unwriteable |
+| `doubled => count * 2` | script | a derived value | one character from the `=` beside it, and that character is the difference |
+
+The two in the script are the only lines a component holds that Python would
+refuse to parse. Both are rewritten **on the same line**, so nothing downstream —
+line numbers, tracebacks, source maps — can tell the difference. A plain `.py`
+gets neither: a module is Python, and only a file with a template has the
+dialect.
+
 ## Composition
 
 A Python component has a single instance `<script>`. Children are therefore
@@ -335,8 +358,28 @@ compiled as Python:
 
 ## Derived values and bindings
 
-`@derived` turns a function into a value — Python reads the name and gets the
-result, exactly like a `@property`:
+A derived value is computed from other values and recomputed when they change.
+It is written with `=>`, one character away from the assignment beside it:
+
+```python
+count = 0            # state — a value
+doubled => count * 2 # derived — a calculation
+```
+
+That character is the whole difference, and the symmetry is deliberate. Nothing
+declares `count` to be state: a bare assignment already says it, and the compiler
+reads it off the AST. If naming is not required there, it is not required here
+either — which is the argument for an operator rather than a word.
+
+It is also JavaScript's arrow, and that is what a derived is: an expression
+re-evaluated rather than a value computed once.
+
+`=>` is a `SyntaxError` in Python, so no valid source can contain one outside a
+string or a comment. It is rewritten to `doubled = derived(lambda: count * 2)`
+**on the same line**, so every line number, traceback and source map is
+untouched — and `=>` inside a string or comment is left alone.
+
+**For anything that needs statements, `@derived` decorates a function:**
 
 ```python
 first = "Ada"
@@ -347,9 +390,20 @@ def full():
     return f"{first} {last}"
 ```
 
+The two forms are Svelte's own split, not an invention of ours:
+
+| Svelte | Svelthon |
+|---|---|
+| `let x = $derived(expr)` | `x => expr` |
+| `let x = $derived.by(() => { … })` | `@derived` on a `def` |
+
+and Python already draws the same line between `lambda` and `def`, so there is
+nothing new to learn. `=>` belongs to a component, where the dialect lives; a
+plain `.py` writes `@derived` and keeps parsing as Python.
+
 `{full}` in markup, `full` in Python. The body runs inside `$derived.by`, and
 every global it touches goes through a namespace accessor, so **Svelte discovers
-the dependencies by itself** — nothing to declare. A `@derived` may read another.
+the dependencies by itself** — nothing to declare. A derived may read another.
 It must be **pure**: writing state inside a derived is rejected by Svelte, and
 rightly so.
 

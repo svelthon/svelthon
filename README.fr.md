@@ -85,7 +85,8 @@ rune en JavaScript.
 | `name: str` | `let { name } = $props()` |
 | `size: int = 3` | `let { size = 3 } = $props()` |
 | `value: str = bindable()` | `let { value = $bindable() } = $props()` |
-| `@derived` | `$derived.by(…)` |
+| `doubled => count * 2` | `let doubled = $derived(count * 2)` |
+| `@derived` sur un `def` | `$derived.by(…)` |
 | `@effect` | `$effect(…)` |
 | `def on_mount()` / `on_destroy()` | `onMount()` / `onDestroy()` |
 | `set_context(k, v)` / `get_context(k)` | `setContext(k, v)` / `getContext(k)` |
@@ -264,6 +265,9 @@ exceptions délibérées près. Les deux existent pour que la ligne de tous les 
 tienne sur une ligne, et les deux méritent d'être sues avant d'écrire un
 composant.
 
+*(Le script en a deux à lui — `importjs` et `=>`. Les quatre sont rassemblées à
+la fin de cette section.)*
+
 **Le point trouve une clé.** `{row.label}` lit un dict aussi bien qu'un objet,
 exactement comme le point de Jinja — la forme de vos données cesse donc de dicter
 celle de votre balisage, et un dict venu d'une API se rend comme un dataclass :
@@ -315,6 +319,25 @@ l'auteur — exactement comme TypeScript ne fuit pas dans un fichier `.js`.
 d'un jour à l'autre), contre 0,6× auparavant : un appel Python par expression et
 par rendu. C'est le prix du gabarit en Python.
 
+### Tout le dialecte, en un tableau
+
+Quatre endroits se lisent autrement que du Python nu. Deux dans le balisage,
+deux dans le script, et il n'y en a pas d'autres — tout le reste d'un composant
+est du Python qui veut dire ce que Python veut dire.
+
+| | Où | Se lit comme | Parce que |
+|---|---|---|---|
+| `{row.label}` | balisage | une clé autant qu'un attribut | la forme des données ne doit pas dicter celle du balisage |
+| `(open := not open)` | balisage, gestionnaires seuls | une affectation dans une expression | `onclick={() => (open = !open)}` n'a pas de jumeau Python |
+| `importjs X from "…"` | script | un import JavaScript | un import est statique, et un mot-clé rend l'import calculé inécrivable |
+| `doubled => count * 2` | script | une valeur dérivée | à un caractère du `=` d'à côté, et ce caractère est la différence |
+
+Les deux du script sont les seules lignes d'un composant que Python refuserait
+de parser. Toutes deux sont réécrites **sur la même ligne**, si bien que rien en
+aval — numéros de ligne, tracebacks, source maps — ne peut faire la différence.
+Un `.py` ordinaire n'a ni l'une ni l'autre : un module est du Python, et seul un
+fichier qui a un gabarit porte le dialecte.
+
 ## Composition
 
 Un composant Python n'a qu'un `<script>` d'instance. Les enfants s'importent
@@ -344,8 +367,29 @@ compilées en Python :
 
 ## Valeurs dérivées et liaisons
 
-`@derived` transforme une fonction en valeur — Python lit le nom et obtient le
-résultat, comme une `@property` :
+Une valeur dérivée se calcule à partir d'autres et se recalcule quand elles
+changent. Elle s'écrit avec `=>`, à un caractère de l'affectation d'à côté :
+
+```python
+count = 0            # état — une valeur
+doubled => count * 2 # dérivé — un calcul
+```
+
+Ce caractère est toute la différence, et la symétrie est voulue. Rien ne déclare
+que `count` est un état : une affectation nue le dit déjà, et le compilateur la
+lit dans l'AST. Si nommer n'est pas nécessaire là, ça ne l'est pas non plus ici —
+c'est l'argument pour un opérateur plutôt qu'un mot.
+
+C'est aussi la flèche de JavaScript, et c'est bien ce qu'un dérivé est : une
+expression réévaluée, pas une valeur calculée une fois.
+
+`=>` est une `SyntaxError` en Python, donc aucune source valide n'en contient
+hors chaîne ou commentaire. Il est réécrit en
+`doubled = derived(lambda: count * 2)` **sur la même ligne**, si bien que les
+numéros de ligne, les tracebacks et les source maps sont intacts — et un `=>`
+dans une chaîne ou un commentaire est laissé tel quel.
+
+**Pour tout ce qui demande des instructions, `@derived` décore une fonction :**
 
 ```python
 first = "Ada"
@@ -356,10 +400,21 @@ def full():
     return f"{first} {last}"
 ```
 
+Les deux formes sont la coupure de Svelte, pas une invention à nous :
+
+| Svelte | Svelthon |
+|---|---|
+| `let x = $derived(expr)` | `x => expr` |
+| `let x = $derived.by(() => { … })` | `@derived` sur un `def` |
+
+et Python trace déjà la même ligne entre `lambda` et `def` : il n'y a rien de
+neuf à apprendre. `=>` appartient au composant, là où vit le dialecte ; un `.py`
+ordinaire écrit `@derived` et continue de parser comme du Python.
+
 `{full}` dans le gabarit, `full` en Python. Le corps s'exécute dans
 `$derived.by`, et chaque global qu'il touche passe par un accesseur du
 namespace : **Svelte découvre les dépendances tout seul**, rien à déclarer. Un
-`@derived` peut en lire un autre. Il doit être **pur** — écrire de l'état dans un
+dérivé peut en lire un autre. Il doit être **pur** — écrire de l'état dans un
 dérivé est refusé par Svelte, à juste titre.
 
 `bind:` doit lire *et* écrire, ce qu'aucune expression ne fait seule : sa valeur

@@ -238,6 +238,61 @@ function endQuote(line, quote) {
     return quote;
 }
 
+// `x => expr` — the derived, written the way the state beside it is written.
+//
+// `count = 0` is state and `doubled => count * 2` is derived: one character
+// apart, and that character is exactly "recomputed when something changes".
+// Naming is not required for state — a bare assignment already says it — so it
+// is not required here either, which is the whole argument for an operator
+// rather than a word.
+//
+// It also reads as JavaScript's arrow, which is what a derived is: an
+// expression that is re-evaluated rather than a value that was computed once.
+//
+// `=>` is a SyntaxError in Python, measured, so no valid source can contain one
+// outside a string or a comment — the rewrite has no ambiguity to resolve. It
+// becomes `x = derived(lambda: expr)` **on the same line**: `derived` is already
+// injected as the identity, `surface()` reads the call off the AST, and the
+// emission already calls whatever the namespace holds.
+//
+// Only the expression form. A derivation that needs statements keeps `@derived`,
+// which is the counterpart of Svelte's own `$derived.by` — the same split their
+// runes make, and the one Python already makes between `lambda` and `def`.
+const ARROW = /^([A-Za-z_]\w*)\s*=>\s*(\S[\s\S]*)$/;
+const ARROW_INDENTED = /^[ \t]+[A-Za-z_]\w*\s*=>\s/;
+
+function takeArrows(src, where, lineOffset, allowed) {
+    const lines = src.split('\n');
+    const out = [];
+    let quote = null;
+
+    for (let n = 0; n < lines.length; n++) {
+        const line = lines[n];
+        const at = `${where}:${n + 1 + lineOffset}`;
+
+        if (quote === null && ARROW_INDENTED.test(line)) {
+            throw new SyntaxError(
+                `svelthon — a derived belongs at the top level of the module, ` +
+                    `and \`=>\` is only read there (${at})`
+            );
+        }
+
+        const found = quote === null ? line.match(ARROW) : null;
+
+        if (found && !allowed) {
+            throw new SyntaxError(
+                `svelthon — \`=>\` belongs to a component; a .py module writes a derived ` +
+                    `with the @derived decorator (${at})`
+            );
+        }
+
+        out.push(found ? `${found[1]} = derived(lambda: ${found[2]})` : line);
+        quote = endQuote(line, quote);
+    }
+
+    return out.join('\n');
+}
+
 function importJsClause(line, where) {
     const bare = line.match(IMPORTJS_EFFECT);
     if (bare) return { from: bare[2], kind: 'effect', entries: [] };
@@ -365,10 +420,14 @@ const injections = (declared, component) =>
 
 // Module-level names, read off the AST rather than the generated JS — the
 // codegen mangles function names (`increment941818`) but the AST has the truth.
-const isBindable = (node) =>
+// `bindable()` and `derived()` are markers: the compiler reads them off the AST
+// and the injected value is the identity, so nothing of them survives to run.
+const isCallTo = (node, name) =>
     node.value instanceof $B.ast.Call &&
     node.value.func instanceof $B.ast.Name &&
-    node.value.func.id === 'bindable';
+    node.value.func.id === name;
+
+const isBindable = (node) => isCallTo(node, 'bindable');
 
 const hasDecorator = (node, name) =>
     (node.decorator_list || []).some((d) => d instanceof $B.ast.Name && d.id === name);
@@ -391,7 +450,14 @@ function surface(body) {
     for (const node of body) {
         if (node instanceof $B.ast.Assign) {
             for (const target of node.targets) {
-                if (target instanceof $B.ast.Name && take(target.id)) state.push(target.id);
+                if (!(target instanceof $B.ast.Name) || !take(target.id)) continue;
+
+                // `x => expr` arrives here as `x = derived(lambda: expr)`, and
+                // the emission below needs no special case: it already writes
+                // `$derived.by(() => __fn_x())`, and a lambda answers a call
+                // exactly as a `def` does.
+                if (isCallTo(node, 'derived')) deriveds.push({ name: target.id, arity: 0 });
+                else state.push(target.id);
             }
         } else if (node instanceof $B.ast.AnnAssign) {
             // An annotation is a declaration of interface, like a dataclass
@@ -584,7 +650,7 @@ function compile(
 
     const lifted = takeImportJs(src, source, lineOffset, component);
 
-    src = lifted.source;
+    src = takeArrows(lifted.source, source, lineOffset, component);
 
     let root;
     try {
