@@ -259,6 +259,28 @@ function endQuote(line, quote) {
 // which is the counterpart of Svelte's own `$derived.by` — the same split their
 // runes make, and the one Python already makes between `lambda` and `def`.
 const ARROW = /^([A-Za-z_]\w*)\s*=>\s*(\S[\s\S]*)$/;
+
+// Brackets closed on the line, ignoring those inside a string.
+function balanced(expr) {
+    let depth = 0;
+    let quote = null;
+
+    for (let i = 0; i < expr.length; i++) {
+        const c = expr[i];
+
+        if (quote) {
+            if (c === '\\') i++;
+            else if (c === quote) quote = null;
+            continue;
+        }
+
+        if (c === '"' || c === "'") quote = c;
+        else if (c === '(' || c === '[' || c === '{') depth++;
+        else if (c === ')' || c === ']' || c === '}') depth--;
+    }
+
+    return depth === 0;
+}
 const ARROW_INDENTED = /^[ \t]+[A-Za-z_]\w*\s*=>\s/;
 
 function takeArrows(src, where, lineOffset, allowed) {
@@ -278,6 +300,17 @@ function takeArrows(src, where, lineOffset, allowed) {
         }
 
         const found = quote === null ? line.match(ARROW) : null;
+
+        // The expression has to finish on its line. A `{` or a `(` left open
+        // would swallow the lines under it into a lambda, and Brython would
+        // report a mismatched bracket several lines further down — which says
+        // nothing about what to do. This says it.
+        if (found && !balanced(found[2])) {
+            throw new SyntaxError(
+                `svelthon — a derived written with \`=>\` must fit on one line; ` +
+                    `use @derived on a def for anything longer (${at})`
+            );
+        }
 
         if (found && !allowed) {
             throw new SyntaxError(
