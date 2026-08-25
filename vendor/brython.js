@@ -1,3 +1,14 @@
+// /* SVELTHON patch, see BRYTHON.md */
+// One interpreter per process. The compiler loads this file with require()
+// and a server-rendered component imports it again — Node keeps those as two
+// module instances, and a second execution rebuilds $B.ast, so the classes the
+// compiler is holding lose the to_js() the code generator attached. Compiling
+// anything after that dies on `ast_root.to_js is not a function`, naming
+// nothing that leads back here.
+//
+// `var` keeps its module scope inside a block, which is what lets the whole
+// file be wrapped without touching a line of it.
+if (!(globalThis.__BRYTHON__ && globalThis.__BRYTHON__.ast)) {
 // brython.js brython.info
 // version [3, 14, 0, 'final', 0]
 // implementation [3, 14, 1, 'dev', 0]
@@ -2336,7 +2347,7 @@ $B.RAISE(_b_.TypeError,`${qualname}.__init_subclass__() `+
 `takes no keyword arguments`)}
 return _b_.None}
 object_funcs.__reduce__=function(cls){if(! $B.get_dict(cls)){$B.RAISE(_b_.TypeError,`cannot pickle '${$B.class_name(cls)}' object`)}
-if($B.imported.copyreg===undefined){$B.$import('copyreg')}
+if($B.imported.copyreg===undefined){$B.$import(/* @vite-ignore */ 'copyreg')}
 var res=[$B.module_getattr($B.imported.copyreg,'_reconstructor')]
 var D=$B.get_class(cls),B=object
 for(var klass of $B.get_mro(D)){if(klass.__module__=='builtins'){B=klass
@@ -2353,7 +2364,7 @@ var reduce=$B.$getattr(klass,'__reduce__')
 if(reduce !==object.tp_funcs.__reduce__ &&
 ((reduce.ob_type===$B.method_descriptor)&&
 (reduce.method !==object.tp_funcs.__reduce__))){return $B.$call(reduce,self)}
-if($B.imported.copyreg===undefined){$B.$import('copyreg')}
+if($B.imported.copyreg===undefined){$B.$import(/* @vite-ignore */ 'copyreg')}
 if(protocol < 2){var _reduce_ex=$B.module_getattr($B.imported.copyreg,'_reduce_ex')
 return $B.$call(_reduce_ex,self,protocol)}
 var res=[$B.module_getattr($B.imported.copyreg,'__newobj__')]
@@ -4287,7 +4298,7 @@ return $builtin_base_convert_helper(res,base)}}
 _b_.bin=function(obj){check_nb_args_no_kw('bin',1,arguments)
 return bin_hex_oct(2,obj)}
 _b_.breakpoint=function(){
-$B.$import('sys',[])
+$B.$import(/* @vite-ignore */ 'sys',[])
 var missing={},hook=$B.$getattr($B.imported.sys,'breakpointhook',missing)
 if(hook===missing){$B.RAISE(_b_.RuntimeError,'lost sys.breakpointhook')}
 return $B.$call(hook,...arguments)}
@@ -4617,7 +4628,7 @@ indexOf(obj)>-1){url=lib_url+`/constants.html#${obj}`}else if($B.is_type(_b_[obj
 _b_[obj].tp_bases.indexOf(_b_.Exception)>-1){url=lib_url+`/exceptions.html#${obj}`}
 if(url){globalThis.open(url)
 return}}
-$B.$import('pydoc')
+$B.$import(/* @vite-ignore */ 'pydoc')
 return $B.$call($B.$getattr($B.imported.pydoc,'help'),obj)}
 if($B.get_class(obj)===$B.module){return help($B.get_name(obj))}
 try{_b_.print($B.$getattr(obj,'__doc__'))}catch(err){return ''}}
@@ -9098,7 +9109,7 @@ _b_.repr($B.fast_tuple(self.interpolations))
 return `<Template(${strings}, ${interpolations})>`}
 var Template_funcs=$B.Template.tp_funcs={}
 Template_funcs.__class_getitem__=function(){return $B.$class_getitem.apply(null,arguments)}
-Template_funcs.__reduce__=function(self){$B.$import('string.templatelib')
+Template_funcs.__reduce__=function(self){$B.$import(/* @vite-ignore */ 'string.templatelib')
 var module=$B.imported['string.templatelib']
 var _template_unpickle=$B.module_getattr(module,'_template_unpickle')
 return $B.fast_tuple([_template_unpickle,$B.fast_tuple([$B.fast_tuple(self.strings),$B.fast_tuple(self.interpolations)])])}
@@ -11069,7 +11080,7 @@ list_iterator_funcs.__length_hint__=function(self){return self.len}
 list_iterator_funcs.__reduce__=function(self){return $B.fast_tuple([_b_.iter,$B.fast_tuple([list.$factory(self)]),0])}
 list_iterator_funcs.__setstate__=function(self){}
 $B.list_iterator.tp_methods=["__length_hint__","__reduce__","__setstate__"]
-var eq=$B.list_eq=function(self,other){if(other[$B.PYOBJ]){other=other[$B.PYOBJ]}
+var eq=$B.list_eq=function(self,other){if($B.$svelthonPyobj.get(other)){other=$B.$svelthonPyobj.get(other)}/* SVELTHON patch, see BRYTHON.md */
 var cls=$B.$isinstance(self,list)? list :tuple
 if(isinstance(other,cls)){if(other.length==self.length){var i=self.length
 while(i--){if(! $B.is_or_equals(self[i],other[i])){return false}}
@@ -11384,6 +11395,7 @@ return res}else{return obj}}else{$B.RAISE(_b_.TypeError,_b_.str.$factory(obj)+
 " does not support the structured clone algorithm")}}
 const JSOBJ=$B.JSOBJ=Symbol('JSOBJ')
 const PYOBJ=$B.PYOBJ=Symbol('PYOBJ')
+const PYOBJ_MAP=$B.$svelthonPyobj=new WeakMap() /* SVELTHON patch, see BRYTHON.md */
 const PYOBJFCT=Symbol('PYOBJFCT')
 const PYOBJFCTS=Symbol('PYOBJFCTS')
 function*f(){}
@@ -11408,7 +11420,7 @@ case 'string':
 return $B.String(jsobj)}
 if(Array.isArray(jsobj)){
 return jsobj}
-let pyobj=jsobj[PYOBJ]
+let pyobj=PYOBJ_MAP.get(jsobj) /* SVELTHON patch, see BRYTHON.md */
 if(pyobj !==undefined){return pyobj}
 if(jsobj instanceof Promise ||typeof jsobj.then=="function"){return jsobj}
 if(typeof jsobj==="function"){
@@ -11437,7 +11449,7 @@ Object.defineProperty(res,'$function_infos',{value,writable:true}
 return res}
 if(jsobj.constructor===Generator.constructor){return JSGenerator.$factory(jsobj)}
 if($B.$isNode(jsobj)){const res=$B.DOMNode.$factory(jsobj)
-jsobj[PYOBJ]=res
+PYOBJ_MAP.set(jsobj,res) /* SVELTHON patch, see BRYTHON.md */
 res[JSOBJ]=jsobj
 return res}
 return jsobj}
@@ -11456,7 +11468,7 @@ function has_type(cls,base){return cls===base ||$B.get_mro(cls).includes(base)}
 if(has_type(klass,$B.DOMNode)){return pyobj}
 if(has_type(klass,_b_.list)||has_type(klass,_b_.tuple)){
 var jsobj=pyobj.map(pyobj2jsobj)
-jsobj[PYOBJ]=pyobj
+PYOBJ_MAP.set(jsobj,pyobj) /* SVELTHON patch, see BRYTHON.md */
 delete jsobj.ob_type 
 return jsobj}
 if(has_type(klass,_b_.dict)){
@@ -11467,7 +11479,7 @@ if(typeof entry.value==='function'){
 entry.value.bind(jsobj)}
 jsobj[key]=pyobj2jsobj(entry.value)}
 pyobj[JSOBJ]=jsobj
-jsobj[PYOBJ]=pyobj
+PYOBJ_MAP.set(jsobj,pyobj) /* SVELTHON patch, see BRYTHON.md */
 return jsobj}
 if(has_type(klass,_b_.str)){
 return pyobj.valueOf()}
@@ -11482,7 +11494,7 @@ if(pyobj.$is_async){
 let jsobj=function(){var res=pyobj.apply(null,arguments)
 return $B.coroutine.tp_funcs.send(res)}
 pyobj[JSOBJ]=jsobj
-jsobj[PYOBJ]=pyobj
+PYOBJ_MAP.set(jsobj,pyobj) /* SVELTHON patch, see BRYTHON.md */
 return jsobj}
 let jsobj=function(){try{
 var args=new Array(arguments.length)
@@ -11493,7 +11505,7 @@ if(pyobj.prototype && pyobj.prototype.constructor===pyobj &&
 res=pyobj.im_func.call(this,pyobj.im_self,...args)}}
 return pyobj2jsobj(res)}catch(err){$B.handle_error(err)}}
 pyobj[JSOBJ]=jsobj
-jsobj[PYOBJ]=pyobj
+PYOBJ_MAP.set(jsobj,pyobj) /* SVELTHON patch, see BRYTHON.md */
 return jsobj}
 return pyobj}
 function convert_to_python(obj){
@@ -11517,7 +11529,7 @@ $B.RAISE(_b_.TypeError,"A Javascript function can't take "+
 args[i]=$B.pyobj2jsobj(arg)}
 return args}
 $B.JSClass=$B.make_builtin_class('JSClass',[_b_.type])
-$B.JSClass.tp_getattro=function(self,attr){console.log('JSClass getatro',self,attr)
+$B.JSClass.tp_getattro=function(self,attr){/* SVELTHON patch, see BRYTHON.md */
 if(attr=='new'){return function(){var args=Array.from(arguments).map(pyobj2jsobj)
 return jsobj2pyobj(new self.js_class(...args))}}
 var res=_b_.type.tp_getattro(self,attr)
@@ -11779,7 +11791,7 @@ $B.repr.leave(self)
 return res}
 var js_array_funcs=js_array.tp_funcs={}
 js_array_funcs.append=function(self,x){self.push(pyobj2jsobj(x))
-if(self[PYOBJ]){self[PYOBJ].push(x)}
+if(PYOBJ_MAP.get(self)){PYOBJ_MAP.get(self).push(x)}/* SVELTHON patch, see BRYTHON.md */
 return _b_.None}
 js_array_funcs.extend=function(self){var $=$B.args("extend",2,{self:null,t:null},arguments)
 var self=$.self,t=$.t
@@ -12278,7 +12290,7 @@ if(res !==$B.NULL){return res}}}
 return _b_.object.tp_getattro(self,attr)}
 var res=property
 if(res !==undefined){if(res===null){return res}
-if(typeof res==="function"){if(Object.hasOwn(res,$B.PYOBJ)){return res[$B.PYOBJ]}
+if(typeof res==="function"){if($B.$svelthonPyobj.has(res)){return $B.$svelthonPyobj.get(res)}/* SVELTHON patch, see BRYTHON.md */
 if(self.ob_type && self.ob_type.$webcomponent){var method=$B.$getattr($B.get_class(self),attr,null)
 if(method !==null){
 return res.bind(self)}}
@@ -13316,7 +13328,7 @@ let package_name=mod_name
 while(parsed_name.length > 1){var module=parsed_name.pop();
 package_name=parsed_name.join('.')
 if($B.imported[package_name]===undefined){
-$B.$import(package_name,[],{},locals)
+$B.$import(/* @vite-ignore */ package_name,[],{},locals)
 $B.module_setattr($B.imported[package_name],module,$B.imported[mod_name])
 mod_name=module}}
 return $B.imported[package_name]}}
@@ -13435,7 +13447,7 @@ parts.pop()}
 if(module){
 var submodule=$B.module_getattr(current_module,'__name__')+
 '.'+module
-$B.$import(submodule,[],{},{},inum)
+$B.$import(/* @vite-ignore */ submodule,[],{},{},inum)
 current_module=$B.imported[submodule]}
 if(names.length > 0 && names[0]=='*'){
 for(var item of $B.module_items(current_module)){if(item.key.startsWith('$')||item.key.startsWith('_')){continue}
@@ -13446,9 +13458,9 @@ if(value !==$B.NULL){
 ns[alias]=value}else{
 var sub_module=$B.module_getattr(current_module,'__name__')+
 '.'+name
-$B.$import(sub_module,[],{},{})
+$B.$import(/* @vite-ignore */ sub_module,[],{},{})
 ns[alias]=$B.imported[sub_module]}}}}else{
-$B.$import(module,names,aliases,locals,inum)}}
+$B.$import(/* @vite-ignore */ module,names,aliases,locals,inum)}}
 $B.$meta_path=[VFSFinder,StdlibStaticFinder,PathFinder]
 $B.finders={VFS:VFSFinder,stdlib_static:StdlibStaticFinder,path:PathFinder}
 function optimize_import_for_path(path,filetype){if(path.slice(-1)!="/"){path=path+"/" }
@@ -13643,9 +13655,9 @@ frame[1][alias]=result}},import_modules:function(refs,callback,loaded){
 if(loaded===undefined){loaded=[]}
 if(! Array.isArray(refs)){$B.RAISE(_b_.TypeError,`first argument must be a list, got ${$B.class_name(refs)}`)}
 if(refs.length > 1){var ref=refs.shift()
-import(ref).then(function(module){loaded.push(module)
+import(/* @vite-ignore */ ref).then(function(module){loaded.push(module)
 var im=$B.module_getattr($B.imported.javascript,'import_modules')
-im(refs,callback,loaded)}).catch($B.show_error)}else{import(refs[0]).then(function(module){loaded.push(module)
+im(refs,callback,loaded)}).catch($B.show_error)}else{import(/* @vite-ignore */ refs[0]).then(function(module){loaded.push(module)
 return $B.$call(callback,...loaded)}).catch($B.show_error)}},import_scripts:function(refs,callback,loaded){
 console.log('import scripts',refs)
 if(loaded===undefined){loaded=[]}
@@ -13698,7 +13710,7 @@ return res},breakpointhook:function(){var hookname=$B.$options.breakpoint,modnam
 if(hookname===undefined){hookname="pdb.set_trace"}
 [modname,dot,funcname]=_b_.str.rpartition(hookname,'.')
 if(dot==""){modname="builtins"}
-try{$B.$import(modname)
+try{$B.$import(/* @vite-ignore */ modname)
 hook=$B.$getattr($B.imported[modname],funcname)}catch(err){console.warn("cannot import breakpoint",hookname)
 return _b_.None}
 return $B.$call(hook,...arguments)},exc_info:function(){var frame_obj=$B.frame_obj,frame,exc
@@ -13921,7 +13933,7 @@ func.$function_infos=[]
 func.$function_infos[$B.func_attrs.name]='sleep'
 return{
 ob_type:$B.coroutine,$args:[seconds],$func:func}},Future,__getattr__:function(attr){
-$B.$import('_aio')
+$B.$import(/* @vite-ignore */ '_aio')
 return $B.$getattr($B.imported._aio,attr)}}
 function load(name,module_obj){
 $B.init_dict(module_obj)
@@ -14259,6 +14271,7 @@ if(min_indent===undefined){min_indent=indent}
 if(indent < min_indent){min_indent=indent}}
 for(var line of lines){if(/^\s*$/.exec(line)){unindented_lines.push(line)}else{unindented_lines.push(line.substr(min_indent))}}
 return unindented_lines.join('\n')}
+$B.unindent=unindent /* SVELTHON patch, see BRYTHON.md */
 var $token={}
 $B.parse_time=0
 $B.py2js=function(src,module,locals_id,parent_scope){
@@ -14530,7 +14543,7 @@ if(! scope){_scopes=scopes.slice()}else{var ix=scopes.indexOf(scope)
 if(ix >-1){_scopes=scopes.slice(0,ix+1)}else{_scopes=scopes.concat(scope)}}
 var names=[]
 for(var _scope of _scopes){if(! _scope.parent){names.push(_scope.name)}}
-return names.join('_').replace(/\./g,'_')}
+return names.join('_').replace(/[^\w$]/g,'_') /* SVELTHON patch, see BRYTHON.md */}
 function module_name(scopes){var _scopes=scopes.slice()
 var names=[]
 for(var _scope of _scopes){if(! _scope.parent){names.push(_scope.name)}}
@@ -14799,16 +14812,6 @@ nb_paren++
 for(let _if of comprehension.ifs){nb_paren++}}
 if(this instanceof $B.ast.DictComp){var key=$B.js_from_ast(this.key,scopes),value=$B.js_from_ast(this.value,scopes)}else{var elt=$B.js_from_ast(this.elt,scopes)}
 if(save_target_flags){$B.str_dict_set(comp_scope_symbols,target_name,save_target_flags)}
-/* SVELTHON patch, see BRYTHON.md: a comprehension's iteration variable is
-   recorded in the enclosing block too, flagged DEF_COMP_ITER, so a later bare
-   read compiles as an unguarded local and yields undefined instead of raising
-   NameError. Since Python 3 the comprehension owns that name; demoting the
-   enclosing entry to an implicit global makes the read resolve — and fail —
-   the way CPython does. */
-for(var comp_name of bindings){var comp_flags=$B.str_dict_get(comp_scope_symbols,comp_name)
-console.log('SONDE',comp_name,comp_flags,comp_flags===$B.NULL?'NULL':(comp_flags & SF.DEF_COMP_ITER)?'COMP_ITER':'autre')
-if(comp_flags!==$B.NULL && (comp_flags & SF.DEF_COMP_ITER)){
-$B.str_dict_set(comp_scope_symbols,comp_name,(SF.GLOBAL_IMPLICIT << SF.SCOPE_OFF)|SF.USE)}}
 var final_nb_await_in_scope=upper_comp_scope.nb_await===undefined ? 0 :
 upper_comp_scope.nb_await
 var has_await=final_nb_await_in_scope > initial_nb_await_in_scope
@@ -14840,11 +14843,6 @@ js+=prefix+`delete ${comp.locals_name}.${comp_name}\n`
 var comp_s=comp_scope
 while(comp_s){comp_s.locals.delete(comp_name)
 comp_s=comp_s.parent}}}
-/* SVELTHON patch, see BRYTHON.md: a name the comprehension introduced has
-   nothing to restore, so it stayed bound in the enclosing scope. Since Python 3
-   a comprehension has a scope of its own; dropping the binding is the closest
-   this codegen gets to that without a real scope. */
-for(var name of bindings){if(! save_locals.has(name)){js+=prefix+`delete ${comp.locals_name}.${name}\n`}}
 if(comp_iter_scope.found){js+=prefix+`${name_reference(comp_iter, scopes)} = save_comp_iter\n`}
 js+=prefix+`return result_${id}\n`
 dedent()
@@ -15189,13 +15187,13 @@ var has_type_params=this.type_params.length > 0
 if(has_type_params){check_type_params(this)
 js+=prefix+`function TYPE_PARAMS_OF_${this.name}(){\n`
 indent()
-js+=prefix+`$B.$import('_typing')\n`+
+js+=prefix+`$B.$import(/* @vite-ignore */ '_typing')\n`+
 prefix+`var _typing = $B.imported._typing\n`
 var params=[],need_typing_module
 for(let item of this.type_params){if(item instanceof $B.ast.TypeVar){params.push(`${item.name}`)}else if(item instanceof $B.ast.TypeVarTuple){params.push(`unpack(${item.name})`)
 need_typing_module=true}else if(item instanceof $B.ast.ParamSpec){params.push(`${item.name}`)}}
 bases.push(`generic_base`)
-if(need_typing_module){js+=prefix+`$B.$import('typing')\n`+
+if(need_typing_module){js+=prefix+`$B.$import(/* @vite-ignore */ 'typing')\n`+
 prefix+'var typing = $B.imported.typing\n'+
 prefix+`var Unpack = $B.module_getattr(typing, 'Unpack')\n`+
 prefix+`var unpack = $B.$call(Unpack, '__getitem__'))\n`}
@@ -15477,7 +15475,7 @@ var type_params_scope=new Scope(tp_name,'type_params',this.type_params)
 scopes.push(type_params_scope)
 var type_params_ref=qualified_scope_name(scopes,type_params_scope)
 var type_params_func=`function TYPE_PARAMS_OF_${name2}(){\n`
-type_params=prefix+`$B.$import('_typing')\n`+
+type_params=prefix+`$B.$import(/* @vite-ignore */ '_typing')\n`+
 prefix+`var _typing = $B.imported._typing\n`+
 prefix+`var locals_${type_params_ref} = $B.empty_dict(),\n`+
 prefix+tab+tab+`locals = locals_${type_params_ref},\n`+
@@ -15768,7 +15766,7 @@ $B.js_from_ast(this.body,scopes)+': '+
 $B.js_from_ast(this.orelse,scopes)+')'}
 $B.ast.Import.prototype.to_js=function(scopes){var js=prefix+`$B.set_lineno(frame, ${this.lineno})\n`
 var inum=add_to_positions(scopes,this)
-for(var alias of this.names){js+=prefix+`$B.$import("${alias.name}", [], `
+for(var alias of this.names){js+=prefix+`$B.$import(/* @vite-ignore */ "${alias.name}", [], `
 if(alias.asname){var binding_scope=bind(alias.asname,scopes)
 var scope_name=make_scope_name(scopes,binding_scope)
 js+=`{'${alias.name}': [${scope_name}, '${alias.asname}']}, `}else{js+='{}, '
@@ -16228,7 +16226,7 @@ var qualified_name=qualified_scope_name(scopes,type_alias_scope)
 var value=this.value.to_js(scopes)
 scopes.pop()
 scopes.pop()
-var js=prefix+`$B.$import('_typing')\n`
+var js=prefix+`$B.$import(/* @vite-ignore */ '_typing')\n`
 js+=prefix+`var locals_${qualified_scope_name(scopes, type_param_scope)} = {}\n`
 js+=prefix+`$B.set_lineno(frame, ${this.lineno})\n`
 js+=prefix+`function TYPE_PARAMS_OF_${this.name.id}(){\n`
@@ -37531,3 +37529,5 @@ throw Error(`unknown parse mode: ${p.mode}`)}};})(__BRYTHON__)
 "use strict";
 (function($B){$B.whenReady=new Promise(function(resolve,reject){resolve()})})(__BRYTHON__);
 ;
+
+}

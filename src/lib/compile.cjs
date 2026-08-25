@@ -176,6 +176,36 @@ function declaredJsImports(body) {
     return [];
 }
 
+// A component's Python: what the author wrote, plus the hidden functions the
+// markup pass appended, one per template expression.
+//
+// The join is also where the indentation is settled, because the join is what
+// creates the problem. A `<script>` body sits inside markup and every Svelte
+// example indents it one level; in JavaScript that is whitespace, here it is
+// syntax, and the block raises `IndentationError: unexpected indent` — pointing,
+// in Brython, at the line *after* the last one, which tells the author nothing.
+//
+// Brython already solves this for its own `<script type="text/python">`, and this
+// is that same function rather than a second copy of the rule: two copies would
+// have to be kept in agreement by hand and would diverge in silence the day
+// theirs improves. It is private upstream, so the vendored build exposes it in
+// one token (see BRYTHON.md).
+//
+// Its rule is `textwrap.dedent`'s with a conservative bail — one non-blank line
+// already at column zero and the source comes back untouched — and it keeps
+// blank lines as they are, so the line count never moves and the source map, the
+// tracebacks and `$B.set_lineno` are unaffected.
+//
+// It has to happen *before* the defs are appended: those are generated at column
+// zero, and appending them first would trip the bail on every component. A `.py`
+// never comes through here at all, which is right — a file is not an embedded
+// block, and an indented one is an error rather than a convenience.
+function pythonSource(content, defs) {
+    const body = $B.unindent(content);
+
+    return defs.length ? `${body}\n${defs.join('\n\n')}\n` : body;
+}
+
 // `importjs` — a component's JavaScript imports, written where its Python is.
 //
 // `__js__` covers a plain `.py`, and only the named form, which is all a module
@@ -988,4 +1018,4 @@ const VFS_PREFIX = 'virtual:svelthon-vfs/';
 const virtualId = (name) => VIRTUAL_PREFIX + name;
 const vfsId = (name) => VFS_PREFIX + name;
 
-module.exports = { compile, VIRTUAL_PREFIX, VFS_PREFIX, virtualId, vfsId };
+module.exports = { compile, pythonSource, VIRTUAL_PREFIX, VFS_PREFIX, virtualId, vfsId };

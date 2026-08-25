@@ -156,6 +156,42 @@ the property normally and therefore walks the prototype chain. It is the only
 place in Brython that consults that flag, and it is what makes the prototype
 trick compatible with props.
 
+## Indentation, which is the one thing a `<script>` changes
+
+In a Svelte component the script body is usually indented one level inside its
+tag, because that is what the surrounding markup invites. In JavaScript that is
+whitespace. In Python it is syntax, and an indented block is an error.
+
+So Svelthon unindents the block for you, and **both of these compile**:
+
+```svelte
+<script lang="python">
+count = 0
+</script>
+
+<script lang="python">
+    count = 0
+</script>
+```
+
+It is Brython's own `unindent` — the function it already runs on every
+`<script type="text/python">` — rather than a rule of ours, so the two tags
+behave the same way. Whitespace is removed, never a line, so error messages and
+source maps keep pointing at the line you wrote.
+
+Two cases it deliberately does not rescue, both because guessing would be worse
+than failing:
+
+- **a block that is only partly indented.** One non-blank line already at column
+  zero and the source is left exactly as written — including the common case of a
+  triple-quoted string whose content starts at the margin.
+- **a `.py` file.** A file is not an embedded block; an indented one is a
+  mistake, not a convenience.
+
+In both, Python raises `IndentationError` — and be warned that Brython reports
+it at the line *after* the last one rather than at the offending line, which is
+a bug of theirs, recorded in `BRYTHON.md`.
+
 ## Templates are Python
 
 Every expression a template *reads* is compiled as Python. Each site becomes a

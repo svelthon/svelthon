@@ -270,6 +270,47 @@ It fires on **every** attribute access on a JavaScript class from Python —
 `js.Response.new` is enough — and dumps the class object, which is hundreds of
 lines. Note the typo in the message. Removing the line is the whole fix.
 
+### An `IndentationError` names the line after the last one
+
+Measured on four sources, and the pattern is exact — the reported line is always
+the end of the file plus one, never the offending line:
+
+| source | reported |
+|---|---|
+| 2 lines, indented | `:3` |
+| 4 lines, indented | `:5` |
+| 10 lines, indented | `:11` |
+| 4 lines, the error genuinely on line 4 | `:5` |
+
+So an author who indents a block is told about a line that does not exist. It is
+the first error anyone will meet coming from JavaScript, where the same
+indentation is whitespace — and it is the least helpful one Brython produces.
+
+Nothing in Svelthon works around it: what it does instead is **remove the
+occasion**, by unindenting a component's script the way Brython already unindents
+its own `<script type="text/python">`. The message still appears for a `.py`
+file, or for a block whose indentation is genuinely inconsistent.
+
+### `unindent` is private, and it is the one function an embedder wants
+
+`vendor/brython.js:14264`. Brython runs it on the body of every
+`<script type="text/python">` before compiling:
+
+```js
+src = (script.innerHTML || script.textContent)
+src = unindent(src)
+```
+
+Its rule is `textwrap.dedent`'s — the minimum indentation over non-blank lines —
+with a conservative bail: if any non-blank line is already at column zero, the
+source is returned untouched rather than mangled. Blank lines are kept as they
+are, so the line count never moves.
+
+That is exactly what any tool embedding Python in markup needs, and it is not
+reachable: it is a module-level function, absent from `$B`. Exposing it is a
+two-word change with no behaviour attached — the smallest of the patches below,
+and the most obvious candidate to send upstream.
+
 ## Patches applied to the vendored build
 
 Every repair is an edit in `vendor/brython.js` itself, marked with a

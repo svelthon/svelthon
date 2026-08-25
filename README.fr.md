@@ -156,6 +156,43 @@ propriété normalement, donc en traversant le prototype. C'est le seul endroit 
 Brython qui consulte ce drapeau, et c'est ce qui rend l'astuce du prototype
 compatible avec les props.
 
+## L'indentation, la seule chose qu'un `<script>` change
+
+Dans un composant Svelte, le corps du script est le plus souvent indenté d'un
+niveau à l'intérieur de sa balise, parce que c'est ce que le balisage autour
+invite à faire. En JavaScript c'est de l'espace. En Python c'est de la syntaxe,
+et un bloc indenté est une erreur.
+
+Svelthon dédente donc le bloc, et **les deux compilent** :
+
+```svelte
+<script lang="python">
+count = 0
+</script>
+
+<script lang="python">
+    count = 0
+</script>
+```
+
+C'est le `unindent` de Brython lui-même — celui qu'il applique déjà à chaque
+`<script type="text/python">` — et non une règle à nous, pour que les deux
+balises se comportent pareil. On retire de l'espace, jamais une ligne, donc les
+messages d'erreur et les source maps continuent de pointer la ligne écrite.
+
+Deux cas qu'il ne rattrape délibérément pas, parce que deviner serait pire
+qu'échouer :
+
+- **un bloc indenté à moitié.** Une seule ligne non vide déjà en colonne zéro et
+  la source est laissée telle quelle — y compris le cas courant d'une chaîne
+  triple dont le contenu commence à la marge.
+- **un fichier `.py`.** Un fichier n'est pas un bloc encastré ; l'indenter est
+  une faute, pas un confort.
+
+Dans les deux, Python lève `IndentationError` — en sachant que Brython l'annonce
+à la ligne *suivant* la dernière plutôt qu'à la ligne fautive, ce qui est un bug
+de leur côté, consigné dans `BRYTHON.md`.
+
 ## Le gabarit est du Python
 
 Toute expression que le gabarit *lit* est compilée en Python. Chaque site devient
