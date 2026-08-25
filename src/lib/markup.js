@@ -151,6 +151,9 @@ export function walrus(expression) {
 
 // Only the markup, never a <script> or <style> body — Python is full of braces
 // (dict literals, f-strings) and rewriting them would be catastrophic.
+//
+// `transform` is given where its chunk starts, for a caller that needs to map
+// what it finds back onto the original file rather than only rewrite it.
 export function overMarkup(content, transform) {
     const blocks = /<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi;
     let out = '';
@@ -158,11 +161,11 @@ export function overMarkup(content, transform) {
     let block;
 
     while ((block = blocks.exec(content))) {
-        out += transform(content.slice(cut, block.index)) + block[0];
+        out += transform(content.slice(cut, block.index), cut) + block[0];
         cut = block.index + block[0].length;
     }
 
-    return out + transform(content.slice(cut));
+    return out + transform(content.slice(cut), cut);
 }
 
 // `bind:` needs to read *and* write, which no single expression can do. Svelte
@@ -344,19 +347,47 @@ function eachBlock(trimmed, declare, call) {
     return `{#each ${iterable} as ${target}` + (keyed ? ` (${call(keyed[1], 'repr')})` : '') + '}';
 }
 
-export function pythonExpressions(markup, collect) {
+export function pythonExpressions(markup, collect, onPython) {
     let out = '';
     let index = 0;
     let inTag = false;
     let quote = null;
     let quotedAttribute = null;
+    let region = null;
     const scopes = [];
 
     const inScope = () => [...new Set(scopes.flat())];
 
-    const call = (expr, wrapper) => {
+    // Where a template expression sits in the *source*, for a caller that needs
+    // to point at it rather than compile it — the editor's highlighting above
+    // all, which colours these ranges with the same parser as the `<script>`.
+    //
+    // The range is reported only when the text occurs exactly once inside its
+    // own braces, so an ambiguous match — `{#each items as items}` — yields no
+    // range rather than the wrong one. A missing highlight is invisible; a
+    // misplaced one teaches the reader something false.
+    const locate = (expr) => {
+        // `{}` has nothing to point at, and a zero-length range is the kind of
+        // thing a consumer is entitled not to expect.
+        if (!onPython || !region || !expr) return;
+
+        const text = markup.slice(region.start, region.end);
+        const at = text.indexOf(expr);
+
+        if (at === -1 || at !== text.lastIndexOf(expr)) return;
+
+        onPython(region.start + at, region.start + at + expr.length);
+    };
+
+    // `source` is what the author actually typed, when that differs from what
+    // gets compiled — a handler goes through walrus() first, and a range has to
+    // point at the text on screen rather than at the rewrite.
+    const call = (expr, wrapper, source = expr) => {
         const args = inScope();
-        const name = collect(expr.trim(), wrapper, args);
+        const trimmed = expr.trim();
+
+        locate(source.trim());
+        const name = collect(trimmed, wrapper, args);
 
         // follow() on the block's own names: a row of an {#each} is a plain
         // JavaScript value, not a signal, so reading `it.label` registers
@@ -365,7 +396,8 @@ export function pythonExpressions(markup, collect) {
     };
 
     // The write half of a binding: the same text, compiled as an assignment
-    // target rather than as an expression.
+    // target rather than as an expression. No locate() — it is the same source
+    // text the read half already reported, and a range must not be sent twice.
     const assign = (expr) => {
         const args = inScope();
         const name = collect(expr.trim(), '', args, true);
@@ -388,7 +420,9 @@ export function pythonExpressions(markup, collect) {
                     const named = quotedAttribute || '';
 
                     if (end !== -1 && !DIRECTIVE.test(named) && !HANDLER.test(named)) {
+                        region = { start: index + 1, end };
                         out += `{${call(markup.slice(index + 1, end), '__text')}}`;
+                        region = null;
                         index = end + 1;
                         continue;
                     }
@@ -404,6 +438,8 @@ export function pythonExpressions(markup, collect) {
                     const attribute = out.match(/([^\s=]+)=$/);
                     const inner = markup.slice(index + 1, end);
                     const trimmed = inner.trim();
+
+                    region = { start: index + 1, end };
 
                     if (attribute) {
                         // A binding becomes a read/write pair; `bind:group` is
@@ -424,7 +460,7 @@ export function pythonExpressions(markup, collect) {
                             // is allowed to write: it runs on an event, not
                             // during a render — where Svelte rejects a write to
                             // state, and rightly so.
-                            out += `{${EVENT_WRAPPER}(${call(walrus(inner), '')})}`;
+                            out += `{${EVENT_WRAPPER}(${call(walrus(inner), '', inner)})}`;
                         } else if (CLASS_DIRECTIVE.test(attribute[1])) {
                             out += `{${call(inner, '__truthy')}}`;
                         } else {
@@ -445,6 +481,7 @@ export function pythonExpressions(markup, collect) {
                         out += markup.slice(index, end + 1);
                     }
 
+                    region = null;
                     index = end + 1;
                     continue;
                 }
@@ -500,6 +537,8 @@ export function pythonExpressions(markup, collect) {
 
         const inner = markup.slice(index + 1, end);
         const trimmed = inner.trim();
+
+        region = { start: index + 1, end };
 
         if (trimmed.startsWith('#')) {
             if (trimmed.startsWith('#if ')) {
@@ -571,10 +610,39 @@ export function pythonExpressions(markup, collect) {
             out += `{${call(inner, '__text')}}`;
         }
 
+        region = null;
         index = end + 1;
     }
 
     return out;
+}
+
+// The source ranges of every Python expression a template holds — the same
+// scan the compiler runs, reporting positions instead of producing code.
+//
+// It exists for the editor: highlighting the Python inside `{…}` means knowing
+// exactly where it is, and that is the hard half. Brace balance, quotes,
+// interpolation inside an attribute value, and the difference between `{#if x}`
+// — where only `x` is Python — and `{x}` are all already solved above, so this
+// borrows the answer rather than guessing at it a second time.
+// Takes a whole component, not just its template: it goes through overMarkup
+// for the same reason the compiler does, so a dict literal in the `<script>` and
+// the braces of a `<style>` are never mistaken for template expressions.
+export function pythonRanges(content) {
+    const ranges = [];
+    let n = 0;
+
+    overMarkup(content, (markup, offset) => {
+        pythonExpressions(
+            markup,
+            () => `__range_${n++}`,
+            (from, to) => ranges.push({ from: offset + from, to: offset + to })
+        );
+
+        return markup;
+    });
+
+    return ranges.sort((a, b) => a.from - b.from);
 }
 
 // Names a component imports or declares in its `<script module>`. They live in
