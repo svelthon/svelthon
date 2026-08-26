@@ -321,7 +321,7 @@ par rendu. C'est le prix du gabarit en Python.
 
 ### Tout le dialecte, en un tableau
 
-Quatre endroits se lisent autrement que du Python nu. Deux dans le balisage,
+Cinq endroits se lisent autrement que du Python nu. Trois dans le balisage,
 deux dans le script, et il n'y en a pas d'autres — tout le reste d'un composant
 est du Python qui veut dire ce que Python veut dire.
 
@@ -329,6 +329,7 @@ est du Python qui veut dire ce que Python veut dire.
 |---|---|---|---|
 | `{row.label}` | balisage | une clé autant qu'un attribut | la forme des données ne doit pas dicter celle du balisage |
 | `(open := not open)` | balisage, gestionnaires seuls | une affectation dans une expression | `onclick={() => (open = !open)}` n'a pas de jumeau Python |
+| `as {id, name}` | balisage, cible d'un `{#each}` | un dépaquetage par clé | Python dépaquette par position, et seul `match` le fait par clé |
 | `importjs X from "…"` | script | un import JavaScript | un import est statique, et un mot-clé rend l'import calculé inécrivable |
 | `doubled => count * 2` | script | une valeur dérivée | à un caractère du `=` d'à côté, et ce caractère est la différence |
 
@@ -337,6 +338,23 @@ de parser. Toutes deux sont réécrites **sur la même ligne**, si bien que rien
 aval — numéros de ligne, tracebacks, source maps — ne peut faire la différence.
 Un `.py` ordinaire n'a ni l'une ni l'autre : un module est du Python, et seul un
 fichier qui a un gabarit porte le dialecte.
+
+La troisième entrée du balisage est celle qui *prend* au lieu de *recouvrir*.
+`{a, b}` est un ensemble dans une expression, mais une cible de `for` accepte un
+nom, un tuple, une liste — jamais une accolade — si bien que `as {id, name}` ne
+percute rien. Elle comble un trou au lieu de couvrir un sens, ce qui la rend
+moins coûteuse que le walrus d'à côté :
+
+```svelte
+{#each cats as {id, name}, i}
+    <a href="/watch?v={id}">{i + 1}: {name}</a>
+{/each}
+```
+
+Ça marche parce qu'un dict à clés textuelles **est** déjà un objet JavaScript
+dont les clés sont des propriétés propres — mesuré, pas supposé — donc rien
+n'est converti à la frontière. La ligne est dépaquetée là où on la lit, et
+l'alternative épelle deux fois la même chose : `{cat.id}`, `{cat.name}`.
 
 ## Composition
 

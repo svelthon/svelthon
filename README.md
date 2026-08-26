@@ -313,7 +313,7 @@ of the template being Python.
 
 ### The whole dialect, in one table
 
-Four places read as something other than plain Python. Two are in the markup,
+Five places read as something other than plain Python. Three are in the markup,
 two in the script, and there are no others — everything else in a component is
 Python that means what Python means.
 
@@ -321,6 +321,7 @@ Python that means what Python means.
 |---|---|---|---|
 | `{row.label}` | markup | a key as well as an attribute | the shape of your data should not dictate the shape of your markup |
 | `(open := not open)` | markup, handlers only | an assignment inside an expression | `onclick={() => (open = !open)}` has no Python twin |
+| `as {id, name}` | markup, `{#each}` target | unpacking a row by key | Python unpacks by position, and only `match` unpacks by key |
 | `importjs X from "…"` | script | a JavaScript import | an import is static, and a keyword makes a computed one unwriteable |
 | `doubled => count * 2` | script | a derived value | one character from the `=` beside it, and that character is the difference |
 
@@ -329,6 +330,22 @@ refuse to parse. Both are rewritten **on the same line**, so nothing downstream 
 line numbers, tracebacks, source maps — can tell the difference. A plain `.py`
 gets neither: a module is Python, and only a file with a template has the
 dialect.
+
+The third markup entry is the one that takes rather than overrides. `{a, b}` is a
+set in an expression, but a `for` target accepts a name, a tuple, a list — never
+a brace — so `as {id, name}` collides with nothing. It fills a hole instead of
+covering a meaning, which is why it costs less than the walrus beside it:
+
+```svelte
+{#each cats as {id, name}, i}
+    <a href="/watch?v={id}">{i + 1}: {name}</a>
+{/each}
+```
+
+It works because a dict with string keys already *is* a JavaScript object whose
+keys are own properties — measured, not assumed — so nothing is converted at the
+boundary. The row is unpacked where it is read, and the alternative spells the
+same thing twice: `{cat.id}`, `{cat.name}`.
 
 ## Composition
 

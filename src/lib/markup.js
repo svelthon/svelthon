@@ -501,7 +501,9 @@ export function pythonExpressions(markup, collect, onPython) {
             // absence of an `=` is certain.
             if (/[\s/>]/.test(char)) {
                 const short = out.match(SHORTHAND);
-                if (short) { /* désactivé pour la vérification */ }
+                if (short) {
+                    out += `={() => ${call(short[1], '__bound')}, (${BOUND_VALUE}) => ${assign(short[1])}}`;
+                }
             }
 
             out += char;
