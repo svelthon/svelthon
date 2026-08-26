@@ -815,6 +815,7 @@ same script as the rest of its Python:
 importjs Star from "#lib/Star.svelte"
 importjs {fade, fly} from "svelte/transition"
 importjs * as Dialog from "#lib/ui/dialog"
+importjs Player, {stopAll} from "#lib/Player.svelte"
 importjs "./theme.css"
 ```
 

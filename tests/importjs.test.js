@@ -32,6 +32,13 @@ describe('importjs', () => {
         expect(setup(ImportJs)('namespace')).toBe('yes');
     });
 
+    // The default and some names, from one module — JavaScript's own clause
+    // allows it, and a component that imports a child *and* something its
+    // `<script module>` exports needs exactly this shape.
+    test('a default and named imports, from the same module', () => {
+        expect(setup(ImportJs)('mixed-child')).toBe('from the module script');
+    });
+
     // Nothing to assert but the absence of a crash: a stylesheet has no value.
     // That it renders at all is the test — the import has to reach the generated
     // module without leaving anything behind in the Python.

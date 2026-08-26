@@ -853,6 +853,7 @@ Python ne sait pas importer depuis npm. Un **composant** le déclare avec
 importjs Star from "#lib/Star.svelte"
 importjs {fade, fly} from "svelte/transition"
 importjs * as Dialog from "#lib/ui/dialog"
+importjs Player, {stopAll} from "#lib/Player.svelte"
 importjs "./theme.css"
 ```
 

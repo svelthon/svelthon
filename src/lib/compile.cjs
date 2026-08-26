@@ -344,9 +344,9 @@ function importJsClause(line, where) {
     const star = clause.match(/^\*\s+as\s+([A-Za-z_$][\w$]*)$/);
     if (star) return { from, kind: 'namespace', entries: [{ name: null, local: star[1] }] };
 
-    const braced = clause.match(/^\{([\s\S]*)\}$/);
-    if (braced) {
-        const entries = braced[1]
+    // `{a, b as c}` — the names between the braces, each optionally renamed.
+    const namedEntries = (inner) => {
+        const entries = inner
             .split(',')
             .map((one) => one.trim())
             .filter(Boolean)
@@ -359,7 +359,23 @@ function importJsClause(line, where) {
             });
 
         if (!entries.length) throw new SyntaxError(`svelthon — importjs: empty {} (${where})`);
-        return { from, kind: 'named', entries };
+        return entries;
+    };
+
+    const braced = clause.match(/^\{([\s\S]*)\}$/);
+    if (braced) return { from, kind: 'named', entries: namedEntries(braced[1]) };
+
+    // `Player, {stopAll}` — the default and some names, from the same module.
+    // JavaScript's own clause allows it, and a component that imports both a
+    // component and something from its `<script module>` needs exactly this.
+    // The default comes first in `entries`, marked by a null `name`.
+    const mixed = clause.match(/^([A-Za-z_$][\w$]*)\s*,\s*\{([\s\S]*)\}$/);
+    if (mixed) {
+        return {
+            from,
+            kind: 'mixed',
+            entries: [{ name: null, local: mixed[1] }, ...namedEntries(mixed[2])]
+        };
     }
 
     if (JS_NAME.test(clause)) return { from, kind: 'default', entries: [{ name: null, local: clause }] };
@@ -409,16 +425,22 @@ function takeImportJs(src, where, lineOffset, allowed) {
     return { source: kept.join('\n'), imports };
 }
 
-// One import statement, in whichever of the four shapes it was declared.
+// One import statement, in whichever of the five shapes it was declared.
 function jsImportLine(one) {
     const from = JSON.stringify(one.from);
+    const list = (entries) =>
+        entries.map((e) => (e.name === e.local ? e.local : `${e.name} as ${e.local}`)).join(', ');
 
     if (one.kind === 'effect') return `import ${from};`;
     if (one.kind === 'namespace') return `import * as ${one.entries[0].local} from ${from};`;
     if (one.kind === 'default') return `import ${one.entries[0].local} from ${from};`;
 
-    const names = one.entries.map((e) => (e.name === e.local ? e.local : `${e.name} as ${e.local}`));
-    return `import { ${names.join(', ')} } from ${from};`;
+    if (one.kind === 'mixed') {
+        const [first, ...rest] = one.entries;
+        return `import ${first.local}, { ${list(rest)} } from ${from};`;
+    }
+
+    return `import { ${list(one.entries)} } from ${from};`;
 }
 
 // `src/counter_store.svelte.py` → `counter_store`, the name Python imports it by.
