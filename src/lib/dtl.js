@@ -144,7 +144,7 @@ function translate(inner, offset, source) {
             // filters are Python's, where they are just functions and methods.
             throw new Error(
                 `${where}: unknown template tag {% ${keyword} %}. ` +
-                    `SVELTHON translates if/elif/else/endif, for/empty/endfor, ` +
+                    `Svelthon translates if/elif/else/endif, for/empty/endfor, ` +
                     `with/endwith and comment; use components instead of ` +
                     `{% include %} / {% extends %}, and Python instead of filters.`
             );
@@ -167,7 +167,7 @@ export function dtl(markup) {
 // from: `forloop.counter` is attribute access, which a JavaScript object would
 // not answer. Appended to a component's own source, and only when its markup
 // names it — one object per row is not free.
-export const FORLOOP = \`class __Forloop:
+export const FORLOOP = `class __Forloop:
     def __init__(self, index, total):
         self.counter0 = index
         self.counter = index + 1

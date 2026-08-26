@@ -97,9 +97,7 @@ def passthrough():
     return items
 
 
-@derived
-def computed():
-    return len(items)
+computed => len(items)
 </script>
 
 <p data-k="count">{count}</p>

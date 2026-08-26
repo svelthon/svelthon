@@ -11,3 +11,8 @@ empty = None
 
 <p data-k="value">{value}</p>
 <p data-k="checked">{checked}</p>
+
+<!-- Python's None, handed to a DOM property. Svelte writes what the getter
+     returns straight into the element, so None has to become undefined on the
+     way out or the field shows the word. -->
+<input bind:value={empty} data-k="empty" />

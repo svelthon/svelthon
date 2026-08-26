@@ -11,23 +11,19 @@ def prepend():
     global next_id
     items.insert(0, Item(next_id, "c"))
     next_id += 1
-    publish("items")
 
 def relabel():
     for it in items:
         if it.id == 2:
             it.label = it.label.upper()
-    publish("items")
 
 def replace():
     for i, it in enumerate(items):
         if it.id == 2:
             items[i] = Item(it.id, it.label.upper())
-    publish("items")
 
 def drop_first():
     del items[0]
-    publish("items")
 </script>
 
 <ul data-k="list">

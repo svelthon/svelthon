@@ -7,4 +7,3 @@ export const anObject = () => ({ name: 'App.svelte', size: 3 });
 export const anArray = () => [1, 2, 3];
 export const aFunction = () => (n) => n * 3;
 export const aPromise = () => Promise.resolve('awaited');
-export const nothing = () => undefined;

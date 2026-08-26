@@ -2,9 +2,7 @@
 stock = {"apple": 3, "pear": 1, "fig": 0}
 
 
-@derived
-def left():
-    return sum(stock.values())
+left => sum(stock.values())
 
 
 def sell():

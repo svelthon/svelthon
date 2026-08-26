@@ -7,10 +7,10 @@
 import { test, expect, describe } from 'vitest';
 import { render } from 'svelte/server';
 
-import Counter from './Counter.svelte';
-import Greeting from './Greeting.svelte';
-import Semantics from './Semantics.svelte';
-import StoreDemo from './StoreDemo.svelte';
+import Counter from '../src/Counter.svelte';
+import Greeting from '../src/Greeting.svelte';
+import Semantics from '../src/Semantics.svelte';
+import StoreDemo from '../src/StoreDemo.svelte';
 import Composition from './fixtures/Composition.svelte';
 import CtxHost from './fixtures/CtxHost.svelte';
 import { store } from '../src/counter_store.svelte.py';
@@ -80,7 +80,7 @@ describe('server rendering', () => {
         expect(second).toBe(first);
     });
 
-    // The server-rendering trap, and it is not SVELTHON's own: a module's state
+    // The server-rendering trap, and it is not Svelthon's own: a module's state
     // lives in the process, so it is shared by every request. Svelte carries
     // exactly the same warning for a module-level `$state` in a `.svelte.js`.
     // Harmless while prerendering — one pass, no concurrent users — and to be

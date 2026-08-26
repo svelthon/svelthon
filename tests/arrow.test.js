@@ -63,3 +63,4 @@ describe('the derived operator', () => {
         expect(read('described')).toBe('many');
     });
 });
+

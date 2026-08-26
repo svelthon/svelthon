@@ -4,7 +4,7 @@ import { mount, flushSync } from 'svelte';
 import JsAttrs from './fixtures/JsAttrs.svelte';
 import PyAttrs from './fixtures/PyAttrs.svelte';
 
-// This file does not check what SVELTHON does, but that it does *the same thing*
+// This file does not check what Svelthon does, but that it does *the same thing*
 // as Svelte. The two components are word for word the same, one in Python with a
 // dict and a list mutated in place, the other in JavaScript with a deeply
 // proxied $state. Any line that diverged here is a bug — unless the divergence
@@ -49,7 +49,7 @@ describe.each([
 
         // Neither here nor in JavaScript: Svelte compares the value to the one
         // it wrote last time, by identity, and a mutated container is the same
-        // object. This is not a SVELTHON limitation, it is the host's own
+        // object. This is not a Svelthon limitation, it is the host's own
         // semantics — and this test is here to prove it on both sides.
         expect(el('raw').getAttribute('title')).toBe('a');
         mutate();

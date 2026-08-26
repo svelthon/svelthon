@@ -7,9 +7,7 @@
 
 <script lang="python">
 # JavaScript names, read from Python.
-@derived
-def shouted():
-    return LABEL.upper()
+shouted => LABEL.upper()
 </script>
 
 <p data-k="direct">{LABEL}</p>

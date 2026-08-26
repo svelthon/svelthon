@@ -1,28 +1,32 @@
 import { test, expect, describe, vi, afterEach } from 'vitest';
 import { mount, unmount, flushSync } from 'svelte';
-import Since from './fixtures/Since.svelte';
+import FromNow from './fixtures/FromNow.svelte';
 
-// Django's `|timesince`, and the one helper Django could not have had: a
-// rendered page is finished, so "3 minutes ago" is true once and then wrong. A
-// component stays on screen, so this one wakes itself when the display would
-// change — and asks for the delay the display needs, so it slows down as the
-// date ages instead of beating at a fixed rate.
+// Django's `|timesince` and `|timeuntil` in one name, which is neither of
+// theirs: `Intl` formats a signed gap, so "since" would lie half the time.
+// `fromnow` is what the JavaScript world calls it.
+//
+// It is also the one helper Django could not have had: a rendered page is
+// finished, so "3 minutes ago" is true once and then wrong. A component stays on
+// screen, so this one wakes itself when the display would change — and asks for
+// the delay the display needs, so it slows down as the date ages.
 describe('fromnow', () => {
-    let mounted = null;
+    const mounted = [];
 
     // The clock is shared by the whole document, and its timer is cleared when
     // the last reader goes away. Leaving components mounted from one test to the
     // next would leave a timer armed and block the next one from re-arming — so
     // this is not tidiness, it is what keeps the tests independent.
     afterEach(() => {
-        if (mounted) unmount(mounted, { outro: false });
-        mounted = null;
+        // *Every* mount, not just the last: a test that sets up twice would
+        // leave a timer armed and stop the next one from re-arming.
+        while (mounted.length) unmount(mounted.pop(), { outro: false });
         vi.useRealTimers();
     });
 
     const setup = (props) => {
         const target = document.body.appendChild(document.createElement('div'));
-        mounted = mount(Since, { target, props });
+        mounted.push(mount(FromNow, { target, props }));
         flushSync();
 
         return () => target.querySelector('p[data-k="said"]').textContent;

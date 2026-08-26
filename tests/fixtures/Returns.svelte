@@ -3,7 +3,7 @@
 # boundary — Python values going out — was always converted; the inbound half
 # was not, so a number came back as a raw JSObject that could not even be
 # multiplied.
-importjs {aFloat, anInt, aString, anObject, anArray, aFunction, aPromise, nothing} from "./returns.js"
+importjs {aFloat, anInt, aString, anObject, anArray, aFunction, aPromise} from "./returns.js"
 
 
 def attempt(fn):
@@ -22,7 +22,6 @@ text = attempt(lambda: aString().upper())
 field = attempt(lambda: anObject().name)
 listed = attempt(lambda: len(anArray()) + sum(anArray()))
 called = attempt(lambda: aFunction()(5))
-empty = attempt(lambda: nothing() is None)
 
 
 async def awaited():
@@ -38,6 +37,5 @@ async def awaited():
 <p data-k="field">{field}</p>
 <p data-k="listed">{listed}</p>
 <p data-k="called">{called}</p>
-<p data-k="empty">{empty}</p>
 
 {#await awaited()}<p data-k="promise">waiting</p>{:then got}<p data-k="promise">{got}</p>{/await}

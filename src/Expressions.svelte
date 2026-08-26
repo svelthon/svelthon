@@ -8,9 +8,7 @@ class Item:
 cart = [Item("apple", 3), Item("pear", 1)]
 
 
-@derived
-def units():
-    return sum(i.qty for i in cart)
+units => sum(i.qty for i in cart)
 
 
 def clear():

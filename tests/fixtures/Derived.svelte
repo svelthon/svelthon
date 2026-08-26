@@ -1,10 +1,12 @@
 <script lang="python">
 first = "Ada"
 last = "Lovelace"
-@derived
-def full():
-    return f"{first} {last}"
+# The expression form, which is the common case.
+full => f"{first} {last}"
 
+
+# And the body form, for anything that needs statements. One derived reads
+# another either way.
 @derived
 def shouted():
     return full.upper()

@@ -16,7 +16,6 @@ def announce():
 
 def add():
     items.append(len(items) + 1)   # mutating is enough
-    publish("items")
 
 
 def on_mount():

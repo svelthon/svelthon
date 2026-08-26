@@ -1,15 +1,15 @@
 import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from 'svelte';
-import Chunks from './fixtures/Chunks.svelte';
+import Batch from './fixtures/Batch.svelte';
 
 // Jinja's `|batch`, and the one thing an index cannot give you: a <table> needs
 // its rows grouped. `itertools.batched` does it, but at the price of an import
 // that ships 16 KB of standard library — and it is lazy, so a name read twice
 // comes back empty the second time.
-describe('chunks', () => {
+describe('batch', () => {
     const setup = () => {
         const target = document.body.appendChild(document.createElement('div'));
-        mount(Chunks, { target });
+        mount(Batch, { target });
         flushSync();
 
         return (k) => target.querySelector(`p[data-k="${k}"]`)?.textContent ?? null;
@@ -39,6 +39,12 @@ describe('chunks', () => {
         // A generator has no len() and no slicing, so the comprehension form
         // cannot do this one.
         expect(setup()('lazily')).toBe("[['A', 'B'], ['C', 'D'], ['E']]");
+    });
+
+    test('None means no padding, not a cell holding None', () => {
+        // None is an object, so a plain `!== undefined` test would let it
+        // through and render it as a cell.
+        expect(setup()('no-fill')).toBe("[['a', 'b', 'c'], ['d', 'e']]");
     });
 
     test('a size below one is refused, and says so', () => {

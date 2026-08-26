@@ -12,14 +12,10 @@
 </script>
 
 <script lang="python">
-@derived
-def shown():
-    return LABEL
+shown => LABEL
 
 
-@derived
-def called():
-    return helper()
+called => helper()
 </script>
 
 <p data-k="label">{shown}</p>

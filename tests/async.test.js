@@ -25,7 +25,7 @@ describe('async def', () => {
         };
     };
 
-    test('un handler asynchrone s’exécute', async () => {
+    test('an async handler runs', async () => {
         const { read, click, settle } = setup();
 
         expect(read('plain')).toBe('no');
@@ -34,12 +34,12 @@ describe('async def', () => {
         expect(read('plain')).toBe('yes');
     });
 
-    test('await rend la main puis reprend', async () => {
+    test('await yields, then resumes', async () => {
         const { read, click, settle } = setup();
 
         click('go-awaited');
         flushSync();
-        expect(read('awaited')).toBe('no'); // suspendu sur await
+        expect(read('awaited')).toBe('no'); // suspended on await
 
         await settle();
         expect(read('awaited')).toBe('yes');
@@ -47,18 +47,18 @@ describe('async def', () => {
     });
 });
 
-// Brython exécute les coroutines par sa propre boucle, dont le gestionnaire
-// d'erreur par défaut se contente de journaliser : une exception levée dans une
-// coroutine n'atteignait donc rien du tout. On la relève depuis un timer, ce qui
-// en fait une vraie erreur non capturée — visible en devtools et dans l'overlay.
-describe('erreur dans une coroutine', () => {
-    test('elle remonte, nommée et située', async () => {
+// Brython runs coroutines through a loop of its own, whose default error
+// handler merely logs: an exception raised inside a coroutine therefore reached
+// nothing at all. We re-raise it from a timer, which makes it a genuine uncaught
+// error — visible in devtools and in the overlay.
+describe('error inside a coroutine', () => {
+    test('it surfaces, named and located', async () => {
         const target = document.body.appendChild(document.createElement('div'));
         mount(AsyncError, { target });
         flushSync();
 
-        // jsdom ne route pas vers window.error ce qu'un timer lève : on
-        // intercepte le timer pour observer le vrai chemin.
+        // jsdom does not route what a timer throws to window.error: we
+        // intercept the timer to observe the real path.
         const original = globalThis.setTimeout;
         const pending = [];
         globalThis.setTimeout = (fn, ...rest) =>
@@ -73,11 +73,11 @@ describe('erreur dans une coroutine', () => {
 
         expect(pending).toHaveLength(1);
         expect(pending[0]).toThrow(
-            /ValueError: cassé dans la coroutine \(boom\(\) — src\/fidelity\/AsyncError\.svelte/
+            /ValueError: broken inside the coroutine \(boom\(\) — tests\/fixtures\/AsyncError\.svelte/
         );
     });
 
-    test('une coroutine qui aboutit ne déclenche rien', async () => {
+    test('a coroutine that completes triggers nothing', async () => {
         const target = document.body.appendChild(document.createElement('div'));
         mount(AsyncError, { target });
         flushSync();

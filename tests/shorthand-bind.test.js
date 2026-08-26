@@ -55,3 +55,18 @@ describe('the bind: shorthand', () => {
         expect(read('checked')).toBe('True');
     });
 });
+
+// The one the shorthand tests above do *not* catch, and the reason the wrapper
+// exists: Python's None is an object, so Svelte writes it into the property it
+// binds. An `<input>` then shows the word "None", and `bind:files` fails
+// outright with `Failed to convert value to FileList` — which is how this was
+// found, porting Svelte's own file-input example.
+describe('None at the DOM boundary', () => {
+    test('an empty binding leaves the field empty, not the word None', () => {
+        const target = document.body.appendChild(document.createElement('div'));
+        mount(Shorthand, { target });
+        flushSync();
+
+        expect(target.querySelector('input[data-k="empty"]').value).toBe('');
+    });
+});

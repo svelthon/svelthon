@@ -6,7 +6,6 @@ def increment():
     global count
     count += 1
     history.append(count)
-    publish("history")
 
 
 def reset():

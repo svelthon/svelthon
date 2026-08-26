@@ -2,12 +2,12 @@ import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from 'svelte';
 import BindHost from './fixtures/BindHost.svelte';
 
-// Une annotation dont la valeur est un appel à bindable() déclare un prop
-// bidirectionnel :  value: str = bindable()   /   tag: str = bindable("default")
+// An annotation whose value is a call to bindable() declares a two-way prop:
+//     value: str = bindable()   /   tag: str = bindable("default")
 //
-// Le piège : le corps du module applique le défaut en écrivant dans le nom, et
-// cette écriture-là ne doit pas remonter au parent. Seules celles qui suivent
-// init() sont de vraies écritures.
+// The trap: the module body applies the default by writing to the name, and
+// that particular write must not travel up to the parent. Only the ones that
+// follow init() are real writes.
 describe('bindable', () => {
     const setup = () => {
         const target = document.body.appendChild(document.createElement('div'));
@@ -22,41 +22,42 @@ describe('bindable', () => {
         };
     };
 
-    test('la valeur du parent descend', () => {
+    test('the parent’s value comes down', () => {
         const { read } = setup();
 
         expect(read('[data-k="parent"]')).toBe('hello');
         expect(read('[data-k="bound"] [data-k="value"]')).toBe('hello');
     });
 
-    test('une écriture Python de l’enfant remonte au parent', () => {
+    test('a Python write in the child travels up to the parent', () => {
         const { read, click } = setup();
 
         click('[data-k="bound"] button');
         expect(read('[data-k="parent"]')).toBe('HELLO');
     });
 
-    test('une écriture du parent redescend', () => {
+    test('a write from the parent comes back down', () => {
         const { read, click } = setup();
 
         click('button[data-k="reset"]');
         expect(read('[data-k="bound"] [data-k="value"]')).toBe('reset');
     });
 
-    test('le défaut s’applique sans écraser le parent', () => {
+    test('the default applies without overwriting the parent', () => {
         const { read } = setup();
 
-        // Le défaut vaut pour les deux instances : le parent ne lie que `value`.
+        // The default holds for both instances: the parent binds `value` only.
         expect(read('[data-k="unbound"] [data-k="tag"]')).toBe('default');
         expect(read('[data-k="bound"] [data-k="tag"]')).toBe('default');
     });
 
-    test('une instance non liée reste indépendante', () => {
+    test('an unbound instance stays independent', () => {
         const { read, click } = setup();
 
         click('[data-k="bound"] button');
-        // Un prop non fourni vaut None, comme un prop ordinaire — les
-        // expressions du gabarit étant du Python, il se rend « None ».
-        expect(read('[data-k="unbound"] [data-k="value"]')).toBe('None');
+        // A prop that was not supplied is None, like an ordinary prop, and a
+        // template renders None as nothing — so the unbound instance shows an
+        // empty cell while the bound one shows what the click set.
+        expect(read('[data-k="unbound"] [data-k="value"]')).toBe('');
     });
 });

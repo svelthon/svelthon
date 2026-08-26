@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Même composant en Python et en JavaScript, mesuré dans un vrai navigateur.
-# Le coût de dispatch d'un clic étant identique des deux côtés, l'écart entre les
-# colonnes est imputable au handler. Sept tours alternés, minimum retenu.
+# The same component in Python and in JavaScript, measured in a real browser.
+# The dispatch cost of a click being identical on both sides, the gap between the
+# columns is the handler's. Seven alternating rounds, the minimum is kept.
 set -uo pipefail
 
 PORT=${PORT:-5184}
@@ -18,7 +18,7 @@ for _ in $(seq 40); do
     curl -sf -o /dev/null "$URL" && break
 done
 
-# La première visite ne mesurerait que la compilation à la volée de Vite.
+# The first visit would measure nothing but Vite's on-the-fly compilation.
 curl -sf -o /dev/null "$URL"
 curl -sf -o /dev/null "http://localhost:$PORT/src/bench/bench.js"
 chromium --headless --no-sandbox --disable-gpu --user-data-dir="$(mktemp -d)" --dump-dom "$URL" >/dev/null 2>&1

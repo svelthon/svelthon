@@ -1,6 +1,6 @@
 import { test, expect, describe } from 'vitest';
 import { hydrate, flushSync } from 'svelte';
-import Counter from './Counter.svelte';
+import Counter from '../src/Counter.svelte';
 
 // Svelte's third mode, after client and server: the HTML comes from the server
 // and the client latches onto it instead of rebuilding everything. This is where
