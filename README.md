@@ -45,7 +45,7 @@ npm run dev
 ```
 
 ```sh
-npm test             # 350 tests: semantics, props, reactivity, Svelte surface
+npm test             # 357 tests: semantics, props, reactivity, Svelte surface
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
 npm run bench        # Python vs JavaScript, same component, real browser
@@ -1052,7 +1052,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test` — 350 tests, plus 3 expected failures (below):
+Validated by `npm test` — 357 tests, plus 3 expected failures (below):
 
 - end-to-end reactivity, and which write paths propagate;
 - props: Python defaults, parent precedence, readability during init, parent

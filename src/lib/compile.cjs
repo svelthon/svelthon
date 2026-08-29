@@ -736,6 +736,16 @@ function compile(
 
     src = takeArrows(lifted.source, source, lineOffset, component);
 
+    // Brython reads the source back out of this cache to quote the offending
+    // line, and `compiler_error` does it without checking: an unregistered
+    // filename turns every *compile* error — as opposed to a parse error, which
+    // takes another path — into `Cannot read properties of undefined (reading
+    // 'split')`. That covers `await` outside a coroutine, `return` and `yield`
+    // outside a function, `break` and `continue` outside a loop: the mistakes a
+    // beginner actually makes. Registering the source is all it takes to get
+    // Brython's own message, which is CPython's.
+    $B.file_cache[source] = src;
+
     let root;
     try {
         root = $B.py2js({ src, filename: source }, name, [name]);

@@ -311,6 +311,39 @@ reachable: it is a module-level function, absent from `$B`. Exposing it is a
 two-word change with no behaviour attached — the smallest of the patches below,
 and the most obvious candidate to send upstream.
 
+### `compiler_error` assumes the source is in `$B.file_cache`
+
+`vendor/brython.js:14486`. Every compile-time error — as opposed to a parse
+error, which takes another path — is raised through this function, which quotes
+the offending line:
+
+```js
+function compiler_error(ast_obj, message, end) {
+    var exc = $B.EXC(_b_.SyntaxError, message)
+    exc.filename = state.filename
+    if (exc.filename != '<string>') {
+        var src = $B.file_cache[exc.filename], lines = src.split('\n'), …
+```
+
+`$B.file_cache[exc.filename]` is read without checking. An embedder that calls
+`py2js({src, filename})` with a filename it never registered therefore gets
+
+```
+TypeError: Cannot read properties of undefined (reading 'split')
+```
+
+in place of the message Brython had already written. It affects `await` outside a
+coroutine, `return` and `yield` outside a function, `break` and `continue`
+outside a loop — the mistakes a beginner makes, and the five where a good message
+matters most.
+
+Two ways to repair it upstream, both small: guard the lookup, or fall back to
+`exc.text = None` as the `'<string>'` branch already does. Svelthon does not
+patch it — the caller can register the source itself, which is what
+`compile.cjs` does before `py2js`, and Brython's own message comes out. It is
+CPython's, word for word: `'await' outside function`. Covered by
+`tests/compile-errors.test.js`.
+
 ## Patches applied to the vendored build
 
 Every repair is an edit in `vendor/brython.js` itself, marked with a
