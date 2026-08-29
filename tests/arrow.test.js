@@ -1,6 +1,7 @@
 import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from 'svelte';
-import Arrow from './fixtures/Arrow.svelte';
+import ArrowDerived from './fixtures/ArrowDerived.svelte';
+import ArrowEffect from './fixtures/ArrowEffect.svelte';
 
 // `doubled => count * 2` — a derived, written the way the state beside it is
 // written. Naming is not required for state, since a bare assignment already
@@ -13,7 +14,7 @@ import Arrow from './fixtures/Arrow.svelte';
 describe('the derived operator', () => {
     const setup = () => {
         const target = document.body.appendChild(document.createElement('div'));
-        mount(Arrow, { target });
+        mount(ArrowDerived, { target });
         flushSync();
 
         return {
@@ -61,6 +62,52 @@ describe('the derived operator', () => {
         bump();
         bump();
         expect(read('described')).toBe('many');
+    });
+});
+
+// The same arrow with nothing to name. A derived and an effect re-run on the
+// same signal and differ only in whether anyone keeps the answer — which is the
+// line Python already draws without a symbol, between `x = f()` and `f()`.
+//
+// Svelte 4 wrote both `$:` and Svelte 5 split them, because a `$:` statement did
+// not show whether it computed or acted. Here the difference is the first thing
+// on the line, at the column where the eye looks for a name.
+describe('the effect operator', () => {
+    const setup = () => {
+        const target = document.body.appendChild(document.createElement('div'));
+        mount(ArrowEffect, { target });
+        flushSync();
+
+        return {
+            read: (k) => target.querySelector(`p[data-k="${k}"]`).textContent,
+            seen: () => document.body.getAttribute('data-seen'),
+            bump: () => {
+                target.querySelector('button').click();
+                flushSync();
+            }
+        };
+    };
+
+    test('it runs once on mount', () => {
+        expect(setup().seen()).toBe('0');
+    });
+
+    test('and again whenever what it read has changed', () => {
+        const { seen, bump } = setup();
+
+        bump();
+        expect(seen()).toBe('1');
+        bump();
+        expect(seen()).toBe('2');
+    });
+
+    // The two forms of the one operator, side by side in the same component.
+    test('a named arrow beside it is still a derived', () => {
+        const { read, bump } = setup();
+
+        expect(read('doubled')).toBe('0');
+        bump();
+        expect(read('doubled')).toBe('2');
     });
 });
 

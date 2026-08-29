@@ -260,6 +260,21 @@ function endQuote(line, quote) {
 // runes make, and the one Python already makes between `lambda` and `def`.
 const ARROW = /^([A-Za-z_]\w*)\s*=>\s*(\S[\s\S]*)$/;
 
+// `=> expr` — the same arrow with nothing to name, which is the effect.
+//
+// A derived and an effect are the one thing seen twice: both re-run when what
+// they read has changed, and they differ only in whether anyone keeps the
+// answer. Python already draws that line without a symbol — `x = f()` keeps,
+// `f()` alone is done for its effect — so the arrow draws it the same way, and
+// the absent name sits at the head of the line where the eye looks for one.
+//
+// Svelte 4 spelled both `$:` and Svelte 5 split them, because a `$:` statement
+// did not show whether it computed or acted. Three of their four reasons were
+// about static analysis and do not reach us — dependencies here come from the
+// namespace accessors at run time. The fourth is that legibility, and putting
+// the difference in the first column is the answer to it.
+const EFFECT = /^=>\s*(\S[\s\S]*)$/;
+
 // Brackets closed on the line, ignoring those inside a string.
 function balanced(expr) {
     let depth = 0;
@@ -281,45 +296,57 @@ function balanced(expr) {
 
     return depth === 0;
 }
-const ARROW_INDENTED = /^[ \t]+[A-Za-z_]\w*\s*=>\s/;
+const ARROW_INDENTED = /^[ \t]+(?:[A-Za-z_]\w*\s*)?=>\s/;
 
 function takeArrows(src, where, lineOffset, allowed) {
     const lines = src.split('\n');
     const out = [];
     let quote = null;
+    let anonymous = 0;
 
     for (let n = 0; n < lines.length; n++) {
         const line = lines[n];
         const at = `${where}:${n + 1 + lineOffset}`;
+        const kind = (named) => (named ? 'derived' : 'effect');
 
         if (quote === null && ARROW_INDENTED.test(line)) {
             throw new SyntaxError(
-                `svelthon — a derived belongs at the top level of the module, ` +
-                    `and \`=>\` is only read there (${at})`
+                `svelthon — a derived and an effect both belong at the top level of ` +
+                    `the module, and \`=>\` is only read there (${at})`
             );
         }
 
-        const found = quote === null ? line.match(ARROW) : null;
+        const found = quote === null ? line.match(ARROW) || line.match(EFFECT) : null;
+
+        // A named match carries the name in group 1 and the expression in 2; an
+        // anonymous one has the expression in 1, and its name is generated.
+        const named = found && found.length > 2;
+        const expression = found && (named ? found[2] : found[1]);
 
         // The expression has to finish on its line. A `{` or a `(` left open
         // would swallow the lines under it into a lambda, and Brython would
         // report a mismatched bracket several lines further down — which says
         // nothing about what to do. This says it.
-        if (found && !balanced(found[2])) {
+        if (found && !balanced(expression)) {
             throw new SyntaxError(
-                `svelthon — a derived written with \`=>\` must fit on one line; ` +
-                    `use @derived on a def for anything longer (${at})`
+                `svelthon — a ${kind(named)} written with \`=>\` must fit on one line; ` +
+                    `use @${kind(named)} on a def for anything longer (${at})`
             );
         }
 
         if (found && !allowed) {
             throw new SyntaxError(
-                `svelthon — \`=>\` belongs to a component; a .py module writes a derived ` +
-                    `with the @derived decorator (${at})`
+                `svelthon — \`=>\` belongs to a component; a .py module writes a ` +
+                    `${kind(named)} with the @${kind(named)} decorator (${at})`
             );
         }
 
-        out.push(found ? `${found[1]} = derived(lambda: ${found[2]})` : line);
+        if (!found) out.push(line);
+        else if (named) out.push(`${found[1]} = derived(lambda: ${expression})`);
+        // The generated name is bound like any other effect's, so it stays out
+        // of the way with the dunder prefix Python already reads as private.
+        else out.push(`__effect_${anonymous++} = effect(lambda: ${expression})`);
+
         quote = endQuote(line, quote);
     }
 
@@ -508,10 +535,12 @@ function surface(body) {
                 if (!(target instanceof $B.ast.Name) || !take(target.id)) continue;
 
                 // `x => expr` arrives here as `x = derived(lambda: expr)`, and
-                // the emission below needs no special case: it already writes
-                // `$derived.by(() => __fn_x())`, and a lambda answers a call
-                // exactly as a `def` does.
+                // `=> expr` as `__effect_0 = effect(lambda: expr)`. The emission
+                // below needs no special case for either: it already writes
+                // `$derived.by(() => __fn_x())` and `$effect(() => __fn_x())`,
+                // and a lambda answers a call exactly as a `def` does.
                 if (isCallTo(node, 'derived')) deriveds.push({ name: target.id, arity: 0 });
+                else if (isCallTo(node, 'effect')) effects.push({ name: target.id, arity: 0 });
                 else state.push(target.id);
             }
         } else if (node instanceof $B.ast.AnnAssign) {
