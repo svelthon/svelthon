@@ -75,7 +75,7 @@ the build fails loudly instead of shipping a component with no reactivity.
 
 ## The API, and what it replaces
 
-Seventeen names, and nothing to import: they are injected into the module's namespace,
+Eighteen names, and nothing to import: they are injected into the module's namespace,
 and a component that defines its own keeps it. Each one stands where a rune
 stands in JavaScript.
 
@@ -95,6 +95,7 @@ stands in JavaScript.
 | `set_context(k, v)` / `get_context(k)` | `setContext(k, v)` / `getContext(k)` |
 | `props_id()` | `$props.id()` |
 | `host()` | `$host()` |
+| `inspect(*values)` | `$inspect(…)` |
 | `to_js(value)` | — a Python container made readable from JavaScript |
 | `tojson(value, indent=None)` | — the same, dumped, under Jinja's own word |
 | `batch(xs, n)` | — a flat list grouped into rows of `n`, as Jinja's `\|batch` |
@@ -794,6 +795,30 @@ and render but never answer.
 
 It is bound only where it is read, because Svelte refuses `$host()` at compile
 time in a component that is not a custom element.
+
+## Debugging
+
+`inspect(count, message)` is a `console.log` that reruns on its own: it prints
+whenever any of the values it was given changes, follows them deeply, and the
+production build drops it entirely.
+
+```python
+count = 0
+message = "hello"
+
+inspect(count, message)
+```
+
+```
+0 'hello'      on mount
+1 'hello'      after count changed
+```
+
+One argument per value, as in Svelte. The `.with(fn)` form that replaces the
+logger is not ported: `with` is a Python keyword, so it would have to be written
+`inspect(*values, with_=fn)` — the form is decided, the work is not done.
+
+`{@debug user}` is the markup counterpart, and it is ported.
 
 ## Lifecycle
 

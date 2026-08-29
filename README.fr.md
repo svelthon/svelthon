@@ -75,7 +75,7 @@ sans réactivité.
 
 ## L'API, et ce qu'elle remplace
 
-Dix-sept noms, et rien à importer : ils sont injectés dans le namespace du module, et
+Dix-huit noms, et rien à importer : ils sont injectés dans le namespace du module, et
 un composant qui définit le sien le garde. Chacun se tient là où se tient une
 rune en JavaScript.
 
@@ -95,6 +95,7 @@ rune en JavaScript.
 | `set_context(k, v)` / `get_context(k)` | `setContext(k, v)` / `getContext(k)` |
 | `props_id()` | `$props.id()` |
 | `host()` | `$host()` |
+| `inspect(*valeurs)` | `$inspect(…)` |
 | `to_js(valeur)` | — un conteneur Python rendu lisible par JavaScript |
 | `tojson(valeur, indent=None)` | — le même, sérialisé, sous le mot de Jinja |
 | `batch(xs, n)` | — une liste plate groupée en lignes de `n`, comme le `\|batch` de Jinja |
@@ -830,6 +831,30 @@ et afficher, jamais répondre.
 
 Il n'est lié que là où il est lu, parce que Svelte refuse `$host()` dès la
 compilation dans un composant qui n'est pas un élément personnalisé.
+
+## Débogage
+
+`inspect(count, message)` est un `console.log` qui se rejoue tout seul : il
+imprime dès que l'une des valeurs données change, les suit en profondeur, et la
+compilation de production le supprime entièrement.
+
+```python
+count = 0
+message = "hello"
+
+inspect(count, message)
+```
+
+```
+0 'hello'      au montage
+1 'hello'      après un changement de count
+```
+
+Un argument par valeur, comme chez Svelte. La forme `.with(fn)`, qui remplace le
+journal, n'est pas portée : `with` est un mot-clé Python, elle s'écrirait donc
+`inspect(*valeurs, with_=fn)` — la forme est décidée, le travail ne l'est pas.
+
+`{@debug user}` en est le pendant dans le balisage, et il est porté.
 
 ## Cycle de vie
 
