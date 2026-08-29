@@ -84,6 +84,7 @@ stands in JavaScript.
 | `count = 0` | `let count = $state(0)` |
 | `name: str` | `let { name } = $props()` |
 | `size: int = 3` | `let { size = 3 } = $props()` |
+| `value: str <=>` | `let { value = $bindable() } = $props()` |
 | `value: str = bindable()` | `let { value = $bindable() } = $props()` |
 | `doubled => count * 2` | `let doubled = $derived(count * 2)` |
 | `@derived` on a `def` | `$derived.by(…)` |
@@ -156,6 +157,29 @@ A prop is readable while the module body runs, a parent update flows through to
 Python, and a required prop that was not passed reads as `None`, not
 `undefined`. Writing to a prop from Python only takes effect when the parent
 supplies nothing — Svelte's own rule for non-`$bindable` props.
+
+### A prop that travels back up
+
+Props go one way, from parent to child, and that is what keeps a data flow
+readable. `<=>` is how a component says it accepts to write back:
+
+```python
+value: str <=>              # bindable, no fallback
+tag: str <=> "default"      # bindable, with one
+```
+
+```svelte
+<Field bind:value={text} />  <!-- bound: what the child writes reaches text -->
+<Field />                    <!-- not bound: an ordinary prop -->
+```
+
+Both sides consent: the child declares that it may be bound, the parent decides
+whether to bind. Without `bind:`, a write inside the child stays there.
+
+It is the fourth of the dialect's bindings, and they are one system built around
+the same sign — `=` a name to a value, `=>` a name to an expression, `:=` a name
+from inside an expression, `<=>` two names in both directions. `bindable()` still
+works and means exactly the same thing.
 
 Reading a global goes through `$B.resolve_global`, which demands an *own*
 property unless the namespace carries the `$proxy` flag — in which case it reads
@@ -352,8 +376,9 @@ Python that means what Python means.
 | `importjs X from "…"` | script | a JavaScript import | an import is static, and a keyword makes a computed one unwriteable |
 | `doubled => count * 2` | script | a derived value | one character from the `=` beside it, and that character is the difference |
 | `=> js.console.log(count)` | script | an effect | the same arrow with nothing to name, as `f()` alone is `x = f()` with nothing to keep |
+| `value: str <=>` | script | a prop that also travels back up | the fourth binding, and the only one that had to be a word |
 
-The three in the script are the only lines a component holds that Python would
+The four in the script are the only lines a component holds that Python would
 refuse to parse. Both are rewritten **on the same line**, so nothing downstream —
 line numbers, tracebacks, source maps — can tell the difference. A plain `.py`
 gets neither: a module is Python, and only a file with a template has the

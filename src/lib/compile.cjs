@@ -345,8 +345,19 @@ function takeArrows(src, where, lineOffset, allowed) {
         // lambda so that they are read again on every change.
         const watched = quote === null && !found && allowed ? line.match(INSPECT) : null;
 
-        if (!found && !watched) out.push(line);
+        // `value: str <=>`, with an optional fallback after the arrow.
+        const both = quote === null && !found && !watched ? line.match(BINDABLE) : null;
+
+        if (both && !allowed) {
+            throw new SyntaxError(
+                `svelthon — \`<=>\` marks a prop, and a prop belongs to a component; ` +
+                    `a module has no parent to bind with (${at})`
+            );
+        }
+
+        if (!found && !watched && !both) out.push(line);
         else if (watched) out.push(`__inspect_${anonymous++} = inspect(lambda: [${watched[1]}])`);
+        else if (both) out.push(`${both[1]} = bindable(${both[2] || ''})`);
         else if (named) out.push(`${found[1]} = derived(lambda: ${expression})`);
         // The generated name is bound like any other effect's, so it stays out
         // of the way with the dunder prefix Python already reads as private.

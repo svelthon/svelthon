@@ -84,6 +84,7 @@ rune en JavaScript.
 | `count = 0` | `let count = $state(0)` |
 | `name: str` | `let { name } = $props()` |
 | `size: int = 3` | `let { size = 3 } = $props()` |
+| `value: str <=>` | `let { value = $bindable() } = $props()` |
 | `value: str = bindable()` | `let { value = $bindable() } = $props()` |
 | `doubled => count * 2` | `let doubled = $derived(count * 2)` |
 | `@derived` sur un `def` | `$derived.by(…)` |
@@ -156,6 +157,30 @@ Un prop est lisible dès l'exécution du corps du module, une mise à jour du
 parent traverse jusqu'au Python, et un prop requis non fourni vaut `None` — pas
 `undefined`. Écrire dans un prop depuis Python n'a d'effet que si le parent n'en
 fournit pas : c'est la règle de Svelte pour les props non `$bindable`.
+
+### Un prop qui remonte
+
+Les props vont dans un sens, du parent vers l'enfant, et c'est ce qui garde un
+flux de données lisible. `<=>` est la façon dont un composant dit qu'il accepte
+d'écrire en retour :
+
+```python
+value: str <=>              # liable, sans repli
+tag: str <=> "default"      # liable, avec repli
+```
+
+```svelte
+<Field bind:value={text} />  <!-- lié : ce que l'enfant écrit atteint text -->
+<Field />                    <!-- non lié : un prop ordinaire -->
+```
+
+Les deux côtés consentent : l'enfant déclare qu'il peut être lié, le parent
+décide s'il lie. Sans `bind:`, une écriture dans l'enfant y reste.
+
+C'est la quatrième liaison du dialecte, et elles forment un système autour du
+même signe — `=` un nom vers une valeur, `=>` un nom vers une expression, `:=` un
+nom depuis l'intérieur d'une expression, `<=>` deux noms dans les deux sens.
+`bindable()` marche toujours et veut dire exactement la même chose.
 
 La lecture d'un global passe par `$B.resolve_global`, qui exige une propriété
 **propre** sauf si le namespace porte le drapeau `$proxy` — auquel cas il lit la
@@ -360,8 +385,9 @@ est du Python qui veut dire ce que Python veut dire.
 | `importjs X from "…"` | script | un import JavaScript | un import est statique, et un mot-clé rend l'import calculé inécrivable |
 | `doubled => count * 2` | script | une valeur dérivée | à un caractère du `=` d'à côté, et ce caractère est la différence |
 | `=> js.console.log(count)` | script | un effet | la même flèche sans rien à nommer, comme `f()` seul est `x = f()` sans rien à garder |
+| `value: str <=>` | script | une prop qui remonte aussi | la quatrième liaison, et la seule qui devait s'écrire par un mot |
 
-Les trois du script sont les seules lignes d'un composant que Python refuserait
+Les quatre du script sont les seules lignes d'un composant que Python refuserait
 de parser. Toutes trois sont réécrites **sur la même ligne**, si bien que rien en
 aval — numéros de ligne, tracebacks, source maps — ne peut faire la différence.
 Un `.py` ordinaire n'a ni l'une ni l'autre : un module est du Python, et seul un
