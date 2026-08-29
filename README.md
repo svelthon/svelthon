@@ -75,7 +75,7 @@ the build fails loudly instead of shipping a component with no reactivity.
 
 ## The API, and what it replaces
 
-Sixteen names, and nothing to import: they are injected into the module's namespace,
+Seventeen names, and nothing to import: they are injected into the module's namespace,
 and a component that defines its own keeps it. Each one stands where a rune
 stands in JavaScript.
 
@@ -94,6 +94,7 @@ stands in JavaScript.
 | `def on_mount()` / `on_destroy()` | `onMount()` / `onDestroy()` |
 | `set_context(k, v)` / `get_context(k)` | `setContext(k, v)` / `getContext(k)` |
 | `props_id()` | `$props.id()` |
+| `host()` | `$host()` |
 | `to_js(value)` | — a Python container made readable from JavaScript |
 | `tojson(value, indent=None)` | — the same, dumped, under Jinja's own word |
 | `batch(xs, n)` | — a flat list grouped into rows of `n`, as Jinja's `\|batch` |
@@ -760,6 +761,39 @@ A `.svelte.py` has no component, so `@effect` there would belong to nobody —
 `@effect.root`, which owns itself, is the form a module writes. A plain `.py`
 holds no signals at all, so no effect there would watch anything. Both are
 refused with a message rather than turned into an ordinary function.
+
+## Custom elements
+
+A component that declares `<svelte:options customElement="…">` is compiled as a
+custom element, so it can be dropped into any HTML page with no Svelte around
+it — its script still Python.
+
+```svelte
+<svelte:options customElement="my-stepper" />
+
+<script lang="python">
+count = 0
+
+
+def bump():
+    global count
+    count += 1
+    host().dispatchEvent(js.CustomEvent.new("stepped", to_js({"detail": count})))
+</script>
+
+<button onclick={bump}>{count}</button>
+```
+
+```html
+<my-stepper></my-stepper>
+```
+
+`host()` is the way back out, and the only one: a custom element speaks to the
+page through DOM events rather than props. Without it a component could receive
+and render but never answer.
+
+It is bound only where it is read, because Svelte refuses `$host()` at compile
+time in a component that is not a custom element.
 
 ## Lifecycle
 

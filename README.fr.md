@@ -75,7 +75,7 @@ sans réactivité.
 
 ## L'API, et ce qu'elle remplace
 
-Seize noms, et rien à importer : ils sont injectés dans le namespace du module, et
+Dix-sept noms, et rien à importer : ils sont injectés dans le namespace du module, et
 un composant qui définit le sien le garde. Chacun se tient là où se tient une
 rune en JavaScript.
 
@@ -94,6 +94,7 @@ rune en JavaScript.
 | `def on_mount()` / `on_destroy()` | `onMount()` / `onDestroy()` |
 | `set_context(k, v)` / `get_context(k)` | `setContext(k, v)` / `getContext(k)` |
 | `props_id()` | `$props.id()` |
+| `host()` | `$host()` |
 | `to_js(valeur)` | — un conteneur Python rendu lisible par JavaScript |
 | `tojson(valeur, indent=None)` | — le même, sérialisé, sous le mot de Jinja |
 | `batch(xs, n)` | — une liste plate groupée en lignes de `n`, comme le `\|batch` de Jinja |
@@ -796,6 +797,39 @@ personne — `@effect.root`, qui se possède lui-même, est la forme qu'écrit u
 module. Un `.py` ordinaire n'a aucun signal, donc aucun effet n'y observerait
 quoi que ce soit. Les deux sont refusés par un message, plutôt que transformés en
 fonction ordinaire.
+
+## Éléments personnalisés
+
+Un composant qui déclare `<svelte:options customElement="…">` est compilé en
+élément personnalisé : il se pose dans n'importe quelle page HTML, sans Svelte
+autour — son script restant du Python.
+
+```svelte
+<svelte:options customElement="my-stepper" />
+
+<script lang="python">
+count = 0
+
+
+def bump():
+    global count
+    count += 1
+    host().dispatchEvent(js.CustomEvent.new("stepped", to_js({"detail": count})))
+</script>
+
+<button onclick={bump}>{count}</button>
+```
+
+```html
+<my-stepper></my-stepper>
+```
+
+`host()` est la sortie, et la seule : un élément personnalisé parle à la page par
+des événements DOM et non par des props. Sans lui, un composant pourrait recevoir
+et afficher, jamais répondre.
+
+Il n'est lié que là où il est lu, parce que Svelte refuse `$host()` dès la
+compilation dans un composant qui n'est pas un élément personnalisé.
 
 ## Cycle de vie
 
