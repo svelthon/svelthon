@@ -15,6 +15,10 @@
 // The filter is what makes that true, and it is not optional: these are bound
 // after the author's own names, onto the same prototype, so without it the
 // compiler's binding silently replaces theirs.
+// The one value a component computes for an injected name rather than reading
+// it lazily, held here so the emitted line and the accessor cannot drift apart.
+const PROPS_ID = '__props_id';
+
 const INJECTED = [
     // The decorators only mark; the compiler has read them off the AST already.
     { name: 'derived', value: '() => (f) => f' },
@@ -260,7 +264,22 @@ const INJECTED = [
     // Context belongs to a component instance; a plain module has none.
     { name: 'set_context', value: '() => setContext', component: true },
     // A missing key is `undefined` in Svelte; Python expects None.
-    { name: 'get_context', value: '() => (key) => getContext(key) ?? NONE', component: true }
+    { name: 'get_context', value: '() => (key) => getContext(key) ?? NONE', component: true },
+
+    // `$props.id()`, whose name follows theirs the way `set_context` follows
+    // `setContext`. It is not a prop — the parent never passes it — but a reader
+    // who meets the problem will find it under that name in Svelte's own docs.
+    //
+    // The rune may only be called at the top level of a component, never from a
+    // getter or a function, so the value cannot be produced lazily like the
+    // others: `emitted` names the line the preamble adds, and it is added only
+    // when the generated code shows the name being read.
+    {
+        name: 'props_id',
+        value: `() => () => ${PROPS_ID}`,
+        component: true,
+        emitted: `const ${PROPS_ID} = $props.id();`
+    }
 ];
 
 module.exports = { INJECTED };

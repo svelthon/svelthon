@@ -22,6 +22,7 @@ striptags = "mine striptags"
 urlencode = "mine urlencode"
 set_context = "mine set_context"
 get_context = "mine get_context"
+props_id = "mine props_id"
 </script>
 
 <p data-k="derived">{derived}</p>
@@ -39,3 +40,4 @@ get_context = "mine get_context"
 <p data-k="urlencode">{urlencode}</p>
 <p data-k="set_context">{set_context}</p>
 <p data-k="get_context">{get_context}</p>
+<p data-k="props_id">{props_id}</p>

@@ -495,9 +495,27 @@ const templateCall = (f, fn) => {
     return f.name.startsWith(EXPR_PREFIX) ? `inTemplate(() => ${call})` : call;
 };
 
-const injections = (declared, component) =>
-    INJECTED.filter((one) => (component || !one.component) && !declared.includes(one.name)).map(
+// An injection whose value is computed rather than read lazily is skipped unless
+// the module actually reads it: Brython resolves a global by name, so the
+// generated code carries the read wherever it happens — module level or inside a
+// function alike — and a name that only appears in a Python string does not.
+const reads = (js, name) => js.includes(`'${name}'`);
+
+const injectable = (one, declared, component, js) =>
+    (component || !one.component) &&
+    !declared.includes(one.name) &&
+    (!one.emitted || reads(js, one.name));
+
+const injections = (declared, component, js) =>
+    INJECTED.filter((one) => injectable(one, declared, component, js)).map(
         (one) => `bind(__proto, '${one.name}', ${one.value}, () => {});`
+    );
+
+// The lines those injections need in the component's preamble, before any of
+// them is bound.
+const injectedPreamble = (declared, component, js) =>
+    INJECTED.filter((one) => one.emitted && injectable(one, declared, component, js)).map(
+        (one) => one.emitted
     );
 
 // Module-level names, read off the AST rather than the generated JS — the
@@ -1119,7 +1137,8 @@ function compile(
         // `import x` on the line above had worked perfectly.
         `${NS}.__name__ = '${namespace}';`,
 
-        ...injections(declared, true),
+        ...injectedPreamble(declared, true, js),
+        ...injections(declared, true, js),
 
         // Wrappers for compiled template expressions. Not Python's own bool()
         // and str(): a template may hold a foreign JavaScript value — a DOM node
