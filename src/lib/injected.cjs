@@ -19,7 +19,10 @@ const INJECTED = [
     // The decorators only mark; the compiler has read them off the AST already.
     { name: 'derived', value: '() => (f) => f' },
     { name: 'bindable', value: '() => (v) => v' },
-    { name: 'effect', value: '() => (f) => f' },
+    // `effect` carries `pre` because Python really applies the decorator at run
+    // time: `@effect.pre` reads the attribute before calling it, and an identity
+    // without one would raise before the compiler's own wiring ever ran.
+    { name: 'effect', value: '() => Object.assign((f) => f, { pre: (f) => f })' },
 
     // The outbound bridge: a Python value made readable from JavaScript.
     { name: 'to_js', value: '() => plainData' },

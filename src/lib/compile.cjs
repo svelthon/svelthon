@@ -514,6 +514,20 @@ const isBindable = (node) => isCallTo(node, 'bindable');
 const hasDecorator = (node, name) =>
     (node.decorator_list || []).some((d) => d instanceof $B.ast.Name && d.id === name);
 
+// `@effect.pre` — a dotted decorator, which is a different AST node: an
+// `Attribute` over a `Name`, not a `Name`. The dotted form is PEP 318's original
+// grammar, and the one Python uses to name a variant of something — `@property`
+// and `@x.setter`. A standalone `@pre` would promise a composability that does
+// not exist.
+const hasDottedDecorator = (node, name, attribute) =>
+    (node.decorator_list || []).some(
+        (d) =>
+            d instanceof $B.ast.Attribute &&
+            d.attr === attribute &&
+            d.value instanceof $B.ast.Name &&
+            d.value.id === name
+    );
+
 function surface(body) {
     const props = [];
     const bindables = [];
@@ -560,11 +574,17 @@ function surface(body) {
 
             // @derived turns a function into a value: Python reads the name and
             // gets the result, exactly like a property. @effect re-runs it
-            // whenever something it read has changed.
-            const entry = { name: node.name, arity: (node.args && node.args.args || []).length };
+            // whenever something it read has changed, and @effect.pre does the
+            // same before the DOM is updated rather than after.
+            const pre = hasDottedDecorator(node, 'effect', 'pre');
+            const entry = {
+                name: node.name,
+                arity: (node.args && node.args.args || []).length,
+                ...(pre ? { pre: true } : {})
+            };
             const bucket = hasDecorator(node, 'derived')
                 ? deriveds
-                : hasDecorator(node, 'effect')
+                : hasDecorator(node, 'effect') || pre
                   ? effects
                   : funcs;
 
@@ -1129,7 +1149,7 @@ function compile(
         // teardown, exactly as a Svelte effect does.
         ...effects.flatMap((e) => [
             ``,
-            `$effect(() => {`,
+            `$effect${e.pre ? '.pre' : ''}(() => {`,
             `    let teardown;`,
             `    try { teardown = ${fn(e.name)}(); }` +
                 ` catch (err) { throw pyError(err, ${JSON.stringify(`${e.name}() — ${source}`)}, ${lineOffset}); }`,
