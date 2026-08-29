@@ -87,6 +87,7 @@ rune en JavaScript.
 | `value: str = bindable()` | `let { value = $bindable() } = $props()` |
 | `doubled => count * 2` | `let doubled = $derived(count * 2)` |
 | `@derived` sur un `def` | `$derived.by(…)` |
+| `=> js.console.log(count)` | `$effect(() => console.log(count))` |
 | `@effect` | `$effect(…)` |
 | `def on_mount()` / `on_destroy()` | `onMount()` / `onDestroy()` |
 | `set_context(k, v)` / `get_context(k)` | `setContext(k, v)` / `getContext(k)` |
@@ -265,8 +266,9 @@ exceptions délibérées près. Les deux existent pour que la ligne de tous les 
 tienne sur une ligne, et les deux méritent d'être sues avant d'écrire un
 composant.
 
-*(Le script en a deux à lui — `importjs` et `=>`. Les quatre sont rassemblées à
-la fin de cette section.)*
+*(Le script en a deux à lui — `importjs` et `=>`, la flèche étant un dérivé quand
+elle nomme et un effet quand elle ne nomme pas. Les cinq sont rassemblées à la
+fin de cette section.)*
 
 **Le point trouve une clé.** `{row.label}` lit un dict aussi bien qu'un objet,
 exactement comme le point de Jinja — la forme de vos données cesse donc de dicter
@@ -332,9 +334,10 @@ est du Python qui veut dire ce que Python veut dire.
 | `as {id, name}` | balisage, cible d'un `{#each}` | un dépaquetage par clé | Python dépaquette par position, et seul `match` le fait par clé |
 | `importjs X from "…"` | script | un import JavaScript | un import est statique, et un mot-clé rend l'import calculé inécrivable |
 | `doubled => count * 2` | script | une valeur dérivée | à un caractère du `=` d'à côté, et ce caractère est la différence |
+| `=> js.console.log(count)` | script | un effet | la même flèche sans rien à nommer, comme `f()` seul est `x = f()` sans rien à garder |
 
-Les deux du script sont les seules lignes d'un composant que Python refuserait
-de parser. Toutes deux sont réécrites **sur la même ligne**, si bien que rien en
+Les trois du script sont les seules lignes d'un composant que Python refuserait
+de parser. Toutes trois sont réécrites **sur la même ligne**, si bien que rien en
 aval — numéros de ligne, tracebacks, source maps — ne peut faire la différence.
 Un `.py` ordinaire n'a ni l'une ni l'autre : un module est du Python, et seul un
 fichier qui a un gabarit porte le dialecte.
@@ -428,6 +431,8 @@ Les deux formes sont la coupure de Svelte, pas une invention à nous :
 et Python trace déjà la même ligne entre `lambda` et `def` : il n'y a rien de
 neuf à apprendre. `=>` appartient au composant, là où vit le dialecte ; un `.py`
 ordinaire écrit `@derived` et continue de parser comme du Python.
+
+La même flèche sans nom à sa gauche est un effet — voir [Effets](#effets).
 
 `{full}` dans le gabarit, `full` en Python. Le corps s'exécute dans
 `$derived.by`, et chaque global qu'il touche passe par un accesseur du
@@ -660,13 +665,37 @@ s'exécute.
 
 ## Effets
 
-`@effect` rejoue une fonction quand un nom qu'elle a *lu* change. Rien à
-déclarer : les globals passent par les accesseurs du namespace, donc leurs
-lectures sont des lectures de signaux et Svelte en déduit seul les dépendances.
+Un effet rejoue quand un nom qu'il a *lu* change. Rien à déclarer : les globals
+passent par les accesseurs du namespace, donc leurs lectures sont des lectures de
+signaux et Svelte en déduit seul les dépendances.
+
+C'est la même flèche qu'un dérivé, sans rien à nommer :
 
 ```python
 count = 0
 
+doubled => count * 2         # dérivé — on garde la réponse
+=> js.console.log(count)     # effet  — on ne la garde pas
+```
+
+Un dérivé et un effet sont un seul mécanisme vu deux fois : tous deux rejouent
+sur le même signal, et ne diffèrent que par le fait que quelqu'un garde la
+réponse ou non. Python trace déjà cette ligne sans symbole — `x = f()` garde,
+`f()` seul est fait pour l'effet — donc la flèche la trace pareil, et le nom
+absent se trouve en tête de ligne, à la colonne où l'œil vient chercher un nom.
+
+Svelte 4 écrivait les deux `$:` et Svelte 5 les a séparés, parce qu'une
+instruction `$:` ne montrait pas si elle calculait ou si elle agissait. Trois de
+leurs quatre raisons portaient sur l'analyse statique et ne nous atteignent pas :
+ici les dépendances viennent des accesseurs du namespace, à l'exécution, pas de
+la lecture du source. La quatrième est cette lisibilité, et la première colonne y
+répond.
+
+**Pour tout ce qui demande des instructions, `@effect` décore une fonction** — la
+flèche porte une `lambda`, donc une expression, et un effet qui affecte a besoin
+du décorateur :
+
+```python
 @effect
 def watch():
     global seen
@@ -676,6 +705,11 @@ def watch():
         ...
     return cleanup     # nettoyage optionnel, avant chaque reprise et au démontage
 ```
+
+| Svelte | Svelthon |
+|---|---|
+| `$effect(() => expr)` | `=> expr` |
+| `$effect(() => { … })` | `@effect` sur un `def` |
 
 **Le piège que ce modèle crée** : `runs += 1` sur un nom de niveau module *lit*
 avant d'écrire, donc un compteur incrémenté dans un effet le rend dépendant de ce

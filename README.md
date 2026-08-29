@@ -87,6 +87,7 @@ stands in JavaScript.
 | `value: str = bindable()` | `let { value = $bindable() } = $props()` |
 | `doubled => count * 2` | `let doubled = $derived(count * 2)` |
 | `@derived` on a `def` | `$derived.by(…)` |
+| `=> js.console.log(count)` | `$effect(() => console.log(count))` |
 | `@effect` | `$effect(…)` |
 | `def on_mount()` / `on_destroy()` | `onMount()` / `onDestroy()` |
 | `set_context(k, v)` / `get_context(k)` | `setContext(k, v)` / `getContext(k)` |
@@ -260,8 +261,9 @@ A template reads as Python and means what Python means, with two deliberate
 exceptions. Both exist so that the everyday line stays one line, and both are
 worth knowing before writing a component.
 
-*(The script has two of its own — `importjs` and `=>`. The four are gathered at
-the end of this section.)*
+*(The script has two of its own — `importjs` and `=>`, the arrow being a derived
+when it names and an effect when it does not. The five are gathered at the end of
+this section.)*
 
 **The dot finds a key.** `{row.label}` reads a dict as well as an object, exactly
 as Jinja's dot does — so the shape of your data stops dictating the shape of your
@@ -324,8 +326,9 @@ Python that means what Python means.
 | `as {id, name}` | markup, `{#each}` target | unpacking a row by key | Python unpacks by position, and only `match` unpacks by key |
 | `importjs X from "…"` | script | a JavaScript import | an import is static, and a keyword makes a computed one unwriteable |
 | `doubled => count * 2` | script | a derived value | one character from the `=` beside it, and that character is the difference |
+| `=> js.console.log(count)` | script | an effect | the same arrow with nothing to name, as `f()` alone is `x = f()` with nothing to keep |
 
-The two in the script are the only lines a component holds that Python would
+The three in the script are the only lines a component holds that Python would
 refuse to parse. Both are rewritten **on the same line**, so nothing downstream —
 line numbers, tracebacks, source maps — can tell the difference. A plain `.py`
 gets neither: a module is Python, and only a file with a template has the
@@ -417,6 +420,9 @@ The two forms are Svelte's own split, not an invention of ours:
 and Python already draws the same line between `lambda` and `def`, so there is
 nothing new to learn. `=>` belongs to a component, where the dialect lives; a
 plain `.py` writes `@derived` and keeps parsing as Python.
+
+The same arrow with no name to its left is an effect — see
+[Effects](#effects).
 
 `{full}` in markup, `full` in Python. The body runs inside `$derived.by`, and
 every global it touches goes through a namespace accessor, so **Svelte discovers
@@ -626,13 +632,36 @@ is registered by the time the body runs.
 
 ## Effects
 
-`@effect` re-runs a function whenever a name it *read* has changed. Nothing to
-declare: globals go through the namespace accessors, so their reads are signal
-reads and Svelte works out the dependencies itself.
+An effect re-runs whenever a name it *read* has changed. Nothing to declare:
+globals go through the namespace accessors, so their reads are signal reads and
+Svelte works out the dependencies itself.
+
+It is the same arrow as a derived, with nothing to name:
 
 ```python
 count = 0
 
+doubled => count * 2         # derived — the answer is kept
+=> js.console.log(count)     # effect  — it is not
+```
+
+A derived and an effect are the one mechanism seen twice: both re-run on the
+same signal, and they differ only in whether anyone keeps the answer. Python
+already draws that line without a symbol — `x = f()` keeps, `f()` alone is done
+for its effect — so the arrow draws it the same way, and the absent name sits at
+the head of the line, at the column where the eye looks for one.
+
+Svelte 4 spelled both `$:` and Svelte 5 split them, because a `$:` statement did
+not show whether it computed or acted. Three of their four reasons were about
+static analysis and do not reach us: dependencies here come from the namespace
+accessors at run time, not from reading the source. The fourth is that
+legibility, and the first column is the answer to it.
+
+**For anything that needs statements, `@effect` decorates a function** — the
+arrow carries a `lambda`, so it holds an expression, and an effect that assigns
+needs the decorator:
+
+```python
 @effect
 def watch():
     global seen
@@ -642,6 +671,11 @@ def watch():
         ...
     return cleanup     # optional teardown, run before each re-run and on destroy
 ```
+
+| Svelte | Svelthon |
+|---|---|
+| `$effect(() => expr)` | `=> expr` |
+| `$effect(() => { … })` | `@effect` on a `def` |
 
 **The trap this model creates**: `runs += 1` on a module-level name *reads*
 before it writes, so a counter incremented inside an effect makes the effect
