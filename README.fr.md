@@ -850,9 +850,8 @@ inspect(count, message)
 1 'hello'      après un changement de count
 ```
 
-Un argument par valeur, comme chez Svelte. La forme `.with(fn)`, qui remplace le
-journal, n'est pas portée : `with` est un mot-clé Python, elle s'écrirait donc
-`inspect(*valeurs, with_=fn)` — la forme est décidée, le travail ne l'est pas.
+Un argument par valeur, comme chez Svelte. Leur forme `.with(fn)`, qui remplace
+le journal, n'est pas portée.
 
 `{@debug user}` en est le pendant dans le balisage, et il est porté.
 

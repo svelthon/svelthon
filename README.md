@@ -814,9 +814,8 @@ inspect(count, message)
 1 'hello'      after count changed
 ```
 
-One argument per value, as in Svelte. The `.with(fn)` form that replaces the
-logger is not ported: `with` is a Python keyword, so it would have to be written
-`inspect(*values, with_=fn)` — the form is decided, the work is not done.
+One argument per value, as in Svelte. Their `.with(fn)` form, which replaces
+the logger, is not ported.
 
 `{@debug user}` is the markup counterpart, and it is ported.
 
