@@ -66,6 +66,16 @@ describe('fromnow', () => {
         expect(setup({ when: ago(90 * 60) })()).toBe('il y a 2 heures');
     });
 
+    // Rounding on a signed gap read the past short: `Math.round` breaks ties
+    // towards +Infinity, so 90 minutes was two hours ahead and one behind. The
+    // pair is the test — either alone passed while the halves disagreed.
+    test('a half unit rounds the same way on both sides of now', () => {
+        const ahead = new Date(Date.now() + 90 * 60 * 1000).toISOString();
+
+        expect(setup({ when: ago(90 * 60), locale: 'en-GB' })()).toBe('2 hours ago');
+        expect(setup({ when: ahead, locale: 'en-GB' })()).toBe('in 2 hours');
+    });
+
     test('a gap of years', () => {
         expect(setup({ when: ago(400 * 86400) })()).toBe('l’année dernière');
     });
