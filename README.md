@@ -75,7 +75,7 @@ the build fails loudly instead of shipping a component with no reactivity.
 
 ## The API, and what it replaces
 
-Fifteen names, and nothing to import: they are injected into the module's namespace,
+Sixteen names, and nothing to import: they are injected into the module's namespace,
 and a component that defines its own keeps it. Each one stands where a rune
 stands in JavaScript.
 
@@ -93,6 +93,7 @@ stands in JavaScript.
 | `@effect.root` | `$effect.root(…)` |
 | `def on_mount()` / `on_destroy()` | `onMount()` / `onDestroy()` |
 | `set_context(k, v)` / `get_context(k)` | `setContext(k, v)` / `getContext(k)` |
+| `props_id()` | `$props.id()` |
 | `to_js(value)` | — a Python container made readable from JavaScript |
 | `tojson(value, indent=None)` | — the same, dumped, under Jinja's own word |
 | `batch(xs, n)` | — a flat list grouped into rows of `n`, as Jinja's `\|batch` |
@@ -159,6 +160,26 @@ property unless the namespace carries the `$proxy` flag — in which case it rea
 the property normally and therefore walks the prototype chain. It is the only
 place in Brython that consults that flag, and it is what makes the prototype
 trick compatible with props.
+
+### An id that is unique to the instance
+
+`props_id()` returns an identifier no other instance of the component shares,
+and which is the same on the server and in the browser — so hydration finds what
+the server wrote.
+
+```python
+uid = props_id()
+```
+
+```svelte
+<label for="{uid}-firstname">First name</label>
+<input id="{uid}-firstname" type="text" />
+```
+
+Without it, a component mounted twice writes `id="firstname"` twice: the second
+label points at the first field, so clicking it focuses the wrong input and a
+screen reader announces the wrong name. The same applies to `aria-labelledby`
+and `aria-describedby`.
 
 ## Indentation, which is the one thing a `<script>` changes
 

@@ -75,7 +75,7 @@ sans réactivité.
 
 ## L'API, et ce qu'elle remplace
 
-Quinze noms, et rien à importer : ils sont injectés dans le namespace du module, et
+Seize noms, et rien à importer : ils sont injectés dans le namespace du module, et
 un composant qui définit le sien le garde. Chacun se tient là où se tient une
 rune en JavaScript.
 
@@ -93,6 +93,7 @@ rune en JavaScript.
 | `@effect.root` | `$effect.root(…)` |
 | `def on_mount()` / `on_destroy()` | `onMount()` / `onDestroy()` |
 | `set_context(k, v)` / `get_context(k)` | `setContext(k, v)` / `getContext(k)` |
+| `props_id()` | `$props.id()` |
 | `to_js(valeur)` | — un conteneur Python rendu lisible par JavaScript |
 | `tojson(valeur, indent=None)` | — le même, sérialisé, sous le mot de Jinja |
 | `batch(xs, n)` | — une liste plate groupée en lignes de `n`, comme le `\|batch` de Jinja |
@@ -159,6 +160,26 @@ La lecture d'un global passe par `$B.resolve_global`, qui exige une propriété
 propriété normalement, donc en traversant le prototype. C'est le seul endroit de
 Brython qui consulte ce drapeau, et c'est ce qui rend l'astuce du prototype
 compatible avec les props.
+
+### Un identifiant propre à l'instance
+
+`props_id()` rend un identifiant qu'aucune autre instance du composant ne
+partage, et qui est le même sur le serveur et dans le navigateur — l'hydratation
+retrouve donc ce que le serveur a écrit.
+
+```python
+uid = props_id()
+```
+
+```svelte
+<label for="{uid}-firstname">Prénom</label>
+<input id="{uid}-firstname" type="text" />
+```
+
+Sans lui, un composant monté deux fois écrit `id="firstname"` deux fois : le
+second libellé désigne le premier champ, donc le cliquer met le focus sur le
+mauvais, et un lecteur d'écran annonce le mauvais nom. Même chose pour
+`aria-labelledby` et `aria-describedby`.
 
 ## L'indentation, la seule chose qu'un `<script>` change
 
