@@ -577,14 +577,16 @@ function surface(body) {
             // whenever something it read has changed, and @effect.pre does the
             // same before the DOM is updated rather than after.
             const pre = hasDottedDecorator(node, 'effect', 'pre');
+            const root = hasDottedDecorator(node, 'effect', 'root');
             const entry = {
                 name: node.name,
                 arity: (node.args && node.args.args || []).length,
-                ...(pre ? { pre: true } : {})
+                ...(pre ? { pre: true } : {}),
+                ...(root ? { root: true } : {})
             };
             const bucket = hasDecorator(node, 'derived')
                 ? deriveds
-                : hasDecorator(node, 'effect') || pre
+                : hasDecorator(node, 'effect') || pre || root
                   ? effects
                   : funcs;
 
@@ -780,9 +782,30 @@ function compile(
         state = [...props, ...bindables, ...state];
         props = [];
         bindables = [];
-        // $effect needs a component to belong to; neither has one.
-        funcs = [...funcs, ...effects];
-        effects = [];
+
+        // `$effect` needs a component to belong to, and neither has one. That is
+        // exactly what `$effect.root` is for: it makes a scope of its own, which
+        // is why `@effect.root` is the form a module writes. Anything else here
+        // would be a function that looks reactive and is not, so it is refused
+        // rather than quietly demoted — the same treatment `=>` gets in a `.py`.
+        const orphan = effects.find((e) => !e.root);
+
+        if (orphan) {
+            throw new SyntaxError(
+                `svelthon — \`@effect\` belongs to a component; ` +
+                    `a ${plain ? '.py' : '.svelte.py'} module writes an effect with ` +
+                    `\`@effect.root\`, whose name receives the destructor (${source})`
+            );
+        }
+
+        // A plain module holds no signals at all, so an effect there would watch
+        // nothing whatever it is spelled.
+        if (plain && effects.length) {
+            throw new SyntaxError(
+                `svelthon — a plain .py module has no reactive state, so ` +
+                    `\`@effect.root\` would watch nothing; move it to a .svelte.py (${source})`
+            );
+        }
     }
 
     // A plain module has no signals at all, so a @derived cannot be one either:
@@ -860,6 +883,10 @@ function compile(
     const jsBound = (name) => `__js_${name}`;
     // Second signal per name: a mutation bumps it without touching the value,
     // so nothing is copied and the object keeps its identity.
+    // What `$effect.root` hands back. Python reads the decorated name and gets
+    // this, exactly as JavaScript reads `const destroy = $effect.root(…)` —
+    // the name belongs to the destructor on both sides.
+    const root = (name) => `__root_${name}`;
     const rev = (name) => `__rev_${name}`;
     const bump = (name) => `__bump_${name}`;
     const read = (name) => `__read_${name}`;
@@ -1020,7 +1047,11 @@ function compile(
             `const ${read(n)} = () => { ${rev(n)}; };`
         ]),
         ...funcs.map((f) => `let ${fn(f.name)} = $state.raw(undefined);`),
-        ...effects.map((e) => `let ${fn(e.name)} = $state.raw(undefined);`),
+        ...effects.flatMap((e) =>
+            e.root
+                ? [`let ${fn(e.name)} = $state.raw(undefined);`, `let ${root(e.name)};`]
+                : [`let ${fn(e.name)} = $state.raw(undefined);`]
+        ),
         // A @derived name reads as its result — on both sides. The body runs
         // inside $derived.by, and every global it touches goes through a
         // namespace accessor, so Svelte discovers the dependencies by itself.
@@ -1060,7 +1091,13 @@ function compile(
                 `bind(__proto, '${n}', () => (${rev(n)}, ${n}), (v) => { ${n} = track(v, ${bump(n)}, ${read(n)}); });`
         ),
         ...funcs.map((f) => `bind(__proto, '${f.name}', () => ${fn(f.name)}, (v) => { ${fn(f.name)} = v; });`),
-        ...effects.map((e) => `bind(__proto, '${e.name}', () => ${fn(e.name)}, (v) => { ${fn(e.name)} = v; });`),
+        // A root's name reads as its destructor; the setter still takes the
+        // function, since that is what Brython writes when the `def` runs.
+        ...effects.map((e) =>
+            e.root
+                ? `bind(__proto, '${e.name}', () => ${root(e.name)}, (v) => { ${fn(e.name)} = v; });`
+                : `bind(__proto, '${e.name}', () => ${fn(e.name)}, (v) => { ${fn(e.name)} = v; });`
+        ),
         // follow(): a @derived that hands back a container it was given is the one
         // place the revision cannot travel by itself — Svelte memoises the
         // derived on `===`, so the reader subscribes to the object instead.
@@ -1147,14 +1184,19 @@ function compile(
         // Deliberately *not* untracked: discovering what the body read is the
         // whole point. A Python function that returns a callable hands back a
         // teardown, exactly as a Svelte effect does.
+        // A root owns its own scope: it is not cleaned up when the component is,
+        // which is the point — the destructor is handed to Python under the
+        // decorated name, and calling it is what ends the effect.
         ...effects.flatMap((e) => [
             ``,
-            `$effect${e.pre ? '.pre' : ''}(() => {`,
+            e.root
+                ? `${root(e.name)} = $effect.root(() => { $effect(() => {`
+                : `$effect${e.pre ? '.pre' : ''}(() => {`,
             `    let teardown;`,
             `    try { teardown = ${fn(e.name)}(); }` +
                 ` catch (err) { throw pyError(err, ${JSON.stringify(`${e.name}() — ${source}`)}, ${lineOffset}); }`,
             `    if (typeof teardown === 'function') return () => { teardown(); };`,
-            `});`
+            e.root ? `}); });` : `});`
         ]),
         ...(lifecycle('on_mount') || lifecycle('on_destroy')
             ? [
