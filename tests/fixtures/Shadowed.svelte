@@ -24,6 +24,7 @@ set_context = "mine set_context"
 get_context = "mine get_context"
 props_id = "mine props_id"
 host = "mine host"
+inspect = "mine inspect"
 </script>
 
 <p data-k="derived">{derived}</p>
@@ -43,3 +44,4 @@ host = "mine host"
 <p data-k="get_context">{get_context}</p>
 <p data-k="props_id">{props_id}</p>
 <p data-k="host">{host}</p>
+<p data-k="inspect">{inspect}</p>

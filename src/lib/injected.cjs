@@ -23,6 +23,10 @@ const INJECTED = [
     // The decorators only mark; the compiler has read them off the AST already.
     { name: 'derived', value: '() => (f) => f' },
     { name: 'bindable', value: '() => (v) => v' },
+    // `inspect(count, message)` is read off the AST like the decorators above;
+    // the identity is what lets Python run the call it really makes.
+    { name: 'inspect', value: '() => (f) => f', component: true },
+
     // `effect` carries `pre` because Python really applies the decorator at run
     // time: `@effect.pre` reads the attribute before calling it, and an identity
     // without one would raise before the compiler's own wiring ever ran.

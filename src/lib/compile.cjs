@@ -341,7 +341,12 @@ function takeArrows(src, where, lineOffset, allowed) {
             );
         }
 
-        if (!found) out.push(line);
+        // `inspect(…)` at the top level of a component, whose arguments become a
+        // lambda so that they are read again on every change.
+        const watched = quote === null && !found && allowed ? line.match(INSPECT) : null;
+
+        if (!found && !watched) out.push(line);
+        else if (watched) out.push(`__inspect_${anonymous++} = inspect(lambda: [${watched[1]}])`);
         else if (named) out.push(`${found[1]} = derived(lambda: ${expression})`);
         // The generated name is bound like any other effect's, so it stays out
         // of the way with the dunder prefix Python already reads as private.
@@ -555,6 +560,7 @@ function surface(body) {
     const funcs = [];
     const deriveds = [];
     const effects = [];
+    const inspects = [];
     const seen = new Set();
 
     const take = (name) => {
@@ -575,6 +581,7 @@ function surface(body) {
                 // and a lambda answers a call exactly as a `def` does.
                 if (isCallTo(node, 'derived')) deriveds.push({ name: target.id, arity: 0 });
                 else if (isCallTo(node, 'effect')) effects.push({ name: target.id, arity: 0 });
+                else if (isCallTo(node, 'inspect')) inspects.push({ name: target.id, arity: 0 });
                 else state.push(target.id);
             }
         } else if (node instanceof $B.ast.AnnAssign) {
@@ -614,7 +621,7 @@ function surface(body) {
         }
     }
 
-    return { props, bindables, state, funcs, deriveds, effects };
+    return { props, bindables, state, funcs, deriveds, effects, inspects };
 }
 
 // The modules a `from x import y` names.
@@ -794,7 +801,7 @@ function compile(
     } catch (error) {
         throw pythonError(error, source, lineOffset);
     }
-    let { props, bindables, state, funcs, deriveds, effects } = surface(root._ast.body);
+    let { props, bindables, state, funcs, deriveds, effects, inspects } = surface(root._ast.body);
 
     // Neither a store nor a plain module has a parent, so an annotation there
     // declares plain state — and $props() would be meaningless at module scope.
@@ -917,9 +924,9 @@ function compile(
     const lifecycle = (hook) => !store && funcs.some((f) => f.name === hook);
 
     // A component free to define its own `publish` or `derived` keeps it.
-    const declared = [...props, ...bindables, ...state, ...funcs, ...deriveds, ...effects].map(
-        (n) => n.name || n
-    );
+    const declared = [
+        ...props, ...bindables, ...state, ...funcs, ...deriveds, ...effects, ...inspects
+    ].map((n) => n.name || n);
 
     // Context is per component subtree, where a store is per application — and
     // it is the only per-request-safe place to put state under server
@@ -1067,6 +1074,7 @@ function compile(
             `const ${read(n)} = () => { ${rev(n)}; };`
         ]),
         ...funcs.map((f) => `let ${fn(f.name)} = $state.raw(undefined);`),
+        ...inspects.map((i) => `let ${fn(i.name)} = $state.raw(undefined);`),
         ...effects.flatMap((e) =>
             e.root
                 ? [`let ${fn(e.name)} = $state.raw(undefined);`, `let ${root(e.name)};`]
@@ -1111,6 +1119,9 @@ function compile(
                 `bind(__proto, '${n}', () => (${rev(n)}, ${n}), (v) => { ${n} = track(v, ${bump(n)}, ${read(n)}); });`
         ),
         ...funcs.map((f) => `bind(__proto, '${f.name}', () => ${fn(f.name)}, (v) => { ${fn(f.name)} = v; });`),
+        ...inspects.map(
+            (i) => `bind(__proto, '${i.name}', () => ${fn(i.name)}, (v) => { ${fn(i.name)} = v; });`
+        ),
         // A root's name reads as its destructor; the setter still takes the
         // function, since that is what Brython writes when the `def` runs.
         ...effects.map((e) =>
@@ -1205,6 +1216,11 @@ function compile(
         // Deliberately *not* untracked: discovering what the body read is the
         // whole point. A Python function that returns a callable hands back a
         // teardown, exactly as a Svelte effect does.
+        // `$inspect` is given the call, not its result: Svelte wraps whatever it
+        // receives in a thunk of its own and re-reads it on every change, so the
+        // lambda is re-run and the namespace accessors do the tracking. A
+        // production build drops the whole line — theirs, not ours.
+        ...inspects.map((i) => `$inspect(...${fn(i.name)}());`),
         // A root owns its own scope: it is not cleaned up when the component is,
         // which is the point — the destructor is handed to Python under the
         // decorated name, and calling it is what ends the effect.
