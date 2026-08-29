@@ -495,16 +495,18 @@ const templateCall = (f, fn) => {
     return f.name.startsWith(EXPR_PREFIX) ? `inTemplate(() => ${call})` : call;
 };
 
-// An injection whose value is computed rather than read lazily is skipped unless
-// the module actually reads it: Brython resolves a global by name, so the
-// generated code carries the read wherever it happens — module level or inside a
-// function alike — and a name that only appears in a Python string does not.
+// Two of them are bound only where the name is actually read — `props_id`
+// because its value must be computed at the top level rather than lazily, `host`
+// because Svelte refuses `$host()` outright in a component that is not a custom
+// element. Brython resolves a global by name, so the generated code carries the
+// read wherever it happens — module level or inside a function alike — and a
+// name that only appears inside a Python string does not.
 const reads = (js, name) => js.includes(`'${name}'`);
 
 const injectable = (one, declared, component, js) =>
     (component || !one.component) &&
     !declared.includes(one.name) &&
-    (!one.emitted || reads(js, one.name));
+    (!one.whenRead || reads(js, one.name));
 
 const injections = (declared, component, js) =>
     INJECTED.filter((one) => injectable(one, declared, component, js)).map(

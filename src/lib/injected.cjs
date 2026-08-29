@@ -278,8 +278,20 @@ const INJECTED = [
         name: 'props_id',
         value: `() => () => ${PROPS_ID}`,
         component: true,
+        whenRead: true,
         emitted: `const ${PROPS_ID} = $props.id();`
-    }
+    },
+
+    // `$host()` — the element a component is mounted as, when it is compiled as
+    // a custom element by `<svelte:options customElement="…">`. It is the only
+    // way out: a custom element speaks to the page through DOM events, not
+    // props, so without it a Python component could receive and render but never
+    // answer.
+    //
+    // Bound only where it is read, because Svelte refuses `$host()` at compile
+    // time in a component that is not a custom element. Unlike `props_id` it may
+    // be called from anywhere, so the value stays lazy like the rest.
+    { name: 'host', value: '() => () => $host()', component: true, whenRead: true }
 ];
 
 module.exports = { INJECTED };
