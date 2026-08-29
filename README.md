@@ -89,6 +89,8 @@ stands in JavaScript.
 | `@derived` on a `def` | `$derived.by(…)` |
 | `=> js.console.log(count)` | `$effect(() => console.log(count))` |
 | `@effect` | `$effect(…)` |
+| `@effect.pre` | `$effect.pre(…)` |
+| `@effect.root` | `$effect.root(…)` |
 | `def on_mount()` / `on_destroy()` | `onMount()` / `onDestroy()` |
 | `set_context(k, v)` / `get_context(k)` | `setContext(k, v)` / `getContext(k)` |
 | `to_js(value)` | — a Python container made readable from JavaScript |
@@ -676,14 +678,67 @@ def watch():
 |---|---|
 | `$effect(() => expr)` | `=> expr` |
 | `$effect(() => { … })` | `@effect` on a `def` |
+| `$effect.pre(…)` | `@effect.pre` |
+| `$effect.root(…)` | `@effect.root` |
 
 **The trap this model creates**: `runs += 1` on a module-level name *reads*
 before it writes, so a counter incremented inside an effect makes the effect
 depend on what it writes, and Svelte loops until
 `effect_update_depth_exceeded`. A plain assignment reads nothing.
 
-`$effect` belongs to a component, so a store — which has none — treats an
-`@effect` function as an ordinary one.
+### Before the DOM, and outside a component
+
+`@effect.pre` is the same effect, run **before** the DOM is updated — for the
+cases that must read a layout before what they depend on changes, an autoscroll
+being the canonical one.
+
+`@effect.root` opens a scope of its own. Nothing cleans it up, which is the
+point: **the decorated name receives the destructor**, exactly as JavaScript
+names the value the call hands back.
+
+```python
+@effect.root
+def destroy():
+    js.console.log(count)
+
+destroy()          # ends it, while the component is still alive
+```
+
+```js
+const destroy = $effect.root(() => { $effect(() => { … }); });
+destroy();
+```
+
+A scope and a moment are different things, so the two compose — which stacking
+says in Python, and which their nesting says in JavaScript:
+
+```python
+@effect.root
+@effect.pre
+def destroy():
+    ...
+```
+
+### Which file may hold what
+
+An effect needs two things: signals to read, and an owner to belong to. The three
+kinds of file have them in different measure, and each restriction below is one
+of those two.
+
+| | `.svelte` | `.svelte.py` | `.py` |
+|---|---|---|---|
+| has signals | yes | yes | no |
+| belongs to a component | yes | no | no |
+| state | `count = 0` | `count = 0` | an ordinary variable |
+| derived, short form | `x => expr` | `x = derived(lambda: …)` | — |
+| derived, long form | `@derived` | `@derived` | `@derived` → a function called on every read |
+| effect | `=> expr`, `@effect`, `@effect.pre`, `@effect.root` | `@effect.root` only | none |
+| props | `name: str` | become state | become state |
+
+A `.svelte.py` has no component, so `@effect` there would belong to nobody —
+`@effect.root`, which owns itself, is the form a module writes. A plain `.py`
+holds no signals at all, so no effect there would watch anything. Both are
+refused with a message rather than turned into an ordinary function.
 
 ## Lifecycle
 

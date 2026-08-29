@@ -89,6 +89,8 @@ rune en JavaScript.
 | `@derived` sur un `def` | `$derived.by(…)` |
 | `=> js.console.log(count)` | `$effect(() => console.log(count))` |
 | `@effect` | `$effect(…)` |
+| `@effect.pre` | `$effect.pre(…)` |
+| `@effect.root` | `$effect.root(…)` |
 | `def on_mount()` / `on_destroy()` | `onMount()` / `onDestroy()` |
 | `set_context(k, v)` / `get_context(k)` | `setContext(k, v)` / `getContext(k)` |
 | `to_js(valeur)` | — un conteneur Python rendu lisible par JavaScript |
@@ -710,14 +712,69 @@ def watch():
 |---|---|
 | `$effect(() => expr)` | `=> expr` |
 | `$effect(() => { … })` | `@effect` sur un `def` |
+| `$effect.pre(…)` | `@effect.pre` |
+| `$effect.root(…)` | `@effect.root` |
 
 **Le piège que ce modèle crée** : `runs += 1` sur un nom de niveau module *lit*
 avant d'écrire, donc un compteur incrémenté dans un effet le rend dépendant de ce
 qu'il écrit, et Svelte boucle jusqu'à `effect_update_depth_exceeded`. Une
 affectation simple ne lit rien.
 
-`$effect` appartient à un composant : un store, qui n'en a pas, traite une
-fonction `@effect` comme une fonction ordinaire.
+### Avant le DOM, et hors d'un composant
+
+`@effect.pre` est le même effet, joué **avant** la mise à jour du DOM — pour ce
+qui doit lire une mise en page avant que ce dont elle dépend ne change, le
+défilement automatique étant le cas canonique.
+
+`@effect.root` ouvre une portée à lui. Rien ne la nettoie, et c'est justement le
+but : **le nom décoré reçoit le destructeur**, exactement comme JavaScript nomme
+la valeur que l'appel rend.
+
+```python
+@effect.root
+def destroy():
+    js.console.log(count)
+
+destroy()          # y met fin, le composant étant toujours vivant
+```
+
+```js
+const destroy = $effect.root(() => { $effect(() => { … }); });
+destroy();
+```
+
+Une portée et un moment sont deux choses différentes, donc les deux se
+composent — ce que l'empilement dit en Python, et ce que l'imbrication dit en
+JavaScript :
+
+```python
+@effect.root
+@effect.pre
+def destroy():
+    ...
+```
+
+### Ce que chaque fichier peut porter
+
+Un effet a besoin de deux choses : des signaux à lire, et un propriétaire à qui
+appartenir. Les trois sortes de fichiers les ont à des degrés différents, et
+chaque restriction ci-dessous est l'une des deux.
+
+| | `.svelte` | `.svelte.py` | `.py` |
+|---|---|---|---|
+| a des signaux | oui | oui | non |
+| appartient à un composant | oui | non | non |
+| état | `count = 0` | `count = 0` | une variable ordinaire |
+| dérivé, forme courte | `x => expr` | `x = derived(lambda: …)` | — |
+| dérivé, forme longue | `@derived` | `@derived` | `@derived` → une fonction appelée à chaque lecture |
+| effet | `=> expr`, `@effect`, `@effect.pre`, `@effect.root` | `@effect.root` seul | aucun |
+| props | `name: str` | deviennent de l'état | deviennent de l'état |
+
+Un `.svelte.py` n'a pas de composant, donc un `@effect` n'y appartiendrait à
+personne — `@effect.root`, qui se possède lui-même, est la forme qu'écrit un
+module. Un `.py` ordinaire n'a aucun signal, donc aucun effet n'y observerait
+quoi que ce soit. Les deux sont refusés par un message, plutôt que transformés en
+fonction ordinaire.
 
 ## Cycle de vie
 
