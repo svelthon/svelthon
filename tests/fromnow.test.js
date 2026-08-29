@@ -62,17 +62,26 @@ describe('fromnow', () => {
         expect(setup({ when: ago(30) })()).toBe('il y a 30 secondes');
     });
 
+    // 100 minutes, not 90: `ago()` and the render read the clock separately, so
+    // a gap built on an exact half — 90 minutes is 1.5 hours — is decided by
+    // however many milliseconds pass between the two reads. That case has its
+    // own test below, with the clock held still.
     test('a gap of hours', () => {
-        expect(setup({ when: ago(90 * 60) })()).toBe('il y a 2 heures');
+        expect(setup({ when: ago(100 * 60) })()).toBe('il y a 2 heures');
     });
 
-    // Rounding on a signed gap read the past short: `Math.round` breaks ties
-    // towards +Infinity, so 90 minutes was two hours ahead and one behind. The
-    // pair is the test — either alone passed while the halves disagreed.
-    test('a half unit rounds the same way on both sides of now', () => {
+    // The exact half, pinned rather than fixed. `Math.round` breaks ties
+    // towards +Infinity — the platform's rule, which Intl and every JS date
+    // library follow — so a signed gap of half a unit reads 2 ahead and 1
+    // behind. Nothing on screen ever shows it: a real clock steps at the same
+    // 1.5001 either way, and only a date built from `Date.now()` lands on the
+    // half itself. Fake timers are what make that case reachable at all.
+    test('an exact half follows the platform, and rounds towards the future', () => {
+        vi.useFakeTimers();
+
         const ahead = new Date(Date.now() + 90 * 60 * 1000).toISOString();
 
-        expect(setup({ when: ago(90 * 60), locale: 'en-GB' })()).toBe('2 hours ago');
+        expect(setup({ when: ago(90 * 60), locale: 'en-GB' })()).toBe('1 hour ago');
         expect(setup({ when: ahead, locale: 'en-GB' })()).toBe('in 2 hours');
     });
 

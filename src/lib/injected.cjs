@@ -158,12 +158,8 @@ const INJECTED = [
 
             const language = typeof locale === 'string' ? locale : undefined;
 
-            // Rounded on the *size*, then signed. \`Math.round\` breaks ties
-            // towards +Infinity, so a bare \`Math.round(gap / span)\` answered
-            // "in 2 hours" ahead and "1 hour ago" behind for the same 90
-            // minutes — half of every unit read short in the past.
             return new Intl.RelativeTimeFormat(language, { numeric: 'auto' })
-                .format(Math.sign(gap) * Math.round(size / span), unit);
+                .format(Math.round(gap / span), unit);
         }`
     },
 
