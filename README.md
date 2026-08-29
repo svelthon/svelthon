@@ -178,8 +178,8 @@ whether to bind. Without `bind:`, a write inside the child stays there.
 
 It is the fourth of the dialect's bindings, and they are one system built around
 the same sign — `=` a name to a value, `=>` a name to an expression, `:=` a name
-from inside an expression, `<=>` two names in both directions. `bindable()` still
-works and means exactly the same thing.
+bound from inside an expression, `<=>` a name that travels both ways.
+`bindable()` still works and means exactly the same thing.
 
 Reading a global goes through `$B.resolve_global`, which demands an *own*
 property unless the namespace carries the `$proxy` flag — in which case it reads

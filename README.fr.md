@@ -179,8 +179,8 @@ décide s'il lie. Sans `bind:`, une écriture dans l'enfant y reste.
 
 C'est la quatrième liaison du dialecte, et elles forment un système autour du
 même signe — `=` un nom vers une valeur, `=>` un nom vers une expression, `:=` un
-nom depuis l'intérieur d'une expression, `<=>` deux noms dans les deux sens.
-`bindable()` marche toujours et veut dire exactement la même chose.
+nom lié depuis l'intérieur d'une expression, `<=>` un nom qui circule dans les
+deux sens. `bindable()` marche toujours et veut dire exactement la même chose.
 
 La lecture d'un global passe par `$B.resolve_global`, qui exige une propriété
 **propre** sauf si le namespace porte le drapeau `$proxy` — auquel cas il lit la
