@@ -45,7 +45,7 @@ npm run dev
 ```
 
 ```sh
-npm test             # 331 tests: semantics, props, reactivity, Svelte surface
+npm test             # 350 tests: semantics, props, reactivity, Svelte surface
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
 npm run bench        # Python vs JavaScript, same component, real browser
@@ -1030,7 +1030,7 @@ a Python component:
 | | |
 |---|---|
 | blocks | `{#if}` `{:else if}` `{#each}` (indexed, `{:else}`, keyed) `{#key}` `{#await}` |
-| tags | `{@html}` `{@const}` `{@render}` `{#snippet}` |
+| tags | `{@html}` `{@const}` `{@render}` `{#snippet}` `{@attach}` `{@debug}` |
 | bindings | `bind:value` `bind:checked` `bind:group` `bind:this` |
 | directives | `class:` `style:` `use:` `transition:` |
 | composition | props, defaults, spread of a **Python dict**, children as snippets |
@@ -1039,8 +1039,15 @@ a Python component:
 
 Template expressions are Python throughout, including the corners that are not
 interpolations: the iterable of an `{#each}`, its key, `{#key}`, the right-hand
-side of an `{@const}`, `{@html}`, the shorthand `{name}`, the spread `{...attrs}`,
-and an interpolation inside a quoted attribute — `class="tag {statut.lower()}"`.
+side of an `{@const}`, `{@html}`, the attachment of an `{@attach}`, the shorthand
+`{name}`, the spread `{...attrs}`, and an interpolation inside a quoted
+attribute — `class="tag {statut.lower()}"`.
+
+**Throughout means throughout**, and that is enforced rather than intended: a
+block, clause or tag the markup pass does not know is **refused**, with a message
+naming the ones it knows. It used to be passed through, which left its expression
+as JavaScript in a component that is Python everywhere else — a leak found five
+times, one construct at a time, before the list existed.
 
 Two Python spellings are accepted where Svelte has its own: `{#each d.items() as
 (k, v)}` destructures a tuple, and `{#each xs as x, i}` keeps Svelte's meaning of
@@ -1050,7 +1057,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test` — 331 tests, plus 3 expected failures (below):
+Validated by `npm test` — 350 tests, plus 3 expected failures (below):
 
 - end-to-end reactivity, and which write paths propagate;
 - props: Python defaults, parent precedence, readability during init, parent

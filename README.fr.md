@@ -43,7 +43,7 @@ npm run dev
 ```
 
 ```sh
-npm test             # 331 tests : sémantique, props, réactivité, surface Svelte
+npm test             # 350 tests : sémantique, props, réactivité, surface Svelte
 npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
 npm run bench        # Python contre JavaScript, même composant, vrai navigateur
@@ -1050,7 +1050,7 @@ C'est le même mécanisme qui accueillera les `.wasm` de Wasthon.
 
 ## État
 
-Validé par `npm test` — 331 tests, plus 3 échecs attendus (voir plus bas) :
+Validé par `npm test` — 350 tests, plus 3 échecs attendus (voir plus bas) :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
 - props : défaut Python, priorité du parent, lisibilité pendant l'init,
@@ -1083,7 +1083,7 @@ un composant Python :
 | | |
 |---|---|
 | blocs | `{#if}` `{:else if}` `{#each}` (indexé, `{:else}`, avec clé) `{#key}` `{#await}` |
-| balises | `{@html}` `{@const}` `{@render}` `{#snippet}` |
+| balises | `{@html}` `{@const}` `{@render}` `{#snippet}` `{@attach}` `{@debug}` |
 | liaisons | `bind:value` `bind:checked` `bind:group` `bind:this` |
 | directives | `class:` `style:` `use:` `transition:` |
 | composition | props, défauts, spread d'un **dict Python**, enfants par snippet |
@@ -1092,9 +1092,16 @@ un composant Python :
 
 Les expressions de gabarit sont du Python de bout en bout, y compris dans les
 recoins qui ne sont pas des interpolations : l'itérable d'un `{#each}`, sa clé,
-`{#key}`, le membre droit d'un `{@const}`, `{@html}`, le raccourci `{nom}`,
-l'étalement `{...attrs}`, et une interpolation dans un attribut entre guillemets
-— `class="tag {statut.lower()}"`.
+`{#key}`, le membre droit d'un `{@const}`, `{@html}`, l'attachement d'un
+`{@attach}`, le raccourci `{nom}`, l'étalement `{...attrs}`, et une interpolation
+dans un attribut entre guillemets — `class="tag {statut.lower()}"`.
+
+**De bout en bout veut dire de bout en bout**, et c'est garanti plutôt que voulu :
+un bloc, une clause ou une balise que la passe de balisage ne connaît pas est
+**refusé**, avec un message qui nomme ceux qu'elle connaît. Il était auparavant
+laissé passer, ce qui abandonnait son expression en JavaScript dans un composant
+Python partout ailleurs — une fuite trouvée cinq fois, une construction à la
+fois, avant que cette liste existe.
 
 Deux graphies de Python sont acceptées là où Svelte a la sienne :
 `{#each d.items() as (k, v)}` déstructure un tuple, et `{#each xs as x, i}` garde

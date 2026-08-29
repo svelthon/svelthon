@@ -347,6 +347,23 @@ function eachBlock(trimmed, declare, call) {
     return `{#each ${iterable} as ${target}` + (keyed ? ` (${call(keyed[1], 'repr')})` : '') + '}';
 }
 
+// What Svelte's template language holds, named here so that anything else stops
+// rather than crosses. The branch that used to end these three chains was a
+// catch-all written for one case — `{@debug}`, `{#snippet}` — and it silently
+// carried every construct nobody had thought about, leaving its expression as
+// JavaScript inside a component that promised Python. Five of them were found
+// one at a time before this list existed.
+const BLOCKS = ['if', 'each', 'key', 'await', 'snippet'];
+const CLAUSES = ['else', 'then', 'catch'];
+const TAGS = ['const', 'html', 'render', 'debug', 'attach'];
+
+const unknownTag = (trimmed, kind, known) =>
+    new SyntaxError(
+        `svelthon — \`{${trimmed}}\` is not a ${kind} Svelthon knows; ` +
+            `the ${kind}s are ${known.join(', ')}. A construct left unhandled would ` +
+            `cross as JavaScript, so it is refused rather than passed through.`
+    );
+
 export function pythonExpressions(markup, collect, onPython) {
     let out = '';
     let index = 0;
@@ -479,11 +496,22 @@ export function pythonExpressions(markup, collect, onPython) {
                         // diff against the previous render sees a mutation: this
                         // is what a JavaScript spread does by itself.
                         out += `{...${call(trimmed.slice(3), '__spread')}}`;
+                    } else if (trimmed.startsWith('@attach ')) {
+                        // `{@attach fn}` sits inside the tag rather than around
+                        // it, so it is read here. What it holds is Python like
+                        // every other expression, and what that yields is a
+                        // function Svelte calls with the element — so it goes
+                        // through the same wrapper a handler does, which trims
+                        // the call to the declared arity, converts the element,
+                        // and hands the teardown back.
+                        out += `{@attach ${EVENT_WRAPPER}(${call(trimmed.slice(8), '')})}`;
                     } else if (/^[A-Za-z_$][\w$]*$/.test(trimmed)) {
                         // {name}, Svelte's shorthand for name={name}. Expanding
                         // it is what routes the read through the namespace, and
                         // therefore through the accessor.
                         out += `${trimmed}={${call(trimmed, '')}}`;
+                    } else if (trimmed.startsWith('@')) {
+                        throw unknownTag(trimmed, 'tag', TAGS);
                     } else {
                         out += markup.slice(index, end + 1);
                     }
@@ -573,9 +601,13 @@ export function pythonExpressions(markup, collect, onPython) {
 
                 scopes.push(declaredBy(trimmed));
                 out += `{#await ${call(awaited, '')}${tail}}`;
-            } else {
+            } else if (trimmed.startsWith('#snippet ')) {
+                // A snippet declares names and holds no expression of its own:
+                // it is passed through, and its body is walked like any other.
                 scopes.push(declaredBy(trimmed));
                 out += markup.slice(index, end + 1);
+            } else {
+                throw unknownTag(trimmed, 'block', BLOCKS);
             }
         } else if (trimmed.startsWith('/')) {
             scopes.pop();
@@ -585,9 +617,15 @@ export function pythonExpressions(markup, collect, onPython) {
             const declared = declaredBy(trimmed);
             if (declared.length) scopes[scopes.length - 1] = declared;
 
-            out += /^:else\s+if\s/.test(trimmed)
-                ? `{:else if ${call(trimmed.replace(/^:else\s+if\s/, ''), '__truthy')}}`
-                : markup.slice(index, end + 1);
+            if (/^:else\s+if\s/.test(trimmed)) {
+                out += `{:else if ${call(trimmed.replace(/^:else\s+if\s/, ''), '__truthy')}}`;
+            } else if (CLAUSES.some((one) => trimmed === `:${one}` || trimmed.startsWith(`:${one} `))) {
+                // `:else`, `:then row`, `:catch err` — a name at most, never an
+                // expression, so they cross unchanged.
+                out += markup.slice(index, end + 1);
+            } else {
+                throw unknownTag(trimmed, 'clause', CLAUSES);
+            }
         } else if (trimmed.startsWith('@')) {
             const assigned = trimmed.match(/^@const\s+([^=]+)=([\s\S]+)$/);
 
@@ -611,9 +649,12 @@ export function pythonExpressions(markup, collect, onPython) {
                     : `{@render ${called.slice(0, opens)}(${arguments_(called.slice(opens + 1, closes))
                           .map((one) => (one.trim() ? call(one, '') : one))
                           .join(', ')})${called.slice(closes + 1)}}`;
-            } else {
-                // {@debug} takes names rather than an expression.
+            } else if (trimmed.startsWith('@debug')) {
+                // `{@debug}` takes names rather than an expression, and the
+                // names it takes are the JavaScript ones the compiler emits.
                 out += markup.slice(index, end + 1);
+            } else {
+                throw unknownTag(trimmed, 'tag', TAGS);
             }
         } else {
             out += `{${call(inner, '__text')}}`;
