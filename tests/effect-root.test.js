@@ -49,6 +49,27 @@ describe('@effect.root', () => {
     });
 });
 
+// `root` is a scope and `pre` is a moment: in JavaScript they nest —
+// `$effect.root(() => { $effect.pre(() => …) })` — so they must compose here
+// too. Stacking is Python's own way of saying that, and each decorator is read
+// independently, so the order carries no meaning and neither does its reverse.
+describe('a root and a pre together', () => {
+    const { compile } = createRequire(import.meta.url)('../src/lib/compile.cjs');
+
+    const emitted = (decorators) =>
+        compile(`c = 0\n\n${decorators}\ndef destroy():\n    js.String(c)\n`, 'Probe', 'probe.svelte', {})
+            .script.split('\n')
+            .find((line) => line.includes('$effect.root'));
+
+    test('nest', () => {
+        expect(emitted('@effect.root\n@effect.pre')).toContain('$effect.root(() => { $effect.pre(');
+    });
+
+    test('and a root alone stays a plain effect inside', () => {
+        expect(emitted('@effect.root')).toContain('$effect.root(() => { $effect(');
+    });
+});
+
 // The reason `@effect.root` exists here rather than only in components: a
 // `.svelte.py` has no component to belong to, so a plain `@effect` there used to
 // become an ordinary exported function — reactive-looking and inert.
