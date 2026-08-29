@@ -309,9 +309,9 @@ list renders as JavaScript renders it. Nothing is injected behind an author's
 back — exactly as TypeScript does not leak into a `.js` file.
 
 It costs **1.3× to 1.7× on rendering** against a JavaScript component (`npm run
-bench`, the spread being what a modest laptop measures from one day to the next),
-against 0.6× before: one Python call per expression per render. That is the price
-of the template being Python.
+bench`, the spread being what a modest laptop measures from one day to the next):
+one Python call per expression per render. That is the price of the template
+being Python.
 
 ### The whole dialect, in one table
 
@@ -1043,11 +1043,6 @@ side of an `{@const}`, `{@html}`, the attachment of an `{@attach}`, the shorthan
 `{name}`, the spread `{...attrs}`, and an interpolation inside a quoted
 attribute — `class="tag {statut.lower()}"`.
 
-**Throughout means throughout**, and that is enforced rather than intended: a
-block, clause or tag the markup pass does not know is **refused**, with a message
-naming the ones it knows. It used to be passed through, which left its expression
-as JavaScript in a component that is Python everywhere else — a leak found five
-times, one construct at a time, before the list existed.
 
 Two Python spellings are accepted where Svelte has its own: `{#each d.items() as
 (k, v)}` destructures a tuple, and `{#each xs as x, i}` keeps Svelte's meaning of
@@ -1215,10 +1210,9 @@ imports, so the scan is skipped and the one package worth pre-bundling is named.
 
 The vendored Brython carries a handful of repairs, each an edit in the file
 itself marked `/* SVELTHON patch */` and held by a test — `BRYTHON.md` lists
-them. They used to be split between the file and a Vite plugin that patched the
-copy it served; the half the plugin owned never reached the compiler, which loads
-the same file with `require` under Node, so server-side rendering ran on an
-unrepaired Brython.
+them. They live in the file rather than in a build step, because the compiler
+loads the same copy with `require` under Node — a patch applied only while
+serving would leave server-side rendering on an unrepaired Brython.
 
 `vendor/brython.js` is a copy of `www/src/brython.js` (3.14 dev). The folder
 carries a `package.json` marked `commonjs`: Node must load it as a classic

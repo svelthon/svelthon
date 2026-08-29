@@ -318,8 +318,8 @@ l'auteur — exactement comme TypeScript ne fuit pas dans un fichier `.js`.
 
 Ça coûte **1,3× à 1,7× sur le rendu** face à un composant JavaScript
 (`npm run bench` — l'écart entre les deux est ce qu'un portable modeste mesure
-d'un jour à l'autre), contre 0,6× auparavant : un appel Python par expression et
-par rendu. C'est le prix du gabarit en Python.
+d'un jour à l'autre) : un appel Python par expression et par rendu. C'est le prix
+du gabarit en Python.
 
 ### Tout le dialecte, en un tableau
 
@@ -1096,12 +1096,6 @@ recoins qui ne sont pas des interpolations : l'itérable d'un `{#each}`, sa clé
 `{@attach}`, le raccourci `{nom}`, l'étalement `{...attrs}`, et une interpolation
 dans un attribut entre guillemets — `class="tag {statut.lower()}"`.
 
-**De bout en bout veut dire de bout en bout**, et c'est garanti plutôt que voulu :
-un bloc, une clause ou une balise que la passe de balisage ne connaît pas est
-**refusé**, avec un message qui nomme ceux qu'elle connaît. Il était auparavant
-laissé passer, ce qui abandonnait son expression en JavaScript dans un composant
-Python partout ailleurs — une fuite trouvée cinq fois, une construction à la
-fois, avant que cette liste existe.
 
 Deux graphies de Python sont acceptées là où Svelte a la sienne :
 `{#each d.items() as (k, v)}` déstructure un tuple, et `{#each xs as x, i}` garde
@@ -1248,10 +1242,10 @@ nomme le seul paquet qui mérite d'être pré-bundlé.
 
 Le Brython vendu porte quelques réparations, chacune écrite dans le fichier
 lui-même, marquée `/* SVELTHON patch */` et tenue par un test — `BRYTHON.md` les
-liste. Elles étaient auparavant partagées entre le fichier et un plugin Vite qui
-corrigeait la copie servie ; la moitié détenue par le plugin n'atteignait jamais
-le compilateur, qui charge le même fichier par `require` sous Node — le rendu
-serveur tournait donc sur un Brython non réparé.
+liste. Elles vivent dans le fichier plutôt que dans une étape de build, parce que
+le compilateur charge la même copie par `require` sous Node — un correctif
+appliqué seulement à la copie servie laisserait le rendu serveur tourner sur un
+Brython non réparé.
 
 `vendor/brython.js` est une copie de `www/src/brython.js` (3.14 dev). Le dossier
 porte un `package.json` marqué `commonjs` : Node doit le charger comme script
