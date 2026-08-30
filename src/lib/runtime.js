@@ -700,6 +700,35 @@ export function scheduleAsync(result, where, lineOffset = 0) {
 // where Python raises on a positional argument it never declared. So the call is
 // trimmed to the signature, which is what `def load():` beside `def load(event):`
 // has always been allowed to mean.
+// What a function the *framework* calls hands back — a transition, an action.
+// Svelte does arithmetic on it: `Element.animate` refuses a duration that is not
+// a number, and a Brython float is an object holding one.
+//
+// Only floats are unwrapped, one level down. Converting the whole value with
+// `plainData` would be wrong: the same function can be called from Python, where
+// a dict must stay a dict and a list must print as a list.
+export function pyNumbers(value) {
+    if (value === null || typeof value !== 'object') return value;
+    if (value.ob_type === _b_.float) return value.value;
+
+    for (const key of Object.keys(value)) {
+        const one = value[key];
+
+        if (one !== null && typeof one === 'object' && one.ob_type === _b_.float) {
+            value[key] = one.value;
+        } else if (typeof one === 'function') {
+            // A callback the framework keeps and calls itself — a transition's
+            // `tick(t, u)`. It never crosses a wrapper, so its arguments arrive
+            // as raw JavaScript numbers, and Brython reads a number as an int:
+            // `tick(0, 1)` works and every frame after it raises *the number
+            // 0.09 cannot be converted to a BigInt*, silently.
+            value[key] = (...args) => one(...args.map(inbound));
+        }
+    }
+
+    return value;
+}
+
 export function pyCall(fn, where, lineOffset = 0, arity = Infinity) {
     return (...args) => {
         try {

@@ -1186,7 +1186,7 @@ function compile(
         // pyError fills them in, naming the function and the file it came from.
         ...funcs.map(
             (f) =>
-                `const ${f.name} = (...a) => { try { return schedule(${templateCall(f, fn)}, ${JSON.stringify(`${f.name}() — ${source}`)}, ${lineOffset}); }` +
+                `const ${f.name} = (...a) => { try { return pyNumbers(schedule(${templateCall(f, fn)}, ${JSON.stringify(`${f.name}() — ${source}`)}, ${lineOffset})); }` +
                 ` catch (err) { throw pyError(err, ${JSON.stringify(`${f.name}() — ${source}`)}, ${lineOffset}); } };`
         ),
         ...(store
