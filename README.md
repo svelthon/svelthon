@@ -1169,20 +1169,16 @@ A store goes through a different path — `load()` rather than the preprocessor 
 and had the same illness, worse: its own `.svelte.js` module has to be
 invalidated too, or its `load()` never re-runs and the cache keeps the old body.
 
-## Stdlib: only what you import
+## What a component can import
 
-`py2js()` exposes a component's imports, and Brython's VFS already carries the
-dependency graph (`[ext, source, deps, is_package]`). The transitive closure is
-therefore exact, and only it enters the bundle:
+Python's own modules — `browser`, `javascript`, `sys` — and any `.py` sitting
+beside the component. Everything else a template needs is already a name:
+`tojson`, `batch`, `date`, `fromnow`, `slugify`, `striptags`, `urlencode`.
 
 | | |
 |---|---|
-| `import sys` → modules bundled | `sys`, `browser` |
-| bundled weight | **7.2 KB** |
-| full stdlib | 4.6 MB |
-| | **652× smaller** |
-
-`vendor/brython_stdlib.js` is the build-time source and is never shipped.
+| the whole runtime, gzipped | **255 KB** |
+| of which `sys` | 7 KB |
 
 ## Svelte surface covered
 

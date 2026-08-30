@@ -1198,21 +1198,17 @@ Le composant survit à l'exception — le handler suivant fonctionne — et un
 `try/except` Python reste un `try/except` Python : l'enveloppe ne s'applique
 qu'à ce qui remonte jusqu'à JavaScript.
 
-## Stdlib : seulement ce qui est importé
+## Ce qu'un composant peut importer
 
-`py2js()` expose les imports du composant, et le VFS de Brython porte déjà le
-graphe de dépendances (`[ext, source, deps, is_package]`). La fermeture
-transitive est donc exacte, et seule elle entre dans le bundle :
+Les modules de Python lui-même — `browser`, `javascript`, `sys` — et n'importe
+quel `.py` posé à côté du composant. Tout ce dont un gabarit a besoin est déjà
+un nom : `tojson`, `batch`, `date`, `fromnow`, `slugify`, `striptags`,
+`urlencode`.
 
 | | |
 |---|---|
-| `import sys` → modules embarqués | `sys`, `browser` |
-| poids embarqué | **7,2 Ko** |
-| stdlib complète | 4,6 Mo |
-| | **652× plus petit** |
-
-`vendor/brython_stdlib.js` sert de source au build et n'est jamais expédié.
-C'est le même mécanisme qui accueillera les `.wasm` de Wasthon.
+| le runtime entier, gzippé | **255 Ko** |
+| dont `sys` | 7 Ko |
 
 ## État
 
