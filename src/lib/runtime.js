@@ -533,6 +533,12 @@ export function plainData(value, seen) {
     if (value === undefined || value === null || value === NONE) return null;
     if (typeof value !== 'object') return value;
 
+    // A Brython `int` is a JavaScript number, a `float` is an object holding
+    // one. The framework does arithmetic on what it is handed — a transition
+    // divides by its `duration`, a spring interpolates — and an object there
+    // stops the animation on its first frame rather than raising.
+    if (value.ob_type === _b_.float) return value.value;
+
     // A coroutine handed to the framework becomes a promise. That is what lets a
     // `load()` stream: `{"lentes": chercher_lentement()}` returns a coroutine,
     // and SvelteKit waits on the promise it turns into.
