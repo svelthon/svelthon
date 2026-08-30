@@ -102,13 +102,7 @@ export function python(options = {}) {
             // their namespaces are registered by the time Brython looks them up.
             const prelude = pythonImports(imports, dirname(filename || '.'));
 
-            generated.set(VIRTUAL_PREFIX + name, {
-                code: `${prelude}\n${module}`,
-                // The prelude holds one line per imported module, and every
-                // mapping shifts down by as many. A source map is delta-encoded
-                // line by line, so a leading `;` is one line with no mapping.
-                map: shifted(map, `${prelude}\n`)
-            });
+            generated.set(VIRTUAL_PREFIX + name, withPrelude(module, map, prelude));
             if (stdlib) generated.set(VFS_PREFIX + name, { code: stdlib, map: null });
 
             // The content is JavaScript now, so the tag must stop claiming
@@ -166,13 +160,19 @@ const countTests = () =>
 // `import peps` → the file it names, looked up in the importer's own directory
 // first, then along the configured path. Both spellings are tried, since the
 // statement says nothing about whether the module it names is reactive.
+// The generated module, behind the imports it needs evaluated first.
+//
 // A source map's `mappings` is delta-encoded per generated line, lines separated
-// by `;`. Text prepended to the module therefore costs one `;` per line it adds,
-// and a debugger opening the file lands that many lines off when it is wrong.
-export function shifted(map, prepended) {
-    const lines = prepended.split('\n').length - 1;
+// by `;`, so the prelude costs one `;` per line it adds — get that wrong and a
+// debugger opens the file that many lines off. A module importing nothing is
+// left alone rather than gaining an empty first line.
+export function withPrelude(module, map, prelude) {
+    if (!prelude) return { code: module, map };
 
-    return { ...map, mappings: ';'.repeat(lines) + map.mappings };
+    const lead = `${prelude}\n`;
+    const lines = lead.split('\n').length - 1;
+
+    return { code: lead + module, map: { ...map, mappings: ';'.repeat(lines) + map.mappings } };
 }
 
 function pythonImports(names, fromDirectory) {
@@ -261,10 +261,7 @@ export function svelthon() {
             // data layer. Same prelude a component gets.
             const prelude = pythonImports(imports, dirname(file));
 
-            generated.set(VIRTUAL_PREFIX + name, {
-                code: prelude ? `${prelude}\n${module}` : module,
-                map: prelude ? shifted(map, `${prelude}\n`) : map
-            });
+            generated.set(VIRTUAL_PREFIX + name, withPrelude(module, map, prelude));
             if (stdlib) generated.set(VFS_PREFIX + name, { code: stdlib, map: null });
 
             this.addWatchFile(file);
