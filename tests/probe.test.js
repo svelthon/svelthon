@@ -1,25 +1,30 @@
 import { test, expect } from 'vitest';
 import { mount, flushSync } from 'svelte';
-import Host from './fixtures/LeakHost.svelte';
+import Clean from './fixtures/CleanHost.svelte';
+import Js from './fixtures/JsHost.svelte';
 
-test('probe', () => {
-    const t = document.body.appendChild(document.createElement('div'));
-    mount(Host, { target: t });
+const settled = () => {
+    for (const _ of [0, 1, 2]) global.gc();
+    return process.memoryUsage().heapUsed;
+};
+
+const run = (Host) => {
+    const target = document.body.appendChild(document.createElement('div'));
+    mount(Host, { target });
     flushSync();
 
-    const read = () => [
-        t.querySelector('[data-k="alive"]').textContent,
-        t.querySelector('[data-k="subscribed"]').textContent
-    ].join('/');
+    const before = settled();
 
-    const seen = [];
-    for (let i = 0; i < 4; i++) {
-        t.querySelector('button').click();
+    for (let i = 0; i < 500; i++) {
+        target.querySelector('button').click();
         flushSync();
-        t.querySelector('button').click();
+        target.querySelector('button').click();
         flushSync();
-        seen.push(read());
     }
 
-    expect(seen).toBe('VOIR');
+    return Math.round((settled() - before) / 500) + ' B / mount';
+};
+
+test('p', () => {
+    expect([run(Js), run(Clean)]).toBe('X');
 });
