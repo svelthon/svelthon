@@ -25,11 +25,6 @@ require('../../vendor/brython.js');
 const $B = globalThis.__BRYTHON__;
 $B.brython({ ipy_id: [] });
 
-// The full stdlib, loaded at build time only — it is the *source* we take
-// modules from, never something the browser downloads. Entries are
-// [ext, source, deps, is_package], so the dependency graph is already computed.
-require('../../vendor/brython_stdlib.js');
-
 const { INJECTED } = require('./injected.cjs');
 
 // Name the generated module gives to the reactive namespace it receives.
@@ -638,20 +633,18 @@ function surface(body) {
 // The modules a `from x import y` names.
 //
 // Brython's own bookkeeping — `root.imports` — records `import x` and nothing
-// else, so half of every module's imports were invisible to the two things that
-// read that list: the standard-library closure below, and the prelude that
-// resolves a sibling `.py`. `from fractions import Fraction` compiled cleanly
-// and then failed in the browser with a module the VFS had never been given.
+// else, so `from counter_store import count` was invisible to the prelude that
+// resolves a sibling `.py`, and the component compiled cleanly then failed in
+// the browser on a module it had never been given.
 //
 // Walked rather than read off the top level, because an import inside a function
 // or a `try` is still an import.
-// The same question asked of the text. The walk below is the precise answer and
-// is what a `from x import y` inside a function or a `try` needs — but it leans
-// on Brython's AST classes, and a build that reaches the browser through a
-// bundler ends up with a second set of them, where the walk quietly matches
-// nothing. Losing the standard library is too expensive a failure to leave to
-// one mechanism, and the cost of asking twice is a module bundled that was
-// already going to be.
+//
+// Asked twice, of the AST and of the text. The walk is the precise answer, but
+// it leans on Brython's AST classes, and a build that reaches the browser
+// through a bundler ends up with a second set of them, where the walk quietly
+// matches nothing. The cost of asking twice is a name listed that was already
+// going to be.
 const FROM_IMPORT = /^[ \t]*from\s+([A-Za-z_][\w.]*)\s+import\s/gm;
 
 function fromImportsInSource(src) {
@@ -871,12 +864,8 @@ function compile(
     const imported = [
         ...new Set([...Object.keys(root.imports), ...fromImports(root._ast), ...fromImportsInSource(src)])
     ];
-    const vfs = stdlibClosure(imported);
-    const needsStdlib = Object.keys(vfs).length > 0;
-
     const module = [
         `import { withNamespace, pyError } from 'svelthon/runtime';`,
-        ...(needsStdlib ? [`import ${JSON.stringify(vfsId(name))};`] : []),
         ``,
         `export function init(${NS}) {`,
         `  try {`,
@@ -1275,29 +1264,16 @@ function compile(
 
     const script = plain ? plainScript : componentScript;
 
-    // Only the modules this component actually imports reach the browser.
-    const stdlib = needsStdlib
-        ? [
-              `import 'svelthon/runtime';`,
-              ``,
-              `__BRYTHON__.use_VFS = true;`,
-              `__BRYTHON__.update_VFS(${JSON.stringify(vfs)});`
-          ].join('\n')
-        : null;
-
     return {
         script,
         module,
         map: sourceMap(module, source, sourceContent ?? src, lineOffset),
-        stdlib,
         imports: imported
     };
 }
 
 const VIRTUAL_PREFIX = 'virtual:svelthon/';
-const VFS_PREFIX = 'virtual:svelthon-vfs/';
 
 const virtualId = (name) => VIRTUAL_PREFIX + name;
-const vfsId = (name) => VFS_PREFIX + name;
 
-module.exports = { compile, VIRTUAL_PREFIX, VFS_PREFIX, virtualId, vfsId };
+module.exports = { compile, VIRTUAL_PREFIX, virtualId };
