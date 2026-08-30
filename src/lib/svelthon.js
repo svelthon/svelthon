@@ -104,9 +104,10 @@ export function python(options = {}) {
 
             generated.set(VIRTUAL_PREFIX + name, {
                 code: `${prelude}\n${module}`,
-                // A prelude line is always prepended, so every mapping shifts
-                // down by one generated line.
-                map: { ...map, mappings: `;${map.mappings}` }
+                // The prelude holds one line per imported module, and every
+                // mapping shifts down by as many. A source map is delta-encoded
+                // line by line, so a leading `;` is one line with no mapping.
+                map: shifted(map, `${prelude}\n`)
             });
             if (stdlib) generated.set(VFS_PREFIX + name, { code: stdlib, map: null });
 
@@ -165,6 +166,15 @@ const countTests = () =>
 // `import peps` → the file it names, looked up in the importer's own directory
 // first, then along the configured path. Both spellings are tried, since the
 // statement says nothing about whether the module it names is reactive.
+// A source map's `mappings` is delta-encoded per generated line, lines separated
+// by `;`. Text prepended to the module therefore costs one `;` per line it adds,
+// and a debugger opening the file lands that many lines off when it is wrong.
+export function shifted(map, prepended) {
+    const lines = prepended.split('\n').length - 1;
+
+    return { ...map, mappings: ';'.repeat(lines) + map.mappings };
+}
+
 function pythonImports(names, fromDirectory) {
     const searchPath = globalThis[Symbol.for('svelthon.path')] || [];
 
@@ -253,7 +263,7 @@ export function svelthon() {
 
             generated.set(VIRTUAL_PREFIX + name, {
                 code: prelude ? `${prelude}\n${module}` : module,
-                map: prelude ? { ...map, mappings: `;${map.mappings}` } : map
+                map: prelude ? shifted(map, `${prelude}\n`) : map
             });
             if (stdlib) generated.set(VFS_PREFIX + name, { code: stdlib, map: null });
 
