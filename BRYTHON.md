@@ -143,6 +143,8 @@ classes with `eval`, whose code resolves `$B` in global scope, not module scope.
 
 ### A `filename` containing `/` produces invalid JavaScript
 
+**Fixed upstream** — `filename-invalid-identifier-chars`.
+
 The namespace identifier is derived from `filename`, and only `.` is neutralised:
 
 ```js
@@ -165,6 +167,8 @@ name) keeps the `/`: it is a string, so it is valid as it stands, and leaving it
 alone keeps `__name__` recognisable.
 
 ### A comprehension's variable leaks into the enclosing scope
+
+**Fixed upstream** — `comprehension-leaks-target`.
 
 ```python
 [q for q in range(3)]
@@ -204,6 +208,8 @@ as it stands instead.
 
 ### `FSTRING_MIDDLE` reports the position of the token that opened the f-string
 
+**Fixed upstream** — `fstring-middle-position`.
+
 ```python
 seen = f"{len(items)} items"
 ```
@@ -236,6 +242,8 @@ the token's decoded text.
 
 ### `pyobj2jsobj` stamps every converted container with `Symbol(PYOBJ)`
 
+**Fixed upstream** — `pyobj-backref-weakmap`.
+
 Converting a `dict` or a `list` to JavaScript leaves a back-reference on the
 result — `jsobj[PYOBJ] = pyobj`. Any Web API whose argument is a WebIDL
 `record<K, V>` then rejects it, because a record conversion refuses an own symbol
@@ -261,6 +269,8 @@ Svelthon works around it by converting such arguments itself (`to_js`, i.e.
 `plainData`), which produces a plain object carrying no symbol.
 
 ### A debug `console.log` is left in `$B.JSClass.tp_getattro`
+
+**Fixed upstream** — `remove-jsclass-getattro-debug-log`.
 
 ```js
 $B.JSClass.tp_getattro = function(self, attr){ console.log('JSClass getatro', self, attr)
@@ -293,6 +303,8 @@ file, or for a block whose indentation is genuinely inconsistent.
 
 ### `unindent` is private, and it is the one function an embedder wants
 
+**Fixed upstream** — `expose-unindent`.
+
 `vendor/brython.js:14264`. Brython runs it on the body of every
 `<script type="text/python">` before compiling:
 
@@ -312,6 +324,8 @@ two-word change with no behaviour attached — the smallest of the patches below
 and the most obvious candidate to send upstream.
 
 ### `JSObj.to_dict()` leaves arrays as arrays
+
+**Fixed upstream** — `to-dict-array-to-list`.
 
 `www/src/js_objects.js:447`, and the comment on the function above it states the
 intent:
@@ -410,8 +424,21 @@ reads and writes move to `$B.$svelthonPyobj`, keyed by the JavaScript object.
 Wrapping the file works because `var` keeps its module scope inside a block, so
 the 4.6 MB below is untouched — two added lines, top and bottom.
 
-The first seven are worth carrying upstream. The last two are Svelthon's own
-arrangements and belong here.
+**The first seven are fixed upstream**, one branch each:
+`filename-invalid-identifier-chars`, `comprehension-leaks-target`,
+`fstring-middle-position`, `remove-jsclass-getattro-debug-log`,
+`pyobj-backref-weakmap`, `to-dict-array-to-list`, `expose-unindent`.
+
+**The last two stay here, and would be wrong upstream.**
+
+The file wrapper answers a *second execution in one process* — a build tool
+requiring the same file twice, or a server rendering after the compiler has run.
+A browser loads the script once per page, so the guard protects nothing there
+while changing the top-level shape of the file for everyone.
+
+`/* @vite-ignore */` is a comment addressed to **one bundler**. It means nothing
+to esbuild, to Rollup on its own, or in a browser. A build tool's annotation has
+no place in an engine that is not built with it.
 
 ### How they are guarded
 
