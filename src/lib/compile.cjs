@@ -957,13 +957,9 @@ function compile(
         ...state.map((n) => `let ${n};`),
         ...[...funcs, ...plainDeriveds].map((f) => `let ${fn(f.name)};`),
         ``,
-        `const __event = (fn) => pyEvent(fn, ${lineOffset});`,
-        // What `(name := value)` in a handler compiles to. The write goes
-        // through the namespace, so it goes through the accessor, so the signal
-        // fires — which is the whole reason the walrus can mean this here.
-        `const __assign = (name, value) => { ${NS}[name] = value; return value; };`,
-        // What `bind:group` becomes: a directive whose value is Python.
-        `const __group = group;`,
+        // No markup here, so none of what a template expression calls — `__event`,
+        // `__assign`, `__group`, `__truthy` and the rest — is emitted. They were,
+        // and `__event` named a `pyEvent` this module never imported.
         `const __proto = {};`,
         ...state.map((n) => `bind(__proto, '${n}', () => ${n}, (v) => { ${n} = v; });`),
         ...funcs.map(
@@ -1088,13 +1084,20 @@ function compile(
             `const ${d.name} = $derived.by(() => ${fn(d.name)}());`
         ]),
         ``,
-        `const __event = (fn) => pyEvent(fn, ${lineOffset});`,
-        // What `(name := value)` in a handler compiles to. The write goes
-        // through the namespace, so it goes through the accessor, so the signal
-        // fires — which is the whole reason the walrus can mean this here.
-        `const __assign = (name, value) => { ${NS}[name] = value; return value; };`,
-        // What `bind:group` becomes: a directive whose value is Python.
-        `const __group = group;`,
+        // What a compiled template expression calls, and only a `.svelte` has
+        // one: a `.svelte.py` holds signals but no markup, exactly as a plain
+        // `.py` holds neither.
+        ...(store
+            ? []
+            : [
+                  `const __event = (fn) => pyEvent(fn, ${lineOffset});`,
+                  // What `(name := value)` in a handler compiles to. The write
+                  // goes through the namespace, so through the accessor, so the
+                  // signal fires — the whole reason the walrus can mean this here.
+                  `const __assign = (name, value) => { ${NS}[name] = value; return value; };`,
+                  // What `bind:group` becomes: a directive whose value is Python.
+                  `const __group = group;`
+              ]),
         `const __proto = {};`,
         // Python may write to a prop; the write lands in the local fallback and
         // is shadowed for as long as the parent supplies a value, which is
@@ -1156,12 +1159,16 @@ function compile(
         // Wrappers for compiled template expressions. Not Python's own bool()
         // and str(): a template may hold a foreign JavaScript value — a DOM node
         // from bind:this — on which Brython's classifier trips. These fall back.
-        `bind(__proto, '__truthy', () => __pybridge.truthy, () => {});`,
-        `bind(__proto, '__text', () => __pybridge.str, () => {});`,
-        `bind(__proto, '__seq', () => __pybridge.seq, () => {});`,
-        `bind(__proto, '__spread', () => __pybridge.spread, () => {});`,
-        `bind(__proto, '__bound', () => __pybridge.bound, () => {});`,
-        `bind(__proto, '__assign', () => __assign, () => {});`,
+        ...(store
+            ? []
+            : [
+                  `bind(__proto, '__truthy', () => __pybridge.truthy, () => {});`,
+                  `bind(__proto, '__text', () => __pybridge.str, () => {});`,
+                  `bind(__proto, '__seq', () => __pybridge.seq, () => {});`,
+                  `bind(__proto, '__spread', () => __pybridge.spread, () => {});`,
+                  `bind(__proto, '__bound', () => __pybridge.bound, () => {});`,
+                  `bind(__proto, '__assign', () => __assign, () => {});`
+              ]),
         // Wrapped once, not on every read: a name Python compares by identity
         // has to answer the same object twice.
         ...[...new Set([...jsImported, ...jsNames])]
