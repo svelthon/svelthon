@@ -40,8 +40,8 @@ export default defineConfig({
         pool: 'threads',
         poolOptions: { threads: { singleThread: true } },
 
-        // Le premier import d'une chaîne de composants compile leur Python ;
-        // sur une machine modeste cela dépasse largement les 5 s par défaut.
+        // The first import of a chain of components compiles their Python;
+        // on a modest machine that goes well past the 5 s default.
         testTimeout: 30000
     }
 });

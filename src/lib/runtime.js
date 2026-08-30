@@ -436,7 +436,7 @@ export function pyError(error, where, lineOffset = 0) {
             tb = $B.$getattr(tb, 'tb_next');
         }
     } catch {
-        /* pas de traceback exploitable */
+        /* no usable traceback */
     }
 
     const at = line === undefined ? where : `${where}:${line + lineOffset}`;

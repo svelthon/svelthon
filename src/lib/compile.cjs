@@ -68,7 +68,7 @@ function pythonError(error, source, lineOffset) {
         const line = $B.$getattr(error, 'lineno');
         if (typeof line === 'number') where = `${source}:${line + lineOffset}`;
     } catch {
-        /* pas de position */
+        /* no position on it */
     }
 
     return new SyntaxError(`svelthon — ${described} (${where})`);
