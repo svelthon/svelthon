@@ -1,6 +1,7 @@
 import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from 'svelte';
 import BindFloat from './fixtures/BindFloat.svelte';
+import { plainData, pyNumbers } from '../src/lib/runtime.js';
 
 // A binding is the one place a Python value reaches the DOM unconverted, and a
 // Brython float is an object rather than a number. Every input below used to
@@ -37,5 +38,44 @@ describe('a float across a binding', () => {
         input.dispatchEvent(new Event('input', { bubbles: true }));
         flushSync();
         expect(at('back').textContent).toBe('0.42');
+    });
+});
+
+// The other two halves of the same boundary. A transition cannot be mounted
+// here — jsdom has no `element.animate` — so what a transition hands back is
+// checked on the converters themselves, with a float built the way Brython
+// builds one.
+describe('a float handed back to the framework', () => {
+    const $B = globalThis.__BRYTHON__;
+    const float = (n) => $B.fast_float(n);
+
+    test('a Brython float is an object, which is the whole problem', () => {
+        expect(typeof float(4300)).toBe('object');
+        expect(typeof 43).toBe('number');
+    });
+
+    test('plainData unwraps it', () => expect(plainData(float(4300))).toBe(4300));
+
+    test('plainData unwraps one inside a container', () =>
+        expect(plainData({ duration: float(4300) }).duration).toBe(4300));
+
+    test('pyNumbers unwraps the values of a returned mapping', () =>
+        expect(pyNumbers({ duration: float(4300) }).duration).toBe(4300));
+
+    test('pyNumbers leaves everything else alone', () => {
+        const kept = { name: 'x', n: 43 };
+        expect(pyNumbers(kept)).toEqual({ name: 'x', n: 43 });
+    });
+
+    // `09-transitions/04-custom-js-transitions`: the framework keeps a callback
+    // and calls it with its own numbers. Brython reads a JavaScript number as an
+    // int, so `tick(0, 1)` works and every frame after it raises *the number
+    // 0.093 cannot be converted to a BigInt*, silently.
+    test('and wraps a callback so a JavaScript float reaches it as one', () => {
+        let seen;
+        const out = pyNumbers({ tick: (t) => { seen = t; return t; } });
+        out.tick(0.093);
+        expect(typeof seen).toBe('object');
+        expect(seen.value).toBeCloseTo(0.093);
     });
 });
