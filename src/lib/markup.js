@@ -129,7 +129,14 @@ export function walrus(expression) {
             continue;
         }
 
-        if (char === '(') {
+        // Only a *grouping* parenthesis, which is the form Python's grammar
+        // forces in a lambda. One that opens a call belongs to the callee, and
+        // consuming it rewrote `f(x := 1)` as `f__assign("x", 1)` — a call to a
+        // name that does not exist, so the handler did nothing at all and said
+        // nothing either. `f((x := 1))` is the form that assigns.
+        const grouping = !/[\w)\]"']$/.test(out);
+
+        if (char === '(' && grouping) {
             const found = expression.slice(index + 1).match(WALRUS);
             const close = found ? closingParen(expression, index) : -1;
 

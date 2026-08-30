@@ -1,13 +1,8 @@
 <script lang="python">
-text = "draft"
-saved = "no"
-
-
-def save(value):
-    global saved
-    saved = value
-    return value
+a = 0
+b = 0
 </script>
 
-<button onclick={lambda: save(draft := text)}>save</button>
-<p data-k="saved">{saved}</p>
+<button onclick={lambda: (a := 1, b := 2)}>both</button>
+<p data-k="a">{a}</p>
+<p data-k="b">{b}</p>
