@@ -1385,5 +1385,5 @@ extension modules to the browser as WebAssembly, and
 
 That matters for how much you ship. Where a full CPython-in-WebAssembly runtime
 arrives as one large payload, these are per-module `.wasm` files, and Svelthon
-already knows exactly which modules a component imports — the same tree-shaking
-that trims the standard library applies to them.
+already knows exactly which modules a component imports — `py2js()` exposes them,
+so only the ones actually named need travel.

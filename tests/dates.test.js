@@ -4,8 +4,7 @@ import Dates from './fixtures/Dates.svelte';
 
 // Django's `|date` keeps its word; what stands behind it is the platform's
 // `Intl`, which answers in the reader's language — something Django's format
-// letters never did. Reaching a Python date formatter would mean importing
-// `datetime`, and an import of the standard library ships 2.9 MB.
+// letters never did.
 describe('date', () => {
     const setup = () => {
         const target = document.body.appendChild(document.createElement('div'));

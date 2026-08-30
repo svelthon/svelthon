@@ -33,4 +33,4 @@ starred = spread(joined)
 <p data-k="payload">{payload}</p>
 <p data-k="starred">{starred}</p>
 <p data-k="identity">{"yes" if twice is twice else "no"}</p>
-<p data-k="to_python">{"yes" if to_python else "no"}</p>
+<p data-k="to_py">{"yes" if to_py else "no"}</p>

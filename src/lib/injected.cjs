@@ -69,11 +69,11 @@ const INJECTED = [
     // cannot give you: a real <table> needs its <tr>s, and JavaScript has no
     // equivalent at all.
     //
-    // A list of lists, not a lazy iterator — which is what `itertools.batched`
-    // returns, and read twice it comes back empty the second time, silently.
-    // The third argument pads the last row,
-    // which is what aligns a table and what `batched` will not do; positional,
-    // because a keyword argument does not survive the call into JavaScript.
+    // A list of lists, not a lazy iterator: an `{#each}` reads its rows again on
+    // every update, and an iterator would come back empty the second time —
+    // silently, with the table simply gone. The third argument pads the last
+    // row, which is what aligns one; positional, because a keyword argument does
+    // not survive the call into JavaScript.
     //
     // `None` there means *no padding*, not "pad with None" — the rule every
     // helper here follows, since None is an object and would otherwise sail

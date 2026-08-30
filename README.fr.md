@@ -1422,5 +1422,5 @@ les vrais modules d'extension C de CPython dans le navigateur en WebAssembly, et
 
 Ça compte pour ce qu'on livre. Là où un runtime CPython-en-WebAssembly complet
 arrive en une seule grosse charge, ce sont ici des `.wasm` par module — et
-Svelthon sait déjà exactement quels modules un composant importe : le
-tree-shaking qui taille la bibliothèque standard s'y applique tel quel.
+Svelthon sait déjà exactement quels modules un composant importe, `py2js()` les
+expose, donc seuls ceux réellement nommés ont à voyager.

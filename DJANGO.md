@@ -209,13 +209,10 @@ Without a third argument the last row is simply short. Passing one pads it, whic
 is what keeps a table's columns aligned — `batch(items, 3, "")`, positional as in
 Jinja. `None` there means no padding, like every other helper on this page.
 
-Python has `itertools.batched` and it works here, but it is not an option:
-**any** import of the standard library ships its whole transitive closure, and
-this one measures **2.9 MB** — `operator`, `functools`, `collections`, and from
-there `pdb`, `pydoc`, `argparse`, `tarfile`. Only `math` is cheap, at 83 KB.
-`batch` needs no import, returns a list of lists rather than a lazy iterator, and
-takes any iterable — a generator included, which a slicing comprehension cannot.
-JavaScript, for its part, has no equivalent at all.
+`batch` takes any iterable — a generator included, which a slicing comprehension
+cannot — and returns a list of lists rather than a lazy iterator, because an
+`{#each}` reads its rows again on every update and an iterator would come back
+empty the second time. JavaScript, for its part, has no equivalent at all.
 
 **Reach for CSS before any of these.** A component carries its own scoped
 stylesheet, which a Django or Jinja template never does — so striping a table,
@@ -273,7 +270,7 @@ the server was configured for.
 The value is whatever a component actually receives: an ISO string, a date alone,
 a timestamp, a JavaScript `Date`. Which matters, because a date crossing from a
 `load()` or a `fetch` arrives as a string, and there is no `datetime` to parse it
-with — importing one would ship 2.9 MB.
+with.
 
 **Under server rendering, pass the locale.** Without it the server formats in its
 own language and time zone, the browser reformats in the visitor's, and Svelte
@@ -324,9 +321,8 @@ to register: any function your module can import, the template can call.
 The handful with no Python one-liner have a helper of their own, listed in the
 README: `tojson`, `batch`, `date`, `fromnow`, `slugify`, `striptags`,
 `urlencode`. Every one of them rests on a browser primitive — `JSON.stringify`,
-`Intl`, `DOMParser`, `URLSearchParams` — which is why none of them needs the
-Python standard library, and why a template can be written without ever
-importing it.
+`Intl`, `DOMParser`, `URLSearchParams` — so a template is written without ever
+importing anything.
 
 **`|truncatewords` is a stylesheet, not a filter.** Cutting at twenty words cuts
 at an arbitrary place: depending on the width it overflows or leaves a gap.
@@ -385,9 +381,10 @@ That is the rule behind this whole page, and it is worth stating once: *a templa
 needs a filter when its host cannot do the job in an expression*. Django's extra
 filters answer a weak expression language. Jinja's 54 answer what no Python
 expression does in one go — regex work, chunking, serialising, wrapping. Ours
-answer a third constraint, which is that the standard library costs 2.9 MB to
-import, and that is why `batch` and `tojson` echo Jinja's list while `date`,
-`timesince` and `slugify` echo Django's.
+answer a third constraint, which is that a component ships to a browser and takes
+its batteries from the platform rather than from an import — and that is why
+`batch` and `tojson` echo Jinja's list while `date`, `timesince` and `slugify`
+echo Django's.
 
 ### Slugs
 
