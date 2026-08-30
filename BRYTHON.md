@@ -399,6 +399,7 @@ endpoint that builds its own `Response`, then returned 500 with
 | the debug `console.log` in `$B.JSClass.tp_getattro` | it fires on every attribute access on a JavaScript class from Python and dumps the class object; two requests through `js.*` filled the server log with hundreds of lines |
 | the `Symbol(PYOBJ)` back-reference, moved to a `WeakMap` | a stamped container is refused by any Web API taking a WebIDL record, `new Response(body, {headers})` first among them |
 | `convert_to_python` returns a real `list` where it returned a bare array | `JSObj.to_dict()` now converts a whole tree, so `isinstance(x, list)` holds on what came from `JSON.parse` |
+| `unindent` published as `$B.unindent` | a component's script is dedented by Brython's own rule rather than by a second implementation of it |
 | the whole file wrapped in `if (!(globalThis.__BRYTHON__ && globalThis.__BRYTHON__.ast))` | a second execution in one process rebuilds `$B.ast`, and the classes the compiler holds lose the `to_js()` the code generator attached |
 | `/* @vite-ignore */` on the eighteen dynamic imports | Brython loads JS modules named from Python with `import(variable)`, which Vite cannot analyse and warns about twice on every start |
 
@@ -409,7 +410,7 @@ reads and writes move to `$B.$svelthonPyobj`, keyed by the JavaScript object.
 Wrapping the file works because `var` keeps its module scope inside a block, so
 the 4.6 MB below is untouched — two added lines, top and bottom.
 
-The first six are worth carrying upstream. The last two are Svelthon's own
+The first seven are worth carrying upstream. The last two are Svelthon's own
 arrangements and belong here.
 
 ### How they are guarded
