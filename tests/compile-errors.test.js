@@ -45,3 +45,44 @@ describe('compile errors carry Python’s own message', () => {
         expect(failure('def (:')).toContain('never closed');
     });
 });
+
+// A `<script>` body sits inside markup and every Svelte example indents it one
+// level, so `$B.unindent` removes that level before Brython ever sees it. Its
+// rule bails as soon as one non-blank line is already at column zero — which in
+// a component is a line typed without its neighbours' indentation. Refusing it is
+// right; what was missing is the sentence saying which line, since Brython blames
+// the first line of the block instead, one the author never touched.
+describe('a line typed at column zero in a component', () => {
+    const failure = (src) => {
+        try {
+            compile(src, 'App', 'App.svelte', { component: true });
+        } catch (error) {
+            return error.message;
+        }
+
+        return 'compiled';
+    };
+
+    test('is named, rather than blamed on the line above it', () => {
+        const message = failure('    name = "world"\nc = 0\n');
+
+        expect(message).toContain('IndentationError');
+        expect(message).toContain('line 2 starts at column zero');
+    });
+
+    test.for([
+        ['indented throughout', '    name = "world"\n    c = 0\n'],
+        ['tabs throughout', '\tname = "world"\n\tc = 0\n'],
+        ['flat throughout', 'name = "world"\nc = 0\n'],
+        ['a nested block, written flat', 'name = "world"\nif True:\n    c = 0\n']
+    ])('a block %s compiles', ([, src]) => expect(failure(src)).toBe('compiled'));
+
+    // Nothing is at column zero here, so there is no such line to name and the
+    // hint stays out of the way.
+    test('a real indentation mistake keeps Python’s message alone', () => {
+        const message = failure('    name = "world"\n        c = 0\n');
+
+        expect(message).toContain('IndentationError');
+        expect(message).not.toContain('column zero');
+    });
+});
