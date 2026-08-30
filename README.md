@@ -98,7 +98,9 @@ stands in JavaScript.
 | `host()` | `$host()` |
 | `inspect(*values)` | `$inspect(…)` |
 | `to_js(value)` | — a Python container made readable from JavaScript |
-| `tojson(value, indent=None)` | — the same, dumped, under Jinja's own word |
+| `to_python(value)` | — the other way: a JavaScript value read as Python |
+| `tojson(value, indent=None)` | — `to_js` with the dump attached, under Jinja's own word |
+| `fromjson(text)` | — `to_python` with the parse attached |
 | `batch(xs, n)` | — a flat list grouped into rows of `n`, as Jinja's `\|batch` |
 | `date(value, style)` | — a date read in the visitor's language, as Django's `\|date` |
 | `fromnow(value)` | — "3 days ago" or "in 2 hours", kept right as time passes |

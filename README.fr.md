@@ -98,7 +98,9 @@ rune en JavaScript.
 | `host()` | `$host()` |
 | `inspect(*valeurs)` | `$inspect(…)` |
 | `to_js(valeur)` | — un conteneur Python rendu lisible par JavaScript |
-| `tojson(valeur, indent=None)` | — le même, sérialisé, sous le mot de Jinja |
+| `to_python(valeur)` | — l'autre sens : une valeur JavaScript lue comme du Python |
+| `tojson(valeur, indent=None)` | — `to_js` avec la sérialisation attachée, sous le mot de Jinja |
+| `fromjson(texte)` | — `to_python` avec l'analyse attachée |
 | `batch(xs, n)` | — une liste plate groupée en lignes de `n`, comme le `\|batch` de Jinja |
 | `date(valeur, style)` | — une date lue dans la langue du visiteur, comme le `\|date` de Django |
 | `fromnow(valeur)` | — « il y a 3 jours » ou « dans 2 heures », et ça reste juste |
