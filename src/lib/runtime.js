@@ -107,7 +107,18 @@ export const __pybridge = {
     //
     // Only None. Zero, an empty string and False are values a binding must keep.
     bound(value) {
-        return value === NONE ? undefined : value;
+        if (value === NONE) return undefined;
+
+        // A Brython `int` is a JavaScript number, but a `float` is an object —
+        // `{ob_type, value}`. Handed to an `<input>` as it stands, a text field
+        // shows `[object Object]`, a number field shows nothing at all, and a
+        // range falls back to the middle of its scale. Only the binding needs
+        // this: interpolation goes through `str()`, which knows what to do.
+        if (value !== null && typeof value === 'object' && value.ob_type === _b_.float) {
+            return value.value;
+        }
+
+        return value;
     },
 
     // `{...attrs}` — Svelte diffs the spread object against the one from the
