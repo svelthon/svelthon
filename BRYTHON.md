@@ -311,6 +311,38 @@ reachable: it is a module-level function, absent from `$B`. Exposing it is a
 two-word change with no behaviour attached — the smallest of the patches below,
 and the most obvious candidate to send upstream.
 
+### `JSObj.to_dict()` leaves arrays as arrays
+
+`www/src/js_objects.js:447`, and the comment on the function above it states the
+intent:
+
+> *converts Array to list and converts its items / converts "raw" Object to dict
+> and converts its values*
+
+The object half holds. The array half does not:
+
+```js
+if(Array.isArray(obj)){
+    return obj.map(convert_to_python)
+}
+```
+
+`Array.prototype.map` returns a JavaScript array, and a JavaScript array is not a
+`list` — measured, `isinstance` says False on one and True on the other. So a
+tree that came from `JSON.parse` comes back with real dicts at every level and
+arrays that no Python test recognises:
+
+```python
+d = jsobj.to_dict()
+isinstance(d, dict)            # True
+isinstance(d["meta"], dict)    # True
+isinstance(d["nodes"], list)   # False
+```
+
+The same file already spells the repair two hundred lines above, at line 96:
+`_b_.list.$factory()`. Wrapping the `map` in it is the whole fix, and `_b_` is in
+scope from line 5.
+
 ### `compiler_error` assumes the source is in `$B.file_cache`
 
 `vendor/brython.js:14486`. Every compile-time error — as opposed to a parse
@@ -366,6 +398,7 @@ endpoint that builds its own `Response`, then returned 500 with
 | the tokenizer records where each f-string chunk begins | `FSTRING_MIDDLE` reported the position of the token that opened the f-string |
 | the debug `console.log` in `$B.JSClass.tp_getattro` | it fires on every attribute access on a JavaScript class from Python and dumps the class object; two requests through `js.*` filled the server log with hundreds of lines |
 | the `Symbol(PYOBJ)` back-reference, moved to a `WeakMap` | a stamped container is refused by any Web API taking a WebIDL record, `new Response(body, {headers})` first among them |
+| `convert_to_python` returns a real `list` where it returned a bare array | `JSObj.to_dict()` now converts a whole tree, so `isinstance(x, list)` holds on what came from `JSON.parse` |
 | the whole file wrapped in `if (!(globalThis.__BRYTHON__ && globalThis.__BRYTHON__.ast))` | a second execution in one process rebuilds `$B.ast`, and the classes the compiler holds lose the `to_js()` the code generator attached |
 | `/* @vite-ignore */` on the eighteen dynamic imports | Brython loads JS modules named from Python with `import(variable)`, which Vite cannot analyse and warns about twice on every start |
 
@@ -376,7 +409,7 @@ reads and writes move to `$B.$svelthonPyobj`, keyed by the JavaScript object.
 Wrapping the file works because `var` keeps its module scope inside a block, so
 the 4.6 MB below is untouched — two added lines, top and bottom.
 
-The first five are worth carrying upstream. The last two are Svelthon's own
+The first six are worth carrying upstream. The last two are Svelthon's own
 arrangements and belong here.
 
 ### How they are guarded
@@ -388,6 +421,7 @@ by a **test** rather than by a build-time check:
 |---|---|
 | `qualified_scope_name`, `make_comp`, the tokenizer | `tests/compiler.test.js`, `tests/fidelity.test.js` |
 | the debug print, `Symbol(PYOBJ)`, the guard | `tests/vendor.test.js` |
+| `convert_to_python` | `tests/fromjson.test.js` — an array that stayed one fails `isinstance(x, list)` |
 
 `scripts/browser-check.sh` covers the DOM node path as well, which is where
 identity across the boundary is observable.

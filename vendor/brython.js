@@ -11512,7 +11512,7 @@ function convert_to_python(obj){
 if(obj===null ||obj===undefined){return $B.jsobj2pyobj(obj)}
 if(obj.ob_type){
 return obj}
-if(Array.isArray(obj)){return obj.map(convert_to_python)}
+/* SVELTHON patch, see BRYTHON.md */ if(Array.isArray(obj)){return _b_.list.$factory(obj.map(convert_to_python))}
 if($B.$isinstance(obj,$B.JSObj)){if(typeof obj=='number'){
 return $B.fast_float(obj)}
 var res=$B.empty_dict()

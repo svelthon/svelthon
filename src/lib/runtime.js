@@ -600,25 +600,22 @@ function pyDict(entries) {
     return out;
 }
 
-// The inbound twin of `plainData`: a JavaScript value as real Python.
+// The inbound twin of `plainData`: a JavaScript value as real Python. The walk
+// is Brython's own `JSObj.to_dict()`; what is left here is the root, which a
+// method on an object cannot speak for — a scalar, a null, a bare array.
 //
-// Brython has `JSObj.to_dict()`, and it recurses into nested objects — but a
-// JavaScript array stays a `JavascriptArray`, so `isinstance(x, list)` is false
-// and the elements inside it are never converted either. Reading a key off a
-// wrapped object hands `convert_to_python` something that already carries an
-// `ob_type`, and it returns on "already a Python object" before reaching its own
-// array branch. So the walk is written out here.
-//
-// What this buys, on a value that only crossed from JavaScript: `.get()`,
+// What it buys, on a value that only ever crossed from JavaScript: `.get()`,
 // `.items()` and `isinstance(x, dict)`. Without it, `.get` and `.keys` raise
 // AttributeError while `.items` silently returns the *value* of a key spelled
 // "items" — a failure whose shape depends on the data.
 export function pyData(value) {
+    const $B = globalThis.__BRYTHON__;
+
     if (value === undefined || value === null) return NONE;
     if (typeof value !== 'object') return value;
     if (Array.isArray(value)) return _b_.list.$factory(value.map(pyData));
 
-    return pyDict(Object.entries(value).map(([key, item]) => [key, pyData(item)]));
+    return $B.$getattr($B.jsobj2pyobj(value), 'to_dict')();
 }
 
 export function pyArg(value) {
