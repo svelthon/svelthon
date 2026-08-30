@@ -671,8 +671,8 @@ function fromImports(ast) {
 
         // Recognised by shape, not by class. Brython builds its AST classes with
         // `eval`, and a bundled build ends up with a second set: `instanceof`
-        // then answers false for a node that is plainly an ImportFrom, and the
-        // standard library silently stopped travelling with any component
+        // then answers false for a node that is plainly an ImportFrom, and a
+        // sibling module silently stopped being resolved for any component
         // compiled in a browser. An ImportFrom is the only node carrying a
         // module name, an alias list and a level together — and a relative
         // import (`from . import x`) names no module.

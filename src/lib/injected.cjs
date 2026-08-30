@@ -69,13 +69,9 @@ const INJECTED = [
     // cannot give you: a real <table> needs its <tr>s, and JavaScript has no
     // equivalent at all.
     //
-    // Python has `itertools.batched`, and it is not an option: *any* import of
-    // the standard library ships its whole transitive closure, measured at
-    // 2.9 MB for this one — `operator`, `functools`, `collections`, and from
-    // there `pdb`, `pydoc`, `argparse`, `tarfile`.
-    //
-    // A list of lists, not a lazy iterator: read twice, `batched` comes back
-    // empty the second time, silently. The third argument pads the last row,
+    // A list of lists, not a lazy iterator — which is what `itertools.batched`
+    // returns, and read twice it comes back empty the second time, silently.
+    // The third argument pads the last row,
     // which is what aligns a table and what `batched` will not do; positional,
     // because a keyword argument does not survive the call into JavaScript.
     //
