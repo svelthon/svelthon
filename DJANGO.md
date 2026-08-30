@@ -311,6 +311,25 @@ This is the direction reversed. Everywhere else on this page Django lends
 Svelthon a word; here Svelte gives the filter something a template engine that
 renders once cannot have.
 
+### Why the blocks are Svelte's and not Django's
+
+`{% if %}` and `{% for %}` over the Svelte blocks was written and tried, then
+ruled out. The reasons, in the order they settled it:
+
+**Svelte's documentation is the asset.** Every page of it, every tutorial and
+every answer online applies here with one substitution — JavaScript for Python.
+A second block syntax spends exactly that, and spends it forever.
+
+**The friction was never `{#if}`.** It was `items.length` against `len(items)`,
+and template expressions already settled that: what goes inside the braces is
+Python. Once an expression is Python, `{#if}` costs three characters of habit.
+
+**And a faithful translation runs out within three constructs.** Django has no
+key for a loop, no `{#await}`, no `{#snippet}`. At the fourth one it has to
+invent — and an invented `{% %}` is a dialect, not a familiar syntax. The
+argument for it was familiarity; it stops being familiar precisely where a
+component needs it most.
+
 ### Filters
 
 A Django filter is a small language: `{{ x|striptags|truncatewords:20 }}`. In
