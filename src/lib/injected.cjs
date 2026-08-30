@@ -55,6 +55,17 @@ const INJECTED = [
         value: '() => (v, indent) => JSON.stringify(plainData(v), null, typeof indent === "number" ? indent : undefined)'
     },
 
+    // The mirror of `tojson`: a JavaScript value read as Python, with `.get()`,
+    // `.items()` and `isinstance(x, dict)` all working on it.
+    //
+    // Both spellings, because both arrive: a string is parsed, anything else is
+    // walked as it stands — which is what `await res.json()` hands back, already
+    // parsed by JavaScript.
+    {
+        name: 'fromjson',
+        value: '() => (v) => pyData(typeof v === "string" ? JSON.parse(v) : v)'
+    },
+
     // The inbound bridge: the JavaScript globals, as they are.
     { name: 'js', value: '() => globalThis' },
 

@@ -600,6 +600,27 @@ function pyDict(entries) {
     return out;
 }
 
+// The inbound twin of `plainData`: a JavaScript value as real Python.
+//
+// Brython has `JSObj.to_dict()`, and it recurses into nested objects — but a
+// JavaScript array stays a `JavascriptArray`, so `isinstance(x, list)` is false
+// and the elements inside it are never converted either. Reading a key off a
+// wrapped object hands `convert_to_python` something that already carries an
+// `ob_type`, and it returns on "already a Python object" before reaching its own
+// array branch. So the walk is written out here.
+//
+// What this buys, on a value that only crossed from JavaScript: `.get()`,
+// `.items()` and `isinstance(x, dict)`. Without it, `.get` and `.keys` raise
+// AttributeError while `.items` silently returns the *value* of a key spelled
+// "items" — a failure whose shape depends on the data.
+export function pyData(value) {
+    if (value === undefined || value === null) return NONE;
+    if (typeof value !== 'object') return value;
+    if (Array.isArray(value)) return _b_.list.$factory(value.map(pyData));
+
+    return pyDict(Object.entries(value).map(([key, item]) => [key, pyData(item)]));
+}
+
 export function pyArg(value) {
     if (value === null || typeof value !== 'object') return value;
     if (!value.params || !value.url || !value.request) return value;
