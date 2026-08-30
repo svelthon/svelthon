@@ -559,6 +559,10 @@ const hasDottedDecorator = (node, name, attribute) =>
             d.value.id === name
     );
 
+// Where a statement keeps the statements it holds. `items` is a `with`'s
+// context managers, which hold no body of their own but do sit on the path.
+const BODIES = ['body', 'orelse', 'finalbody', 'handlers', 'cases', 'items'];
+
 function surface(body) {
     const props = [];
     const bindables = [];
@@ -575,57 +579,69 @@ function surface(body) {
         return true;
     };
 
-    for (const node of body) {
-        if (node instanceof $B.ast.Assign) {
-            for (const target of node.targets) {
-                if (!(target instanceof $B.ast.Name) || !take(target.id)) continue;
+    const visit = (statements) => {
+        for (const node of statements) {
+            if (node instanceof $B.ast.Assign) {
+                for (const target of node.targets) {
+                    if (!(target instanceof $B.ast.Name) || !take(target.id)) continue;
 
-                // `x => expr` arrives here as `x = derived(lambda: expr)`, and
-                // `=> expr` as `__effect_0 = effect(lambda: expr)`. The emission
-                // below needs no special case for either: it already writes
-                // `$derived.by(() => __fn_x())` and `$effect(() => __fn_x())`,
-                // and a lambda answers a call exactly as a `def` does.
-                if (isCallTo(node, 'derived')) deriveds.push({ name: target.id, arity: 0 });
-                else if (isCallTo(node, 'effect')) effects.push({ name: target.id, arity: 0 });
-                else if (isCallTo(node, 'inspect')) inspects.push({ name: target.id, arity: 0 });
-                else state.push(target.id);
+                    // `x => expr` arrives here as `x = derived(lambda: expr)`, and
+                    // `=> expr` as `__effect_0 = effect(lambda: expr)`. The emission
+                    // below needs no special case for either: it already writes
+                    // `$derived.by(() => __fn_x())` and `$effect(() => __fn_x())`,
+                    // and a lambda answers a call exactly as a `def` does.
+                    if (isCallTo(node, 'derived')) deriveds.push({ name: target.id, arity: 0 });
+                    else if (isCallTo(node, 'effect')) effects.push({ name: target.id, arity: 0 });
+                    else if (isCallTo(node, 'inspect')) inspects.push({ name: target.id, arity: 0 });
+                    else state.push(target.id);
+                }
+            } else if (node instanceof $B.ast.AnnAssign) {
+                // An annotation is a declaration of interface, like a dataclass
+                // field: `name: str` is a prop, `count: int = 0` a prop with a
+                // default. A bare assignment stays internal state.
+                if (node.target instanceof $B.ast.Name && take(node.target.id)) {
+                    (isBindable(node) ? bindables : props).push(node.target.id);
+                }
+            } else if (
+                // `async def` is a different AST node, and missing it left async
+                // handlers undefined — a click did nothing at all, silently.
+                node instanceof $B.ast.FunctionDef ||
+                node instanceof $B.ast.AsyncFunctionDef
+            ) {
+                if (!take(node.name)) continue;
+
+                // @derived turns a function into a value: Python reads the name and
+                // gets the result, exactly like a property. @effect re-runs it
+                // whenever something it read has changed, and @effect.pre does the
+                // same before the DOM is updated rather than after.
+                const pre = hasDottedDecorator(node, 'effect', 'pre');
+                const root = hasDottedDecorator(node, 'effect', 'root');
+                const entry = {
+                    name: node.name,
+                    arity: (node.args && node.args.args || []).length,
+                    ...(pre ? { pre: true } : {}),
+                    ...(root ? { root: true } : {})
+                };
+                const bucket = hasDecorator(node, 'derived')
+                    ? deriveds
+                    : hasDecorator(node, 'effect') || pre || root
+                      ? effects
+                      : funcs;
+
+                bucket.push(entry);
+            } else if (!(node instanceof $B.ast.ClassDef)) {
+                // A block is not a scope in Python: a name bound inside `if`, `for`,
+                // `try`, `with` or `match` belongs to the module exactly as one
+                // written at the left margin does. `def` and `class` are the real
+                // scopes — both are taken by name above, and neither is descended
+                // into. An `except` handler and a `match` case arrive here as
+                // statements of their own and recurse the same way.
+                for (const key of BODIES) if (node[key]) visit(node[key]);
             }
-        } else if (node instanceof $B.ast.AnnAssign) {
-            // An annotation is a declaration of interface, like a dataclass
-            // field: `name: str` is a prop, `count: int = 0` a prop with a
-            // default. A bare assignment stays internal state.
-            if (node.target instanceof $B.ast.Name && take(node.target.id)) {
-                (isBindable(node) ? bindables : props).push(node.target.id);
-            }
-        } else if (
-            // `async def` is a different AST node, and missing it left async
-            // handlers undefined — a click did nothing at all, silently.
-            node instanceof $B.ast.FunctionDef ||
-            node instanceof $B.ast.AsyncFunctionDef
-        ) {
-            if (!take(node.name)) continue;
-
-            // @derived turns a function into a value: Python reads the name and
-            // gets the result, exactly like a property. @effect re-runs it
-            // whenever something it read has changed, and @effect.pre does the
-            // same before the DOM is updated rather than after.
-            const pre = hasDottedDecorator(node, 'effect', 'pre');
-            const root = hasDottedDecorator(node, 'effect', 'root');
-            const entry = {
-                name: node.name,
-                arity: (node.args && node.args.args || []).length,
-                ...(pre ? { pre: true } : {}),
-                ...(root ? { root: true } : {})
-            };
-            const bucket = hasDecorator(node, 'derived')
-                ? deriveds
-                : hasDecorator(node, 'effect') || pre || root
-                  ? effects
-                  : funcs;
-
-            bucket.push(entry);
         }
-    }
+    };
+
+    visit(body);
 
     return { props, bindables, state, funcs, deriveds, effects, inspects };
 }
@@ -659,7 +675,6 @@ function fromImportsInSource(src) {
 
 function fromImports(ast) {
     const found = new Set();
-    const BODIES = ['body', 'orelse', 'finalbody', 'handlers', 'cases', 'items'];
 
     const walk = (node) => {
         if (!node || typeof node !== 'object') return;
