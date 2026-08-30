@@ -1175,10 +1175,7 @@ Python's own modules — `browser`, `javascript`, `sys` — and any `.py` sittin
 beside the component. Everything else a template needs is already a name:
 `tojson`, `batch`, `date`, `fromnow`, `slugify`, `striptags`, `urlencode`.
 
-| | |
-|---|---|
-| the whole runtime, gzipped | **255 KB** |
-| of which `sys` | 7 KB |
+The whole runtime, gzipped, is **255 KB**.
 
 ## Svelte surface covered
 

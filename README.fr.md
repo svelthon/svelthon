@@ -1205,10 +1205,7 @@ quel `.py` posé à côté du composant. Tout ce dont un gabarit a besoin est d�
 un nom : `tojson`, `batch`, `date`, `fromnow`, `slugify`, `striptags`,
 `urlencode`.
 
-| | |
-|---|---|
-| le runtime entier, gzippé | **255 Ko** |
-| dont `sys` | 7 Ko |
+Le runtime entier, gzippé, fait **255 Ko**.
 
 ## État
 
