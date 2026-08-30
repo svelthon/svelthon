@@ -47,7 +47,25 @@ const namespaceFor = (filename) => filename.replace(/\./g, '_');
 
 // A Brython exception carries neither `message` nor `stack`, so a Python syntax
 // error would reach Vite as an empty object and be reported as nothing at all.
-function pythonError(error, source, lineOffset) {
+// `$B.unindent` hands the source back untouched as soon as one non-blank line
+// already sits at column zero: it reads that as an author who meant it. In a
+// `.svelte` the block is indented one level by convention, so such a line is
+// almost always one typed without the others' indentation — and nothing is
+// dedented, so Brython raises on the *first* line instead, which the author did
+// not touch.
+//
+// Refusing is right: a line out of line with its neighbours is a mistake, and
+// compiling it anyway would accept in silence what the rest of the project
+// rejects out loud. What was missing is only the sentence saying so. Returns the
+// line to blame, or 0 when there is nothing to say.
+function flushLine(src) {
+    const lines = src.split('\n');
+    if (!lines.some((line) => /^[ \t]+\S/.test(line))) return 0;
+
+    return lines.findIndex((line) => /^\S/.test(line)) + 1;
+}
+
+function pythonError(error, source, lineOffset, block = '') {
     // A JavaScript Error is not ours to describe: it already carries a message
     // and a stack, and wrapping it produced the useless
     // `JSObject: <Javascript object: [object Error]>` — which hid what actually
@@ -71,7 +89,15 @@ function pythonError(error, source, lineOffset) {
         /* no position on it */
     }
 
-    return new SyntaxError(`svelthon — ${described} (${where})`);
+    const flush = described.startsWith('IndentationError') ? flushLine(block) : 0;
+
+    return new SyntaxError(
+        `svelthon — ${described} (${where})` +
+            (flush
+                ? `\n  line ${flush + lineOffset} starts at column zero while the rest of` +
+                  ` the block is indented — indent it like its neighbours.`
+                : '')
+    );
 }
 
 // Brython scatters `$B.set_lineno(frame, N)` through the code it generates, so
@@ -795,6 +821,10 @@ function compile(
     // A `.py` gets neither half: a file is not an embedded block, so an indented
     // one is a mistake rather than a convenience, and a module has no template
     // to collect from.
+    // Kept for the error path: the block as the author typed it, before the
+    // generated defs join it at column zero.
+    const authored = component ? src : '';
+
     if (component) {
         const body = $B.unindent(src);
         src = defs.length ? `${body}\n${defs.join('\n\n')}\n` : body;
@@ -818,7 +848,7 @@ function compile(
     try {
         root = $B.py2js({ src, filename: source }, name, [name]);
     } catch (error) {
-        throw pythonError(error, source, lineOffset);
+        throw pythonError(error, source, lineOffset, authored);
     }
     let { props, bindables, state, funcs, deriveds, effects, inspects } = surface(root._ast.body);
 

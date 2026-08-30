@@ -299,7 +299,9 @@ indentation is whitespace — and it is the least helpful one Brython produces.
 Nothing in Svelthon works around it: what it does instead is **remove the
 occasion**, by unindenting a component's script the way Brython already unindents
 its own `<script type="text/python">`. The message still appears for a `.py`
-file, or for a block whose indentation is genuinely inconsistent.
+file, or for a block whose indentation is genuinely inconsistent — and in that
+last case Svelthon adds a line naming the one that is out of line, since Brython
+points at the first line of the block instead.
 
 ### `unindent` is private, and it is the one function an embedder wants
 
