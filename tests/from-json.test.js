@@ -28,6 +28,12 @@ describe('the inbound bridge', () => {
         test('an object inside an array is a dict', () => expect(read('inside')).toBe('True'));
         test('a scalar crosses unchanged', () => expect(read('scalar')).toBe('2'));
         test('null becomes None', () => expect(read('empty')).toBe('True'));
+
+        // A root that is an array, which no method on an object can speak for.
+        test('a root array becomes a list', () => expect(read('rooted_kind')).toBe('list'));
+        test('so it takes a slice', () => expect(read('rooted_slice')).toBe('[1]'));
+        test('and its own arrays are lists too', () =>
+            expect(read('rooted_inner')).toBe('True'));
     });
 
     describe('to_python', () => {

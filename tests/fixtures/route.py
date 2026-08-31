@@ -1,7 +1,7 @@
 # A SvelteKit route module, in the shape the framework calls it: `load` is a
 # coroutine, `actions` a mapping of names to handlers, and both receive the
 # request event.
-__all__ = ["load", "actions", "GET", "config", "boom"]
+__all__ = ["load", "actions", "GET", "config", "boom", "streaming"]
 
 from browser import aio
 
@@ -30,6 +30,23 @@ def boom(event):
     raise ValueError("no such page")
 
 
+async def slowly():
+    await aio.sleep(0)
+    return {"rows": [1, 2, 3]}
+
+
+def streaming(event):
+    # SvelteKit's streaming shape: what is ready now beside what is not. The
+    # coroutine has to reach the framework as a promise.
+    return {"now": event["params"]["slug"], "later": slowly()}
+
+
+async def failing(event):
+    await aio.sleep(0)
+    raise KeyError("gone")
+
+
+
 def save(event):
     return {"saved": event["params"]["slug"]}
 
@@ -38,4 +55,8 @@ def remove(event):
     return {"removed": True}
 
 
-actions = {"default": save, "remove": remove}
+def refuse(event):
+    raise PermissionError("read only")
+
+
+actions = {"default": save, "remove": remove, "failing": failing, "refuse": refuse}

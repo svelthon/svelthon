@@ -42,3 +42,6 @@ empty = fromjson("null")
 <p data-k="converted_list">{converted_list}</p>
 <p data-k="plain">{plain}</p>
 <p data-k="empty">{empty is None}</p>
+<p data-k="rooted_kind">{rooted_kind}</p>
+<p data-k="rooted_slice">{rooted_slice}</p>
+<p data-k="rooted_inner">{rooted_inner}</p>
