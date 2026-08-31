@@ -19,18 +19,32 @@ import {
 // parentheses inside a lambda, and that parenthesised form is the only one
 // rewritten — `f(x := 1)` keeps its meaning as a temporary the call consumes.
 describe('the walrus', () => {
-    test.for([
-        ['lambda: (count := count + 1)', true],
-        ['lambda: (a := 1, b := 2)', true],
-        ['f(x := 1)', false],
-        ['"(quoted := no)"', false],
-        ["'(also := no)'", false],
-        ['count + 1', false]
-    ])('%s', ([source, rewritten]) => {
-        const out = walrus(source);
-
-        expect(out === source).toBe(!rewritten);
+    test('a parenthesised assignment writes through the namespace', () => {
+        expect(walrus('lambda: (count := count + 1)')).toBe(
+            'lambda: __assign("count", count + 1)'
+        );
     });
+
+    // A call's own parenthesis belongs to the callee. Consuming it rewrote
+    // `f(x := 1)` as `f__assign("x", 1)` — a call to a name that does not exist,
+    // so the handler did nothing and said nothing. Doubling the parentheses is
+    // what asks for the assignment.
+    test.for([
+        ['f(x := 1)'],
+        ['obj.m(x := 1)'],
+        ['items[0](x := 1)'],
+        ['"(quoted := no)"'],
+        ["'(also := no)'"],
+        ['count + 1']
+    ])('%s is left alone', ([source]) => expect(walrus(source)).toBe(source));
+
+    test('f((x := 1)) is the form that assigns', () =>
+        expect(walrus('f((x := 1))')).toBe('f(__assign("x", 1))'));
+
+    test('a lambda argument keeps its own scope', () =>
+        expect(walrus('sorted(items, key=lambda i: (n := i))')).toBe(
+            'sorted(items, key=lambda i: __assign("n", i))'
+        ));
 
     test('an escaped quote does not end the string', () => {
         const source = '"a \\" (x := 1)"';
@@ -89,8 +103,11 @@ describe('overMarkup walks the markup and nothing else', () => {
             return part;
         });
 
-        for (const offset of offsets) expect(component.slice(offset)).toMatch(/^[\s\S]/);
+        // Increasing, and each one lands inside the file: what a caller needs to
+        // map a chunk back onto the original rather than only rewrite it.
         expect(offsets).toEqual([...offsets].sort((a, b) => a - b));
+        for (const offset of offsets) expect(offset).toBeLessThanOrEqual(component.length);
+        expect(component.slice(offsets[0])).toContain('<p>{label}</p>');
     });
 });
 
@@ -235,8 +252,10 @@ describe('pythonExpressions', () => {
     test('an interpolation becomes a call', () => {
         const { out, defs } = rewrite('<p>{count}</p>');
 
+        // `__text` is the wrapper an interpolation gets: Python's str(), so a
+        // list renders `['a']` rather than JavaScript's `a`.
         expect(out).toContain('__expr_0()');
-        expect(defs[0]).toContain('return count');
+        expect(defs[0]).toContain('return __text(count)');
     });
 
     test('a block keeps its syntax and rewrites only its expression', () => {

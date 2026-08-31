@@ -606,8 +606,17 @@ export function pythonExpressions(markup, collect, onPython) {
                 const awaited = at === -1 ? rest : rest.slice(0, at);
                 const tail = at === -1 ? '' : rest.slice(at);
 
-                scopes.push(declaredBy(trimmed));
+                // The name comes from the tail rather than from `BLOCK_NAMES`,
+                // which knows `:then` and `:catch` as clauses but has no entry
+                // for the shorthand that folds one into the opening tag. Without
+                // it `{#await f() then value}` declared nothing, `value` was
+                // compiled as a free name, and the block rendered empty — while
+                // the same await written the long way worked.
+                // Compiled before the scope is pushed: the promise is evaluated
+                // outside the block, so the name it declares is not in scope for
+                // it — `{#await f(value) then value}` must read the outer one.
                 out += `{#await ${call(awaited, '')}${tail}}`;
+                scopes.push(identifiers(tail.replace(/^\s*(?:then|catch)\s+/, '')));
             } else if (trimmed.startsWith('#snippet ')) {
                 // A snippet declares names and holds no expression of its own:
                 // it is passed through, and its body is walked like any other.
