@@ -10,7 +10,7 @@
 // which is what an `async def load()` needs, had never run.
 import { test, expect, describe } from 'vitest';
 import * as route from './fixtures/route.py';
-import { load, GET, actions, config, boom } from './fixtures/route.py';
+import { load, GET, actions, config, boom, streaming } from './fixtures/route.py';
 
 // A RequestEvent as SvelteKit builds one. The conversion is recognised by shape
 // — `params`, `url` and `request` together — and anything else is handed over
@@ -81,7 +81,7 @@ describe('an exported mapping of handlers', () => {
     });
 
     test('the same names are on the module', () => {
-        expect(Object.keys(route.actions).sort()).toEqual(['default', 'remove']);
+        expect(Object.keys(route.actions).sort()).toEqual(['default', 'failing', 'refuse', 'remove']);
     });
 });
 
@@ -90,10 +90,44 @@ describe('an exported mapping of handlers', () => {
 // the names are the contract — and `__all__` is what declares them.
 describe('what a plain module exports', () => {
     test('exactly the names __all__ declares, and no default', () => {
-        expect(Object.keys(route).sort()).toEqual(['GET', 'actions', 'load']);
+        expect(Object.keys(route).sort()).toEqual([
+            'GET',
+            'actions',
+            'boom',
+            'config',
+            'load',
+            'streaming'
+        ]);
     });
 
     test('a helper left out of __all__ stays private', () => {
         expect(route.save).toBeUndefined();
+    });
+});
+
+// The paths that only open when something goes right slowly, or wrong: a result
+// that is still being computed, and the rejection half of a coroutine.
+describe('what a route hands back besides plain data', () => {
+    test('a coroutine inside the result becomes a promise', async () => {
+        const out = streaming(requestEvent());
+
+        expect(out.now).toBe('pep-703');
+        expect(out.later).toBeInstanceOf(Promise);
+        expect(await out.later).toEqual({ rows: [1, 2, 3] });
+    });
+
+    // The synchronous half of the same story: an action that raises before it
+    // ever awaits anything.
+    test('an action that raises carries Python’s message', () => {
+        expect(() => actions.refuse(requestEvent())).toThrow(/read only/);
+        expect(() => actions.refuse(requestEvent())).toThrow(/route\.py/);
+    });
+
+    test('a coroutine that raises rejects with Python’s message', async () => {
+        await expect(actions.failing(requestEvent())).rejects.toThrow(/gone/);
+    });
+
+    test('and the rejection says where it happened', async () => {
+        await expect(actions.failing(requestEvent())).rejects.toThrow(/route\.py/);
     });
 });

@@ -46,7 +46,6 @@ async def failing(event):
     raise KeyError("gone")
 
 
-
 def save(event):
     return {"saved": event["params"]["slug"]}
 

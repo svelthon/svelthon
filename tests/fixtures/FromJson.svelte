@@ -4,11 +4,11 @@
 # and `.items()` then calls an integer.
 TEXT = '{"type": "Fragment", "nodes": [{"type": "Text"}, 2], "meta": {"k": 1}, "items": 42}'
 
-parsed = fromjson(TEXT)
+parsed = from_json(TEXT)
 
-# `to_python` takes the value, `fromjson` takes the text — so the two spellings
+# `to_py` takes the value, `from_json` takes the text — so the two spellings
 # below have to agree.
-converted = to_python(js.JSON.parse(TEXT))
+converted = to_py(js.JSON.parse(TEXT))
 
 is_dict = isinstance(parsed, dict)
 got = parsed.get("type")
@@ -25,8 +25,17 @@ converted_dict = isinstance(converted, dict)
 converted_list = isinstance(converted["nodes"], list)
 
 # What the framework itself never sees: a value reached for by hand.
-plain = to_python("already a string")
-empty = fromjson("null")
+plain = to_py("already a string")
+empty = from_json("null")
+
+# A payload whose *root* is an array. The nested ones above are converted by
+# Brython's own walk; the root is the one thing a method on an object cannot
+# speak for, so it is converted here — and a JSObj answers neither a slice nor
+# `.append()`.
+rooted = from_json("[1, [2], 3]")
+rooted_kind = type(rooted).__name__
+rooted_slice = rooted[:1]
+rooted_inner = isinstance(rooted[1], list)
 </script>
 
 <p data-k="is_dict">{is_dict}</p>
