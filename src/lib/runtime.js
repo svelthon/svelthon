@@ -129,35 +129,6 @@ export const __pybridge = {
     spread(value) {
         if (value === null || value === undefined || typeof value !== 'object') return value;
         return { ...value };
-    },
-
-    repr(value) {
-        try {
-            return _b_.repr(value);
-        } catch {
-            return String(value);
-        }
-    },
-
-    // Brython keeps an instance's attributes out of the object's JS properties,
-    // so `{o.label}` reads undefined on a class instance — dicts and tuples need
-    // nothing, but objects do. `py.of(o).label` goes through Python's own
-    // attribute lookup, so properties and __getattr__ work too.
-    of(value) {
-        const $B = globalThis.__BRYTHON__;
-
-        return new Proxy(Object.create(null), {
-            get(_target, prop) {
-                if (typeof prop !== 'string') return undefined;
-                if (prop === 'toString') return () => __pybridge.str(value);
-
-                try {
-                    return $B.$getattr(value, prop);
-                } catch {
-                    return undefined;
-                }
-            }
-        });
     }
 };
 
