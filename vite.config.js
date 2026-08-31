@@ -6,8 +6,8 @@ import { python, svelthon } from './src/lib/svelthon.js';
 export default defineConfig({
     plugins: [svelthon(), svelte({
             preprocess: [python({ path: ['src'] })],
-            // Le filtre de modules de vite-plugin-svelte, élargi au Python : un
-            // `.svelte.py` est compilé comme un `.svelte.ts`, sous son propre nom.
+            // vite-plugin-svelte's module filter, widened to Python: a
+            // `.svelte.py` compiles as a `.svelte.ts` does, under its own name.
             experimental: { compileModule: { extensions: ['.js', '.ts', '.py'] } }
         })],
     resolve: {
@@ -16,7 +16,7 @@ export default defineConfig({
         },
         conditions: ['browser']
     },
-    // 5173 est pris par TABLE.
+    // 5173 is taken by TABLE.
     server: { port: 5174, strictPort: true },
 
     optimizeDeps: {
@@ -32,16 +32,21 @@ export default defineConfig({
     test: {
         environment: 'jsdom',
 
-        // Chaque worker recharge et retransforme pour son compte le runtime
-        // Brython — 1,4 Mo — puis reboote l'interpréteur. Paralléliser les
-        // fichiers multiplie ce coût au lieu de le partager : mesuré à plus de
-        // 30 minutes en parallèle contre moins de 2 en séquentiel.
-        fileParallelism: false,
-        pool: 'threads',
-        poolOptions: { threads: { singleThread: true } },
+        // The first import of a chain of components compiles their Python,
+        // which goes past the 5 s default.
+        testTimeout: 30000,
 
-        // The first import of a chain of components compiles their Python;
-        // on a modest machine that goes well past the 5 s default.
-        testTimeout: 30000
+        // Only what the project itself ships. The vendored Brython is not ours
+        // to cover, and it would drown the number it is measured against.
+        //
+        // What this can and cannot see is worth knowing: it instruments the test
+        // worker, so a module that runs inside Vite's own process — the
+        // preprocessor and the plugin — counts only where a test calls it
+        // directly. `markup.js` read 4 % while running for every file in the
+        // project, until `tests/markup.test.js` called it in the open.
+        coverage: {
+            include: ['src/lib/**'],
+            reporter: ['text', 'html']
+        }
     }
 });
