@@ -34,12 +34,9 @@ describe('Python expressions in the template', () => {
         expect(cell('fstring')).toBe('3 items');
     });
 
-    test('instance attributes, read by Python itself', () => {
-        // This was the main wart back when a template expression was compiled to
-        // JavaScript: Brython keeps attributes out of JS properties, so
-        // `{r.label}` rendered nothing at all, and a bridge handed the lookup
-        // back to Python. Compiling the expression *as* Python removed the
-        // occasion, and the bridge with it.
+    test('instance attributes', () => {
+        // Brython keeps them out of the object's JS properties, so a template
+        // reads them through Python's own attribute protocol.
         expect(cell('attr')).toBe('[x:X][y:Y]');
     });
 
