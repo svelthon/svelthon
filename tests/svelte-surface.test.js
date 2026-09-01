@@ -1,105 +1,107 @@
-import { test, expect, describe } from 'vitest';
-import { mount, flushSync, tick } from 'svelte';
+// The surface Svelte documents, put to Svelthon one construct at a time. The
+// other test files each defend a feature; this one asks the flat question the
+// project's goal implies — what of Svelte is there, and what is not.
+//
+// Compiling is not rendering, so each of these is mounted. The two that are only
+// compiled here are named in AUDIT4.md with the reason.
+import { test, expect, describe, vi } from 'vitest';
+import { mount, flushSync } from 'svelte';
+import Shorthand from './fixtures/audit4/Shorthand.svelte';
+import Options from './fixtures/audit4/Options.svelte';
+import Element from './fixtures/audit4/Element.svelte';
+import Window from './fixtures/audit4/Window.svelte';
+import Head from './fixtures/audit4/Head.svelte';
+import Boundary from './fixtures/audit4/Boundary.svelte';
+import BoundaryCatch from './fixtures/audit4/BoundaryCatch.svelte';
+import KeyBlock from './fixtures/audit4/KeyBlock.svelte';
+import EachElse from './fixtures/audit4/EachElse.svelte';
+import Snippet from './fixtures/audit4/Snippet.svelte';
+import StyleDir from './fixtures/audit4/StyleDir.svelte';
+import ClassArray from './fixtures/audit4/ClassArray.svelte';
+import UseParams from './fixtures/audit4/UseParams.svelte';
+import BindThis from './fixtures/audit4/BindThis.svelte';
 
-import SvBlocks from './fixtures/SvBlocks.svelte';
-import SvBindings from './fixtures/SvBindings.svelte';
-import SvDirectives from './fixtures/SvDirectives.svelte';
-import SvShell from './fixtures/SvShell.svelte';
-
-// How much of Svelte works inside a Python component? This file answers with
-// facts rather than guesses. Features that touch neither state nor markup pass
-// by construction; the ones that cross the Python/JS boundary are the only
-// interesting ones, and they are here.
-
-function render(Component) {
+const render = (Component) => {
     const target = document.body.appendChild(document.createElement('div'));
     mount(Component, { target });
     flushSync();
-    return target;
-}
 
-describe('template blocks and directives', () => {
-    const el = (k) => render(SvBlocks).querySelector(`[data-k="${k}"]`);
+    return {
+        at: (k) => target.querySelector(`[data-k="${k}"]`),
+        html: () => target.innerHTML,
+        click: () => {
+            target.querySelector('button').click();
+            flushSync();
+        }
+    };
+};
 
-    test('{@html} passes the string through as it is', () => {
-        expect(el('html').innerHTML).toBe('<b>bold</b>');
-    });
+describe('the special elements', () => {
+    // `this` is an expression, so the tag itself is chosen in Python.
+    test('<svelte:element> takes its tag from a name', () =>
+        expect(render(Element).html()).toContain('<h2>dynamic</h2>'));
 
-    test('{@const} inside an {#each}', () => {
-        expect(el('const').textContent).toBe('[a!][b!]');
-    });
+    test('<svelte:window> binds a browser value back into Python', () =>
+        expect(render(Window).at('width').textContent).toBe('True'));
 
-    test('{#key}', () => {
-        expect(el('key').textContent).toBe('k3');
-    });
+    test('<svelte:head> renders its children outside the component', () =>
+        expect(render(Head).at('head').textContent).toBe('ok'));
 
-    test('class: and style: read Python names', () => {
-        expect(el('classdir').className).toBe('on');
-        expect(el('styledir').getAttribute('style')).toBe('color: red;');
-    });
+    test('<svelte:options> is read at compile time and does not disturb the rest', () =>
+        expect(render(Options).at('name').textContent).toBe('x'));
 
-    test('indexed {#each} and {:else}', () => {
-        expect(el('eachidx').textContent).toBe('[0:a][1:b]');
-        expect(el('eachelse').textContent).toBe('empty');
-    });
-});
+    test('<svelte:boundary> renders its children when nothing fails', () =>
+        expect(render(Boundary).at('boundary').textContent).toBe('safe'));
 
-describe('bindings and snippets', () => {
-    test('bind:checked both ways', () => {
-        const t = render(SvBindings);
-        const box = t.querySelector('[data-k="chk"]');
+    // The one that matters: an exception raised in Python has to be caught by a
+    // JavaScript error boundary, and its `failed` snippet shown instead.
+    test('and catches a Python exception, showing its failed snippet', () => {
+        const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const { at } = render(BoundaryCatch);
+        spy.mockRestore();
 
-        expect(box.checked).toBe(true); // initial value out of Python
-        expect(t.querySelector('[data-k="chkv"]').textContent).toBe('True');
-
-        box.click();
-        flushSync();
-        expect(t.querySelector('[data-k="chkv"]').textContent).toBe('False');
-    });
-
-    test('bind:group', () => {
-        const t = render(SvBindings);
-        expect(t.querySelector('[data-k="radio"]').checked).toBe(false); // pick is "b"
-        expect(t.querySelector('[data-k="pick"]').textContent).toBe('b');
-    });
-
-    test('bind:this writes the node into a Python name', () => {
-        // The node is observed with no Python operation on it: interpolation
-        // falls back to the JavaScript conversion, which names the constructor.
-        expect(render(SvBindings).querySelector('[data-k="thisv"]').textContent).toContain(
-            'HTMLParagraph'
-        );
-    });
-
-    test('a Python component receives and renders its children', () => {
-        // {#snippet children()} on the parent, {@render children()} on the child.
-        expect(render(SvBindings).querySelector('[data-k="card"]').innerHTML).toContain(
-            '<h3>Hello</h3><em>content</em>'
-        );
+        expect(at('failed').textContent).toBe('caught');
+        expect(at('body')).toBeNull();
     });
 });
 
-describe('directives and special elements', () => {
-    test('{#await}, use:, bind on <svelte:window>, scoped style, spread', async () => {
-        const t = render(SvDirectives);
-        await tick();
-        await Promise.resolve();
-        flushSync();
+describe('the blocks and their clauses', () => {
+    test('{#key} rebuilds its content when the key changes', () => {
+        const { at, click } = render(KeyBlock);
 
-        expect(t.querySelector('[data-k="await"]').textContent).toBe('resolved');
-        expect(t.querySelector('[data-k="action"]').getAttribute('data-action')).toBe('ok');
-        expect(t.querySelector('[data-k="width"]').textContent).toBe('1024'); // written by Svelte
-        expect(t.querySelector('[data-k="scoped"]').className).toMatch(/^svelte-/);
-
-        // {...props} where props is a Python dict: its keys are JS properties.
-        expect(t.querySelector('[data-k="card"]').innerHTML).toContain('<h3>spread</h3>');
+        expect(at('key').textContent).toBe('1');
+        click();
+        expect(at('key').textContent).toBe('2');
     });
 
-    test('transition:, <svelte:head>, <svelte:boundary>', () => {
-        const t = render(SvShell);
+    test('{#each} falls to its else branch on an empty list', () =>
+        expect(render(EachElse).at('else').textContent).toBe('none'));
 
-        expect(t.querySelector('[data-k="fade"]')).not.toBeNull();
-        expect(document.title).toBe('title');
-        expect(t.querySelector('[data-k="inside"]')).not.toBeNull();
+    test('{#snippet} is declared once and rendered per row', () =>
+        expect(render(Snippet).html()).toContain('<li data-k="row">20</li>'));
+});
+
+describe('the directives that are not bind: or on:', () => {
+    test('style: writes one property, in Python', () =>
+        expect(render(StyleDir).at('style').getAttribute('style')).toBe('color: rgb(1, 2, 3);'));
+
+    test('a class array joins its truthy members', () =>
+        expect(render(ClassArray).at('class').className).toBe('one two'));
+
+    test('use: hands its parameters to the action as a dict', () =>
+        expect(render(UseParams).at('use').dataset.mark).toBe('yes'));
+
+    test('bind:this gives Python the element itself', () =>
+        expect(render(BindThis).at('this').textContent).toBe('section'));
+
+    // `{onclick}` takes the shorthand path rather than the handler path, so the
+    // Python function is handed to Svelte unwrapped. A Brython function is
+    // callable from JavaScript, so it runs.
+    test('an event handler passed by shorthand still fires', () => {
+        const { at, click } = render(Shorthand);
+
+        expect(at('seen').textContent).toBe('0');
+        click();
+        expect(at('seen').textContent).toBe('1');
     });
 });
