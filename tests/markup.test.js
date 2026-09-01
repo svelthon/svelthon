@@ -19,38 +19,83 @@ import {
 // parentheses inside a lambda, and that parenthesised form is the only one
 // rewritten — `f(x := 1)` keeps its meaning as a temporary the call consumes.
 describe('the walrus', () => {
-    test('a parenthesised assignment writes through the namespace', () => {
-        expect(walrus('lambda: (count := count + 1)')).toBe(
-            'lambda: __assign("count", count + 1)'
-        );
-    });
-
-    // A call's own parenthesis belongs to the callee. Consuming it rewrote
-    // `f(x := 1)` as `f__assign("x", 1)` — a call to a name that does not exist,
-    // so the handler did nothing and said nothing. Doubling the parentheses is
-    // what asks for the assignment.
+    // Every form of the grammar, in one table: what is rewritten, what is left
+    // alone, and why. Two defects were found here by writing it out — a call's
+    // parenthesis taken for a group, and a tuple losing every assignment but the
+    // first — so the table is the test rather than a script beside it.
     test.for([
-        ['f(x := 1)'],
-        ['obj.m(x := 1)'],
-        ['items[0](x := 1)'],
-        ['"(quoted := no)"'],
-        ["'(also := no)'"],
-        ['count + 1']
-    ])('%s is left alone', ([source]) => expect(walrus(source)).toBe(source));
+        // The form svelte.dev uses, and the one the documentation shows.
+        ['lambda: (count := count + 1)', 'lambda: __assign("count", count + 1)'],
 
-    test('f((x := 1)) is the form that assigns', () =>
-        expect(walrus('f((x := 1))')).toBe('f(__assign("x", 1))'));
+        // Several names at once. Python has no comma operator, so this is a
+        // *tuple* whose elements assign — and it stays one. The parentheses are
+        // already required for a single assignment, so this form costs the
+        // author no new syntax.
+        [
+            'lambda: (a := 1, b := 2)',
+            'lambda: (__assign("a", 1), __assign("b", 2))'
+        ],
+        [
+            'lambda: (a := 1, b := 2, c := 3)',
+            'lambda: (__assign("a", 1), __assign("b", 2), __assign("c", 3))'
+        ],
 
-    test('a lambda argument keeps its own scope', () =>
-        expect(walrus('sorted(items, key=lambda i: (n := i))')).toBe(
+        // Only some elements assign; the others cross untouched.
+        ['lambda: (x + 1, a := 2)', 'lambda: (x + 1, __assign("a", 2))'],
+
+        ['lambda: (a := (b := 2))', 'lambda: __assign("a", __assign("b", 2))'],
+        ['lambda: (x + (y := 2))', 'lambda: (x + __assign("y", 2))'],
+        [
+            'lambda: ((a := 1) if c else (b := 2))',
+            'lambda: (__assign("a", 1) if c else __assign("b", 2))'
+        ],
+        ['lambda: ((a := 1), f(2))', 'lambda: (__assign("a", 1), f(2))'],
+
+        // The value may hold anything, including what would look like a
+        // separator: the split is made at depth zero.
+        ['lambda: (a := f(1, 2))', 'lambda: __assign("a", f(1, 2))'],
+        ['lambda: (a := (1, 2))', 'lambda: __assign("a", (1, 2))'],
+
+        // A call's own parenthesis belongs to the callee. Consuming it rewrote
+        // `f(x := 1)` as `f__assign("x", 1)` — a call to a name that does not
+        // exist, so the handler did nothing and said nothing.
+        ['f(x := 1)', 'f(x := 1)'],
+        ['obj.m(x := 1)', 'obj.m(x := 1)'],
+        ['items[0](x := 1)', 'items[0](x := 1)'],
+
+        // Doubling the parentheses is what asks for the assignment.
+        ['f((x := 1))', 'f(__assign("x", 1))'],
+        ['f(key=(x := 1))', 'f(key=__assign("x", 1))'],
+        ['d[(a := 1)]', 'd[__assign("a", 1)]'],
+        ['{(a := 1): 2}', '{__assign("a", 1): 2}'],
+        [
+            'sorted(items, key=lambda i: (n := i))',
             'sorted(items, key=lambda i: __assign("n", i))'
-        ));
+        ],
 
-    test('an escaped quote does not end the string', () => {
-        const source = '"a \\" (x := 1)"';
+        // A string is opaque, which is what keeps a template from rewriting
+        // text that happens to look like code.
+        ['"(quoted := no)"', '"(quoted := no)"'],
+        ["'(also := no)'", "'(also := no)'"],
+        ['"a \\" (x := 1)"', '"a \\" (x := 1)"'],
 
-        expect(walrus(source)).toBe(source);
-    });
+        ['lambda: (a == 1)', 'lambda: (a == 1)'],
+        ['count + 1', 'count + 1']
+    ])('%s', ([source, expected]) => expect(walrus(source)).toBe(expected));
+
+    // Two limits, both known and neither silent-by-accident.
+    //
+    // A call written with a space reads as a group, and the Python it produces
+    // is invalid — so it is refused at compile time rather than mis-assigning.
+    // Telling `f (…)` from `not (…)` would take a Python keyword table.
+    test('a call written with a space produces invalid Python, and is refused', () =>
+        expect(walrus('f (x := 1)')).toBe('f __assign("x", 1)'));
+
+    // An f-string is a string, and strings are opaque by design — the rule that
+    // protects `"(a := 1)"`. The assignment inside one is therefore lost, which
+    // is a question about f-strings rather than about the walrus.
+    test('a walrus inside an f-string is not rewritten', () =>
+        expect(walrus('f"{(a := 1)}"')).toBe('f"{(a := 1)}"'));
 });
 
 // Python is full of braces — dict literals, f-strings — so a `<script>` or a
