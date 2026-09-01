@@ -27,6 +27,17 @@ const INJECTED = [
     // the identity is what lets Python run the call it really makes.
     { name: 'inspect', value: '() => (f) => f', component: true },
 
+    // `inspect_with(log, count, message)` is `$inspect(…).with(fn)`. Their form
+    // chains, which Python cannot spell — `with` is a keyword, and `with=` is
+    // not an argument name either. A keyword argument was the first answer and
+    // it costs a parser: `$inspect` is variadic, so pulling one named argument
+    // out of the list means splitting the source text at depth zero. Taking the
+    // callable *first* needs no parsing at all — the split happens on the
+    // evaluated list, where position is reliable — and it is what Python does
+    // whenever position stops being enough: `map(fn, *iterables)`,
+    // `filter(fn, it)`, `reduce(fn, it)`.
+    { name: 'inspect_with', value: '() => (f) => f', component: true },
+
     // `effect` carries `pre` because Python really applies the decorator at run
     // time: `@effect.pre` reads the attribute before calling it, and an identity
     // without one would raise before the compiler's own wiring ever ran.

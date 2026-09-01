@@ -97,6 +97,7 @@ stands in JavaScript.
 | `props_id()` | `$props.id()` |
 | `host()` | `$host()` |
 | `inspect(*values)` | `$inspect(…)` |
+| `inspect_with(fn, *values)` | `$inspect(…).with(fn)` |
 | `to_js(value)` | — a Python container made readable from JavaScript |
 | `to_python(value)` | — the other way: a JavaScript value read as Python |
 | `tojson(value, indent=None)` | — `to_js` with the dump attached, under Jinja's own word |
@@ -117,6 +118,24 @@ caught without a proxy.
 There is no `$state` equivalent to write, because there is nothing to declare: a
 module-level assignment already *is* the declaration, and the compiler reads it
 from the AST.
+
+### The six runes with no counterpart, and why
+
+Svelte documents seventeen rune forms. Eleven are in the table above; six are
+absent on purpose, and the reasons differ.
+
+| Svelte | why not |
+|---|---|
+| `$state.raw` | Nothing to opt out of. Both exist to undo a deep proxy, and a Python value behind one fails Brython's own type checks — so every module-level name here is already raw, and a port would be a no-op wearing a name. |
+| `$state.snapshot` | as above |
+| `$state.eager` | Serves `await` expressions, which Svelte itself gates behind `experimental.async` and calls experimental. Nothing to mirror until that lands. |
+| `$effect.pending` | as above |
+| `$effect.tracking` | Tells a *library* author whether the code sits in a tracking context. Deferred: none of the 88 examples on svelte.dev uses any `$effect` variant, and four use `$effect` plain. |
+| `$inspect.trace` | Names what caused an effect to re-run. Deferred with `$effect.tracking`, and for the same reason. |
+
+Two of the six would do nothing, two wait on a feature Svelte has not settled,
+and two are development tools. None is an oversight, and each is measured rather
+than assumed.
 
 ## Compilation pipeline
 
@@ -842,8 +861,28 @@ inspect(count, message)
 1 'hello'      after count changed
 ```
 
-One argument per value, as in Svelte. Their `.with(fn)` form, which replaces
-the logger, is not ported.
+One argument per value, as in Svelte.
+
+To replace the logger, `inspect_with` takes the callable first:
+
+```python
+def record(kind, *values):
+    js.console.table(values)
+
+
+inspect_with(record, count, message)
+```
+
+The callback is handed `"init"` or `"update"` and then the values, and is
+trimmed to the parameters it declares — `def record(kind)` is called with one
+argument, not three. Svelte writes this as `$inspect(x).with(fn)`, which Python
+cannot spell: `with` is a keyword, and `with=` is not an argument name either.
+Putting the callable in front is where Python puts one whenever position stops
+being enough — `map(fn, *iterables)`, `filter(fn, it)`, `reduce(fn, it)`.
+
+Note that a callback may not write to the component's own state: Svelte forbids
+it from inside `$inspect` as it does from inside a `$derived`, which is why a
+logger logs somewhere else.
 
 `{@debug user}` is the markup counterpart, and it is ported.
 

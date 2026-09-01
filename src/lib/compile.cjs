@@ -377,7 +377,10 @@ function takeArrows(src, where, lineOffset, allowed) {
         }
 
         if (!found && !watched && !both) out.push(line);
-        else if (watched) out.push(`__inspect_${anonymous++} = inspect(lambda: [${watched[1]}])`);
+        else if (watched)
+            out.push(
+                `__inspect_${anonymous++} = inspect${watched[1] || ''}(lambda: [${watched[2]}])`
+            );
         else if (both) out.push(`${both[1]} = bindable(${both[2] || ''})`);
         else if (named) out.push(`${found[1]} = derived(lambda: ${expression})`);
         // The generated name is bound like any other effect's, so it stays out
@@ -619,6 +622,10 @@ function surface(body) {
                     if (isCallTo(node, 'derived')) deriveds.push({ name: target.id, arity: 0 });
                     else if (isCallTo(node, 'effect')) effects.push({ name: target.id, arity: 0 });
                     else if (isCallTo(node, 'inspect')) inspects.push({ name: target.id, arity: 0 });
+                    // The callable comes first, so the emission takes it off the
+                    // front of the evaluated list rather than out of the source.
+                    else if (isCallTo(node, 'inspect_with'))
+                        inspects.push({ name: target.id, arity: 0, logger: true });
                     else state.push(target.id);
                 }
             } else if (node instanceof $B.ast.AnnAssign) {
@@ -1272,7 +1279,14 @@ function compile(
         // receives in a thunk of its own and re-reads it on every change, so the
         // lambda is re-run and the namespace accessors do the tracking. A
         // production build drops the whole line — theirs, not ours.
-        ...inspects.map((i) => `$inspect(...${fn(i.name)}());`),
+        // The lambda is called *inside* the rune both times, never hoisted into a
+        // const first: hoisting reads the values once, outside the tracking
+        // context, and the logger then fires on `init` and never again.
+        ...inspects.map((i) =>
+            i.logger
+                ? `$inspect(...${fn(i.name)}().slice(1)).with(__event(${fn(i.name)}()[0]));`
+                : `$inspect(...${fn(i.name)}());`
+        ),
         // A root owns its own scope: it is not cleaned up when the component is,
         // which is the point — the destructor is handed to Python under the
         // decorated name, and calling it is what ends the effect.

@@ -6,20 +6,20 @@
 // compiled here are named in AUDIT4.md with the reason.
 import { test, expect, describe, vi } from 'vitest';
 import { mount, flushSync } from 'svelte';
-import Shorthand from './fixtures/audit4/Shorthand.svelte';
-import Options from './fixtures/audit4/Options.svelte';
-import Element from './fixtures/audit4/Element.svelte';
-import Window from './fixtures/audit4/Window.svelte';
-import Head from './fixtures/audit4/Head.svelte';
-import Boundary from './fixtures/audit4/Boundary.svelte';
-import BoundaryCatch from './fixtures/audit4/BoundaryCatch.svelte';
-import KeyBlock from './fixtures/audit4/KeyBlock.svelte';
-import EachElse from './fixtures/audit4/EachElse.svelte';
-import Snippet from './fixtures/audit4/Snippet.svelte';
-import StyleDir from './fixtures/audit4/StyleDir.svelte';
-import ClassArray from './fixtures/audit4/ClassArray.svelte';
-import UseParams from './fixtures/audit4/UseParams.svelte';
-import BindThis from './fixtures/audit4/BindThis.svelte';
+import Shorthand from './fixtures/SvShorthand.svelte';
+import Options from './fixtures/SvOptions.svelte';
+import Element from './fixtures/SvElement.svelte';
+import Window from './fixtures/SvWindow.svelte';
+import Head from './fixtures/SvHead.svelte';
+import Boundary from './fixtures/SvBoundary.svelte';
+import BoundaryCatch from './fixtures/SvBoundaryCatch.svelte';
+import KeyBlock from './fixtures/SvKeyBlock.svelte';
+import EachElse from './fixtures/SvEachElse.svelte';
+import Snippet from './fixtures/SvSnippet.svelte';
+import StyleDir from './fixtures/SvStyleDir.svelte';
+import ClassArray from './fixtures/SvClassArray.svelte';
+import UseParams from './fixtures/SvUseParams.svelte';
+import BindThis from './fixtures/SvBindThis.svelte';
 
 const render = (Component) => {
     const target = document.body.appendChild(document.createElement('div'));

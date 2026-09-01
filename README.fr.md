@@ -97,6 +97,7 @@ rune en JavaScript.
 | `props_id()` | `$props.id()` |
 | `host()` | `$host()` |
 | `inspect(*valeurs)` | `$inspect(…)` |
+| `inspect_with(fn, *valeurs)` | `$inspect(…).with(fn)` |
 | `to_js(valeur)` | — un conteneur Python rendu lisible par JavaScript |
 | `to_python(valeur)` | — l'autre sens : une valeur JavaScript lue comme du Python |
 | `tojson(valeur, indent=None)` | — `to_js` avec la sérialisation attachée, sous le mot de Jinja |
@@ -117,6 +118,24 @@ en place est attrapée sans proxy.
 Il n'y a pas d'équivalent de `$state` à écrire, parce qu'il n'y a rien à
 déclarer : une affectation au niveau du module *est* la déclaration, et le
 compilateur la lit dans l'AST.
+
+### Les six runes sans équivalent, et pourquoi
+
+Svelte documente dix-sept formes de runes. Onze sont dans le tableau ci-dessus ;
+six sont absentes à dessein, et pour des raisons différentes.
+
+| Svelte | pourquoi non |
+|---|---|
+| `$state.raw` | Rien à refuser. Les deux existent pour défaire un proxy profond, et une valeur Python derrière un proxy échoue aux vérifications de type de Brython — donc tout nom de module est déjà brut ici, et un portage serait une fonction vide portant un nom. |
+| `$state.snapshot` | idem |
+| `$state.eager` | Au service des expressions `await`, que Svelte garde lui-même derrière `experimental.async` et qualifie d'expérimental. Rien à refléter tant que ce n'est pas stabilisé. |
+| `$effect.pending` | idem |
+| `$effect.tracking` | Indique à l'auteur d'une *bibliothèque* si le code s'exécute dans un contexte suivi. Différée : aucun des 88 exemples de svelte.dev n'utilise une variante de `$effect`, et quatre utilisent `$effect` tout court. |
+| `$inspect.trace` | Nomme ce qui a provoqué la réexécution d'un effet. Différée avec `$effect.tracking`, et pour la même raison. |
+
+Deux des six ne feraient rien, deux attendent une fonctionnalité que Svelte n'a
+pas stabilisée, et deux sont des outils de développement. Aucune n'est un oubli,
+et chacune est mesurée plutôt que supposée.
 
 ## Chaîne de compilation
 
@@ -880,8 +899,29 @@ inspect(count, message)
 1 'hello'      après un changement de count
 ```
 
-Un argument par valeur, comme chez Svelte. Leur forme `.with(fn)`, qui remplace
-le journal, n'est pas portée.
+Un argument par valeur, comme chez Svelte.
+
+Pour remplacer le journal, `inspect_with` prend l'appelable en premier :
+
+```python
+def record(kind, *values):
+    js.console.table(values)
+
+
+inspect_with(record, count, message)
+```
+
+Le rappel reçoit `"init"` ou `"update"`, puis les valeurs, et il est rogné aux
+paramètres qu'il déclare — `def record(kind)` est appelé avec un argument, pas
+trois. Svelte l'écrit `$inspect(x).with(fn)`, ce que Python ne sait pas
+orthographier : `with` est un mot-clé, et `with=` n'est pas non plus un nom
+d'argument valide. Mettre l'appelable devant, c'est là que Python le met dès que
+la position ne suffit plus — `map(fn, *iterables)`, `filter(fn, it)`,
+`reduce(fn, it)`.
+
+À noter qu'un rappel ne peut pas écrire dans l'état du composant : Svelte
+l'interdit depuis un `$inspect` comme depuis un `$derived`, ce qui est la raison
+pour laquelle un journal journalise ailleurs.
 
 `{@debug user}` en est le pendant dans le balisage, et il est porté.
 
