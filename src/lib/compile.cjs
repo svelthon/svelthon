@@ -1147,6 +1147,11 @@ function compile(
                   // goes through the namespace, so through the accessor, so the
                   // signal fires — the whole reason the walrus can mean this here.
                   `const __assign = (name, value) => { ${NS}[name] = value; return value; };`,
+                  // The same walrus aimed at an attribute or a key rather than
+                  // a name. Python's grammar takes only the name; JavaScript's
+                  // `=` takes all three, and so does `bind:` already.
+                  `const __setattr = writeAttr;`,
+                  `const __setitem = writeItem;`,
                   // What `bind:group` becomes: a directive whose value is Python.
                   `const __group = group;`
               ]),
@@ -1219,7 +1224,9 @@ function compile(
                   `bind(__proto, '__seq', () => __pybridge.seq, () => {});`,
                   `bind(__proto, '__spread', () => __pybridge.spread, () => {});`,
                   `bind(__proto, '__bound', () => __pybridge.bound, () => {});`,
-                  `bind(__proto, '__assign', () => __assign, () => {});`
+                  `bind(__proto, '__assign', () => __assign, () => {});`,
+                  `bind(__proto, '__setattr', () => __setattr, () => {});`,
+                  `bind(__proto, '__setitem', () => __setitem, () => {});`
               ]),
         // Wrapped once, not on every read: a name Python compares by identity
         // has to answer the same object twice.

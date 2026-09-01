@@ -26,9 +26,12 @@ function closingBrace(source, start) {
     return -1;
 }
 
-// The ')' closing the '(' that opens at `start`, ignoring parentheses inside
-// string literals.
-function closingParen(source, start) {
+// The bracket closing the one that opens at `start`, whichever it is, ignoring
+// brackets inside string literals. `(` for a group or a call, `[` for the
+// subscript a walrus may aim at.
+function closingPair(source, start) {
+    const open = source[start];
+    const close = open === '(' ? ')' : ']';
     let depth = 0;
     let quote = null;
 
@@ -42,8 +45,8 @@ function closingParen(source, start) {
         }
 
         if (c === '"' || c === "'") quote = c;
-        else if (c === '(') depth++;
-        else if (c === ')' && --depth === 0) return i;
+        else if (c === open) depth++;
+        else if (c === close && --depth === 0) return i;
     }
 
     return -1;
@@ -92,7 +95,70 @@ function arguments_(text) {
     return parts;
 }
 
-const WALRUS = /^\s*([A-Za-z_]\w*)\s*:=\s*/;
+const WALRUS_NAME = /^\s*([A-Za-z_]\w*)/;
+const WALRUS_ARROW = /^\s*:=\s*/;
+
+// What a walrus aims at, which is more than Python's own grammar allows it.
+//
+// PEP 572 restricts the target to a single name; JavaScript's `=` takes a name,
+// an attribute and a key alike, and every handler upstream writes one of the
+// three. Svelthon's dot already finds a key rather than only an attribute, both
+// reading a template expression and writing through `bind:`. The walrus was the
+// one place that decision had not been carried, which is why `spring.target`
+// needed `setattr` while nothing else did.
+//
+// Returns the name for the plain form, or the object and key for the other two,
+// with `subscript` telling which was written. Null when there is no walrus here.
+function walrusTarget(text) {
+    const found = text.match(WALRUS_NAME);
+    if (!found) return null;
+
+    let index = found[0].length;
+    let object = null;
+    let key = null;
+    let subscript = false;
+
+    // The *last* step is the one being assigned; everything before it is the
+    // object to assign into. `a.b.c := 1` writes `c` on `a.b`.
+    while (index < text.length) {
+        if (text[index] === '.') {
+            const attribute = text.slice(index + 1).match(WALRUS_NAME);
+            if (!attribute) return null;
+
+            object = text.slice(0, index).trim();
+            key = `"${attribute[1]}"`;
+            subscript = false;
+            index += 1 + attribute[0].length;
+        } else if (text[index] === '[') {
+            const close = closingPair(text, index);
+            if (close === -1) return null;
+
+            const inner = text.slice(index + 1, close).trim();
+
+            // A slice is a target Python assigns to and an expression it has no
+            // spelling for: `items[1:]` cannot be passed as a key. Rather than
+            // emit something that will not parse, leave the whole walrus alone
+            // and let Python report it in its own words.
+            if (atTopLevel(inner, (i) => inner[i] === ':') !== -1) return null;
+
+            object = text.slice(0, index).trim();
+            key = inner;
+            subscript = true;
+            index = close + 1;
+        } else break;
+    }
+
+    const arrow = text.slice(index).match(WALRUS_ARROW);
+    if (!arrow) return null;
+
+    return {
+        name: object === null ? found[1] : null,
+        object,
+        key,
+        subscript,
+        length: index + arrow[0].length
+    };
+}
 
 // `(name := value)` is the one assignment Python allows inside an expression,
 // and therefore the only one a `lambda` can hold — which is exactly what a
@@ -670,7 +736,7 @@ export function pythonExpressions(markup, collect, onPython) {
                 // zero, so a comma inside a call or a literal stays put.
                 const called = trimmed.slice(8).trim();
                 const opens = called.indexOf('(');
-                const closes = opens === -1 ? -1 : closingParen(called, opens);
+                const closes = opens === -1 ? -1 : closingPair(called, opens);
 
                 out += closes === -1
                     ? markup.slice(index, end + 1)

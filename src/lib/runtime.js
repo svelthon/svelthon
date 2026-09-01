@@ -909,6 +909,44 @@ export function inTemplate(run) {
     }
 }
 
+// What `(obj.attr := value)` and `(obj[key] := value)` compile to, the two the
+// walrus has that Python's own grammar refuses it.
+//
+// The dot carries the same rule `inTemplate` installs for a read: an existing
+// key wins over an attribute, so the write lands where the read came from. The
+// rule is repeated here rather than borrowed, because a handler fires on the
+// click, long after the expression that built it has left `inTemplate` and put
+// the original `$setattr1` back. Borrowing it set a JavaScript property on the
+// dict instead: no error, no effect, and the field back to its old value on the
+// next render.
+//
+// They return the value, as an assignment expression must, so that a group can
+// hold several and `{count}` still reads afterwards.
+export function writeAttr(target, name, value) {
+    const $B = globalThis.__BRYTHON__;
+
+    if ($B.$getattr(target, name, MISSING) === MISSING) {
+        try {
+            $B.$getitem(target, name);
+            $B.$setitem(target, name, value);
+
+            return value;
+        } catch {
+            /* no such key either: the real assignment decides, and may raise */
+        }
+    }
+
+    $B.$setattr1(target, name, value);
+
+    return value;
+}
+
+export function writeItem(target, key, value) {
+    globalThis.__BRYTHON__.$setitem(target, key, value);
+
+    return value;
+}
+
 // `bind:group`, which Svelte will not take a getter/setter pair for: it works
 // out which inputs form one group from the *text* of the expression, and two
 // anonymous functions have none. So the markup pass turns it into this action
