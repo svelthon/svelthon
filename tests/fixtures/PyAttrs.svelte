@@ -9,7 +9,7 @@ def mutate():
     items.append("b")
 </script>
 
-<p data-k="spread" {...attrs}>spread</p>
+<p data-k="spread" {**attrs}>spread</p>
 <p data-k="attr" title={",".join(items)}>computed attribute</p>
 <p data-k="raw" title={items}>raw attribute</p>
 <p data-k="witness">{len(items)}</p>

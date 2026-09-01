@@ -510,9 +510,10 @@ export function pythonExpressions(markup, collect, onPython) {
                         out += `{...${call(trimmed.slice(2), '__spread')}}`;
                     } else if (trimmed.startsWith('...')) {
                         throw new SyntaxError(
-                            `svelthon — \`{${trimmed}}\` is JavaScript's spread; Python's is ` +
-                                `\`{**${trimmed.slice(3).trim()}}\`. An expression in the markup ` +
-                                `is Python, so there is one spelling and it is Python's.`
+                            `svelthon — a spread is written \`{**${trimmed.slice(3).trim()}}\`, ` +
+                                `the way Python spreads a mapping. \`...\` is Python's Ellipsis, ` +
+                                `not a spread, and it keeps that meaning everywhere an ` +
+                                `expression is read.`
                         );
                     } else if (trimmed.startsWith('@attach ')) {
                         // `{@attach fn}` sits inside the tag rather than around

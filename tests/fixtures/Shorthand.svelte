@@ -21,7 +21,7 @@ def mutate_rows():
 <p data-k="text">{labels}</p>
 <p data-k="cite" class="tag {word.lower()}" title="n={len(labels)}">quoted</p>
 <p data-k="witness">{attrs}</p>
-<p data-k="spread" {...attrs}>spread</p>
+<p data-k="spread" {**attrs}>spread</p>
 <p data-k="parent">{rows}</p>
 <ShorthandChild {rows} />
 
