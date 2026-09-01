@@ -121,8 +121,10 @@ compilateur la lit dans l'AST.
 
 ### Les six runes sans équivalent, et pourquoi
 
-Svelte documente dix-sept formes de runes. Onze sont dans le tableau ci-dessus ;
-six sont absentes à dessein, et pour des raisons différentes.
+Svelte documente dix-sept formes de runes. Onze sont dans le tableau ci-dessus —
+avec `$inspect(…).with(fn)`, qui est une méthode sur ce que `$inspect` rend
+plutôt qu'une rune à part entière. Six sont absentes à dessein, et pour des
+raisons différentes.
 
 | Svelte | pourquoi non |
 |---|---|

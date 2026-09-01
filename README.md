@@ -121,8 +121,9 @@ from the AST.
 
 ### The six runes with no counterpart, and why
 
-Svelte documents seventeen rune forms. Eleven are in the table above; six are
-absent on purpose, and the reasons differ.
+Svelte documents seventeen rune forms. Eleven are in the table above — along with
+`$inspect(…).with(fn)`, which is a method on what `$inspect` hands back rather
+than a rune of its own. Six are absent on purpose, and the reasons differ.
 
 | Svelte | why not |
 |---|---|
