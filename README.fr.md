@@ -322,7 +322,7 @@ quoi Python sait affecter :
 
 La règle : tout est du Python dans un gabarit — chaque attribut, prop de
 composant compris, la valeur de chaque directive, ainsi que le raccourci `{nom}`
-et l'étalement `{...attrs}`, développés pour que la lecture passe par le
+et l'étalement `{**attrs}`, développés pour que la lecture passe par le
 namespace au lieu de le contourner — sans plus aucune exception.
 
 `bind:group` était la dernière, et elle a pris une autre forme qu'une paire :
@@ -615,7 +615,7 @@ Où on en est, chaque ligne tenue par un test :
 | une mutation faite dans une fonction que le compilateur ne voit pas | oui |
 | à travers un `@derived` qui rend l'objet, ou un prop de composant | oui |
 | un enfant atteint par `.items()`, `.values()` ou `.get()` | oui |
-| `<p {...attrs}>` — un étalement | oui |
+| `<p {**attrs}>` — un étalement | oui |
 | `<p title={items}>` — un attribut portant le conteneur lui-même | non — **et JavaScript non plus** |
 
 La dernière ligne est la sémantique de l'hôte, pas une limite à nous : Svelte
@@ -1294,7 +1294,7 @@ un composant Python :
 Les expressions de gabarit sont du Python de bout en bout, y compris dans les
 recoins qui ne sont pas des interpolations : l'itérable d'un `{#each}`, sa clé,
 `{#key}`, le membre droit d'un `{@const}`, `{@html}`, l'attachement d'un
-`{@attach}`, le raccourci `{nom}`, l'étalement `{...attrs}`, et une interpolation
+`{@attach}`, le raccourci `{nom}`, l'étalement `{**attrs}`, et une interpolation
 dans un attribut entre guillemets — `class="tag {statut.lower()}"`.
 
 

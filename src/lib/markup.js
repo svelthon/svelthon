@@ -497,12 +497,23 @@ export function pythonExpressions(markup, collect, onPython) {
                             // back as None on the other side regardless.
                             out += `{${call(inner, '__bound')}}`;
                         }
+                    } else if (trimmed.startsWith('**')) {
+                        // `{**attrs}` spreads a Python dict, whose keys become
+                        // attributes. Python's own spelling, because Python has
+                        // one: everywhere an expression can be written, it is
+                        // written the way Python writes it. The output is
+                        // JavaScript's `...`, since that is what Svelte reads.
+                        //
+                        // A shallow copy, so that Svelte's diff against the
+                        // previous render sees a mutation: that is what a
+                        // JavaScript spread does by itself.
+                        out += `{...${call(trimmed.slice(2), '__spread')}}`;
                     } else if (trimmed.startsWith('...')) {
-                        // {...attrs} — spreading a Python dict, whose keys are
-                        // JavaScript properties. A shallow copy, so that Svelte's
-                        // diff against the previous render sees a mutation: this
-                        // is what a JavaScript spread does by itself.
-                        out += `{...${call(trimmed.slice(3), '__spread')}}`;
+                        throw new SyntaxError(
+                            `svelthon — \`{${trimmed}}\` is JavaScript's spread; Python's is ` +
+                                `\`{**${trimmed.slice(3).trim()}}\`. An expression in the markup ` +
+                                `is Python, so there is one spelling and it is Python's.`
+                        );
                     } else if (trimmed.startsWith('@attach ')) {
                         // `{@attach fn}` sits inside the tag rather than around
                         // it, so it is read here. What it holds is Python like

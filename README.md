@@ -316,7 +316,7 @@ Python's truthiness, and a binding names something Python can assign to:
 
 The rule: everything in a template is Python — every attribute, component prop
 included, every directive's value, and the shorthand `{name}` and the spread
-`{...attrs}`, which are expanded so that the read goes through the namespace
+`{**attrs}`, which are expanded so that the read goes through the namespace
 rather than around it — with no exception left.
 
 `bind:group` was the last one, and it took a different shape rather than a pair:
@@ -596,7 +596,7 @@ Where it stands, each line held by a test:
 | a mutation made inside a helper the compiler cannot see | yes |
 | through a `@derived` that hands back the object, or a component prop | yes |
 | a child reached through `.items()`, `.values()` or `.get()` | yes |
-| `<p {...attrs}>` — a spread | yes |
+| `<p {**attrs}>` — a spread | yes |
 | `<p title={items}>` — an attribute carrying the container itself | no — **and neither does JavaScript** |
 
 The last line is host semantics, not a limitation of ours: Svelte compares the
@@ -1235,7 +1235,7 @@ a Python component:
 Template expressions are Python throughout, including the corners that are not
 interpolations: the iterable of an `{#each}`, its key, `{#key}`, the right-hand
 side of an `{@const}`, `{@html}`, the attachment of an `{@attach}`, the shorthand
-`{name}`, the spread `{...attrs}`, and an interpolation inside a quoted
+`{name}`, the spread `{**attrs}`, and an interpolation inside a quoted
 attribute — `class="tag {statut.lower()}"`.
 
 
