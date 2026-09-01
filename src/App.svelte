@@ -82,7 +82,9 @@
             <h2>The template is Python too</h2>
             <p>Every expression the markup reads is compiled as Python, not JavaScript — so an
                 empty list is false, a comprehension is a comprehension, and an attribute of a
-                class instance is found where Python keeps it.</p>
+                class instance is found where Python keeps it. What it <em>writes</em> is Python
+                too: <code>:=</code> assigns from the markup, and two at once is a tuple, where
+                JavaScript reaches for its comma operator.</p>
         </div>
         <div class="body">
             <div class="files"><div class="code"><span class="tag">Expressions.svelte</span><pre><code><Highlight file="Expressions.svelte" code={expressionsSrc} /></code></pre></div></div>

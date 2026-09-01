@@ -6,6 +6,7 @@ class Item:
 
 
 cart = [Item("apple", 3), Item("pear", 1)]
+emptied = 0
 
 
 units => sum(i.qty for i in cart)
@@ -29,6 +30,10 @@ def restock():
 
 <output>{[i.label for i in cart]}</output>
 <output>{cart[0].label.upper() if cart else "—"}</output>
+<output>emptied {emptied}×</output>
 
 <button onclick={clear}>clear()</button>
+<!-- The same, written in the markup: `:=` assigns, and two at once is a tuple —
+     where JavaScript reaches for its comma operator. -->
+<button onclick={lambda: (cart := [], emptied := emptied + 1)}>(cart := [], emptied := emptied + 1)</button>
 <button onclick={restock}>restock()</button>
