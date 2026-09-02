@@ -392,6 +392,36 @@ patch it — the caller can register the source itself, which is what
 CPython's, word for word: `'await' outside function`. Covered by
 `tests/compile-errors.test.js`.
 
+### `str.find` hands its `start` to `indexOf` without converting it
+
+`vendor/brython.js`, in `str_funcs.find`:
+
+```js
+res = self.indexOf(sub, start)
+…
+return jspos2pypos(self, res)
+```
+
+`start` counts code points; `String.prototype.indexOf` counts UTF-16 units. The
+result is converted back, the argument never is. So a character outside the basic
+plane sitting before `start` moves the search backwards, and the call answers a
+match it was told to skip — for ever, if the caller is walking occurrences:
+
+```python
+>>> s = 'a\U0001f600bXbX'
+>>> s.find('X', 4)
+3      # the match at 4 is never passed
+```
+
+`pypos2jspos` is the conversion, defined in the same file and already used at
+five other sites. Two other defects live next door and are **not** repaired here,
+because nothing in Svelthon reaches them: `str.startswith` has the same omission,
+and `str.find` does not normalise a negative `start` — `'abXbX'.find('X', -2)`
+answers 2 rather than 4, in plain ASCII.
+
+All three are proposed upstream, one branch each: `find-start-position`,
+`startswith-start-position`, `find-negative-start`.
+
 ## Patches applied to the vendored build
 
 Every repair is an edit in `vendor/brython.js` itself, marked with a

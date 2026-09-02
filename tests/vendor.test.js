@@ -41,4 +41,34 @@ describe('the vendored Brython carries its repairs', () => {
     test('a second execution is refused', () => {
         expect($B.ast).toBeTruthy();
     });
+
+    // `str.find` handed its `start` straight to `indexOf`. One counts code
+    // points, the other UTF-16 units, so an emoji before `start` moved the
+    // search backwards and the same match came back for ever. The tutorial's
+    // prose scanner walks the rendered HTML with exactly that loop, and the
+    // page carrying the three wise monkeys pegged a core until the tab was
+    // killed.
+    test('str.find honours its start argument past an astral character', () => {
+        // `$B.String` is the factory the compiler emits for a literal: it is
+        // what records where the surrogate pairs are. A bare JavaScript string
+        // carries none, and would not exercise the conversion at all.
+        const find = (text, sub, start) => $B.$getattr(text, 'find')(sub, start);
+
+        // 'a', an emoji, 'b', 'X', 'b', 'X' — the second X is at 5 in Python
+        // and at 6 in JavaScript.
+        const s = $B.String('a\u{1f600}bXbX');
+
+        expect(find(s, 'X', 0)).toBe(3);
+        expect(find(s, 'X', 4)).toBe(5);
+
+        // The loop the defect used to make endless.
+        let at = find(s, 'X', 0);
+        const seen = [];
+        while (at !== -1 && seen.length < 4) {
+            seen.push(at);
+            at = find(s, 'X', at + 1);
+        }
+
+        expect(seen).toEqual([3, 5]);
+    });
 });
