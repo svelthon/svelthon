@@ -9,13 +9,34 @@
 # of being read as template expressions.
 people = ["ada", "grace"]
 
+# Written out in full, bodies included: the output below is only readable if the
+# markup that produced it is on screen. `here` is this file, `card` is the child.
+here = "Snippets.svelte     "
+card = "SnippetCard.svelte  "
+
 code = {
-    "one": '{#snippet hello()}...{/snippet}   {@render hello()}',
-    "two": '{#snippet loud(who)}...{/snippet}   {@render loud("ada")}',
-    "three": '<Card>{#snippet row(x)}...{/snippet}</Card>',
-    "four": '<Card>plain text</Card>',
-    "five": '{#snippet row(x)}...{/snippet}   <Card {row} />',
-    "six": '{#snippet row(x)}...{/snippet}   <Card header={row} />',
+    "one": here + '{#snippet hello()}<b>reused</b>{/snippet}\n'
+    + here + '{@render hello()}',
+    "two": here + '{#snippet loud(who)}<b>{who.upper()}</b>{/snippet}\n'
+    + here + '{@render loud("ada")} {@render loud(people[1])}',
+    "three": here + '<Card>{#snippet row(x)}<b>row says {x}</b>{/snippet}</Card>\n'
+    + card + '{#if row is not None}{@render row("from the child")}{/if}',
+    "four": here + '<Card>plain text</Card>\n'
+    + card + '{#if children is not None}{@render children()}{/if}',
+    "five": here + '<Card>\n'
+    + here + '    {#snippet header(x)}<b>header({x})</b>{/snippet}\n'
+    + here + '    {#snippet row(x)}<b>row({x})</b>{/snippet}\n'
+    + here + '    and whatever is left over\n'
+    + here + '</Card>\n'
+    + card + '{#if children is not None}{@render children()}{/if}\n'
+    + card + '{#if row is not None}{@render row("from the child")}{/if}\n'
+    + card + '{#if header is not None}{@render header("from the child")}{/if}',
+    "six": here + '{#snippet row(x)}<b>row says {x}</b>{/snippet}\n'
+    + here + '<Card {row} />\n'
+    + card + '{#if row is not None}{@render row("from the child")}{/if}',
+    "seven": here + '{#snippet row(x)}<b>row says {x}</b>{/snippet}\n'
+    + here + '<Card header={row} />\n'
+    + card + '{#if header is not None}{@render header("from the child")}{/if}',
 }
 </script>
 
@@ -56,9 +77,21 @@ code = {
     <div class="live"><Card>plain text</Card></div>
 </section>
 
-<section class="broken">
-    <h2>5. Declared here, handed over by its name</h2>
+<section>
+    <h2>5. Several at once, and what is left over</h2>
     <code>{code["five"]}</code>
+    <div class="live">
+        <Card>
+            {#snippet header(x)}<b>header({x})</b>{/snippet}
+            {#snippet row(x)}<b>row({x})</b>{/snippet}
+            and whatever is left over
+        </Card>
+    </div>
+</section>
+
+<section class="broken">
+    <h2>6. Declared here, handed over by its name</h2>
+    <code>{code["six"]}</code>
     <div class="live">
         <svelte:boundary>
             <Card {row} />
@@ -68,8 +101,8 @@ code = {
 </section>
 
 <section class="broken">
-    <h2>6. The same, under another name</h2>
-    <code>{code["six"]}</code>
+    <h2>7. The same, under another name</h2>
+    <code>{code["seven"]}</code>
     <div class="live">
         <svelte:boundary>
             <Card header={row} />
