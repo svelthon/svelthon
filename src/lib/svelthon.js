@@ -3,7 +3,13 @@ import { relative, resolve, dirname } from 'node:path';
 import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { overMarkup, pythonExpressions, collector, moduleImports } from './markup.js';
+import {
+    overMarkup,
+    pythonExpressions,
+    collector,
+    moduleImports,
+    directiveModules
+} from './markup.js';
 
 const require = createRequire(import.meta.url);
 const { compile, VIRTUAL_PREFIX } = require('./compile.cjs');
@@ -33,6 +39,10 @@ const lineOffsets = new Map();
 const templateFunctions = new Map();
 
 const jsNames = new Map();
+
+// The Python modules each file names in a directive, which is the one place a
+// module needs a JavaScript binding of its own.
+const pyDirectives = new Map();
 
 // Appended, never prepended: the Python's own line numbers stay true, which is
 // what keeps error messages and source maps pointing at the right place.
@@ -69,6 +79,7 @@ export function python(options = {}) {
             if (!HAS_PYTHON_SCRIPT.test(content)) return;
 
             jsNames.set(filename, moduleImports(content));
+            pyDirectives.set(filename, directiveModules(content));
             lineOffsets.set(
                 filename,
                 content.slice(0, content.search(HAS_PYTHON_SCRIPT)).split('\n').length - 1
@@ -88,6 +99,7 @@ export function python(options = {}) {
                 {
                     defs: templateFunctions.get(filename) || [],
                     jsNames: jsNames.get(filename) ?? [],
+                    pyDirectives: pyDirectives.get(filename) ?? [],
                     lineOffset: lineOffsets.get(filename) ?? 0,
                     // The whole file, so a debugger opens the .svelte itself.
                     sourceContent: filename ? readFileSync(filename, 'utf8') : content

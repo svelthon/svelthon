@@ -923,6 +923,25 @@ function topLevelIndent(block) {
     }, lines[0].match(/^[ \t]*/)[0]);
 }
 
+// The head of every dotted directive: the `x` of `in:x.fade`. Svelte copies that
+// text into a `() => …`, so `x` has to be a JavaScript binding — and when the
+// author meant a Python module, none exists.
+//
+// Only the five that name a function. `class:` and `style:` name a property, and
+// `bind:` names a target; a dot in those means something else entirely.
+const DOTTED_DIRECTIVE = /(?:^|[\s"'])(?:use|transition|in|out|animate):([A-Za-z_]\w*)\./g;
+
+export function directiveModules(markup) {
+    const found = new Set();
+
+    DOTTED_DIRECTIVE.lastIndex = 0;
+
+    let match;
+    while ((match = DOTTED_DIRECTIVE.exec(markup))) found.add(match[1]);
+
+    return [...found];
+}
+
 export function moduleImports(content) {
     const block = content.match(MODULE_SCRIPT);
     if (!block) return [];

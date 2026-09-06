@@ -781,6 +781,7 @@ function compile(
         plain = false,
         defs = [],
         jsNames = [],
+        pyDirectives = [],
         lineOffset = 0,
         sourceContent = null
     } = {}
@@ -1073,7 +1074,7 @@ function compile(
         // expressions were JavaScript and an author wrote `py.str(items)` in the
         // markup — short on purpose. Now that only generated code touches it,
         // short is exactly wrong, and `py` is a name an author may want.
-        `import { bind, __pybridge, track, follow, pyError, schedule, inTemplate, pyEvent, plainData, pyArg, pyData, pyBoundary, pyNumbers, jsCall, ticking, group, writeAttr, writeItem, NONE${store ? ', registerModule' : ''} } from 'svelthon/runtime';`,
+        `import { bind, __pybridge, track, follow, pyError, schedule, inTemplate, pyEvent, plainData, pyArg, pyData, pyBoundary, pyNumbers, jsCall, ticking, group, writeAttr, writeItem, pyModule, NONE${store ? ', registerModule' : ''} } from 'svelthon/runtime';`,
         ...jsImports.map(jsImportLine),
         `import { ${['getContext', 'setContext']
             .concat(lifecycle('on_mount') || lifecycle('on_destroy') ? ['untrack'] : [])
@@ -1239,6 +1240,24 @@ function compile(
         ...jsNames
             .filter((n) => !declared.includes(n))
             .map((n) => `bind(__proto, '${n}', () => ${jsBound(n)}, () => {});`),
+        // A Python module named by a directive — `in:fades.typewriter`. Svelte
+        // copies that text into a `() => …` of its own, so it looks for a
+        // JavaScript `fades`, and `import fades` never made one: the name binds
+        // in Python's namespace. Only what a directive actually names, and only
+        // when it is a module this file imports — a JavaScript name resolves on
+        // its own and must keep doing so.
+        //
+        // Read lazily by pyModule, so the position in the emitted script does
+        // not matter: the module is registered by the time a directive runs.
+        ...pyDirectives
+            .filter(
+                (n) =>
+                    imported.includes(n) &&
+                    !declared.includes(n) &&
+                    !jsImported.includes(n) &&
+                    !jsNames.includes(n)
+            )
+            .map((n) => `const ${n} = pyModule(${JSON.stringify(n)});`),
         ``,
         `init(${NS});`,
         ...(bindables.length ? [`__initialising = false;`] : []),

@@ -845,10 +845,73 @@ export function pyBoundary(fn) {
 
     if (wrapped === undefined) {
         wrapped = (...args) => fn(...args.map(restored));
+
+        // The wrapper stands in for the Python function, so it answers for it
+        // too: `$function_infos` is where the name, the file and the declared
+        // arity are read from, and losing them leaves every caller downstream
+        // handing a Python signature more arguments than it takes.
+        wrapped.$function_infos = fn.$function_infos;
         boundaries.set(fn, wrapped);
     }
 
     return wrapped;
+}
+
+// A Python module under a JavaScript name, for the one place that needs one:
+// what a directive *names*. Svelte copies that text into a `() => …` of its own,
+// so `in:fades.typewriter` compiles to `() => fades.typewriter` and looks for a
+// JavaScript `fades` — which an `import fades` never made, since it binds in
+// Python's namespace.
+//
+// Members are wrapped the way a component's own functions are, not the way the
+// module's exports are: measured, the export path runs `plainData` over the
+// result, and a transition's `tick(0.5, 0.5)` then raises `0.5 cannot be
+// converted to a BigInt` on the first fractional frame. `pyNumbers` is what
+// repairs exactly that, and it is what a `def` written in the component already
+// goes through.
+//
+// Read lazily, so the module only has to exist by the time the directive runs,
+// and memoised per function, so two reads of the same name answer the same
+// object — Svelte keeps what a directive gave it.
+const directives = new WeakMap();
+
+export function pyModule(name) {
+    return new Proxy(
+        {},
+        {
+            get(_, key) {
+                const namespace = globalThis.__BRYTHON__.imported[name];
+                const member = namespace === undefined ? undefined : namespace[key];
+
+                if (typeof member !== 'function') return member;
+
+                let wrapped = directives.get(member);
+
+                if (wrapped === undefined) {
+                    // Trimmed to the arity Python declared, exactly as a
+                    // handler is: Svelte calls a transition `fn(node, params,
+                    // options)`, and `def typewriter(node, params)` refuses the
+                    // third. A `def` written in the component is trimmed by its
+                    // own wrapper, which is why it worked and this did not.
+                    const infos = member.$function_infos;
+                    const arity = Array.isArray(infos) ? (infos[8] ? Infinity : infos[10]) : Infinity;
+                    const where = Array.isArray(infos) ? `${infos[2]}() — ${infos[3]}` : `${name}.${key}()`;
+
+                    wrapped = (...args) => {
+                        try {
+                            return pyNumbers(member(...args.slice(0, arity)));
+                        } catch (error) {
+                            throw pyError(error, where);
+                        }
+                    };
+
+                    directives.set(member, wrapped);
+                }
+
+                return wrapped;
+            }
+        }
+    );
 }
 
 export function registerModule(name, namespace) {
