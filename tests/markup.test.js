@@ -375,7 +375,10 @@ describe('the blocks that declare names', () => {
         const { out, defs } = rewrite('{#snippet row(item, index)}<li>{item}</li>{/snippet}');
 
         expect(out).toContain('{#snippet row(item, index)}');
-        expect(defs.some((one) => /^def __expr_\d+\(item, index\):/m.test(one))).toBe(true);
+
+        // Its own name comes first: it lives in the scope that encloses the
+        // block, and an enclosing scope reaches into it.
+        expect(defs.some((one) => /^def __expr_\d+\(row, item, index\):/m.test(one))).toBe(true);
     });
 
     test('{@const} declares a name and compiles its value', () => {

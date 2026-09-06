@@ -4,7 +4,7 @@
 
 <script lang="python">
 # What a snippet is for: writing a piece of markup once and rendering it where
-# it is needed, with arguments. Five forms, live, in the order an author meets
+# it is needed, with arguments. Every form, live, in the order an author meets
 # them. The code shown is held as strings so the braces reach the page instead
 # of being read as template expressions.
 people = ["ada", "grace"]
@@ -41,11 +41,6 @@ code = {
     + card + '{#if header is not None}{@render header("from the child")}{/if}',
 }
 
-# What the two broken forms would print if the name resolved. Both are the same
-# string, and it is the one case 3 already prints: same child, same snippet,
-# same argument, only the place where the snippet is written differs.
-want = "row says from the child"
-
 # The comparison at the end. The child is identical on both sides, so it is
 # printed once above the two columns rather than in each.
 shared = card + '{#if row is not None}{@render row("from the child")}{/if}'
@@ -62,7 +57,7 @@ beside = here + '{#snippet row(x)}<b>row says {x}</b>{/snippet}\n' + here + '<Ca
 {#snippet row(x)}<b>row says {x}</b>{/snippet}
 
 <h1>Snippets</h1>
-<p class="lede">Reusing a piece of markup. What works, and where it stops.</p>
+<p class="lede">Reusing a piece of markup, in every form Svelte gives it.</p>
 
 <section>
     <h2>1. Declared and rendered in the same component</h2>
@@ -114,33 +109,21 @@ beside = here + '{#snippet row(x)}<b>row says {x}</b>{/snippet}\n' + here + '<Ca
     </div>
 </section>
 
-<section class="broken">
+<section>
     <h2>6. Declared here, handed over by its name</h2>
     <code>{code["six"]}</code>
-    <div class="live">
-        <svelte:boundary>
-            <Card {row} />
-            {#snippet failed(error, reset)}<span class="err">{error}</span>{/snippet}
-        </svelte:boundary>
-        <p class="want">expected: <b>{want}</b></p>
-    </div>
+    <div class="live"><Card {row} /></div>
 </section>
 
-<section class="broken">
+<section>
     <h2>7. The same, under another name</h2>
     <code>{code["seven"]}</code>
-    <div class="live">
-        <svelte:boundary>
-            <Card header={row} />
-            {#snippet failed(error, reset)}<span class="err">{error}</span>{/snippet}
-        </svelte:boundary>
-        <p class="want">expected: <b>{want}</b></p>
-    </div>
+    <div class="live"><Card header={row} /></div>
 </section>
 
 <section class="compare">
     <h2>8. The two side by side</h2>
-    <p class="lede">Same child, same snippet, same argument, same expected output. The only
+    <p class="lede">Same child, same snippet, same argument, same output. The only
         difference is where the snippet is written.</p>
     <code>{shared}</code>
     <div class="pair">
@@ -156,12 +139,7 @@ beside = here + '{#snippet row(x)}<b>row says {x}</b>{/snippet}\n' + here + '<Ca
         <div>
             <h3>written beside it, passed by name</h3>
             <code>{beside}</code>
-            <div class="live">
-                <svelte:boundary>
-                    <Card {row} />
-                    {#snippet failed(error, reset)}<span class="err">{error}</span>{/snippet}
-                </svelte:boundary>
-            </div>
+            <div class="live"><Card {row} /></div>
         </div>
     </div>
 </section>
@@ -200,11 +178,6 @@ beside = here + '{#snippet row(x)}<b>row says {x}</b>{/snippet}\n' + here + '<Ca
     .live {
         margin-top: 0.7rem;
     }
-    .broken h2::after {
-        content: ' (cassé)';
-        color: #b00;
-        font-weight: normal;
-    }
     .pair {
         display: grid;
         grid-template-columns: 1fr 1fr;
@@ -216,16 +189,6 @@ beside = here + '{#snippet row(x)}<b>row says {x}</b>{/snippet}\n' + here + '<Ca
         font-weight: 600;
         margin: 0 0 0.4rem;
         color: #444;
-    }
-    .want {
-        margin: 0.4rem 0 0;
-        color: #666;
-        font-size: 13px;
-    }
-    .err {
-        color: #b00;
-        font-family: ui-monospace, monospace;
-        font-size: 13px;
     }
     :global(.card) {
         border: 1px dashed #bbb;

@@ -336,6 +336,13 @@ const BLOCK_NAMES = {
     '@const': /^@const\s+([^=]+)=/
 };
 
+// The elements HTML closes by itself, which therefore open no body and no
+// scope. A component is never one of them.
+const VOID = new Set([
+    'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input',
+    'link', 'meta', 'param', 'source', 'track', 'wbr'
+]);
+
 const identifiers = (text) => [...text.matchAll(/[A-Za-z_]\w*/g)].map((m) => m[0]);
 
 function declaredBy(inner) {
@@ -463,14 +470,56 @@ const unknownTag = (trimmed, kind, known) =>
             `cross as JavaScript, so it is refused rather than passed through.`
     );
 
+// A snippet's name belongs to the scope that *encloses* the block, and to the
+// whole of it: Svelte hoists the declaration, so `<Card {row} />` may be written
+// above the `{#snippet row(x)}` it names — measured, it compiles. One
+// left-to-right walk cannot know a name it has not reached yet, so the markup is
+// walked twice: once with a throwaway collector, to record which scope each
+// snippet name belongs to, then for real with every scope seeded.
+//
+// The parameters are the other half and were already handled: `x` belongs
+// *inside* the block, the name belongs outside it. That is the whole difference,
+// and it is why `{#snippet row(x)}<b>{x}</b>{/snippet}` always worked while
+// `<Card {row} />` did not.
 export function pythonExpressions(markup, collect, onPython) {
+    const named = new Map();
+
+    walk(markup, () => '__probe', undefined, new Map(), named);
+
+    return walk(markup, collect, onPython, named, null);
+}
+
+function walk(markup, collect, onPython, seed, record) {
     let out = '';
     let index = 0;
     let inTag = false;
     let quote = null;
     let quotedAttribute = null;
     let region = null;
-    const scopes = [];
+
+    // Scopes are numbered by the order they are opened in, which two walks of
+    // the same markup agree on. The base scope, the component's own, is 0.
+    let opened = 0;
+    const ids = [0];
+    const scopes = [[...(seed.get(0) || [])]];
+
+    // The tag being read, so that its closing `>` knows what it closed.
+    let tag = null;
+
+    const push = (names) => {
+        opened += 1;
+        ids.push(opened);
+        scopes.push([...(seed.get(opened) || []), ...names]);
+    };
+
+    // Never below the base scope: unbalanced markup is Svelte's to refuse, and
+    // popping past the bottom here would lose the snippet names it holds.
+    const pop = () => {
+        if (scopes.length > 1) {
+            scopes.pop();
+            ids.pop();
+        }
+    };
 
     const inScope = () => [...new Set(scopes.flat())];
 
@@ -633,6 +682,19 @@ export function pythonExpressions(markup, collect, onPython) {
                 }
             } else if (char === '>') {
                 inTag = false;
+
+                // An element's body is a scope of its own, measured: Svelte
+                // emits `const row = …` inside a JavaScript block for a snippet
+                // written in a `<div>` as much as in a `<Card>`, so the name
+                // dies at the closing tag. Seeding it any wider would replace a
+                // Python NameError with a JavaScript ReferenceError, which is
+                // the same failure with a worse message.
+                if (tag && tag.closing) pop();
+                else if (tag && !VOID.has(tag.name.toLowerCase()) && markup[index - 1] !== '/') {
+                    push([]);
+                }
+
+                tag = null;
             }
 
             // `bind:value` on its own ends here — at a space, a slash or the
@@ -664,6 +726,9 @@ export function pythonExpressions(markup, collect, onPython) {
                 continue;
             }
 
+            const named = markup.slice(index).match(/^<(\/?)\s*([A-Za-z][\w:.-]*)/);
+            tag = named ? { closing: named[1] === '/', name: named[2] } : null;
+
             inTag = true;
             out += char;
             index++;
@@ -690,14 +755,14 @@ export function pythonExpressions(markup, collect, onPython) {
 
         if (trimmed.startsWith('#')) {
             if (trimmed.startsWith('#if ')) {
-                scopes.push([]);
+                push([]);
                 out += `{#if ${call(trimmed.slice(4), '__truthy')}}`;
             } else if (trimmed.startsWith('#each ')) {
-                out += eachBlock(trimmed, (names) => scopes.push(names), call);
+                out += eachBlock(trimmed, push, call);
             } else if (trimmed.startsWith('#key ')) {
                 // Svelte re-creates the block when the value changes, by
                 // identity — which no Python value keeps. repr() gives one.
-                scopes.push([]);
+                push([]);
                 out += `{#key ${call(trimmed.slice(5), 'repr')}}`;
             } else if (trimmed.startsWith('#await ')) {
                 // The awaited expression is Python like any other — a coroutine
@@ -720,22 +785,39 @@ export function pythonExpressions(markup, collect, onPython) {
                 // outside the block, so the name it declares is not in scope for
                 // it — `{#await f(value) then value}` must read the outer one.
                 out += `{#await ${call(awaited, '')}${tail}}`;
-                scopes.push(identifiers(tail.replace(/^\s*(?:then|catch)\s+/, '')));
+                push(identifiers(tail.replace(/^\s*(?:then|catch)\s+/, '')));
             } else if (trimmed.startsWith('#snippet ')) {
                 // A snippet declares names and holds no expression of its own:
                 // it is passed through, and its body is walked like any other.
-                scopes.push(declaredBy(trimmed));
+                //
+                // Two scopes are touched, not one. Its parameters go into the
+                // block, its own name into what encloses the block — that name
+                // outlives the block, which is the whole point of being able to
+                // hand it to a child.
+                const declares = trimmed.match(/^#snippet\s+([A-Za-z_]\w*)/);
+
+                if (record && declares) {
+                    const holder = ids[ids.length - 1];
+                    record.set(holder, [...(record.get(holder) || []), declares[1]]);
+                }
+
+                push(declaredBy(trimmed));
                 out += markup.slice(index, end + 1);
             } else {
                 throw unknownTag(trimmed, 'block', BLOCKS);
             }
         } else if (trimmed.startsWith('/')) {
-            scopes.pop();
+            pop();
             out += markup.slice(index, end + 1);
         } else if (trimmed.startsWith(':')) {
-            // A continuation clause may rebind the block's names.
+            // A continuation clause may rebind the block's names. What the
+            // block's scope holds beyond them is kept: a snippet declared in it
+            // is still declared after `{:else}`.
             const declared = declaredBy(trimmed);
-            if (declared.length) scopes[scopes.length - 1] = declared;
+            if (declared.length) {
+                const holder = ids[ids.length - 1];
+                scopes[scopes.length - 1] = [...(seed.get(holder) || []), ...declared];
+            }
 
             if (/^:else\s+if\s/.test(trimmed)) {
                 out += `{:else if ${call(trimmed.replace(/^:else\s+if\s/, ''), '__truthy')}}`;
