@@ -324,3 +324,200 @@ describe('pythonExpressions', () => {
         expect(out).toContain(' after');
     });
 });
+
+// The block vocabulary. Each one declares names, holds an expression, or both,
+// and the pass has to tell which is which — a name is not compiled, an
+// expression is. These were the paths nothing reached.
+describe('the blocks that declare names', () => {
+    const rewrite = (markup) => {
+        const defs = [];
+        const out = pythonExpressions(markup, collector(defs));
+
+        return { out, defs };
+    };
+
+    test('{#each} with an index declares both names', () => {
+        const { defs } = rewrite('{#each rows as row, i}<li>{row}{i}</li>{/each}');
+
+        expect(defs.some((one) => /^def __expr_\d+\(row, i\):/m.test(one))).toBe(true);
+    });
+
+    test('{#each} keyed evaluates the key in the row’s scope', () => {
+        const { out, defs } = rewrite('{#each rows as row (row.id)}<li>{row}</li>{/each}');
+
+        expect(out).toContain('(__expr_');
+        expect(defs.some((one) => one.includes('repr(row.id)'))).toBe(true);
+    });
+
+    test('{#await} splits the promise from the name it declares', () => {
+        const { out, defs } = rewrite('{#await later() then value}{value}{/await}');
+
+        expect(out).toMatch(/\{#await __expr_\d+\(\) then value\}/);
+        expect(defs.some((one) => /^def __expr_\d+\(value\):/m.test(one))).toBe(true);
+    });
+
+    // The split is made at depth zero, so a `then` inside the call's own string
+    // is not mistaken for the clause.
+    test('{#await} is not cut inside its own string', () => {
+        const { out } = rewrite('{#await f(" then ")}waiting{/await}');
+
+        expect(out).toMatch(/^\{#await __expr_\d+\(\)\}waiting\{\/await\}$/);
+    });
+
+    test('{:then} and {:catch} cross unchanged', () => {
+        const { out } = rewrite('{#await p}w{:then value}{value}{:catch failure}{failure}{/await}');
+
+        expect(out).toContain('{:then value}');
+        expect(out).toContain('{:catch failure}');
+    });
+
+    test('{#snippet} declares its parameters and holds no expression', () => {
+        const { out, defs } = rewrite('{#snippet row(item, index)}<li>{item}</li>{/snippet}');
+
+        expect(out).toContain('{#snippet row(item, index)}');
+        expect(defs.some((one) => /^def __expr_\d+\(item, index\):/m.test(one))).toBe(true);
+    });
+
+    test('{@const} declares a name and compiles its value', () => {
+        const { out, defs } = rewrite('{#each rows as row}{@const half = row / 2}{half}{/each}');
+
+        expect(out).toContain('{@const half =');
+        expect(defs.some((one) => one.includes('row / 2'))).toBe(true);
+    });
+
+    test('{:else if} compiles its condition through truthy', () => {
+        const { defs } = rewrite('{#if a}x{:else if b}y{/if}');
+
+        expect(defs.some((one) => one.includes('__truthy(b)'))).toBe(true);
+    });
+
+    test('{:else} alone crosses unchanged', () => {
+        expect(rewrite('{#if a}x{:else}y{/if}').out).toContain('{:else}');
+    });
+});
+
+// `{@render}` takes a call, and each of its arguments is an expression of its
+// own — a comma inside one of them is not a separator.
+describe('{@render}', () => {
+    const rewrite = (markup) => {
+        const defs = [];
+        return { out: pythonExpressions(markup, collector(defs)), defs };
+    };
+
+    test('each argument is compiled separately', () => {
+        const { out } = rewrite('{@render row(item, index)}');
+
+        expect(out).toMatch(/\{@render row\(__expr_\d+\(\), __expr_\d+\(\)\)\}/);
+    });
+
+    test('a comma inside an argument is not a separator', () => {
+        const { out, defs } = rewrite('{@render row(f(a, b))}');
+
+        expect(out).toMatch(/\{@render row\(__expr_\d+\(\)\)\}/);
+        expect(defs.some((one) => one.includes('f(a, b)'))).toBe(true);
+    });
+
+    test('a snippet rendered without arguments crosses whole', () => {
+        expect(rewrite('{@render row()}').out).toBe('{@render row()}');
+    });
+
+    // The names it takes are the JavaScript ones the compiler emits, not Python
+    // expressions.
+    test('{@debug} crosses unchanged', () => {
+        expect(rewrite('{@debug count}').out).toBe('{@debug count}');
+    });
+});
+
+// An attribute is not a text node: what goes in one may be a value rather than
+// its rendering, a directive whose name is Python, or a spread. Each shape has
+// its own wrapper, and getting them wrong is how JavaScript leaks into a
+// template.
+describe('the attribute pass', () => {
+    const rewrite = (markup) => {
+        const defs = [];
+        return { out: pythonExpressions(markup, collector(defs)), defs };
+    };
+
+    test('an interpolation inside a quoted value', () => {
+        const { out, defs } = rewrite('<p class="row {kind}">x</p>');
+
+        expect(out).toMatch(/class="row \{__expr_\d+\(\)\}"/);
+        expect(defs[0]).toContain('__text(kind)');
+    });
+
+    // The value itself, not its rendering: `data-v={items}` must carry the list.
+    test('a bare attribute value keeps the value', () => {
+        const { defs } = rewrite('<p data-v={items}>x</p>');
+
+        expect(defs[0]).not.toContain('__text');
+    });
+
+    test('class: takes a condition, so it goes through truthy', () => {
+        const { defs } = rewrite('<p class:active={current == "a"}>x</p>');
+
+        expect(defs.some((one) => one.includes('__truthy'))).toBe(true);
+    });
+
+    // Python's spelling, because Python has one. What comes out is
+    // JavaScript's `...`, since that is what Svelte reads.
+    test('a spread is written the Python way and compiled as one expression', () => {
+        const { out, defs } = rewrite('<div {**attrs}></div>');
+
+        expect(out).toMatch(/\{\.\.\.__expr_\d+\(\)\}/);
+        expect(defs[0]).toContain('attrs');
+    });
+
+    test('and `...` in that position is refused, naming the Python spelling', () => {
+        expect(() => rewrite('<div {...attrs}></div>')).toThrow(/\{\*\*attrs\}/);
+        expect(() => rewrite('<div {...attrs}></div>')).toThrow(/Ellipsis/);
+    });
+
+    // `...` is refused where a spread would go, and nowhere else: it is a Python
+    // object, and it keeps its meaning wherever an expression is read.
+    test('`...` stays Python\u2019s Ellipsis in an expression', () => {
+        expect(rewrite('<p>{...}</p>').out).toMatch(/\{__expr_\d+\(\)\}/);
+        expect(rewrite('<p>{[..., 1]}</p>').defs[0]).toContain('[..., 1]');
+    });
+
+    test('a shorthand attribute keeps its name and gains a value', () => {
+        expect(rewrite('<input {value} />').out).toMatch(/value=\{__expr_\d+\(\)\}/);
+    });
+
+    test('bind: gets a getter and a setter', () => {
+        const { out, defs } = rewrite('<input bind:value={name} />');
+
+        expect(out).toContain('() =>');
+        expect(defs.some((one) => one.startsWith('def __expr_set_'))).toBe(true);
+    });
+
+    test('{@html} renders through Python’s str', () => {
+        const { out, defs } = rewrite('{@html markup_text}');
+
+        expect(out).toMatch(/\{@html __expr_\d+\(\)\}/);
+        expect(defs[0]).toContain('__text(markup_text)');
+    });
+
+    test('a comment is not scanned for expressions', () => {
+        expect(rewrite('<!-- {not_an_expression} -->').out).toBe('<!-- {not_an_expression} -->');
+    });
+});
+
+// A construct left unhandled would cross into the output as JavaScript. The pass
+// refuses instead — the rule the project applies everywhere, and the reason five
+// leaks were closed at once when the catch-all branches went.
+describe('an unknown construct is refused, never passed through', () => {
+    const rewrite = (markup) => pythonExpressions(markup, collector([]));
+
+    test.for([
+        ['{#nope x}y{/nope}', 'block', 'if, each, key, await, snippet'],
+        ['{#if a}x{:nope}y{/if}', 'clause', 'else, then, catch'],
+        ['{@nope x}', 'tag', 'const, html, render, debug, attach']
+    ])('an unknown %s', ([markup, kind, known]) => {
+        expect(() => rewrite(markup)).toThrow(new RegExp(`is not a ${kind} Svelthon knows`));
+        expect(() => rewrite(markup)).toThrow(known);
+    });
+
+    test('the message says why it is refused rather than ignored', () => {
+        expect(() => rewrite('{@nope x}')).toThrow(/would\s+cross as JavaScript/);
+    });
+});

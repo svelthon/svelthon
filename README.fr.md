@@ -43,7 +43,7 @@ npm run dev
 ```
 
 ```sh
-npm test             # 357 tests : sémantique, props, réactivité, surface Svelte
+npm test             # 397 tests : sémantique, props, réactivité, surface Svelte
 npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
 npm run bench        # Python contre JavaScript, même composant, vrai navigateur
@@ -75,7 +75,7 @@ sans réactivité.
 
 ## L'API, et ce qu'elle remplace
 
-Dix-huit noms, et rien à importer : ils sont injectés dans le namespace du module, et
+Vingt noms, et rien à importer : ils sont injectés dans le namespace du module, et
 un composant qui définit le sien le garde. Chacun se tient là où se tient une
 rune en JavaScript.
 
@@ -99,9 +99,9 @@ rune en JavaScript.
 | `inspect(*valeurs)` | `$inspect(…)` |
 | `inspect_with(fn, *valeurs)` | `$inspect(…).with(fn)` |
 | `to_js(valeur)` | — un conteneur Python rendu lisible par JavaScript |
-| `to_python(valeur)` | — l'autre sens : une valeur JavaScript lue comme du Python |
+| `to_py(valeur)` | — l'autre sens : une valeur JavaScript lue comme du Python |
 | `tojson(valeur, indent=None)` | — `to_js` avec la sérialisation attachée, sous le mot de Jinja |
-| `fromjson(texte)` | — `to_python` avec l'analyse attachée |
+| `from_json(texte)` | — `to_py` avec l'analyse attachée |
 | `batch(xs, n)` | — une liste plate groupée en lignes de `n`, comme le `\|batch` de Jinja |
 | `date(valeur, style)` | — une date lue dans la langue du visiteur, comme le `\|date` de Django |
 | `fromnow(valeur)` | — « il y a 3 jours » ou « dans 2 heures », et ça reste juste |
@@ -1251,7 +1251,7 @@ Le runtime entier, gzippé, fait **255 Ko**.
 
 ## État
 
-Validé par `npm test` — 357 tests, plus 3 échecs attendus (voir plus bas) :
+Validé par `npm test` — 397 tests, plus 3 échecs attendus (voir plus bas) :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
 - props : défaut Python, priorité du parent, lisibilité pendant l'init,
@@ -1296,7 +1296,6 @@ recoins qui ne sont pas des interpolations : l'itérable d'un `{#each}`, sa clé
 `{#key}`, le membre droit d'un `{@const}`, `{@html}`, l'attachement d'un
 `{@attach}`, le raccourci `{nom}`, l'étalement `{**attrs}`, et une interpolation
 dans un attribut entre guillemets — `class="tag {statut.lower()}"`.
-
 
 Deux graphies de Python sont acceptées là où Svelte a la sienne :
 `{#each d.items() as (k, v)}` déstructure un tuple, et `{#each xs as x, i}` garde
@@ -1386,19 +1385,6 @@ l'application ne recharge jamais.
   et le plugin doivent partager leur registre par `globalThis`, parce que
   SvelteKit charge `svelte.config.js` et Vite charge `vite.config.js` par des
   loaders différents, si bien que ce fichier est évalué **deux fois**.
-
-**Écarté**
-
-- **La syntaxe de gabarit de Django.** `{% if %}` / `{% for %}` par-dessus les
-  blocs de Svelte a été écrite puis laissée débranchée dans `src/lib/dtl.js`,
-  avant d'être écartée. Svelthon, c'est Svelte en Python, pas Django dans Svelte.
-  Toute la documentation de Svelte s'applique ici à une substitution près —
-  JavaScript pour Python — et c'est précisément l'actif qu'une seconde syntaxe de
-  blocs dépenserait. Le frottement n'a jamais été `{#if}` : il était dans
-  `items.length` contre `len(items)`, et les expressions de gabarit l'ont réglé.
-  Django n'a par ailleurs ni clé de boucle, ni `{#await}`, ni `{#snippet}` : une
-  traduction fidèle bute au bout de trois constructions et doit inventer — c'est
-  alors un dialecte, plus une syntaxe familière.
 
 
 **Notes de conception** — [notes/template.md](notes/template.md) sur ce en quoi

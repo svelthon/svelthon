@@ -8666,7 +8666,7 @@ check_str(sub)
 var res
 try{start=$B.PyNumber_Index(start)}catch(err){$B.RAISE(_b_.TypeError,'slice indices must be integers or None or have an __index__ '+
 'method')}
-res=self.indexOf(sub,start)
+/* SVELTHON patch, see BRYTHON.md */ res=self.indexOf(sub,pypos2jspos(self,start))
 if(end !==_b_.None){try{end=$B.PyNumber_Index(end)}catch(err){$B.RAISE(_b_.TypeError,'slice indices must be integers or None or have an __index__ '+
 'method')}
 if(end < 0){end+=str.mp_length(self)}

@@ -45,7 +45,7 @@ npm run dev
 ```
 
 ```sh
-npm test             # 357 tests: semantics, props, reactivity, Svelte surface
+npm test             # 397 tests: semantics, props, reactivity, Svelte surface
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
 npm run bench        # Python vs JavaScript, same component, real browser
@@ -75,7 +75,7 @@ the build fails loudly instead of shipping a component with no reactivity.
 
 ## The API, and what it replaces
 
-Eighteen names, and nothing to import: they are injected into the module's namespace,
+Twenty names, and nothing to import: they are injected into the module's namespace,
 and a component that defines its own keeps it. Each one stands where a rune
 stands in JavaScript.
 
@@ -99,9 +99,9 @@ stands in JavaScript.
 | `inspect(*values)` | `$inspect(…)` |
 | `inspect_with(fn, *values)` | `$inspect(…).with(fn)` |
 | `to_js(value)` | — a Python container made readable from JavaScript |
-| `to_python(value)` | — the other way: a JavaScript value read as Python |
+| `to_py(value)` | — the other way: a JavaScript value read as Python |
 | `tojson(value, indent=None)` | — `to_js` with the dump attached, under Jinja's own word |
-| `fromjson(text)` | — `to_python` with the parse attached |
+| `from_json(text)` | — `to_py` with the parse attached |
 | `batch(xs, n)` | — a flat list grouped into rows of `n`, as Jinja's `\|batch` |
 | `date(value, style)` | — a date read in the visitor's language, as Django's `\|date` |
 | `fromnow(value)` | — "3 days ago" or "in 2 hours", kept right as time passes |
@@ -1238,7 +1238,6 @@ side of an `{@const}`, `{@html}`, the attachment of an `{@attach}`, the shorthan
 `{name}`, the spread `{**attrs}`, and an interpolation inside a quoted
 attribute — `class="tag {statut.lower()}"`.
 
-
 Two Python spellings are accepted where Svelte has its own: `{#each d.items() as
 (k, v)}` destructures a tuple, and `{#each xs as x, i}` keeps Svelte's meaning of
 item and index. What a component imports or declares in its `<script module>` is
@@ -1247,7 +1246,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test` — 357 tests, plus 3 expected failures (below):
+Validated by `npm test` — 397 tests, plus 3 expected failures (below):
 
 - end-to-end reactivity, and which write paths propagate;
 - props: Python defaults, parent precedence, readability during init, parent
@@ -1351,18 +1350,6 @@ reloads.
   `globalThis`, because SvelteKit loads `svelte.config.js` and Vite loads
   `vite.config.js` through different loaders, and this file is then evaluated
   twice.
-
-**Decided against**
-
-- **Django template syntax.** `{% if %}` / `{% for %}` over the Svelte blocks was
-  written and left unwired in `src/lib/dtl.js`, then ruled out. Svelthon is
-  Svelte in Python, not Django in Svelte. The whole of Svelte's documentation
-  applies here with one substitution — JavaScript for Python — and that is the
-  asset a second block syntax would spend. The friction was never `{#if}`; it was
-  `items.length` against `len(items)`, and template expressions already settled
-  it. Django also has no key for a loop, no `{#await}`, no `{#snippet}`: a
-  faithful translation hits a wall within three constructs and has to invent, at
-  which point it is a dialect rather than a familiar syntax.
 
 
 **Design notes** — [notes/template.md](notes/template.md) on what a template

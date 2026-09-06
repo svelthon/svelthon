@@ -203,13 +203,39 @@ export function walrus(expression) {
         const grouping = !/[\w)\]"']$/.test(out);
 
         if (char === '(' && grouping) {
-            const found = expression.slice(index + 1).match(WALRUS);
-            const close = found ? closingParen(expression, index) : -1;
+            // Each element of the group, not only the first. `(a := 1, b := 2)`
+            // is the one expression Python has that assigns twice, and it is
+            // what a handler needs: JavaScript reaches for its comma operator
+            // there, which exists for the same reason — a `for` clause takes one
+            // expression and you want two. Reading only the start of the group
+            // took `1, b := 2` for the value and lost every assignment but the
+            // first, silently.
+            //
+            // The parentheses are already required for a single assignment, so
+            // the several-element form costs the author no new syntax.
+            const close = closingPair(expression, index);
+            const parts = close === -1 ? [] : arguments_(expression.slice(index + 1, close));
 
-            if (close !== -1) {
-                const value = expression.slice(index + 1 + found[0].length, close);
+            if (parts.some((one) => walrusTarget(one))) {
+                const written = parts.map((one) => {
+                    const found = walrusTarget(one);
+                    if (!found) return walrus(one).trim();
 
-                out += `__assign("${found[1]}", ${walrus(value)})`;
+                    const value = walrus(one.slice(found.length));
+
+                    // A name goes through the namespace, which is what makes the
+                    // signal fire. An attribute or a key is written where it
+                    // lives, by the same two calls Brython itself compiles an
+                    // assignment to, so `inTemplate`, already in place for the
+                    // read, applies its rule to the write for free.
+                    return found.name
+                        ? `__assign("${found.name}", ${value})`
+                        : `${found.subscript ? '__setitem' : '__setattr'}(${found.object}, ${found.key}, ${value})`;
+                });
+
+                // One element was a grouping parenthesis and goes with it;
+                // several are a tuple, and Python keeps it one.
+                out += written.length > 1 ? `(${written.join(', ')})` : written[0];
                 index = close + 1;
                 continue;
             }

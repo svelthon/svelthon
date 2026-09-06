@@ -21,7 +21,7 @@ props = {"title": "spread"}
 <p data-k="width">{width}</p>
 <p data-k="scoped">scoped</p>
 
-<Card {...props}>
+<Card {**props}>
     {#snippet children()}<i>x</i>{/snippet}
 </Card>
 

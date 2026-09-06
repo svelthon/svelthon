@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { overMarkup, pythonExpressions, collector, moduleImports } from './markup.js';
 
 const require = createRequire(import.meta.url);
-const { compile, VIRTUAL_PREFIX, VFS_PREFIX } = require('./compile.cjs');
+const { compile, VIRTUAL_PREFIX } = require('./compile.cjs');
 
 // Generated modules, keyed by component name. Filled by the preprocessor when
 // Svelte transforms a component, read back when Vite resolves the import that
@@ -81,7 +81,7 @@ export function python(options = {}) {
             if (attributes.lang !== 'python') return;
 
             const name = nameFor(filename);
-            const { script, module, map, stdlib, imports } = compile(
+            const { script, module, map, imports } = compile(
                 content,
                 name,
                 relative(process.cwd(), filename || 'Component'),
@@ -103,7 +103,6 @@ export function python(options = {}) {
             const prelude = pythonImports(imports, dirname(filename || '.'));
 
             generated.set(VIRTUAL_PREFIX + name, withPrelude(module, map, prelude));
-            if (stdlib) generated.set(VFS_PREFIX + name, { code: stdlib, map: null });
 
             // The content is JavaScript now, so the tag must stop claiming
             // otherwise. Leaving `lang="python"` in place is invisible to the
@@ -210,7 +209,7 @@ const isReactive = (file) => file.endsWith('.svelte.py');
 
 // The Vite plugin that serves those modules.
 export function svelthon() {
-    const isVirtual = (id) => id.startsWith(VIRTUAL_PREFIX) || id.startsWith(VFS_PREFIX);
+    const isVirtual = (id) => id.startsWith(VIRTUAL_PREFIX);
 
     return {
         name: 'svelthon:modules',
@@ -255,14 +254,13 @@ export function svelthon() {
 
             const file = id;
             const name = nameFor(file);
-            const { script, module, map, stdlib, imports } = compilePython(file);
+            const { script, module, map, imports } = compilePython(file);
 
             // A `.py` may import another one — a route module reaching for its
             // data layer. Same prelude a component gets.
             const prelude = pythonImports(imports, dirname(file));
 
             generated.set(VIRTUAL_PREFIX + name, withPrelude(module, map, prelude));
-            if (stdlib) generated.set(VFS_PREFIX + name, { code: stdlib, map: null });
 
             this.addWatchFile(file);
             return script;
@@ -300,7 +298,7 @@ export function svelthon() {
             const name = nameFor(file);
             if (!generated.has(VIRTUAL_PREFIX + name)) return;
 
-            for (const prefix of [VIRTUAL_PREFIX, VFS_PREFIX]) forget('\0' + prefix + name);
+            forget('\0' + VIRTUAL_PREFIX + name);
 
             // A store's .py is watched, not imported, so its own module has to
             // be invalidated too — otherwise its load() never reruns and

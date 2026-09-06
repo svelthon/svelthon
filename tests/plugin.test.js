@@ -6,7 +6,8 @@
 // These call the hooks the way Svelte and Vite do.
 import { test, expect, describe } from 'vitest';
 import { createRequire } from 'node:module';
-import { resolve } from 'node:path';
+import { resolve, relative } from 'node:path';
+import { readFileSync } from 'node:fs';
 import { python, svelthon, withPrelude } from '../src/lib/svelthon.js';
 
 const { VIRTUAL_PREFIX } = createRequire(import.meta.url)('../src/lib/compile.cjs');
@@ -171,5 +172,202 @@ describe('withPrelude keeps the source map honest', () => {
         withPrelude('code', map, 'a\nb');
 
         expect(map.mappings).toBe('AAAA;AACA;AAEA');
+    });
+});
+
+// A `.py` is loaded by the plugin rather than preprocessed by Svelte: no markup,
+// no `<script>`, just a module. A `.svelte.py` is served under a `.svelte.js`
+// identity, which is what makes vite-plugin-svelte compile the runes inside it.
+describe('the plugin loads a .py itself', () => {
+    const plugin = svelthon();
+    const file = resolve(fixtures, 'shapes.py');
+
+    // `addWatchFile` and `environment` are what Vite gives a hook as `this`.
+    const context = { watched: [], addWatchFile(one) { this.watched.push(one); } };
+
+    test('a module compiles to a component script', () => {
+        const code = plugin.load.call(context, file);
+
+        expect(code).toContain('init');
+        expect(context.watched).toContain(file);
+    });
+
+    test('and its generated body is then served on demand', () => {
+        plugin.load.call(context, file);
+
+        const name = relative(process.cwd(), file).replace(/\W/g, '_');
+        const served = plugin.load.call(context, '\0' + VIRTUAL_PREFIX + name);
+
+        expect(served.code).toContain('$B');
+        expect(served.map.sources[0]).toContain('shapes.py');
+    });
+
+    test('anything that is not a .py is left to Vite', () => {
+        expect(plugin.load.call(context, resolve(fixtures, 'Groups.svelte'))).toBeUndefined();
+    });
+});
+
+// A component's generated code lives in its own module, which Vite has no reason
+// to tie to the `.svelte` that produced it. Without this hook, editing the Python
+// re-transforms the component and keeps serving the previous generated body: the
+// page updates to code that never changed.
+describe('hot update invalidates the generated module too', () => {
+    const plugin = svelthon();
+
+    const graph = () => {
+        const invalidated = [];
+
+        return {
+            invalidated,
+            moduleGraph: {
+                getModuleById: (id) => ({ id }),
+                invalidateModule: (mod) => invalidated.push(mod.id)
+            }
+        };
+    };
+
+    test('editing a component forgets its generated body', () => {
+        const filename = resolve(fixtures, 'BlockScope.svelte');
+        const pre = python();
+        const whole = readFileSync(filename, 'utf8');
+
+        pre.markup({ content: whole, filename });
+        pre.script({
+            content: whole.match(/<script lang="python">([\s\S]*?)<\/script>/)[1],
+            attributes: { lang: 'python' },
+            filename
+        });
+
+        const env = graph();
+        const out = plugin.hotUpdate.call({ environment: env }, { file: filename, modules: [] });
+        const name = relative(process.cwd(), filename).replace(/\W/g, '_');
+
+        expect(env.invalidated).toContain('\0' + VIRTUAL_PREFIX + name);
+        expect(out).toHaveLength(1);
+    });
+
+    // A store's `.py` is watched, not imported, so its own module has to go too
+    // — otherwise its load() never reruns and the previous body stands.
+    test('editing a .py forgets the file as well as its module', () => {
+        const file = resolve(fixtures, 'shapes.py');
+        plugin.load.call({ addWatchFile() {} }, file);
+
+        const env = graph();
+        plugin.hotUpdate.call({ environment: env }, { file, modules: [] });
+
+        expect(env.invalidated).toContain(file);
+    });
+
+    // The test count is read from the filesystem once, and the module holding it
+    // depends on no file Vite can see.
+    test('adding a test forgets the count', () => {
+        const env = graph();
+        const out = plugin.hotUpdate.call(
+            { environment: env },
+            { file: resolve(process.cwd(), 'tests/markup.test.js'), modules: [] }
+        );
+
+        expect(env.invalidated.some((id) => id.includes('stats'))).toBe(true);
+        expect(out).toHaveLength(1);
+    });
+
+    test('a file with no generated module is left alone', () => {
+        const env = graph();
+
+        expect(
+            plugin.hotUpdate.call({ environment: env }, { file: '/nowhere/Unknown.svelte', modules: [] })
+        ).toBeUndefined();
+        expect(env.invalidated).toEqual([]);
+    });
+});
+
+// Two rewrites happen before Brython sees the source, and neither is Python:
+// `importjs` names JavaScript a module cannot import, and `x => expr` is the
+// arrow that declares a derived. Both run for every component that uses them,
+// and both were reached only from inside Vite's process.
+describe('the rewrites that precede Brython', () => {
+    const compiled = (name) => {
+        const filename = resolve(fixtures, name);
+        const whole = readFileSync(filename, 'utf8');
+        const pre = python();
+
+        pre.markup({ content: whole, filename });
+
+        return pre.script({
+            content: whole.match(/<script lang="python">([\s\S]*?)<\/script>/)[1],
+            attributes: { lang: 'python' },
+            filename
+        }).code;
+    };
+
+    test('importjs becomes a JavaScript import, in the component', () => {
+        const code = compiled('ImportJsLines.svelte');
+
+        expect(code).toMatch(/import .* from ['"]/);
+    });
+
+    test('an arrow becomes a derived', () => {
+        expect(compiled('ArrowDerived.svelte')).toContain('$derived');
+    });
+
+    test('an arrow with no name becomes an effect', () => {
+        expect(compiled('ArrowEffect.svelte')).toContain('$effect');
+    });
+});
+
+// A `.svelte.py` is not a route module: its names become module-scope signals,
+// created once for the whole application, and it is served under a `.svelte.js`
+// identity so that vite-plugin-svelte compiles the runes inside it.
+describe('a store takes the other branch of the compiler', () => {
+    const plugin = svelthon();
+    const file = resolve(fixtures, 'root_store.svelte.py');
+
+    test('its names are signals, reachable through a store object', () => {
+        const code = plugin.load.call({ addWatchFile() {} }, file);
+
+        expect(code).toContain('$state');
+        expect(code).toContain('export const store');
+    });
+
+    test('and a default export, which a route module does not have', () => {
+        expect(plugin.load.call({ addWatchFile() {} }, file)).toContain('export default store');
+    });
+});
+
+// A component that imports a sibling `.py` gets a prelude: the module has to be
+// evaluated before init() runs, so its namespace is registered by the time
+// Brython looks it up.
+describe('a component importing a module', () => {
+    test('is served with the import ahead of its own body', () => {
+        const filename = resolve(fixtures, 'RootStore.svelte');
+        const whole = readFileSync(filename, 'utf8');
+        const pre = python();
+
+        pre.markup({ content: whole, filename });
+        pre.script({
+            content: whole.match(/<script lang="python">([\s\S]*?)<\/script>/)[1],
+            attributes: { lang: 'python' },
+            filename
+        });
+
+        const name = relative(process.cwd(), filename).replace(/\W/g, '_');
+        const served = svelthon().load('\0' + VIRTUAL_PREFIX + name);
+
+        expect(served.code).toMatch(/^import ".*root_store/m);
+
+        // The prelude pays for its own lines, or every mapping points one line
+        // above where it came from.
+        expect(served.map.mappings.startsWith(';')).toBe(true);
+    });
+});
+
+// The demo shows how many tests back the project. Hard-coding it means letting
+// it drift on every addition, so it is counted when the module is served.
+describe('the test count is served, not written down', () => {
+    test('it is a number, and it is not zero', () => {
+        const code = svelthon().load('\0' + VIRTUAL_PREFIX + 'stats');
+        const count = Number(code.match(/= (\d+);/)[1]);
+
+        expect(count).toBeGreaterThan(400);
     });
 });

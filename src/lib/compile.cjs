@@ -279,7 +279,7 @@ function endQuote(line, quote) {
 // Only the expression form. A derivation that needs statements keeps `@derived`,
 // which is the counterpart of Svelte's own `$derived.by` — the same split their
 // runes make, and the one Python already makes between `lambda` and `def`.
-const ARROW = /^([A-Za-z_]\w*)\s*=>\s*(\S[\s\S]*)$/;
+const ARROW_DERIVED = /^([A-Za-z_]\w*)\s*=>\s*(\S[\s\S]*)$/;
 
 // `=> expr` — the same arrow with nothing to name, which is the effect.
 //
@@ -294,7 +294,43 @@ const ARROW = /^([A-Za-z_]\w*)\s*=>\s*(\S[\s\S]*)$/;
 // about static analysis and do not reach us — dependencies here come from the
 // namespace accessors at run time. The fourth is that legibility, and putting
 // the difference in the first column is the answer to it.
-const EFFECT = /^=>\s*(\S[\s\S]*)$/;
+const ARROW_EFFECT = /^=>\s*(\S[\s\S]*)$/;
+
+// `inspect(count, message)` — a console.log that reruns on its own, and that the
+// production build drops entirely.
+//
+// The values have to be *read again* on every change, so they cannot be handed
+// over already read. Svelte solves that for itself — it compiles `$inspect(x)`
+// into `$.inspect(() => [x], …)` — and the same trick works here one level down:
+// the arguments go into a lambda, and calling it re-reads them through the
+// namespace accessors, which is what makes Svelte follow them.
+//
+// Their `$inspect(x).with(fn)` chains, which Python cannot spell — `with` is a
+// keyword. `inspect_with(fn, *values)` is that form with the callable in front,
+// where Python puts it whenever position stops being enough. The two are read by
+// the same rule and told apart by the name alone.
+const INSPECT = /^inspect(_with)?\s*\((\s*\S[\s\S]*)\)\s*$/;
+
+// `value: str <=>` — a prop that also travels back up, and the fourth of the
+// dialect's bindings. They are one system, built around the same sign, and what
+// surrounds it says which:
+//
+//     count = 0                 a name to a value, once
+//     doubled => count * 2      a name to an expression, re-run
+//     (open := not open)        a name from *inside* an expression
+//     value: str <=>            a name that travels both ways
+//
+// The nameless arrow, `=> expr`, is not one of them: with nothing to bind, it is
+// an effect.
+//
+// The double arrow is the only one of the four that had to be written as a word,
+// and the two readings of `<=>` agree for once: two directions, and logic's
+// equivalence — the parent and the child hold the same value.
+//
+// It is sugar over `bindable()`, which stays: a searchable name for the reader
+// who arrives from Svelte's `$bindable`, exactly as `derived(lambda: …)` stays
+// under `=>`.
+const BINDABLE = /^([A-Za-z_]\w*\s*:\s*[^=<>]+?)\s*<=>\s*(\S[\s\S]*)?$/;
 
 // Brackets closed on the line, ignoring those inside a string.
 function balanced(expr) {
@@ -337,7 +373,7 @@ function takeArrows(src, where, lineOffset, allowed) {
             );
         }
 
-        const found = quote === null ? line.match(ARROW) || line.match(EFFECT) : null;
+        const found = quote === null ? line.match(ARROW_DERIVED) || line.match(ARROW_EFFECT) : null;
 
         // A named match carries the name in group 1 and the expression in 2; an
         // anonymous one has the expression in 1, and its name is generated.
@@ -736,43 +772,6 @@ function fromImports(ast) {
     return [...found];
 }
 
-// Transitive closure of a component's imports over the build-time stdlib.
-//
-// What brython.js installs by itself, and which therefore needs no bundling:
-// `builtins`, `browser`, `browser.aio`, `javascript`, `_sys`, `_warnings`,
-// `_suggestions`, `_importlib`. Note that some of those — `browser` among them —
-// *are* in the VFS as well, so they do not "drop out" for want of an entry, as
-// this comment used to claim: they come through with a payload of nothing, which
-// is why `from browser import aio` measures 0 KB. Measured, not assumed.
-//
-// The cost is not gradual. `math` is the one cheap module — 83 KB, no
-// dependency of its own — and everything else drags the same 212-module closure:
-// `json`, `fractions` and `dataclasses` each emit 2 869 KB. That is the whole
-// reason the injected helpers exist: `batch` is there so that a template never
-// has to reach for `itertools`.
-function stdlibClosure(names) {
-    const VFS = $B.VFS || {};
-    const needed = {};
-    const queue = [...names];
-
-    while (queue.length) {
-        const module = queue.shift();
-        if (needed[module] || !VFS[module]) continue;
-
-        needed[module] = VFS[module];
-        queue.push(...(VFS[module][2] || []));
-
-        // A submodule is useless without the packages above it.
-        const parts = module.split('.');
-        while (parts.length > 1) {
-            parts.pop();
-            queue.push(parts.join('.'));
-        }
-    }
-
-    return needed;
-}
-
 function compile(
     src,
     name = 'Component',
@@ -965,7 +964,7 @@ function compile(
     // What `$effect.root` hands back. Python reads the decorated name and gets
     // this, exactly as JavaScript reads `const destroy = $effect.root(…)` —
     // the name belongs to the destructor on both sides.
-    const root = (name) => `__root_${name}`;
+    const destroyer = (name) => `__root_${name}`;
     const rev = (name) => `__rev_${name}`;
     const bump = (name) => `__bump_${name}`;
     const read = (name) => `__read_${name}`;
@@ -1003,7 +1002,7 @@ function compile(
 
     const plainScript = [
         `import { init } from ${JSON.stringify(virtualId(name))};`,
-        `import { bind, __pybridge, pyError, scheduleAsync, plainData, pyArg, pyExport, jsCall, ticking, group, NONE, registerModule } from 'svelthon/runtime';`,
+        `import { bind, __pybridge, pyError, scheduleAsync, plainData, pyArg, pyData, pyExport, pyBoundary, jsCall, ticking, group, NONE, registerModule } from 'svelthon/runtime';`,
         ...jsImports.map(jsImportLine),
         ``,
         ...state.map((n) => `let ${n};`),
@@ -1015,22 +1014,13 @@ function compile(
         `const __proto = {};`,
         ...state.map((n) => `bind(__proto, '${n}', () => ${n}, (v) => { ${n} = v; });`),
         ...funcs.map(
-            (f) => `bind(__proto, '${f.name}', () => ${fn(f.name)}, (v) => { ${fn(f.name)} = v; });`
+            (f) => `bind(__proto, '${f.name}', () => pyBoundary(${fn(f.name)}), (v) => { ${fn(f.name)} = v; });`
         ),
         ...plainDeriveds.map(
             (d) => `bind(__proto, '${d.name}', () => ${fn(d.name)}(), (v) => { ${fn(d.name)} = v; });`
         ),
-        ...injections(declared, false),
+        ...injections(declared, false, js),
 
-        // The five a compiled template expression calls. Always injected, never
-        // guarded: an author who shadowed one would silently take over every
-        // interpolation in their own markup.
-        `bind(__proto, '__truthy', () => __pybridge.truthy, () => {});`,
-        `bind(__proto, '__text', () => __pybridge.str, () => {});`,
-        `bind(__proto, '__seq', () => __pybridge.seq, () => {});`,
-        `bind(__proto, '__spread', () => __pybridge.spread, () => {});`,
-        `bind(__proto, '__bound', () => __pybridge.bound, () => {});`,
-        `bind(__proto, '__assign', () => __assign, () => {});`,
         // Wrapped once, not on every read: a name Python compares by identity —
         // `handler is on_click` — has to answer the same object twice.
         ...[...new Set(jsImported)]
@@ -1083,7 +1073,7 @@ function compile(
         // expressions were JavaScript and an author wrote `py.str(items)` in the
         // markup — short on purpose. Now that only generated code touches it,
         // short is exactly wrong, and `py` is a name an author may want.
-        `import { bind, __pybridge, track, follow, pyError, schedule, inTemplate, pyEvent, plainData, pyArg, jsCall, ticking, group, NONE${store ? ', registerModule' : ''} } from 'svelthon/runtime';`,
+        `import { bind, __pybridge, track, follow, pyError, schedule, inTemplate, pyEvent, plainData, pyArg, pyData, pyBoundary, pyNumbers, jsCall, ticking, group, writeAttr, writeItem, NONE${store ? ', registerModule' : ''} } from 'svelthon/runtime';`,
         ...jsImports.map(jsImportLine),
         `import { ${['getContext', 'setContext']
             .concat(lifecycle('on_mount') || lifecycle('on_destroy') ? ['untrack'] : [])
@@ -1125,7 +1115,7 @@ function compile(
         ...inspects.map((i) => `let ${fn(i.name)} = $state.raw(undefined);`),
         ...effects.flatMap((e) =>
             e.root
-                ? [`let ${fn(e.name)} = $state.raw(undefined);`, `let ${root(e.name)};`]
+                ? [`let ${fn(e.name)} = $state.raw(undefined);`, `let ${destroyer(e.name)};`]
                 : [`let ${fn(e.name)} = $state.raw(undefined);`]
         ),
         // A @derived name reads as its result — on both sides. The body runs
@@ -1178,7 +1168,15 @@ function compile(
             (n) =>
                 `bind(__proto, '${n}', () => (${rev(n)}, ${n}), (v) => { ${n} = track(v, ${bump(n)}, ${read(n)}); });`
         ),
-        ...funcs.map((f) => `bind(__proto, '${f.name}', () => ${fn(f.name)}, (v) => { ${fn(f.name)} = v; });`),
+        // A store's function is read from another module, where the namespace is
+        // an ordinary JavaScript object and Brython converts what it is given.
+        // A component's is not, so it keeps the bare binding.
+        ...funcs.map(
+            (f) =>
+                `bind(__proto, '${f.name}', () => ` +
+                `${store ? `pyBoundary(${fn(f.name)})` : fn(f.name)}, ` +
+                `(v) => { ${fn(f.name)} = v; });`
+        ),
         ...inspects.map(
             (i) => `bind(__proto, '${i.name}', () => ${fn(i.name)}, (v) => { ${fn(i.name)} = v; });`
         ),
@@ -1186,7 +1184,7 @@ function compile(
         // function, since that is what Brython writes when the `def` runs.
         ...effects.map((e) =>
             e.root
-                ? `bind(__proto, '${e.name}', () => ${root(e.name)}, (v) => { ${fn(e.name)} = v; });`
+                ? `bind(__proto, '${e.name}', () => ${destroyer(e.name)}, (v) => { ${fn(e.name)} = v; });`
                 : `bind(__proto, '${e.name}', () => ${fn(e.name)}, (v) => { ${fn(e.name)} = v; });`
         ),
         // follow(): a @derived that hands back a container it was given is the one
@@ -1299,8 +1297,11 @@ function compile(
         // decorated name, and calling it is what ends the effect.
         ...effects.flatMap((e) => [
             ``,
+            // `root` is a scope and `pre` is a moment, so they compose rather
+            // than exclude each other — which is what stacking the two
+            // decorators says, and what the nesting emits.
             e.root
-                ? `${root(e.name)} = $effect.root(() => { $effect(() => {`
+                ? `${destroyer(e.name)} = $effect.root(() => { $effect${e.pre ? '.pre' : ''}(() => {`
                 : `$effect${e.pre ? '.pre' : ''}(() => {`,
             `    let teardown;`,
             `    try { teardown = ${fn(e.name)}(); }` +

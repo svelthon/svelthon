@@ -107,18 +107,7 @@ export const __pybridge = {
     //
     // Only None. Zero, an empty string and False are values a binding must keep.
     bound(value) {
-        if (value === NONE) return undefined;
-
-        // A Brython `int` is a JavaScript number, but a `float` is an object —
-        // `{ob_type, value}`. Handed to an `<input>` as it stands, a text field
-        // shows `[object Object]`, a number field shows nothing at all, and a
-        // range falls back to the middle of its scale. Only the binding needs
-        // this: interpolation goes through `str()`, which knows what to do.
-        if (value !== null && typeof value === 'object' && value.ob_type === _b_.float) {
-            return value.value;
-        }
-
-        return value;
+        return value === NONE ? undefined : value;
     },
 
     // `{...attrs}` — Svelte diffs the spread object against the one from the
@@ -504,10 +493,8 @@ export function plainData(value, seen) {
     if (value === undefined || value === null || value === NONE) return null;
     if (typeof value !== 'object') return value;
 
-    // A Brython `int` is a JavaScript number, a `float` is an object holding
-    // one. The framework does arithmetic on what it is handed — a transition
-    // divides by its `duration`, a spring interpolates — and an object there
-    // stops the animation on its first frame rather than raising.
+    // A Brython float is an object holding a number and a reference to its
+    // type. `tojson(1 / 3)` walks the lot: 20 KB of `ob_type`.
     if (value.ob_type === _b_.float) return value.value;
 
     // A coroutine handed to the framework becomes a promise. That is what lets a
@@ -700,9 +687,10 @@ export function pyNumbers(value) {
         } else if (typeof one === 'function') {
             // A callback the framework keeps and calls itself — a transition's
             // `tick(t, u)`. It never crosses a wrapper, so its arguments arrive
-            // as raw JavaScript numbers, and Brython reads a number as an int:
-            // `tick(0, 1)` works and every frame after it raises *the number
-            // 0.09 cannot be converted to a BigInt*, silently.
+            // as raw JavaScript numbers, and Brython reads a number as an int.
+            // So `tick(0, 1)` works — 0 and 1 *are* integers — and the first
+            // frame after it raises `0.0026 can't be converted to BigInt`,
+            // which is what a transition that plays once and then stops is.
             value[key] = (...args) => one(...args.map(inbound));
         }
     }
@@ -867,14 +855,6 @@ export function registerModule(name, namespace) {
     const $B = globalThis.__BRYTHON__;
 
     namespace.__name__ = name;
-
-    // Stamped as a module, which is what Brython does to every object it puts
-    // in `$B.imported` (`modobj.ob_type = Module`). Without it the namespace is
-    // a bare JavaScript object, so `import helpers` reads its attributes the way
-    // it reads any foreign object's: a function comes back wrapped, and Brython
-    // converts the arguments on the way in. A `dict` then arrived at a Python
-    // function as a JavaScript object, and `.get` was gone.
-    namespace.ob_type = $B.module;
 
     $B.imported[name] = namespace;
 }

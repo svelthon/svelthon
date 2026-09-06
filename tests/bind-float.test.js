@@ -54,10 +54,12 @@ describe('a float handed back to the framework', () => {
         expect(typeof 43).toBe('number');
     });
 
+    // `tojson(1 / 3)` without this renders 20 KB: the float's type, its
+    // descriptors, and theirs.
     test('plainData unwraps it', () => expect(plainData(float(4300))).toBe(4300));
 
     test('plainData unwraps one inside a container', () =>
-        expect(plainData({ duration: float(4300) }).duration).toBe(4300));
+        expect(plainData({ ratio: float(0.5) }).ratio).toBe(0.5));
 
     test('pyNumbers unwraps the values of a returned mapping', () =>
         expect(pyNumbers({ duration: float(4300) }).duration).toBe(4300));

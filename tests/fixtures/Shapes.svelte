@@ -36,7 +36,7 @@ def bump():
 <ShapeChild one={obj} label="obj" />
 <ShapeChild one={dic} label="dic" />
 
-<div data-k="spread-obj"><SpreadChild {...obj} /></div>
-<div data-k="spread-dic"><SpreadChild {...dic} /></div>
+<div data-k="spread-obj"><SpreadChild {**obj} /></div>
+<div data-k="spread-dic"><SpreadChild {**dic} /></div>
 
 <button data-k="bump" onclick={bump}>bump</button>

@@ -149,12 +149,12 @@ def increment():
         expect(script).toContain("bind(__proto, 'error', () => __js_error");
     });
 
-    test('a component imports the pyData that to_python depends on', () => {
+    test('a component imports the pyData that to_py depends on', () => {
         // It was bound without being imported: a ReferenceError on the first
-        // read of to_python, and on that one alone.
+        // read of to_py, and on that one alone.
         const { script } = compile('x = 1\n', 'C', 'src/C.svelte');
 
         expect(script).toMatch(/import \{[^}]*\bpyData\b[^}]*\} from 'svelthon\/runtime'/);
-        expect(script).toContain("bind(__proto, 'to_python', () => pyData");
+        expect(script).toContain("bind(__proto, 'to_py', () => pyData");
     });
 });

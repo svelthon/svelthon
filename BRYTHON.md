@@ -426,7 +426,7 @@ All three are proposed upstream, one branch each: `find-start-position`,
 
 Every repair is an edit in `vendor/brython.js` itself, marked with a
 `/* SVELTHON patch, see BRYTHON.md */` comment — the only way to find one again
-in 4.6 MB.
+in 1.3 MB.
 
 They used to be split: three in the file, two applied as Vite served it. That
 split had a hole, and it was not theoretical. The served copy is the *browser's*;
@@ -445,6 +445,7 @@ endpoint that builds its own `Response`, then returned 500 with
 | the debug `console.log` in `$B.JSClass.tp_getattro` | it fires on every attribute access on a JavaScript class from Python and dumps the class object; two requests through `js.*` filled the server log with hundreds of lines |
 | the `Symbol(PYOBJ)` back-reference, moved to a `WeakMap` | a stamped container is refused by any Web API taking a WebIDL record, `new Response(body, {headers})` first among them |
 | `convert_to_python` returns a real `list` where it returned a bare array | `JSObj.to_dict()` now converts a whole tree, so `isinstance(x, list)` holds on what came from `JSON.parse` |
+| `str.find` converts its `start` with `pypos2jspos` | a loop over occurrences past an emoji terminates; the tutorial's prose scanner walks rendered HTML with exactly that loop |
 | `unindent` published as `$B.unindent` | a component's script is dedented by Brython's own rule rather than by a second implementation of it |
 | the whole file wrapped in `if (!(globalThis.__BRYTHON__ && globalThis.__BRYTHON__.ast))` | a second execution in one process rebuilds `$B.ast`, and the classes the compiler holds lose the `to_js()` the code generator attached |
 | `/* @vite-ignore */` on the eighteen dynamic imports | Brython loads JS modules named from Python with `import(variable)`, which Vite cannot analyse and warns about twice on every start |
@@ -454,12 +455,13 @@ The `PYOBJ` one is nine sites — five writes and four reads, one of them throug
 reads and writes move to `$B.$svelthonPyobj`, keyed by the JavaScript object.
 
 Wrapping the file works because `var` keeps its module scope inside a block, so
-the 4.6 MB below is untouched — two added lines, top and bottom.
+the 1.3 MB below is untouched — two added lines, top and bottom.
 
-**The first seven are fixed upstream**, one branch each:
+**The first eight are fixed upstream**, one branch each:
 `filename-invalid-identifier-chars`, `comprehension-leaks-target`,
 `fstring-middle-position`, `remove-jsclass-getattro-debug-log`,
-`pyobj-backref-weakmap`, `to-dict-array-to-list`, `expose-unindent`.
+`pyobj-backref-weakmap`, `to-dict-array-to-list`, `expose-unindent`,
+`find-start-position`.
 
 **The last two stay here, and would be wrong upstream.**
 
@@ -480,8 +482,8 @@ by a **test** rather than by a build-time check:
 | Edit | Turns red |
 |---|---|
 | `qualified_scope_name`, `make_comp`, the tokenizer | `tests/compiler.test.js`, `tests/fidelity.test.js` |
-| the debug print, `Symbol(PYOBJ)`, the guard | `tests/vendor.test.js` |
-| `convert_to_python` | `tests/fromjson.test.js` — an array that stayed one fails `isinstance(x, list)` |
+| the debug print, `Symbol(PYOBJ)`, the guard, `str.find` | `tests/vendor.test.js` |
+| `convert_to_python` | `tests/from_json.test.js` — an array that stayed one fails `isinstance(x, list)` |
 
 `scripts/browser-check.sh` covers the DOM node path as well, which is where
 identity across the boundary is observable.

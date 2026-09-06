@@ -1,5 +1,5 @@
 import { test, expect, describe } from 'vitest';
-import { mount, flushSync } from 'svelte';
+import { mount, unmount, flushSync } from 'svelte';
 import Groups from './fixtures/Groups.svelte';
 
 // `bind:group` is the one directive Svelte refuses a getter/setter pair for: it
@@ -101,5 +101,30 @@ describe('bind:group', () => {
         expect(read('rows')).toBe('c/b');
         expect(filled('r0-')).toBe('r0-c');
         expect(filled('r1-')).toBe('r1-b');
+    });
+});
+
+// The action's teardown had never run: nothing in the suite unmounted a
+// component holding a group, so the `change` listener it adds was never seen
+// being removed. A group inside an `{#if}` is the ordinary way to meet it.
+describe('the group action lets go', () => {
+    test('unmounting removes the listener it added', () => {
+        const target = document.body.appendChild(document.createElement('div'));
+        const component = mount(Groups, { target });
+        flushSync();
+
+        const input = target.querySelector('input[data-k]');
+        const removed = [];
+        const real = input.removeEventListener.bind(input);
+
+        input.removeEventListener = (type, ...rest) => {
+            removed.push(type);
+            return real(type, ...rest);
+        };
+
+        unmount(component);
+        flushSync();
+
+        expect(removed).toContain('change');
     });
 });

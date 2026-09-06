@@ -46,11 +46,11 @@ const INJECTED = [
         value: '() => Object.assign((f) => f, { pre: (f) => f, root: (f) => f })'
     },
 
-    // The two bridges, each way. `to_python` is what makes `.get()`, `.items()`
+    // The two bridges, each way. `to_py` is what makes `.get()`, `.items()`
     // and `isinstance(x, dict)` work on something that only ever crossed from
     // JavaScript — `await res.json()`, above all.
     { name: 'to_js', value: '() => plainData' },
-    { name: 'to_python', value: '() => pyData' },
+    { name: 'to_py', value: '() => pyData' },
 
     // Jinja's `|tojson`, under its own word: a body, an embedded payload, a
     // data attribute. It keeps the template's spelling rather than the shape of
@@ -68,9 +68,9 @@ const INJECTED = [
         value: '() => (v, indent) => JSON.stringify(plainData(v), null, typeof indent === "number" ? indent : undefined)'
     },
 
-    // The mirror of the line above, and built the same way: this is `to_python`
+    // The mirror of the line above, and built the same way: this is `to_py`
     // with the parse attached.
-    { name: 'fromjson', value: '() => (text) => pyData(JSON.parse(text))' },
+    { name: 'from_json', value: '() => (text) => pyData(JSON.parse(text))' },
 
     // The inbound bridge: the JavaScript globals, as they are.
     { name: 'js', value: '() => globalThis' },

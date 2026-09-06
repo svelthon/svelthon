@@ -2,8 +2,8 @@ import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from 'svelte';
 import FromJson from './fixtures/FromJson.svelte';
 
-// `to_js` and `to_python` are the two directions of the same bridge, and
-// `tojson`/`fromjson` are those two with the dump and the parse attached. What
+// `to_js` and `to_py` are the two directions of the same bridge, and
+// `tojson`/`from_json` are those two with the dump and the parse attached. What
 // the inbound half has to produce is *real* Python: an unconverted JavaScript
 // object answers `.type` and nothing else.
 describe('the inbound bridge', () => {
@@ -14,7 +14,7 @@ describe('the inbound bridge', () => {
         return target.querySelector(`p[data-k="${key}"]`).textContent;
     };
 
-    describe('fromjson', () => {
+    describe('from_json', () => {
         test('the result is a dict', () => expect(read('is_dict')).toBe('True'));
         test('.get() works on it', () => expect(read('got')).toBe('Fragment'));
         test('.items() works on it', () => expect(read('pairs')).toBe('4'));
@@ -36,12 +36,12 @@ describe('the inbound bridge', () => {
             expect(read('rooted_inner')).toBe('True'));
     });
 
-    describe('to_python', () => {
+    describe('to_py', () => {
         // What `await res.json()` hands back is parsed already, so this is the
         // half a component reaching into `js.` by hand actually needs.
         test('a JavaScript object becomes a dict', () => expect(read('converted_dict')).toBe('True'));
         test('it walks arrays too', () => expect(read('converted_list')).toBe('True'));
-        test('it agrees with fromjson on the same payload', () => expect(read('agree')).toBe('True'));
+        test('it agrees with from_json on the same payload', () => expect(read('agree')).toBe('True'));
         test('a value that needs nothing is returned as it is', () =>
             expect(read('plain')).toBe('already a string'));
     });
