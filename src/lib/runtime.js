@@ -604,7 +604,17 @@ export function pyData(value) {
     if (typeof value !== 'object') return value;
     if (Array.isArray(value)) return _b_.list.$factory(value.map(pyData));
 
-    return $B.$getattr($B.jsobj2pyobj(value), 'to_dict')();
+    const python = $B.jsobj2pyobj(value);
+
+    // Idempotent, which it has to be: `jsobj2pyobj` hands back the *original*
+    // Python object when the value once came from one — that is what the
+    // `PYOBJ` WeakMap is for — and a dict has no `to_dict`. Asking for it
+    // unconditionally made `to_py` raise on every value that did not need
+    // converting, so it was no use as the guard on a boundary, which is the one
+    // place anyone would reach for it.
+    const toDict = $B.$getattr(python, 'to_dict', null);
+
+    return toDict === null ? python : toDict();
 }
 
 export function pyArg(value) {
@@ -815,10 +825,56 @@ export function pyExport(value, where, lineOffset = 0) {
 // A store's namespace, published under its Python module name, so a component's
 // own Python can `import counter_store` and reach the very same signals the
 // template reads. Without it the bridge would only run one way.
+// A module's function, read from Python.
+//
+// `$B.imported[name]` holds our namespace, which is an ordinary JavaScript
+// object — the accessors live on its prototype, where a module's own attribute
+// lookup does not reach. So Brython falls back to reading it as a foreign
+// object, wraps what it finds, and converts the arguments on the way in. A
+// `dict` handed from one Python file to another arrived as a JavaScript object,
+// with `.get` gone and only the subscript left.
+//
+// The conversion is undone rather than prevented: `pyobj2jsobj` records what it
+// converted in the WeakMap our vendored Brython carries, so the original object
+// is there to be handed back. Anything not in it — a real JavaScript value —
+// passes through untouched, and so do arrays, which cross as themselves.
+const boundaries = new WeakMap();
+
+const restored = (value) => {
+    if (value === null || typeof value !== 'object') return value;
+
+    const original = globalThis.__BRYTHON__.$svelthonPyobj?.get(value);
+
+    return original === undefined ? value : original;
+};
+
+export function pyBoundary(fn) {
+    if (typeof fn !== 'function') return fn;
+
+    // Memoised, because Python compares a function by identity: reading
+    // `helpers.look` twice has to answer the same object.
+    let wrapped = boundaries.get(fn);
+
+    if (wrapped === undefined) {
+        wrapped = (...args) => fn(...args.map(restored));
+        boundaries.set(fn, wrapped);
+    }
+
+    return wrapped;
+}
+
 export function registerModule(name, namespace) {
     const $B = globalThis.__BRYTHON__;
 
     namespace.__name__ = name;
+
+    // Stamped as a module, which is what Brython does to every object it puts
+    // in `$B.imported` (`modobj.ob_type = Module`). Without it the namespace is
+    // a bare JavaScript object, so `import helpers` reads its attributes the way
+    // it reads any foreign object's: a function comes back wrapped, and Brython
+    // converts the arguments on the way in. A `dict` then arrived at a Python
+    // function as a JavaScript object, and `.get` was gone.
+    namespace.ob_type = $B.module;
 
     $B.imported[name] = namespace;
 }
