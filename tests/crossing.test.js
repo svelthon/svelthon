@@ -17,16 +17,9 @@ describe('a dict crossing a module boundary', () => {
     test('returned by another module', () => expect(read('returned')).toBe('dict dict=True'));
     test('passed down as a component prop', () => expect(read('prop')).toBe('dict dict=True'));
 
-    // The sixth direction, and the one that used to be missing. A dict handed
-    // to another module's *function* arrived as a JavaScript object — `["k"]`
-    // worked, `.get()`, `.items()` and `isinstance` did not — because
-    // `registerModule` puts a plain JavaScript object into `$B.imported`, so the
-    // call takes Brython's interop path and converts its arguments on the way
-    // in. `pyBoundary` undoes that conversion by handing back the object the
-    // WeakMap recorded, rather than trying to prevent it.
-    //
-    // Found again from the outside: a Pronom component split into a module and
-    // components, where a `.get` on a helper's argument stopped working.
+    // The direction Brython converts on: `$B.imported` holds a plain JavaScript
+    // object, so the call takes its interop path. `pyBoundary` hands back what
+    // the WeakMap recorded.
     test('handed to another module as an argument', () =>
         expect(read('argument')).toBe('dict dict=True'));
 });
