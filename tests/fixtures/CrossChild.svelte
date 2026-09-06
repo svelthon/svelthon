@@ -1,6 +1,14 @@
 <script lang="python">
-# The fifth direction: a dict handed down as a component prop.
+# The prop direction, one container of each kind.
 one: dict = None
+two: list = None
+three: set = None
+
+
+def describe(value):
+    return "{} len={}".format(type(value).__name__, len(value))
 </script>
 
-<p data-k="prop">{type(one).__name__} dict={isinstance(one, dict)}</p>
+<p data-k="dict-prop">{describe(one)}</p>
+<p data-k="list-prop">{describe(two)}</p>
+<p data-k="set-prop">{describe(three)}</p>
