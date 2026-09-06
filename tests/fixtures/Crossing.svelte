@@ -9,8 +9,10 @@
 import keeper
 
 record = {"k": "v"}
+nested = {"rows": [1, 2]}
 
 keeper.keep(record)
+keeper.keep(nested)
 
 taken = keeper.table
 given = keeper.give()
@@ -25,4 +27,5 @@ def describe(value):
 <p data-k="argument">{keeper.seen}</p>
 <p data-k="read">{describe(taken)}</p>
 <p data-k="returned">{describe(given)}</p>
+<p data-k="nested">{describe(nested["rows"])}</p>
 <CrossChild one={record} />

@@ -30,6 +30,27 @@ describe('the vendored Brython carries its repairs', () => {
         expect($B.jsobj2pyobj(converted)).toBe(dict);
     });
 
+    // A list too, which the back-reference used to miss: `jsobj2pyobj` answered
+    // every array before consulting the map, so a converted one came back as a
+    // bare `JavascriptArray`.
+    //
+    // It shows up through a dict rather than on its own, because a converted
+    // dict keeps its JavaScript view and reads through it from then on. So one
+    // call into JavaScript with a dict left every nested list in it stripped of
+    // its class — `.index()` gone, slicing gone, `isinstance(x, list)` false —
+    // in the caller's own value, after the call had returned.
+    test('a list comes back as the list it was', () => {
+        const _b_ = $B.builtins;
+        const rows = _b_.list.$factory([1, 2]);
+        const dict = _b_.dict.$factory();
+
+        $B.$setitem(dict, 'rows', rows);
+        $B.pyobj2jsobj(dict);
+
+        expect($B.$getitem(dict, 'rows')).toBe(rows);
+        expect($B.class_name($B.$getitem(dict, 'rows'))).toBe('list');
+    });
+
     // A debug print left upstream, firing on every attribute access on a
     // JavaScript class from Python. Two requests through `js.` filled the log.
     test('no debug print in JSClass.tp_getattro', () => {
