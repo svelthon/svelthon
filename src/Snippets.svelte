@@ -31,6 +31,8 @@ code = {
     + card + '{#if children is not None}{@render children()}{/if}\n'
     + card + '{#if row is not None}{@render row("from the child")}{/if}\n'
     + card + '{#if header is not None}{@render header("from the child")}{/if}',
+    "five_b": here + '<Card>{#snippet children()}<b>named by hand</b>{/snippet}</Card>\n'
+    + card + '{#if children is not None}{@render children()}{/if}',
     "six": here + '{#snippet row(x)}<b>row says {x}</b>{/snippet}\n'
     + here + '<Card {row} />\n'
     + card + '{#if row is not None}{@render row("from the child")}{/if}',
@@ -38,6 +40,11 @@ code = {
     + here + '<Card header={row} />\n'
     + card + '{#if header is not None}{@render header("from the child")}{/if}',
 }
+
+# What the two broken forms would print if the name resolved. Both are the same
+# string, and it is the one case 3 already prints: same child, same snippet,
+# same argument, only the place where the snippet is written differs.
+want = "row says from the child"
 </script>
 
 {#snippet hello()}<b>reused</b>{/snippet}
@@ -89,6 +96,16 @@ code = {
     </div>
 </section>
 
+<section>
+    <h2>5b. The leftover, named by hand</h2>
+    <code>{code["five_b"]}</code>
+    <div class="live">
+        <Card>
+            {#snippet children()}<b>named by hand</b>{/snippet}
+        </Card>
+    </div>
+</section>
+
 <section class="broken">
     <h2>6. Declared here, handed over by its name</h2>
     <code>{code["six"]}</code>
@@ -97,6 +114,7 @@ code = {
             <Card {row} />
             {#snippet failed(error, reset)}<span class="err">{error}</span>{/snippet}
         </svelte:boundary>
+        <p class="want">expected: <b>{want}</b></p>
     </div>
 </section>
 
@@ -108,6 +126,7 @@ code = {
             <Card header={row} />
             {#snippet failed(error, reset)}<span class="err">{error}</span>{/snippet}
         </svelte:boundary>
+        <p class="want">expected: <b>{want}</b></p>
     </div>
 </section>
 
@@ -149,6 +168,11 @@ code = {
         content: ' (cassé)';
         color: #b00;
         font-weight: normal;
+    }
+    .want {
+        margin: 0.4rem 0 0;
+        color: #666;
+        font-size: 13px;
     }
     .err {
         color: #b00;
