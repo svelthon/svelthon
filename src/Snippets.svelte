@@ -45,6 +45,14 @@ code = {
 # string, and it is the one case 3 already prints: same child, same snippet,
 # same argument, only the place where the snippet is written differs.
 want = "row says from the child"
+
+# The comparison at the end. The child is identical on both sides, so it is
+# printed once above the two columns rather than in each.
+shared = card + '{#if row is not None}{@render row("from the child")}{/if}'
+
+inside = here + '<Card>\n' + here + '    {#snippet row(x)}<b>row says {x}</b>{/snippet}\n' + here + '</Card>'
+
+beside = here + '{#snippet row(x)}<b>row says {x}</b>{/snippet}\n' + here + '<Card {row} />'
 </script>
 
 {#snippet hello()}<b>reused</b>{/snippet}
@@ -130,6 +138,34 @@ want = "row says from the child"
     </div>
 </section>
 
+<section class="compare">
+    <h2>8. The two side by side</h2>
+    <p class="lede">Same child, same snippet, same argument, same expected output. The only
+        difference is where the snippet is written.</p>
+    <code>{shared}</code>
+    <div class="pair">
+        <div>
+            <h3>written inside the tag</h3>
+            <code>{inside}</code>
+            <div class="live">
+                <Card>
+                    {#snippet row(x)}<b>row says {x}</b>{/snippet}
+                </Card>
+            </div>
+        </div>
+        <div>
+            <h3>written beside it, passed by name</h3>
+            <code>{beside}</code>
+            <div class="live">
+                <svelte:boundary>
+                    <Card {row} />
+                    {#snippet failed(error, reset)}<span class="err">{error}</span>{/snippet}
+                </svelte:boundary>
+            </div>
+        </div>
+    </div>
+</section>
+
 <style>
     :global(body) {
         font: 15px/1.6 system-ui, sans-serif;
@@ -168,6 +204,18 @@ want = "row says from the child"
         content: ' (cassé)';
         color: #b00;
         font-weight: normal;
+    }
+    .pair {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
+        margin-top: 0.8rem;
+    }
+    .pair h3 {
+        font-size: 13px;
+        font-weight: 600;
+        margin: 0 0 0.4rem;
+        color: #444;
     }
     .want {
         margin: 0.4rem 0 0;
