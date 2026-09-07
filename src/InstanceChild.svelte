@@ -1,32 +1,25 @@
 <script lang="python">
-# A child with something worth calling from outside: a method that changes its
-# own state. Everything it needs to talk to its parent is already here — a prop
-# coming down, a callback going up, a bindable going both ways.
-label: str = "child"
-told: callable = None
-heard: str = bindable()
-
-count = 0
+# A counter. Everything a parent and a child can exchange, they exchange about
+# this one number: the parent sets where it starts, the child says when it
+# moves, and both may hold it at once.
+start: int = 0
+on_change: callable = None
+count: int <=>
 
 
-def shout():
+def value():
+    return start if count is None else count
+
+
+def add():
     global count
-    count += 1
-    return "shouted {} times".format(count)
+    count = value() + 1
 
-
-def tell():
-    if told is not None:
-        told("the child called up")
-
-
-def hear(what):
-    global heard
-    heard = what
+    if on_change is not None:
+        on_change(count)
 </script>
 
-<p class="child">
-    <b>{label}</b> shouted {count} times, heard "{heard if heard else "nothing"}"
-    <button onclick={tell}>call up</button>
-    <button onclick={lambda: hear("its own click")}>hear</button>
-</p>
+<span class="child">
+    count = <b>{value()}</b>
+    <button onclick={add}>+1</button>
+</span>

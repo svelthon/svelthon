@@ -3,21 +3,21 @@
 </script>
 
 <script lang="python">
-# Four ways a parent and a child can talk, and the one that is missing. The three
-# that work need no reference to the child at all; the fourth is the only one
-# that asks the child to *be* something a parent can hold and call.
-mine = None
-said = "nothing yet"
-shared = ""
+# Four ways a parent can talk to a child, about one number. Three work. The
+# fourth is the only one that asks the child to *be* an object the parent holds
+# and calls, and that is the one Svelthon does not do yet.
+seen = "nothing yet"
+shared = 10
 outcome = "not tried"
+mine = None
 
 
-def note(what):
-    global said
-    said = what
+def note(n):
+    global seen
+    seen = "the child moved to {}".format(n)
 
 
-def probe():
+def reset_from_here():
     global outcome
 
     if mine is None:
@@ -25,56 +25,83 @@ def probe():
         return
 
     try:
-        outcome = mine.shout()
+        mine.reset()
+        outcome = "called"
     except Exception as error:
         outcome = "{}: {}".format(type(error).__name__, error)
 
 
+# Both sides, always: a prop is declared in the child and filled by the parent,
+# and naming one without showing the other explains nothing.
+here = "Instances.svelte      "
+kid = "InstanceChild.svelte  "
+
 code = {
-    "down": '<Child label="one" />',
-    "up": '<Child told={note} />        def note(what): ...',
-    "both": '<Child bind:heard={shared} />',
-    "call": '<Child bind:this={mine} />    mine.shout()',
+    "down": kid + 'start: int = 0\n'
+    + here + '<Child start={5} />',
+    "up": kid + 'on_change: callable = None\n'
+    + kid + 'on_change(count)              # called on every +1\n'
+    + here + 'def note(n): ...\n'
+    + here + '<Child on_change={note} />',
+    "both": kid + 'count: int <=>\n'
+    + here + '<Child bind:count={shared} />',
+    "call": kid + '(nothing to declare: that is the hole)\n'
+    + here + '<Child bind:this={mine} />\n'
+    + here + 'mine.reset()',
 }
 </script>
 
 <h1>Talking to a child</h1>
-<p class="lede">What a parent can already do, and the one thing it cannot.</p>
+<p class="lede">The same counter, four ways. Three are props. The fourth is not.</p>
 
 <section>
-    <h2>1. A prop going down</h2>
+    <h2>1. A prop carrying a number</h2>
     <code>{code["down"]}</code>
-    <div class="live"><Child label="one" /></div>
+    <p class="what">It goes down, and the child counts from 5 instead of 0.</p>
+    <div class="live"><Child start={5} /></div>
 </section>
 
 <section>
-    <h2>2. A callback going up</h2>
+    <h2>2. A prop carrying a function</h2>
     <code>{code["up"]}</code>
+    <p class="what">A function is a value like any other. The child calls it on every +1,
+        which is how anything travels upward: Svelte 5 has no events, only this.</p>
     <div class="live">
-        <Child label="two" told={note} />
-        <p>the parent heard: <b>{said}</b></p>
+        <Child on_change={note} />
+        <p>the parent heard: <b>{seen}</b></p>
     </div>
 </section>
 
 <section>
-    <h2>3. A bindable going both ways</h2>
+    <h2>3. The same prop, read and written</h2>
     <code>{code["both"]}</code>
+    <p class="what">
+        The child's +1 moves the parent's value, and the parent's button moves the child's.
+    </p>
     <div class="live">
-        <Child label="three" bind:heard={shared} />
-        <p>the parent holds: <b>{shared if shared else "nothing"}</b></p>
+        <Child bind:count={shared} />
+        <p>
+            the parent holds: <b>{shared}</b>
+            <button onclick={lambda: (shared := 100)}>set it to 100 from here</button>
+        </p>
     </div>
 </section>
 
 <section class="broken">
-    <h2>4. Calling a method on the instance</h2>
+    <h2>4. Not a prop at all</h2>
     <code>{code["call"]}</code>
+    <p class="what">
+        Nothing is passed here. The parent asks the child to expose something on itself,
+        which Svelte calls the component's instance API. It is the only one of the four that
+        is not a prop, and the only one missing.
+    </p>
     <div class="live">
-        <Child label="four" bind:this={mine} />
+        <Child bind:this={mine} />
         <p>
-            <button onclick={probe}>call mine.shout()</button>
+            <button onclick={reset_from_here}>call mine.reset()</button>
             result: <b>{outcome}</b>
         </p>
-        <p class="what">the reference itself: <b>{type(mine).__name__}</b></p>
+        <p class="what">what bind:this gave us: <b>{type(mine).__name__}</b></p>
     </div>
 </section>
 
@@ -95,6 +122,11 @@ code = {
     .lede {
         color: #666;
         margin-top: 0.2rem;
+    }
+    .what {
+        color: #666;
+        font-size: 13px;
+        margin: 0.4rem 0;
     }
     section {
         border-top: 1px solid #ddd;
@@ -117,13 +149,10 @@ code = {
         color: #b00;
         font-weight: normal;
     }
-    .what {
-        color: #666;
-        font-size: 13px;
-    }
     :global(.child) {
+        display: inline-block;
         border: 1px dashed #bbb;
-        padding: 0.4rem 0.6rem;
+        padding: 0.3rem 0.6rem;
         border-radius: 4px;
     }
 </style>
