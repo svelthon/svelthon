@@ -17,6 +17,11 @@ def focus():
     field.focus()
 
 
+# The call form, which is what their `export const focus = () => …` looks like
+# in Python. Every marker here answers to both spellings.
+doubled = export(lambda n: n * 2)
+
+
 def internal():
     # No decorator, so a parent must not see it, exactly as an undecorated
     # function is invisible on a Svelte instance.

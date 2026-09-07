@@ -688,6 +688,19 @@ function surface(body) {
                     // front of the evaluated list rather than out of the source.
                     else if (isCallTo(node, 'inspect_with'))
                         inspects.push({ name: target.id, arity: 0, logger: true });
+                    // `focus = export(lambda: field.focus())`, the call form of
+                    // `@export`, and the shape their own `export const focus =
+                    // () => …` has. Every other marker here answers to both
+                    // spellings; this one answering to only the decorator was an
+                    // omission, not a rule. The arity comes off the lambda, since
+                    // unlike a derived or an effect an exported function is
+                    // called with arguments.
+                    else if (isCallTo(node, 'export'))
+                        funcs.push({
+                            name: target.id,
+                            arity: ((node.value.args?.[0]?.args?.args) || []).length,
+                            exported: true
+                        });
                     else state.push(target.id);
                 }
             } else if (node instanceof $B.ast.AnnAssign) {
