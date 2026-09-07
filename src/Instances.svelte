@@ -17,7 +17,7 @@ def note(n):
     seen = "the child moved to {}".format(n)
 
 
-def reset_from_here():
+def focus_the_child():
     global outcome
 
     if mine is None:
@@ -25,8 +25,8 @@ def reset_from_here():
         return
 
     try:
-        mine.reset()
-        outcome = "called"
+        mine.focus()
+        outcome = "the field is focused"
     except Exception as error:
         outcome = "{}: {}".format(type(error).__name__, error)
 
@@ -45,9 +45,9 @@ code = {
     + here + '<Child on_change={note} />',
     "both": kid + 'count: int <=>\n'
     + here + '<Child bind:count={shared} />',
-    "call": kid + '(nothing to declare: that is the hole)\n'
+    "call": kid + 'def focus(): field.focus()   (nothing marks it public: the hole)\n'
     + here + '<Child bind:this={mine} />\n'
-    + here + 'mine.reset()',
+    + here + 'mine.focus()',
 }
 </script>
 
@@ -91,14 +91,15 @@ code = {
     <h2>4. Not a prop at all</h2>
     <code>{code["call"]}</code>
     <p class="what">
-        Nothing is passed here. The parent asks the child to expose something on itself,
-        which Svelte calls the component's instance API. It is the only one of the four that
-        is not a prop, and the only one missing.
+        Nothing is passed here. The parent wants the child to <b>do</b> something, and an
+        act is not a value: a <code>should_focus</code> flag would have to be watched, acted
+        on, then cleared. Svelte calls this the component's instance API. It is the only one
+        of the four that is not a prop, and the only one missing.
     </p>
     <div class="live">
         <Child bind:this={mine} />
         <p>
-            <button onclick={reset_from_here}>call mine.reset()</button>
+            <button onclick={focus_the_child}>call mine.focus()</button>
             result: <b>{outcome}</b>
         </p>
         <p class="what">what bind:this gave us: <b>{type(mine).__name__}</b></p>
