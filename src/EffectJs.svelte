@@ -26,7 +26,10 @@
             $effect(() => {});
             late = 'accepted';
         } catch (error) {
-            late = String(error.message || error).split('\n')[0];
+            // Their message is a link in a built runtime, so the code is
+            // what carries the meaning.
+            const text = String(error.message || error);
+            late = 'refused: ' + (text.match(/e\/(\w+)/) || [, text])[1];
         }
     }
 </script>
@@ -35,4 +38,4 @@
 <p>in a function, at init: <b data-k="inner">{innerRan}</b></p>
 <p>in a function, on a click: <b data-k="late">{late}</b></p>
 <button onclick={() => n++}>n = {n} +1</button>
-<button data-k="try" onclick={tryLate}>create one now</button>
+<button data-k="try" onclick={tryLate}>make an effect from this click</button>

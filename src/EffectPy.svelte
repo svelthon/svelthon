@@ -5,6 +5,18 @@
 n = 0
 top_ran = "never"
 inner_ran = "never"
+arrow_ran = "never"
+
+
+def note(value):
+    global arrow_ran
+    arrow_ran = "ran, n={}".format(value)
+
+
+# The arrow is the other spelling of the same thing: an effect with no name. It
+# holds an expression, so it calls rather than assigns — and it must not touch a
+# name it reads, or it would depend on what it writes.
+=> note(n)
 
 
 @effect
@@ -30,6 +42,7 @@ def bump():
     n += 1
 </script>
 
-<p>at the top: <b data-k="top">{top_ran}</b></p>
+<p>at the top, decorated: <b data-k="top">{top_ran}</b></p>
+<p>at the top, arrow: <b data-k="arrow">{arrow_ran}</b></p>
 <p>in a function: <b data-k="inner">{inner_ran}</b></p>
 <button onclick={bump}>n = {n} +1</button>
