@@ -119,6 +119,21 @@ There is no `$state` equivalent to write, because there is nothing to declare: a
 module-level assignment already *is* the declaration, and the compiler reads it
 from the AST.
 
+**And that is the whole rule: in Svelthon, a rune lives at the top level of a
+component's module, and nowhere else.** The compiler reads the AST and never
+descends into a `def` or a `class`, so a rune written deeper would be built and
+wired to nothing. It is refused instead, naming the line:
+
+```
+svelthon — a rune belongs at the top level of the module,
+           and `@effect` is only read there (src/App.svelte:12)
+```
+
+Svelte's own rule is different, and it can be: `$effect` is a real call that
+reads the current owner at run time, so where it is written does not matter to
+them, only when it runs — which is why theirs refuses too, with `effect_orphan`,
+once the owner is gone.
+
 ### The six runes with no counterpart, and why
 
 Svelte documents seventeen rune forms. Eleven are in the table above — along with

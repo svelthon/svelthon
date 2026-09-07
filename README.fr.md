@@ -127,6 +127,21 @@ Il n'y a pas d'équivalent de `$state` à écrire, parce qu'il n'y a rien à
 déclarer : une affectation au niveau du module *est* la déclaration, et le
 compilateur la lit dans l'AST.
 
+**Et c'est toute la règle : en Svelthon, une rune vit au niveau module d'un
+composant, et nulle part ailleurs.** Le compilateur lit l'AST et ne descend
+jamais dans un `def` ni dans une `class`, donc une rune écrite plus bas serait
+fabriquée et câblée à rien. Elle est refusée, avec sa ligne :
+
+```
+svelthon — a rune belongs at the top level of the module,
+           and `@effect` is only read there (src/App.svelte:12)
+```
+
+La règle de Svelte est différente, et elle peut l'être : `$effect` est un vrai
+appel qui lit le propriétaire courant à l'exécution, donc l'endroit où c'est
+écrit leur est indifférent, seul le moment compte — d'où leur propre refus,
+`effect_orphan`, une fois le propriétaire disparu.
+
 ### Les six runes sans équivalent, et pourquoi
 
 Svelte documente dix-sept formes de runes. Onze sont dans le tableau ci-dessus —

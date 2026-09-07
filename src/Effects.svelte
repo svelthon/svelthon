@@ -16,9 +16,14 @@ py_code = (
     "\n"
     "def register():\n"
     "    @effect\n"
-    "    def inner(): ...        <- silence\n"
+    "    def inner(): ...        <- refused, see below\n"
     "\n"
     "register()"
+)
+
+refusal = (
+    "svelthon — a rune belongs at the top level of the module,\n"
+    "           and `@effect` is only read there (src/App.svelte:12)"
 )
 
 js_code = (
@@ -43,9 +48,12 @@ js_code = (
     <h2>Svelthon</h2>
     <code>{py_code}</code>
     <div class="live"><Py /></div>
+    <p class="what">Both spellings run at the top. Written inside a function, a rune is
+        built and wired to nothing, so it is refused rather than shipped silent:</p>
+    <code class="err">{refusal}</code>
     <p class="what">
-        The second one never runs, and nothing is said. The decorator is an identity at run
-        time, so the function is built and wired to nothing.
+        The arrow already refused it by indentation; the decorator now says the same thing.
+        A rune lives at the top level of a component's module, and nowhere else.
     </p>
 </section>
 
@@ -94,6 +102,10 @@ js_code = (
         font-size: 13px;
         white-space: pre;
         overflow-x: auto;
+    }
+    .err {
+        background: #fff4f4;
+        color: #b00;
     }
     .live {
         margin: 0.7rem 0;

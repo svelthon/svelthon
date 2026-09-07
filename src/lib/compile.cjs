@@ -645,6 +645,73 @@ const hasDottedDecorator = (node, name, attribute) =>
 // context managers, which hold no body of their own but do sit on the path.
 const BODIES = ['body', 'orelse', 'finalbody', 'handlers', 'cases', 'items'];
 
+// A rune lives at the top level of a component's module, and nowhere else.
+// `surface()` reads the AST and never descends into a `def` or a `class`, so a
+// rune written deeper is built and wired to nothing.
+//
+// The arrow already refused this, by indentation, before parsing. The decorator
+// said nothing at all — so the same construct spoke under one spelling and
+// vanished under the other, which is worse than either rule on its own.
+const RUNE_NAMES = new Set(['effect', 'derived', 'inspect', 'inspect_with']);
+
+const decoratorSpelling = (node) => {
+    for (const one of node.decorator_list || []) {
+        if (one instanceof $B.ast.Name && RUNE_NAMES.has(one.id)) return `@${one.id}`;
+        if (
+            one instanceof $B.ast.Attribute &&
+            one.value instanceof $B.ast.Name &&
+            RUNE_NAMES.has(one.value.id)
+        ) {
+            return `@${one.value.id}.${one.attr}`;
+        }
+    }
+
+    return null;
+};
+
+function refuseNestedRunes(body, source, lineOffset) {
+    const scoped = (statements) => {
+        for (const node of statements) {
+            const spelling =
+                decoratorSpelling(node) ||
+                (node instanceof $B.ast.Assign &&
+                node.value instanceof $B.ast.Call &&
+                node.value.func instanceof $B.ast.Name &&
+                RUNE_NAMES.has(node.value.func.id)
+                    ? `${node.value.func.id}()`
+                    : null);
+
+            if (spelling) {
+                throw new SyntaxError(
+                    `svelthon — a rune belongs at the top level of the module, and ` +
+                        `\`${spelling}\` is only read there (${source}:${node.lineno + lineOffset})`
+                );
+            }
+
+            for (const key of BODIES) if (node[key]) scoped(node[key]);
+        }
+    };
+
+    // Only what a `def` or a `class` holds: at the top level these are the
+    // mechanism itself, since `x => expr` compiles to `x = derived(lambda: …)`.
+    const descend = (statements) => {
+        for (const node of statements) {
+            if (
+                node instanceof $B.ast.FunctionDef ||
+                node instanceof $B.ast.AsyncFunctionDef ||
+                node instanceof $B.ast.ClassDef
+            ) {
+                scoped(node.body || []);
+                continue;
+            }
+
+            for (const key of BODIES) if (node[key]) descend(node[key]);
+        }
+    };
+
+    descend(body);
+}
+
 function surface(body) {
     const props = [];
     const bindables = [];
@@ -1025,6 +1092,7 @@ function compile(
     ].map((n) => n.name || n);
 
     refuseLocked([...declared, ...reserved], !plain && !store, source);
+    refuseNestedRunes(root._ast.body, source, lineOffset);
 
     // Context is per component subtree, where a store is per application — and
     // it is the only per-request-safe place to put state under server

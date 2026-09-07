@@ -4,7 +4,6 @@
 # runs.
 n = 0
 top_ran = "never"
-inner_ran = "never"
 arrow_ran = "never"
 
 
@@ -25,16 +24,9 @@ def top():
     top_ran = "ran, n={}".format(n)
 
 
-def register():
-    # Identical body, one indentation level deeper. The decorator is an identity
-    # at run time, so this silently produces a function nobody wired to anything.
-    @effect
-    def inner():
-        global inner_ran
-        inner_ran = "ran, n={}".format(n)
-
-
-register()
+# The third shape used to live here, one indentation level deeper, and did
+# nothing at all. It is refused at compile time now, so it cannot be shown
+# running: the message is printed beside this box instead.
 
 
 def bump():
@@ -44,5 +36,4 @@ def bump():
 
 <p>at the top, decorated: <b data-k="top">{top_ran}</b></p>
 <p>at the top, arrow: <b data-k="arrow">{arrow_ran}</b></p>
-<p>in a function: <b data-k="inner">{inner_ran}</b></p>
 <button onclick={bump}>n = {n} +1</button>
