@@ -43,7 +43,7 @@ npm run dev
 ```
 
 ```sh
-npm test             # 397 tests : sémantique, props, réactivité, surface Svelte
+npm test             # 664 tests : sémantique, props, réactivité, surface Svelte
 npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
 npm run bench        # Python contre JavaScript, même composant, vrai navigateur
@@ -1274,7 +1274,7 @@ Le runtime entier, gzippé, fait **255 Ko**.
 
 ## État
 
-Validé par `npm test` — 397 tests, plus 3 échecs attendus (voir plus bas) :
+Validé par `npm test` — 664 tests, aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
 - props : défaut Python, priorité du parent, lisibilité pendant l'init,
@@ -1308,8 +1308,9 @@ un composant Python :
 |---|---|
 | blocs | `{#if}` `{:else if}` `{#each}` (indexé, `{:else}`, avec clé) `{#key}` `{#await}` |
 | balises | `{@html}` `{@const}` `{@render}` `{#snippet}` `{@attach}` `{@debug}` |
+| snippets | déclarés, rendus, donnés à un enfant dans sa balise **ou par leur nom** |
 | liaisons | `bind:value` `bind:checked` `bind:group` `bind:this` |
-| directives | `class:` `style:` `use:` `transition:` |
+| directives | `class:` `style:` `use:` `transition:` `in:` `out:`, nommant aussi une fonction d'un **module Python** |
 | composition | props, défauts, spread d'un **dict Python**, enfants par snippet, l'API d'instance par `@export` |
 | éléments | `<svelte:window>` `<svelte:head>` `<svelte:boundary>` |
 | styles | `<style>` scopé |

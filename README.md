@@ -45,7 +45,7 @@ npm run dev
 ```
 
 ```sh
-npm test             # 397 tests: semantics, props, reactivity, Svelte surface
+npm test             # 664 tests: semantics, props, reactivity, Svelte surface
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
 npm run bench        # Python vs JavaScript, same component, real browser
@@ -1241,8 +1241,9 @@ a Python component:
 |---|---|
 | blocks | `{#if}` `{:else if}` `{#each}` (indexed, `{:else}`, keyed) `{#key}` `{#await}` |
 | tags | `{@html}` `{@const}` `{@render}` `{#snippet}` `{@attach}` `{@debug}` |
+| snippets | declared, rendered, given to a child inside its tag **or by name** |
 | bindings | `bind:value` `bind:checked` `bind:group` `bind:this` |
-| directives | `class:` `style:` `use:` `transition:` |
+| directives | `class:` `style:` `use:` `transition:` `in:` `out:`, naming a function of a **Python module** too |
 | composition | props, defaults, spread of a **Python dict**, children as snippets, the instance API through `@export` |
 | elements | `<svelte:window>` `<svelte:head>` `<svelte:boundary>` |
 | styles | scoped `<style>` |
@@ -1261,7 +1262,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test` — 397 tests, plus 3 expected failures (below):
+Validated by `npm test` — 664 tests, none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;
 - props: Python defaults, parent precedence, readability during init, parent
