@@ -10,11 +10,13 @@
 # it has a current owner at run time. We wire at compile time and have none.
 py_code = (
     "@effect\n"
-    "def top(): ...            <- runs\n"
+    "def top(): ...              <- runs\n"
+    "\n"
+    "=> note(n)                  <- runs too, the arrow is the same thing unnamed\n"
     "\n"
     "def register():\n"
     "    @effect\n"
-    "    def inner(): ...      <- silence\n"
+    "    def inner(): ...        <- silence\n"
     "\n"
     "register()"
 )
