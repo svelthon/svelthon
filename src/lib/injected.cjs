@@ -23,6 +23,11 @@ const INJECTED = [
     // The decorators only mark; the compiler has read them off the AST already.
     { name: 'derived', value: '() => (f) => f' },
     { name: 'bindable', value: '() => (v) => v' },
+    // `@export` is what Svelte writes as `export function focus()`: the one
+    // thing a parent can reach on a child that is not a prop. It marks the
+    // function and nothing else, so a component exposes nothing unless it says
+    // so, exactly as theirs does.
+    { name: 'export', value: '() => (f) => f', component: true },
     // `inspect(count, message)` is read off the AST like the decorators above;
     // the identity is what lets Python run the call it really makes.
     { name: 'inspect', value: '() => (f) => f', component: true },

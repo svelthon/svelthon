@@ -22,9 +22,20 @@ describe('a module-level name the compiler also wants', () => {
         return found.textContent;
     };
 
-    for (const { name } of INJECTED) {
+    // `export` is the exception, and it is not one of ours: it is a JavaScript
+    // reserved word, so the compiler refuses it as a module-level name long
+    // before the injection is bound — a generated `let export = …` would not
+    // parse. An author cannot hold that name in a component whatever we do,
+    // which is why the injection is free to keep it.
+    const RESERVED = new Set(['export']);
+
+    for (const { name } of INJECTED.filter((one) => !RESERVED.has(one.name))) {
         test(`the author's own ${name} wins`, () => {
             expect(read(name)).toBe(`mine ${name}`);
         });
     }
+
+    test('and a JavaScript reserved word cannot be held at all', () => {
+        expect(read('export')).toBe('<JavascriptFunction object>');
+    });
 });

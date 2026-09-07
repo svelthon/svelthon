@@ -13,6 +13,7 @@ def value():
     return start if count is None else count
 
 
+@export
 def focus():
     # What a prop cannot carry. A `should_focus` flag would have to be watched,
     # acted on, then cleared, or a second request would do nothing.

@@ -689,7 +689,11 @@ function surface(body) {
                     name: node.name,
                     arity: (node.args && node.args.args || []).length,
                     ...(pre ? { pre: true } : {}),
-                    ...(root ? { root: true } : {})
+                    ...(root ? { root: true } : {}),
+                    // `@export` leaves the function where it was: it is an
+                    // ordinary function that is *also* reachable from a parent
+                    // holding the instance.
+                    ...(hasDecorator(node, 'export') ? { exported: true } : {})
                 };
                 const bucket = hasDecorator(node, 'derived')
                     ? deriveds
@@ -1272,6 +1276,16 @@ function compile(
                 `const ${f.name} = (...a) => { try { return pyNumbers(schedule(${templateCall(f, fn)}, ${JSON.stringify(`${f.name}() — ${source}`)}, ${lineOffset})); }` +
                 ` catch (err) { throw pyError(err, ${JSON.stringify(`${f.name}() — ${source}`)}, ${lineOffset}); } };`
         ),
+        // What a parent holding `bind:this` can call. Svelte gathers whatever an
+        // instance script exports into `$$exports` and hands that object back,
+        // so a specifier list is enough — measured, `export { focus }` becomes
+        // `var $$exports = { focus }`.
+        //
+        // A component with no `@export` exports nothing, which is theirs too: an
+        // instance exposes only what it says it exposes.
+        ...(!store && funcs.some((f) => f.exported)
+            ? [``, `export { ${funcs.filter((f) => f.exported).map((f) => f.name).join(', ')} };`]
+            : []),
         ...(store
             ? [
                   ``,

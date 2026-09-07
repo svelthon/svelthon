@@ -9,6 +9,7 @@
 # component read `globalThis` where it had written a string.
 derived = "mine derived"
 bindable = "mine bindable"
+export = "mine export"
 effect = "mine effect"
 to_js = "mine to_js"
 to_py = "mine to_py"
@@ -31,6 +32,7 @@ inspect_with = "mine inspect_with"
 
 <p data-k="derived">{derived}</p>
 <p data-k="bindable">{bindable}</p>
+<p data-k="export">{export}</p>
 <p data-k="effect">{effect}</p>
 <p data-k="to_js">{to_js}</p>
 <p data-k="to_py">{to_py}</p>

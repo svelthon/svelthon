@@ -45,7 +45,8 @@ code = {
     + here + '<Child on_change={note} />',
     "both": kid + 'count: int <=>\n'
     + here + '<Child bind:count={shared} />',
-    "call": kid + 'def focus(): field.focus()   (nothing marks it public: the hole)\n'
+    "call": kid + '@export\n'
+    + kid + 'def focus(): field.focus()\n'
     + here + '<Child bind:this={mine} />\n'
     + here + 'mine.focus()',
 }
@@ -87,14 +88,14 @@ code = {
     </div>
 </section>
 
-<section class="broken">
+<section>
     <h2>4. Not a prop at all</h2>
     <code>{code["call"]}</code>
     <p class="what">
         Nothing is passed here. The parent wants the child to <b>do</b> something, and an
         act is not a value: a <code>should_focus</code> flag would have to be watched, acted
-        on, then cleared. Svelte calls this the component's instance API. It is the only one
-        of the four that is not a prop, and the only one missing.
+        on, then cleared. This is the component's instance API, and a child exposes on it
+        exactly what it marks <code>@export</code>, nothing else.
     </p>
     <div class="live">
         <Child bind:this={mine} />
@@ -144,11 +145,6 @@ code = {
     }
     .live {
         margin-top: 0.7rem;
-    }
-    .broken h2::after {
-        content: ' (cassé)';
-        color: #b00;
-        font-weight: normal;
     }
     :global(.child) {
         display: inline-block;
