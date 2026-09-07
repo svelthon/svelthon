@@ -1228,7 +1228,7 @@ a Python component:
 | tags | `{@html}` `{@const}` `{@render}` `{#snippet}` `{@attach}` `{@debug}` |
 | bindings | `bind:value` `bind:checked` `bind:group` `bind:this` |
 | directives | `class:` `style:` `use:` `transition:` |
-| composition | props, defaults, spread of a **Python dict**, children as snippets |
+| composition | props, defaults, spread of a **Python dict**, children as snippets, the instance API through `@export` |
 | elements | `<svelte:window>` `<svelte:head>` `<svelte:boundary>` |
 | styles | scoped `<style>` |
 

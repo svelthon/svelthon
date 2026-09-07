@@ -75,9 +75,16 @@ sans réactivité.
 
 ## L'API, et ce qu'elle remplace
 
-Vingt noms, et rien à importer : ils sont injectés dans le namespace du module, et
-un composant qui définit le sien le garde. Chacun se tient là où se tient une
-rune en JavaScript.
+Vingt et un noms, et rien à importer : ils sont injectés dans le namespace du
+module. Chacun se tient là où se tient une rune en JavaScript.
+
+Deux règles les gouvernent. Les **auxiliaires** s'effacent devant un composant qui
+déclare un nom de cette orthographe, exactement comme un module Python qui
+définit `list` masque le builtin. Les six qui sont les mots propres de Svelthon —
+`derived`, `effect`, `bindable`, `export`, `inspect`, `inspect_with` — sont
+**refusés** : redéfinir `effect` tient moins du masquage de `list` que de la
+redéfinition de `def`, et Svelte trace la même limite en réservant le préfixe
+`$`. Le refus a lieu à la compilation et nomme le coupable.
 
 | Python | Svelte 5 |
 |---|---|
@@ -98,6 +105,7 @@ rune en JavaScript.
 | `host()` | `$host()` |
 | `inspect(*valeurs)` | `$inspect(…)` |
 | `inspect_with(fn, *valeurs)` | `$inspect(…).with(fn)` |
+| `@export` sur un `def` | `export function …` — ce qu'un parent atteint par `bind:this` |
 | `to_js(valeur)` | — un conteneur Python rendu lisible par JavaScript |
 | `to_py(valeur)` | — l'autre sens : une valeur JavaScript lue comme du Python |
 | `tojson(valeur, indent=None)` | — `to_js` avec la sérialisation attachée, sous le mot de Jinja |
@@ -1287,7 +1295,7 @@ un composant Python :
 | balises | `{@html}` `{@const}` `{@render}` `{#snippet}` `{@attach}` `{@debug}` |
 | liaisons | `bind:value` `bind:checked` `bind:group` `bind:this` |
 | directives | `class:` `style:` `use:` `transition:` |
-| composition | props, défauts, spread d'un **dict Python**, enfants par snippet |
+| composition | props, défauts, spread d'un **dict Python**, enfants par snippet, l'API d'instance par `@export` |
 | éléments | `<svelte:window>` `<svelte:head>` `<svelte:boundary>` |
 | styles | `<style>` scopé |
 
