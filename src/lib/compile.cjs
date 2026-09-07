@@ -584,6 +584,23 @@ const injectable = (one, declared, component, js) =>
     !declared.includes(one.name) &&
     (!one.whenRead || reads(js, one.name));
 
+// A locked name is Svelthon's own word, not a builtin to shadow: refused rather
+// than quietly given to either side. Scoped like the injection itself, so a
+// component-only word is free in a plain `.py`.
+function refuseLocked(declared, component, source) {
+    const taken = INJECTED.find(
+        (one) => one.locked && (component || !one.component) && declared.includes(one.name)
+    );
+
+    if (!taken) return;
+
+    throw new SyntaxError(
+        `svelthon — \`${taken.name}\` is one of Svelthon's own words and cannot be ` +
+            `redefined (${source}). The helpers — \`date\`, \`slugify\`, \`tojson\` and the ` +
+            `rest — may still be shadowed; the decorators may not.`
+    );
+}
+
 const injections = (declared, component, js) =>
     INJECTED.filter((one) => injectable(one, declared, component, js)).map(
         (one) => `bind(__proto, '${one.name}', ${one.value}, () => {});`
@@ -637,9 +654,18 @@ function surface(body) {
     const effects = [];
     const inspects = [];
     const seen = new Set();
+    // Names the author wrote and the compiler cannot emit: a JavaScript reserved
+    // word makes an invalid `let export = …`. They are dropped, but they were
+    // still *declared*, and the locked-name check has to see them — otherwise
+    // redefining `export` would be the one silent case left.
+    const reserved = [];
 
     const take = (name) => {
-        if (seen.has(name) || JS_RESERVED.has(name)) return false;
+        if (seen.has(name)) return false;
+        if (JS_RESERVED.has(name)) {
+            reserved.push(name);
+            return false;
+        }
         seen.add(name);
         return true;
     };
@@ -716,7 +742,7 @@ function surface(body) {
 
     visit(body);
 
-    return { props, bindables, state, funcs, deriveds, effects, inspects };
+    return { props, bindables, state, funcs, deriveds, effects, inspects, reserved };
 }
 
 // The modules a `from x import y` names.
@@ -861,7 +887,8 @@ function compile(
     } catch (error) {
         throw pythonError(error, source, lineOffset, authored);
     }
-    let { props, bindables, state, funcs, deriveds, effects, inspects } = surface(root._ast.body);
+    let { props, bindables, state, funcs, deriveds, effects, inspects, reserved } =
+        surface(root._ast.body);
 
     // Neither a store nor a plain module has a parent, so an annotation there
     // declares plain state — and $props() would be meaningless at module scope.
@@ -983,6 +1010,8 @@ function compile(
     const declared = [
         ...props, ...bindables, ...state, ...funcs, ...deriveds, ...effects, ...inspects
     ].map((n) => n.name || n);
+
+    refuseLocked([...declared, ...reserved], !plain && !store, source);
 
     // Context is per component subtree, where a store is per application — and
     // it is the only per-request-safe place to put state under server

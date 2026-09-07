@@ -5,6 +5,7 @@ import Shadowed from './fixtures/Shadowed.svelte';
 
 const require = createRequire(import.meta.url);
 const { INJECTED } = require('../src/lib/injected.cjs');
+const { compile } = require('../src/lib/compile.cjs');
 
 // One test per name the compiler publishes, taken from the table itself
 // rather than written out here. A name added to it without a line in the fixture
@@ -22,20 +23,35 @@ describe('a module-level name the compiler also wants', () => {
         return found.textContent;
     };
 
-    // `export` is the exception, and it is not one of ours: it is a JavaScript
-    // reserved word, so the compiler refuses it as a module-level name long
-    // before the injection is bound — a generated `let export = …` would not
-    // parse. An author cannot hold that name in a component whatever we do,
-    // which is why the injection is free to keep it.
-    const RESERVED = new Set(['export']);
-
-    for (const { name } of INJECTED.filter((one) => !RESERVED.has(one.name))) {
+    for (const { name } of INJECTED.filter((one) => !one.locked)) {
         test(`the author's own ${name} wins`, () => {
             expect(read(name)).toBe(`mine ${name}`);
         });
     }
+});
 
-    test('and a JavaScript reserved word cannot be held at all', () => {
-        expect(read('export')).toBe('<JavascriptFunction object>');
+// The other half of the table, and the opposite rule. These are not builtins to
+// shadow, they are Svelthon's own words: a component that redefines one is
+// refused, with the name in the message, rather than quietly given to either
+// side. Svelte draws the same line by reserving the `$` prefix.
+describe('a name the compiler keeps for itself', () => {
+    const script = (src, options) => compile(src, 'Probe', 'src/Probe.svelte', options);
+
+    for (const { name, component } of INJECTED.filter((one) => one.locked)) {
+        test(`redefining ${name} is refused`, () => {
+            expect(() => script(`${name} = "mine"\n`)).toThrow(
+                new RegExp(`\`${name}\`.+cannot be redefined`)
+            );
+        });
+
+        if (component) {
+            test(`but ${name} is free in a plain module`, () => {
+                expect(() => script(`${name} = "mine"\n`, { plain: true })).not.toThrow();
+            });
+        }
+    }
+
+    test('and the message says what may still be shadowed', () => {
+        expect(() => script('effect = 1\n')).toThrow(/date.+may still be shadowed/s);
     });
 });

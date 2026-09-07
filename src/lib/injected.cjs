@@ -8,9 +8,20 @@
 // Everything the compiler publishes into a module's namespace, in one place —
 // the counterpart of JS_RESERVED in compile.cjs, and readable the same way.
 //
-// One rule for all of them: an injection is skipped when the module already
-// declares a name of that spelling. The author's own always wins, exactly as a
-// Python module that defines `list` shadows the builtin — and loses it.
+// Two rules, not one.
+//
+// A **helper** is skipped when the module already declares a name of that
+// spelling: the author's own wins, exactly as a Python module that defines
+// `list` shadows the builtin and loses it. `date` is the one measured in real
+// code, twice, for a variable holding a date — the most natural name there is.
+//
+// A **locked** name is refused outright. These are not builtins, they are
+// Svelthon's own words: redefining `effect` is closer to redefining `def` than
+// to shadowing `list`, and a reader who meets it can no longer read the file.
+// Svelte draws the same line — `$state` and `$effect` cannot be redefined at all,
+// the `$` prefix being reserved inside a component. The refusal is loud and
+// names the culprit; winning in silence is what the `js` defect did, and it is
+// the worst of the three behaviours.
 //
 // The filter is what makes that true, and it is not optional: these are bound
 // after the author's own names, onto the same prototype, so without it the
@@ -21,16 +32,16 @@ const PROPS_ID = '__props_id';
 
 const INJECTED = [
     // The decorators only mark; the compiler has read them off the AST already.
-    { name: 'derived', value: '() => (f) => f' },
-    { name: 'bindable', value: '() => (v) => v' },
+    { name: 'derived', value: '() => (f) => f', locked: true },
+    { name: 'bindable', value: '() => (v) => v', locked: true },
     // `@export` is what Svelte writes as `export function focus()`: the one
     // thing a parent can reach on a child that is not a prop. It marks the
     // function and nothing else, so a component exposes nothing unless it says
     // so, exactly as theirs does.
-    { name: 'export', value: '() => (f) => f', component: true },
+    { name: 'export', value: '() => (f) => f', component: true, locked: true },
     // `inspect(count, message)` is read off the AST like the decorators above;
     // the identity is what lets Python run the call it really makes.
-    { name: 'inspect', value: '() => (f) => f', component: true },
+    { name: 'inspect', value: '() => (f) => f', component: true, locked: true },
 
     // `inspect_with(log, count, message)` is `$inspect(…).with(fn)`. Their form
     // chains, which Python cannot spell — `with` is a keyword, and `with=` is
@@ -41,14 +52,15 @@ const INJECTED = [
     // evaluated list, where position is reliable — and it is what Python does
     // whenever position stops being enough: `map(fn, *iterables)`,
     // `filter(fn, it)`, `reduce(fn, it)`.
-    { name: 'inspect_with', value: '() => (f) => f', component: true },
+    { name: 'inspect_with', value: '() => (f) => f', component: true, locked: true },
 
     // `effect` carries `pre` because Python really applies the decorator at run
     // time: `@effect.pre` reads the attribute before calling it, and an identity
     // without one would raise before the compiler's own wiring ever ran.
     {
         name: 'effect',
-        value: '() => Object.assign((f) => f, { pre: (f) => f, root: (f) => f })'
+        value: '() => Object.assign((f) => f, { pre: (f) => f, root: (f) => f })',
+        locked: true
     },
 
     // The two bridges, each way. `to_py` is what makes `.get()`, `.items()`

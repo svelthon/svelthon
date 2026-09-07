@@ -4,13 +4,12 @@
 # injection steps aside, exactly as a Python module defining `list` shadows the
 # builtin and loses it.
 #
+# The decorators are not here: they are locked, and declaring one is refused at
+# compile time rather than shadowed. See LockedName.svelte.
+#
 # `js` is the one that found the bug. It had no guard at all, so a name declared
 # here was replaced by the bridge to the JavaScript globals — silently, and the
 # component read `globalThis` where it had written a string.
-derived = "mine derived"
-bindable = "mine bindable"
-export = "mine export"
-effect = "mine effect"
 to_js = "mine to_js"
 to_py = "mine to_py"
 tojson = "mine tojson"
@@ -26,14 +25,8 @@ set_context = "mine set_context"
 get_context = "mine get_context"
 props_id = "mine props_id"
 host = "mine host"
-inspect = "mine inspect"
-inspect_with = "mine inspect_with"
 </script>
 
-<p data-k="derived">{derived}</p>
-<p data-k="bindable">{bindable}</p>
-<p data-k="export">{export}</p>
-<p data-k="effect">{effect}</p>
 <p data-k="to_js">{to_js}</p>
 <p data-k="to_py">{to_py}</p>
 <p data-k="tojson">{tojson}</p>
@@ -49,5 +42,3 @@ inspect_with = "mine inspect_with"
 <p data-k="get_context">{get_context}</p>
 <p data-k="props_id">{props_id}</p>
 <p data-k="host">{host}</p>
-<p data-k="inspect">{inspect}</p>
-<p data-k="inspect_with">{inspect_with}</p>
