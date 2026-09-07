@@ -1376,6 +1376,9 @@ becomes Python and the two things left over, and
 instance each cost at the boundary — measured side by side, and backed by
 `tests/shapes.test.js` — and [notes/one-interpreter.md](notes/one-interpreter.md)
 on why Brython loads twice in one process and what it would take to load it once.
+[notes/crossings.md](notes/crossings.md) is the index of the boundary itself: the
+thirteen converters in one table, which door to use, and the three failures that
+show when the wrong one is chosen.
 
 **Coming from Django or Flask?** [DJANGO.md](DJANGO.md) maps every everyday
 template construct onto its Svelthon counterpart — the whole translation fits on

@@ -1418,7 +1418,9 @@ d'une directive devient du Python et sur les deux points qui restent, et [notes/
 valent un dict et une instance de classe à la frontière — mesuré côte à côte, et
 tenu par `tests/shapes.test.js` — et [notes/one-interpreter.md](notes/one-interpreter.md)
 sur les deux chargements de Brython dans un même processus, et ce que coûterait
-de n'en faire qu'un.
+de n'en faire qu'un. [notes/crossings.md](notes/crossings.md) est l'index de la
+frontière elle-même : les treize convertisseurs en un tableau, quelle porte
+prendre, et les trois pannes qui apparaissent quand on se trompe.
 
 **Vous venez de Django ou de Flask ?** [DJANGO.md](DJANGO.md) met en regard
 chaque construction de gabarit courante et son équivalent Svelthon — toute la
