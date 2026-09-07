@@ -724,19 +724,42 @@ export function pyCall(fn, where, lineOffset = 0, arity = Infinity) {
 // handler's return value is dropped on the floor, so it goes through `schedule`
 // — which runs the coroutine, and reports a failure nobody observed by throwing
 // it rather than leaving a rejected promise nobody will ever look at.
-export function pyEvent(value, lineOffset = 0) {
-    if (typeof value !== 'function' || !Array.isArray(value.$function_infos)) return value;
+// What Python really handed over, and what it declares.
+//
+// A function read off *another* module — `helpers.click` as a handler — does not
+// arrive as the accessor's own wrapper. `$B.imported` holds a plain JavaScript
+// object, so Brython's interop wraps the function again, and that wrapper
+// carries a `$function_infos` of its own with nothing in it but a name. It
+// passes an `Array.isArray` guard and then trims to `undefined`, which trims
+// nothing: `onclick={helpers.click}` called `click(event)` on a `def click()`.
+//
+// The original is kept on `$js_func`, and it is the one that answers for the
+// signature — which is why `pyBoundary` carries `$function_infos` too.
+function declared(value) {
+    if (typeof value !== 'function') return null;
 
-    const infos = value.$function_infos;
-    const where = `${infos[2]}() — ${infos[3]}`;
-    const arity = infos[8] ? Infinity : infos[10];
+    const fn = typeof value.$js_func === 'function' ? value.$js_func : value;
+    const infos = fn.$function_infos;
+
+    // `arity` is what the whole thing is for, so a shape that has no number
+    // there is not a Python signature, whatever else it carries.
+    if (!Array.isArray(infos) || (!infos[8] && typeof infos[10] !== 'number')) return null;
+
+    return { fn, where: `${infos[2]}() — ${infos[3]}`, arity: infos[8] ? Infinity : infos[10] };
+}
+
+export function pyEvent(value, lineOffset = 0) {
+    const found = declared(value);
+    if (found === null) return value;
+
+    const { fn: called, where, arity } = found;
 
     // The offset is the number of lines before `<script lang="python">`, known
     // only to the generated script — without it an error in a handler names a
     // line counted from the tag rather than from the top of the file.
     return (...args) => {
         try {
-            return schedule(value(...args.slice(0, arity).map(pyArg)), where, lineOffset);
+            return schedule(called(...args.slice(0, arity).map(pyArg)), where, lineOffset);
         } catch (error) {
             throw pyError(error, where, lineOffset);
         }
@@ -744,11 +767,10 @@ export function pyEvent(value, lineOffset = 0) {
 }
 
 export function pyHandler(value) {
-    if (typeof value !== 'function' || !Array.isArray(value.$function_infos)) return value;
+    const found = declared(value);
+    if (found === null) return value;
 
-    const infos = value.$function_infos;
-
-    return pyCall(value, `${infos[2]}() — ${infos[3]}`, 0, infos[8] ? Infinity : infos[10]);
+    return pyCall(found.fn, found.where, 0, found.arity);
 }
 
 // A JavaScript function a Python module reached for — named in `__js__`, or
