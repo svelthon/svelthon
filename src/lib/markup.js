@@ -332,8 +332,7 @@ const BLOCK_NAMES = {
     '#each': /\bas\s+([^()]*?)\s*(?:\(|$)/,
     '#snippet': /\w+\s*\(([^)]*)\)/,
     ':then': /^:then\s+(.+)$/,
-    ':catch': /^:catch\s+(.+)$/,
-    '@const': /^@const\s+([^=]+)=/
+    ':catch': /^:catch\s+(.+)$/
 };
 
 // The elements HTML closes by itself, which therefore open no body and no
@@ -461,7 +460,66 @@ function eachBlock(trimmed, declare, call) {
 // one at a time before this list existed.
 const BLOCKS = ['if', 'each', 'key', 'await', 'snippet'];
 const CLAUSES = ['else', 'then', 'catch'];
-const TAGS = ['const', 'html', 'render', 'debug', 'attach'];
+const TAGS = ['html', 'render', 'debug', 'attach'];
+
+// `{x = 2}` and `{y => x + 5}` — a name declared in the markup, with the two
+// signs the script already uses and no third one invented.
+//
+// Svelte spells these `{let x = …}` and `{const y = $derived(…)}`, which are
+// JavaScript keywords in a Python file. We keep our own, and the rule stays the
+// one sentence it has always been: **a rune lives at the top level of the
+// script, and in the markup** — the two places the compiler reads a
+// declaration.
+//
+// `=` makes state here for the same reason it does at module level: there is no
+// way to assign without it. The analogy with `x = 2` inside a `def`, which is an
+// ordinary local, does not hold — the markup is not a Python scope, so there is
+// no Python rule to inherit.
+//
+// And the powerful form costs nothing when nobody uses the power: measured on
+// 5.56.9, a `$state.raw` that nothing writes to compiles to a bare binding,
+// exactly as a `const` would. Svelte upgrades it to a signal only when a `bind:`
+// writes to it.
+//
+// `$state.raw` and never `$state`: the latter deep-proxies, and a Brython object
+// behind a JavaScript proxy fails its own type checks.
+const DECLARED_NAME = /^[A-Za-z_]\w*$/;
+
+// What `walrus()` emits for the plain form, read back so that a write aimed at a
+// markup name can be refused rather than sent to the wrong scope.
+const ASSIGNED = /__assign\("([A-Za-z_]\w*)"/g;
+
+// The signs that end in `=` without being an assignment, plus the comparison.
+const NOT_ASSIGNMENT = new Set(['=', '!', '<', '>', '+', '-', '*', '/', '%', '&', '|', '^', ':']);
+
+function declaration(inner) {
+    // The arrow first: `y => e` would otherwise be read as `y =` followed by a
+    // stray `>`.
+    const arrow = atTopLevel(inner, (i) => inner.startsWith('=>', i));
+
+    if (arrow !== -1) {
+        const name = inner.slice(0, arrow).trim();
+
+        if (DECLARED_NAME.test(name)) {
+            return { name, expression: inner.slice(arrow + 2), rune: 'derived' };
+        }
+    }
+
+    const at = atTopLevel(
+        inner,
+        (i) => inner[i] === '=' && inner[i + 1] !== '=' && !NOT_ASSIGNMENT.has(inner[i - 1])
+    );
+
+    if (at !== -1) {
+        const name = inner.slice(0, at).trim();
+
+        if (DECLARED_NAME.test(name)) {
+            return { name, expression: inner.slice(at + 1), rune: 'state' };
+        }
+    }
+
+    return null;
+}
 
 const unknownTag = (trimmed, kind, known) =>
     new SyntaxError(
@@ -523,6 +581,20 @@ function walk(markup, collect, onPython, seed, record) {
 
     const inScope = () => [...new Set(scopes.flat())];
 
+    // The block names an expression actually reads, rather than every name in
+    // scope. Passing all of them was harmless until the markup could declare
+    // one: Svelte then warns `state_referenced_locally` about a name the
+    // expression never mentions, because it sees a tag-declared state read
+    // outside a reactive position.
+    //
+    // It is the right shape anyway. `follow(x)` subscribes the reader to `x`,
+    // and an expression that does not read `x` has no business depending on it.
+    const mentioned = (expr) => {
+        const names = new Set(identifiers(expr));
+
+        return inScope().filter((one) => names.has(one));
+    };
+
     // Where a template expression sits in the *source*, for a caller that needs
     // to point at it rather than compile it — the editor's highlighting above
     // all, which colours these ranges with the same parser as the `<script>`.
@@ -548,8 +620,8 @@ function walk(markup, collect, onPython, seed, record) {
     // gets compiled — a handler goes through walrus() first, and a range has to
     // point at the text on screen rather than at the rewrite.
     const call = (expr, wrapper, source = expr) => {
-        const args = inScope();
         const trimmed = expr.trim();
+        const args = mentioned(trimmed);
 
         locate(source.trim());
         const name = collect(trimmed, wrapper, args);
@@ -564,11 +636,48 @@ function walk(markup, collect, onPython, seed, record) {
     // target rather than as an expression. No locate() — it is the same source
     // text the read half already reported, and a range must not be sent twice.
     const assign = (expr) => {
-        const args = inScope();
+        const args = mentioned(expr.trim());
         const name = collect(expr.trim(), '', args, true);
         const rest = args.map((arg) => `follow(${arg})`);
 
         return `${name}(${[BOUND_VALUE, ...rest].join(', ')})`;
+    };
+
+    // A `bind:` whose target is a name the *markup* declared — a `{x = e}`, or a
+    // block's own alias — cannot go through the pair above. The generated `def`
+    // receives that name as a parameter, so `x = value` would assign to the
+    // parameter and the write would die with the call. Silently.
+    //
+    // Svelte already knows how to write those, so the directive is handed over
+    // untouched. Measured on 5.56.9: a tag-declared `$state.raw` that nothing
+    // writes to compiles to a bare binding, and Svelte upgrades it to a real
+    // signal the moment a `bind:` targets it.
+    const declaredHere = (expr) => {
+        const name = expr.trim();
+
+        return DECLARED_NAME.test(name) && inScope().includes(name);
+    };
+
+    // `(x := …)` writes through the namespace, which holds the module's names
+    // and nothing else. A name the markup declared is not there, so the write
+    // would land on a module name of the same spelling, creating one if it had
+    // to. Silently, and in the wrong scope.
+    //
+    // Refused rather than supported: `bind:` writes those names already, and a
+    // handler that wants to toggle something has the script for it. What is
+    // missing is the ability to *write* a markup name from a handler, and no
+    // corpus asks for it — measured, zero of 889 components.
+    const refuseMarkupWalrus = (rewritten, source) => {
+        for (const [, name] of rewritten.matchAll(ASSIGNED)) {
+            if (!inScope().includes(name)) continue;
+
+            throw new SyntaxError(
+                `svelthon — \`${name}\` is declared by the markup, and \`:=\` writes ` +
+                    `the script's names, so \`{${source.trim()}}\` would write a different ` +
+                    `\`${name}\`. Use \`bind:\` to write a name the markup declared, or ` +
+                    `declare \`${name}\` in the script.`
+            );
+        }
     };
 
     while (index < markup.length) {
@@ -619,13 +728,18 @@ function walk(markup, collect, onPython, seed, record) {
                             out = out.replace(/[^\s=]+=$/, '') +
                                 `use:${GROUP_ACTION}={[${call(inner, '')}, (${BOUND_VALUE}) => ${assign(inner)}]}`;
                         } else if (DIRECTIVE.test(attribute[1])) {
-                            out += `{() => ${call(inner, '__bound')}, (${BOUND_VALUE}) => ${assign(inner)}}`;
+                            out += declaredHere(inner)
+                                ? `{${inner.trim()}}`
+                                : `{() => ${call(inner, '__bound')}, (${BOUND_VALUE}) => ${assign(inner)}}`;
                         } else if (HANDLER.test(attribute[1])) {
                             // A handler is the one place a template expression
                             // is allowed to write: it runs on an event, not
                             // during a render — where Svelte rejects a write to
                             // state, and rightly so.
-                            out += `{${EVENT_WRAPPER}(${call(walrus(inner), '', inner)})}`;
+                            const rewritten = walrus(inner);
+
+                            refuseMarkupWalrus(rewritten, inner);
+                            out += `{${EVENT_WRAPPER}(${call(rewritten, '', inner)})}`;
                         } else if (CLASS_DIRECTIVE.test(attribute[1])) {
                             out += `{${call(inner, '__truthy')}}`;
                         } else {
@@ -703,7 +817,9 @@ function walk(markup, collect, onPython, seed, record) {
             if (/[\s/>]/.test(char)) {
                 const short = out.match(SHORTHAND);
                 if (short) {
-                    out += `={() => ${call(short[1], '__bound')}, (${BOUND_VALUE}) => ${assign(short[1])}}`;
+                    out += declaredHere(short[1])
+                        ? `={${short[1].trim()}}`
+                        : `={() => ${call(short[1], '__bound')}, (${BOUND_VALUE}) => ${assign(short[1])}}`;
                 }
             }
 
@@ -829,14 +945,7 @@ function walk(markup, collect, onPython, seed, record) {
                 throw unknownTag(trimmed, 'clause', CLAUSES);
             }
         } else if (trimmed.startsWith('@')) {
-            const assigned = trimmed.match(/^@const\s+([^=]+)=([\s\S]+)$/);
-
-            if (assigned) {
-                // Compiled before the name it declares enters scope: a const may
-                // read the block's names and the consts before it, never itself.
-                out += `{@const ${assigned[1].trim()} = ${call(assigned[2], '')}}`;
-                scopes[scopes.length - 1]?.push(...declaredBy(trimmed));
-            } else if (trimmed.startsWith('@html ')) {
+            if (trimmed.startsWith('@html ')) {
                 out += `{@html ${call(trimmed.slice(6), '__text')}}`;
             } else if (trimmed.startsWith('@render ')) {
                 // The snippet itself is a JavaScript function and stays one —
@@ -859,7 +968,23 @@ function walk(markup, collect, onPython, seed, record) {
                 throw unknownTag(trimmed, 'tag', TAGS);
             }
         } else {
-            out += `{${call(inner, '__text')}}`;
+            const declared = declaration(inner);
+
+            if (declared) {
+                // Compiled before the name it declares enters scope: a
+                // declaration may read the block's names and the declarations
+                // before it, never itself.
+                const value = call(declared.expression, '');
+
+                out +=
+                    declared.rune === 'state'
+                        ? `{let ${declared.name} = $state.raw(${value})}`
+                        : `{const ${declared.name} = $derived(${value})}`;
+
+                scopes[scopes.length - 1]?.push(declared.name);
+            } else {
+                out += `{${call(inner, '__text')}}`;
+            }
         }
 
         region = null;

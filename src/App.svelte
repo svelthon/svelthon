@@ -98,7 +98,7 @@
             <p>A list is already a JavaScript array, so it needed nothing. A dict, a
                 <code>range</code>, a generator, the pairs of <code>.items()</code> — those are
                 Python objects, and <code>{'{#each}'}</code> walks them all. So does
-                <code>{'{@const}'}</code>, in Python arithmetic.</p>
+                <code>{'{bar => …}'}</code>, in Python arithmetic.</p>
         </div>
         <div class="body">
             <div class="files"><div class="code"><span class="tag">Blocks.svelte</span><pre><code><Highlight file="Blocks.svelte" code={blocksSrc} /></code></pre></div></div>

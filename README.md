@@ -313,7 +313,7 @@ Every site the markup *reads* goes through Python, not only interpolations:
 
 ```svelte
 {#each scores.items() as [k, v]}   <!-- a dict, a range, a generator: not arrays -->
-  {@const half = (v - 7) // 2}     <!-- -4, where JavaScript would say -3.5 -->
+  {half => (v - 7) // 2}           <!-- -4, where JavaScript would say -3.5 -->
 {/each}
 {#key point}                       <!-- compared by repr(), Python's own equality -->
 {@html render(row)}
@@ -412,7 +412,8 @@ Python that means what Python means.
 | `(open := not open)` | markup, handlers only | an assignment inside an expression | `onclick={() => (open = !open)}` has no Python twin |
 | `as {id, name}` | markup, `{#each}` target | unpacking a row by key | Python unpacks by position, and only `match` unpacks by key |
 | `importjs X from "…"` | script | a JavaScript import | an import is static, and a keyword makes a computed one unwriteable |
-| `doubled => count * 2` | script | a derived value | one character from the `=` beside it, and that character is the difference |
+| `doubled => count * 2` | script **and markup** | a derived value | one character from the `=` beside it, and that character is the difference |
+| `{x = 2}` | markup | state, scoped to the block | the sign the script already uses; Svelte's `{let}` and `{const}` are JavaScript keywords in a Python file |
 | `=> js.console.log(count)` | script | an effect | the same arrow with nothing to name, as `f()` alone is `x = f()` with nothing to keep |
 | `value: str <=>` | script | a prop that also travels back up | the fourth binding, and the only one that had to be a word |
 
@@ -1240,7 +1241,7 @@ a Python component:
 | | |
 |---|---|
 | blocks | `{#if}` `{:else if}` `{#each}` (indexed, `{:else}`, keyed) `{#key}` `{#await}` |
-| tags | `{@html}` `{@const}` `{@render}` `{#snippet}` `{@attach}` `{@debug}` |
+| tags | `{@html}` `{@render}` `{#snippet}` `{@attach}` `{@debug}` |
 | snippets | declared, rendered, given to a child inside its tag **or by name** |
 | bindings | `bind:value` `bind:checked` `bind:group` `bind:this` |
 | directives | `class:` `style:` `use:` `transition:` `in:` `out:`, naming a function of a **Python module** too |
@@ -1250,7 +1251,7 @@ a Python component:
 
 Template expressions are Python throughout, including the corners that are not
 interpolations: the iterable of an `{#each}`, its key, `{#key}`, the right-hand
-side of an `{@const}`, `{@html}`, the attachment of an `{@attach}`, the shorthand
+side of a declaration, `{@html}`, the attachment of an `{@attach}`, the shorthand
 `{name}`, the spread `{**attrs}`, and an interpolation inside a quoted
 attribute — `class="tag {statut.lower()}"`.
 

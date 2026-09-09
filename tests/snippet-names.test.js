@@ -41,21 +41,22 @@ describe('a snippet name in a template expression', () => {
         expect(out).toContain('<Card header={__expr_1(follow(row))} />');
     });
 
-    test('alongside its own parameters, both scopes at once', () => {
-        const { defs } = rewrite('{#snippet row(item, n)}<b>{item}</b>{/snippet}');
-
-        expect(takes(defs, 'row', 'item', 'n')).toBe(true);
+    // Only the names the expression reads: `{item}` reads neither the snippet's
+    // own name nor its second parameter, so neither is passed.
+    test('alongside its own parameters, when it reads them', () => {
+        expect(takes(rewrite('{#snippet row(item, n)}<b>{item}</b>{/snippet}').defs, 'item')).toBe(true);
+        expect(takes(rewrite('{#snippet row(item, n)}<b>{n + item}</b>{/snippet}').defs, 'item', 'n')).toBe(true);
     });
 
     test('and alongside the names of the block holding it', () => {
-        const { defs } = rewrite('{#each xs as x}{#snippet row(n)}<b>{n}</b>{/snippet}{row}{/each}');
+        const { defs } = rewrite('{#each xs as x}{#snippet row(n)}<b>{n}</b>{/snippet}{row + x}{/each}');
 
         expect(takes(defs, 'row', 'x')).toBe(true);
     });
 
     test('several of them, each in scope', () => {
         const { defs } = rewrite(
-            '{#snippet a(n)}<b>{n}</b>{/snippet}{#snippet b(n)}<b>{n}</b>{/snippet}<Card head={a} foot={b} />'
+            '{#snippet a(n)}<b>{n}</b>{/snippet}{#snippet b(n)}<b>{n}</b>{/snippet}<Card head={a or b} />'
         );
 
         expect(takes(defs, 'a', 'b')).toBe(true);

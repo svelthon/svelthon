@@ -12,7 +12,7 @@ def sell():
 
 <ul>
     {#each stock.items() as [name, qty]}
-        {@const bar = "▪" * qty or "—"}
+        {bar => "▪" * qty or "—"}
         <li>{name} · {bar}</li>
     {/each}
 </ul>

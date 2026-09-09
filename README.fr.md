@@ -326,7 +326,7 @@ interpolations :
 
 ```svelte
 {#each scores.items() as [k, v]}   <!-- un dict, un range, un générateur -->
-  {@const half = (v - 7) // 2}     <!-- -4, là où JavaScript dirait -3,5 -->
+  {half => (v - 7) // 2}           <!-- -4, là où JavaScript dirait -3,5 -->
 {/each}
 {#key point}                       <!-- comparé par repr(), l'égalité de Python -->
 {@html render(row)}
@@ -431,7 +431,8 @@ est du Python qui veut dire ce que Python veut dire.
 | `(open := not open)` | balisage, gestionnaires seuls | une affectation dans une expression | `onclick={() => (open = !open)}` n'a pas de jumeau Python |
 | `as {id, name}` | balisage, cible d'un `{#each}` | un dépaquetage par clé | Python dépaquette par position, et seul `match` le fait par clé |
 | `importjs X from "…"` | script | un import JavaScript | un import est statique, et un mot-clé rend l'import calculé inécrivable |
-| `doubled => count * 2` | script | une valeur dérivée | à un caractère du `=` d'à côté, et ce caractère est la différence |
+| `doubled => count * 2` | script **et gabarit** | une valeur dérivée | à un caractère du `=` d'à côté, et ce caractère est la différence |
+| `{x = 2}` | gabarit | de l'état, à portée du bloc | le signe que le script emploie déjà ; les `{let}` et `{const}` de Svelte sont des mots-clés JavaScript dans un fichier Python |
 | `=> js.console.log(count)` | script | un effet | la même flèche sans rien à nommer, comme `f()` seul est `x = f()` sans rien à garder |
 | `value: str <=>` | script | une prop qui remonte aussi | la quatrième liaison, et la seule qui devait s'écrire par un mot |
 
@@ -1307,7 +1308,7 @@ un composant Python :
 | | |
 |---|---|
 | blocs | `{#if}` `{:else if}` `{#each}` (indexé, `{:else}`, avec clé) `{#key}` `{#await}` |
-| balises | `{@html}` `{@const}` `{@render}` `{#snippet}` `{@attach}` `{@debug}` |
+| balises | `{@html}` `{@render}` `{#snippet}` `{@attach}` `{@debug}` |
 | snippets | déclarés, rendus, donnés à un enfant dans sa balise **ou par leur nom** |
 | liaisons | `bind:value` `bind:checked` `bind:group` `bind:this` |
 | directives | `class:` `style:` `use:` `transition:` `in:` `out:`, nommant aussi une fonction d'un **module Python** |

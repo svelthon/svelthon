@@ -336,10 +336,15 @@ describe('the blocks that declare names', () => {
         return { out, defs };
     };
 
+    // Both names are in scope; each expression takes only the one it reads.
     test('{#each} with an index declares both names', () => {
         const { defs } = rewrite('{#each rows as row, i}<li>{row}{i}</li>{/each}');
 
-        expect(defs.some((one) => /^def __expr_\d+\(row, i\):/m.test(one))).toBe(true);
+        expect(defs.some((one) => /^def __expr_\d+\(row\):/m.test(one))).toBe(true);
+        expect(defs.some((one) => /^def __expr_\d+\(i\):/m.test(one))).toBe(true);
+        expect(rewrite('{#each rows as row, i}<li>{row * i}</li>{/each}').defs.some(
+            (one) => /^def __expr_\d+\(row, i\):/m.test(one)
+        )).toBe(true);
     });
 
     test('{#each} keyed evaluates the key in the row’s scope', () => {
@@ -378,14 +383,84 @@ describe('the blocks that declare names', () => {
 
         // Its own name comes first: it lives in the scope that encloses the
         // block, and an enclosing scope reaches into it.
-        expect(defs.some((one) => /^def __expr_\d+\(row, item, index\):/m.test(one))).toBe(true);
+        expect(defs.some((one) => /^def __expr_\d+\(item\):/m.test(one))).toBe(true);
     });
 
-    test('{@const} declares a name and compiles its value', () => {
-        const { out, defs } = rewrite('{#each rows as row}{@const half = row / 2}{half}{/each}');
+    // `{x = e}` and `{y => e}` are the two signs the script already uses, put in
+    // the markup. Svelte spells them `{let x = …}` and `{const y = $derived(…)}`,
+    // which are JavaScript keywords in a Python file.
+    test('{y => e} declares a derived and compiles its value', () => {
+        const { out, defs } = rewrite('{#each rows as row}{half => row / 2}{half}{/each}');
 
-        expect(out).toContain('{@const half =');
+        expect(out).toContain('{const half = $derived(');
         expect(defs.some((one) => one.includes('row / 2'))).toBe(true);
+    });
+
+    // `$state.raw` and never `$state`: the latter deep-proxies, and a Brython
+    // object behind a JavaScript proxy fails its own type checks. Measured on
+    // 5.56.9, one that nothing writes to compiles to a bare binding anyway, so
+    // the powerful form costs nothing when the power is unused.
+    test('{x = e} declares state, raw', () => {
+        const { out } = rewrite('{n = 2}<p>{n}</p>');
+
+        expect(out).toContain('{let n = $state.raw(');
+        expect(out).not.toContain('$state(');
+    });
+
+    test('and the name it declares enters the scope after it, never before', () => {
+        const { defs } = rewrite('{#each rows as row}{half => row / 2}{half}{/each}');
+
+        // The declaration reads the block's name and not its own; the
+        // interpolation after it reads the declaration and not the block's.
+        expect(defs.some((one) => /^def __expr_\d+\(row\):/m.test(one))).toBe(true);
+        expect(defs.some((one) => /^def __expr_\d+\(half\):/m.test(one))).toBe(true);
+    });
+
+    // The sign has to be an assignment, not a comparison or a keyword argument.
+    test('and a comparison is not a declaration', () => {
+        for (const one of ['{a == b}', '{a <= b}', '{a != b}', '{f(a=1)}', '{d["k"]}']) {
+            expect(rewrite(one).out, one).not.toContain('$state.raw');
+        }
+    });
+
+    // A `bind:` on a name the markup declared cannot go through the read/write
+    // pair: the generated `def` receives that name as a *parameter*, so the
+    // write would land on the parameter and die with the call. Svelte knows how
+    // to write those, so the directive is handed over untouched.
+    test('a bind: on a markup name is handed to Svelte', () => {
+        expect(rewrite('{draft = name}<input bind:value={draft} />').out).toContain(
+            'bind:value={draft}'
+        );
+        expect(rewrite('{value = ""}<input bind:value />').out).toContain('bind:value={value}');
+    });
+
+    // Same failure, and it was there before markup declarations existed: an
+    // `{#each}` alias is a parameter too.
+    test('and so is one on a block s own alias', () => {
+        expect(rewrite('{#each xs as row}<input bind:value={row} />{/each}').out).toContain(
+            'bind:value={row}'
+        );
+    });
+
+    test('while a target the script owns keeps the pair', () => {
+        const { out } = rewrite('<input bind:value={name} />');
+
+        expect(out).toContain('__expr_set_');
+        expect(rewrite('<input bind:value={obj.field} />').out).toContain('__expr_set_');
+    });
+
+    // `:=` writes through the namespace, which holds the script's names and
+    // nothing else, so a markup name of the same spelling would be written in
+    // the wrong scope. Refused rather than sent there.
+    test('the walrus refuses a name the markup declared', () => {
+        expect(() => rewrite('{open = False}<button onclick={(open := not open)}>x</button>'))
+            .toThrow(/declared by the markup/);
+    });
+
+    test('and still writes one the script owns', () => {
+        expect(rewrite('<button onclick={(open := not open)}>x</button>').out).toContain(
+            '__event('
+        );
     });
 
     test('{:else if} compiles its condition through truthy', () => {
@@ -514,7 +589,7 @@ describe('an unknown construct is refused, never passed through', () => {
     test.for([
         ['{#nope x}y{/nope}', 'block', 'if, each, key, await, snippet'],
         ['{#if a}x{:nope}y{/if}', 'clause', 'else, then, catch'],
-        ['{@nope x}', 'tag', 'const, html, render, debug, attach']
+        ['{@nope x}', 'tag', 'html, render, debug, attach']
     ])('an unknown %s', ([markup, kind, known]) => {
         expect(() => rewrite(markup)).toThrow(new RegExp(`is not a ${kind} Svelthon knows`));
         expect(() => rewrite(markup)).toThrow(known);
