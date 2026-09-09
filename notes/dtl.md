@@ -48,19 +48,37 @@ it renders text once.
 
 ## Not Jinja, and not a modified Jinja
 
-**The practical obstacle.** Jinja is a Python package and the build runs under
-Node. Requiring CPython in the build chain breaks the positioning: `npm install
-&& npm run dev` has to be enough. Running Jinja under Brython at build time pulls
-the whole standard library back, the 2 869 kB cliff that was deliberately
-removed.
+**The obstacle, and it is structural.** We want Jinja's **block grammar** and not
+its **expression grammar**, and a parser hands over both.
 
-**The real obstacle.** We want Jinja's **block grammar** and not its **expression
-grammar**, and a parser hands over both. Nunjucks, which presents itself as a
-port of Jinja2 to JavaScript, has the same problem: it would parse `{{ x }}` with
-Jinja's semantics.
+Measured on Jinja 3.1.6, because this had been asserted before it was checked:
+its AST keeps `lineno` and nothing else. No `col_offset`, no `end_lineno`, no
+source span. `{{ a if b else c }}` becomes `CondExpr(test, expr1, expr2)`, and
+**the text of the expression is gone**. It cannot be recovered and handed to
+Brython. So taking the block skeleton while leaving the expressions alone is not
+merely awkward with a Jinja parser, it is impossible with one.
+
+Nunjucks, which presents itself as a port of Jinja2 to JavaScript, has the same
+shape and the same problem.
 
 Stage 1 of Svelthon, which took the longest, says that what sits between the
 delimiters is **Python**. Going through any Jinja parser would undo it.
+
+**One thing that is *not* an obstacle, and was wrongly presented as one.** An
+earlier draft of this note refused Jinja at build time because running it under
+Brython would pull the standard library back, quoting the 2 869 kB cliff. That
+number is a **browser bundle** figure, borrowed to refuse a **build-time**
+dependency, which is a different budget. Measured: `brython_stdlib.js` is 3 619 kB
+against a `vendor/` of 3 600 kB today, so the npm tarball would roughly double and
+the browser would ship **zero extra bytes**. For scale, `typescript` is 24 MB and
+`esbuild` is 12 MB in a normal `node_modules`.
+
+Keeping the package self-contained is a stated preference of Florent's, and a good
+one. It is not a wall, and dressing a preference as an impossibility is what that
+paragraph did. (Requiring **CPython** in the build chain would be a real
+obstacle, since `npm install && npm run dev` has to be enough. Whether Jinja runs
+under *Brython* at build time was never measured, and is left unmeasured rather
+than guessed, since the AST above settles the question anyway.)
 
 ## So: a transliteration, not a parser
 
