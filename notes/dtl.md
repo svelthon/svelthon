@@ -1,8 +1,12 @@
-# `foo.dtl.svelte`, if it ever happens
+# `foo.dtl.svelte`, and why it will not be built
 
-Design note, 2026-09-09. Nothing is committed and nothing is written. This
-records how it would be built, so that reopening the question costs a read rather
-than a rediscovery.
+Design note, 2026-09-09. **Closed the same day it was reopened**, and the closing
+reason is at the bottom under *"Why neither shape works"*. Read that first if you
+are here to decide something.
+
+What is kept below is how it was evaluated: the measurements, the design that was
+drawn, and the two ways it fails. Reopening the question should cost a read
+rather than a rediscovery, and that includes knowing what was already tried.
 
 Background: block syntax over Svelte's was written, tried and ruled out on
 2026-08-20 for three reasons, kept in `DJANGO.md` under *"Why the blocks are
@@ -129,6 +133,42 @@ Jinja template out of a Flask application and count **how much compiles
 untouched**. High, and there is a killer feature. Low, and it is a synonym.
 
 Not done.
+
+## Why neither shape works, and this reason does not expire
+
+Florent, later the same day: *"we are releasing something new, it has to be
+clear, two template options is complicated. And we would not be shipping a Svelte
+template plus a DTL template, we would be shipping a Svelte template plus a mix.
+So the argument would be that if it is the right design it becomes the only
+choice."*
+
+**The hybrid defeats its own purpose.** The design above has the author writing
+`{% for note in notes key note.id %}` and `bind:this={row}` in the same file. A
+Flask developer recognises the first line and is lost on the second; a Svelte
+developer recognises the second and is lost on the first; and `key note.id`
+belongs to neither. **Nobody arrives already knowing this language.** Recognition
+was the only benefit, so the full learning cost buys a partial one, which is
+worse than either pure option.
+
+**And "the only choice" is worse still.** Making it the sole syntax means
+inventing the other half in `{% %}` too: events, bindings, transitions, the key,
+`{#await}`. Jinja has none of them because it renders text once. What comes out
+of that exercise is not Jinja, it is **a new template language wearing Jinja's
+braces** and the familiarity evaporates exactly where the invention was needed,
+which is everything that makes a component a component rather than a page.
+
+**This is the reason that matters**, because unlike the three from 2026-08-20 it
+does not depend on the size of the project. Reason 1 was about a borrowed asset
+and a community replaces it. This one holds at any size.
+
+**What survives: a converter, not a dialect.** A one-way tool that takes a Flask
+application's Jinja templates and emits `.svelte` files in Python, once, on
+arrival. Svelthon keeps one template language forever, no option and no
+documentation tax; Jinja knowledge is used at the moment of porting and never
+after; and it is the compatibility argument without the syntax fork. Honest about
+its size: a migrating Flask application has to rewrite its views and its request
+handling anyway, templates are perhaps 30 % of the work, and the converter saves
+part of that. Modest and real.
 
 ## Naming, decided by Florent
 
