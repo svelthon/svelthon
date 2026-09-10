@@ -603,7 +603,7 @@ function refuseLocked(declared, component, source) {
 
 const injections = (declared, component, js) =>
     INJECTED.filter((one) => injectable(one, declared, component, js)).map(
-        (one) => `bind(__proto, '${one.name}', ${one.value}, () => {});`
+        (one) => `bind(__proto, '${one.name}', ${one.value});`
     );
 
 // The lines those injections need in the component's preamble, before any of
@@ -727,6 +727,75 @@ function surface(body) {
     // redefining `export` would be the one silent case left.
     const reserved = [];
 
+    // Every name the module binds, whatever the spelling, and *only* to be
+    // recognised as taken.
+    //
+    // The four buckets above answer "what is reactive here", and Python binds a
+    // module-level name in a good many more ways than the four that can be:
+    // `class`, `import`, a `for` target, a `with … as`, an `except … as`, a
+    // tuple unpacking, a walrus, a `global` written in a function. None of those
+    // is state and none of them should get a signal.
+    //
+    // But three other rules read the same list, and for them the question is not
+    // "is it reactive", it is "did the author take this word":
+    //
+    //   1. an injected helper is skipped where the author has a name of that
+    //      spelling. Missing from the list, `date` was injected over the author's
+    //      own, and their write went to the injection's no-op setter and was
+    //      discarded. `bind()` now writes an own property instead, so this is
+    //      belt as well as braces, but the list is the braces;
+    //   2. a JavaScript name from `<script module>` is published the same way,
+    //      with the same filter;
+    //   3. `refuseLocked` refuses the six words of the dialect. `effect = 0` was
+    //      refused and `for effect in …` was not, which is a rule that does not
+    //      apply rather than a rule with an exception.
+    //
+    // Recorded outside `seen`, so it never competes with a real declaration: a
+    // name that is both a `def` and a loop target is still the `def`.
+    const bound = [];
+    const bind = (name) => {
+        if (typeof name === 'string' && name) bound.push(name);
+    };
+
+    // A target is a name, or a tuple or list of them, nested to any depth:
+    // `a, (b, c) = …` is one statement binding three names. A `*rest` wraps its
+    // name in a `Starred`, which is why the value is followed too.
+    const targets = (node) => {
+        if (!node) return;
+        if (node instanceof $B.ast.Name) return bind(node.id);
+        if (node instanceof $B.ast.Starred) return targets(node.value);
+        for (const one of node.elts || []) targets(one);
+    };
+
+    // `(x := 1)` binds wherever an expression may be written, so it is the one
+    // form that cannot be found by looking at statements. Walked over every
+    // field rather than over `BODIES`, since a walrus lives in an `if` test, a
+    // call's arguments, a comprehension. Stops at a `def` and a `class`, which
+    // are scopes of their own and where the rest of this function stops too.
+    // Brython's nodes carry a `parent` back up the tree, so a walk over every
+    // field is a walk in circles without this.
+    const walked = new WeakSet();
+
+    const walruses = (node) => {
+        if (!node || typeof node !== 'object') return;
+        if (walked.has(node)) return;
+        walked.add(node);
+
+        if (Array.isArray(node)) return node.forEach(walruses);
+
+        if (
+            node instanceof $B.ast.FunctionDef ||
+            node instanceof $B.ast.AsyncFunctionDef ||
+            node instanceof $B.ast.ClassDef
+        ) {
+            return;
+        }
+
+        if (node instanceof $B.ast.NamedExpr) targets(node.target);
+
+        for (const key of Object.keys(node)) walruses(node[key]);
+    };
+
     const take = (name) => {
         if (seen.has(name)) return false;
         if (JS_RESERVED.has(name)) {
@@ -741,7 +810,13 @@ function surface(body) {
         for (const node of statements) {
             if (node instanceof $B.ast.Assign) {
                 for (const target of node.targets) {
+                    // `a, b = 1, 2` binds two names and is not a declaration the
+                    // buckets below can hold, since neither half is a statement
+                    // of its own to give a signal to.
+                    if (!(target instanceof $B.ast.Name)) targets(target);
                     if (!(target instanceof $B.ast.Name) || !take(target.id)) continue;
+
+                    bind(target.id);
 
                     // `x => expr` arrives here as `x = derived(lambda: expr)`, and
                     // `=> expr` as `__effect_0 = effect(lambda: expr)`. The emission
@@ -774,6 +849,7 @@ function surface(body) {
                 // An annotation is a declaration of interface, like a dataclass
                 // field: `name: str` is a prop, `count: int = 0` a prop with a
                 // default. A bare assignment stays internal state.
+                if (node.target instanceof $B.ast.Name) bind(node.target.id);
                 if (node.target instanceof $B.ast.Name && take(node.target.id)) {
                     (isBindable(node) ? bindables : props).push(node.target.id);
                 }
@@ -783,6 +859,7 @@ function surface(body) {
                 node instanceof $B.ast.FunctionDef ||
                 node instanceof $B.ast.AsyncFunctionDef
             ) {
+                bind(node.name);
                 if (!take(node.name)) continue;
 
                 // @derived turns a function into a value: Python reads the name and
@@ -822,7 +899,19 @@ function surface(body) {
 
     visit(body);
 
-    return { props, bindables, state, funcs, deriveds, effects, inspects, reserved };
+    // A `global x` written inside a function creates a module name that no
+    // statement at module level declares. Walked over the whole tree, since the
+    // point of `global` is that it is written where the descent above stops.
+    const globals = (statements) => {
+        for (const node of statements) {
+            if (node instanceof $B.ast.Global) for (const name of node.names || []) bind(name);
+            for (const key of [...BODIES, 'body']) if (node[key]) globals(node[key]);
+        }
+    };
+
+    globals(body);
+
+    return { props, bindables, state, funcs, deriveds, effects, inspects, reserved, bound };
 }
 
 // The modules a `from x import y` names.
@@ -1106,7 +1195,7 @@ function jsNameBindings(c, extra = []) {
 
     return [
         ...names.map((n) => `const ${jsBound(n)} = jsCall(${n});`),
-        ...names.map((n) => `bind(__proto, '${n}', () => ${jsBound(n)}, () => {});`)
+        ...names.map((n) => `bind(__proto, '${n}', () => ${jsBound(n)});`)
     ];
 }
 
@@ -1124,14 +1213,14 @@ function injectedBindings(c) {
         ...(c.store
             ? []
             : [
-                  `bind(__proto, '__truthy', () => __pybridge.truthy, () => {});`,
-                  `bind(__proto, '__text', () => __pybridge.str, () => {});`,
-                  `bind(__proto, '__seq', () => __pybridge.seq, () => {});`,
-                  `bind(__proto, '__spread', () => __pybridge.spread, () => {});`,
-                  `bind(__proto, '__bound', () => __pybridge.bound, () => {});`,
-                  `bind(__proto, '__assign', () => __assign, () => {});`,
-                  `bind(__proto, '__setattr', () => __setattr, () => {});`,
-                  `bind(__proto, '__setitem', () => __setitem, () => {});`
+                  `bind(__proto, '__truthy', () => __pybridge.truthy);`,
+                  `bind(__proto, '__text', () => __pybridge.str);`,
+                  `bind(__proto, '__seq', () => __pybridge.seq);`,
+                  `bind(__proto, '__spread', () => __pybridge.spread);`,
+                  `bind(__proto, '__bound', () => __pybridge.bound);`,
+                  `bind(__proto, '__assign', () => __assign);`,
+                  `bind(__proto, '__setattr', () => __setattr);`,
+                  `bind(__proto, '__setitem', () => __setitem);`
               ]),
         // Wrapped once, not on every read: a name Python compares by identity
         // has to answer the same object twice.
@@ -1140,12 +1229,12 @@ function injectedBindings(c) {
             .map((n) => `const ${jsBound(n)} = jsCall(${n});`),
         ...c.jsImported
             .filter((n) => !c.declared.includes(n))
-            .map((n) => `bind(__proto, '${n}', () => ${jsBound(n)}, () => {});`),
+            .map((n) => `bind(__proto, '${n}', () => ${jsBound(n)});`),
         // What the component imported in its `<script module>`, published so
         // Python can read it. A name Python declares itself wins.
         ...c.jsNames
             .filter((n) => !c.declared.includes(n))
-            .map((n) => `bind(__proto, '${n}', () => ${jsBound(n)}, () => {});`),
+            .map((n) => `bind(__proto, '${n}', () => ${jsBound(n)});`),
         // A Python module named by a directive — `in:fades.typewriter`. Svelte
         // copies that text into a `() => …` of its own, so it looks for a
         // JavaScript `fades`, and `import fades` never made one: the name binds
@@ -1156,10 +1245,14 @@ function injectedBindings(c) {
         // Read lazily by pyModule, so the position in the emitted script does
         // not matter: the module is registered by the time a directive runs.
         ...c.pyDirectives
+            // `c.emitted` and not `c.declared`: the filter is here to avoid a
+            // second JavaScript declaration of the same name, and `import fades`
+            // is the very thing that makes the directive need this line. Reading
+            // the wider list turned the import into a reason to skip it.
             .filter(
                 (n) =>
                     c.imported.includes(n) &&
-                    !c.declared.includes(n) &&
+                    !c.emitted.includes(n) &&
                     !c.jsImported.includes(n) &&
                     !c.jsNames.includes(n)
             )
@@ -1337,7 +1430,7 @@ function plainBindings(c) {
             .map((n) => `const ${jsBound(n)} = jsCall(${n});`),
         ...c.jsImported
             .filter((n) => !c.declared.includes(n))
-            .map((n) => `bind(__proto, '${n}', () => ${jsBound(n)}, () => {});`),
+            .map((n) => `bind(__proto, '${n}', () => ${jsBound(n)});`),
         ``
     ];
 }
@@ -1492,7 +1585,7 @@ function compile(
     } catch (error) {
         throw pythonError(error, source, lineOffset, authored);
     }
-    let { props, bindables, state, funcs, deriveds, effects, inspects, reserved } =
+    let { props, bindables, state, funcs, deriveds, effects, inspects, reserved, bound } =
         surface(root._ast.body);
 
     // Neither a store nor a plain module has a parent, so an annotation there
@@ -1590,9 +1683,20 @@ function compile(
     const lifecycle = (hook) => !store && funcs.some((f) => f.name === hook);
 
     // A component free to define its own `publish` or `derived` keeps it.
-    const declared = [
+    // Two lists, and they answer two different questions.
+    //
+    // `emitted` is what the generated script declares in JavaScript, one binding
+    // per reactive name. Anything that must not collide with a `let` or a `const`
+    // reads this one.
+    //
+    // `declared` is every word the author took, however they wrote it. Whether a
+    // helper may be injected over a name, and whether a locked word has been
+    // redefined, are questions about the author's text and not about signals.
+    const emitted = [
         ...props, ...bindables, ...state, ...funcs, ...deriveds, ...effects, ...inspects
     ].map((n) => n.name || n);
+
+    const declared = [...emitted];
 
     refuseLocked([...declared, ...reserved], !plain && !store, source);
     refuseNestedRunes(root._ast.body, source, lineOffset);
@@ -1620,6 +1724,7 @@ function compile(
         namespace,
         js,
         declared,
+        emitted,
         imported,
         props,
         bindables,

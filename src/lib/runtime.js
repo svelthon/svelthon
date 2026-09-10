@@ -1237,7 +1237,28 @@ export function ticking(after) {
 export function bind(proto, key, get, set) {
     Object.defineProperty(proto, key, {
         get,
-        set,
+        // No setter means the name is a *default*: an injected helper, or a
+        // JavaScript name published for Python to read. The author may still
+        // take that word, and until this existed their write was swallowed.
+        //
+        // Brython writes a global as a plain property assignment on the
+        // namespace, so it walked the prototype chain, found `() => {}` and went
+        // nowhere. `class date: …` left no class behind, and reading `date` gave
+        // the helper for the rest of the module.
+        //
+        // Writing an own property on the receiver is what a prototype is for:
+        // the default answers until someone assigns, and then theirs shadows it.
+        // Not an arrow, because `this` has to be the namespace being written to.
+        set:
+            set ??
+            function () {
+                Object.defineProperty(this, key, {
+                    value,
+                    writable: true,
+                    enumerable: true,
+                    configurable: true
+                });
+            },
         enumerable: true,
         configurable: true
     });
