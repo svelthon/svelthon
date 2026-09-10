@@ -907,7 +907,7 @@ const boundaries = new WeakMap();
 const restored = (value) => {
     if (value === null || typeof value !== 'object') return value;
 
-    const original = globalThis.__BRYTHON__.$svelthonPyobj?.get(value);
+    const original = globalThis.__BRYTHON__.PYOBJ_MAP?.get(value);
 
     return original === undefined ? value : original;
 };

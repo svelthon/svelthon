@@ -96,11 +96,10 @@ def increment():
         expect(lineFor[generated]).toBe(5); // 0-indexed: line 6 of the file
     });
 
-    // `vendor/brython.js` is patched in place for this one — it cannot go
-    // through VENDOR_PATCHES, which is a Vite plugin, where the compiler runs
-    // under Node. A direct edit is lost silently when a newer Brython is
-    // vendored, so this test is the guard: it fails the moment the patch is
-    // gone. See BRYTHON.md.
+    // Fixed upstream, `filename-invalid-identifier-chars`, and it was a local
+    // edit in `vendor/brython.js` before that. Going upstream does not retire
+    // the test: a newer Brython loses a behaviour as silently as a dropped
+    // edit, and this is what turns red when it does. See BRYTHON.md.
     test('a path builds a valid identifier, and __file__ keeps the real path', () => {
         const { module } = compile('x = 1\n', 'C', 'src/routes/+page.server.py');
 
@@ -113,7 +112,7 @@ def increment():
         expect(module).toContain("__file__ = 'src/routes/+page.server.py'");
     });
 
-    // The other edit made in `vendor/brython.js` itself. Upstream reported the
+    // Fixed upstream too, `fstring-middle-position`. Brython reported the
     // position of the token that *opened* the f-string for every FSTRING_MIDDLE
     // chunk, so anything walking the stream positionally went backwards and
     // re-emitted text it had already seen. See BRYTHON.md.

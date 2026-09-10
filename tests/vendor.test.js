@@ -1,9 +1,16 @@
+import { readFileSync } from 'node:fs';
+
 import { test, expect, describe } from 'vitest';
 import '../src/lib/runtime.js';
 
-// The repairs made to the vendored Brython are edits in the file itself, so a
-// newer build drops them silently. Their guard is this: each one is observable,
-// and losing it turns a test red rather than a page.
+// Every repair below is upstream now, in the build this file vendors. That does
+// not retire the tests: a newer Brython can lose a behaviour as easily as a
+// local edit can be dropped, and each one here is observable, so losing it
+// turns a test red rather than a page.
+//
+// Two edits are still local and would be wrong upstream: the file wrapper and
+// the two `/* @vite-ignore */`. They are the last two tests of the file, and
+// they are the ones a re-vendoring really does drop.
 describe('the vendored Brython carries its repairs', () => {
     const $B = globalThis.__BRYTHON__;
 
@@ -17,7 +24,7 @@ describe('the vendored Brython carries its repairs', () => {
         const converted = $B.pyobj2jsobj(dict);
 
         expect(Object.getOwnPropertySymbols(converted)).toHaveLength(0);
-        expect($B.$svelthonPyobj).toBeInstanceOf(WeakMap);
+        expect($B.PYOBJ_MAP).toBeInstanceOf(WeakMap);
     });
 
     // The round-trip cache the symbol used to be: the same Python object comes
@@ -26,7 +33,7 @@ describe('the vendored Brython carries its repairs', () => {
         const dict = $B.builtins.dict.$factory();
         const converted = $B.pyobj2jsobj(dict);
 
-        expect($B.$svelthonPyobj.has(converted)).toBe(true);
+        expect($B.PYOBJ_MAP.has(converted)).toBe(true);
         expect($B.jsobj2pyobj(converted)).toBe(dict);
     });
 
@@ -57,12 +64,6 @@ describe('the vendored Brython carries its repairs', () => {
         expect(String($B.JSClass.tp_getattro)).not.toContain('console.log');
     });
 
-    // Loading it twice in one process rebuilds `$B.ast`, and the classes the
-    // compiler holds lose the `to_js()` the code generator attached.
-    test('a second execution is refused', () => {
-        expect($B.ast).toBeTruthy();
-    });
-
     // `str.find` handed its `start` straight to `indexOf`. One counts code
     // points, the other UTF-16 units, so an emoji before `start` moved the
     // search backwards and the same match came back for ever. The tutorial's
@@ -91,5 +92,33 @@ describe('the vendored Brython carries its repairs', () => {
         }
 
         expect(seen).toEqual([3, 5]);
+    });
+
+    // Loading it twice in one process rebuilds `$B.ast`, and the classes the
+    // compiler holds lose the `to_js()` the code generator attached. Local, and
+    // it would be wrong upstream: a browser loads the script once per page, so
+    // the guard protects nothing there while changing the shape of the file for
+    // everyone.
+    test('a second execution is refused', () => {
+        expect($B.ast).toBeTruthy();
+    });
+
+    // The other local edit, and the one with nothing observable at run time to
+    // hang a test on: it silences a Vite warning. So the file is read as text.
+    //
+    // Two, not eighteen. `$B.$import(...)` is Brython's own function and
+    // `vite:import-analysis` never looks at it; the sixteen comments sat there
+    // for years doing nothing because `$B.$import(` contains `import(`.
+    // Measured by removing them: eighteen gives no warning, two gives no
+    // warning, none gives exactly two, at both sites below.
+    test('the two real dynamic imports are the only ones marked', () => {
+        // Relative to the working directory, not to `import.meta.url`: this
+        // file runs under jsdom, where that is an http URL and `readFileSync`
+        // refuses it. The other source-reading tests are node-environment.
+        const source = readFileSync('vendor/brython.js', 'utf8');
+
+        expect(source.match(/@vite-ignore/g)).toHaveLength(2);
+        expect(source).toContain('import(/* @vite-ignore */ ref)');
+        expect(source).toContain('import(/* @vite-ignore */ refs[0])');
     });
 });
