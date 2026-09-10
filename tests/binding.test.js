@@ -1,5 +1,5 @@
 import { test, expect, describe } from 'vitest';
-import { mount, flushSync } from 'svelte';
+import { mount, flushSync } from './mounted.js';
 import Bound from './fixtures/Bound.svelte';
 
 // A binding on a bare name, the simplest target there is: the value is compiled

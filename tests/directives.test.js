@@ -1,5 +1,5 @@
 import { test, expect, describe } from 'vitest';
-import { mount, flushSync } from 'svelte';
+import { mount, flushSync } from './mounted.js';
 import PyDirectives from './fixtures/PyDirectives.svelte';
 
 // Every directive except `bind:` now takes a Python value. `bind:` cannot: it

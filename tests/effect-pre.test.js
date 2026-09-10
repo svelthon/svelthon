@@ -1,5 +1,5 @@
 import { test, expect, describe } from 'vitest';
-import { mount, flushSync } from 'svelte';
+import { mount, flushSync } from './mounted.js';
 import EffectPre from './fixtures/EffectPre.svelte';
 
 // `@effect.pre` runs before the DOM is updated rather than after — Svelte's own

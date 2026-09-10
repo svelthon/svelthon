@@ -1,5 +1,5 @@
 import { test, expect, describe } from 'vitest';
-import { mount, flushSync } from 'svelte';
+import { mount, flushSync } from './mounted.js';
 import BoundTargets from './fixtures/BoundTargets.svelte';
 
 // `bind:` used to be the one directive left in JavaScript, because it needs to

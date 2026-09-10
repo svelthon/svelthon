@@ -1,5 +1,5 @@
 import { test, expect, describe } from 'vitest';
-import { mount, flushSync } from 'svelte';
+import { mount, flushSync, rendered } from './mounted.js';
 import Returns from './fixtures/Returns.svelte';
 
 // The boundary converts in both directions, and only one of them was ever
@@ -20,10 +20,12 @@ describe('what a JavaScript function hands back to Python', () => {
         const target = document.body.appendChild(document.createElement('div'));
         mount(Returns, { target });
         flushSync();
-        await new Promise((resolve) => setTimeout(resolve, 20));
-        flushSync();
 
-        return (k) => target.querySelector(`[data-k="${k}"]`)?.textContent;
+        const read = (k) => target.querySelector(`[data-k="${k}"]`)?.textContent;
+
+        await rendered(read, 'promise');
+
+        return read;
     };
 
     test('a number is a Python float, not a JavaScript one', async () => {

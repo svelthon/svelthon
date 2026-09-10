@@ -1,5 +1,5 @@
 import { test, expect, describe } from 'vitest';
-import { mount, flushSync } from 'svelte';
+import { mount, flushSync } from './mounted.js';
 import NamedPy from './fixtures/NamedPy.svelte';
 
 // `py` sat in JS_RESERVED alone among the runtime's names, and for a reason that

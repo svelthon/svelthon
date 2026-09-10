@@ -1,5 +1,5 @@
 import { test, expect, describe } from 'vitest';
-import { mount, flushSync } from 'svelte';
+import { mount, flushSync } from './mounted.js';
 import BindHost from './fixtures/BindHost.svelte';
 
 // An annotation whose value is a call to bindable() declares a two-way prop:

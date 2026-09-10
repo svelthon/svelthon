@@ -1,5 +1,5 @@
 import { test, expect, describe, beforeEach } from 'vitest';
-import { mount, flushSync } from 'svelte';
+import { mount, flushSync } from './mounted.js';
 import InspectWith from './fixtures/InspectWith.svelte';
 
 // `$inspect(x).with(fn)` chains, and Python cannot spell it: `with` is a keyword

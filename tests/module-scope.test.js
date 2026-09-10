@@ -1,5 +1,5 @@
 import { test, expect, describe } from 'vitest';
-import { mount, flushSync } from 'svelte';
+import { mount, flushSync } from './mounted.js';
 import ModuleScope from './fixtures/ModuleScope.svelte';
 
 // Names declared by a `<script module>` are published so Python can read them.

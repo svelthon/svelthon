@@ -1,5 +1,5 @@
 import { test, expect, describe } from 'vitest';
-import { mount, flushSync } from 'svelte';
+import { mount, flushSync } from './mounted.js';
 import Walrus from './fixtures/Walrus.svelte';
 
 // `onclick={() => (open = !open)}` is the commonest line in a Svelte template

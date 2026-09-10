@@ -1,5 +1,5 @@
 import { test, expect } from 'vitest';
-import { mount, flushSync } from 'svelte';
+import { mount, flushSync } from './mounted.js';
 import Counter from '../src/Counter.svelte';
 
 test('a click runs Python and the DOM follows', () => {

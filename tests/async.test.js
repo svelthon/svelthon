@@ -1,5 +1,5 @@
 import { test, expect, describe } from 'vitest';
-import { mount, flushSync } from 'svelte';
+import { mount, flushSync, settled } from './mounted.js';
 import Async from './fixtures/Async.svelte';
 import AsyncError from './fixtures/AsyncError.svelte';
 
@@ -18,10 +18,9 @@ describe('async def', () => {
                 target.querySelector(`button[data-k="${k}"]`).click();
                 flushSync();
             },
-            settle: async () => {
-                await new Promise((resolve) => setTimeout(resolve, 60));
-                flushSync();
-            }
+            // The condition rather than a delay: a slow machine waits longer
+            // and a fast one stops sooner.
+            settle: (check) => settled(check)
         };
     };
 
@@ -30,8 +29,7 @@ describe('async def', () => {
 
         expect(read('plain')).toBe('no');
         click('go-plain');
-        await settle();
-        expect(read('plain')).toBe('yes');
+        await settle(() => expect(read('plain')).toBe('yes'));
     });
 
     test('await yields, then resumes', async () => {
@@ -41,8 +39,7 @@ describe('async def', () => {
         flushSync();
         expect(read('awaited')).toBe('no'); // suspended on await
 
-        await settle();
-        expect(read('awaited')).toBe('yes');
+        await settle(() => expect(read('awaited')).toBe('yes'));
         expect(read('order')).toBe("['before', 'after']");
     });
 });
@@ -83,9 +80,9 @@ describe('error inside a coroutine', () => {
         flushSync();
 
         target.querySelector('button[data-k="fine"]').click();
-        await new Promise((resolve) => setTimeout(resolve, 80));
-        flushSync();
 
-        expect(target.querySelector('p[data-k="state"]').textContent).toBe('ok');
+        await settled(() =>
+            expect(target.querySelector('p[data-k="state"]').textContent).toBe('ok')
+        );
     });
 });

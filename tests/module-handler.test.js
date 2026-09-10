@@ -1,5 +1,5 @@
 import { test, expect, describe } from 'vitest';
-import { mount, flushSync } from 'svelte';
+import { mount, flushSync } from './mounted.js';
 import ModuleHandler from './fixtures/ModuleHandler.svelte';
 
 // `onclick={helpers.click}` — the handler is a function of another module, so it

@@ -5,7 +5,7 @@
 // Compiling is not rendering, so each of these is mounted. The two that are only
 // compiled here are named in AUDIT4.md with the reason.
 import { test, expect, describe, vi } from 'vitest';
-import { mount, flushSync } from 'svelte';
+import { mount, flushSync } from './mounted.js';
 import Shorthand from './fixtures/SvShorthand.svelte';
 import Options from './fixtures/SvOptions.svelte';
 import Element from './fixtures/SvElement.svelte';

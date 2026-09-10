@@ -1,5 +1,5 @@
 import { test, expect, describe } from 'vitest';
-import { mount, flushSync } from 'svelte';
+import { mount, flushSync } from './mounted.js';
 import Derived from './fixtures/Derived.svelte';
 
 // @derived turns a function into a value: Python reads the name and gets the

@@ -1,5 +1,5 @@
-import { test, expect, describe } from 'vitest';
-import { mount, flushSync } from 'svelte';
+import { test, expect, describe, beforeEach } from 'vitest';
+import { mount, flushSync } from './mounted.js';
 import Urls from './fixtures/Urls.svelte';
 
 // Liquid, Django and Jinja all spell it `urlencode`, and a template only ever
@@ -11,11 +11,18 @@ import Urls from './fixtures/Urls.svelte';
 // `/tag/{urlencode(t)}` into two segments. Jinja does not agree with itself
 // either — its string form yields `a/b` and its mapping form `p=a%2Fb`.
 describe('urlencode', () => {
-    const target = document.body.appendChild(document.createElement('div'));
-    mount(Urls, { target });
-    flushSync();
+    // Once per test rather than once per file, so the component is torn down
+    // with the test that made it.
+    let read;
 
-    const read = (k) => target.querySelector(`[data-k="${k}"]`);
+    beforeEach(() => {
+        const target = document.body.appendChild(document.createElement('div'));
+
+        mount(Urls, { target });
+        flushSync();
+
+        read = (k) => target.querySelector(`[data-k="${k}"]`);
+    });
 
     test('a value is escaped for a URL', () => {
         expect(read('piece').textContent).toBe('caf%C3%A9%20%26%20th%C3%A9');

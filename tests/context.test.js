@@ -1,5 +1,5 @@
 import { test, expect, describe } from 'vitest';
-import { mount, flushSync } from 'svelte';
+import { mount, flushSync } from './mounted.js';
 import CtxHost from './fixtures/CtxHost.svelte';
 
 // Context is per subtree, where a store is per application: two instances of

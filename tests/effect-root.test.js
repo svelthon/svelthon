@@ -1,6 +1,6 @@
 import { test, expect, describe } from 'vitest';
 import { createRequire } from 'node:module';
-import { mount, flushSync } from 'svelte';
+import { mount, flushSync } from './mounted.js';
 import EffectRoot from './fixtures/EffectRoot.svelte';
 import RootStore from './fixtures/RootStore.svelte';
 

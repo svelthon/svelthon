@@ -1,6 +1,6 @@
 import { test, expect, describe } from 'vitest';
 import { createRequire } from 'node:module';
-import { mount, flushSync } from 'svelte';
+import { mount, flushSync } from './mounted.js';
 import BindArrowHost from './fixtures/BindArrowHost.svelte';
 
 // `value: str <=>` — the fourth of the dialect's bindings, and the only one that

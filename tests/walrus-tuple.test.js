@@ -1,5 +1,5 @@
 import { test, expect, describe } from 'vitest';
-import { mount, flushSync } from 'svelte';
+import { mount, flushSync } from './mounted.js';
 import WalrusTuple from './fixtures/WalrusTuple.svelte';
 
 // Svelte has two inline ways to assign twice in a handler — the comma operator

@@ -1,5 +1,5 @@
 import { test, expect, describe } from 'vitest';
-import { mount, unmount, flushSync } from 'svelte';
+import { mount, unmount, flushSync } from './mounted.js';
 import Lifecycle from './fixtures/Lifecycle.svelte';
 
 // on_mount / on_destroy by naming convention, backed by a single $effect: the

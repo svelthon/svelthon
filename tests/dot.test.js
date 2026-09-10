@@ -1,5 +1,5 @@
 import { test, expect, describe } from 'vitest';
-import { mount, flushSync } from 'svelte';
+import { mount, flushSync } from './mounted.js';
 import DotFallback from './fixtures/DotFallback.svelte';
 import DotMissing from './fixtures/DotMissing.svelte';
 

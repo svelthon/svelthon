@@ -1,6 +1,6 @@
 import { test, expect, describe } from 'vitest';
 import { createRequire } from 'node:module';
-import { mount, flushSync } from 'svelte';
+import { mount, flushSync } from './mounted.js';
 import PropsId from './fixtures/PropsId.svelte';
 
 // `$props.id()` under the name Svelte gives it, the way `set_context` follows

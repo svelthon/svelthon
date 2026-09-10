@@ -1,5 +1,5 @@
 import { test, expect, describe } from 'vitest';
-import { mount, flushSync } from 'svelte';
+import { mount, flushSync } from './mounted.js';
 import Batch from './fixtures/Batch.svelte';
 
 // Jinja's `|batch`, and the one thing an index cannot give you: a <table> needs

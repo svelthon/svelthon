@@ -1,5 +1,5 @@
 import { test, expect, describe } from 'vitest';
-import { mount, flushSync } from 'svelte';
+import { mount, flushSync } from './mounted.js';
 import Indented from './fixtures/Indented.svelte';
 import Tabbed from './fixtures/Tabbed.svelte';
 

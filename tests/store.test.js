@@ -1,5 +1,5 @@
 import { test, expect } from 'vitest';
-import { mount, unmount, flushSync } from 'svelte';
+import { mount, unmount, flushSync } from './mounted.js';
 import StoreA from './fixtures/StoreA.svelte';
 import StoreB from './fixtures/StoreB.svelte';
 import StoreFromPython from './fixtures/StoreFromPython.svelte';

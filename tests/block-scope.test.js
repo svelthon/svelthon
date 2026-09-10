@@ -1,5 +1,5 @@
 import { test, expect, describe } from 'vitest';
-import { mount, flushSync } from 'svelte';
+import { mount, flushSync } from './mounted.js';
 import BlockScope from './fixtures/BlockScope.svelte';
 
 // `surface()` used to walk the module's top-level statements and stop there, so

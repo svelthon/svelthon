@@ -1,5 +1,5 @@
 import { test, expect, describe } from 'vitest';
-import { mount, flushSync } from 'svelte';
+import { mount, flushSync } from './mounted.js';
 import { walrus } from '../src/lib/markup.js';
 import WalrusTargets from './fixtures/WalrusTargets.svelte';
 

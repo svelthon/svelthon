@@ -1,5 +1,5 @@
 import { test, expect, describe } from 'vitest';
-import { mount, flushSync } from 'svelte';
+import { mount, flushSync } from './mounted.js';
 import { directiveModules } from '../src/lib/markup.js';
 import { pyModule } from '../src/lib/runtime.js';
 import DirectiveModule from './fixtures/DirectiveModule.svelte';

@@ -29,7 +29,9 @@ import { NONE, __pybridge, plainData, pyData, ticking } from './runtime.js';
 // JavaScript errors keep crossing untouched, which was the reason `pyError`
 // stayed out of their way in the first place.
 function refuse(message) {
-    const error = new Error(message);
+    const error = new Error(`svelthon — ${message}`);
+
+    error.$svelthon = true;
 
     return error;
 }

@@ -1,5 +1,5 @@
 import { test, expect, describe } from 'vitest';
-import { mount, flushSync } from 'svelte';
+import { mount, flushSync } from './mounted.js';
 import FromJson from './fixtures/FromJson.svelte';
 
 // `to_js` and `to_py` are the two directions of the same bridge, and

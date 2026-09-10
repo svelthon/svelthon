@@ -1,5 +1,5 @@
 import { test, expect, describe } from 'vitest';
-import { mount, unmount, flushSync } from 'svelte';
+import { mount, unmount, flushSync } from './mounted.js';
 import Groups from './fixtures/Groups.svelte';
 
 // `bind:group` is the one directive Svelte refuses a getter/setter pair for: it

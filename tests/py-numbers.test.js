@@ -1,5 +1,5 @@
 import { test, expect, describe } from 'vitest';
-import { mount, flushSync } from 'svelte';
+import { mount, flushSync } from './mounted.js';
 
 import Retained from './fixtures/Retained.svelte';
 import { pyNumbers } from '../src/lib/runtime.js';

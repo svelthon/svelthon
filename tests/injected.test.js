@@ -1,5 +1,5 @@
 import { test, expect, describe } from 'vitest';
-import { mount, flushSync } from 'svelte';
+import { mount, flushSync } from './mounted.js';
 import { createRequire } from 'node:module';
 import Shadowed from './fixtures/Shadowed.svelte';
 

@@ -1,5 +1,5 @@
 import { test, expect, describe } from 'vitest';
-import { mount, flushSync } from 'svelte';
+import { mount, flushSync } from './mounted.js';
 import Lambdas from './fixtures/Lambdas.svelte';
 
 // `onclick={lambda: choose(pep)}` — a handler in the language the rest of the

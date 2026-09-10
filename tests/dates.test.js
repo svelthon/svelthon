@@ -1,5 +1,5 @@
 import { test, expect, describe } from 'vitest';
-import { mount, flushSync } from 'svelte';
+import { mount, flushSync } from './mounted.js';
 import Dates from './fixtures/Dates.svelte';
 
 // Django's `|date` keeps its word; what stands behind it is the platform's

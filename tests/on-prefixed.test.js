@@ -1,5 +1,5 @@
 import { test, expect, describe } from 'vitest';
-import { mount, flushSync } from 'svelte';
+import { mount, flushSync } from './mounted.js';
 
 import OnPrefixed from './fixtures/OnPrefixed.svelte';
 import { pyEvent, NONE } from '../src/lib/runtime.js';

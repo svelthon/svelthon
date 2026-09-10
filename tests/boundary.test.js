@@ -1,5 +1,5 @@
 import { test, expect, describe } from 'vitest';
-import { mount, flushSync } from 'svelte';
+import { mount, flushSync } from './mounted.js';
 import JsBoundary from './fixtures/JsBoundary.svelte';
 
 // The boundary as JavaScript sees it: a `<script module>` calling back into

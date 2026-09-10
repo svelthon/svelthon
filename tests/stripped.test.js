@@ -1,5 +1,5 @@
-import { test, expect, describe } from 'vitest';
-import { mount, flushSync } from 'svelte';
+import { test, expect, describe, beforeEach } from 'vitest';
+import { mount, flushSync } from './mounted.js';
 import Stripped from './fixtures/Stripped.svelte';
 
 // Jinja's `|striptags`, done with the browser's parser instead of a regex.
@@ -7,11 +7,20 @@ import Stripped from './fixtures/Stripped.svelte';
 // two of them are ordinary content rather than an edge case: entities are left
 // undecoded, and markup escapes through an attribute holding a `>`.
 describe('striptags', () => {
-    const target = document.body.appendChild(document.createElement('div'));
-    mount(Stripped, { target });
-    flushSync();
+    // Once per test rather than once per file, so the component is torn down
+    // with the test that made it.
+    let out;
+    let read;
 
-    const out = (i) => target.querySelector(`p[data-k="out-${i}"]`).textContent;
+    beforeEach(() => {
+        const target = document.body.appendChild(document.createElement('div'));
+
+        mount(Stripped, { target });
+        flushSync();
+
+        out = (i) => target.querySelector(`p[data-k="out-${i}"]`).textContent;
+        read = (k) => target.querySelector(`p[data-k="${k}"]`).textContent;
+    });
 
     test('tags go, text stays', () => {
         expect(out(0)).toBe('Bonjour le monde');
@@ -53,6 +62,6 @@ describe('striptags', () => {
     });
 
     test('a value that is not a string goes through str() first', () => {
-        expect(target.querySelector('p[data-k="number"]').textContent).toBe('703');
+        expect(read('number')).toBe('703');
     });
 });

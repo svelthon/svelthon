@@ -1,5 +1,5 @@
 import { test, expect, describe } from 'vitest';
-import { mount, flushSync } from 'svelte';
+import { mount, flushSync, rendered } from './mounted.js';
 import AwaitCoroutine from './fixtures/AwaitCoroutine.svelte';
 import AwaitShorthand from './fixtures/AwaitShorthand.svelte';
 
@@ -19,10 +19,9 @@ describe('an await block over a coroutine', () => {
 
         return {
             read: (k) => target.querySelector(`p[data-k="${k}"]`).textContent,
-            settle: async () => {
-                await new Promise((resolve) => setTimeout(resolve, 120));
-                flushSync();
-            }
+            // Both blocks show `waiting` until their coroutine lands, so that
+            // is the condition rather than a guessed delay.
+            settle: () => rendered((k) => target.querySelector(`p[data-k="${k}"]`).textContent, 'block', 'failing')
         };
     };
 
@@ -53,10 +52,12 @@ describe('the {#await … then name} shorthand', () => {
         const target = document.body.appendChild(document.createElement('div'));
         mount(AwaitShorthand, { target });
         flushSync();
-        await new Promise((resolve) => setTimeout(resolve, 50));
-        flushSync();
 
-        return (k) => target.querySelector(`p[data-k="${k}"]`).textContent;
+        const read = (k) => target.querySelector(`p[data-k="${k}"]`).textContent;
+
+        await rendered(read, 'long');
+
+        return read;
     };
 
     test('declares its name, like the clause it folds', async () => {

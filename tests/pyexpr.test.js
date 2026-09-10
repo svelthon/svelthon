@@ -1,5 +1,5 @@
 import { test, expect, describe } from 'vitest';
-import { mount, flushSync } from 'svelte';
+import { mount, flushSync } from './mounted.js';
 import PyExpr from './fixtures/PyExpr.svelte';
 import Shorthand from './fixtures/Shorthand.svelte';
 import JsImport from './fixtures/JsImport.svelte';

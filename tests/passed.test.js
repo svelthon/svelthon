@@ -1,5 +1,5 @@
 import { test, expect, describe } from 'vitest';
-import { mount, flushSync } from 'svelte';
+import { mount, flushSync, rendered } from './mounted.js';
 import Passed from './fixtures/Passed.svelte';
 
 // Two constructs kept their text through every earlier pass, and nobody noticed
@@ -11,10 +11,12 @@ describe('the constructs that used to keep their JavaScript', () => {
         const target = document.body.appendChild(document.createElement('div'));
         mount(Passed, { target });
         flushSync();
-        await new Promise((resolve) => setTimeout(resolve, 50));
-        flushSync();
 
-        return (k) => target.querySelector(`[data-k="${k}"]`)?.textContent;
+        const read = (k) => target.querySelector(`[data-k="${k}"]`)?.textContent;
+
+        await rendered(read, 'await', 'inline', 'caught');
+
+        return read;
     };
 
     test('what an {#await} awaits is Python', async () => {

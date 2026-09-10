@@ -1,5 +1,5 @@
 import { test, expect, describe } from 'vitest';
-import { mount, unmount, flushSync } from 'svelte';
+import { mount, unmount, flushSync } from './mounted.js';
 import Attach from './fixtures/Attach.svelte';
 
 // `{@attach fn}` is Svelte's replacement for `use:`, and it sits inside the tag

@@ -1,5 +1,5 @@
 import { test, expect, describe } from 'vitest';
-import { mount, flushSync } from 'svelte';
+import { mount, flushSync } from './mounted.js';
 import Keys from './fixtures/Keys.svelte';
 
 // An `{#each}` key is an expression, so it may hold parentheses of its own — a

@@ -1,5 +1,5 @@
 import { test, expect, describe } from 'vitest';
-import { mount, flushSync } from 'svelte';
+import { mount, flushSync } from './mounted.js';
 import Crossing from './fixtures/Crossing.svelte';
 
 // Each container, asked what it has become at each place it can cross out of the

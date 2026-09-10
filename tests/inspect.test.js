@@ -1,6 +1,6 @@
 import { test, expect, describe, vi, afterEach } from 'vitest';
 import { createRequire } from 'node:module';
-import { mount, flushSync } from 'svelte';
+import { mount, flushSync } from './mounted.js';
 import Inspect from './fixtures/Inspect.svelte';
 
 // `inspect(count, message)` is a console.log that reruns on its own — Svelte's

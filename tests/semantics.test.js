@@ -1,5 +1,5 @@
 import { test, expect } from 'vitest';
-import { mount } from 'svelte';
+import { mount } from './mounted.js';
 import Semantics from '../src/Semantics.svelte';
 
 // Each of these is wrong under JavaScript semantics, so passing them means the

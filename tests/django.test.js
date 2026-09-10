@@ -1,5 +1,5 @@
 import { test, expect, describe } from 'vitest';
-import { mount, flushSync } from 'svelte';
+import { mount, flushSync } from './mounted.js';
 import DjangoDoc from './fixtures/DjangoDoc.svelte';
 
 // DJANGO.md maps every everyday Django construct onto its Svelthon counterpart.

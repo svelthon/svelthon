@@ -1,5 +1,5 @@
 import { test, expect, describe, vi, afterEach } from 'vitest';
-import { mount, unmount, flushSync } from 'svelte';
+import { mount, unmount, flushSync } from './mounted.js';
 import FromNow from './fixtures/FromNow.svelte';
 
 // Django's `|timesince` and `|timeuntil` in one name, which is neither of

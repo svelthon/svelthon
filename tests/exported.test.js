@@ -1,5 +1,5 @@
 import { test, expect, describe } from 'vitest';
-import { mount, flushSync } from 'svelte';
+import { mount, flushSync } from './mounted.js';
 import Exposed from './fixtures/Exposed.svelte';
 import ExposedHost from './fixtures/ExposedHost.svelte';
 

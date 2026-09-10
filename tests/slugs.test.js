@@ -1,5 +1,5 @@
-import { test, expect, describe } from 'vitest';
-import { mount, flushSync } from 'svelte';
+import { test, expect, describe, beforeEach } from 'vitest';
+import { mount, flushSync } from './mounted.js';
 import Slugs from './fixtures/Slugs.svelte';
 
 // Django's `|slugify`, taken to its conclusion: a URL carries unicode, so the
@@ -7,12 +7,21 @@ import Slugs from './fixtures/Slugs.svelte';
 // Django folds accents to ASCII and drops what will not fold, which turns a
 // Russian or Japanese site into one empty slug per article.
 describe('slugify', () => {
-    const target = document.body.appendChild(document.createElement('div'));
-    mount(Slugs, { target });
-    flushSync();
+    // Once per test rather than once per file, so the component is torn down
+    // with the test that made it. The fixture renders constants, so the mount is
+    // the whole cost, and it is a millisecond.
+    let read;
+    let slug;
 
-    const read = (k) => target.querySelector(`[data-k="${k}"]`);
-    const slug = (i) => read(`slug-${i}`).textContent;
+    beforeEach(() => {
+        const target = document.body.appendChild(document.createElement('div'));
+
+        mount(Slugs, { target });
+        flushSync();
+
+        read = (k) => target.querySelector(`[data-k="${k}"]`);
+        slug = (i) => read(`slug-${i}`).textContent;
+    });
 
     test('a plain title', () => {
         expect(slug(0)).toBe('making-the-gil-optional');
