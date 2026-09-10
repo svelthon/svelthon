@@ -712,6 +712,10 @@ function refuseNestedRunes(body, source, lineOffset) {
     descend(body);
 }
 
+// The two assignments that are declarations to the compiler rather than data to
+// the module. Both are read off the AST, and neither is state.
+const DIRECTIVES = new Set(['__all__', '__js__']);
+
 function surface(body) {
     const props = [];
     const bindables = [];
@@ -810,6 +814,14 @@ function surface(body) {
         for (const node of statements) {
             if (node instanceof $B.ast.Assign) {
                 for (const target of node.targets) {
+                    // `__all__` and `__js__` are read off the AST by
+                    // `declaredExports` and `declaredJsImports`, and read is all
+                    // they are for. Left in the buckets they became module
+                    // state: a `.svelte.py` published `store.__all__` with a
+                    // revision signal, a bump and a read behind it, which is
+                    // generated machinery for a compiler directive.
+                    if (target instanceof $B.ast.Name && DIRECTIVES.has(target.id)) continue;
+
                     // `a, b = 1, 2` binds two names and is not a declaration the
                     // buckets below can hold, since neither half is a statement
                     // of its own to give a signal to.
@@ -1302,18 +1314,32 @@ function instanceExports(c) {
                   // through getters because Svelte forbids exporting a reassigned
                   // $state binding directly — and a getter is what keeps the read
                   // reactive at the call site.
+                  // `__all__` says what a module exports, and it said it in a
+                  // `.py` and nothing at all here: the store published every
+                  // name it had, so the same declaration meant "this is the
+                  // contract" in one file kind and was ignored in the other.
+                  // `c.listed` is null when the module wrote none, which is
+                  // when everything is published as before.
                   `export const store = {`,
-                  ...c.state.map((n) => `    get ${n}() { return (${rev(n)}, ${n}); },`),
-                  ...c.state.map((n) => `    set ${n}(v) { ${n} = track(v, ${bump(n)}, ${read(n)}); },`),
-                  ...c.deriveds.map((d) => `    get ${d.name}() { return follow(${d.name}); },`),
-                  ...c.funcs.map((f) => `    ${f.name},`),
+                  ...c.state.filter(c.published).map((n) => `    get ${n}() { return (${rev(n)}, ${n}); },`),
+                  ...c.state.filter(c.published).map((n) => `    set ${n}(v) { ${n} = track(v, ${bump(n)}, ${read(n)}); },`),
+                  ...c.deriveds
+                      .filter((d) => c.published(d.name))
+                      .map((d) => `    get ${d.name}() { return follow(${d.name}); },`),
+                  ...c.funcs.filter((f) => c.published(f.name)).map((f) => `    ${f.name},`),
                   `};`,
                   ``,
                   `export default store;`,
                   // Named exports too: a `.py` is not only a store. SvelteKit
                   // looks for `load`, `actions`, `GET` — by name, on the module.
-                  ...(c.funcs.length
-                      ? [``, `export { ${c.funcs.map((f) => f.name).join(', ')} };`]
+                  ...(c.funcs.filter((f) => c.published(f.name)).length
+                      ? [
+                            ``,
+                            `export { ${c.funcs
+                                .filter((f) => c.published(f.name))
+                                .map((f) => f.name)
+                                .join(', ')} };`
+                        ]
                       : [])
               ]
             : [])
@@ -1463,11 +1489,22 @@ function plainExports(c) {
         // No default export: SvelteKit refuses one on a route module, and a
         // Python module has no notion of a default anyway. Named exports are
         // the whole contract, and `__all__` is where it is written.
+        // Read off the namespace and not off a JavaScript binding, because only
+        // the *reactive* names have one. A class, an import and a `for` target
+        // are the author's names and are correctly not signals, so `${n}` alone
+        // referenced something that was never declared: `__all__ = ["Widget"]`
+        // on a class emitted `pyExport(Widget, …)` and the module failed to
+        // evaluate with `ReferenceError: Widget is not defined`, taking every
+        // other export down with it.
+        //
+        // `__py` is where the module body put every one of them, and reading it
+        // through the accessor gives the reactive ones the same value their
+        // binding holds. One shape for all of them.
         ...c.exported
             .filter((n) => !c.isFunction(n))
             .map(
                 (n) =>
-                    `const __export_${n} = pyExport(${n}, ${JSON.stringify(`${n} — ${c.source}`)}, ${c.lineOffset});`
+                    `const __export_${n} = pyExport(${NS}.${n}, ${JSON.stringify(`${n} — ${c.source}`)}, ${c.lineOffset});`
             ),
         ...(c.exported.length
             ? [
@@ -1725,6 +1762,9 @@ function compile(
         js,
         declared,
         emitted,
+        // Whether a name belongs to the module's public surface. `__all__` when
+        // the module wrote one, everything when it did not.
+        published: (name) => listed === null || listed.includes(name),
         imported,
         props,
         bindables,

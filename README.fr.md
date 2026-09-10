@@ -721,6 +721,14 @@ ces noms directement :
 import { chercher } from '$lib/peps.py';
 ```
 
+Il nomme tout ce que le module lie, et pas seulement ce qu'il affecte : une
+classe, une constante, une fonction, un nom amené par un import. Et un nom qu'il
+invente est refusé à la compilation, puisqu'un module exporte ce qu'il définit.
+
+**Un module réactif le lit aussi.** `__all__` dans un `.svelte.py` dit ce que le
+store publie, exactement comme dans un `.py` ; sans lui, le store publie tous les
+noms qu'il a.
+
 **Un module réactif** est celui de l'état partagé. Ses noms de niveau module
 deviennent des signaux créés **une fois pour toute l'application**, là où l'état
 d'un composant naît et meurt avec chaque instance :

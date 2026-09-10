@@ -678,6 +678,14 @@ imports those names directly:
 import { chercher } from '$lib/peps.py';
 ```
 
+It names anything the module binds, not only what it assigns: a class, a
+constant, a function, a name brought in by an import. And a name it invents is
+refused at compile time, since a module exports what it defines.
+
+**A reactive module reads it too.** `__all__` in a `.svelte.py` says what the
+store publishes, exactly as it does in a `.py`; without one, the store publishes
+every name it has.
+
 **A reactive module** is the shared-state one. Its module-level names become
 signals created **once for the whole application**, where a component's state is
 born and dies with each instance:
