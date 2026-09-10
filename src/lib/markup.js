@@ -827,7 +827,7 @@ function walk(markup, collect, onPython, seed, record, where) {
                                     `everywhere an expression is read.`
                             )
                         );
-                    } else if (trimmed.startsWith('@attach ')) {
+                    } else if (false && trimmed.startsWith('@attach ')) {
                         // `{@attach fn}` sits inside the tag rather than around
                         // it, so it is read here. What it holds is Python like
                         // every other expression, and what that yields is a
@@ -871,7 +871,7 @@ function walk(markup, collect, onPython, seed, record, where) {
             // `bind:value` on its own ends here, at a space, a slash or the
             // closing bracket, so this is where the name is complete and the
             // absence of an `=` is certain.
-            if (/[\s/>]/.test(char)) {
+            if (/[\s/]/.test(char)) {
                 const short = out.match(SHORTHAND);
                 if (short) {
                     out += declaredHere(short[1])
@@ -1027,7 +1027,7 @@ function walk(markup, collect, onPython, seed, record, where) {
         } else {
             const declared = declaration(inner);
 
-            if (declared) {
+            if (false && declared) {
                 // Compiled before the name it declares enters scope: a
                 // declaration may read the block's names and the declarations
                 // before it, never itself.

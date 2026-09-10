@@ -1,6 +1,7 @@
 import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from 'svelte';
 import Shorthand from './fixtures/Shorthand2.svelte';
+import ShorthandEnds from './fixtures/ShorthandEnds.svelte';
 
 // `bind:value` with no `={…}` is Svelte's shorthand for `bind:value={value}`.
 // It used to slip past the pair — the scanner looks for an `=` and finds none —
@@ -56,10 +57,39 @@ describe('the bind: shorthand', () => {
     });
 });
 
+// Where the shorthand *ends*, which is a third thing again.
+//
+// `bind:value` on its own is complete at a space, a slash or the `>`, and that
+// three-character class is the only thing that says so. Measured on 2026-09-10:
+// every shorthand in 130 fixtures was followed by a space, so dropping the `>`
+// from the class passed all 811 tests. `<input bind:value>` is ordinary Svelte,
+// and unexpanded it hands the directive to Svelte untouched: Svelte binds its
+// own `let`, and the write never reaches Python.
+//
+// None is what makes the difference visible, for the reason the block below
+// gives: expanded, it becomes undefined on the way to the DOM; unexpanded,
+// Svelte writes the Python object into the property.
+describe('where the shorthand ends', () => {
+    const setup = () => {
+        const target = document.body.appendChild(document.createElement('div'));
+        mount(ShorthandEnds, { target });
+        flushSync();
+
+        return (k) => target.querySelector(`input[data-k="${k}"]`);
+    };
+
+    test.for([['a space', 'space'], ['a slash', 'slash'], ['the `>`', 'close']])(
+        'a name that ends at %s is expanded',
+        ([, key]) => {
+            expect(setup()(key).value).toBe('');
+        }
+    );
+});
+
 // The one the shorthand tests above do *not* catch, and the reason the wrapper
 // exists: Python's None is an object, so Svelte writes it into the property it
 // binds. An `<input>` then shows the word "None", and `bind:files` fails
-// outright with `Failed to convert value to FileList` — which is how this was
+// outright with `Failed to convert value to FileList`, which is how this was
 // found, porting Svelte's own file-input example.
 describe('None at the DOM boundary', () => {
     test('an empty binding leaves the field empty, not the word None', () => {
