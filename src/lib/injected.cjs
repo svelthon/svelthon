@@ -78,16 +78,11 @@ const INJECTED = [
     // `json.dumps` cannot stand in for it: Brython leaves a class instance
     // untouched, so the dump walks the raw object. This is `to_js` with the
     // dump attached.
-    // A non-numeric indent is dropped rather than passed on: Python's None is an
-    // object, and `JSON.stringify(v, null, None)` would quietly indent with it.
-    {
-        name: 'tojson',
-        value: '() => (v, indent) => JSON.stringify(plainData(v), null, typeof indent === "number" ? indent : undefined)'
-    },
+    { name: 'tojson', value: '() => __helpers.tojson' },
 
     // The mirror of the line above, and built the same way: this is `to_py`
     // with the parse attached.
-    { name: 'from_json', value: '() => (text) => pyData(JSON.parse(text))' },
+    { name: 'from_json', value: '() => __helpers.from_json' },
 
     // The inbound bridge: the JavaScript globals, as they are.
     { name: 'js', value: '() => globalThis' },
@@ -106,25 +101,7 @@ const INJECTED = [
     // `None` there means *no padding*, not "pad with None", the rule every
     // helper here follows, since None is an object and would otherwise sail
     // through an `!== undefined` test and be rendered as a cell.
-    {
-        name: 'batch',
-        value: `() => (xs, size, fill) => {
-            if (!Number.isInteger(size) || size < 1) {
-                throw new Error('batch(): size must be an integer of at least one');
-            }
-
-            const items = __pybridge.seq(xs);
-            const out = [];
-
-            for (let at = 0; at < items.length; at += size) {
-                const row = items.slice(at, at + size);
-                if (fill !== undefined && fill !== NONE) while (row.length < size) row.push(fill);
-                out.push(__pybridge.list(row));
-            }
-
-            return __pybridge.list(out);
-        }`
-    },
+    { name: 'batch', value: '() => __helpers.batch' },
 
     // Django's `|date`, under Django's word, with the platform's behaviour
     // behind it, which is the rule the whole set follows: the keyword guides
@@ -138,31 +115,7 @@ const INJECTED = [
     // `locale` is the last argument, and matters most under server rendering:
     // without it the server formats in *its* language and the browser
     // reformats in the visitor's, which Svelte reports as a hydration mismatch.
-    {
-        name: 'date',
-        value: `() => (value, dateStyle, timeStyle, locale) => {
-            const at = value instanceof Date ? value : new Date(value);
-
-            if (Number.isNaN(at.getTime())) {
-                throw new Error('date(): ' + JSON.stringify(value) + ' is not a date');
-            }
-
-            // A string, or absent. Python's None is an *object*, so testing
-            // against undefined would hand Intl a Brython singleton and fail on
-            // a value the author wrote as "nothing".
-            const options = {};
-
-            if (typeof dateStyle === 'string') options.dateStyle = dateStyle;
-            if (typeof timeStyle === 'string') options.timeStyle = timeStyle;
-            if (options.dateStyle === undefined && options.timeStyle === undefined) {
-                options.dateStyle = 'medium';
-            }
-
-            const language = typeof locale === 'string' ? locale : undefined;
-
-            return new Intl.DateTimeFormat(language, options).format(at);
-        }`
-    },
+    { name: 'date', value: '() => __helpers.date' },
 
     // Django's `|timesince` and `|timeuntil` in one, which is why it carries
     // neither word: `Intl` formats a *signed* gap, so the direction is in the
@@ -178,34 +131,7 @@ const INJECTED = [
     // for is what the *display* needs: a second while it counts seconds, an
     // hour once it counts days. So it slows down on its own as a date ages,
     // which is why nothing has to switch it off.
-    {
-        name: 'fromnow',
-        value: `() => (value, locale) => {
-            const at = value instanceof Date ? value : new Date(value);
-
-            if (Number.isNaN(at.getTime())) {
-                throw new Error('fromnow(): ' + JSON.stringify(value) + ' is not a date');
-            }
-
-            const UNITS = [
-                ['year', 31536000], ['month', 2592000], ['week', 604800],
-                ['day', 86400], ['hour', 3600], ['minute', 60], ['second', 1]
-            ];
-
-            const gap = (at.getTime() - Date.now()) / 1000;
-            const size = Math.abs(gap);
-            const [unit, span] = UNITS.find(([, s]) => size >= s) || UNITS[UNITS.length - 1];
-
-            // When the shown number next changes: one whole unit from the last
-            // boundary crossed, never the fixed beat of a generic timer.
-            ticking(span * 1000 - ((size * 1000) % (span * 1000)));
-
-            const language = typeof locale === 'string' ? locale : undefined;
-
-            return new Intl.RelativeTimeFormat(language, { numeric: 'auto' })
-                .format(Math.round(gap / span), unit);
-        }`
-    },
+    { name: 'fromnow', value: '() => __helpers.fromnow' },
 
     // Django's `|slugify`: a title made into a URL segment or an anchor id.
     //
@@ -226,14 +152,7 @@ const INJECTED = [
     // a combining mark with no composed form, so dropping marks turns
     // `हिन्दी भाषा` into `ह-न-द-भ-ष-`. That is not folding a word, it is
     // shredding it.
-    {
-        name: 'slugify',
-        value: `() => (value) => __pybridge.str(value)
-            .normalize('NFC')
-            .toLowerCase()
-            .replace(/[^\\p{L}\\p{N}\\p{M}_]+/gu, '-')
-            .replace(/^-+|-+$/g, '')`
-    },
+    { name: 'slugify', value: '() => __helpers.slugify' },
 
     // Jinja's `|striptags`: HTML shown as text, an excerpt from a feed, a
     // preview of an imported document, content nobody here wrote.
@@ -251,18 +170,7 @@ const INJECTED = [
     //
     // Whitespace is collapsed, as Jinja does. Neither inserts a separator
     // between blocks: `<p>a</p><p>b</p>` is `ab` there too.
-    {
-        name: 'striptags',
-        value: `() => (value) => {
-            if (typeof DOMParser === 'undefined') return '';
-
-            const text = new DOMParser()
-                .parseFromString(__pybridge.str(value), 'text/html')
-                .body.textContent;
-
-            return (text || '').replace(/\\s+/g, ' ').trim();
-        }`
-    },
+    { name: 'striptags', value: '() => __helpers.striptags' },
 
     // The word all three engines use, Liquid, Django and Jinja alike, for the one
     // thing a template genuinely does with a URL: build one. Decoding is an
@@ -280,20 +188,7 @@ const INJECTED = [
     // Jinja does not even agree with itself: `|urlencode("a/b")` yields `a/b`
     // while `|urlencode({"p": "a/b"})` yields `p=a%2Fb`, because the two forms
     // reach different helpers. Escaping in both is the only reading that holds.
-    {
-        name: 'urlencode',
-        value: `() => (value) => {
-            if (value !== null && typeof value === 'object' && !(value instanceof Date)) {
-                const pairs = new URLSearchParams();
-
-                for (const key of Object.keys(value)) pairs.append(key, __pybridge.str(value[key]));
-
-                return pairs.toString();
-            }
-
-            return encodeURIComponent(__pybridge.str(value));
-        }`
-    },
+    { name: 'urlencode', value: '() => __helpers.urlencode' },
 
     // Context belongs to a component instance; a plain module has none. It is
     // per subtree, where a store is per application, and it is the only

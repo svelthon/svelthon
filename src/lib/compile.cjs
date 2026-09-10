@@ -914,7 +914,7 @@ function preamble(c) {
         // expressions were JavaScript and an author wrote `py.str(items)` in the
         // markup — short on purpose. Now that only generated code touches it,
         // short is exactly wrong, and `py` is a name an author may want.
-        `import { bind, __pybridge, track, follow, pyError, schedule, inTemplate, pyEvent, plainData, pyArg, pyData, pyBoundary, pyNumbers, jsCall, ticking, group, writeAttr, writeItem, pyModule, NONE${c.store ? ', registerModule' : ''} } from 'svelthon/runtime';`,
+        `import { bind, __pybridge, track, follow, pyError, schedule, inTemplate, pyEvent, plainData, pyArg, pyData, pyBoundary, pyNumbers, jsCall, ticking, group, writeAttr, writeItem, pyModule, NONE, helpers as __helpers${c.store ? ', registerModule' : ''} } from 'svelthon/runtime';`,
         ...c.jsImports.map(jsImportLine),
         `import { ${['getContext', 'setContext']
             .concat(c.lifecycle('on_mount') || c.lifecycle('on_destroy') ? ['untrack'] : [])
@@ -1277,7 +1277,7 @@ function effectBlocks(c) {
 function plainPreamble(c) {
     return [
         `import { init } from ${JSON.stringify(virtualId(c.name))};`,
-        `import { bind, __pybridge, pyError, scheduleAsync, plainData, pyArg, pyData, pyExport, pyBoundary, jsCall, ticking, group, NONE, registerModule } from 'svelthon/runtime';`,
+        `import { bind, __pybridge, pyError, scheduleAsync, plainData, pyArg, pyData, pyExport, pyBoundary, jsCall, ticking, group, NONE, helpers as __helpers, registerModule } from 'svelthon/runtime';`,
         ...c.jsImports.map(jsImportLine),
         ``
     ];

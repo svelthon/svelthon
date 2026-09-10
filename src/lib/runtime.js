@@ -10,6 +10,15 @@ import { createSubscriber } from 'svelte/reactivity';
 // leaking JavaScript's undefined into Python.
 export const NONE = globalThis.__BRYTHON__.builtins.None;
 
+// The template helpers, re-exported so a generated component has one specifier
+// to import rather than two, and so every satellite repo keeps the single
+// `svelthon/runtime` alias it already resolves.
+//
+// The cycle is deliberate and safe: `helpers.js` reads `NONE`, `__pybridge`,
+// `ticking`, `plainData` and `pyData` from here, but only from inside function
+// bodies, so nothing is touched while either module is still evaluating.
+export { helpers } from './helpers.js';
+
 // Svelte interpolates with String(), and None is an object — it would render as
 // "[object Object]". Non-enumerable so nothing that walks the singleton's
 // properties can see it. (The same gap remains for lists and dicts, which
