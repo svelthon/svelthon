@@ -526,12 +526,30 @@ function declaration(inner) {
     return null;
 }
 
-const unknownTag = (trimmed, kind, known) =>
+const unknownTag = (trimmed, kind, known, at) =>
     new SyntaxError(
-        `svelthon — \`{${trimmed}}\` is not a ${kind} Svelthon knows; ` +
+        `svelthon — \`{${trimmed}}\` is not a ${kind} Svelthon knows${at}; ` +
             `the ${kind}s are ${known.join(', ')}. A construct left unhandled would ` +
             `cross as JavaScript, so it is refused rather than passed through.`
     );
+
+// Where a refusal happened, in the file the author is looking at.
+//
+// The compiler names a position on all sixteen of its refusals and the markup
+// pass named one on none of them, because it never received a filename: the
+// message said what was wrong and left the reader to grep. `walk()` was already
+// holding the answer, since it keeps `region` on every `{…}` it reads, and threw
+// it away one line later.
+//
+// `filename` and `start` go on the error object too, in Svelte's own shape, so
+// vite-plugin-svelte and an editor can put the squiggle under the character
+// rather than print a sentence.
+function lineColumn(content, offset) {
+    const before = content.slice(0, offset);
+    const line = before.split('\n').length;
+
+    return { line, column: offset - (before.lastIndexOf('\n') + 1), character: offset };
+}
 
 // A snippet's name belongs to the scope that *encloses* the block, and to the
 // whole of it: Svelte hoists the declaration, so `<Card {row} />` may be written
@@ -544,15 +562,19 @@ const unknownTag = (trimmed, kind, known) =>
 // *inside* the block, the name belongs outside it. That is the whole difference,
 // and it is why `{#snippet row(x)}<b>{x}</b>{/snippet}` always worked while
 // `<Card {row} />` did not.
-export function pythonExpressions(markup, collect, onPython) {
+// `where` is `{ filename, content, offset }`, and it is what a refusal needs to
+// name a position: `markup` is one chunk of the file, `offset` is where that
+// chunk starts, and `content` is the whole of it. Optional, since the playground
+// and the range scan below compile a fragment that belongs to no file.
+export function pythonExpressions(markup, collect, onPython, where) {
     const named = new Map();
 
-    walk(markup, () => '__probe', undefined, new Map(), named);
+    walk(markup, () => '__probe', undefined, new Map(), named, where);
 
-    return walk(markup, collect, onPython, named, null);
+    return walk(markup, collect, onPython, named, null, where);
 }
 
-function walk(markup, collect, onPython, seed, record) {
+function walk(markup, collect, onPython, seed, record, where) {
     let out = '';
     let index = 0;
     let inTag = false;
@@ -585,6 +607,32 @@ function walk(markup, collect, onPython, seed, record) {
     };
 
     const inScope = () => [...new Set(scopes.flat())];
+
+    // The `{` of the construct being read, as the author sees it. `region.start`
+    // is the character after the brace, so this steps back onto it.
+    const position = () =>
+        where && region ? lineColumn(where.content, where.offset + region.start - 1) : null;
+
+    // ` (src/App.svelte:14:6)`, or nothing when there is no file to name.
+    const said = () => {
+        const at = position();
+
+        return at ? ` (${where.filename}:${at.line}:${at.column + 1})` : '';
+    };
+
+    // The same position, on the error object, in the shape Svelte's own
+    // preprocessor errors carry.
+    const refuse = (error) => {
+        const at = position();
+
+        if (at) {
+            error.filename = where.filename;
+            error.start = at;
+            error.end = where && region ? lineColumn(where.content, where.offset + region.end + 1) : at;
+        }
+
+        return error;
+    };
 
     // The block names an expression actually reads, rather than every name in
     // scope. Passing all of them was harmless until the markup could declare
@@ -676,11 +724,13 @@ function walk(markup, collect, onPython, seed, record) {
         for (const [, name] of rewritten.matchAll(ASSIGNED)) {
             if (!inScope().includes(name)) continue;
 
-            throw new SyntaxError(
-                `svelthon — \`${name}\` is declared by the markup, and \`:=\` writes ` +
-                    `the script's names, so \`{${source.trim()}}\` would write a different ` +
-                    `\`${name}\`. Use \`bind:\` to write a name the markup declared, or ` +
-                    `declare \`${name}\` in the script.`
+            throw refuse(
+                new SyntaxError(
+                    `svelthon — \`${name}\` is declared by the markup${said()}, and \`:=\` ` +
+                        `writes the script's names, so \`{${source.trim()}}\` would write a ` +
+                        `different \`${name}\`. Use \`bind:\` to write a name the markup ` +
+                        `declared, or declare \`${name}\` in the script.`
+                )
             );
         }
     };
@@ -769,11 +819,13 @@ function walk(markup, collect, onPython, seed, record) {
                         // JavaScript spread does by itself.
                         out += `{...${call(trimmed.slice(2), '__spread')}}`;
                     } else if (trimmed.startsWith('...')) {
-                        throw new SyntaxError(
-                            `svelthon — a spread is written \`{**${trimmed.slice(3).trim()}}\`, ` +
-                                `the way Python spreads a mapping. \`...\` is Python's Ellipsis, ` +
-                                `not a spread, and it keeps that meaning everywhere an ` +
-                                `expression is read.`
+                        throw refuse(
+                            new SyntaxError(
+                                `svelthon — a spread is written \`{**${trimmed.slice(3).trim()}}\`` +
+                                    `${said()}, the way Python spreads a mapping. \`...\` is ` +
+                                    `Python's Ellipsis, not a spread, and it keeps that meaning ` +
+                                    `everywhere an expression is read.`
+                            )
                         );
                     } else if (trimmed.startsWith('@attach ')) {
                         // `{@attach fn}` sits inside the tag rather than around
@@ -790,7 +842,7 @@ function walk(markup, collect, onPython, seed, record) {
                         // therefore through the accessor.
                         out += `${trimmed}={${call(trimmed, '')}}`;
                     } else if (trimmed.startsWith('@')) {
-                        throw unknownTag(trimmed, 'tag', ATTACHMENTS);
+                        throw refuse(unknownTag(trimmed, 'tag', ATTACHMENTS, said()));
                     } else {
                         out += markup.slice(index, end + 1);
                     }
@@ -925,7 +977,7 @@ function walk(markup, collect, onPython, seed, record) {
                 push(declaredBy(trimmed));
                 out += markup.slice(index, end + 1);
             } else {
-                throw unknownTag(trimmed, 'block', BLOCKS);
+                throw refuse(unknownTag(trimmed, 'block', BLOCKS, said()));
             }
         } else if (trimmed.startsWith('/')) {
             pop();
@@ -947,7 +999,7 @@ function walk(markup, collect, onPython, seed, record) {
                 // expression, so they cross unchanged.
                 out += markup.slice(index, end + 1);
             } else {
-                throw unknownTag(trimmed, 'clause', CLAUSES);
+                throw refuse(unknownTag(trimmed, 'clause', CLAUSES, said()));
             }
         } else if (trimmed.startsWith('@')) {
             if (trimmed.startsWith('@html ')) {
@@ -970,7 +1022,7 @@ function walk(markup, collect, onPython, seed, record) {
                 // names it takes are the JavaScript ones the compiler emits.
                 out += markup.slice(index, end + 1);
             } else {
-                throw unknownTag(trimmed, 'tag', TAGS);
+                throw refuse(unknownTag(trimmed, 'tag', TAGS, said()));
             }
         } else {
             const declared = declaration(inner);

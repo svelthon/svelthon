@@ -84,7 +84,14 @@ export function python(options = {}) {
             );
 
             const collect = fileCollector(filename);
-            return { code: overMarkup(content, (markup) => pythonExpressions(markup, collect)) };
+
+            return {
+                code: overMarkup(content, (markup, offset) =>
+                    // The chunk, and where it starts, so a refusal can name a
+                    // line and a column in the file the author is looking at.
+                    pythonExpressions(markup, collect)
+                )
+            };
         },
         script({ content, attributes, filename }) {
             if (attributes.lang !== 'python') return;
