@@ -862,17 +862,20 @@ export function pyExport(value, where, lineOffset = 0) {
     // `__qualname__`, `__dict__` and the methods: neither the class nor an
     // error, and the one shape here that was a lie rather than a limit.
     //
-    // Handing it over untouched is the truth about the boundary. JavaScript
-    // cannot construct a Brython class, and nothing in this project claims it
-    // can; what it can do is give the object back to Python, which is what the
-    // `PYOBJ` WeakMap exists for.
+    // Handing it over untouched is the truth about the boundary. What arrives
+    // is a Brython class object, so `typeof` is `object` and neither `W(3)` nor
+    // `new W(3)` reaches it; what does is `$B.$call(W, 3)`, which runs
+    // `__init__` and returns an instance, and giving the object back to Python,
+    // which is what the `PYOBJ` WeakMap exists for. Wrapping it in a JavaScript
+    // constructor so `new W(3)` worked is a thing this boundary could do and
+    // does not: it would be an addition, not a repair.
     //
     // Refusing the spelling instead was the other honest answer and it was
     // dropped for a reason worth writing down: `__all__` is *Python's*
     // declaration of what a module exports, read by `from m import *` before
     // anything of ours reads it, and refusing an accurate one because
-    // JavaScript cannot use one of its entries would be a JavaScript limit
-    // imposed on Python.
+    // JavaScript would need `$B.$call` to use one of its entries would be a
+    // JavaScript limit imposed on Python.
     console.log('PYEXPORT', where, '| ob_type?', value.ob_type !== undefined, '| __mro__?', value.__mro__ !== undefined, '| $is_class?', value.$is_class, '| keys', Object.keys(value).slice(0,4).join(','));
 
     const keys = Object.keys(value);
