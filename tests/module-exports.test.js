@@ -163,3 +163,43 @@ describe('a directive is not data', () => {
         );
     });
 });
+
+// A class is a name `__all__` may hold, and until this it crossed to JavaScript
+// as neither the class nor an error: `pyExport` sent it through `plainData`,
+// which walks whatever it is given and hands back the attributes it found, so
+// JavaScript received `__doc__`, `__qualname__`, `__dict__` and the methods.
+//
+// That was the residue of the repair above rather than something it broke: before
+// it, the module failed to evaluate at all. A loud failure became a quiet wrong
+// shape, which is the one direction this project does not accept.
+//
+// The other honest answer was to refuse the spelling, and it was dropped for a
+// reason worth keeping: refusing an accurate Python `__all__` because JavaScript
+// would need `$B.$call` to use one of its entries is a JavaScript limit imposed
+// on Python.
+//
+// `typeof` cannot see any of this: a flattened copy of the attributes and the
+// class itself are both `object`. The two measurements that tell them apart are
+// the keys and the round trip, which is what the next two tests are.
+describe('a class named in __all__ crosses as itself', () => {
+    test('the module evaluates, which it did not before any of this', async () => {
+        const mod = await import('./fixtures/exported_shapes.py');
+
+        expect(mod.LIMIT).toBe(10);
+    });
+
+    test('and what crosses is the class, not a copy of its attributes', async () => {
+        const mod = await import('./fixtures/exported_shapes.py');
+
+        expect(mod.Widget.tp_name).toBe('Widget');
+        expect(Object.keys(mod.Widget)).not.toContain('__qualname__');
+    });
+
+    // What JavaScript can do with it, and the reason handing it over beats
+    // flattening it: give it back to Python.
+    test('and Python can use it again on the other side', async () => {
+        const mod = await import('./fixtures/exported_shapes.py');
+
+        expect(mod.build(mod.Widget, 21)).toBe(42);
+    });
+});
