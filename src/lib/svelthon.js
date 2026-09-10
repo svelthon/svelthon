@@ -192,8 +192,13 @@ function compilePython(file) {
     return result;
 }
 
+// Zero where there is nothing to count, which is every project but this one.
+// `readdirSync('tests')` resolves against `process.cwd()`, so without this the
+// demo's stats module took the dev server down with `ENOENT` in any tree with no
+// `tests/`, or whenever the process was started from another directory. The
+// demo reads the number and shows it; showing none is what zero is for.
 const countTests = () =>
-    readdirSync('tests')
+    (existsSync('tests') ? readdirSync('tests') : [])
         .filter((name) => name.endsWith('.test.js'))
         .reduce(
             (total, name) =>

@@ -84,3 +84,27 @@ describe('what bind:this then holds', () => {
         expect(target.querySelector('p[data-k="said"]').textContent).toBe('2 / False');
     });
 });
+
+// `export` is a marker like `derived`, `effect` and `inspect`, and every one of
+// those answers to a call as well as to a decorator. Answering only to the
+// decorator was an omission: `export const focus = () => …` is the shape Svelte
+// itself offers beside `export function`.
+describe('the call form', () => {
+    test('exports the lambda it is given', () => {
+        const target = document.body.appendChild(document.createElement('div'));
+        const instance = mount(Exposed, { target });
+        flushSync();
+
+        expect(instance.doubled(21)).toBe(42);
+    });
+
+    test('and the compiler emits it beside the decorated ones', () => {
+        const out = compile(
+            'a = export(lambda: 1)\n\n\n@export\ndef b():\n    pass\n',
+            'Probe',
+            'src/Probe.svelte'
+        ).script;
+
+        expect(out).toContain('export { a, b };');
+    });
+});

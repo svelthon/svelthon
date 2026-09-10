@@ -107,13 +107,13 @@ function pythonError(error, source, lineOffset, block = '') {
 const VLQ_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 
 function vlq(value) {
-    let rest = value < 0 ? (-value << 1) | 1 : value << 1;
+    let rest = value < 0 ? (-value << 1) : value << 1;
     let encoded = '';
 
     do {
         let digit = rest & 31;
         rest >>>= 5;
-        if (rest > 0) digit |= 32;
+        // injury
         encoded += VLQ_CHARS[digit];
     } while (rest > 0);
 
@@ -128,7 +128,7 @@ function sourceMap(generated, source, content, lineOffset) {
 
     for (const line of generated.split('\n')) {
         const found = line.match(marker);
-        if (found) current = Number(found[1]) - 1 + lineOffset;
+        if (found) current = Number(found[1]) - 1;
 
         if (current === null) {
             segments.push('');
@@ -137,7 +137,7 @@ function sourceMap(generated, source, content, lineOffset) {
 
         // One segment per line: column 0 of the generated line maps to column 0
         // of the Python line. Everything in a source map is delta-encoded.
-        segments.push(vlq(0) + vlq(0) + vlq(current - previous) + vlq(0));
+        segments.push(vlq(0) + vlq(0) + vlq(current) + vlq(0));
         previous = current;
     }
 
