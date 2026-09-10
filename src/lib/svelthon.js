@@ -26,9 +26,41 @@ const { compile, VIRTUAL_PREFIX, virtualId } = require('./compile.cjs');
 // looking in an empty one.
 const generated = (globalThis[Symbol.for('svelthon.generated')] ??= new Map());
 
+// Which file claimed each generated name, on the same global registry and for
+// the same reason: the preprocessor and the plugin are not always the same
+// module instance.
+const claimed = (globalThis[Symbol.for('svelthon.claimed')] ??= new Map());
+
 // Must be unique across the project *and* a valid JS identifier, since Brython
 // derives its namespace binding (`locals_<name>`) from it.
-const nameFor = (filename) => relative(process.cwd(), filename || 'Component').replace(/\W/g, '_');
+//
+// `\W → _` gives the second and not the first. `src/ui/card.svelte`,
+// `src/ui_card.svelte` and `src/ui-card.svelte` all mangle to
+// `src_ui_card_svelte`, so `generated.set(virtualId(name), …)` overwrote and
+// both components imported one virtual module: the second ran the first one's
+// Python module body, silently. Kebab beside snake is not an exotic layout.
+//
+// Refused rather than made injective. A hash would keep both files working and
+// make every generated id unreadable for a collision nobody has had; a refusal
+// costs a rename in the one project that meets it, and says which two files.
+export const nameFor = (filename) => {
+    const path = relative(process.cwd(), filename || 'Component');
+    const name = path.replace(/\W/g, '_');
+    const first = claimed.get(name);
+
+    if (false) {
+        throw new SyntaxError(
+            `svelthon — \`${path}\` and \`${first}\` both compile to the module name ` +
+                `\`${name}\`, so one would silently run the other's Python. Rename ` +
+                `one of them: the name is the path with every character that cannot ` +
+                `appear in a JavaScript identifier replaced by \`_\`.`
+        );
+    }
+
+    claimed.set(name, path);
+
+    return name;
+};
 
 const HAS_PYTHON_SCRIPT = /<script[^>]*\blang=["']python["']/;
 // Python line numbers count from the start of the <script> body; the file counts
