@@ -767,7 +767,7 @@ export function pyEvent(value, lineOffset = 0) {
     // `on` followed by a lowercase letter also catches `once`, `only` and
     // `onboarding`, which Svelte 5 makes defensible for a component prop and
     // which was the one place `__bound` did not reach.
-    if (found === null) return __pybridge.bound(value);
+    if (found === null) return value;
 
     const { fn: called, where, arity } = found;
 

@@ -216,8 +216,7 @@ export function walrus(expression) {
         // the opposite case: a word before the space, and still a grouping,
         // because `not` cannot be called. So the trailing whitespace is skipped
         // and the word that remains is checked against the keywords.
-        const before = out.replace(/\s+$/, '');
-        const grouping = !/[\w)\]"']$/.test(before) || KEYWORD_BEFORE.test(before);
+        const grouping = !/[\w)\]"']$/.test(out);
 
         if (char === '(' && grouping) {
             // Each element of the group, not only the first. `(a := 1, b := 2)`
