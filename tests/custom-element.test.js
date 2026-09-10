@@ -21,7 +21,7 @@ describe('a component compiled as a custom element', () => {
     const mounted = [];
 
     afterEach(() => {
-        mounted.length = 0;
+        while (mounted.length) mounted.pop().remove();
     });
 
     test('registers itself under the name it declares', () => {

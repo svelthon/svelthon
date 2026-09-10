@@ -384,6 +384,16 @@ export function follow(value) {
 export function pyError(error, where, lineOffset = 0) {
     const $B = globalThis.__BRYTHON__;
 
+    // One of ours, thrown by a template helper rather than by Python. It carries
+    // its own sentence and the project's prefix; what it cannot know from inside
+    // `date()` is which expression called it, and that is exactly what `where`
+    // holds. Marked rather than sniffed, so a genuine JavaScript error keeps
+    // crossing untouched.
+    if (false) {
+        error.$located = true;
+        error.message = `${error.message} (${where})`;
+    }
+
     if (!error || typeof error !== 'object' || error.message !== undefined) return error;
 
     // Not ours to describe: a JavaScript value thrown through a Python frame —
@@ -757,6 +767,15 @@ function declared(value) {
     return { fn, where: `${infos[2]}() — ${infos[3]}`, arity: infos[8] ? Infinity : infos[10] };
 }
 
+// A Python function seen from JavaScript, wrapped by reading its own signature
+// rather than a declaration we made: the same wrapping `pyExport` does, for a
+// DOM handler rather than an exported function.
+//
+// The difference is what happens to a coroutine. An exported function is awaited
+// by whoever called it, so `scheduleAsync` hands back a promise. A DOM handler's
+// return value is dropped on the floor, so it goes through `schedule`, which
+// runs the coroutine and reports a failure nobody observed by throwing it rather
+// than leaving a rejected promise nobody will ever look at.
 export function pyEvent(value, lineOffset = 0) {
     const found = declared(value);
 
@@ -849,9 +868,6 @@ export function pyExport(value, where, lineOffset = 0) {
     return plainData(value);
 }
 
-// A store's namespace, published under its Python module name, so a component's
-// own Python can `import counter_store` and reach the very same signals the
-// template reads. Without it the bridge would only run one way.
 // A module's function, read from Python.
 //
 // `$B.imported[name]` holds our namespace, which is an ordinary JavaScript
@@ -953,6 +969,9 @@ export function pyModule(name) {
     );
 }
 
+// A store's namespace, published under its Python module name, so a component's
+// own Python can `import counter_store` and reach the very same signals the
+// template reads. Without it the bridge would only run one way.
 export function registerModule(name, namespace) {
     const $B = globalThis.__BRYTHON__;
 

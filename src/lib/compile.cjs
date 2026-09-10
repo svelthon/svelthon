@@ -1086,6 +1086,30 @@ function namespaceObject(c) {
     ];
 }
 
+// The JavaScript names a module reaches for, wrapped and published.
+//
+// Wrapped once and not on every read: a name Python compares by identity,
+// `handler is on_click`, has to answer the same object twice. And a name Python
+// declares itself wins, which is what the filter is for.
+//
+// `extra` is what a component has and a plain `.py` cannot: the names its
+// `<script module>` imported. They are wrapped like the rest and bound like the
+// rest, so the only difference between the two paths is that list, which is why
+// this is one function rather than the same six lines twice.
+function jsNameBindings(c, extra = []) {
+    // Once each. The two lists overlap whenever a component names the same
+    // import in its `<script module>` and in an `importjs`, and the two loops
+    // this replaces then bound it twice: the same line, emitted after itself.
+    const names = [...new Set([...c.jsImported, ...extra])].filter(
+        (n) => !c.declared.includes(n)
+    );
+
+    return [
+        ...names.map((n) => `const ${jsBound(n)} = jsCall(${n});`),
+        ...names.map((n) => `bind(__proto, '${n}', () => ${jsBound(n)}, () => {});`)
+    ];
+}
+
 // Everything the compiler adds: the injected helpers, the template bridge's
 // entries, the JavaScript names and the Python modules a directive names. All
 // of it after `authorBindings`, so a name the author declared always wins.

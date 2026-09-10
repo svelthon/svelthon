@@ -17,6 +17,23 @@
 // `__pybridge` and `__proto` follow.
 import { NONE, __pybridge, plainData, pyData, ticking } from './runtime.js';
 
+// A helper's refusal, in the dialect the rest of the project speaks.
+//
+// The eighteen refusals in `compile.cjs` and `markup.js` all open with
+// `svelthon — ` and all name a file. These three could do neither: they run at
+// render time, inside a compiled `__expr_N`, so the file is not theirs to know.
+//
+// The mark is what fixes that. `pyError` already receives the expression and the
+// component from the wrapper that catches, and it now completes a marked error
+// with them, which leaves the sentence here and the position there. Genuine
+// JavaScript errors keep crossing untouched, which was the reason `pyError`
+// stayed out of their way in the first place.
+function refuse(message) {
+    const error = new Error(message);
+
+    return error;
+}
+
 // What a refusal shows of the value it refused.
 //
 // Not `JSON.stringify` alone: Python's None is an object with a reference back
@@ -52,7 +69,7 @@ export function from_json(text) {
 // otherwise sail through an `!== undefined` test and be rendered as a cell.
 export function batch(xs, size, fill) {
     if (!Number.isInteger(size) || size < 1) {
-        throw new Error('batch(): size must be an integer of at least one');
+        throw refuse('batch(): size must be an integer of at least one');
     }
 
     const items = __pybridge.seq(xs);
@@ -78,7 +95,7 @@ export function date(value, dateStyle, timeStyle, locale) {
     const at = value instanceof Date ? value : new Date(value);
 
     if (Number.isNaN(at.getTime())) {
-        throw new Error('date(): ' + shown(value) + ' is not a date');
+        throw refuse('date(): ' + shown(value) + ' is not a date');
     }
 
     // A string, or absent. Python's None is an *object*, so testing against
@@ -113,7 +130,7 @@ export function fromnow(value, locale) {
     const at = value instanceof Date ? value : new Date(value);
 
     if (Number.isNaN(at.getTime())) {
-        throw new Error('fromnow(): ' + shown(value) + ' is not a date');
+        throw refuse('fromnow(): ' + shown(value) + ' is not a date');
     }
 
     const gap = (at.getTime() - Date.now()) / 1000;
