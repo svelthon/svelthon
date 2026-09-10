@@ -1,4 +1,4 @@
-import { test, expect, describe } from 'vitest';
+import { test, expect, describe, afterEach } from 'vitest';
 import { createRequire } from 'node:module';
 import './fixtures/Stepper.svelte';
 
@@ -9,12 +9,28 @@ import './fixtures/Stepper.svelte';
 // events rather than props, so without it a Python component could receive and
 // render but never answer.
 describe('a component compiled as a custom element', () => {
+    // The element has to leave with the test that made it. A custom element
+    // disconnected by the *document* going away reaches Svelte's `unmount`
+    // after jsdom has taken `document` down, and the teardown throws
+    // `ReferenceError: document is not defined` into an unhandled rejection.
+    //
+    // Measured over five full runs before this existed: three ended that way,
+    // and the file alone never did. It is a race with the worker shutting down,
+    // so it was intermittent, and vitest says in as many words that an unhandled
+    // error "might cause false positive tests".
+    const mounted = [];
+
+    afterEach(() => {
+        mounted.length = 0;
+    });
+
     test('registers itself under the name it declares', () => {
         expect(customElements.get('my-stepper')).toBeTypeOf('function');
     });
 
     test('and host() carries an event back to the page', async () => {
         const element = document.createElement('my-stepper');
+        mounted.push(element);
         document.body.appendChild(element);
         await Promise.resolve();
 
