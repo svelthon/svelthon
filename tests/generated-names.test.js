@@ -9,9 +9,18 @@
 // other is CommonJS because Brython has to execute after its globals exist,
 // which ES imports cannot order. `require` does not reach across that line.
 //
-// So the agreement is checked instead of imported. Every `__name` invented in
-// the markup pass must either have a definition in the compiler, or be named
-// below as markup-local, which is a deliberate act rather than an oversight.
+// So the agreement is checked instead of imported, and in **both directions**,
+// which is a thing this file did not do at first.
+//
+// Forwards: every `__name` invented in the markup pass must have a definition in
+// the compiler, or be named below as markup-local, which is a deliberate act
+// rather than an oversight. That catches the failure that shows: a call to
+// something nobody defined.
+//
+// Backwards: every `__name` the compiler publishes *for the template* must be
+// one the markup still writes. That catches the failure that does not show. A
+// name the markup stops writing leaves its `bind()` in every component the
+// project ever compiles, for ever, and nothing goes red.
 import { test, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -50,4 +59,50 @@ test('and a name the compiler stopped emitting turns this red', () => {
     const compiler = read('compile.cjs').replace(/__event/g, '__handler');
 
     expect(compiler.includes('__event')).toBe(false);
+});
+
+// What the compiler hands the template, and only that. `compile.cjs` writes many
+// other `__` names, and none of them is the template's business: `__proto`,
+// `__py`, `__props`, `__fn_x`, `__rev_x`, `__helpers` and the rest are the
+// component script talking to itself.
+//
+// Two shapes carry the template's own set, and both are read off the file rather
+// than listed here, for the same reason the forward direction is: a tenth entry
+// must not be able to arrive unnoticed.
+const published = (compiler) => {
+    const at = compiler.indexOf('function templateBridge(');
+    const bridge = compiler.slice(at, compiler.indexOf('\n}', at));
+
+    return [
+        ...new Set([
+            // `bind(__proto, '__truthy', …)` and its seven neighbours.
+            ...[...compiler.matchAll(/bind\(__proto, '(__\w+)'/g)].map((one) => one[1]),
+            // `const __event = …`, `const __group = group;`, which a directive
+            // and a handler are given by name rather than through the namespace.
+            ...[...bridge.matchAll(/const (__\w+) =/g)].map((one) => one[1])
+        ])
+    ].sort();
+};
+
+// Whole names, not substrings. `includes` was the first spelling of this and it
+// answered true for `__spread` in a file that only wrote `__spreadX`, which is
+// exactly the rename this is meant to catch.
+const written = (markup) => new Set([...markup.matchAll(/__[a-z][\w]*/g)].map((one) => one[0]));
+
+test('every name the compiler publishes to the template is one the markup writes', () => {
+    const markup = written(read('markup.js'));
+    const names = published(read('compile.cjs'));
+
+    expect(names.length).toBeGreaterThan(8);
+
+    expect(names.filter((one) => !markup.has(one))).toEqual([]);
+});
+
+test('and one the markup stopped writing turns this red', () => {
+    // The failure this guards against, and the reason it needed guarding: it
+    // costs a dead `bind()` in every compiled component and says nothing.
+    const markup = written(read('markup.js').replace(/__spread/g, '__spreadX'));
+    const names = published(read('compile.cjs'));
+
+    expect(names.filter((one) => !markup.has(one))).toEqual(['__spread']);
 });
