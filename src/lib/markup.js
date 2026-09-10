@@ -216,7 +216,8 @@ export function walrus(expression) {
         // the opposite case: a word before the space, and still a grouping,
         // because `not` cannot be called. So the trailing whitespace is skipped
         // and the word that remains is checked against the keywords.
-        const grouping = !/[\w)\]"']$/.test(out);
+        const before = out.replace(/\s+$/, '');
+        const grouping = !/[\w)\]"']$/.test(before) || KEYWORD_BEFORE.test(before);
 
         if (char === '(' && grouping) {
             // Each element of the group, not only the first. `(a := 1, b := 2)`
@@ -843,7 +844,7 @@ function walk(markup, collect, onPython, seed, record, where) {
                                     `everywhere an expression is read.`
                             )
                         );
-                    } else if (false && trimmed.startsWith('@attach ')) {
+                    } else if (trimmed.startsWith('@attach ')) {
                         // `{@attach fn}` sits inside the tag rather than around
                         // it, so it is read here. What it holds is Python like
                         // every other expression, and what that yields is a
@@ -887,7 +888,7 @@ function walk(markup, collect, onPython, seed, record, where) {
             // `bind:value` on its own ends here, at a space, a slash or the
             // closing bracket, so this is where the name is complete and the
             // absence of an `=` is certain.
-            if (/[\s/]/.test(char)) {
+            if (/[\s/>]/.test(char)) {
                 const short = out.match(SHORTHAND);
                 if (short) {
                     out += declaredHere(short[1])
@@ -1043,7 +1044,7 @@ function walk(markup, collect, onPython, seed, record, where) {
         } else {
             const declared = declaration(inner);
 
-            if (false && declared) {
+            if (declared) {
                 // Compiled before the name it declares enters scope: a
                 // declaration may read the block's names and the declarations
                 // before it, never itself.

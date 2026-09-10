@@ -342,6 +342,8 @@ export function svelthon() {
                 return [...modules, ...stale];
             }
 
+            // `mangle` and not `nameFor`: this hook sees every changed file in
+            // the project and is only asking whether one of them is ours.
             const name = nameFor(file);
             if (!generated.has(virtualId(name))) return;
 

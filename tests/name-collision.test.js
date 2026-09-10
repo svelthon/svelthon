@@ -14,7 +14,7 @@
 // Python module body. Silently, which is the failure this project refuses.
 import { test, expect, describe } from 'vitest';
 
-import { nameFor } from '../src/lib/svelthon.js';
+import { mangle, nameFor, svelthon } from '../src/lib/svelthon.js';
 
 describe('two files that mangle to one module name', () => {
     // Called directly rather than through the `script` hook, which would read
@@ -59,5 +59,38 @@ describe('two files that mangle to one module name', () => {
         compile('src/five/epsilon.svelte');
 
         expect(() => compile('src/five/zeta.svelte')).not.toThrow();
+    });
+});
+
+// Claiming is what refuses, so only the two hooks that *emit* a module may
+// claim. `hotUpdate` runs for every file the dev server sees change, component
+// or not, and asks one question: is this one of mine? Asking used to claim, so
+// two TypeScript files that hold no Python at all collided with each other and
+// read a message about Python they had never written. It surfaced as an HMR
+// failure, which is the harder kind to trace back.
+describe('asking whether a module exists does not claim its name', () => {
+    const environment = {
+        moduleGraph: { getModuleById: () => undefined, invalidateModule: () => {} }
+    };
+
+    const touch = (file) =>
+        svelthon().hotUpdate.call({ environment }, { file, modules: [] });
+
+    test('two files of someone else’s that mangle alike both pass through', () => {
+        touch('src/six-utils.ts');
+
+        expect(() => touch('src/six_utils.ts')).not.toThrow();
+    });
+
+    test('and neither of them ends up claimed', () => {
+        touch('src/seven-utils.ts');
+
+        expect(() => nameFor('src/seven_utils.ts')).not.toThrow();
+    });
+
+    test('mangle answers the same name, it simply does not record it', () => {
+        expect(mangle('src/eight/theta.svelte')).toBe('src_eight_theta_svelte');
+        expect(mangle('src/eight_theta.svelte')).toBe('src_eight_theta_svelte');
+        expect(nameFor('src/eight/theta.svelte')).toBe('src_eight_theta_svelte');
     });
 });
