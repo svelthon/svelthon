@@ -834,7 +834,7 @@ function walk(markup, collect, onPython, seed, record, where) {
                         // A shallow copy, so that Svelte's diff against the
                         // previous render sees a mutation: that is what a
                         // JavaScript spread does by itself.
-                        out += `{...${call(trimmed.slice(2), '__spreadX')}}`;
+                        out += `{...${call(trimmed.slice(2), '__spread')}}`;
                     } else if (trimmed.startsWith('...')) {
                         throw refuse(
                             new SyntaxError(

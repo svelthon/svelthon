@@ -1,7 +1,7 @@
 'use strict';
 
 // Build-time half of Svelthon: run Brython's compiler under Node and split the
-// result in two — a plain ES module holding the generated code, and a Svelte
+// result in two: a plain ES module holding the generated code, and a Svelte
 // component script that wires it to runes.
 //
 // CommonJS because brython.js is a classic script that has to execute *after*
@@ -14,7 +14,7 @@ globalThis.$B ??= globalThis.__BRYTHON__; // the codegen's eval() resolves $B gl
 
 // The same snapshot `globals.js` takes, taken here too because this file loads
 // Brython without it. Off a browser, brython.js installs `document`, `location`
-// and three more, and `boot.js` removes whatever it added — by comparing against
+// and three more, and `boot.js` removes whatever it added by comparing against
 // this set. Recorded too late, the stubs count as pre-existing and survive, and
 // then every library that tests `typeof document` takes the browser path and
 // dies on `window is not defined`.
@@ -33,14 +33,14 @@ const NS = '__py';
 // Brython emits module state into a namespace object:
 //     locals_Counter = $B.namespace('Counter')
 //     locals_Counter.count = 0
-// Nothing lives in a lexical binding, so there is a single call to intercept —
+// Nothing lives in a lexical binding, so there is a single call to intercept,
 // which the runtime does at execution time. This pattern is only checked, never
 // rewritten; if a future codegen stops emitting it, compilation fails loudly
 // instead of producing a component with no reactivity at all.
 const namespaceCall = (name) => `$B.namespace('${name}')`;
 
 // The module id Brython derives from a filename: only '.' becomes '_'. It ends
-// up as a *string* — the argument to $B.namespace and the frame name — so a '/'
+// up as a *string*, the argument to $B.namespace and the frame name, so a '/'
 // is harmless there. The identifier built beside it is a different matter, and
 // the vendored build is patched so that one stays valid (see BRYTHON.md).
 const namespaceFor = (filename) => filename.replace(/\./g, '_');
@@ -50,7 +50,7 @@ const namespaceFor = (filename) => filename.replace(/\./g, '_');
 // `$B.unindent` hands the source back untouched as soon as one non-blank line
 // already sits at column zero: it reads that as an author who meant it. In a
 // `.svelte` the block is indented one level by convention, so such a line is
-// almost always one typed without the others' indentation — and nothing is
+// almost always one typed without the others' indentation, and nothing is
 // dedented, so Brython raises on the *first* line instead, which the author did
 // not touch.
 //
@@ -68,7 +68,7 @@ function flushLine(src) {
 function pythonError(error, source, lineOffset, block = '') {
     // A JavaScript Error is not ours to describe: it already carries a message
     // and a stack, and wrapping it produced the useless
-    // `JSObject: <Javascript object: [object Error]>` — which hid what actually
+    // `JSObject: <Javascript object: [object Error]>`, which hid what actually
     // went wrong behind our own formatting.
     if (error instanceof Error) return error;
 
@@ -95,7 +95,7 @@ function pythonError(error, source, lineOffset, block = '') {
         `svelthon — ${described} (${where})` +
             (flush
                 ? `\n  line ${flush + lineOffset} starts at column zero while the rest of` +
-                  ` the block is indented — indent it like its neighbours.`
+                  ` the block is indented, so indent it like its neighbours.`
                 : '')
     );
 }
@@ -107,13 +107,13 @@ function pythonError(error, source, lineOffset, block = '') {
 const VLQ_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 
 function vlq(value) {
-    let rest = value < 0 ? (-value << 1) : value << 1;
+    let rest = value < 0 ? (-value << 1) | 1 : value << 1;
     let encoded = '';
 
     do {
         let digit = rest & 31;
         rest >>>= 5;
-        // injury
+        if (rest > 0) digit |= 32;
         encoded += VLQ_CHARS[digit];
     } while (rest > 0);
 
@@ -128,7 +128,7 @@ function sourceMap(generated, source, content, lineOffset) {
 
     for (const line of generated.split('\n')) {
         const found = line.match(marker);
-        if (found) current = Number(found[1]) - 1;
+        if (found) current = Number(found[1]) - 1 + lineOffset;
 
         if (current === null) {
             segments.push('');
@@ -137,7 +137,7 @@ function sourceMap(generated, source, content, lineOffset) {
 
         // One segment per line: column 0 of the generated line maps to column 0
         // of the Python line. Everything in a source map is delta-encoded.
-        segments.push(vlq(0) + vlq(0) + vlq(current) + vlq(0));
+        segments.push(vlq(0) + vlq(0) + vlq(current - previous) + vlq(0));
         previous = current;
     }
 
@@ -150,7 +150,7 @@ function sourceMap(generated, source, content, lineOffset) {
     };
 }
 
-// `__all__ = ["load"]` — Python's own way of saying what a module exports, and
+// `__all__ = ["load"]`, Python's own way of saying what a module exports, and
 // the closest thing it has to TypeScript's `export` keyword. Read from the AST,
 // so it stays a plain assignment in the source.
 function declaredExports(body) {
@@ -169,7 +169,7 @@ function declaredExports(body) {
     return null;
 }
 
-// `__js__ = {"@sveltejs/kit": ["error", "redirect"]}` — the JavaScript a module
+// `__js__ = {"@sveltejs/kit": ["error", "redirect"]}`: the JavaScript a module
 // needs. Python has no way to import from npm, and a plain `.py` has no
 // `<script module>` to do it for them; this is its equivalent, written as an
 // ordinary assignment and read from the AST like `__all__`.
@@ -197,11 +197,11 @@ function declaredJsImports(body) {
     return [];
 }
 
-// `importjs` — a component's JavaScript imports, written where its Python is.
+// `importjs`: a component's JavaScript imports, written where its Python is.
 //
 // `__js__` covers a plain `.py`, and only the named form, which is all a module
 // ever asks for: `error`, `redirect`, `query`, `browser`. A component asks for
-// three more, and every one of them is a template concern — the default export,
+// three more, and every one of them is a template concern: the default export,
 // which is how a `.svelte` child is imported and by far the commonest (25 of the
 // 65 imports measured across the three projects); a stylesheet, imported for its
 // effect; and a namespace, which is what `<Dialog.Root>` needs. None of the three
@@ -210,7 +210,7 @@ function declaredJsImports(body) {
 //
 // A keyword rather than another declaration read from the AST. `__all__` is real
 // Python and the compiler only reads it; `__js__` wears the same costume without
-// the language behind it, and a dict literal invites being computed — which
+// the language behind it, and a dict literal invites being computed, which
 // parses, raises nothing, and does not work. A keyword makes that unwriteable
 // instead of merely wrong, the same way the walrus works in the markup: the
 // syntax says what the thing is.
@@ -225,7 +225,7 @@ const IMPORTJS_EFFECT = /^importjs\s+(['"])([^'"]+)\1\s*$/;
 const JS_NAME = /^[A-Za-z_$][\w$]*$/;
 
 // The triple-quote state after `line`. Only a triple-quoted string survives a
-// line break, so it is the only thing that can hide an `importjs` further down —
+// line break, so it is the only thing that can hide an `importjs` further down,
 // the trap a regex over the whole source would walk straight into.
 function endQuote(line, quote) {
     for (let i = 0; i < line.length; i++) {
@@ -259,11 +259,11 @@ function endQuote(line, quote) {
     return quote;
 }
 
-// `x => expr` — the derived, written the way the state beside it is written.
+// `x => expr`, the derived, written the way the state beside it is written.
 //
 // `count = 0` is state and `doubled => count * 2` is derived: one character
 // apart, and that character is exactly "recomputed when something changes".
-// Naming is not required for state — a bare assignment already says it — so it
+// Naming is not required for state, a bare assignment already says it, so it
 // is not required here either, which is the whole argument for an operator
 // rather than a word.
 //
@@ -271,47 +271,47 @@ function endQuote(line, quote) {
 // expression that is re-evaluated rather than a value that was computed once.
 //
 // `=>` is a SyntaxError in Python, measured, so no valid source can contain one
-// outside a string or a comment — the rewrite has no ambiguity to resolve. It
+// outside a string or a comment, so the rewrite has no ambiguity to resolve. It
 // becomes `x = derived(lambda: expr)` **on the same line**: `derived` is already
 // injected as the identity, `surface()` reads the call off the AST, and the
 // emission already calls whatever the namespace holds.
 //
 // Only the expression form. A derivation that needs statements keeps `@derived`,
-// which is the counterpart of Svelte's own `$derived.by` — the same split their
+// which is the counterpart of Svelte's own `$derived.by`: the same split their
 // runes make, and the one Python already makes between `lambda` and `def`.
 const ARROW_DERIVED = /^([A-Za-z_]\w*)\s*=>\s*(\S[\s\S]*)$/;
 
-// `=> expr` — the same arrow with nothing to name, which is the effect.
+// `=> expr`, the same arrow with nothing to name, which is the effect.
 //
 // A derived and an effect are the one thing seen twice: both re-run when what
 // they read has changed, and they differ only in whether anyone keeps the
-// answer. Python already draws that line without a symbol — `x = f()` keeps,
-// `f()` alone is done for its effect — so the arrow draws it the same way, and
+// answer. Python already draws that line without a symbol: `x = f()` keeps,
+// `f()` alone is done for its effect, so the arrow draws it the same way, and
 // the absent name sits at the head of the line where the eye looks for one.
 //
 // Svelte 4 spelled both `$:` and Svelte 5 split them, because a `$:` statement
 // did not show whether it computed or acted. Three of their four reasons were
-// about static analysis and do not reach us — dependencies here come from the
+// about static analysis and do not reach us: dependencies here come from the
 // namespace accessors at run time. The fourth is that legibility, and putting
 // the difference in the first column is the answer to it.
 const ARROW_EFFECT = /^=>\s*(\S[\s\S]*)$/;
 
-// `inspect(count, message)` — a console.log that reruns on its own, and that the
+// `inspect(count, message)`: a console.log that reruns on its own, and that the
 // production build drops entirely.
 //
 // The values have to be *read again* on every change, so they cannot be handed
-// over already read. Svelte solves that for itself — it compiles `$inspect(x)`
-// into `$.inspect(() => [x], …)` — and the same trick works here one level down:
+// over already read. Svelte solves that for itself, compiling `$inspect(x)`
+// into `$.inspect(() => [x], …)`, and the same trick works here one level down:
 // the arguments go into a lambda, and calling it re-reads them through the
 // namespace accessors, which is what makes Svelte follow them.
 //
-// Their `$inspect(x).with(fn)` chains, which Python cannot spell — `with` is a
+// Their `$inspect(x).with(fn)` chains, which Python cannot spell: `with` is a
 // keyword. `inspect_with(fn, *values)` is that form with the callable in front,
 // where Python puts it whenever position stops being enough. The two are read by
 // the same rule and told apart by the name alone.
 const INSPECT = /^inspect(_with)?\s*\((\s*\S[\s\S]*)\)\s*$/;
 
-// `value: str <=>` — a prop that also travels back up, and the fourth of the
+// `value: str <=>`, a prop that also travels back up, and the fourth of the
 // dialect's bindings. They are one system, built around the same sign, and what
 // surrounds it says which:
 //
@@ -325,7 +325,7 @@ const INSPECT = /^inspect(_with)?\s*\((\s*\S[\s\S]*)\)\s*$/;
 //
 // The double arrow is the only one of the four that had to be written as a word,
 // and the two readings of `<=>` agree for once: two directions, and logic's
-// equivalence — the parent and the child hold the same value.
+// equivalence: the parent and the child hold the same value.
 //
 // It is sugar over `bindable()`, which stays: a searchable name for the reader
 // who arrives from Svelte's `$bindable`, exactly as `derived(lambda: …)` stays
@@ -382,7 +382,7 @@ function takeArrows(src, where, lineOffset, allowed) {
 
         // The expression has to finish on its line. A `{` or a `(` left open
         // would swallow the lines under it into a lambda, and Brython would
-        // report a mismatched bracket several lines further down — which says
+        // report a mismatched bracket several lines further down, which says
         // nothing about what to do. This says it.
         if (found && !balanced(expression)) {
             throw new SyntaxError(
@@ -447,7 +447,7 @@ function importJsClause(line, where) {
     const star = clause.match(/^\*\s+as\s+([A-Za-z_$][\w$]*)$/);
     if (star) return { from, kind: 'namespace', entries: [{ name: null, local: star[1] }] };
 
-    // `{a, b as c}` — the names between the braces, each optionally renamed.
+    // `{a, b as c}`: the names between the braces, each optionally renamed.
     const namedEntries = (inner) => {
         const entries = inner
             .split(',')
@@ -468,7 +468,7 @@ function importJsClause(line, where) {
     const braced = clause.match(/^\{([\s\S]*)\}$/);
     if (braced) return { from, kind: 'named', entries: namedEntries(braced[1]) };
 
-    // `Player, {stopAll}` — the default and some names, from the same module.
+    // `Player, {stopAll}`: the default and some names, from the same module.
     // JavaScript's own clause allows it, and a component that imports both a
     // component and something from its `<script module>` needs exactly this.
     // The default comes first in `entries`, marked by a null `name`.
@@ -489,8 +489,8 @@ function importJsClause(line, where) {
 // Lift every `importjs` out of the source, leaving the line blank behind it.
 //
 // Blank rather than removed, and on the same line rather than rewritten into a
-// call: the source map is line-level — `sourceMap()` emits column zero on both
-// sides — so a line-preserving pass costs the debugger, the tracebacks and
+// call: the source map is line-level, `sourceMap()` emits column zero on both
+// sides, so a line-preserving pass costs the debugger, the tracebacks and
 // `$B.set_lineno` exactly nothing.
 function takeImportJs(src, where, lineOffset, allowed) {
     const lines = src.split('\n');
@@ -564,18 +564,18 @@ yield arguments eval`.split(/\s+/));
 const EXPR_PREFIX = '__expr_';
 
 // Inside a template expression, and only there, the dot finds a key as well as
-// an attribute — `{pep.title}` reads a dict. The same text in the `<script>`
+// an attribute: `{pep.title}` reads a dict. The same text in the `<script>`
 // stays plain Python and raises, which is the seam this marks.
 const templateCall = (f, fn) => {
     const call = `${fn(f.name)}(...a.slice(0, ${f.arity}))`;
     return f.name.startsWith(EXPR_PREFIX) ? `inTemplate(() => ${call})` : call;
 };
 
-// Two of them are bound only where the name is actually read — `props_id`
+// Two of them are bound only where the name is actually read: `props_id`
 // because its value must be computed at the top level rather than lazily, `host`
 // because Svelte refuses `$host()` outright in a component that is not a custom
 // element. Brython resolves a global by name, so the generated code carries the
-// read wherever it happens — module level or inside a function alike — and a
+// read wherever it happens, module level or inside a function alike, and a
 // name that only appears inside a Python string does not.
 const reads = (js, name) => js.includes(`'${name}'`);
 
@@ -596,8 +596,8 @@ function refuseLocked(declared, component, source) {
 
     throw new SyntaxError(
         `svelthon — \`${taken.name}\` is one of Svelthon's own words and cannot be ` +
-            `redefined (${source}). The helpers — \`date\`, \`slugify\`, \`tojson\` and the ` +
-            `rest — may still be shadowed; the decorators may not.`
+            `redefined (${source}). The helpers, \`date\`, \`slugify\`, \`tojson\` and`  +
+            ` the rest, may still be shadowed; the decorators may not.`
     );
 }
 
@@ -613,7 +613,7 @@ const injectedPreamble = (declared, component, js) =>
         (one) => one.emitted
     );
 
-// Module-level names, read off the AST rather than the generated JS — the
+// Module-level names, read off the AST rather than the generated JS, since the
 // codegen mangles function names (`increment941818`) but the AST has the truth.
 // `bindable()` and `derived()` are markers: the compiler reads them off the AST
 // and the injected value is the identity, so nothing of them survives to run.
@@ -627,9 +627,9 @@ const isBindable = (node) => isCallTo(node, 'bindable');
 const hasDecorator = (node, name) =>
     (node.decorator_list || []).some((d) => d instanceof $B.ast.Name && d.id === name);
 
-// `@effect.pre` — a dotted decorator, which is a different AST node: an
+// `@effect.pre`, a dotted decorator, which is a different AST node: an
 // `Attribute` over a `Name`, not a `Name`. The dotted form is PEP 318's original
-// grammar, and the one Python uses to name a variant of something — `@property`
+// grammar, and the one Python uses to name a variant of something: `@property`
 // and `@x.setter`. A standalone `@pre` would promise a composability that does
 // not exist.
 const hasDottedDecorator = (node, name, attribute) =>
@@ -650,7 +650,7 @@ const BODIES = ['body', 'orelse', 'finalbody', 'handlers', 'cases', 'items'];
 // rune written deeper is built and wired to nothing.
 //
 // The arrow already refused this, by indentation, before parsing. The decorator
-// said nothing at all — so the same construct spoke under one spelling and
+// said nothing at all, so the same construct spoke under one spelling and
 // vanished under the other, which is worse than either rule on its own.
 const RUNE_NAMES = new Set(['effect', 'derived', 'inspect', 'inspect_with']);
 
@@ -727,7 +727,7 @@ function surface(body) {
     const seen = new Set();
     // Names the author wrote and the compiler cannot emit: a JavaScript reserved
     // word makes an invalid `let export = …`. They are dropped, but they were
-    // still *declared*, and the locked-name check has to see them — otherwise
+    // still *declared*, and the locked-name check has to see them, otherwise
     // redefining `export` would be the one silent case left.
     const reserved = [];
 
@@ -867,7 +867,7 @@ function surface(body) {
                 }
             } else if (
                 // `async def` is a different AST node, and missing it left async
-                // handlers undefined — a click did nothing at all, silently.
+                // handlers undefined: a click did nothing at all, silently.
                 node instanceof $B.ast.FunctionDef ||
                 node instanceof $B.ast.AsyncFunctionDef
             ) {
@@ -897,13 +897,32 @@ function surface(body) {
                       : funcs;
 
                 bucket.push(entry);
-            } else if (!(node instanceof $B.ast.ClassDef)) {
-                // A block is not a scope in Python: a name bound inside `if`, `for`,
-                // `try`, `with` or `match` belongs to the module exactly as one
-                // written at the left margin does. `def` and `class` are the real
-                // scopes — both are taken by name above, and neither is descended
-                // into. An `except` handler and a `match` case arrive here as
-                // statements of their own and recurse the same way.
+            } else if (node instanceof $B.ast.ClassDef) {
+                // A class is a scope, so nothing inside it is module state, and
+                // the descent stops here as it always did. The *name* is still
+                // the author's, which is the half that was missing.
+                bind(node.name);
+            } else {
+                // A block is not a scope in Python: a name bound inside `if`,
+                // `for`, `try`, `with` or `match` belongs to the module exactly
+                // as one written at the left margin does. `def` and `class` are
+                // the real scopes, both are taken by name above, and neither is
+                // descended into. An `except` handler and a `match` case arrive
+                // here as statements of their own and recurse the same way.
+                //
+                // Everything below binds a name without declaring anything: the
+                // statement is about something else and leaves a name behind.
+                targets(node.target); // `for x in …`, and `x += 1`
+                bind(node.name); // `except … as x`
+
+                // `with a() as x, b() as y:` and `import json`, `from m import a
+                // as b`. An alias is the name when there is one; a dotted
+                // `import a.b` binds `a`.
+                for (const item of node.items || []) targets(item.optional_vars);
+                for (const alias of node.names || []) {
+                    bind(typeof alias === 'string' ? alias : alias.asname || alias.name?.split('.')[0]);
+                }
+
                 for (const key of BODIES) if (node[key]) visit(node[key]);
             }
         }
@@ -922,13 +941,14 @@ function surface(body) {
     };
 
     globals(body);
+    walruses(body);
 
     return { props, bindables, state, funcs, deriveds, effects, inspects, reserved, bound };
 }
 
 // The modules a `from x import y` names.
 //
-// Brython's own bookkeeping — `root.imports` — records `import x` and nothing
+// Brython's own bookkeeping, `root.imports`, records `import x` and nothing
 // else, so `from counter_store import count` was invisible to the prelude that
 // resolves a sibling `.py`, and the component compiled cleanly then failed in
 // the browser on a module it had never been given.
@@ -969,7 +989,7 @@ function fromImports(ast) {
         // then answers false for a node that is plainly an ImportFrom, and a
         // sibling module silently stopped being resolved for any component
         // compiled in a browser. An ImportFrom is the only node carrying a
-        // module name, an alias list and a level together — and a relative
+        // module name, an alias list and a level together, and a relative
         // import (`from . import x`) names no module.
         const importFrom =
             typeof node.module === 'string' && Array.isArray(node.names) && typeof node.level === 'number';
@@ -984,15 +1004,15 @@ function fromImports(ast) {
 }
 
 // The names the emitted script gives to what it generates. Pure functions of the
-// author's name — `markup.js` writes calls to the same spellings, and
+// author's name. `markup.js` writes calls to the same spellings, and
 // `tests/generated-names.test.js` holds the two files to them.
 const fn = (name) => `__fn_${name}`;
 const local = (name) => `__local_${name}`;
 // An imported JavaScript name, once it has been given a Python-aware
-// boundary — see `jsCall` in the runtime.
+// boundary, see `jsCall` in the runtime.
 const jsBound = (name) => `__js_${name}`;
 // What `$effect.root` hands back. Python reads the decorated name and gets
-// this, exactly as JavaScript reads `const destroy = $effect.root(…)` —
+// this, exactly as JavaScript reads `const destroy = $effect.root(…)`, and
 // the name belongs to the destructor on both sides.
 const destroyer = (name) => `__root_${name}`;
 // Second signal per name: a mutation bumps it without touching the value,
@@ -1003,7 +1023,7 @@ const read = (name) => `__read_${name}`;
 
 // The component script, one function per section.
 //
-// Each takes the same context object — what `compile()` read off the source —
+// Each takes the same context object, what `compile()` read off the source,
 // and hands back its lines. They are assembled in `componentSections` order,
 // which is load-bearing in four places and asserted by `tests/sections.test.js`.
 
@@ -1013,7 +1033,7 @@ function preamble(c) {
         // The bridge behind `__truthy` and the three beside it. Imported under a
         // name no one would type: it was called `py` back when a template's
         // expressions were JavaScript and an author wrote `py.str(items)` in the
-        // markup — short on purpose. Now that only generated code touches it,
+        // markup, short on purpose. Now that only generated code touches it,
         // short is exactly wrong, and `py` is a name an author may want.
         `import { bind, __pybridge, track, follow, pyError, schedule, inTemplate, pyEvent, plainData, pyArg, pyData, pyBoundary, pyNumbers, jsCall, ticking, group, writeAttr, writeItem, pyModule, NONE, helpers as __helpers${c.store ? ', registerModule' : ''} } from 'svelthon/runtime';`,
         ...c.jsImports.map(jsImportLine),
@@ -1036,7 +1056,7 @@ function declarations(c) {
                       `const ${read(b)} = () => { ${rev(b)}; };`
                   ]),
                   // The module body applies the annotation's default by writing
-                  // to the name — and that write must not travel up to the
+                  // to the name, and that write must not travel up to the
                   // parent. Only writes made after init() are real ones.
                   `let __initialising = true;`,
                   ``
@@ -1045,7 +1065,7 @@ function declarations(c) {
               ? [`const __props = $props();`, ``]
               : []),
         // A prop's value comes from the parent when it was passed, and from the
-        // annotation's default otherwise — the default being whatever the Python
+        // annotation's default otherwise, the default being whatever the Python
         // body assigned during init(). Reading __props keeps it reactive, so a
         // parent update flows into Python's namespace on the next read.
         ...c.props.flatMap((n) => [
@@ -1065,7 +1085,7 @@ function declarations(c) {
                 ? [`let ${fn(e.name)} = $state.raw(undefined);`, `let ${destroyer(e.name)};`]
                 : [`let ${fn(e.name)} = $state.raw(undefined);`]
         ),
-        // A @derived name reads as its result — on both sides. The body runs
+        // A @derived name reads as its result, on both sides. The body runs
         // inside $derived.by, and every global it touches goes through a
         // namespace accessor, so Svelte discovers the dependencies by itself.
         ...c.deriveds.flatMap((d) => [
@@ -1085,7 +1105,7 @@ function templateBridge(c) {
     return [
         `const __event = (fn) => pyEvent(fn, ${c.lineOffset});`,
         // What `(name := value)` in a handler compiles to. The write goes
-        // through the namespace, so through the accessor, so the signal fires —
+        // through the namespace, so through the accessor, so the signal fires:
         // the whole reason the walrus can mean this here.
         `const __assign = (name, value) => { ${NS}[name] = value; return value; };`,
         // The same walrus aimed at an attribute or a key rather than a name.
@@ -1099,14 +1119,14 @@ function templateBridge(c) {
 }
 
 // One signal per module-level name, published to Brython as an accessor.
-// Everything the compiler adds is bound after this, in `injectedBindings` —
+// Everything the compiler adds is bound after this, in `injectedBindings`;
 // bound before, an injection would silently take a name the author declared.
 //
 // The namespace must NOT be a $state proxy: Svelte would deep-proxy every
 // Python value stored in it, and a proxied Brython object fails its own type
 // checks (`repr((1, 2))` raises "descriptor '__repr__' requires a 'tuple'
 // object but received a 'tuple'"). $state.raw keeps values opaque, so
-// reactivity tracks *rebinding a name* — which is what `count = …` and
+// reactivity tracks *rebinding a name*, which is what `count = …` and
 // `global count; count += 1` both do.
 //
 // Making `items.append(x)` reactive too was tried and abandoned: bumping a
@@ -1114,7 +1134,7 @@ function templateBridge(c) {
 // mutated list is still the *same object*, and both $derived and $state.raw
 // drop a write whose value is unchanged by ===. Propagating it would mean
 // handing the template a fresh copy on every render, at the cost of object
-// identity — too high a price for a rule that is easy to state instead.
+// identity, too high a price for a rule that is easy to state instead.
 function authorBindings(c) {
     return [
         `const __proto = {};`,
@@ -1160,7 +1180,7 @@ function authorBindings(c) {
                 : `bind(__proto, '${e.name}', () => ${fn(e.name)}, (v) => { ${fn(e.name)} = v; });`
         ),
         // follow(): a @derived that hands back a container it was given is the one
-        // place the revision cannot travel by itself — Svelte memoises the
+        // place the revision cannot travel by itself: Svelte memoises the
         // derived on `===`, so the reader subscribes to the object instead.
         ...c.deriveds.map(
             (d) => `bind(__proto, '${d.name}', () => follow(${d.name}), (v) => { ${fn(d.name)} = v; });`
@@ -1174,14 +1194,14 @@ function namespaceObject(c) {
         `const ${NS} = Object.create(__proto);`,
         // Reading a global goes through $B.resolve_global → resolve_in_namespace,
         // which demands an *own* property unless the namespace is flagged
-        // $proxy — in which case it reads the property normally and therefore
+        // $proxy, in which case it reads the property normally and therefore
         // walks the prototype chain, where our accessors live. It is the only
         // place in Brython that consults this flag.
         `${NS}.$proxy = true;`,
         // Every namespace Brython makes for itself carries the module's own
         // name, and `from x import y` reads it off the *importing* module to
         // work out what package it sits in. Ours had none, so the lookup asked
-        // for a module called `undefined` — and said so, in a component where
+        // for a module called `undefined`, and said so, in a component where
         // `import x` on the line above had worked perfectly.
         `${NS}.__name__ = '${c.namespace}';`
     ];
@@ -1220,8 +1240,8 @@ function injectedBindings(c) {
         ...injections(c.declared, true, c.js),
 
         // Wrappers for compiled template expressions. Not Python's own bool()
-        // and str(): a template may hold a foreign JavaScript value — a DOM node
-        // from bind:this — on which Brython's classifier trips. These fall back.
+        // and str(): a template may hold a foreign JavaScript value, a DOM node
+        // from bind:this, on which Brython's classifier trips. These fall back.
         ...(c.store
             ? []
             : [
@@ -1234,24 +1254,14 @@ function injectedBindings(c) {
                   `bind(__proto, '__setattr', () => __setattr);`,
                   `bind(__proto, '__setitem', () => __setitem);`
               ]),
-        // Wrapped once, not on every read: a name Python compares by identity
-        // has to answer the same object twice.
-        ...[...new Set([...c.jsImported, ...c.jsNames])]
-            .filter((n) => !c.declared.includes(n))
-            .map((n) => `const ${jsBound(n)} = jsCall(${n});`),
-        ...c.jsImported
-            .filter((n) => !c.declared.includes(n))
-            .map((n) => `bind(__proto, '${n}', () => ${jsBound(n)});`),
-        // What the component imported in its `<script module>`, published so
-        // Python can read it. A name Python declares itself wins.
-        ...c.jsNames
-            .filter((n) => !c.declared.includes(n))
-            .map((n) => `bind(__proto, '${n}', () => ${jsBound(n)});`),
-        // A Python module named by a directive — `in:fades.typewriter`. Svelte
+        // The second argument is what the component imported in its
+        // `<script module>`, published so Python can read it.
+        ...jsNameBindings(c, c.jsNames),
+        // A Python module named by a directive, `in:fades.typewriter`. Svelte
         // copies that text into a `() => …` of its own, so it looks for a
         // JavaScript `fades`, and `import fades` never made one: the name binds
         // in Python's namespace. Only what a directive actually names, and only
-        // when it is a module this file imports — a JavaScript name resolves on
+        // when it is a module this file imports: a JavaScript name resolves on
         // its own and must keep doing so.
         //
         // Read lazily by pyModule, so the position in the emitted script does
@@ -1287,7 +1297,7 @@ function instanceExports(c) {
     return [
         // Event handlers are called with a DOM event Python never asked for.
         // Truncating to the declared arity is a placeholder for a real interop
-        // policy (jsobj2pyobj on demand) — enough to make handlers work.
+        // policy (jsobj2pyobj on demand), enough to make handlers work.
         // An uncaught Python exception arrives in JS without message or stack;
         // pyError fills them in, naming the function and the file it came from.
         ...c.funcs.map(
@@ -1297,7 +1307,7 @@ function instanceExports(c) {
         ),
         // What a parent holding `bind:this` can call. Svelte gathers whatever an
         // instance script exports into `$$exports` and hands that object back,
-        // so a specifier list is enough — measured, `export { focus }` becomes
+        // so a specifier list is enough: measured, `export { focus }` becomes
         // `var $$exports = { focus }`.
         //
         // A component with no `@export` exports nothing, which is theirs too: an
@@ -1312,7 +1322,7 @@ function instanceExports(c) {
                   ``,
                   // Module-scope signals live once for the whole app. Exported
                   // through getters because Svelte forbids exporting a reassigned
-                  // $state binding directly — and a getter is what keeps the read
+                  // $state binding directly, and a getter is what keeps the read
                   // reactive at the call site.
                   // `__all__` says what a module exports, and it said it in a
                   // `.py` and nothing at all here: the store published every
@@ -1331,7 +1341,7 @@ function instanceExports(c) {
                   ``,
                   `export default store;`,
                   // Named exports too: a `.py` is not only a store. SvelteKit
-                  // looks for `load`, `actions`, `GET` — by name, on the module.
+                  // looks for `load`, `actions`, `GET`, by name, on the module.
                   ...(c.funcs.filter((f) => c.published(f.name)).length
                       ? [
                             ``,
@@ -1356,7 +1366,7 @@ function effectBlocks(c) {
         // `$inspect` is given the call, not its result: Svelte wraps whatever it
         // receives in a thunk of its own and re-reads it on every change, so the
         // lambda is re-run and the namespace accessors do the tracking. A
-        // production build drops the whole line — theirs, not ours.
+        // production build drops the whole line, theirs and not ours.
         // The lambda is called *inside* the rune both times, never hoisted into a
         // const first: hoisting reads the values once, outside the tracking
         // context, and the logger then fires on `init` and never again.
@@ -1366,12 +1376,12 @@ function effectBlocks(c) {
                 : `$inspect(...${fn(i.name)}());`
         ),
         // A root owns its own scope: it is not cleaned up when the component is,
-        // which is the point — the destructor is handed to Python under the
+        // which is the point: the destructor is handed to Python under the
         // decorated name, and calling it is what ends the effect.
         ...c.effects.flatMap((e) => [
             ``,
             // `root` is a scope and `pre` is a moment, so they compose rather
-            // than exclude each other — which is what stacking the two
+            // than exclude each other, which is what stacking the two
             // decorators says, and what the nesting emits.
             e.root
                 ? `${destroyer(e.name)} = $effect.root(() => { $effect${e.pre ? '.pre' : ''}(() => {`
@@ -1387,7 +1397,7 @@ function effectBlocks(c) {
                   ``,
                   `$effect(() => {`,
                   // untrack, because a hook reads the component's names through
-                  // the namespace accessors — and those reads are signal reads.
+                  // the namespace accessors, and those reads are signal reads.
                   // `mounts += 1` inside on_mount would otherwise make the effect
                   // depend on state it also writes, and Svelte loops until it
                   // gives up with effect_update_depth_exceeded.
@@ -1411,7 +1421,7 @@ function effectBlocks(c) {
 }
 
 // The plain module: a `.py` compiled to ordinary JavaScript. No runes, so no
-// need for the Svelte compiler and no need to be renamed `.svelte.js` — which is
+// need for the Svelte compiler and no need to be renamed `.svelte.js`, which is
 // what lets SvelteKit find a `+page.server.py` in its manifest. It is the mirror
 // of a plain `.ts` next to a `.svelte.ts`.
 //
@@ -1436,8 +1446,8 @@ function plainDeclarations(c) {
 
 function plainBindings(c) {
     return [
-        // No markup here, so none of what a template expression calls — `__event`,
-        // `__assign`, `__group`, `__truthy` and the rest — is emitted. They were,
+        // No markup here, so none of what a template expression calls (`__event`,
+        // `__assign`, `__group`, `__truthy` and the rest) is emitted. They were,
         // and `__event` named a `pyEvent` this module never imported.
         `const __proto = {};`,
         ...c.state.map((n) => `bind(__proto, '${n}', () => ${n}, (v) => { ${n} = v; });`),
@@ -1449,14 +1459,8 @@ function plainBindings(c) {
         ),
         ...injections(c.declared, false, c.js),
 
-        // Wrapped once, not on every read: a name Python compares by identity —
-        // `handler is on_click` — has to answer the same object twice.
-        ...[...new Set(c.jsImported)]
-            .filter((n) => !c.declared.includes(n))
-            .map((n) => `const ${jsBound(n)} = jsCall(${n});`),
-        ...c.jsImported
-            .filter((n) => !c.declared.includes(n))
-            .map((n) => `bind(__proto, '${n}', () => ${jsBound(n)});`),
+        // A module has no `<script module>`, so nothing joins its own imports.
+        ...jsNameBindings(c),
         ``
     ];
 }
@@ -1482,7 +1486,7 @@ function plainExports(c) {
         ),
         ``,
         // SvelteKit reads `load`, `actions`, `GET`, `prerender` by name off the
-        // module, so values are exported as well as functions — and a value goes
+        // module, so values are exported as well as functions, and a value goes
         // through the boundary too: `actions` is a dict of Python functions, each
         // of them called by the framework.
         //
@@ -1518,7 +1522,7 @@ function plainExports(c) {
 
 // The order, which is the one thing about this file that cannot be read off any
 // single section. Four constraints hold it, and `tests/sections.test.js` asserts
-// all four on the emitted script rather than on this list — a list can only
+// all four on the emitted script rather than on this list, since a list can only
 // restate itself:
 //
 //   1. the injections bind *after* the author's names, or they take them;
@@ -1608,8 +1612,8 @@ function compile(
 
     // Brython reads the source back out of this cache to quote the offending
     // line, and `compiler_error` does it without checking: an unregistered
-    // filename turns every *compile* error — as opposed to a parse error, which
-    // takes another path — into `Cannot read properties of undefined (reading
+    // filename turns every *compile* error, as opposed to a parse error, which
+    // takes another path, into `Cannot read properties of undefined (reading
     // 'split')`. That covers `await` outside a coroutine, `return` and `yield`
     // outside a function, `break` and `continue` outside a loop: the mistakes a
     // beginner actually makes. Registering the source is all it takes to get
@@ -1626,7 +1630,7 @@ function compile(
         surface(root._ast.body);
 
     // Neither a store nor a plain module has a parent, so an annotation there
-    // declares plain state — and $props() would be meaningless at module scope.
+    // declares plain state, and $props() would be meaningless at module scope.
     if (store || plain) {
         state = [...props, ...bindables, ...state];
         props = [];
@@ -1636,7 +1640,7 @@ function compile(
         // exactly what `$effect.root` is for: it makes a scope of its own, which
         // is why `@effect.root` is the form a module writes. Anything else here
         // would be a function that looks reactive and is not, so it is refused
-        // rather than quietly demoted — the same treatment `=>` gets in a `.py`.
+        // rather than quietly demoted, the same treatment `=>` gets in a `.py`.
         const orphan = effects.find((e) => !e.root);
 
         if (orphan) {
@@ -1658,8 +1662,8 @@ function compile(
     }
 
     // A plain module has no signals at all, so a @derived cannot be one either:
-    // it becomes a function the accessor calls on every read. Same semantics —
-    // read the name, get the result — minus the memoisation nothing observes.
+    // it becomes a function the accessor calls on every read. Same semantics,
+    // read the name and get the result, minus the memoisation nothing observes.
     const plainDeriveds = plain ? deriveds : [];
     if (plain) deriveds = [];
     const js = root.to_js();
@@ -1679,7 +1683,7 @@ function compile(
 
     if (!js.includes(namespaceCall(namespace))) {
         throw new Error(
-            `svelthon: the code generated for ${source} never calls ${namespaceCall(namespace)} — ` +
+            `svelthon: the code generated for ${source} never calls ${namespaceCall(namespace)}. ` +
                 `Brython's codegen no longer exposes the module namespace where Svelthon hooks it`
         );
     }
@@ -1716,7 +1720,7 @@ function compile(
 
     // Lifecycle by convention, mapped onto a single $effect: its body runs once
     // after the DOM exists, its teardown when the component goes away. Both
-    // names stay ordinary functions — nothing stops Python calling them too.
+    // names stay ordinary functions, nothing stops Python calling them too.
     const lifecycle = (hook) => !store && funcs.some((f) => f.name === hook);
 
     // A component free to define its own `publish` or `derived` keeps it.
@@ -1733,19 +1737,35 @@ function compile(
         ...props, ...bindables, ...state, ...funcs, ...deriveds, ...effects, ...inspects
     ].map((n) => n.name || n);
 
-    const declared = [...emitted];
+    const declared = [...new Set([...emitted, ...bound])];
 
     refuseLocked([...declared, ...reserved], !plain && !store, source);
     refuseNestedRunes(root._ast.body, source, lineOffset);
 
-    // Functions by default — what a framework calls by name. A module that wants
+    // Functions by default, what a framework calls by name. A module that wants
     // to export values says so with `__all__`, exactly as it would to a Python
     // caller. SvelteKit is strict about it: a `+page.server.py` exporting
     // anything but load/actions/prerender/… is refused, and rightly so.
+    const listed = declaredExports(root._ast.body);
     const exported = (
-        declaredExports(root._ast.body) ??
-        [...funcs.map((f) => f.name), ...plainDeriveds.map((d) => d.name)]
+        listed ?? [...funcs.map((f) => f.name), ...plainDeriveds.map((d) => d.name)]
     ).filter((n) => /^[A-Za-z_$][\w$]*$/.test(n) && !JS_RESERVED.has(n));
+
+    // A name in `__all__` that the module never binds. Python raises on it at
+    // `from m import *` and says nothing otherwise; here it used to emit a
+    // reference to a name that does not exist, so the module failed to evaluate
+    // with `ReferenceError: Widget is not defined` and took everything it
+    // exported down with it. Reading the value off the namespace fixed the
+    // class and the import, and would have made this one quietly `undefined`.
+    const missing = (listed ?? []).find((n) => !declared.includes(n));
+
+    if (missing) {
+        throw new SyntaxError(
+            `svelthon — \`__all__\` names \`${missing}\`, which this module never ` +
+                `binds (${source}). A module exports what it defines: check the ` +
+                `spelling, or remove it from the list.`
+        );
+    }
 
     const isFunction = (name) =>
         funcs.some((f) => f.name === name) || plainDeriveds.some((d) => d.name === name);
