@@ -12,7 +12,7 @@ import {
 } from './markup.js';
 
 const require = createRequire(import.meta.url);
-const { compile, VIRTUAL_PREFIX } = require('./compile.cjs');
+const { compile, VIRTUAL_PREFIX, virtualId } = require('./compile.cjs');
 
 // Generated modules, keyed by component name. Filled by the preprocessor when
 // Svelte transforms a component, read back when Vite resolves the import that
@@ -20,7 +20,7 @@ const { compile, VIRTUAL_PREFIX } = require('./compile.cjs');
 //
 // Held on a global registry rather than in this module, because the two halves
 // do not always land in the same module instance: SvelteKit loads
-// `svelte.config.js` — where the preprocessor is declared — through its own
+// `svelte.config.js` (where the preprocessor is declared) through its own
 // loader, while Vite bundles `vite.config.js`, where the plugin is. This file
 // is then evaluated twice, and a module-level Map would leave the plugin
 // looking in an empty one.
@@ -44,8 +44,6 @@ const jsNames = new Map();
 // module needs a JavaScript binding of its own.
 const pyDirectives = new Map();
 
-// Appended, never prepended: the Python's own line numbers stay true, which is
-// what keeps error messages and source maps pointing at the right place.
 // One collector per file, keeping the definitions where the script hook will
 // find them. The collector itself is in markup.js, which the browser can load.
 function fileCollector(filename) {
@@ -58,14 +56,14 @@ function fileCollector(filename) {
 // compiler only ever sees ordinary JavaScript with runes.
 // `path` mirrors PYTHONPATH: the directories searched for the `.py` a component
 // imports, after its own. Without it, `import counter_store` only ever resolves
-// to a sibling file — and a component that reached the module some other way
+// to a sibling file, and a component that reached the module some other way
 // would appear to work purely by load order.
 export function python(options = {}) {
     const searchPath = options.path || [];
 
     // Shared with the plugin, which compiles the `.py` files themselves and has
     // to resolve their imports the same way. The two halves may not be the same
-    // module instance — see the registry above.
+    // module instance. See the registry above.
     globalThis[Symbol.for('svelthon.path')] = searchPath;
 
     return {
@@ -75,7 +73,7 @@ export function python(options = {}) {
             // mode: a component without `lang="python"` is a JavaScript
             // component and stays one, exactly as a .js file is untouched by
             // TypeScript. Python semantics are opt-in, per file, by declaring
-            // Python — never injected behind an author's back.
+            // Python, never injected behind an author's back.
             if (!HAS_PYTHON_SCRIPT.test(content)) return;
 
             jsNames.set(filename, moduleImports(content));
@@ -110,16 +108,14 @@ export function python(options = {}) {
             // own directory first, then `path`. The module has to be evaluated
             // before init() runs, so its namespace is registered by the time
             // Brython looks it up.
-            // The imported modules have to be evaluated before init() runs, so
-            // their namespaces are registered by the time Brython looks them up.
             const prelude = pythonImports(imports, dirname(filename || '.'));
 
-            generated.set(VIRTUAL_PREFIX + name, withPrelude(module, map, prelude));
+            generated.set(virtualId(name), withPrelude(module, map, prelude));
 
             // The content is JavaScript now, so the tag must stop claiming
             // otherwise. Leaving `lang="python"` in place is invisible to the
             // Svelte compiler, which parses the content as JavaScript either
-            // way — but every tool downstream reads the attribute and refuses:
+            // way, but every tool downstream reads the attribute and refuses:
             // `svelte-check`, installed by 93% of SvelteKit projects, reported
             // dozens of parse errors per component until this line existed.
             const { lang, ...rest } = attributes;
@@ -129,18 +125,18 @@ export function python(options = {}) {
     };
 }
 
-// A shared store is a plain .py file. It compiles to module-scope signals —
-// created once for the whole application, not per component instance — and is
-// served under a `.svelte.js` identity, which is what makes vite-plugin-svelte
-// compile the runes inside it.
 // The demo shows how many tests back the project. Hard-coding it means letting
 // it drift on every addition, so it is counted when the module is served.
-const STATS_ID = VIRTUAL_PREFIX + 'stats';
+const STATS_ID = virtualId('stats');
 
 // A store is served on every request in dev, and compiling Python is the
 // expensive half. Keyed on mtime, so an edit still recompiles.
 const compiledStores = new Map();
 
+// A shared store is a plain .py file. It compiles to module-scope signals,
+// created once for the whole application rather than per component instance,
+// and is served under a `.svelte.js` identity, which is what makes
+// vite-plugin-svelte compile the runes inside it.
 function compilePython(file) {
     const stamp = statSync(file).mtimeMs;
     const cached = compiledStores.get(file);
@@ -163,18 +159,15 @@ const countTests = () =>
         .reduce(
             (total, name) =>
                 // Anchored: a `/re/.test(x)` elsewhere in a file is not a test,
-                // and `test.fails()` — the failures we expect — is one.
+                // and `test.fails()`, the failures we expect, is one.
                 total + (readFileSync(`tests/${name}`, 'utf8').match(/^\s*test(\.fails)?\(/gm) || []).length,
             0
         );
 
-// `import peps` → the file it names, looked up in the importer's own directory
-// first, then along the configured path. Both spellings are tried, since the
-// statement says nothing about whether the module it names is reactive.
 // The generated module, behind the imports it needs evaluated first.
 //
 // A source map's `mappings` is delta-encoded per generated line, lines separated
-// by `;`, so the prelude costs one `;` per line it adds — get that wrong and a
+// by `;`, so the prelude costs one `;` per line it adds: get that wrong and a
 // debugger opens the file that many lines off. A module importing nothing is
 // left alone rather than gaining an empty first line.
 export function withPrelude(module, map, prelude) {
@@ -186,6 +179,9 @@ export function withPrelude(module, map, prelude) {
     return { code: lead + module, map: { ...map, mappings: ';'.repeat(lines) + map.mappings } };
 }
 
+// `import peps` names a file, looked up in the importer's own directory first,
+// then along the configured path. Both spellings are tried, since the statement
+// says nothing about whether the module it names is reactive.
 function pythonImports(names, fromDirectory) {
     const searchPath = globalThis[Symbol.for('svelthon.path')] || [];
 
@@ -208,12 +204,12 @@ function pythonImports(names, fromDirectory) {
 // module whose names become signals.
 //
 // A rune module is only compiled by the Svelte plugin if its name matches that
-// plugin's own filter — which is configurable, and which the project widens:
+// plugin's own filter, which is configurable, and which the project widens:
 //
 //     svelte({ experimental: { compileModule: { extensions: ['.js', '.ts', '.py'] } } })
 //
 // The filter is an infix (`.svelte.`) followed by one of those extensions, so
-// `panier.svelte.py` matches and `peps.py` does not — exactly the line we wanted
+// `panier.svelte.py` matches and `peps.py` does not, exactly the line we wanted
 // to draw. Both keep their own path, which is also what lets SvelteKit find a
 // `+page.server.py` in Vite's manifest, where it looks it up by the name it
 // wrote.
@@ -232,17 +228,17 @@ export function svelthon() {
             if (isVirtual(id)) return '\0' + id;
             // Without an importer either: SvelteKit hands its route modules to
             // Vite as already-resolved entries, with nobody to resolve against.
-            // Only a path we can resolve ourselves. A bare or aliased specifier —
-            // `#lib/peps.py` — belongs to whoever defined the alias, and reaches
-            // load() as an absolute path once they have.
+            // Only a path we can resolve ourselves. A bare or aliased specifier
+            // such as `#lib/peps.py` belongs to whoever defined the alias, and
+            // reaches load() as an absolute path once they have.
             if (id.endsWith('.py') && (id.startsWith('.') || id.startsWith('/'))) {
                 const direct = importer ? resolve(dirname(importer), id) : resolve(id);
                 if (existsSync(direct)) return direct;
 
                 // A leading slash means two different things. An alias has
                 // already produced a real filesystem path; SvelteKit's own route
-                // entries are relative to the **project root** —
-                // `/src/routes/+page.server.py` — which no filesystem has. Note
+                // entries are relative to the **project root**,
+                // `/src/routes/+page.server.py`, which no filesystem has. Note
                 // that `resolve(dir, '/x')` ignores `dir` entirely, so having an
                 // importer does not help here: only trying the file tells the
                 // two apart, and getting it wrong reads as
@@ -268,11 +264,11 @@ export function svelthon() {
             const name = nameFor(file);
             const { script, module, map, imports } = compilePython(file);
 
-            // A `.py` may import another one — a route module reaching for its
+            // A `.py` may import another one, a route module reaching for its
             // data layer. Same prelude a component gets.
             const prelude = pythonImports(imports, dirname(file));
 
-            generated.set(VIRTUAL_PREFIX + name, withPrelude(module, map, prelude));
+            generated.set(virtualId(name), withPrelude(module, map, prelude));
 
             this.addWatchFile(file);
             return script;
@@ -284,7 +280,7 @@ export function svelthon() {
         // serving the previous generated body: the page updates to code that
         // never changed.
         //
-        // Order holds on its own — the browser refetches the component first,
+        // Order holds on its own: the browser refetches the component first,
         // which re-runs the preprocessor and refreshes `generated`, and only
         // then follows its import to the virtual module.
         hotUpdate({ file, modules }) {
@@ -300,7 +296,7 @@ export function svelthon() {
             };
 
             // The test count is read from the filesystem once, and the module
-            // holding it depends on no file Vite can see — so nothing would ever
+            // holding it depends on no file Vite can see, so nothing would ever
             // invalidate it, and the page would keep showing a stale number.
             if (file.endsWith('.test.js')) {
                 forget('\0' + STATS_ID);
@@ -308,12 +304,12 @@ export function svelthon() {
             }
 
             const name = nameFor(file);
-            if (!generated.has(VIRTUAL_PREFIX + name)) return;
+            if (!generated.has(virtualId(name))) return;
 
-            forget('\0' + VIRTUAL_PREFIX + name);
+            forget('\0' + virtualId(name));
 
             // A store's .py is watched, not imported, so its own module has to
-            // be invalidated too — otherwise its load() never reruns and
+            // be invalidated too, otherwise its load() never reruns and
             // `generated` keeps the previous body, exactly the staleness this
             // hook exists to prevent.
             if (file.endsWith('.py')) forget(file);

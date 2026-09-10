@@ -1407,20 +1407,14 @@ function compile(
         sourceContent = null
     } = {}
 ) {
-    // The namespace identifier is derived from `filename` alone — `module` and
-    // `locals_id` are ignored by js_from_root. Upstream Brython maps only '.' to
-    // '_', so a real path emitted `locals_src/Counter_svelte`, which is not
-    // valid JavaScript; the vendored build is patched to neutralise every
-    // character that cannot appear in an identifier (see BRYTHON.md). So the
-    // real path can be passed, and Python's __file__ names the actual file —
-    // which is what a traceback shows.
-    //
-    // The identifier Brython then derives is `nameFor()`'s own output, so the
-    // namespace interception is unaffected.
     // A component has markup, so it has the dialect; a module is a module and
-    // keeps parsing as Python. Lifted before py2js, since `importjs` is not
-    // Python and Brython would rightly refuse it.
+    // keeps parsing as Python. Read before py2js, since `importjs` is not Python
+    // and Brython would rightly refuse it.
     const component = !store && !plain;
+
+    // Kept for the error path: the block as the author typed it, before the
+    // generated defs join it at column zero.
+    const authored = component ? src : '';
 
     // `src` is what the author wrote; `defs` are the hidden functions the markup
     // pass produced, one per template expression. They are joined here rather
@@ -1430,15 +1424,15 @@ function compile(
     // The invariant is the indentation. A `<script>` body sits inside markup and
     // every Svelte example indents it one level; in JavaScript that is
     // whitespace, in Python it is syntax, and the block raises
-    // `IndentationError` — pointing, in Brython, at the line *after* the last
+    // `IndentationError`, pointing, in Brython, at the line *after* the last
     // one, which tells the author nothing.
     //
     // `$B.unindent` is Brython's own, the one it already runs on every
     // `<script type="text/python">`, so the two tags behave alike and there is no
     // second copy of the rule to keep in agreement. It is private upstream, so
     // the vendored build exposes it in one token (see BRYTHON.md). Its rule is
-    // `textwrap.dedent`'s with a conservative bail — one non-blank line already
-    // at column zero and the source comes back untouched — and blank lines are
+    // `textwrap.dedent`'s with a conservative bail (one non-blank line already at
+    // column zero and the source comes back untouched), and blank lines are
     // kept, so the line count never moves and the source map, the tracebacks and
     // `$B.set_lineno` are unaffected.
     //
@@ -1449,10 +1443,6 @@ function compile(
     // A `.py` gets neither half: a file is not an embedded block, so an indented
     // one is a mistake rather than a convenience, and a module has no template
     // to collect from.
-    // Kept for the error path: the block as the author typed it, before the
-    // generated defs join it at column zero.
-    const authored = component ? src : '';
-
     if (component) {
         const body = $B.unindent(src);
         src = defs.length ? `${body}\n${defs.join('\n\n')}\n` : body;
@@ -1520,9 +1510,17 @@ function compile(
     if (plain) deriveds = [];
     const js = root.to_js();
 
-    // Brython derives the namespace identifier from the filename, neutralising
-    // whatever cannot appear in a JavaScript identifier — so the name to hook is
-    // a function of the file, not of `name`.
+    // Brython derives the namespace identifier from the filename alone: `module`
+    // and `locals_id` are ignored by js_from_root, so the name to hook is a
+    // function of the file and not of `name`. Upstream maps only '.' to '_', so
+    // a real path emitted `locals_src/Counter_svelte`, which is not valid
+    // JavaScript; the vendored build is patched to neutralise every character
+    // that cannot appear in an identifier (see BRYTHON.md). That is what lets
+    // the real path be passed, so Python's __file__ names the actual file, which
+    // is what a traceback shows.
+    //
+    // The identifier Brython then derives is `nameFor()`'s own output, so the
+    // namespace interception is unaffected.
     const namespace = namespaceFor(source);
 
     if (!js.includes(namespaceCall(namespace))) {

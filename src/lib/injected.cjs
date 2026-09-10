@@ -1,11 +1,11 @@
 'use strict';
 
 // Data, and deliberately on its own: `compile.cjs` boots a Brython interpreter
-// the moment it is required, so anything that only wants to read this list —
-// a test, a tool — would be starting one for nothing, and a second one in a
+// the moment it is required, so anything that only wants to read this list
+// (a test, a tool) would be starting one for nothing, and a second one in a
 // process that already has one fails outright.
 
-// Everything the compiler publishes into a module's namespace, in one place —
+// Everything the compiler publishes into a module's namespace, in one place:
 // the counterpart of JS_RESERVED in compile.cjs, and readable the same way.
 //
 // Two rules, not one.
@@ -13,12 +13,12 @@
 // A **helper** is skipped when the module already declares a name of that
 // spelling: the author's own wins, exactly as a Python module that defines
 // `list` shadows the builtin and loses it. `date` is the one measured in real
-// code, twice, for a variable holding a date — the most natural name there is.
+// code, twice, for a variable holding a date, the most natural name there is.
 //
 // A **locked** name is refused outright. These are not builtins, they are
 // Svelthon's own words: redefining `effect` is closer to redefining `def` than
 // to shadowing `list`, and a reader who meets it can no longer read the file.
-// Svelte draws the same line — `$state` and `$effect` cannot be redefined at all,
+// Svelte draws the same line: `$state` and `$effect` cannot be redefined at all,
 // the `$` prefix being reserved inside a component. The refusal is loud and
 // names the culprit; winning in silence is what the `js` defect did, and it is
 // the worst of the three behaviours.
@@ -44,12 +44,12 @@ const INJECTED = [
     { name: 'inspect', value: '() => (f) => f', component: true, locked: true },
 
     // `inspect_with(log, count, message)` is `$inspect(…).with(fn)`. Their form
-    // chains, which Python cannot spell — `with` is a keyword, and `with=` is
+    // chains, which Python cannot spell: `with` is a keyword, and `with=` is
     // not an argument name either. A keyword argument was the first answer and
     // it costs a parser: `$inspect` is variadic, so pulling one named argument
     // out of the list means splitting the source text at depth zero. Taking the
-    // callable *first* needs no parsing at all — the split happens on the
-    // evaluated list, where position is reliable — and it is what Python does
+    // callable *first* needs no parsing at all, since the split happens on the
+    // evaluated list, where position is reliable, and it is what Python does
     // whenever position stops being enough: `map(fn, *iterables)`,
     // `filter(fn, it)`, `reduce(fn, it)`.
     { name: 'inspect_with', value: '() => (f) => f', component: true, locked: true },
@@ -65,14 +65,14 @@ const INJECTED = [
 
     // The two bridges, each way. `to_py` is what makes `.get()`, `.items()`
     // and `isinstance(x, dict)` work on something that only ever crossed from
-    // JavaScript — `await res.json()`, above all.
+    // JavaScript, `await res.json()` above all.
     { name: 'to_js', value: '() => plainData' },
     { name: 'to_py', value: '() => pyData' },
 
     // Jinja's `|tojson`, under its own word: a body, an embedded payload, a
     // data attribute. It keeps the template's spelling rather than the shape of
     // the two above, because it is the only one of the three an author writes
-    // every day — those are last-resort converters for reaching into `js.` by
+    // every day. Those are last-resort converters for reaching into `js.` by
     // hand, and the framework already converts what crosses its own boundaries.
     //
     // `json.dumps` cannot stand in for it: Brython leaves a class instance
@@ -98,12 +98,12 @@ const INJECTED = [
     // equivalent at all.
     //
     // A list of lists, not a lazy iterator: an `{#each}` reads its rows again on
-    // every update, and an iterator would come back empty the second time —
+    // every update, and an iterator would come back empty the second time,
     // silently, with the table simply gone. The third argument pads the last
     // row, which is what aligns one; positional, because a keyword argument does
     // not survive the call into JavaScript.
     //
-    // `None` there means *no padding*, not "pad with None" — the rule every
+    // `None` there means *no padding*, not "pad with None", the rule every
     // helper here follows, since None is an object and would otherwise sail
     // through an `!== undefined` test and be rendered as a cell.
     {
@@ -126,13 +126,13 @@ const INJECTED = [
         }`
     },
 
-    // Django's `|date`, under Django's word — and the platform's behaviour
+    // Django's `|date`, under Django's word, with the platform's behaviour
     // behind it, which is the rule the whole set follows: the keyword guides
     // someone arriving from Jinja, what they get is Svelte's.
     //
     // So no format letters (`d/m/Y`): `Intl` takes four styles and answers in
     // the reader's own language, which Django's codes never do. A value is
-    // whatever a component actually receives — an ISO string, a date alone, a
+    // whatever a component actually receives: an ISO string, a date alone, a
     // timestamp, a JavaScript `Date`.
     //
     // `locale` is the last argument, and matters most under server rendering:
@@ -167,7 +167,7 @@ const INJECTED = [
     // Django's `|timesince` and `|timeuntil` in one, which is why it carries
     // neither word: `Intl` formats a *signed* gap, so the direction is in the
     // value rather than in the name. `fromnow` is the JavaScript world's word
-    // for it — moment and dayjs both spell it that way — and it stays true in
+    // for it, moment and dayjs both spell it that way, and it stays true in
     // both directions where "since" would lie half the time.
     //
     // It is also the one helper here that Django could not have had at all. A
@@ -175,7 +175,7 @@ const INJECTED = [
     // a component stays on screen, and this one keeps itself right.
     //
     // Reading it registers the block with a shared clock, and the delay asked
-    // for is what the *display* needs — a second while it counts seconds, an
+    // for is what the *display* needs: a second while it counts seconds, an
     // hour once it counts days. So it slows down on its own as a date ages,
     // which is why nothing has to switch it off.
     {
@@ -212,7 +212,7 @@ const INJECTED = [
     // One rule, no option, and it goes all the way: normalise, lowercase, keep
     // every letter, digit and mark, turn the rest into a dash. Django folds
     // accents to ASCII and drops what will not fold, which needs
-    // `allow_unicode=True` to stop destroying text — and even then it is a half
+    // `allow_unicode=True` to stop destroying text, and even then it is a half
     // measure, since a URL carries unicode either way. Keeping `é` while keeping
     // `本` is the only reading of "support unicode" that holds together.
     //
@@ -235,7 +235,7 @@ const INJECTED = [
             .replace(/^-+|-+$/g, '')`
     },
 
-    // Jinja's `|striptags`: HTML shown as text — an excerpt from a feed, a
+    // Jinja's `|striptags`: HTML shown as text, an excerpt from a feed, a
     // preview of an imported document, content nobody here wrote.
     //
     // The browser's own parser does it, and nothing else does it correctly. The
@@ -246,7 +246,7 @@ const INJECTED = [
     //
     // Which is why there is no fallback: off a browser this returns nothing
     // rather than something wrong. A first render shows less and then shows the
-    // text, instead of showing `caf&eacute;` and correcting it — and a page that
+    // text, instead of showing `caf&eacute;` and correcting it. A page that
     // needs the text on the server should strip it where the data is prepared.
     //
     // Whitespace is collapsed, as Jinja does. Neither inserts a separator
@@ -264,13 +264,13 @@ const INJECTED = [
         }`
     },
 
-    // The word all three engines use — Liquid, Django and Jinja — for the one
+    // The word all three engines use, Liquid, Django and Jinja alike, for the one
     // thing a template genuinely does with a URL: build one. Decoding is an
     // *input* operation and belongs before the template; only Liquid ships a
     // decoder, because a Shopify theme has no code in front of it.
     //
     // Jinja's shape: a string, or a mapping that becomes a whole query string.
-    // Not Jinja's behaviour, and not Django's either — both leave `/` unquoted,
+    // Not Jinja's behaviour, and not Django's either: both leave `/` unquoted,
     // which quietly turns `/tag/{urlencode(t)}` into two path segments. Jinja
     // states a reason for it ("HTTP servers treat / and %2F equivalently in
     // paths") and the reason is untrue: Apache answers 404 on an encoded slash
@@ -296,7 +296,7 @@ const INJECTED = [
     },
 
     // Context belongs to a component instance; a plain module has none. It is
-    // per subtree, where a store is per application — and it is the only
+    // per subtree, where a store is per application, and it is the only
     // per-request-safe place to put state under server rendering. Both must be
     // called while an instance initialises, which is exactly when the Python
     // module body runs.
@@ -305,7 +305,7 @@ const INJECTED = [
     { name: 'get_context', value: '() => (key) => getContext(key) ?? NONE', component: true },
 
     // `$props.id()`, whose name follows theirs the way `set_context` follows
-    // `setContext`. It is not a prop — the parent never passes it — but a reader
+    // `setContext`. It is not a prop, the parent never passes it, but a reader
     // who meets the problem will find it under that name in Svelte's own docs.
     //
     // The rune may only be called at the top level of a component, never from a
@@ -320,7 +320,7 @@ const INJECTED = [
         emitted: `const ${PROPS_ID} = $props.id();`
     },
 
-    // `$host()` — the element a component is mounted as, when it is compiled as
+    // `$host()`, the element a component is mounted as, when it is compiled as
     // a custom element by `<svelte:options customElement="…">`. It is the only
     // way out: a custom element speaks to the page through DOM events, not
     // props, so without it a Python component could receive and render but never

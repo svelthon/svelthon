@@ -1,5 +1,5 @@
 // The markup half of the preprocessor: turning a Svelte template's expressions
-// into Python. Pure string work, and deliberately free of any Node import — the
+// into Python. Pure string work, and deliberately free of any Node import: the
 // browser playground compiles components client-side and needs exactly this,
 // while the file next door needs `fs` and `path` and cannot be loaded there.
 
@@ -53,8 +53,8 @@ function closingPair(source, start) {
 }
 
 // Walk `text` at depth zero, ignoring anything inside a string, a bracket or a
-// parenthesis. Used to find where an expression ends — a comma between two
-// arguments, or the `then` of an await block — without parsing Python.
+// parenthesis. Used to find where an expression ends (a comma between two
+// arguments, or the `then` of an await block) without parsing Python.
 function atTopLevel(text, visit) {
     let depth = 0;
     let quote = null;
@@ -161,11 +161,11 @@ function walrusTarget(text) {
 }
 
 // `(name := value)` is the one assignment Python allows inside an expression,
-// and therefore the only one a `lambda` can hold — which is exactly what a
+// and therefore the only one a `lambda` can hold, which is exactly what a
 // handler needs, since `onclick={() => (open = !open)}` has no Python twin.
 //
 // Its own meaning is useless here: PEP 572 binds in the enclosing *function*,
-// and a lambda is one, so the write dies with the call — silently, which is
+// and a lambda is one, so the write dies with the call, silently, which is
 // worse than an error. A template is not plain Python either; it already has
 // `{#if}`, `{:else}` and four implicit wrappers. So here the walrus writes the
 // component's name, through the namespace and therefore through the signal.
@@ -197,7 +197,7 @@ export function walrus(expression) {
 
         // Only a *grouping* parenthesis, which is the form Python's grammar
         // forces in a lambda. One that opens a call belongs to the callee, and
-        // consuming it rewrote `f(x := 1)` as `f__assign("x", 1)` — a call to a
+        // consuming it rewrote `f(x := 1)` as `f__assign("x", 1)`, a call to a
         // name that does not exist, so the handler did nothing at all and said
         // nothing either. `f((x := 1))` is the form that assigns.
         const grouping = !/[\w)\]"']$/.test(out);
@@ -206,7 +206,7 @@ export function walrus(expression) {
             // Each element of the group, not only the first. `(a := 1, b := 2)`
             // is the one expression Python has that assigns twice, and it is
             // what a handler needs: JavaScript reaches for its comma operator
-            // there, which exists for the same reason — a `for` clause takes one
+            // there, which exists for the same reason: a `for` clause takes one
             // expression and you want two. Reading only the start of the group
             // took `1, b := 2` for the value and lost every assignment but the
             // first, silently.
@@ -248,7 +248,7 @@ export function walrus(expression) {
     return out;
 }
 
-// Only the markup, never a <script> or <style> body — Python is full of braces
+// Only the markup, never a <script> or <style> body: Python is full of braces
 // (dict literals, f-strings) and rewriting them would be catastrophic.
 //
 // `transform` is given where its chunk starts, for a caller that needs to map
@@ -268,30 +268,30 @@ export function overMarkup(content, transform) {
 }
 
 // `bind:` needs to read *and* write, which no single expression can do. Svelte
-// takes a pair for exactly that — `bind:value={() => v, (n) => v = n}` — so the
+// takes a pair for exactly that, `bind:value={() => v, (n) => v = n}`, so the
 // value is compiled twice: once as an expression, once as an assignment target.
 // A bare name barely notices, being written the same way in both languages; what
 // this buys is `bind:value={row.name}`, a member expression that used to be
 // JavaScript's and silently missed a dict.
 //
-// Everything else that used to sit here — `use:`, the transition family,
-// `class:`, `style:` — takes an ordinary *value*, and takes a Python one.
+// Everything else that used to sit here (`use:`, the transition family,
+// `class:`, `style:`) takes an ordinary *value*, and takes a Python one.
 const DIRECTIVE = /^bind:/;
 
-// `bind:group` refuses the pair — Svelte works out which inputs form one group
+// `bind:group` refuses the pair: Svelte works out which inputs form one group
 // from the *text* of the expression, and two anonymous functions have none. So it
 // does not become a pair, it becomes an action, and the group stops needing an
 // identity at all: each input computes its own `checked` from the same target.
 //
 // That is also what fixes it. Svelte's own version writes the value with a plain
 // JavaScript assignment, which lands on the object but never reaches
-// `$B.$setitem` — so nothing re-renders, not even Svelte's effect that unfills
+// `$B.$setitem`, so nothing re-renders, not even Svelte's effect that unfills
 // the others. Going through the pair puts the write back on Python's path.
 const GROUP_DIRECTIVE = /^bind:group\b/;
 
 // The shorthand: `bind:value` with no `={…}` is Svelte's way of writing
-// `bind:value={value}`. Written that way it never reaches the pair above — the
-// scanner looks for an `=` and finds none — so Svelte binds its own `let` for
+// `bind:value={value}`. Written that way it never reaches the pair above, since
+// the scanner looks for an `=` and finds none, so Svelte binds its own `let` for
 // the name instead, which is the raw signal cell rather than Python's. Reads
 // then miss the namespace and writes never come back, and the first symptom is
 // worse than either: `bind:files` with nothing chosen hands Python's `None`
@@ -312,17 +312,17 @@ const BOUND_VALUE = '__value';
 // A handler takes a *callable*, and Python's is `lambda`. So its value is
 // compiled as Python like everything else, and what the expression yields is
 // wrapped for JavaScript: `pyHandler` reads the signature Brython recorded,
-// trims the call to the arity the author declared and converts the arguments —
+// trims the call to the arity the author declared and converts the arguments,
 // which is what lets `lambda: choose(pep)` ignore the DOM event it is handed
 // while `lambda e: read(e.target.value)` receives it.
 const HANDLER = /^(?:on[a-z]|on:)/;
 
 // The wrapper the generated script defines for handlers. Named here and emitted
-// there, so the two have to agree — it exists to carry the component's line
+// there, so the two have to agree: it exists to carry the component's line
 // offset, which the markup pass runs too early to know.
 const EVENT_WRAPPER = '__event';
 
-// `class:many={…}` is read for truthiness, so it needs Python's — an empty list
+// `class:many={…}` is read for truthiness, so it needs Python's: an empty list
 // is false here and true in JavaScript, exactly as in `{#if}`.
 const CLASS_DIRECTIVE = /^class:/;
 
@@ -355,16 +355,16 @@ function declaredBy(inner) {
 
 // `{#each xs as x, i (key)}`. The iterable is evaluated outside the block, so it
 // is compiled before the block's names exist; the key is evaluated inside it.
-// Both matter: a Python iterable that is not a list — a dict, a range, the
-// result of .items() — has to become an array for Svelte to walk it.
+// Both matter: a Python iterable that is not a list (a dict, a range, the
+// result of .items()) has to become an array for Svelte to walk it.
 // `for k, v in d.items()` is how Python unpacks, and `as (k, v)` is how it reads
-// in a template. Svelte destructures with brackets — and a Python tuple *is* an
+// in a template. Svelte destructures with brackets, and a Python tuple *is* an
 // array, so the two mean the same thing once the punctuation is translated.
 function pattern(target) {
     const trimmed = target.trim();
 
     // Only what is explicitly parenthesised. A bare `x, i` is Svelte's item and
-    // index, not a tuple — turning that into `[x, i]` would silently destructure
+    // index, not a tuple: turning that into `[x, i]` would silently destructure
     // every indexed loop in the project.
     if (!trimmed.startsWith('(')) return trimmed;
 
@@ -385,11 +385,11 @@ function pattern(target) {
 // The key that trails an `{#each}` target: `[target, key]`, or null when the line
 // carries none.
 //
-// A key is an expression, so it holds parentheses of its own — a call, a builtin,
+// A key is an expression, so it holds parentheses of its own: a call, a builtin,
 // a tuple. Matching it with `\(([^()]*)\)$` therefore failed on exactly those, and
 // failed *silently*: the whole line was taken for the target, so the key travelled
-// into the generated markup uncompiled — JavaScript, in a template where nothing
-// else is — and the names inside it were declared as the block's own. Measured
+// into the generated markup uncompiled, JavaScript in a template where nothing
+// else is, and the names inside it were declared as the block's own. Measured
 // before this existed: `(str(r.id))` reached the browser as `ReferenceError: str
 // is not defined`, and a tuple key, which is how Python writes a composite one,
 // could not be written at all.
@@ -425,7 +425,7 @@ function trailingKey(text) {
             if (text.slice(i + 1).trim()) continue;
 
             // And the part before has to be non-empty, or `as (statut, combien)`
-            // — a tuple target — would read as a key with no target at all.
+            // (a tuple target) would read as a key with no target at all.
             return text.slice(0, opens).trim() ? [text.slice(0, opens), text.slice(opens + 1, i)] : null;
         }
     }
@@ -454,7 +454,7 @@ function eachBlock(trimmed, declare, call) {
 
 // What Svelte's template language holds, named here so that anything else stops
 // rather than crosses. The branch that used to end these three chains was a
-// catch-all written for one case — `{@debug}`, `{#snippet}` — and it silently
+// catch-all written for one case, `{@debug}` and `{#snippet}`, and it silently
 // carried every construct nobody had thought about, leaving its expression as
 // JavaScript inside a component that promised Python. Five of them were found
 // one at a time before this list existed.
@@ -462,23 +462,23 @@ const BLOCKS = ['if', 'each', 'key', 'await', 'snippet'];
 const CLAUSES = ['else', 'then', 'catch'];
 // `{@…}` is read in two positions and the two sets do not overlap: Svelte places
 // `{@attach}` inside a tag and the other three outside one. One shared list made
-// every refusal name the very word the author had just written — `{@html x}` in
+// every refusal name the very word the author had just written: `{@html x}` in
 // a tag was refused by a sentence listing `html` among the tags it knows.
 const TAGS = ['html', 'render', 'debug'];
 const ATTACHMENTS = ['attach'];
 
-// `{x = 2}` and `{y => x + 5}` — a name declared in the markup, with the two
+// `{x = 2}` and `{y => x + 5}`: a name declared in the markup, with the two
 // signs the script already uses and no third one invented.
 //
 // Svelte spells these `{let x = …}` and `{const y = $derived(…)}`, which are
 // JavaScript keywords in a Python file. We keep our own, and the rule stays the
 // one sentence it has always been: **a rune lives at the top level of the
-// script, and in the markup** — the two places the compiler reads a
+// script, and in the markup**, the two places the compiler reads a
 // declaration.
 //
 // `=` makes state here for the same reason it does at module level: there is no
 // way to assign without it. The analogy with `x = 2` inside a `def`, which is an
-// ordinary local, does not hold — the markup is not a Python scope, so there is
+// ordinary local, does not hold: the markup is not a Python scope, so there is
 // no Python rule to inherit.
 //
 // And the powerful form costs nothing when nobody uses the power: measured on
@@ -535,7 +535,7 @@ const unknownTag = (trimmed, kind, known) =>
 
 // A snippet's name belongs to the scope that *encloses* the block, and to the
 // whole of it: Svelte hoists the declaration, so `<Card {row} />` may be written
-// above the `{#snippet row(x)}` it names — measured, it compiles. One
+// above the `{#snippet row(x)}` it names, measured, it compiles. One
 // left-to-right walk cannot know a name it has not reached yet, so the markup is
 // walked twice: once with a throwaway collector, to record which scope each
 // snippet name belongs to, then for real with every scope seeded.
@@ -601,11 +601,11 @@ function walk(markup, collect, onPython, seed, record) {
     };
 
     // Where a template expression sits in the *source*, for a caller that needs
-    // to point at it rather than compile it — the editor's highlighting above
+    // to point at it rather than compile it: the editor's highlighting above
     // all, which colours these ranges with the same parser as the `<script>`.
     //
     // The range is reported only when the text occurs exactly once inside its
-    // own braces, so an ambiguous match — `{#each items as items}` — yields no
+    // own braces, so an ambiguous match like `{#each items as items}` yields no
     // range rather than the wrong one. A missing highlight is invisible; a
     // misplaced one teaches the reader something false.
     const locate = (expr) => {
@@ -622,7 +622,7 @@ function walk(markup, collect, onPython, seed, record) {
     };
 
     // `source` is what the author actually typed, when that differs from what
-    // gets compiled — a handler goes through walrus() first, and a range has to
+    // gets compiled: a handler goes through walrus() first, and a range has to
     // point at the text on screen rather than at the rewrite.
     const call = (expr, wrapper, source = expr) => {
         const trimmed = expr.trim();
@@ -638,7 +638,7 @@ function walk(markup, collect, onPython, seed, record) {
     };
 
     // The write half of a binding: the same text, compiled as an assignment
-    // target rather than as an expression. No locate() — it is the same source
+    // target rather than as an expression. No locate(): it is the same source
     // text the read half already reported, and a range must not be sent twice.
     const assign = (expr) => {
         const args = mentioned(expr.trim());
@@ -648,8 +648,8 @@ function walk(markup, collect, onPython, seed, record) {
         return `${name}(${[BOUND_VALUE, ...rest].join(', ')})`;
     };
 
-    // A `bind:` whose target is a name the *markup* declared — a `{x = e}`, or a
-    // block's own alias — cannot go through the pair above. The generated `def`
+    // A `bind:` whose target is a name the *markup* declared, a `{x = e}` or a
+    // block's own alias, cannot go through the pair above. The generated `def`
     // receives that name as a parameter, so `x = value` would assign to the
     // parameter and the write would die with the call. Silently.
     //
@@ -671,7 +671,7 @@ function walk(markup, collect, onPython, seed, record) {
     // Refused rather than supported: `bind:` writes those names already, and a
     // handler that wants to toggle something has the script for it. What is
     // missing is the ability to *write* a markup name from a handler, and no
-    // corpus asks for it — measured, zero of 889 components.
+    // corpus asks for it: measured, zero of 889 components.
     const refuseMarkupWalrus = (rewritten, source) => {
         for (const [, name] of rewritten.matchAll(ASSIGNED)) {
             if (!inScope().includes(name)) continue;
@@ -690,7 +690,7 @@ function walk(markup, collect, onPython, seed, record) {
 
         if (inTag) {
             if (quote) {
-                // `class="badge {statut.lower()}"` — an interpolation inside a
+                // `class="badge {statut.lower()}"`, an interpolation inside a
                 // quoted attribute value. Svelte concatenates it into a string,
                 // so it renders like any other text and goes through __text.
                 if (char === '{') {
@@ -724,8 +724,8 @@ function walk(markup, collect, onPython, seed, record) {
                         // A binding becomes a read/write pair; `bind:group` is
                         // the one Svelte will not take a pair for and keeps its
                         // text. A handler is Python, and what it yields is made
-                        // callable from JavaScript. Everything else — a
-                        // component prop included — is Python.
+                        // callable from JavaScript. Everything else, a
+                        // component prop included, is Python.
                         if (GROUP_DIRECTIVE.test(attribute[1])) {
                             // The tag is never inspected: `type` and `value` are
                             // read off the node at run time, which is why this
@@ -739,7 +739,7 @@ function walk(markup, collect, onPython, seed, record) {
                         } else if (HANDLER.test(attribute[1])) {
                             // A handler is the one place a template expression
                             // is allowed to write: it runs on an event, not
-                            // during a render — where Svelte rejects a write to
+                            // during a render, where Svelte rejects a write to
                             // state, and rightly so.
                             const rewritten = walrus(inner);
 
@@ -752,7 +752,7 @@ function walk(markup, collect, onPython, seed, record) {
                             // out as undefined so Svelte drops the attribute
                             // rather than writing the word "None" into it. In a
                             // template the default failure is absence. The same
-                            // wrapper the bindings use — the boundary is the
+                            // wrapper the bindings use: the boundary is the
                             // same one, and a prop passed to a child is read
                             // back as None on the other side regardless.
                             out += `{${call(inner, '__bound')}}`;
@@ -779,7 +779,7 @@ function walk(markup, collect, onPython, seed, record) {
                         // `{@attach fn}` sits inside the tag rather than around
                         // it, so it is read here. What it holds is Python like
                         // every other expression, and what that yields is a
-                        // function Svelte calls with the element — so it goes
+                        // function Svelte calls with the element, so it goes
                         // through the same wrapper a handler does, which trims
                         // the call to the declared arity, converts the element,
                         // and hands the teardown back.
@@ -816,8 +816,8 @@ function walk(markup, collect, onPython, seed, record) {
                 tag = null;
             }
 
-            // `bind:value` on its own ends here — at a space, a slash or the
-            // closing bracket — so this is where the name is complete and the
+            // `bind:value` on its own ends here, at a space, a slash or the
+            // closing bracket, so this is where the name is complete and the
             // absence of an `=` is certain.
             if (/[\s/>]/.test(char)) {
                 const short = out.match(SHORTHAND);
@@ -835,7 +835,7 @@ function walk(markup, collect, onPython, seed, record) {
 
         if (char === '<') {
             // An HTML comment is not a tag. Quotes mean nothing inside one, and
-            // an apostrophe — `aujourd'hui` — would otherwise open a string that
+            // an apostrophe, as in `aujourd'hui`, would otherwise open a string that
             // never closes, silently leaving the whole rest of the template in
             // JavaScript.
             if (markup.startsWith('<!--', index)) {
@@ -882,11 +882,11 @@ function walk(markup, collect, onPython, seed, record) {
                 out += eachBlock(trimmed, push, call);
             } else if (trimmed.startsWith('#key ')) {
                 // Svelte re-creates the block when the value changes, by
-                // identity — which no Python value keeps. repr() gives one.
+                // identity, which no Python value keeps. repr() gives one.
                 push([]);
                 out += `{#key ${call(trimmed.slice(5), 'repr')}}`;
             } else if (trimmed.startsWith('#await ')) {
-                // The awaited expression is Python like any other — a coroutine
+                // The awaited expression is Python like any other, a coroutine
                 // included, since the wrapper hands one back as a promise. What
                 // follows it is a name the block declares, never an expression:
                 // `{#await f() then row}`. The split is made at depth zero so
@@ -900,11 +900,11 @@ function walk(markup, collect, onPython, seed, record) {
                 // which knows `:then` and `:catch` as clauses but has no entry
                 // for the shorthand that folds one into the opening tag. Without
                 // it `{#await f() then value}` declared nothing, `value` was
-                // compiled as a free name, and the block rendered empty — while
+                // compiled as a free name, and the block rendered empty, while
                 // the same await written the long way worked.
                 // Compiled before the scope is pushed: the promise is evaluated
                 // outside the block, so the name it declares is not in scope for
-                // it — `{#await f(value) then value}` must read the outer one.
+                // it: `{#await f(value) then value}` must read the outer one.
                 out += `{#await ${call(awaited, '')}${tail}}`;
                 push(identifiers(tail.replace(/^\s*(?:then|catch)\s+/, '')));
             } else if (trimmed.startsWith('#snippet ')) {
@@ -912,7 +912,7 @@ function walk(markup, collect, onPython, seed, record) {
                 // it is passed through, and its body is walked like any other.
                 //
                 // Two scopes are touched, not one. Its parameters go into the
-                // block, its own name into what encloses the block — that name
+                // block, its own name into what encloses the block, and that name
                 // outlives the block, which is the whole point of being able to
                 // hand it to a child.
                 const declares = trimmed.match(/^#snippet\s+([A-Za-z_]\w*)/);
@@ -943,7 +943,7 @@ function walk(markup, collect, onPython, seed, record) {
             if (/^:else\s+if\s/.test(trimmed)) {
                 out += `{:else if ${call(trimmed.replace(/^:else\s+if\s/, ''), '__truthy')}}`;
             } else if (CLAUSES.some((one) => trimmed === `:${one}` || trimmed.startsWith(`:${one} `))) {
-                // `:else`, `:then row`, `:catch err` — a name at most, never an
+                // `:else`, `:then row`, `:catch err`: a name at most, never an
                 // expression, so they cross unchanged.
                 out += markup.slice(index, end + 1);
             } else {
@@ -953,7 +953,7 @@ function walk(markup, collect, onPython, seed, record) {
             if (trimmed.startsWith('@html ')) {
                 out += `{@html ${call(trimmed.slice(6), '__text')}}`;
             } else if (trimmed.startsWith('@render ')) {
-                // The snippet itself is a JavaScript function and stays one —
+                // The snippet itself is a JavaScript function and stays one;
                 // what it is *given* is Python. Arguments are split at depth
                 // zero, so a comma inside a call or a literal stays put.
                 const called = trimmed.slice(8).trim();
@@ -999,13 +999,13 @@ function walk(markup, collect, onPython, seed, record) {
     return out;
 }
 
-// The source ranges of every Python expression a template holds — the same
+// The source ranges of every Python expression a template holds, from the same
 // scan the compiler runs, reporting positions instead of producing code.
 //
 // It exists for the editor: highlighting the Python inside `{…}` means knowing
 // exactly where it is, and that is the hard half. Brace balance, quotes,
 // interpolation inside an attribute value, and the difference between `{#if x}`
-// — where only `x` is Python — and `{x}` are all already solved above, so this
+// (where only `x` is Python) and `{x}` are all already solved above, so this
 // borrows the answer rather than guessing at it a second time.
 // Takes a whole component, not just its template: it goes through overMarkup
 // for the same reason the compiler does, so a dict literal in the `<script>` and
@@ -1028,20 +1028,20 @@ export function pythonRanges(content) {
 }
 
 // Names a component imports or declares in its `<script module>`. They live in
-// JavaScript, and Python cannot import them — but they are in scope for the
+// JavaScript, and Python cannot import them, but they are in scope for the
 // generated code, so publishing them into the namespace makes them readable
 // from Python. That is what lets a Python component reach `page` from
 // `$app/state`, or any npm library at all.
 const MODULE_SCRIPT = /<script[^>]*\b(?:module|context=["']module["'])[^>]*>([\s\S]*?)<\/script>/i;
 const IMPORT = /import\s+([\s\S]*?)\s+from\s+['"]/g;
 
-// Whatever the block declares in its own right — a constant, a helper, a class.
+// Whatever the block declares in its own right: a constant, a helper, a class.
 const DECLARED = /^([ \t]*)(?:export\s+)?(?:const|let|var|function|class)\s+([A-Za-z_$][\w$]*)/gm;
 
 // Only what the module script declares at its *own* level. `^\s*` with the `m`
 // flag matches any indentation, so a `const` inside a function body was
 // published as a module name and the component referenced something that does
-// not exist there — a ReferenceError at render, for a variable the author had
+// not exist there: a ReferenceError at render, for a variable the author had
 // scoped correctly.
 function topLevelIndent(block) {
     const lines = block.split('\n').filter((line) => line.trim());
@@ -1054,7 +1054,7 @@ function topLevelIndent(block) {
 }
 
 // The head of every dotted directive: the `x` of `in:x.fade`. Svelte copies that
-// text into a `() => …`, so `x` has to be a JavaScript binding — and when the
+// text into a `() => …`, so `x` has to be a JavaScript binding, and when the
 // author meant a Python module, none exists.
 //
 // Only the five that name a function. `class:` and `style:` name a property, and
@@ -1085,7 +1085,7 @@ export function moduleImports(content) {
         const clause = one[1];
         const braced = clause.match(/\{([\s\S]*)\}/);
 
-        // `import Default, { a as b }` — the part before the brace is a default
+        // `import Default, { a as b }`: the part before the brace is a default
         // binding, and each entry inside is renamed by its own `as`.
         for (const piece of (braced ? clause.slice(0, braced.index) : clause).split(',')) {
             const bare = piece.replace(/\*\s*as\s+/, '').trim();
@@ -1114,7 +1114,7 @@ export function moduleImports(content) {
 
 // The hidden Python functions a template needs, one per distinct expression.
 // Appended to the component's own Python, never prepended, so its line numbers
-// stay true — which is what keeps error messages and source maps honest.
+// stay true, which is what keeps error messages and source maps honest.
 export function collector(defs) {
     const seen = new Map();
 
@@ -1129,7 +1129,7 @@ export function collector(defs) {
 
         if (assign) {
             // A module name assigned inside a function is local unless declared
-            // — Python's rule, and the binding would otherwise write into a
+            // by Python's rule, and the binding would otherwise write into a
             // frame nobody reads. A block's own name is already a parameter.
             const bare = /^[A-Za-z_]\w*$/.test(expression) && !args.includes(expression);
 
