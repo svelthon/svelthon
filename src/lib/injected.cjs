@@ -295,7 +295,11 @@ const INJECTED = [
         }`
     },
 
-    // Context belongs to a component instance; a plain module has none.
+    // Context belongs to a component instance; a plain module has none. It is
+    // per subtree, where a store is per application — and it is the only
+    // per-request-safe place to put state under server rendering. Both must be
+    // called while an instance initialises, which is exactly when the Python
+    // module body runs.
     { name: 'set_context', value: '() => setContext', component: true },
     // A missing key is `undefined` in Svelte; Python expects None.
     { name: 'get_context', value: '() => (key) => getContext(key) ?? NONE', component: true },

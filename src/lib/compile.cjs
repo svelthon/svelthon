@@ -882,6 +882,517 @@ function fromImports(ast) {
     return [...found];
 }
 
+// The names the emitted script gives to what it generates. Pure functions of the
+// author's name — `markup.js` writes calls to the same spellings, and
+// `tests/generated-names.test.js` holds the two files to them.
+const fn = (name) => `__fn_${name}`;
+const local = (name) => `__local_${name}`;
+// An imported JavaScript name, once it has been given a Python-aware
+// boundary — see `jsCall` in the runtime.
+const jsBound = (name) => `__js_${name}`;
+// What `$effect.root` hands back. Python reads the decorated name and gets
+// this, exactly as JavaScript reads `const destroy = $effect.root(…)` —
+// the name belongs to the destructor on both sides.
+const destroyer = (name) => `__root_${name}`;
+// Second signal per name: a mutation bumps it without touching the value,
+// so nothing is copied and the object keeps its identity.
+const rev = (name) => `__rev_${name}`;
+const bump = (name) => `__bump_${name}`;
+const read = (name) => `__read_${name}`;
+
+// The component script, one function per section.
+//
+// Each takes the same context object — what `compile()` read off the source —
+// and hands back its lines. They are assembled in `componentSections` order,
+// which is load-bearing in four places and asserted by `tests/sections.test.js`.
+
+function preamble(c) {
+    return [
+        `import { init } from ${JSON.stringify(virtualId(c.name))};`,
+        // The bridge behind `__truthy` and the three beside it. Imported under a
+        // name no one would type: it was called `py` back when a template's
+        // expressions were JavaScript and an author wrote `py.str(items)` in the
+        // markup — short on purpose. Now that only generated code touches it,
+        // short is exactly wrong, and `py` is a name an author may want.
+        `import { bind, __pybridge, track, follow, pyError, schedule, inTemplate, pyEvent, plainData, pyArg, pyData, pyBoundary, pyNumbers, jsCall, ticking, group, writeAttr, writeItem, pyModule, NONE${c.store ? ', registerModule' : ''} } from 'svelthon/runtime';`,
+        ...c.jsImports.map(jsImportLine),
+        `import { ${['getContext', 'setContext']
+            .concat(c.lifecycle('on_mount') || c.lifecycle('on_destroy') ? ['untrack'] : [])
+            .join(', ')} } from 'svelte';`,
+        ``
+    ];
+}
+
+function declarations(c) {
+    return [
+        ...(c.bindables.length
+            ? [
+                  `let { ${c.bindables.map((b) => `${b} = $bindable()`).join(', ')}, ...__props } =` +
+                      ` $props();`,
+                  ...c.bindables.flatMap((b) => [
+                      `let ${rev(b)} = $state.raw(0);`,
+                      `const ${bump(b)} = () => { ${rev(b)} += 1; };`,
+                      `const ${read(b)} = () => { ${rev(b)}; };`
+                  ]),
+                  // The module body applies the annotation's default by writing
+                  // to the name — and that write must not travel up to the
+                  // parent. Only writes made after init() are real ones.
+                  `let __initialising = true;`,
+                  ``
+              ]
+            : c.props.length
+              ? [`const __props = $props();`, ``]
+              : []),
+        // A prop's value comes from the parent when it was passed, and from the
+        // annotation's default otherwise — the default being whatever the Python
+        // body assigned during init(). Reading __props keeps it reactive, so a
+        // parent update flows into Python's namespace on the next read.
+        ...c.props.flatMap((n) => [
+            `let ${local(n)} = $state.raw(undefined);`,
+            `const ${n} = $derived(('${n}' in __props ? __props.${n} : ${local(n)}) ?? NONE);`
+        ]),
+        ...c.state.flatMap((n) => [
+            `let ${n} = $state.raw(undefined);`,
+            `let ${rev(n)} = $state.raw(0);`,
+            `const ${bump(n)} = () => { ${rev(n)} += 1; };`,
+            `const ${read(n)} = () => { ${rev(n)}; };`
+        ]),
+        ...c.funcs.map((f) => `let ${fn(f.name)} = $state.raw(undefined);`),
+        ...c.inspects.map((i) => `let ${fn(i.name)} = $state.raw(undefined);`),
+        ...c.effects.flatMap((e) =>
+            e.root
+                ? [`let ${fn(e.name)} = $state.raw(undefined);`, `let ${destroyer(e.name)};`]
+                : [`let ${fn(e.name)} = $state.raw(undefined);`]
+        ),
+        // A @derived name reads as its result — on both sides. The body runs
+        // inside $derived.by, and every global it touches goes through a
+        // namespace accessor, so Svelte discovers the dependencies by itself.
+        ...c.deriveds.flatMap((d) => [
+            `let ${fn(d.name)} = $state.raw(undefined);`,
+            `const ${d.name} = $derived.by(() => ${fn(d.name)}());`
+        ]),
+        ``
+    ];
+}
+
+// What a compiled template expression calls, and only a `.svelte` has one: a
+// `.svelte.py` holds signals but no markup, exactly as a plain `.py` holds
+// neither.
+function templateBridge(c) {
+    if (c.store) return [];
+
+    return [
+        `const __event = (fn) => pyEvent(fn, ${c.lineOffset});`,
+        // What `(name := value)` in a handler compiles to. The write goes
+        // through the namespace, so through the accessor, so the signal fires —
+        // the whole reason the walrus can mean this here.
+        `const __assign = (name, value) => { ${NS}[name] = value; return value; };`,
+        // The same walrus aimed at an attribute or a key rather than a name.
+        // Python's grammar takes only the name; JavaScript's `=` takes all
+        // three, and so does `bind:` already.
+        `const __setattr = writeAttr;`,
+        `const __setitem = writeItem;`,
+        // What `bind:group` becomes: a directive whose value is Python.
+        `const __group = group;`
+    ];
+}
+
+// One signal per module-level name, published to Brython as an accessor.
+// Everything the compiler adds is bound after this, in `injectedBindings` —
+// bound before, an injection would silently take a name the author declared.
+//
+// The namespace must NOT be a $state proxy: Svelte would deep-proxy every
+// Python value stored in it, and a proxied Brython object fails its own type
+// checks (`repr((1, 2))` raises "descriptor '__repr__' requires a 'tuple'
+// object but received a 'tuple'"). $state.raw keeps values opaque, so
+// reactivity tracks *rebinding a name* — which is what `count = …` and
+// `global count; count += 1` both do.
+//
+// Making `items.append(x)` reactive too was tried and abandoned: bumping a
+// revision signal that the bindings also read does invalidate them, but a
+// mutated list is still the *same object*, and both $derived and $state.raw
+// drop a write whose value is unchanged by ===. Propagating it would mean
+// handing the template a fresh copy on every render, at the cost of object
+// identity — too high a price for a rule that is easy to state instead.
+function authorBindings(c) {
+    return [
+        `const __proto = {};`,
+        // Python may write to a prop; the write lands in the local fallback and
+        // is shadowed for as long as the parent supplies a value, which is
+        // Svelte's own rule for non-bindable props.
+        //
+        // The accessors read the raw cell, never the tracked binding: Python must
+        // not subscribe to Svelte's graph, only feed it.
+        ...c.props.map(
+            (n) =>
+                `bind(__proto, '${n}', () => follow(('${n}' in __props ? __props.${n} : ${local(n)}) ?? NONE), (v) => { ${local(n)} = v; });`
+        ),
+        ...c.bindables.map(
+            (b) =>
+                `bind(__proto, '${b}', () => (${rev(b)}, follow(${b} ?? NONE)),` +
+                ` (v) => { if (!__initialising || ${b} === undefined) ${b} = track(v, ${bump(b)}, ${read(b)}); });`
+        ),
+        // Reading the revision alongside the value is what registers the
+        // dependency: an in-place mutation then invalidates every reader,
+        // without the value ever changing identity.
+        ...c.state.map(
+            (n) =>
+                `bind(__proto, '${n}', () => (${rev(n)}, ${n}), (v) => { ${n} = track(v, ${bump(n)}, ${read(n)}); });`
+        ),
+        // A store's function is read from another module, where the namespace is
+        // an ordinary JavaScript object and Brython converts what it is given.
+        // A component's is not, so it keeps the bare binding.
+        ...c.funcs.map(
+            (f) =>
+                `bind(__proto, '${f.name}', () => ` +
+                `${c.store ? `pyBoundary(${fn(f.name)})` : fn(f.name)}, ` +
+                `(v) => { ${fn(f.name)} = v; });`
+        ),
+        ...c.inspects.map(
+            (i) => `bind(__proto, '${i.name}', () => ${fn(i.name)}, (v) => { ${fn(i.name)} = v; });`
+        ),
+        // A root's name reads as its destructor; the setter still takes the
+        // function, since that is what Brython writes when the `def` runs.
+        ...c.effects.map((e) =>
+            e.root
+                ? `bind(__proto, '${e.name}', () => ${destroyer(e.name)}, (v) => { ${fn(e.name)} = v; });`
+                : `bind(__proto, '${e.name}', () => ${fn(e.name)}, (v) => { ${fn(e.name)} = v; });`
+        ),
+        // follow(): a @derived that hands back a container it was given is the one
+        // place the revision cannot travel by itself — Svelte memoises the
+        // derived on `===`, so the reader subscribes to the object instead.
+        ...c.deriveds.map(
+            (d) => `bind(__proto, '${d.name}', () => follow(${d.name}), (v) => { ${fn(d.name)} = v; });`
+        )
+    ];
+}
+
+function namespaceObject(c) {
+    return [
+        ``,
+        `const ${NS} = Object.create(__proto);`,
+        // Reading a global goes through $B.resolve_global → resolve_in_namespace,
+        // which demands an *own* property unless the namespace is flagged
+        // $proxy — in which case it reads the property normally and therefore
+        // walks the prototype chain, where our accessors live. It is the only
+        // place in Brython that consults this flag.
+        `${NS}.$proxy = true;`,
+        // Every namespace Brython makes for itself carries the module's own
+        // name, and `from x import y` reads it off the *importing* module to
+        // work out what package it sits in. Ours had none, so the lookup asked
+        // for a module called `undefined` — and said so, in a component where
+        // `import x` on the line above had worked perfectly.
+        `${NS}.__name__ = '${c.namespace}';`
+    ];
+}
+
+// Everything the compiler adds: the injected helpers, the template bridge's
+// entries, the JavaScript names and the Python modules a directive names. All
+// of it after `authorBindings`, so a name the author declared always wins.
+function injectedBindings(c) {
+    return [
+        ...injectedPreamble(c.declared, true, c.js),
+        ...injections(c.declared, true, c.js),
+
+        // Wrappers for compiled template expressions. Not Python's own bool()
+        // and str(): a template may hold a foreign JavaScript value — a DOM node
+        // from bind:this — on which Brython's classifier trips. These fall back.
+        ...(c.store
+            ? []
+            : [
+                  `bind(__proto, '__truthy', () => __pybridge.truthy, () => {});`,
+                  `bind(__proto, '__text', () => __pybridge.str, () => {});`,
+                  `bind(__proto, '__seq', () => __pybridge.seq, () => {});`,
+                  `bind(__proto, '__spread', () => __pybridge.spread, () => {});`,
+                  `bind(__proto, '__bound', () => __pybridge.bound, () => {});`,
+                  `bind(__proto, '__assign', () => __assign, () => {});`,
+                  `bind(__proto, '__setattr', () => __setattr, () => {});`,
+                  `bind(__proto, '__setitem', () => __setitem, () => {});`
+              ]),
+        // Wrapped once, not on every read: a name Python compares by identity
+        // has to answer the same object twice.
+        ...[...new Set([...c.jsImported, ...c.jsNames])]
+            .filter((n) => !c.declared.includes(n))
+            .map((n) => `const ${jsBound(n)} = jsCall(${n});`),
+        ...c.jsImported
+            .filter((n) => !c.declared.includes(n))
+            .map((n) => `bind(__proto, '${n}', () => ${jsBound(n)}, () => {});`),
+        // What the component imported in its `<script module>`, published so
+        // Python can read it. A name Python declares itself wins.
+        ...c.jsNames
+            .filter((n) => !c.declared.includes(n))
+            .map((n) => `bind(__proto, '${n}', () => ${jsBound(n)}, () => {});`),
+        // A Python module named by a directive — `in:fades.typewriter`. Svelte
+        // copies that text into a `() => …` of its own, so it looks for a
+        // JavaScript `fades`, and `import fades` never made one: the name binds
+        // in Python's namespace. Only what a directive actually names, and only
+        // when it is a module this file imports — a JavaScript name resolves on
+        // its own and must keep doing so.
+        //
+        // Read lazily by pyModule, so the position in the emitted script does
+        // not matter: the module is registered by the time a directive runs.
+        ...c.pyDirectives
+            .filter(
+                (n) =>
+                    c.imported.includes(n) &&
+                    !c.declared.includes(n) &&
+                    !c.jsImported.includes(n) &&
+                    !c.jsNames.includes(n)
+            )
+            .map((n) => `const ${n} = pyModule(${JSON.stringify(n)});`)
+    ];
+}
+
+// Running the module body, which is what fills every cell the sections above
+// declared. Nothing that reads a Python name may come before it.
+function initCall(c) {
+    return [
+        ``,
+        `init(${NS});`,
+        ...(c.bindables.length ? [`__initialising = false;`] : []),
+        ``
+    ];
+}
+
+function instanceExports(c) {
+    return [
+        // Event handlers are called with a DOM event Python never asked for.
+        // Truncating to the declared arity is a placeholder for a real interop
+        // policy (jsobj2pyobj on demand) — enough to make handlers work.
+        // An uncaught Python exception arrives in JS without message or stack;
+        // pyError fills them in, naming the function and the file it came from.
+        ...c.funcs.map(
+            (f) =>
+                `const ${f.name} = (...a) => { try { return pyNumbers(schedule(${templateCall(f, fn)}, ${JSON.stringify(`${f.name}() — ${c.source}`)}, ${c.lineOffset})); }` +
+                ` catch (err) { throw pyError(err, ${JSON.stringify(`${f.name}() — ${c.source}`)}, ${c.lineOffset}); } };`
+        ),
+        // What a parent holding `bind:this` can call. Svelte gathers whatever an
+        // instance script exports into `$$exports` and hands that object back,
+        // so a specifier list is enough — measured, `export { focus }` becomes
+        // `var $$exports = { focus }`.
+        //
+        // A component with no `@export` exports nothing, which is theirs too: an
+        // instance exposes only what it says it exposes.
+        ...(!c.store && c.funcs.some((f) => f.exported)
+            ? [``, `export { ${c.funcs.filter((f) => f.exported).map((f) => f.name).join(', ')} };`]
+            : []),
+        ...(c.store
+            ? [
+                  ``,
+                  `registerModule(${JSON.stringify(pythonModuleName(c.source))}, ${NS});`,
+                  ``,
+                  // Module-scope signals live once for the whole app. Exported
+                  // through getters because Svelte forbids exporting a reassigned
+                  // $state binding directly — and a getter is what keeps the read
+                  // reactive at the call site.
+                  `export const store = {`,
+                  ...c.state.map((n) => `    get ${n}() { return (${rev(n)}, ${n}); },`),
+                  ...c.state.map((n) => `    set ${n}(v) { ${n} = track(v, ${bump(n)}, ${read(n)}); },`),
+                  ...c.deriveds.map((d) => `    get ${d.name}() { return follow(${d.name}); },`),
+                  ...c.funcs.map((f) => `    ${f.name},`),
+                  `};`,
+                  ``,
+                  `export default store;`,
+                  // Named exports too: a `.py` is not only a store. SvelteKit
+                  // looks for `load`, `actions`, `GET` — by name, on the module.
+                  ...(c.funcs.length
+                      ? [``, `export { ${c.funcs.map((f) => f.name).join(', ')} };`]
+                      : [])
+              ]
+            : [])
+    ];
+}
+
+// Last, because an effect runs its body the moment it is created: anything it
+// reads has to exist, and that means every wrapper above it.
+function effectBlocks(c) {
+    return [
+        // Deliberately *not* untracked: discovering what the body read is the
+        // whole point. A Python function that returns a callable hands back a
+        // teardown, exactly as a Svelte effect does.
+        // `$inspect` is given the call, not its result: Svelte wraps whatever it
+        // receives in a thunk of its own and re-reads it on every change, so the
+        // lambda is re-run and the namespace accessors do the tracking. A
+        // production build drops the whole line — theirs, not ours.
+        // The lambda is called *inside* the rune both times, never hoisted into a
+        // const first: hoisting reads the values once, outside the tracking
+        // context, and the logger then fires on `init` and never again.
+        ...c.inspects.map((i) =>
+            i.logger
+                ? `$inspect(...${fn(i.name)}().slice(1)).with(__event(${fn(i.name)}()[0]));`
+                : `$inspect(...${fn(i.name)}());`
+        ),
+        // A root owns its own scope: it is not cleaned up when the component is,
+        // which is the point — the destructor is handed to Python under the
+        // decorated name, and calling it is what ends the effect.
+        ...c.effects.flatMap((e) => [
+            ``,
+            // `root` is a scope and `pre` is a moment, so they compose rather
+            // than exclude each other — which is what stacking the two
+            // decorators says, and what the nesting emits.
+            e.root
+                ? `${destroyer(e.name)} = $effect.root(() => { $effect${e.pre ? '.pre' : ''}(() => {`
+                : `$effect${e.pre ? '.pre' : ''}(() => {`,
+            `    let teardown;`,
+            `    try { teardown = ${fn(e.name)}(); }` +
+                ` catch (err) { throw pyError(err, ${JSON.stringify(`${e.name}() — ${c.source}`)}, ${c.lineOffset}); }`,
+            `    if (typeof teardown === 'function') return () => { teardown(); };`,
+            e.root ? `}); });` : `});`
+        ]),
+        ...(c.lifecycle('on_mount') || c.lifecycle('on_destroy')
+            ? [
+                  ``,
+                  `$effect(() => {`,
+                  // untrack, because a hook reads the component's names through
+                  // the namespace accessors — and those reads are signal reads.
+                  // `mounts += 1` inside on_mount would otherwise make the effect
+                  // depend on state it also writes, and Svelte loops until it
+                  // gives up with effect_update_depth_exceeded.
+                  //
+                  // Captured while the component is alive, too: reading a signal
+                  // from a teardown, once destroyed, yields no function at all.
+                  ...(c.lifecycle('on_destroy')
+                      ? [`    const __teardown = untrack(() => ${fn('on_destroy')});`]
+                      : []),
+                  ...(c.lifecycle('on_mount') ? [`    untrack(() => on_mount());`] : []),
+                  ...(c.lifecycle('on_destroy')
+                      ? [
+                            `    return () => { try { __teardown(); }` +
+                                ` catch (err) { throw pyError(err, ${JSON.stringify(`on_destroy() — ${c.source}`)}, ${c.lineOffset}); } };`
+                        ]
+                      : []),
+                  `});`
+              ]
+            : [])
+    ];
+}
+
+// The plain module: a `.py` compiled to ordinary JavaScript. No runes, so no
+// need for the Svelte compiler and no need to be renamed `.svelte.js` — which is
+// what lets SvelteKit find a `+page.server.py` in its manifest. It is the mirror
+// of a plain `.ts` next to a `.svelte.ts`.
+//
+// The same five moments as a component, minus everything a template needs.
+
+function plainPreamble(c) {
+    return [
+        `import { init } from ${JSON.stringify(virtualId(c.name))};`,
+        `import { bind, __pybridge, pyError, scheduleAsync, plainData, pyArg, pyData, pyExport, pyBoundary, jsCall, ticking, group, NONE, registerModule } from 'svelthon/runtime';`,
+        ...c.jsImports.map(jsImportLine),
+        ``
+    ];
+}
+
+function plainDeclarations(c) {
+    return [
+        ...c.state.map((n) => `let ${n};`),
+        ...[...c.funcs, ...c.plainDeriveds].map((f) => `let ${fn(f.name)};`),
+        ``
+    ];
+}
+
+function plainBindings(c) {
+    return [
+        // No markup here, so none of what a template expression calls — `__event`,
+        // `__assign`, `__group`, `__truthy` and the rest — is emitted. They were,
+        // and `__event` named a `pyEvent` this module never imported.
+        `const __proto = {};`,
+        ...c.state.map((n) => `bind(__proto, '${n}', () => ${n}, (v) => { ${n} = v; });`),
+        ...c.funcs.map(
+            (f) => `bind(__proto, '${f.name}', () => pyBoundary(${fn(f.name)}), (v) => { ${fn(f.name)} = v; });`
+        ),
+        ...c.plainDeriveds.map(
+            (d) => `bind(__proto, '${d.name}', () => ${fn(d.name)}(), (v) => { ${fn(d.name)} = v; });`
+        ),
+        ...injections(c.declared, false, c.js),
+
+        // Wrapped once, not on every read: a name Python compares by identity —
+        // `handler is on_click` — has to answer the same object twice.
+        ...[...new Set(c.jsImported)]
+            .filter((n) => !c.declared.includes(n))
+            .map((n) => `const ${jsBound(n)} = jsCall(${n});`),
+        ...c.jsImported
+            .filter((n) => !c.declared.includes(n))
+            .map((n) => `bind(__proto, '${n}', () => ${jsBound(n)}, () => {});`),
+        ``
+    ];
+}
+
+function plainInit(c) {
+    return [
+        `const ${NS} = Object.create(__proto);`,
+        `${NS}.$proxy = true;`,
+        ``,
+        `registerModule(${JSON.stringify(pythonModuleName(c.source))}, ${NS});`,
+        `init(${NS});`,
+        ``
+    ];
+}
+
+function plainExports(c) {
+    return [
+        ...[...c.funcs, ...c.plainDeriveds].map(
+            (f) =>
+                `const ${f.name} = (...a) => { try { const r = scheduleAsync(${fn(f.name)}(...a.slice(0, ${f.arity ?? 0}).map(pyArg)), ${JSON.stringify(`${f.name}() — ${c.source}`)}, ${c.lineOffset});` +
+                ` return r instanceof Promise ? r.then(plainData) : plainData(r); }` +
+                ` catch (err) { throw pyError(err, ${JSON.stringify(`${f.name}() — ${c.source}`)}, ${c.lineOffset}); } };`
+        ),
+        ``,
+        // SvelteKit reads `load`, `actions`, `GET`, `prerender` by name off the
+        // module, so values are exported as well as functions — and a value goes
+        // through the boundary too: `actions` is a dict of Python functions, each
+        // of them called by the framework.
+        //
+        // No default export: SvelteKit refuses one on a route module, and a
+        // Python module has no notion of a default anyway. Named exports are
+        // the whole contract, and `__all__` is where it is written.
+        ...c.exported
+            .filter((n) => !c.isFunction(n))
+            .map(
+                (n) =>
+                    `const __export_${n} = pyExport(${n}, ${JSON.stringify(`${n} — ${c.source}`)}, ${c.lineOffset});`
+            ),
+        ...(c.exported.length
+            ? [
+                  `export { ${c.exported
+                      .map((n) => (c.isFunction(n) ? n : `__export_${n} as ${n}`))
+                      .join(', ')} };`
+              ]
+            : [])
+    ];
+}
+
+// The order, which is the one thing about this file that cannot be read off any
+// single section. Four constraints hold it, and `tests/sections.test.js` asserts
+// all four on the emitted script rather than on this list — a list can only
+// restate itself:
+//
+//   1. the injections bind *after* the author's names, or they take them;
+//   2. init() comes after every binding, since it is what fills them;
+//   3. the exported wrappers come after init(), so they call something;
+//   4. the effects come last, since an effect runs its body on creation.
+//
+// Nothing breaks if a section moves. Something subtle stops working.
+const COMPONENT_SECTIONS = [
+    preamble,
+    declarations,
+    templateBridge,
+    authorBindings,
+    namespaceObject,
+    injectedBindings,
+    initCall,
+    instanceExports,
+    effectBlocks
+];
+
+const PLAIN_SECTIONS = [
+    plainPreamble,
+    plainDeclarations,
+    plainBindings,
+    plainInit,
+    plainExports
+];
+
 function compile(
     src,
     name = 'Component',
@@ -1039,21 +1550,6 @@ function compile(
         `}`
     ].join('\n');
 
-    // One signal per module-level name, published to Brython as an accessor.
-    //
-    // The namespace must NOT be a $state proxy: Svelte would deep-proxy every
-    // Python value stored in it, and a proxied Brython object fails its own type
-    // checks (`repr((1, 2))` raises "descriptor '__repr__' requires a 'tuple'
-    // object but received a 'tuple'"). $state.raw keeps values opaque, so
-    // reactivity tracks *rebinding a name* — which is what `count = …` and
-    // `global count; count += 1` both do.
-    //
-    // Making `items.append(x)` reactive too was tried and abandoned: bumping a
-    // revision signal that the bindings also read does invalidate them, but a
-    // mutated list is still the *same object*, and both $derived and $state.raw
-    // drop a write whose value is unchanged by ===. Propagating it would mean
-    // handing the template a fresh copy on every render, at the cost of object
-    // identity — too high a price for a rule that is easy to state instead.
     // The two declarations meet here, in one shape: `__js__` is the module's and
     // only ever names, `importjs` is the component's and covers the four forms.
     const jsImports = [
@@ -1065,21 +1561,6 @@ function compile(
         ...lifted.imports
     ];
     const jsImported = jsImports.flatMap((one) => one.entries.map((e) => e.local));
-
-    const fn = (name) => `__fn_${name}`;
-    const local = (name) => `__local_${name}`;
-    // An imported JavaScript name, once it has been given a Python-aware
-    // boundary — see `jsCall` in the runtime.
-    const jsBound = (name) => `__js_${name}`;
-    // Second signal per name: a mutation bumps it without touching the value,
-    // so nothing is copied and the object keeps its identity.
-    // What `$effect.root` hands back. Python reads the decorated name and gets
-    // this, exactly as JavaScript reads `const destroy = $effect.root(…)` —
-    // the name belongs to the destructor on both sides.
-    const destroyer = (name) => `__root_${name}`;
-    const rev = (name) => `__rev_${name}`;
-    const bump = (name) => `__bump_${name}`;
-    const read = (name) => `__read_${name}`;
 
     // Lifecycle by convention, mapped onto a single $effect: its body runs once
     // after the DOM exists, its teardown when the component goes away. Both
@@ -1094,15 +1575,6 @@ function compile(
     refuseLocked([...declared, ...reserved], !plain && !store, source);
     refuseNestedRunes(root._ast.body, source, lineOffset);
 
-    // Context is per component subtree, where a store is per application — and
-    // it is the only per-request-safe place to put state under server
-    // rendering. Both must be called while an instance initialises, which is
-    // exactly when the Python module body runs.
-
-    // The plain module: a `.py` compiled to ordinary JavaScript. No runes, so
-    // no need for the Svelte compiler and no need to be renamed `.svelte.js` —
-    // which is what lets SvelteKit find a `+page.server.py` in its manifest. It
-    // is the mirror of a plain `.ts` next to a `.svelte.ts`.
     // Functions by default — what a framework calls by name. A module that wants
     // to export values says so with `__all__`, exactly as it would to a Python
     // caller. SvelteKit is strict about it: a `+page.server.py` exporting
@@ -1115,371 +1587,38 @@ function compile(
     const isFunction = (name) =>
         funcs.some((f) => f.name === name) || plainDeriveds.some((d) => d.name === name);
 
-    const plainScript = [
-        `import { init } from ${JSON.stringify(virtualId(name))};`,
-        `import { bind, __pybridge, pyError, scheduleAsync, plainData, pyArg, pyData, pyExport, pyBoundary, jsCall, ticking, group, NONE, registerModule } from 'svelthon/runtime';`,
-        ...jsImports.map(jsImportLine),
-        ``,
-        ...state.map((n) => `let ${n};`),
-        ...[...funcs, ...plainDeriveds].map((f) => `let ${fn(f.name)};`),
-        ``,
-        // No markup here, so none of what a template expression calls — `__event`,
-        // `__assign`, `__group`, `__truthy` and the rest — is emitted. They were,
-        // and `__event` named a `pyEvent` this module never imported.
-        `const __proto = {};`,
-        ...state.map((n) => `bind(__proto, '${n}', () => ${n}, (v) => { ${n} = v; });`),
-        ...funcs.map(
-            (f) => `bind(__proto, '${f.name}', () => pyBoundary(${fn(f.name)}), (v) => { ${fn(f.name)} = v; });`
-        ),
-        ...plainDeriveds.map(
-            (d) => `bind(__proto, '${d.name}', () => ${fn(d.name)}(), (v) => { ${fn(d.name)} = v; });`
-        ),
-        ...injections(declared, false, js),
+    // Everything the sections read, gathered once. Nothing is computed here:
+    // the whole of `compile()` above this line is the reading, and everything
+    // below it is the writing.
+    const c = {
+        name,
+        source,
+        lineOffset,
+        store,
+        namespace,
+        js,
+        declared,
+        imported,
+        props,
+        bindables,
+        state,
+        funcs,
+        deriveds,
+        effects,
+        inspects,
+        plainDeriveds,
+        jsImports,
+        jsImported,
+        jsNames,
+        pyDirectives,
+        exported,
+        isFunction,
+        lifecycle
+    };
 
-        // Wrapped once, not on every read: a name Python compares by identity —
-        // `handler is on_click` — has to answer the same object twice.
-        ...[...new Set(jsImported)]
-            .filter((n) => !declared.includes(n))
-            .map((n) => `const ${jsBound(n)} = jsCall(${n});`),
-        ...jsImported
-            .filter((n) => !declared.includes(n))
-            .map((n) => `bind(__proto, '${n}', () => ${jsBound(n)}, () => {});`),
-        ``,
-        `const ${NS} = Object.create(__proto);`,
-        `${NS}.$proxy = true;`,
-        ``,
-        `registerModule(${JSON.stringify(pythonModuleName(source))}, ${NS});`,
-        `init(${NS});`,
-        ``,
-        ...[...funcs, ...plainDeriveds].map(
-            (f) =>
-                `const ${f.name} = (...a) => { try { const r = scheduleAsync(${fn(f.name)}(...a.slice(0, ${f.arity ?? 0}).map(pyArg)), ${JSON.stringify(`${f.name}() — ${source}`)}, ${lineOffset});` +
-                ` return r instanceof Promise ? r.then(plainData) : plainData(r); }` +
-                ` catch (err) { throw pyError(err, ${JSON.stringify(`${f.name}() — ${source}`)}, ${lineOffset}); } };`
-        ),
-        ``,
-        // SvelteKit reads `load`, `actions`, `GET`, `prerender` by name off the
-        // module, so values are exported as well as functions — and a value goes
-        // through the boundary too: `actions` is a dict of Python functions, each
-        // of them called by the framework.
-        //
-        // No default export: SvelteKit refuses one on a route module, and a
-        // Python module has no notion of a default anyway. Named exports are
-        // the whole contract, and `__all__` is where it is written.
-        ...exported
-            .filter((n) => !isFunction(n))
-            .map(
-                (n) =>
-                    `const __export_${n} = pyExport(${n}, ${JSON.stringify(`${n} — ${source}`)}, ${lineOffset});`
-            ),
-        ...(exported.length
-            ? [
-                  `export { ${exported
-                      .map((n) => (isFunction(n) ? n : `__export_${n} as ${n}`))
-                      .join(', ')} };`
-              ]
-            : [])
-    ].join('\n');
-
-    const componentScript = [
-        `import { init } from ${JSON.stringify(virtualId(name))};`,
-        // The bridge behind `__truthy` and the three beside it. Imported under a
-        // name no one would type: it was called `py` back when a template's
-        // expressions were JavaScript and an author wrote `py.str(items)` in the
-        // markup — short on purpose. Now that only generated code touches it,
-        // short is exactly wrong, and `py` is a name an author may want.
-        `import { bind, __pybridge, track, follow, pyError, schedule, inTemplate, pyEvent, plainData, pyArg, pyData, pyBoundary, pyNumbers, jsCall, ticking, group, writeAttr, writeItem, pyModule, NONE${store ? ', registerModule' : ''} } from 'svelthon/runtime';`,
-        ...jsImports.map(jsImportLine),
-        `import { ${['getContext', 'setContext']
-            .concat(lifecycle('on_mount') || lifecycle('on_destroy') ? ['untrack'] : [])
-            .join(', ')} } from 'svelte';`,
-        ``,
-        ...(bindables.length
-            ? [
-                  `let { ${bindables.map((b) => `${b} = $bindable()`).join(', ')}, ...__props } =` +
-                      ` $props();`,
-                  ...bindables.flatMap((b) => [
-                      `let ${rev(b)} = $state.raw(0);`,
-                      `const ${bump(b)} = () => { ${rev(b)} += 1; };`,
-                      `const ${read(b)} = () => { ${rev(b)}; };`
-                  ]),
-                  // The module body applies the annotation's default by writing
-                  // to the name — and that write must not travel up to the
-                  // parent. Only writes made after init() are real ones.
-                  `let __initialising = true;`,
-                  ``
-              ]
-            : props.length
-              ? [`const __props = $props();`, ``]
-              : []),
-        // A prop's value comes from the parent when it was passed, and from the
-        // annotation's default otherwise — the default being whatever the Python
-        // body assigned during init(). Reading __props keeps it reactive, so a
-        // parent update flows into Python's namespace on the next read.
-        ...props.flatMap((n) => [
-            `let ${local(n)} = $state.raw(undefined);`,
-            `const ${n} = $derived(('${n}' in __props ? __props.${n} : ${local(n)}) ?? NONE);`
-        ]),
-        ...state.flatMap((n) => [
-            `let ${n} = $state.raw(undefined);`,
-            `let ${rev(n)} = $state.raw(0);`,
-            `const ${bump(n)} = () => { ${rev(n)} += 1; };`,
-            `const ${read(n)} = () => { ${rev(n)}; };`
-        ]),
-        ...funcs.map((f) => `let ${fn(f.name)} = $state.raw(undefined);`),
-        ...inspects.map((i) => `let ${fn(i.name)} = $state.raw(undefined);`),
-        ...effects.flatMap((e) =>
-            e.root
-                ? [`let ${fn(e.name)} = $state.raw(undefined);`, `let ${destroyer(e.name)};`]
-                : [`let ${fn(e.name)} = $state.raw(undefined);`]
-        ),
-        // A @derived name reads as its result — on both sides. The body runs
-        // inside $derived.by, and every global it touches goes through a
-        // namespace accessor, so Svelte discovers the dependencies by itself.
-        ...deriveds.flatMap((d) => [
-            `let ${fn(d.name)} = $state.raw(undefined);`,
-            `const ${d.name} = $derived.by(() => ${fn(d.name)}());`
-        ]),
-        ``,
-        // What a compiled template expression calls, and only a `.svelte` has
-        // one: a `.svelte.py` holds signals but no markup, exactly as a plain
-        // `.py` holds neither.
-        ...(store
-            ? []
-            : [
-                  `const __event = (fn) => pyEvent(fn, ${lineOffset});`,
-                  // What `(name := value)` in a handler compiles to. The write
-                  // goes through the namespace, so through the accessor, so the
-                  // signal fires — the whole reason the walrus can mean this here.
-                  `const __assign = (name, value) => { ${NS}[name] = value; return value; };`,
-                  // The same walrus aimed at an attribute or a key rather than
-                  // a name. Python's grammar takes only the name; JavaScript's
-                  // `=` takes all three, and so does `bind:` already.
-                  `const __setattr = writeAttr;`,
-                  `const __setitem = writeItem;`,
-                  // What `bind:group` becomes: a directive whose value is Python.
-                  `const __group = group;`
-              ]),
-        `const __proto = {};`,
-        // Python may write to a prop; the write lands in the local fallback and
-        // is shadowed for as long as the parent supplies a value, which is
-        // Svelte's own rule for non-bindable props.
-        //
-        // The accessors read the raw cell, never the tracked binding: Python must
-        // not subscribe to Svelte's graph, only feed it.
-        ...props.map(
-            (n) =>
-                `bind(__proto, '${n}', () => follow(('${n}' in __props ? __props.${n} : ${local(n)}) ?? NONE), (v) => { ${local(n)} = v; });`
-        ),
-        ...bindables.map(
-            (b) =>
-                `bind(__proto, '${b}', () => (${rev(b)}, follow(${b} ?? NONE)),` +
-                ` (v) => { if (!__initialising || ${b} === undefined) ${b} = track(v, ${bump(b)}, ${read(b)}); });`
-        ),
-        // Reading the revision alongside the value is what registers the
-        // dependency: an in-place mutation then invalidates every reader,
-        // without the value ever changing identity.
-        ...state.map(
-            (n) =>
-                `bind(__proto, '${n}', () => (${rev(n)}, ${n}), (v) => { ${n} = track(v, ${bump(n)}, ${read(n)}); });`
-        ),
-        // A store's function is read from another module, where the namespace is
-        // an ordinary JavaScript object and Brython converts what it is given.
-        // A component's is not, so it keeps the bare binding.
-        ...funcs.map(
-            (f) =>
-                `bind(__proto, '${f.name}', () => ` +
-                `${store ? `pyBoundary(${fn(f.name)})` : fn(f.name)}, ` +
-                `(v) => { ${fn(f.name)} = v; });`
-        ),
-        ...inspects.map(
-            (i) => `bind(__proto, '${i.name}', () => ${fn(i.name)}, (v) => { ${fn(i.name)} = v; });`
-        ),
-        // A root's name reads as its destructor; the setter still takes the
-        // function, since that is what Brython writes when the `def` runs.
-        ...effects.map((e) =>
-            e.root
-                ? `bind(__proto, '${e.name}', () => ${destroyer(e.name)}, (v) => { ${fn(e.name)} = v; });`
-                : `bind(__proto, '${e.name}', () => ${fn(e.name)}, (v) => { ${fn(e.name)} = v; });`
-        ),
-        // follow(): a @derived that hands back a container it was given is the one
-        // place the revision cannot travel by itself — Svelte memoises the
-        // derived on `===`, so the reader subscribes to the object instead.
-        ...deriveds.map(
-            (d) => `bind(__proto, '${d.name}', () => follow(${d.name}), (v) => { ${fn(d.name)} = v; });`
-        ),
-        ``,
-        `const ${NS} = Object.create(__proto);`,
-        // Reading a global goes through $B.resolve_global → resolve_in_namespace,
-        // which demands an *own* property unless the namespace is flagged
-        // $proxy — in which case it reads the property normally and therefore
-        // walks the prototype chain, where our accessors live. It is the only
-        // place in Brython that consults this flag.
-        `${NS}.$proxy = true;`,
-        // Every namespace Brython makes for itself carries the module's own
-        // name, and `from x import y` reads it off the *importing* module to
-        // work out what package it sits in. Ours had none, so the lookup asked
-        // for a module called `undefined` — and said so, in a component where
-        // `import x` on the line above had worked perfectly.
-        `${NS}.__name__ = '${namespace}';`,
-
-        ...injectedPreamble(declared, true, js),
-        ...injections(declared, true, js),
-
-        // Wrappers for compiled template expressions. Not Python's own bool()
-        // and str(): a template may hold a foreign JavaScript value — a DOM node
-        // from bind:this — on which Brython's classifier trips. These fall back.
-        ...(store
-            ? []
-            : [
-                  `bind(__proto, '__truthy', () => __pybridge.truthy, () => {});`,
-                  `bind(__proto, '__text', () => __pybridge.str, () => {});`,
-                  `bind(__proto, '__seq', () => __pybridge.seq, () => {});`,
-                  `bind(__proto, '__spread', () => __pybridge.spread, () => {});`,
-                  `bind(__proto, '__bound', () => __pybridge.bound, () => {});`,
-                  `bind(__proto, '__assign', () => __assign, () => {});`,
-                  `bind(__proto, '__setattr', () => __setattr, () => {});`,
-                  `bind(__proto, '__setitem', () => __setitem, () => {});`
-              ]),
-        // Wrapped once, not on every read: a name Python compares by identity
-        // has to answer the same object twice.
-        ...[...new Set([...jsImported, ...jsNames])]
-            .filter((n) => !declared.includes(n))
-            .map((n) => `const ${jsBound(n)} = jsCall(${n});`),
-        ...jsImported
-            .filter((n) => !declared.includes(n))
-            .map((n) => `bind(__proto, '${n}', () => ${jsBound(n)}, () => {});`),
-        // What the component imported in its `<script module>`, published so
-        // Python can read it. A name Python declares itself wins.
-        ...jsNames
-            .filter((n) => !declared.includes(n))
-            .map((n) => `bind(__proto, '${n}', () => ${jsBound(n)}, () => {});`),
-        // A Python module named by a directive — `in:fades.typewriter`. Svelte
-        // copies that text into a `() => …` of its own, so it looks for a
-        // JavaScript `fades`, and `import fades` never made one: the name binds
-        // in Python's namespace. Only what a directive actually names, and only
-        // when it is a module this file imports — a JavaScript name resolves on
-        // its own and must keep doing so.
-        //
-        // Read lazily by pyModule, so the position in the emitted script does
-        // not matter: the module is registered by the time a directive runs.
-        ...pyDirectives
-            .filter(
-                (n) =>
-                    imported.includes(n) &&
-                    !declared.includes(n) &&
-                    !jsImported.includes(n) &&
-                    !jsNames.includes(n)
-            )
-            .map((n) => `const ${n} = pyModule(${JSON.stringify(n)});`),
-        ``,
-        `init(${NS});`,
-        ...(bindables.length ? [`__initialising = false;`] : []),
-        ``,
-        // Event handlers are called with a DOM event Python never asked for.
-        // Truncating to the declared arity is a placeholder for a real interop
-        // policy (jsobj2pyobj on demand) — enough to make handlers work.
-        // An uncaught Python exception arrives in JS without message or stack;
-        // pyError fills them in, naming the function and the file it came from.
-        ...funcs.map(
-            (f) =>
-                `const ${f.name} = (...a) => { try { return pyNumbers(schedule(${templateCall(f, fn)}, ${JSON.stringify(`${f.name}() — ${source}`)}, ${lineOffset})); }` +
-                ` catch (err) { throw pyError(err, ${JSON.stringify(`${f.name}() — ${source}`)}, ${lineOffset}); } };`
-        ),
-        // What a parent holding `bind:this` can call. Svelte gathers whatever an
-        // instance script exports into `$$exports` and hands that object back,
-        // so a specifier list is enough — measured, `export { focus }` becomes
-        // `var $$exports = { focus }`.
-        //
-        // A component with no `@export` exports nothing, which is theirs too: an
-        // instance exposes only what it says it exposes.
-        ...(!store && funcs.some((f) => f.exported)
-            ? [``, `export { ${funcs.filter((f) => f.exported).map((f) => f.name).join(', ')} };`]
-            : []),
-        ...(store
-            ? [
-                  ``,
-                  `registerModule(${JSON.stringify(pythonModuleName(source))}, ${NS});`,
-                  ``,
-                  // Module-scope signals live once for the whole app. Exported
-                  // through getters because Svelte forbids exporting a reassigned
-                  // $state binding directly — and a getter is what keeps the read
-                  // reactive at the call site.
-                  `export const store = {`,
-                  ...state.map((n) => `    get ${n}() { return (${rev(n)}, ${n}); },`),
-                  ...state.map((n) => `    set ${n}(v) { ${n} = track(v, ${bump(n)}, ${read(n)}); },`),
-                  ...deriveds.map((d) => `    get ${d.name}() { return follow(${d.name}); },`),
-                  ...funcs.map((f) => `    ${f.name},`),
-                  `};`,
-                  ``,
-                  `export default store;`,
-                  // Named exports too: a `.py` is not only a store. SvelteKit
-                  // looks for `load`, `actions`, `GET` — by name, on the module.
-                  ...(funcs.length
-                      ? [``, `export { ${funcs.map((f) => f.name).join(', ')} };`]
-                      : [])
-              ]
-            : []),
-        // Deliberately *not* untracked: discovering what the body read is the
-        // whole point. A Python function that returns a callable hands back a
-        // teardown, exactly as a Svelte effect does.
-        // `$inspect` is given the call, not its result: Svelte wraps whatever it
-        // receives in a thunk of its own and re-reads it on every change, so the
-        // lambda is re-run and the namespace accessors do the tracking. A
-        // production build drops the whole line — theirs, not ours.
-        // The lambda is called *inside* the rune both times, never hoisted into a
-        // const first: hoisting reads the values once, outside the tracking
-        // context, and the logger then fires on `init` and never again.
-        ...inspects.map((i) =>
-            i.logger
-                ? `$inspect(...${fn(i.name)}().slice(1)).with(__event(${fn(i.name)}()[0]));`
-                : `$inspect(...${fn(i.name)}());`
-        ),
-        // A root owns its own scope: it is not cleaned up when the component is,
-        // which is the point — the destructor is handed to Python under the
-        // decorated name, and calling it is what ends the effect.
-        ...effects.flatMap((e) => [
-            ``,
-            // `root` is a scope and `pre` is a moment, so they compose rather
-            // than exclude each other — which is what stacking the two
-            // decorators says, and what the nesting emits.
-            e.root
-                ? `${destroyer(e.name)} = $effect.root(() => { $effect${e.pre ? '.pre' : ''}(() => {`
-                : `$effect${e.pre ? '.pre' : ''}(() => {`,
-            `    let teardown;`,
-            `    try { teardown = ${fn(e.name)}(); }` +
-                ` catch (err) { throw pyError(err, ${JSON.stringify(`${e.name}() — ${source}`)}, ${lineOffset}); }`,
-            `    if (typeof teardown === 'function') return () => { teardown(); };`,
-            e.root ? `}); });` : `});`
-        ]),
-        ...(lifecycle('on_mount') || lifecycle('on_destroy')
-            ? [
-                  ``,
-                  `$effect(() => {`,
-                  // untrack, because a hook reads the component's names through
-                  // the namespace accessors — and those reads are signal reads.
-                  // `mounts += 1` inside on_mount would otherwise make the effect
-                  // depend on state it also writes, and Svelte loops until it
-                  // gives up with effect_update_depth_exceeded.
-                  //
-                  // Captured while the component is alive, too: reading a signal
-                  // from a teardown, once destroyed, yields no function at all.
-                  ...(lifecycle('on_destroy')
-                      ? [`    const __teardown = untrack(() => ${fn('on_destroy')});`]
-                      : []),
-                  ...(lifecycle('on_mount') ? [`    untrack(() => on_mount());`] : []),
-                  ...(lifecycle('on_destroy')
-                      ? [
-                            `    return () => { try { __teardown(); }` +
-                                ` catch (err) { throw pyError(err, ${JSON.stringify(`on_destroy() — ${source}`)}, ${lineOffset}); } };`
-                        ]
-                      : []),
-                  `});`
-              ]
-            : [])
-    ].join('\n');
-
-    const script = plain ? plainScript : componentScript;
+    const script = (plain ? PLAIN_SECTIONS : COMPONENT_SECTIONS)
+        .flatMap((section) => section(c))
+        .join('\n');
 
     return {
         script,
