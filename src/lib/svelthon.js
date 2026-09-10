@@ -210,6 +210,14 @@ const countTests = () =>
 
 // The generated module, behind the imports it needs evaluated first.
 //
+// Exported, and it is the one export in this file that exists for its test.
+// `pyCall`, `mangle` and the rest were privatised because their behaviour is
+// reachable through a hook; this one is not. The defect it guards is arithmetic,
+// **one `;` per prelude line and not one `;` in total**, which put every mapping
+// one line too high the day a component imported two modules. Reproducing a
+// count through the door would take one fixture per count, and a fixture that
+// exists to make a number bigger tests the fixture.
+//
 // A source map's `mappings` is delta-encoded per generated line, lines separated
 // by `;`, so the prelude costs one `;` per line it adds: get that wrong and a
 // debugger opens the file that many lines off. A module importing nothing is

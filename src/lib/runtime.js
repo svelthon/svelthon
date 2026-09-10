@@ -717,7 +717,7 @@ export function pyNumbers(value) {
     return value;
 }
 
-export function pyCall(fn, where, lineOffset = 0, arity = Infinity) {
+function pyCall(fn, where, lineOffset = 0, arity = Infinity) {
     return (...args) => {
         try {
             const given = args.slice(0, arity).map(pyArg);

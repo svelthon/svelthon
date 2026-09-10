@@ -14,7 +14,7 @@
 // Python module body. Silently, which is the failure this project refuses.
 import { test, expect, describe } from 'vitest';
 
-import { mangle, nameFor, svelthon } from '../src/lib/svelthon.js';
+import { nameFor, svelthon } from '../src/lib/svelthon.js';
 
 describe('two files that mangle to one module name', () => {
     // Called directly rather than through the `script` hook, which would read
@@ -88,9 +88,13 @@ describe('asking whether a module exists does not claim its name', () => {
         expect(() => nameFor('src/seven_utils.ts')).not.toThrow();
     });
 
-    test('mangle answers the same name, it simply does not record it', () => {
-        expect(mangle('src/eight/theta.svelte')).toBe('src_eight_theta_svelte');
-        expect(mangle('src/eight_theta.svelte')).toBe('src_eight_theta_svelte');
+    // The two answer the same name; only one records it. Asked through the hook
+    // that merely asks, both spellings pass and neither is claimed, which is the
+    // whole difference stated as behaviour rather than as two function names.
+    test('asking twice about two colliding paths claims neither', () => {
+        touch('src/eight/theta.svelte');
+        touch('src/eight_theta.svelte');
+
         expect(nameFor('src/eight/theta.svelte')).toBe('src_eight_theta_svelte');
     });
 });
