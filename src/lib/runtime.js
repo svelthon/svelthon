@@ -759,7 +759,15 @@ function declared(value) {
 
 export function pyEvent(value, lineOffset = 0) {
     const found = declared(value);
-    if (found === null) return value;
+
+    // Not a Python function, so there is nothing to wrap, and the value is on
+    // its way to a DOM boundary like any other: `bound` is what turns None into
+    // undefined there. Returning it untouched leaked the None object into every
+    // attribute the handler test claims, and it claims more than handlers:
+    // `on` followed by a lowercase letter also catches `once`, `only` and
+    // `onboarding`, which Svelte 5 makes defensible for a component prop and
+    // which was the one place `__bound` did not reach.
+    if (found === null) return __pybridge.bound(value);
 
     const { fn: called, where, arity } = found;
 

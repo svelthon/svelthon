@@ -83,13 +83,36 @@ describe('the walrus', () => {
         ['count + 1', 'count + 1']
     ])('%s', ([source, expected]) => expect(walrus(source)).toBe(expected));
 
-    // Two limits, both known and neither silent-by-accident.
+    // Python allows a space between a callee and its parenthesis, so `f (x)` is
+    // a call and `not (x)` is not, and the only thing that tells them apart is
+    // whether the word is a keyword.
     //
-    // A call written with a space reads as a group, and the Python it produces
-    // is invalid — so it is refused at compile time rather than mis-assigning.
-    // Telling `f (…)` from `not (…)` would take a Python keyword table.
-    test('a call written with a space produces invalid Python, and is refused', () =>
-        expect(walrus('f (x := 1)')).toBe('f __assign("x", 1)'));
+    // This used to read the last character alone, take the space for "nothing
+    // callable here", and rewrite `f (x := 1)` into `f __assign("x", 1)`, which
+    // is a syntax error on a line the author never wrote. It was recorded here
+    // as a known limit, on the grounds that telling the two apart would take a
+    // keyword table. It took one regex.
+    describe('a call and a group are told apart across a space', () => {
+        test.for([
+            // A call: the walrus keeps Python's own meaning, a temporary the
+            // call consumes, so nothing is rewritten.
+            ['f (x := 1)', 'f (x := 1)'],
+            ['items[0] (x := 1)', 'items[0] (x := 1)'],
+            ['toggle ((open := not open))', 'toggle (__assign("open", not open))'],
+
+            // A keyword cannot be called, so the parenthesis after one is a
+            // group whatever the spacing.
+            ['not (open := True)', 'not __assign("open", True)'],
+            ['a and (x := 1)', 'a and __assign("x", 1)'],
+            ['1 if (x := 2) else 0', '1 if __assign("x", 2) else 0'],
+            ['return (x := 1)', 'return __assign("x", 1)'],
+            ['lambda: (x := 1)', 'lambda: __assign("x", 1)'],
+
+            // And a word that merely ends in a keyword is not one.
+            ['isnot (x := 1)', 'isnot (x := 1)'],
+            ['obj.for_ (x := 1)', 'obj.for_ (x := 1)']
+        ])('%s', ([source, expected]) => expect(walrus(source)).toBe(expected));
+    });
 
     // An f-string is a string, and strings are opaque by design — the rule that
     // protects `"(a := 1)"`. The assignment inside one is therefore lost, which

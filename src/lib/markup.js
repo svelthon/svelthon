@@ -95,6 +95,14 @@ function arguments_(text) {
     return parts;
 }
 
+// A word that cannot be called, sitting where a callee would be. Python allows a
+// space between a callee and its parenthesis, so `f (x)` is a call and `not (x)`
+// is not, and the only thing that tells them apart is whether the word is a
+// keyword. Only the ones that can be followed by a parenthesised expression are
+// listed; `def` or `class` cannot appear inside a template expression at all.
+const KEYWORD_BEFORE =
+    /(^|[^\w.])(not|and|or|if|else|in|is|return|yield|lambda|await|assert|del|elif|while|for|from|import|raise|with|as|None|True|False)$/;
+
 const WALRUS_NAME = /^\s*([A-Za-z_]\w*)/;
 const WALRUS_ARROW = /^\s*:=\s*/;
 
@@ -200,7 +208,16 @@ export function walrus(expression) {
         // consuming it rewrote `f(x := 1)` as `f__assign("x", 1)`, a call to a
         // name that does not exist, so the handler did nothing at all and said
         // nothing either. `f((x := 1))` is the form that assigns.
-        const grouping = !/[\w)\]"']$/.test(out);
+        //
+        // The space is why this is two lines rather than one. `f (x := 1)` is a
+        // call in Python, and reading only the last character took the space for
+        // "nothing callable here" and rewrote the line into `f __assign(…)`, a
+        // syntax error on a line the author never wrote. And `not (x := 1)` is
+        // the opposite case: a word before the space, and still a grouping,
+        // because `not` cannot be called. So the trailing whitespace is skipped
+        // and the word that remains is checked against the keywords.
+        const before = out.replace(/\s+$/, '');
+        const grouping = !/[\w)\]"']$/.test(before) || KEYWORD_BEFORE.test(before);
 
         if (char === '(' && grouping) {
             // Each element of the group, not only the first. `(a := 1, b := 2)`
