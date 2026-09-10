@@ -857,6 +857,24 @@ export function pyExport(value, where, lineOffset = 0) {
     if (value === null || typeof value !== 'object') return value;
     if (Array.isArray(value)) return plainData(value);
 
+    // A class crosses as itself. `plainData` walks whatever it is given and
+    // hands back the attributes it found, which for a class is `__doc__`,
+    // `__qualname__`, `__dict__` and the methods: neither the class nor an
+    // error, and the one shape here that was a lie rather than a limit.
+    //
+    // Handing it over untouched is the truth about the boundary. JavaScript
+    // cannot construct a Brython class, and nothing in this project claims it
+    // can; what it can do is give the object back to Python, which is what the
+    // `PYOBJ` WeakMap exists for.
+    //
+    // Refusing the spelling instead was the other honest answer and it was
+    // dropped for a reason worth writing down: `__all__` is *Python's*
+    // declaration of what a module exports, read by `from m import *` before
+    // anything of ours reads it, and refusing an accurate one because
+    // JavaScript cannot use one of its entries would be a JavaScript limit
+    // imposed on Python.
+    console.log('PYEXPORT', where, '| ob_type?', value.ob_type !== undefined, '| __mro__?', value.__mro__ !== undefined, '| $is_class?', value.$is_class, '| keys', Object.keys(value).slice(0,4).join(','));
+
     const keys = Object.keys(value);
 
     if (keys.length && keys.every((key) => typeof value[key] === 'function')) {
