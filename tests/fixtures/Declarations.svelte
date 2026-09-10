@@ -28,4 +28,6 @@
 <input bind:value={brouillon} />
 <p class="brouillon">{brouillon.upper()}</p>
 
-<button onclick={elargir()}>élargir</button>
+<!-- The reference, not a call: `onclick={elargir()}` would run it during
+     the render and Svelte refuses a mutation there. -->
+<button onclick={elargir}>élargir</button>

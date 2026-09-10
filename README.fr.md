@@ -43,7 +43,7 @@ npm run dev
 ```
 
 ```sh
-npm test             # 664 tests : sémantique, props, réactivité, surface Svelte
+npm test             # 699 tests : sémantique, props, réactivité, surface Svelte
 npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
 npm run bench        # Python contre JavaScript, même composant, vrai navigateur
@@ -127,10 +127,11 @@ Il n'y a pas d'équivalent de `$state` à écrire, parce qu'il n'y a rien à
 déclarer : une affectation au niveau du module *est* la déclaration, et le
 compilateur la lit dans l'AST.
 
-**Et c'est toute la règle : en Svelthon, une rune vit au niveau module d'un
-composant, et nulle part ailleurs.** Le compilateur lit l'AST et ne descend
-jamais dans un `def` ni dans une `class`, donc une rune écrite plus bas serait
-fabriquée et câblée à rien. Elle est refusée, avec sa ligne :
+**Et c'est toute la règle : une rune vit au niveau module du script, et dans le
+gabarit. Ce sont les deux endroits où le compilateur lit une déclaration.** Dans
+le script il lit l'AST et ne descend jamais dans un `def` ni dans une `class`,
+donc une rune écrite plus bas serait fabriquée et câblée à rien. Elle est
+refusée, avec sa ligne :
 
 ```
 svelthon — a rune belongs at the top level of the module,
@@ -435,6 +436,22 @@ est du Python qui veut dire ce que Python veut dire.
 | `{x = 2}` | gabarit | de l'état, à portée du bloc | le signe que le script emploie déjà ; les `{let}` et `{const}` de Svelte sont des mots-clés JavaScript dans un fichier Python |
 | `=> js.console.log(count)` | script | un effet | la même flèche sans rien à nommer, comme `f()` seul est `x = f()` sans rien à garder |
 | `value: str <=>` | script | une prop qui remonte aussi | la quatrième liaison, et la seule qui devait s'écrire par un mot |
+
+Un nom déclaré dans le gabarit est à la portée du bloc qui le contient, et
+`bind:` l'écrit :
+
+```svelte
+{#if edition}
+  {brouillon = user.nom}                 {#- de l'état, à portée de ce bloc -#}
+  {salut => f"Bonjour {brouillon}"}      {#- un dérivé, qui le suit -#}
+
+  <input bind:value={brouillon} />
+  <p>{salut}</p>
+{/if}
+```
+
+`:=` y est refusé : il écrit les noms du script, donc il en atteindrait un autre.
+`bind:` est la façon d'écrire un nom déclaré par le gabarit.
 
 Les quatre du script sont les seules lignes d'un composant que Python refuserait
 de parser. Toutes trois sont réécrites **sur la même ligne**, si bien que rien en
@@ -1275,7 +1292,7 @@ Le runtime entier, gzippé, fait **255 Ko**.
 
 ## État
 
-Validé par `npm test` — 664 tests, aucun échec attendu :
+Validé par `npm test` — 699 tests, aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
 - props : défaut Python, priorité du parent, lisibilité pendant l'init,

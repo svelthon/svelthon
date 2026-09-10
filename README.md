@@ -45,7 +45,7 @@ npm run dev
 ```
 
 ```sh
-npm test             # 664 tests: semantics, props, reactivity, Svelte surface
+npm test             # 699 tests: semantics, props, reactivity, Svelte surface
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
 npm run bench        # Python vs JavaScript, same component, real browser
@@ -119,10 +119,11 @@ There is no `$state` equivalent to write, because there is nothing to declare: a
 module-level assignment already *is* the declaration, and the compiler reads it
 from the AST.
 
-**And that is the whole rule: in Svelthon, a rune lives at the top level of a
-component's module, and nowhere else.** The compiler reads the AST and never
-descends into a `def` or a `class`, so a rune written deeper would be built and
-wired to nothing. It is refused instead, naming the line:
+**And that is the whole rule: a rune lives at the top level of the script, and in
+the markup. Those are the two places the compiler reads a declaration.** In the
+script it reads the AST and never descends into a `def` or a `class`, so a rune
+written deeper would be built and wired to nothing. It is refused instead, naming
+the line:
 
 ```
 svelthon — a rune belongs at the top level of the module,
@@ -416,6 +417,22 @@ Python that means what Python means.
 | `{x = 2}` | markup | state, scoped to the block | the sign the script already uses; Svelte's `{let}` and `{const}` are JavaScript keywords in a Python file |
 | `=> js.console.log(count)` | script | an effect | the same arrow with nothing to name, as `f()` alone is `x = f()` with nothing to keep |
 | `value: str <=>` | script | a prop that also travels back up | the fourth binding, and the only one that had to be a word |
+
+A name declared in the markup is scoped to the block that holds it, and `bind:`
+writes it:
+
+```svelte
+{#if editing}
+  {draft = user.name}                {#- state, scoped to this block -#}
+  {greeting => f"Hello {draft}"}     {#- a derived, which follows it -#}
+
+  <input bind:value={draft} />
+  <p>{greeting}</p>
+{/if}
+```
+
+`:=` is refused on such a name: it writes the script's names, so it would reach a
+different one. `bind:` is the way to write a name the markup declared.
 
 The four in the script are the only lines a component holds that Python would
 refuse to parse. Both are rewritten **on the same line**, so nothing downstream —
@@ -1263,7 +1280,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test` — 664 tests, none expected to fail:
+Validated by `npm test` — 699 tests, none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;
 - props: Python defaults, parent precedence, readability during init, parent
