@@ -460,7 +460,12 @@ function eachBlock(trimmed, declare, call) {
 // one at a time before this list existed.
 const BLOCKS = ['if', 'each', 'key', 'await', 'snippet'];
 const CLAUSES = ['else', 'then', 'catch'];
-const TAGS = ['html', 'render', 'debug', 'attach'];
+// `{@…}` is read in two positions and the two sets do not overlap: Svelte places
+// `{@attach}` inside a tag and the other three outside one. One shared list made
+// every refusal name the very word the author had just written — `{@html x}` in
+// a tag was refused by a sentence listing `html` among the tags it knows.
+const TAGS = ['html', 'render', 'debug'];
+const ATTACHMENTS = ['attach'];
 
 // `{x = 2}` and `{y => x + 5}` — a name declared in the markup, with the two
 // signs the script already uses and no third one invented.
@@ -785,7 +790,7 @@ function walk(markup, collect, onPython, seed, record) {
                         // therefore through the accessor.
                         out += `${trimmed}={${call(trimmed, '')}}`;
                     } else if (trimmed.startsWith('@')) {
-                        throw unknownTag(trimmed, 'tag', TAGS);
+                        throw unknownTag(trimmed, 'tag', ATTACHMENTS);
                     } else {
                         out += markup.slice(index, end + 1);
                     }

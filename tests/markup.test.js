@@ -589,7 +589,7 @@ describe('an unknown construct is refused, never passed through', () => {
     test.for([
         ['{#nope x}y{/nope}', 'block', 'if, each, key, await, snippet'],
         ['{#if a}x{:nope}y{/if}', 'clause', 'else, then, catch'],
-        ['{@nope x}', 'tag', 'html, render, debug, attach']
+        ['{@nope x}', 'tag', 'html, render, debug']
     ])('an unknown %s', ([markup, kind, known]) => {
         expect(() => rewrite(markup)).toThrow(new RegExp(`is not a ${kind} Svelthon knows`));
         expect(() => rewrite(markup)).toThrow(known);
@@ -598,4 +598,25 @@ describe('an unknown construct is refused, never passed through', () => {
     test('the message says why it is refused rather than ignored', () => {
         expect(() => rewrite('{@nope x}')).toThrow(/would\s+cross as JavaScript/);
     });
+
+    // `{@…}` is read in two positions with no overlap between them, and one
+    // shared list used to make every one of these refusals name the very word
+    // the author had just written.
+    test.for([
+        ['<p>{@attach fn}</p>', 'attach', 'html, render, debug'],
+        ['<div {@html x}></div>', 'html', 'attach'],
+        ['<div {@render row()}></div>', 'render', 'attach']
+    ])('%s is refused without claiming to know it', ([markup, word, known]) => {
+        expect(() => rewrite(markup)).toThrow(/is not a tag Svelthon knows/);
+        expect(() => rewrite(markup)).toThrow(`the tags are ${known}`);
+        expect(() => rewrite(markup)).not.toThrow(new RegExp(`the tags are[^.]*\\b${word}\\b`));
+    });
+
+    // The other side of the same rule: each is accepted where Svelte puts it.
+    test.for([['<div {@attach fn}></div>'], ['<p>{@html x}</p>']])(
+        '%s compiles',
+        ([markup]) => {
+            expect(() => rewrite(markup)).not.toThrow();
+        }
+    );
 });
