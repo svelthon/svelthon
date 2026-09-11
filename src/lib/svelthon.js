@@ -128,6 +128,31 @@ export function python(options = {}) {
         script({ content, attributes, filename }) {
             if (attributes.lang !== 'python') return;
 
+            // One component, one generated module. This hook fires once per
+            // script block and both blocks derive their id from
+            // `nameFor(filename)`, so a module block's body would be dropped by
+            // `generated.set()` and Svelte would then concatenate two scripts
+            // that each declare `init`. What the author saw was
+            // `` `init` has already been declared `` at line 58 of a ten-line
+            // file, which is the kind of message this project refuses to emit.
+            //
+            // Refused rather than made to work, because the better answer is
+            // already there: state shared by every instance is what a
+            // `.svelte.py` module is, and it is a file any component can import
+            // rather than one block this component owns alone.
+            //
+            // Both spellings, because Svelte 5 still parses the Svelte 4 one:
+            // `<script module>` gives `module: true`, `<script
+            // context="module">` gives `context: 'module'`.
+            if (attributes.module || attributes.context === 'module') {
+                throw new SyntaxError(
+                    `svelthon — a <script module> cannot hold Python; state shared ` +
+                        `by every instance belongs in a .svelte.py module, which a ` +
+                        `component imports like any other ` +
+                        `(${relative(process.cwd(), filename || 'Component')})`
+                );
+            }
+
             const name = nameFor(filename);
             const { script, module, map, imports } = compile(
                 content,

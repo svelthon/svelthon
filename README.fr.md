@@ -480,7 +480,9 @@ l'alternative épelle deux fois la même chose : `{cat.id}`, `{cat.name}`.
 
 Un composant Python n'a qu'un `<script>` d'instance. Les enfants s'importent
 donc dans un `<script module>`, dont les déclarations restent visibles du
-gabarit :
+gabarit. Ce bloc est du JavaScript : `<script module lang="python">` est refusé,
+en nommant le module `.svelte.py` qui partage l'état entre instances, parce
+qu'un composant compile vers un seul module Python et que deux s'écraseraient :
 
 ```svelte
 <script module>

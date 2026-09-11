@@ -459,7 +459,10 @@ same thing twice: `{cat.id}`, `{cat.name}`.
 ## Composition
 
 A Python component has a single instance `<script>`. Children are therefore
-imported in a `<script module>`, whose declarations stay visible to the markup:
+imported in a `<script module>`, whose declarations stay visible to the markup.
+That block is JavaScript: `<script module lang="python">` is refused, naming the
+`.svelte.py` module that shares state between instances, because one component
+compiles to one Python module and two would overwrite each other.
 
 ```svelte
 <script module>

@@ -8,6 +8,7 @@ import { test, expect, describe } from 'vitest';
 import { createRequire } from 'node:module';
 import { resolve, relative } from 'node:path';
 import { readFileSync } from 'node:fs';
+import { preprocess } from 'svelte/compiler';
 import { python, svelthon, withPrelude } from '../src/lib/svelthon.js';
 
 const { VIRTUAL_PREFIX } = createRequire(import.meta.url)('../src/lib/compile.cjs');
@@ -75,6 +76,61 @@ describe('the preprocessor decides by the script tag', () => {
         });
 
         expect(out.attributes).toEqual({ generics: 'T' });
+    });
+});
+
+// One component, one generated module. Both script blocks derive their id from
+// `nameFor(filename)`, so a Python module block's body was dropped by
+// `generated.set()` and Svelte then concatenated two scripts that each declared
+// `init`. What the author read was `` `init` has already been declared `` at
+// line 58 of a ten-line file: loud, and about nothing they had written.
+describe('a Python <script module> is refused, with the answer', () => {
+    const component = (attrs) =>
+        `<script ${attrs} lang="python">\nshared = 0\n</script>\n` +
+        `<script lang="python">\ncount = 1\n</script>\n<p>{count}</p>`;
+
+    const refused = (attributes) => () =>
+        python().script({ content: 'shared = 0\n', attributes, filename: 'src/Thing.svelte' });
+
+    test('the modern spelling is refused', () => {
+        expect(refused({ module: true, lang: 'python' })).toThrow(
+            /a <script module> cannot hold Python/
+        );
+    });
+
+    // Svelte 5 still parses Svelte 4's spelling, so the same mistake arrives
+    // under two names and has to be caught under both.
+    test('and so is the one Svelte 4 used', () => {
+        expect(refused({ context: 'module', lang: 'python' })).toThrow(
+            /a <script module> cannot hold Python/
+        );
+    });
+
+    test('the message names the file and the file kind to use instead', () => {
+        expect(refused({ module: true, lang: 'python' })).toThrow(
+            /belongs in a \.svelte\.py module.*\(src\/Thing\.svelte\)/
+        );
+    });
+
+    // The guard reads the language first: a JavaScript module block beside a
+    // Python instance block declares nothing of ours and collides with nothing.
+    test('a JavaScript module block in a Python component is left alone', () => {
+        expect(
+            python().script({
+                content: 'export const kind = "widget";',
+                attributes: { module: true },
+                filename: 'src/Thing.svelte'
+            })
+        ).toBeUndefined();
+    });
+
+    // Through Svelte's own `preprocess`, which is what fills `attributes`: the
+    // refusal has to be what the author meets, not something only reachable by
+    // calling the hook by hand.
+    test('and it is what Svelte itself runs into', async () => {
+        await expect(
+            preprocess(component('module'), python(), { filename: 'src/Thing.svelte' })
+        ).rejects.toThrow(/a <script module> cannot hold Python/);
     });
 });
 
