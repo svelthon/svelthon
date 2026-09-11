@@ -1426,6 +1426,7 @@ npm install
 npm test             # fidelity grid, props, reactivity (jsdom)
 npm run test:browser # DOM interop and the demo, in a real Chromium
 npm run test:hmr     # virtual-module invalidation
+npm run test:all     # the three above, stopping at the first failure
 npm run dev          # demo page
 npm run build
 ```

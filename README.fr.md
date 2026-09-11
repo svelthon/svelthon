@@ -1468,6 +1468,7 @@ npm install
 npm test             # grille de fidélité, props, réactivité (jsdom)
 npm run test:browser # interop DOM, dans un vrai Chromium
 npm run test:hmr     # invalidation des modules virtuels (composant + store)
+npm run test:all     # les trois ci-dessus, arrêt au premier échec
 npm run dev          # page de démonstration
 npm run build
 ```
