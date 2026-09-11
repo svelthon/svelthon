@@ -21,28 +21,58 @@ describe('two files that mangle to one module name', () => {
     // each file off disk for its source map. The contract under test is the one
     // written above `nameFor` itself.
     //
-    // The registry is per process, so each test names its own pair rather than
-    // relying on what a previous one claimed.
+    // The paths are real files, and that is not decoration: the refusal now asks
+    // whether the first claimant is still on disk, so an invented path is no
+    // longer a collision. `tests/fixtures/collide-name.svelte` and friends exist
+    // for their names and nothing compiles them.
+    //
+    // The registry is per process. A pair may be replayed, because re-claiming
+    // from the same path is allowed and the second path still collides, but no
+    // test relies on what another one claimed.
     const compile = (filename) => nameFor(filename);
 
     test('the second is refused, and both files are named', () => {
-        compile('src/one/alpha.svelte');
+        compile('tests/fixtures/collide/deep.svelte');
 
-        expect(() => compile('src/one_alpha.svelte')).toThrow(
-            /`src\/one_alpha\.svelte` and `src\/one\/alpha\.svelte` both compile to the module name `src_one_alpha_svelte`/
+        expect(() => compile('tests/fixtures/collide_deep.svelte')).toThrow(
+            /`tests\/fixtures\/collide_deep\.svelte` and `tests\/fixtures\/collide\/deep\.svelte` both compile to the module name `tests_fixtures_collide_deep_svelte`/
         );
     });
 
     test('a dash and an underscore collide the same way', () => {
-        compile('src/two-beta.svelte');
+        compile('tests/fixtures/collide-name.svelte');
 
-        expect(() => compile('src/two_beta.svelte')).toThrow(/both compile to the module name/);
+        expect(() => compile('tests/fixtures/collide_name.svelte')).toThrow(
+            /both compile to the module name/
+        );
     });
 
     test('and the message says what to do about it', () => {
-        compile('src/three/gamma.svelte');
+        compile('tests/fixtures/collide-name.svelte');
 
-        expect(() => compile('src/three_gamma.svelte')).toThrow(/Rename one of them/);
+        expect(() => compile('tests/fixtures/collide_name.svelte')).toThrow(/Rename one of them/);
+    });
+
+    // A claim is never released, so before this the registry outlived the file.
+    // Renaming `ui-card.svelte` to `ui_card.svelte` while the dev server ran was
+    // refused as a collision with a file that had just stopped existing, and the
+    // cure, restarting the server, was named nowhere in the message.
+    //
+    // A renamed-away file is, mechanically, a claimant no longer on disk, which
+    // is what these two paths are.
+    test('a first claimant that is gone is a rename, not a collision', () => {
+        compile('tests/fixtures/renamed-away.svelte');
+
+        expect(() => compile('tests/fixtures/renamed_away.svelte')).not.toThrow();
+    });
+
+    // And the new claimant takes the name over, rather than the registry keeping
+    // a path that leads nowhere.
+    test('and the file that is there ends up holding the name', () => {
+        compile('tests/fixtures/moved-on.svelte');
+        compile('tests/fixtures/moved_on.svelte');
+
+        expect(nameFor('tests/fixtures/moved_on.svelte')).toBe('tests_fixtures_moved_on_svelte');
     });
 
     // The preprocessor runs its hooks more than once per file, and a watched file
