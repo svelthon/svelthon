@@ -1,17 +1,16 @@
 // @vitest-environment node
 //
 // The generated module name is the path with every character that cannot appear
-// in a JavaScript identifier replaced by `_`. The comment above it says the
-// result must be unique across the project, and `\W → _` gives the valid half
-// and not the unique one:
+// in a JavaScript identifier replaced by `_`. That has to be unique across the
+// project, and `\W → _` gives the valid half and not the unique one:
 //
 //     src/ui/card.svelte  ->  src_ui_card_svelte
 //     src/ui_card.svelte  ->  src_ui_card_svelte
 //     src/ui-card.svelte  ->  src_ui_card_svelte
 //
-// Both components then emitted the same `import { init } from
-// 'virtual:svelthon/src_ui_card_svelte'`, and the second ran the first one's
-// Python module body. Silently, which is the failure this project refuses.
+// Two components emitting the same `import { init } from
+// 'virtual:svelthon/src_ui_card_svelte'` means one runs the other's Python
+// module body, silently, which is the failure this project refuses.
 import { test, expect, describe } from 'vitest';
 
 import { nameFor, svelthon } from '../src/lib/svelthon.js';
@@ -21,10 +20,10 @@ describe('two files that mangle to one module name', () => {
     // each file off disk for its source map. The contract under test is the one
     // written above `nameFor` itself.
     //
-    // The paths are real files, and that is not decoration: the refusal now asks
-    // whether the first claimant is still on disk, so an invented path is no
-    // longer a collision. `tests/fixtures/collide-name.svelte` and friends exist
-    // for their names and nothing compiles them.
+    // The paths are real files, and that is not decoration: the refusal asks
+    // whether the first claimant is still on disk, so an invented path is not a
+    // collision. `tests/fixtures/collide-name.svelte` and friends exist for
+    // their names and nothing compiles them.
     //
     // The registry is per process. A pair may be replayed, because re-claiming
     // from the same path is allowed and the second path still collides, but no
@@ -53,13 +52,10 @@ describe('two files that mangle to one module name', () => {
         expect(() => compile('tests/fixtures/collide_name.svelte')).toThrow(/Rename one of them/);
     });
 
-    // A claim is never released, so before this the registry outlived the file.
-    // Renaming `ui-card.svelte` to `ui_card.svelte` while the dev server ran was
-    // refused as a collision with a file that had just stopped existing, and the
-    // cure, restarting the server, was named nowhere in the message.
-    //
-    // A renamed-away file is, mechanically, a claimant no longer on disk, which
-    // is what these two paths are.
+    // A claim is never released, so the registry outlives the file. Renaming
+    // `ui-card.svelte` to `ui_card.svelte` under a running dev server is the
+    // ordinary case, and a renamed-away file is, mechanically, a claimant no
+    // longer on disk, which is what these two paths are.
     test('a first claimant that is gone is a rename, not a collision', () => {
         compile('tests/fixtures/renamed-away.svelte');
 
@@ -94,10 +90,10 @@ describe('two files that mangle to one module name', () => {
 
 // Claiming is what refuses, so only the two hooks that *emit* a module may
 // claim. `hotUpdate` runs for every file the dev server sees change, component
-// or not, and asks one question: is this one of mine? Asking used to claim, so
-// two TypeScript files that hold no Python at all collided with each other and
-// read a message about Python they had never written. It surfaced as an HMR
-// failure, which is the harder kind to trace back.
+// or not, and asks one question: is this one of mine? If asking claimed, two
+// TypeScript files holding no Python at all would collide with each other and
+// read a message about Python they never wrote, as an HMR failure, which is the
+// harder kind to trace back.
 describe('asking whether a module exists does not claim its name', () => {
     const environment = {
         moduleGraph: { getModuleById: () => undefined, invalidateModule: () => {} }
