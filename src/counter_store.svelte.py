@@ -1,4 +1,4 @@
-count = 0
+count = 7
 history = []
 
 

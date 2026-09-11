@@ -12,14 +12,14 @@ BACKUPS=$(mktemp -d)
 
 cleanup() {
     cp "$BACKUPS/Counter.svelte" src/Counter.svelte 2>/dev/null
-    cp "$BACKUPS/counter_store.py" src/lib/counter_store.py 2>/dev/null
+    cp "$BACKUPS/counter_store.svelte.py" src/counter_store.svelte.py 2>/dev/null
     rm -rf "$BACKUPS"
     pkill -f "vite --port $PORT" 2>/dev/null
 }
 trap cleanup EXIT
 
 cp src/Counter.svelte "$BACKUPS/Counter.svelte"
-cp src/lib/counter_store.py "$BACKUPS/counter_store.py"
+cp src/counter_store.svelte.py "$BACKUPS/counter_store.svelte.py"
 
 pkill -f "vite --port $PORT" 2>/dev/null
 (npx vite --port "$PORT" --strictPort >/dev/null 2>&1 &)
@@ -58,7 +58,11 @@ check "component" src/Counter.svelte src_Counter_svelte src/Counter.svelte
 
 # The store is only served once it has entered the graph: pull the component
 # that imports it first.
+#
+# `?import` is not decoration: it is the exact specifier the component's virtual
+# module holds (`import "/src/counter_store.svelte.py?import"`). Requesting the
+# bare path is a different entry of the graph, and re-transforms nothing.
 curl -s "$V/src/StoreDemo.svelte" >/dev/null
-check "store" src/lib/counter_store.py src_lib_counter_store_py src/lib/counter_store.py.svelte.js
+check "store" src/counter_store.svelte.py src_counter_store_svelte_py "src/counter_store.svelte.py?import"
 
 exit $status
