@@ -55,16 +55,12 @@ CLOSE = '// <<< brython compiler chain\n'
 # while changing the top-level shape of the file for everyone. See BRYTHON.md.
 GUARD = """\
 // /* SVELTHON patch, see BRYTHON.md */
-// One interpreter per process. The compiler loads this file with require()
-// and a server-rendered component imports it again — Node keeps those as two
-// module instances, and a second execution rebuilds $B.ast, so the classes the
-// compiler is holding lose the to_js() the code generator attached. Compiling
-// anything after that dies on `ast_root.to_js is not a function`, naming
-// nothing that leads back here.
+// One interpreter per process. Under Node the compiler loads this file with
+// require() and a server-rendered component imports it again, which are two
+// module instances of the same file; `$B.builtins` marks that the body ran.
 //
-// `var` keeps its module scope inside a block, which is what lets the whole
-// file be wrapped without touching a line of it.
-if (!(globalThis.__BRYTHON__ && globalThis.__BRYTHON__.ast)) {
+// `var` keeps its module scope inside a block, so the file below is untouched.
+if (!(globalThis.__BRYTHON__ && globalThis.__BRYTHON__.builtins)) {
 """
 
 # The second. Two, not eighteen: `$B.$import(...)` is Brython's own function and
