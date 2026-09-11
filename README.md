@@ -1445,9 +1445,17 @@ them. They live in the file rather than in a build step, because the compiler
 loads the same copy with `require` under Node — a patch applied only while
 serving would leave server-side rendering on an unrepaired Brython.
 
-`vendor/brython.js` is a copy of `www/src/brython.js` (3.14 dev). The folder
-carries a `package.json` marked `commonjs`: Node must load it as a classic
-script, while the root is `type: module`.
+`vendor/brython.js` is a copy of `www/src/brython.js` (3.14 dev), rebuilt from
+master by `scripts/vendor-brython.py`. The folder carries a `package.json` marked
+`commonjs`: Node must load it as a classic script, while the root is
+`type: module`.
+
+**And it is the only Python that ships.** No stdlib module travels with
+Svelthon, `sys` included: a stdlib exists so that an author can `import`
+something, which is Brython's job, not a component framework's. A need that is
+identified becomes a builtin of ours instead, injected into the namespace with
+nothing to import. What the engine already carries stays reachable, `browser`
+and `_sys` among them.
 
 ## The wider stack
 

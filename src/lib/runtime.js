@@ -2,7 +2,6 @@
 // the runtime, then boot.
 import './globals.js';
 import '../../vendor/brython.js';
-import '../../vendor/sys.js';
 import './boot.js';
 import { createSubscriber } from 'svelte/reactivity';
 

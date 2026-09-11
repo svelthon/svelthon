@@ -1489,9 +1489,17 @@ le compilateur charge la même copie par `require` sous Node — un correctif
 appliqué seulement à la copie servie laisserait le rendu serveur tourner sur un
 Brython non réparé.
 
-`vendor/brython.js` est une copie de `www/src/brython.js` (3.14 dev). Le dossier
-porte un `package.json` marqué `commonjs` : Node doit le charger comme script
-classique, alors que la racine est en `type: module`.
+`vendor/brython.js` est une copie de `www/src/brython.js` (3.14 dev),
+reconstruite depuis master par `scripts/vendor-brython.py`. Le dossier porte un
+`package.json` marqué `commonjs` : Node doit le charger comme script classique,
+alors que la racine est en `type: module`.
+
+**Et c'est le seul Python livré.** Aucun module de la stdlib ne voyage avec
+Svelthon, `sys` compris : une stdlib existe pour qu'un auteur puisse `import`
+quelque chose, ce qui est le métier de Brython et pas celui d'un framework de
+composants. Un besoin identifié devient un builtin à nous, injecté dans le
+namespace, sans rien à importer. Ce que le moteur porte déjà reste accessible,
+`browser` et `_sys` entre autres.
 
 ## La pile plus large
 

@@ -94,7 +94,8 @@ dict's keys, by contrast, are ordinary enumerable JavaScript properties.
 | | |
 |---|---|
 | `$B.imported[name]` | module registry; a store publishes its namespace here so component Python can `import` it |
-| `$B.VFS`, `$B.update_VFS(scripts)`, `$B.use_VFS` | how a module reaches Brython without a network fetch; entries are `[ext, source, deps]`. `vendor/sys.js` registers one entry, and it is the only one Svelthon ships |
+| `$B.VFS`, `$B.update_VFS(scripts)`, `$B.use_VFS` | how a module reaches Brython without a network fetch; entries are `[ext, source, deps]`. Svelthon registers none: the VFS is how a stdlib is delivered, and a need that is identified becomes a builtin of ours instead |
+| `$B.imported._sys` | the interpreter's own module, installed by brython.js like `browser`: `_getframe`, `modules`, `path`, the streams. It is what stack introspection reaches now that `sys` is gone |
 | `$B.imported['browser.html']` | consulted to pick a DOM node's Python class from its tagName; registered by brython.js itself, but only by its browser half |
 | `$B.isNode` | `typeof process !== 'undefined' && process.release.name === 'node'`, decided at load. It picks which half of brython.js is installed — the browser half is the one that defines `browser.html`, `browser.window` and the DOM wrappers |
 | `browser.aio` | `run(coro, onsuccess, onerror)`, `iscoroutine`, `sleep` |

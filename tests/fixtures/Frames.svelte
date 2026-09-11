@@ -1,18 +1,22 @@
 <script lang="python">
-import sys
+# `_sys`, not `sys`. Brython installs `_sys` itself, the way it installs
+# `browser`, so it is there with nothing shipped alongside the engine. `sys` is a
+# stdlib module, and Svelthon does not ship a stdlib: a need that is identified
+# becomes a builtin of ours, never an import the author has to remember.
+import _sys
 
 def own_name():
-    return sys._getframe().f_code.co_name
+    return _sys._getframe().f_code.co_name
 
 def caller_name():
-    return sys._getframe(1).f_code.co_name
+    return _sys._getframe(1).f_code.co_name
 
 def outer():
     return caller_name()
 
 def line_delta():
-    a = sys._getframe().f_lineno
-    b = sys._getframe().f_lineno
+    a = _sys._getframe().f_lineno
+    b = _sys._getframe().f_lineno
     return b - a
 
 name = own_name()
