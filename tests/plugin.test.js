@@ -35,10 +35,11 @@ describe('the preprocessor decides by the script tag', () => {
         expect(out.code).toContain('<script lang="python">');
     });
 
-    // Svelte's parser accepts whitespace around `=`, and the script hook reads
-    // the attribute Svelte parsed. Read more narrowly here, the script compiled
-    // as Python while the markup stayed JavaScript: one component, two
-    // languages, and nothing said so.
+    // Whitespace around `=` is legal HTML. Svelte's own parser refuses it today
+    // (`<script lang = "js">` gives `Expected token >`), so the last two
+    // spellings below do not reach us from a real file; they are here because a
+    // detection narrower than HTML is a second grammar to keep in step, and the
+    // day Svelte relaxes, this reads what Svelte reads.
     const rewritten = (tag, name) =>
         pre.markup({
             content: `${tag}\ncount = 0\n</script>\n<p>{count}</p>`,

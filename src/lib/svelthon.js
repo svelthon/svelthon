@@ -78,10 +78,10 @@ export const nameFor = (filename) => {
     return name;
 };
 
-// The tag that decides a file is Python, read the way Svelte's own parser reads
-// an attribute: whitespace around `=` is legal HTML, and `lang = "python"`
-// compiled its script as Python while leaving the markup as JavaScript, so a
-// component split in half between two languages.
+// The tag that decides a file is Python. Whitespace around `=` is legal HTML and
+// read here, though Svelte's own parser refuses it (`<script lang = "js">` gives
+// `Expected token >`), so no component reaches us written that way today. Read
+// wide costs nothing and keeps this from being a second, narrower grammar.
 const HAS_PYTHON_SCRIPT = /<script[^>]*\blang\s*=\s*["']python["']/;
 
 // And read on the markup with its comments taken out. A `<script lang="python">`
