@@ -86,6 +86,18 @@ def cut(full):
     return full[:start] + full[end:]
 
 
+def chain(full):
+    """What sits between the markers: the parsing chain, on its own.
+
+    Each module of the concatenation is a complete `(function($B){…})(…)`, so
+    the block stands alone and registers onto an engine that is already there.
+    """
+    start = full.index(COMPILER_CHAIN_OPEN) + len(COMPILER_CHAIN_OPEN)
+    end = full.index(COMPILER_CHAIN_CLOSE)
+
+    return full[start:end]
+
+
 def ours(body):
     """The two edits that never go upstream."""
     for before, after in VITE_IGNORE:
@@ -116,5 +128,11 @@ assert runtime == build(skip=compiler_scripts), 'cutting by marker and building 
 
 write(os.path.join(VENDOR, 'brython.js'), ours(full))
 write(os.path.join(VENDOR, 'brython_runtime.js'), ours(runtime))
+
+# The chain on its own, for a page that compiles: it loads after the runtime and
+# registers `$B.Parser` and the rest onto the engine already there. No guard and
+# no `@vite-ignore`, since neither edit has anything to do with these modules.
+write(os.path.join(VENDOR, 'brython_compiler.js'), chain(full))
+
 print(f'{"cut":34} {len(full) - len(runtime):>9} bytes '
       f'({100 * (len(full) - len(runtime)) / len(full):.1f} %)')
