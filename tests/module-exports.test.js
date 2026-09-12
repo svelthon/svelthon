@@ -203,3 +203,31 @@ describe('a class named in __all__ crosses as itself', () => {
         expect(mod.build(mod.Widget, 21)).toBe(42);
     });
 });
+
+// A name the module took from JavaScript. Brython wraps what crosses into
+// Python, so the module holds a `JavascriptFunction` and not the function the
+// library made, and a framework that checks its own object finds a stranger.
+// SvelteKit's remote functions are exactly that: `accepted = query(_accepted)`
+// in a `.remote.py`, and `vite-plugin-sveltekit-remote` refusing the export
+// with `all exports from this file must be remote functions`.
+describe('a name taken from JavaScript goes back as itself', () => {
+    test('the export is the object the library built', async () => {
+        const mod = await import('./fixtures/exported_js.py');
+
+        expect(mod.marked.built_by).toBe('js_stamp');
+    });
+
+    test('and it still runs the Python it was given', async () => {
+        const mod = await import('./fixtures/exported_js.py');
+
+        expect(mod.marked()).toBe(42);
+    });
+
+    // The unwrapping reads one symbol, so a value Python made must not take
+    // that door: `plain` is Python's own and crosses as data.
+    test('a Python value beside it is untouched', async () => {
+        const mod = await import('./fixtures/exported_js.py');
+
+        expect(mod.plain).toBe(7);
+    });
+});

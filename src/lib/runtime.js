@@ -898,6 +898,14 @@ export function jsCall(value) {
 // `actions` is, becomes an object of *wrapped* functions, so a form action gets
 // the same boundary treatment as a `load()`. Anything else is plain data.
 export function pyExport(value, where, lineOffset = 0) {
+    // A name the module took from JavaScript goes back as the JavaScript it
+    // was. Brython wraps what crosses into Python, and the wrapper carries the
+    // original under `$B.JSOBJ`: `accepted = query(_accepted)` in a
+    // `.remote.py` stores a `JavascriptFunction`, and SvelteKit checks the
+    // object its own `query()` built.
+    const jsobj = value === null || value === undefined ? undefined : value[$B.JSOBJ];
+    if (jsobj !== undefined) return jsobj;
+
     if (value === null || typeof value !== 'object') return value;
     if (Array.isArray(value)) return plainData(value);
 
