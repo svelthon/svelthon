@@ -4,6 +4,7 @@ items = []
 table = {}
 tags = set()
 nested = {"rows": []}
+grid = [[]]
 nothing = None
 Alias = None
 
@@ -90,6 +91,60 @@ def add_row():
     box.rows.append(len(box.rows))
 
 
+# The same mutation, reached by every way Python has of getting hold of the
+# method rather than calling it on the spot.
+def mutate_detached():
+    add = items.append
+    add(len(items))
+
+
+def mutate_mapped():
+    list(map(items.append, [len(items)]))
+
+
+def mutate_fetched():
+    getattr(items, "append")(len(items))
+
+
+# And the ways of getting hold of a child container without indexing it.
+def mutate_looped():
+    for row in grid:
+        row.append(1)
+
+
+def mutate_comprehended():
+    [row.append(2) for row in grid]
+
+
+def mutate_unpacked():
+    one, = grid
+    one.append(3)
+
+
+def mutate_reversed():
+    for row in reversed(grid):
+        row.append(4)
+
+
+def mutate_copied():
+    list(grid)[0].append(5)
+
+
+def mutate_augmented():
+    row = grid[0]
+    row += [7]
+
+
+def add_row_late():
+    grid.append([])
+
+
+def mutate_late():
+    # A row that was not there when `grid` came under watch, and reached
+    # through a copy so nothing indexes it on the way.
+    list(grid)[-1].append(6)
+
+
 @derived
 def passthrough():
     # Returns the object itself: Svelte memoises a derived on `===`, so
@@ -105,6 +160,8 @@ computed => len(items)
 <p data-k="table">{table}</p>
 <p data-k="tags">{tags}</p>
 <p data-k="nested">{nested}</p>
+<p data-k="grid">{grid}</p>
+<p data-k="method">{type(items.append).__name__} {repr(items.append)}</p>
 <p data-k="attr">{box.value}</p>
 <p data-k="extra">{hasattr(box, "extra")}</p>
 <p data-k="rows">{box.rows}</p>
@@ -128,3 +185,14 @@ computed => len(items)
 <button data-k="drop_attribute" onclick={drop_attribute}>drop_attribute</button>
 <button data-k="replace_rows" onclick={replace_rows}>replace_rows</button>
 <button data-k="add_row" onclick={add_row}>add_row</button>
+<button data-k="mutate_detached" onclick={mutate_detached}>mutate_detached</button>
+<button data-k="mutate_mapped" onclick={mutate_mapped}>mutate_mapped</button>
+<button data-k="mutate_fetched" onclick={mutate_fetched}>mutate_fetched</button>
+<button data-k="mutate_looped" onclick={mutate_looped}>mutate_looped</button>
+<button data-k="mutate_comprehended" onclick={mutate_comprehended}>mutate_comprehended</button>
+<button data-k="mutate_unpacked" onclick={mutate_unpacked}>mutate_unpacked</button>
+<button data-k="mutate_reversed" onclick={mutate_reversed}>mutate_reversed</button>
+<button data-k="mutate_copied" onclick={mutate_copied}>mutate_copied</button>
+<button data-k="mutate_augmented" onclick={mutate_augmented}>mutate_augmented</button>
+<button data-k="add_row_late" onclick={add_row_late}>add_row_late</button>
+<button data-k="mutate_late" onclick={mutate_late}>mutate_late</button>

@@ -143,6 +143,11 @@ const MUTATORS = new Set([
 // indexing to catch it.
 const VIEWS = new Set(['items', 'values']);
 
+// Every name a call on a watched container has to be followed up on. Read on
+// the way out of `$getattr`, which is asked for every attribute in the program
+// and has to decide in one lookup whether this one is any of its business.
+const FOLLOWED = new Set([...MUTATORS, ...VIEWS, 'get']);
+
 // Make an in-place mutation reactive: `items.append(x)` with nothing after it.
 //
 // Svelte's own answer is to proxy the value in depth, which is unusable here: a
@@ -152,9 +157,24 @@ const VIEWS = new Set(['items', 'values']);
 // A Python list *is* a JavaScript array, so the object itself can carry a
 // non-enumerable marker instead, since `$B.get_class` reads only `ob_type`, so
 // `type(items) is list` stays true, `repr` is untouched, and nothing that walks
-// the value can see the marker. Brython compiles every method call to
-// `$B.call_attr` and every indexed write to `$B.$setitem`, so two interceptions
-// cover the whole language, and an unmarked object pays one property miss.
+// the value can see the marker.
+//
+// The rule the code below holds is one sentence: a watched container notifies
+// whenever it is mutated, and every container inside a watched one is watched
+// too. Brython offers no single choke point for either half, so both are taken
+// where they happen.
+//
+// A mutation is caught at the call, whether Python wrote it on the object or
+// took the method off it first, and at an indexed or attribute write. The watch
+// is handed down at the two moments a container can find itself inside another:
+// it was already there when the watch began, which `mark` walks, or it arrives
+// afterwards through a mutator, an index or an attribute, which each pass it on.
+//
+// Covering the ways *in* is what leaves reading alone: `for row in rows` and
+// `list(rows)[0]` hand out a row that is watched already, so Brython's own
+// iteration and copying are untouched, and so is every other builtin that
+// reaches inside a container. Every check reads the marker first, so an object
+// nobody watches pays one property miss and nothing else.
 //
 // The marker travels with the object: a list handed to a helper that mutates it
 // deep inside a function still notifies, which no static analysis could do.
@@ -166,8 +186,30 @@ function installMutationTracking($B) {
         if (obj !== null && typeof obj === 'object' && obj.$notify !== undefined) obj.$notify();
     };
 
-    // Rest arguments rather than `arguments` + apply: these three sit on the
-    // hottest path Brython has, and the old form blocks V8's optimiser.
+    // What a call on a watched container leaves to do, wherever the call came
+    // from. `obj` is known watched and `attr` known followed by both callers.
+    const afterCall = (obj, attr, result, args) => {
+        if (MUTATORS.has(attr)) {
+            // A container handed to a mutator is now inside a watched one, so
+            // it comes under the same watch. This is the other half of the walk
+            // `mark` does: that one takes what was already there, this one
+            // takes what arrives afterwards.
+            for (const arg of args) inherit(obj, arg);
+            if (attr === 'setdefault') inherit(obj, result);
+            obj.$notify();
+        } else if (VIEWS.has(attr)) {
+            // `.items()` and `.values()` hand out the children without ever
+            // indexing them. A Brython dict exposes its keys as enumerable
+            // JavaScript properties, so the values are reachable directly, no
+            // need to materialise the view to hand them the watch.
+            for (const key in obj) inherit(obj, obj[key]);
+        } else {
+            inherit(obj, result); // `get`
+        }
+    };
+
+    // Rest arguments rather than `arguments` + apply: these sit on the hottest
+    // path Brython has, and the old form blocks V8's optimiser.
     const callAttr = $B.call_attr;
     $B.call_attr = function (obj, attr, ...rest) {
         const result = callAttr(obj, attr, ...rest);
@@ -176,18 +218,50 @@ function installMutationTracking($B) {
         // call in the program, and an unwatched object must pay one property
         // miss, not a set lookup.
         if (obj !== null && typeof obj === 'object' && obj.$notify !== undefined) {
-            if (MUTATORS.has(attr)) {
-                if (attr === 'setdefault') inherit(obj, result);
-                obj.$notify();
-            } else if (VIEWS.has(attr)) {
-                // `.items()` and `.values()` hand out the children without ever
-                // indexing them. A Brython dict exposes its keys as enumerable
-                // JavaScript properties, so the values are reachable directly,
-                // no need to materialise the view to hand them the watch.
-                for (const key in obj) inherit(obj, obj[key]);
-            } else if (attr === 'get') {
-                inherit(obj, result);
-            }
+            // `call_attr` takes the position marker before the arguments, and
+            // it is the arguments that come under watch.
+            if (FOLLOWED.has(attr)) afterCall(obj, attr, result, rest.slice(1));
+        }
+
+        return result;
+    };
+
+    // `add = xs.append` and then `add(1)`, one statement later or one component
+    // away. The method has left the object as a value, so the interception
+    // above never sees the call: Brython compiles the attribute read to
+    // `$getattr` (`$getattr_pep657` delegates to it, and so does the builtin
+    // `getattr`) and the later call to `$B.$call`, which is a plain JavaScript
+    // call on whatever it was handed. Wrapping the method as it leaves is what
+    // puts `afterCall` back on that path, and it is the last place where the
+    // object the method belongs to is still known.
+    const notifying = (obj, attr, method) => {
+        const wrapper = function (...args) {
+            const result = method(...args);
+            afterCall(obj, attr, result, args);
+            return result;
+        };
+
+        // Python has to keep seeing the method it asked for: `type(add)` and
+        // `repr(add)` read `ob_type`, `ml` and `m_self` off the function
+        // object, and a bare wrapper would answer `function` where Brython
+        // answers `builtin_method`. Brython sets those five as plain
+        // properties, so an assign takes them and leaves `length` and `name`,
+        // which a function carries as its own and non-enumerable.
+        return Object.assign(wrapper, method);
+    };
+
+    const getattr = $B.$getattr;
+    $B.$getattr = function (obj, attr, ...rest) {
+        const result = getattr(obj, attr, ...rest);
+
+        if (
+            obj !== null &&
+            typeof obj === 'object' &&
+            obj.$notify !== undefined &&
+            FOLLOWED.has(attr) &&
+            typeof result === 'function'
+        ) {
+            return notifying(obj, attr, result);
         }
 
         return result;
@@ -203,8 +277,10 @@ function installMutationTracking($B) {
         return result;
     };
 
-    // Reading is where nesting is caught, and it is the hottest of the three:
-    // an unwatched container pays one property miss and nothing else.
+    // The ways into a watched container are the ones we know about; reading a
+    // child is the last moment before it could be mutated, so the watch is
+    // handed over here too, for whatever got in another way. An unwatched
+    // container pays one property miss and nothing else.
     const getitem = $B.$getitem;
     $B.$getitem = function (obj, ...rest) {
         const result = getitem(obj, ...rest);
@@ -240,6 +316,31 @@ function installMutationTracking($B) {
     $B.$delattr = function (obj, ...rest) {
         const result = delattr(obj, ...rest);
         notify(obj);
+        return result;
+    };
+
+    // `row += [1]`, `d |= other`, and every other operator with an `=` after
+    // it: Brython compiles them all through here. They mutate the object and
+    // rebind the name to that same object, so a watched container can change
+    // without a single watched name being written.
+    //
+    // Giving back a *different* object is a rebinding, not a mutation, and the
+    // accessor of whatever name it lands on already answers for that. `n += 1`
+    // is the case this tells apart.
+    const augmAssign = $B.augm_assign;
+    $B.augm_assign = function (left, op, right, ...rest) {
+        const result = augmAssign(left, op, right, ...rest);
+
+        if (
+            result === left &&
+            left !== null &&
+            typeof left === 'object' &&
+            left.$notify !== undefined
+        ) {
+            inherit(left, right); // `rows += [[]]` puts the new rows under watch
+            left.$notify();
+        }
+
         return result;
     };
 }
@@ -305,13 +406,24 @@ function mark(value, bumps, reads) {
         return value;
     }
 
-    // A container already sitting in an attribute, `self.rows = []` written in
-    // __init__, was put there before the object came under watch. Hand it the
-    // watch now. inherit() marks in turn, so depth follows on its own, and a
-    // cycle stops at the first object that already carries a marker.
+    // Everything already inside the value when the watch begins: an attribute
+    // written in __init__, an element of a list, a value of a dict. All of them
+    // were put there before the object came under watch, so nothing has handed
+    // them anything. inherit() marks in turn, so depth follows on its own, and
+    // a cycle stops at the first object that already carries a marker.
+    //
+    // This is the moment the whole graph is in hand, and taking it here is what
+    // lets every way of reading a child go unwatched: the child is marked
+    // before Python can reach for it, by any route.
     const attributes = ownAttributes(value);
     if (attributes !== undefined) {
         for (const key in attributes) inherit(value, attributes[key]);
+    }
+
+    if (Array.isArray(value)) {
+        for (const child of value) inherit(value, child);
+    } else {
+        for (const key in value) inherit(value, value[key]);
     }
 
     return value;
@@ -440,6 +552,15 @@ export function pyError(error, where, lineOffset = 0) {
     return error;
 }
 
+// A promise that can tell it is being waited for.
+//
+// `await p` on a plain promise never reads `p.then`: the language recognises
+// its own kind and goes to the internal machinery instead. A subclass is not
+// that kind, so `await` takes the long way and calls `then` like anyone else,
+// which is how `schedule` below knows the failure reached somebody. Everything
+// that asks stays satisfied: it is still an instance of Promise.
+class Waited extends Promise {}
+
 // Calling an `async def` from JavaScript returns a coroutine that nobody runs:
 // the handler appears to do nothing at all, silently. Brython has its own event
 // loop, so hand it over.
@@ -463,7 +584,7 @@ export function schedule(result, where, lineOffset = 0) {
     // event, no overlay.
     let watched = false;
 
-    const promise = new Promise((resolve, reject) => {
+    const promise = new Waited((resolve, reject) => {
         $B.$getattr(aio, 'run')(
             result,
             (value) => {

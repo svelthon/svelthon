@@ -86,3 +86,38 @@ describe('error inside a coroutine', () => {
         );
     });
 });
+
+// The rethrow above is for a handler nobody waits for. When somebody does wait,
+// the failure reaches them and reporting it again would make a caught error
+// escape anyway. `schedule` tells the two apart by watching its own `.then`,
+// so it has to be a promise that calls `.then` when it is awaited.
+//
+// A `.py` module is where a test can hold a Python coroutine of its own; what
+// is under test is the component boundary that wraps one.
+describe('a coroutine whose caller waits for it', () => {
+    const failing = () => {
+        const $B = globalThis.__BRYTHON__;
+
+        return $B.$call($B.$getattr($B.imported['route'], 'failing'), null);
+    };
+
+    test('reaches the caller and is not reported a second time', async () => {
+        const original = globalThis.setTimeout;
+        const pending = [];
+        globalThis.setTimeout = (fn, ...rest) =>
+            typeof fn === 'function' && rest.length === 0 ? pending.push(fn) : original(fn, ...rest);
+
+        let caught;
+        try {
+            await schedule(failing(), 'waited');
+        } catch (error) {
+            caught = error;
+        } finally {
+            globalThis.setTimeout = original;
+        }
+
+        expect(caught.message).toContain('KeyError');
+        expect(pending).toHaveLength(1);
+        expect(pending[0]).not.toThrow();
+    });
+});

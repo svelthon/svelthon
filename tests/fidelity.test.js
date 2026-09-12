@@ -511,4 +511,63 @@ describe('reactivity — which Python writes propagate', () => {
         click('mutate_attribute');
         expect(read('attr')).toBe('1');
     });
+
+    // The contract is not "these call sites notify" but "a mutation of a
+    // watched object invalidates its readers", so the matrix is written out:
+    // each row is another way Python has of reaching the mutation, and the
+    // display has to move for all of them or the sentence is not true.
+    //
+    // `mutate_list` above is the first row, the one where the call is written
+    // on the object. These are the ones where it is not.
+    test.for([
+        ['taken off the object first', 'mutate_detached'],
+        ['passed to map as a callback', 'mutate_mapped'],
+        ['fetched by name', 'mutate_fetched']
+    ])('a mutator %s propagates', ([, button]) => {
+        const { read, click } = setup();
+
+        expect(read('items')).toBe('[]');
+        click(button);
+        expect(read('items')).toBe('[0]');
+    });
+
+    // And the same for the child: a container is watched because something
+    // handed it the watch, so every way of getting one out of a watched parent
+    // has to hand it over. An index does, which is `mutate_nested` above.
+    test.for([
+        ['a for loop', 'mutate_looped', '[[1]]'],
+        ['a comprehension', 'mutate_comprehended', '[[2]]'],
+        ['unpacking', 'mutate_unpacked', '[[3]]'],
+        ['reversed()', 'mutate_reversed', '[[4]]'],
+        ['a copy made by list()', 'mutate_copied', '[[5]]'],
+        // `row += [7]` mutates the list and rebinds a local name to it, so the
+        // mutation is real and no watched name was written.
+        ['an in-place operator', 'mutate_augmented', '[[7]]']
+    ])('a child reached through %s propagates', ([, button, shown]) => {
+        const { read, click } = setup();
+
+        expect(read('grid')).toBe('[[]]');
+        click(button);
+        expect(read('grid')).toBe(shown);
+    });
+
+    // Reaching a mutator off a watched object hands back something that
+    // notifies, and Python must not be able to tell: it is the method it asked
+    // for, and it answers about itself as one.
+    test('a mutator taken off a watched object is still that method', () => {
+        expect(setup().read('method'))
+            .toBe('builtin_method <built-in method append of list object>');
+    });
+
+    test('a child added after the watch began propagates', () => {
+        const { read, click } = setup();
+
+        // Two clicks, because appending notifies on its own: put in the same
+        // handler, the append would answer for the mutation being measured.
+        click('add_row_late');
+        expect(read('grid')).toBe('[[], []]');
+
+        click('mutate_late');
+        expect(read('grid')).toBe('[[], [6]]');
+    });
 });
