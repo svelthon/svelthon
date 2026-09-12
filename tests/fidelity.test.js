@@ -14,6 +14,7 @@ import Keyed from './fixtures/Keyed.svelte';
 import Errors from './fixtures/Errors.svelte';
 import InitError from './fixtures/InitError.svelte';
 import OffsetError from './fixtures/OffsetError.svelte';
+import Accents from './fixtures/Accents.svelte';
 
 // Semantic fidelity grid.
 //
@@ -557,6 +558,28 @@ describe('reactivity — which Python writes propagate', () => {
     test('a mutator taken off a watched object is still that method', () => {
         expect(setup().read('method'))
             .toBe('builtin_method <built-in method append of list object>');
+    });
+
+    // Names Python accepts and the signs of the dialect used to refuse, three of
+    // them without a word. `tests/accented-names.test.js` holds the rule sign by
+    // sign; this one is the component an author would write, rendered.
+    test('an accented name works, at every sign at once', () => {
+        const target = render(Accents);
+        const read = (k) => target.querySelector(`[data-k="${k}"]`).textContent;
+        const click = (k) => {
+            target.querySelector(`button[data-k="${k}"]`).click();
+            flushSync();
+        };
+
+        // `=>`, `<=>`, `{#each … as}`, and `{première = …}` in the markup.
+        expect([read('effectif'), read('moyenne'), read('élève'), read('première')])
+            .toEqual(['1', '12.5', 'Zoé', 'Zoé']);
+
+        click('inscrire');
+        expect([read('effectif'), read('élèves')]).toEqual(['2', "['Zoé', 'Loïc']"]);
+
+        click('noter'); // `:=` on an accented name, from a handler
+        expect(read('moyenne')).toBe('15.0');
     });
 
     test('a child added after the watch began propagates', () => {

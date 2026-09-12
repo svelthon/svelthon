@@ -287,7 +287,11 @@ function endQuote(line, quote) {
 // Only the expression form. A derivation that needs statements keeps `@derived`,
 // which is the counterpart of Svelte's own `$derived.by`: the same split their
 // runes make, and the one Python already makes between `lambda` and `def`.
-const ARROW_DERIVED = /^([A-Za-z_]\w*)\s*=>\s*(\S[\s\S]*)$/;
+// A name, spelled the way Python spells one. `\w` is ASCII in JavaScript, so
+// `[A-Za-z_]\w*` made `année` a name to the script's `=` and not to its `=>` or
+// its `<=>`, which refused it with Brython's `invalid syntax`. Marks are in the
+// class because a name in Vietnamese or Devanagari carries them.
+const ARROW_DERIVED = /^([\p{L}_][\p{L}\p{M}\p{N}_]*)\s*=>\s*(\S[\s\S]*)$/u;
 
 // `=> expr`, the same arrow with nothing to name, which is the effect.
 //
@@ -338,7 +342,7 @@ const INSPECT = /^inspect(_with)?\s*\((\s*\S[\s\S]*)\)\s*$/;
 // It is sugar over `bindable()`, which stays: a searchable name for the reader
 // who arrives from Svelte's `$bindable`, exactly as `derived(lambda: …)` stays
 // under `=>`.
-const BINDABLE = /^([A-Za-z_]\w*\s*:\s*[^=<>]+?)\s*<=>\s*(\S[\s\S]*)?$/;
+const BINDABLE = /^([\p{L}_][\p{L}\p{M}\p{N}_]*\s*:\s*[^=<>]+?)\s*<=>\s*(\S[\s\S]*)?$/u;
 
 // Brackets closed on the line, ignoring those inside a string.
 function balanced(expr) {
@@ -361,7 +365,7 @@ function balanced(expr) {
 
     return depth === 0;
 }
-const ARROW_INDENTED = /^[ \t]+(?:[A-Za-z_]\w*\s*)?=>\s/;
+const ARROW_INDENTED = /^[ \t]+(?:[\p{L}_][\p{L}\p{M}\p{N}_]*\s*)?=>\s/u;
 
 function takeArrows(src, where, lineOffset, allowed) {
     const lines = src.split('\n');

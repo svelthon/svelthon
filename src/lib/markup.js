@@ -103,7 +103,12 @@ function arguments_(text) {
 const KEYWORD_BEFORE =
     /(^|[^\w.])(not|and|or|if|else|in|is|return|yield|lambda|await|assert|del|elif|while|for|from|import|raise|with|as|None|True|False)$/;
 
-const WALRUS_NAME = /^\s*([A-Za-z_]\w*)/;
+// A name, spelled the way Python spells one, which is the class every pattern
+// in this file that reads a name uses. `\w` is ASCII in JavaScript, so
+// `[A-Za-z_]\w*` made `année` a name to the script half and not to any of the
+// signs, and three of the signs then failed without saying anything. Marks are
+// in the class because a name in Vietnamese or Devanagari carries them.
+const WALRUS_NAME = /^\s*([\p{L}_][\p{L}\p{M}\p{N}_]*)/u;
 const WALRUS_ARROW = /^\s*:=\s*/;
 
 // What a walrus aims at, which is more than Python's own grammar allows it.
@@ -359,7 +364,7 @@ const VOID = new Set([
     'link', 'meta', 'param', 'source', 'track', 'wbr'
 ]);
 
-const identifiers = (text) => [...text.matchAll(/[A-Za-z_]\w*/g)].map((m) => m[0]);
+const identifiers = (text) => [...text.matchAll(/[\p{L}_][\p{L}\p{M}\p{N}_]*/gu)].map((m) => m[0]);
 
 function declaredBy(inner) {
     const keyword = inner.trimStart().split(/[\s(]/)[0];
@@ -505,11 +510,11 @@ const ATTACHMENTS = ['attach'];
 //
 // `$state.raw` and never `$state`: the latter deep-proxies, and a Brython object
 // behind a JavaScript proxy fails its own type checks.
-const DECLARED_NAME = /^[A-Za-z_]\w*$/;
+const DECLARED_NAME = /^[\p{L}_][\p{L}\p{M}\p{N}_]*$/u;
 
 // What `walrus()` emits for the plain form, read back so that a write aimed at a
 // markup name can be refused rather than sent to the wrong scope.
-const ASSIGNED = /__assign\("([A-Za-z_]\w*)"/g;
+const ASSIGNED = /__assign\("([\p{L}_][\p{L}\p{M}\p{N}_]*)"/gu;
 
 // The signs that end in `=` without being an assignment, plus the comparison.
 const NOT_ASSIGNMENT = new Set(['=', '!', '<', '>', '+', '-', '*', '/', '%', '&', '|', '^', ':']);
@@ -853,7 +858,7 @@ function walk(markup, collect, onPython, seed, record, where) {
                         // the call to the declared arity, converts the element,
                         // and hands the teardown back.
                         out += `{@attach ${EVENT_WRAPPER}(${call(trimmed.slice(8), '')})}`;
-                    } else if (/^[A-Za-z_$][\w$]*$/.test(trimmed)) {
+                    } else if (/^[\p{L}_$][\p{L}\p{M}\p{N}_$]*$/u.test(trimmed)) {
                         // {name}, Svelte's shorthand for name={name}. Expanding
                         // it is what routes the read through the namespace, and
                         // therefore through the accessor.
@@ -1227,7 +1232,8 @@ export function collector(defs) {
             // A module name assigned inside a function is local unless declared
             // by Python's rule, and the binding would otherwise write into a
             // frame nobody reads. A block's own name is already a parameter.
-            const bare = /^[A-Za-z_]\w*$/.test(expression) && !args.includes(expression);
+            const bare =
+                /^[\p{L}_][\p{L}\p{M}\p{N}_]*$/u.test(expression) && !args.includes(expression);
 
             defs.push(
                 [
