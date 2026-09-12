@@ -10,9 +10,9 @@ and the VFS with whatever the local tree happens to hold. This does lines 33 to
 Nothing in the Brython checkout is touched.
 
 The runtime bundle is the full one with the parsing chain cut out, and the cut is
-made **by the markers**, not by the module list. That is on purpose: the markers
-are what we propose upstream, so the pipeline here is the one a stranger would
-run against a published `brython.js`.
+made **by the markers**, not by a module list of our own: `compiler_scripts` and
+the two marker strings are read from Brython's own build scripts, so this runs
+the same contract a stranger would run against a published `brython.js`.
 
 Usage:  python3 scripts/vendor-brython.py [path-to-brython-checkout]
 """
@@ -28,23 +28,8 @@ sys.path.insert(0, os.path.join(BRYTHON, 'scripts'))
 import javascript_minifier                                  # noqa: E402
 from version import version, implementation                 # noqa: E402
 from directories import src_dir                             # noqa: E402
-from core_scripts import core_scripts                       # noqa: E402
-
-# The Python-to-JavaScript parsing chain, positions 41 to 47 of `core_scripts`
-# and therefore one contiguous block of the output. A page that only runs code
-# compiled ahead of time never reaches any of it.
-COMPILER = [
-    'symtable',
-    'action_helpers',
-    'string_parser',
-    'number_parser',
-    'python_parser',
-    'pegen',
-    'gen_parse'
-]
-
-OPEN = '// >>> brython compiler chain\n'
-CLOSE = '// <<< brython compiler chain\n'
+from core_scripts import core_scripts, compiler_scripts     # noqa: E402
+from make_dist import COMPILER_CHAIN_OPEN, COMPILER_CHAIN_CLOSE  # noqa: E402
 
 # The first of the two edits that stay ours, and that would be wrong upstream: a
 # browser loads the script once per page, so the guard protects nothing there
@@ -70,8 +55,8 @@ VITE_IGNORE = [
 def build(skip=()):
     """The bundle, markers included, before any edit of ours.
 
-    `skip` leaves modules out of the concatenation, which is what
-    `make_dist.py --runtime-only` would do. Only used to check the markers.
+    `skip` leaves modules out of the concatenation. Only used to check that
+    cutting by the markers gives the same file.
     """
     out = (
         f'// brython.js brython.info\n'
@@ -84,19 +69,19 @@ def build(skip=()):
     for name in core_scripts:
         if name in skip:
             continue
-        if name == COMPILER[0]:
-            out += OPEN
+        if name == compiler_scripts[0]:
+            out += COMPILER_CHAIN_OPEN
         out += javascript_minifier.minify(open(os.path.join(src_dir, name) + '.js').read() + '\n') + ';\n'
-        if name == COMPILER[-1]:
-            out += CLOSE
+        if name == compiler_scripts[-1]:
+            out += COMPILER_CHAIN_CLOSE
 
     return out
 
 
 def cut(full):
     """The runtime bundle: everything but what sits between the markers."""
-    start = full.index(OPEN)
-    end = full.index(CLOSE) + len(CLOSE)
+    start = full.index(COMPILER_CHAIN_OPEN)
+    end = full.index(COMPILER_CHAIN_CLOSE) + len(COMPILER_CHAIN_CLOSE)
 
     return full[:start] + full[end:]
 
@@ -120,13 +105,14 @@ def write(path, body):
 full = build()
 runtime = cut(full)
 
-# The claim the upstream proposal rests on, checked on every build rather than
-# taken on faith: cutting by the markers gives exactly what leaving the modules
-# out of the concatenation gives. If that ever stops holding, the parsing chain
-# has stopped being contiguous and the markers are the wrong idea.
-assert full.count(OPEN) == 1 and full.count(CLOSE) == 1, 'the markers are not unique'
-assert OPEN not in runtime and CLOSE not in runtime, 'the markers survived the cut'
-assert runtime == build(skip=COMPILER), 'cutting by marker and building without differ'
+# Checked on every build rather than taken on faith: cutting by the markers
+# gives exactly what leaving those modules out of the concatenation gives. If it
+# ever stops holding, the parsing chain has stopped being contiguous.
+assert full.count(COMPILER_CHAIN_OPEN) == 1, 'the opening marker is not unique'
+assert full.count(COMPILER_CHAIN_CLOSE) == 1, 'the closing marker is not unique'
+assert COMPILER_CHAIN_OPEN not in runtime, 'the opening marker survived the cut'
+assert COMPILER_CHAIN_CLOSE not in runtime, 'the closing marker survived the cut'
+assert runtime == build(skip=compiler_scripts), 'cutting by marker and building without differ'
 
 write(os.path.join(VENDOR, 'brython.js'), ours(full))
 write(os.path.join(VENDOR, 'brython_runtime.js'), ours(runtime))
