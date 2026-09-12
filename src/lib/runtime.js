@@ -878,13 +878,19 @@ const outbound = (value) => (typeof value === 'function' ? pyHandler(value) : pl
 // JavascriptError. The same call written `js.Math.sqrt(2)` gives a Python float,
 // because Brython's own JSObject machinery converts and this proxy did not.
 //
-// `jsobj2pyobj` is that machinery, and it is conservative in exactly the way
-// this needs: a number becomes an int or a float, a string a Python string, a
-// function a Python-callable one, a DOM node a DOMNode, and everything else,
-// plain objects and Promises included, is returned untouched. So a result handed
-// straight back to JavaScript crosses unchanged, and an awaited promise still
-// awaits.
-const inbound = (value) => globalThis.__BRYTHON__.jsobj2pyobj(value);
+// `jsobj2pyobj` is that machinery: a number becomes an int or a float, a string
+// a Python string, a DOM node a DOMNode, and plain objects and Promises are
+// returned untouched, so a result handed straight back to JavaScript crosses
+// unchanged and an awaited promise still awaits.
+//
+// A function is the exception, and it goes past untouched. `jsobj2pyobj` builds
+// a Python-callable one around it, which is a different object: what a library
+// marks, a framework no longer recognises. SvelteKit's `query()` returns a
+// function carrying `__.type`, and `accepted = query(_accepted)` in a
+// `.remote.py` must export the object SvelteKit built. Brython calls a plain
+// JavaScript function perfectly well.
+const inbound = (value) =>
+    typeof value === 'function' ? value : globalThis.__BRYTHON__.jsobj2pyobj(value);
 
 export function jsCall(value) {
     if (typeof value !== 'function') return value;
@@ -898,14 +904,6 @@ export function jsCall(value) {
 // `actions` is, becomes an object of *wrapped* functions, so a form action gets
 // the same boundary treatment as a `load()`. Anything else is plain data.
 export function pyExport(value, where, lineOffset = 0) {
-    // A name the module took from JavaScript goes back as the JavaScript it
-    // was. Brython wraps what crosses into Python, and the wrapper carries the
-    // original under `$B.JSOBJ`: `accepted = query(_accepted)` in a
-    // `.remote.py` stores a `JavascriptFunction`, and SvelteKit checks the
-    // object its own `query()` built.
-    const jsobj = value === null || value === undefined ? undefined : value[$B.JSOBJ];
-    if (jsobj !== undefined) return jsobj;
-
     if (value === null || typeof value !== 'object') return value;
     if (Array.isArray(value)) return plainData(value);
 

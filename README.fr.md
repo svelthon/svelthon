@@ -729,10 +729,11 @@ Il nomme tout ce que le module lie, et pas seulement ce qu'il affecte : une
 classe, une constante, une fonction, un nom amené par un import. Et un nom qu'il
 invente est refusé à la compilation, puisqu'un module exporte ce qu'il définit.
 
-**Un nom que le module a pris à JavaScript repart tel quel**, et c'est ce qui
-fait marcher les fonctions distantes de SvelteKit depuis Python :
-`accepted = query(…)` dans un `.remote.py` exporte l'objet que le `query()` de
-SvelteKit a fabriqué, pas une vue Python de celui-ci.
+**Une fonction rendue par un appel `importjs` est la fonction elle-même**, et
+c'est ce qui fait marcher les fonctions distantes de SvelteKit depuis Python :
+`accepted = query(…)` dans un `.remote.py` garde, et exporte, l'objet que le
+`query()` de SvelteKit a fabriqué. Ce qu'un framework reconnaît par identité le
+reste en traversant.
 
 **Un module réactif le lit aussi.** `__all__` dans un `.svelte.py` dit ce que le
 store publie, exactement comme dans un `.py` ; sans lui, le store publie tous les
