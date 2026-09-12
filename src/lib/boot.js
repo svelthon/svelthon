@@ -1,3 +1,10 @@
+// Brython, imported here and not left to the order of `runtime.js`. The engine
+// is a CommonJS file, so a bundler wraps it in a lazy initialiser and places the
+// call where the binding is used rather than where the import sits: read from a
+// neighbour, that call lands *after* this file and `$B.brython` is undefined.
+// Naming the dependency where it is needed is what keeps the order.
+import '../../vendor/brython.js';
+
 // Initialise the runtime once per page. `ipy_id: []` keeps brython() from
 // scanning the document for <script type="text/python">: Svelthon components
 // are already compiled, there is nothing left to find.

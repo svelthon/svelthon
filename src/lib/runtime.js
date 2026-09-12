@@ -1,7 +1,7 @@
-// What every compiled component imports. Order is load-bearing: globals, then
-// the runtime, then boot.
+// What every compiled component imports. `globals.js` prepares the scope
+// brython.js reads as it loads, and `boot.js` imports the engine itself and
+// starts it.
 import './globals.js';
-import '../../vendor/brython.js';
 import './boot.js';
 import { createSubscriber } from 'svelte/reactivity';
 
