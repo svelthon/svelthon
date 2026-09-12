@@ -501,6 +501,19 @@ export function schedule(result, where, lineOffset = 0) {
     return promise;
 }
 
+// A key written, and not assigned. `out[key] = value` runs the setter that
+// `__proto__` has on `Object.prototype`, so a dict holding that key lost it and
+// handed back an object whose prototype was whatever the key held:
+// `{"__proto__": {"flag": 42}}` crossed as `{}` answering 42 for `flag`. A key
+// is data here, wherever it came from.
+const define = (target, key, value) =>
+    Object.defineProperty(target, key, {
+        value,
+        enumerable: true,
+        writable: true,
+        configurable: true
+    });
+
 // What an exported function hands back to the framework.
 //
 // SvelteKit serialises whatever `load()` returns, and a Brython dict carries
@@ -544,10 +557,16 @@ export function plainData(value, seen) {
 function branch(value, seen) {
     if (Array.isArray(value)) return value.map((one) => plainData(one, seen)); // list, tuple
 
-    // Anything with a constructor of its own is not ours to flatten: a Response,
-    // a URL, a Date, a Map, a Promise: a Python `load()` may hand any of those
-    // straight back to the framework, and copying their keys would destroy them.
-    if (value.constructor !== undefined && value.constructor !== Object) return value;
+    // Anything of a class of its own is not ours to flatten: a Response, a URL,
+    // a Date, a Map, a Promise: a Python `load()` may hand any of those straight
+    // back to the framework, and copying their keys would destroy them.
+    //
+    // Read on the prototype and not as `value.constructor`, which a dict may
+    // carry as data: `{"constructor": "invoice"}` answered a constructor of its
+    // own and the whole mapping crossed unconverted, floats and all. A Brython
+    // dict and a plain object both sit on `Object.prototype`.
+    const prototype = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) return value;
 
     // A class instance keeps its attributes under a private symbol rather than as
     // JavaScript properties, so walking its own keys finds almost nothing and
@@ -558,7 +577,7 @@ function branch(value, seen) {
 
     if (attributes !== undefined && attributes !== null && typeof attributes === 'object') {
         const fields = {};
-        for (const key of Object.keys(attributes)) fields[key] = plainData(attributes[key], seen);
+        for (const key of Object.keys(attributes)) define(fields, key, plainData(attributes[key], seen));
         return fields;
     }
 
@@ -571,7 +590,7 @@ function branch(value, seen) {
     // A set has no key to copy: `list(mon_set)` is the Python way to hand one
     // over, and it is what any serialiser would want anyway.
     const out = {};
-    for (const key of Object.keys(value)) out[key] = plainData(value[key], seen);
+    for (const key of Object.keys(value)) define(out, key, plainData(value[key], seen));
     return out;
 }
 
