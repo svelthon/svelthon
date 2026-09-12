@@ -33,10 +33,6 @@ from core_scripts import core_scripts                       # noqa: E402
 # The Python-to-JavaScript parsing chain, positions 41 to 47 of `core_scripts`
 # and therefore one contiguous block of the output. A page that only runs code
 # compiled ahead of time never reaches any of it.
-#
-# `python_tokenizer` and `py_tokens` are not here: `str.isidentifier()` calls
-# into them. Neither is `ast_to_js`, which holds the name resolution the
-# generated code calls at run time.
 COMPILER = [
     'symtable',
     'action_helpers',
