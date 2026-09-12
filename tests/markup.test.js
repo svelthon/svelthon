@@ -573,6 +573,23 @@ describe('the attribute pass', () => {
         expect(() => rewrite('<div {...attrs}></div>')).toThrow(/Ellipsis/);
     });
 
+    // The other position. A spread fills a tag's attributes, so outside a tag
+    // there is nothing for it to spread into, in either spelling. Left to fall
+    // through, `{**attrs}` reached Brython as `__text(**attrs)` and the author
+    // read a syntax error about a missing comma, on a line they never wrote.
+    test.for([['the Python spelling', '**'], ['the JavaScript one', '...']])(
+        'a spread outside a tag is refused, in %s',
+        ([, marker]) => {
+            expect(() => rewrite(`<p>{${marker}attrs}</p>`)).toThrow(/svelthon — /);
+            expect(() => rewrite(`<p>{${marker}attrs}</p>`)).toThrow(/\{\*\*attrs\}/);
+        }
+    );
+
+    test('and the one written with `...` is told about Ellipsis as well', () => {
+        expect(() => rewrite('<p>{...attrs}</p>')).toThrow(/Ellipsis/);
+        expect(() => rewrite('<p>{**attrs}</p>')).not.toThrow(/Ellipsis/);
+    });
+
     // `...` is refused where a spread would go, and nowhere else: it is a Python
     // object, and it keeps its meaning wherever an expression is read.
     test('`...` stays Python\u2019s Ellipsis in an expression', () => {

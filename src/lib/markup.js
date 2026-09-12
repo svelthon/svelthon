@@ -1041,6 +1041,33 @@ function walk(markup, collect, onPython, seed, record, where) {
             } else {
                 throw refuse(unknownTag(trimmed, 'tag', TAGS, said()));
             }
+        } else if (trimmed.startsWith('**') || /^\.\.\.[A-Za-z_$]/.test(trimmed)) {
+            // The other half of the spread refusal. A spread fills a tag's
+            // attributes, so out here there is nothing for it to spread into,
+            // and Svelte refuses `{...x}` in this position too. Both spellings
+            // are named, because the branch below would otherwise hand `**attrs`
+            // to Brython as an expression and the author would read a syntax
+            // error about a comma, on a line they never wrote.
+            //
+            // `**` cannot open a Python expression at all, so it is refused on
+            // sight. `...` can: it is Ellipsis, and `{...}`, `{... if x else
+            // y}` and `{...[0]}` are all expressions the author is entitled to
+            // write. Only `...` run straight into a name is a spread.
+            const spread = trimmed.replace(/^(\*\*|\.\.\.)/, '').trim();
+
+            throw refuse(
+                new SyntaxError(
+                    `svelthon — a spread fills a tag's attributes, so ` +
+                        `\`{**${spread}}\` goes inside the tag${said()}, as in ` +
+                        `\`<div {**${spread}}>\`. Out here there is nothing for it ` +
+                        `to spread into.` +
+                        (trimmed.startsWith('...')
+                            ? ` And \`...\` is Python's Ellipsis, not a spread, ` +
+                              `which is what it keeps meaning everywhere an ` +
+                              `expression is read.`
+                            : '')
+                )
+            );
         } else {
             const declared = declaration(inner);
 

@@ -5,6 +5,8 @@
 import { test, expect, describe } from 'vitest';
 import { createRequire } from 'node:module';
 
+import { overMarkup, pythonExpressions, collector } from '../src/lib/markup.js';
+
 const require = createRequire(import.meta.url);
 const { compile } = require('../src/lib/compile.cjs');
 
@@ -156,4 +158,45 @@ def increment():
         expect(script).toMatch(/import \{[^}]*\bpyData\b[^}]*\} from 'svelthon\/runtime'/);
         expect(script).toContain("bind(__proto, 'to_py', () => pyData");
     });
+});
+
+// The property that holds over the two halves at once: whatever a template
+// says, the author reads a Svelthon sentence or the component compiles. What
+// must never happen is the third outcome, an emission that is not Python, which
+// reaches the author as a Brython error about a line they never wrote.
+//
+// It is written as a matrix of *positions* because that is how it breaks twice
+// over: `{@…}` and then a spread were each handled inside a tag and forgotten
+// outside one, or the reverse. Every construct is therefore written in both.
+describe('a template is refused or it compiles', () => {
+    const CONSTRUCTS = [
+        '{**attrs}', '{...attrs}', '{@attach fn}', '{@html x}', '{@render row(1)}',
+        '{@debug x}', '{name}', '{x = 1}', '{y => 1}', '{...}', '{[..., 1]}',
+        '{... if flag else 1}', 'bind:value={name}', 'onclick={go}',
+        'class:on={flag}', 'use:action={opt}', 'href={url}'
+    ];
+
+    test.for(CONSTRUCTS.flatMap((one) => [[one, 'inside a tag'], [one, 'outside one']]))(
+        '%s, %s',
+        ([construct, where]) => {
+            const body = where === 'inside a tag'
+                ? `<div ${construct}>a</div>`
+                : `<div>${construct}</div>`;
+            const defs = [];
+
+            try {
+                overMarkup(body, (markup, at) =>
+                    pythonExpressions(markup, collector(defs), undefined, at));
+            } catch (error) {
+                expect(error.message).toMatch(/^svelthon — /);
+                return;
+            }
+
+            expect(() =>
+                compile('attrs = {}\nname = 1\nflag = True\nurl = ""\n', 'Probe', 'Probe.svelte', {
+                    defs
+                })
+            ).not.toThrow();
+        }
+    );
 });
