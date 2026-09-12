@@ -69,17 +69,31 @@ Token type codes read off the tokenizer: `NAME 1`, `NUMBER 2`, `STRING 3`,
 
 ### Dispatch points, for reactivity
 
-Every write a Python program makes goes through one of these, which is what lets
-an in-place mutation become reactive without proxying anything. An object that
-carries no marker pays one property miss.
+Every mutation a Python program makes goes through one of these, which is what
+lets an in-place mutation become reactive without proxying anything. An object
+that carries no marker pays one property miss.
 
 | | |
 |---|---|
-| `$B.call_attr(obj, name, nargs, ...)` | every method call |
+| `$B.call_attr(obj, name, nargs, ...)` | every method call written on the object |
+| `$B.$getattr(obj, name)` | a method taken off the object and called later, `add = xs.append`. `$B.$getattr_pep657` delegates here and so does the builtin `getattr`, so this one covers all three and they must not be wrapped as well |
+| `$B.augm_assign(left, op, right)` | `row += [1]`, `d \|= other`; every operator with an `=` after it. They mutate and rebind the name to the same object, so a watched container changes without a watched name being written. A *different* object back is a rebinding, which the accessor already answers for |
 | `$B.$setitem(obj, key, value)` / `$B.$delitem` | `d[k] = v`, `del d[k]` |
-| `$B.$getitem(obj, key)` | every indexed read, the hottest of them, and where a nested container comes under watch |
+| `$B.$getitem(obj, key)` | every indexed read, the hottest of them |
 | `$B.$setattr(obj, name, value)` / `$B.$setattr1` | attribute writes; Brython emits one or the other depending on the statement, and both have to be covered |
 | `$B.$delattr(obj, name)` | `del obj.attr` |
+
+A container reached out of a watched one is watched too, and that is settled on
+the way **in** rather than on the way out: marking a container walks what is
+already inside it, and the mutators above hand the watch to what arrives
+afterwards. Covering the entrances is what leaves reading alone, so Brython's own
+iteration, `reversed()` and `list()` need no hook at all.
+
+The walk is bounded to what Python calls a container, an array or a dict by
+`$B.get_class`. Walking any object's keys let it leave the author's data: it
+reached `__BRYTHON__` itself, 558 keys, and from there `localStorage`, which is a
+`Storage` and turns every value it is given into a string, so the marker came
+back as its own source text.
 
 Wrap them with rest arguments, `function (a, b, ...rest)`, and never with
 `arguments` + `apply`: these are the hottest functions Brython has, and the old

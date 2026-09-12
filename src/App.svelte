@@ -150,17 +150,17 @@
             <p>The last row is the one that costs work. Svelte makes
                 <code>items.append(x)</code> reactive by proxying the value in depth, which Svelthon
                 cannot use: a Python object behind a proxy fails its own type checks. Instead the
-                object carries an invisible marker, and Brython's two dispatch points —
-                <code>call_attr</code>, <code>$setitem</code>, <code>$getitem</code>,
-                <code>$setattr</code> — tell the signal it moved. The object keeps its identity,
-                nothing is copied, and <code>type(items) is list</code> stays true. A container read
-                out of a watched one comes under the same watch, and <code>{'{#each}'}</code> hands
-                it down to its rows: deep proxying, without a proxy.</p>
+                object carries an invisible marker, and every way Brython has of mutating a
+                container tells the signal it moved: a method called on it, a method taken off it
+                and called later, an index, an attribute, an in-place operator. The object keeps its
+                identity, nothing is copied, and <code>type(items) is list</code> stays true. Every
+                container inside a watched one is watched too, so <code>{'{#each}'}</code> hands the
+                watch down to its rows: deep proxying, without a proxy.</p>
         </div>
     </article>
 
     <footer>
-        <span><strong>250 KB</strong> gzip, runtime included</span>
+        <span><strong>224 KB</strong> gzip, runtime included</span>
         <span><strong>{tests}</strong> tests</span>
         <span><strong>0 ms</strong> compiling at load</span>
     </footer>
