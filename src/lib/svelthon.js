@@ -31,24 +31,40 @@ const generated = (globalThis[Symbol.for('svelthon.generated')] ??= new Map());
 // module instance.
 const claimed = (globalThis[Symbol.for('svelthon.claimed')] ??= new Map());
 
-// Must be unique across the project *and* a valid JS identifier, since Brython
-// derives its namespace binding (`locals_<name>`) from it.
+// The name alone, for a caller that is only asking a question. `hotUpdate` runs
+// for every file the dev server sees change, component or not, and all it wants
+// to know is whether a module of that name exists. Asking must not claim.
+const mangle = (filename) =>
+    relative(process.cwd(), filename || 'Component').replace(/\W/g, '_');
+
+// The name, claimed. Must be unique across the project *and* a valid JS
+// identifier, since Brython derives its namespace binding (`locals_<name>`) from
+// it.
 //
-// `\W → _` gives the second and not the first. `src/ui/card.svelte`,
+// `\W → _` gives the second and not the first: `src/ui/card.svelte`,
 // `src/ui_card.svelte` and `src/ui-card.svelte` all mangle to
-// `src_ui_card_svelte`, so `generated.set(virtualId(name), …)` overwrote and
-// both components imported one virtual module: the second ran the first one's
-// Python module body, silently. Kebab beside snake is not an exotic layout.
+// `src_ui_card_svelte`, and one virtual module for two components means one
+// runs the other's Python module body. Kebab beside snake is not an exotic
+// layout.
 //
 // Refused rather than made injective. A hash would keep both files working and
 // make every generated id unreadable for a collision nobody has had; a refusal
 // costs a rename in the one project that meets it, and says which two files.
+//
+// Only the two hooks that *emit* a module call this, so that asking whether a
+// module exists does not claim its name: `hotUpdate` asks for every file the
+// dev server sees change, Svelthon's or not.
+//
+// A claim is never released, the registry living as long as the process, so the
+// last condition reads the disk: **a first claimant that is no longer there is
+// not a collision, it is a rename.** The refusal keeps the case it is for, two
+// files that both exist.
 export const nameFor = (filename) => {
     const path = relative(process.cwd(), filename || 'Component');
-    const name = path.replace(/\W/g, '_');
+    const name = mangle(filename);
     const first = claimed.get(name);
 
-    if (false) {
+    if (first !== undefined && first !== path && existsSync(first)) {
         throw new SyntaxError(
             `svelthon — \`${path}\` and \`${first}\` both compile to the module name ` +
                 `\`${name}\`, so one would silently run the other's Python. Rename ` +
@@ -121,7 +137,7 @@ export function python(options = {}) {
                 code: overMarkup(content, (markup, offset) =>
                     // The chunk, and where it starts, so a refusal can name a
                     // line and a column in the file the author is looking at.
-                    pythonExpressions(markup, collect)
+                    pythonExpressions(markup, collect, undefined, { filename, content, offset })
                 )
             };
         },
@@ -377,7 +393,7 @@ export function svelthon() {
 
             // `mangle` and not `nameFor`: this hook sees every changed file in
             // the project and is only asking whether one of them is ours.
-            const name = nameFor(file);
+            const name = mangle(file);
             if (!generated.has(virtualId(name))) return;
 
             forget('\0' + virtualId(name));
