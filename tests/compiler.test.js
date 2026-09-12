@@ -44,7 +44,11 @@ describe('compiler', () => {
         expect(script).toContain('let __rev_items = $state.raw(0)');
         expect(script).toContain('const __bump_items = () => { __rev_items += 1; }');
         expect(script).toContain("bind(__proto, 'items', () => (__rev_items, items)");
-        expect(script).toContain('track(v, __bump_items, __read_items)');
+        // The list is the fourth argument, and the effect below is what empties
+        // it: a container reached through a store outlives the instance that
+        // read it, so subscribing without a way out accumulates.
+        expect(script).toContain('track(v, __bump_items, __read_items, __subs)');
+        expect(script).toContain('$effect(() => () => unsubscribe(__subs));');
     });
 
     test('a store folds annotations into state and registers itself for Python', () => {

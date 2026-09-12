@@ -385,15 +385,38 @@ function ownAttributes(value) {
     return value[DICT];
 }
 
-function mark(value, bumps, reads) {
-    const marker = () => {
-        for (const one of bumps) one();
-    };
-    marker.bumps = bumps;
-    marker.reads = reads;
-    marker.follow = () => {
-        for (const one of reads) one();
-    };
+// A watch runs from the object that was named to every container under it, and
+// a mutation anywhere under a name has to reach whoever is reading that name.
+//
+// The link points *up*: a child holds its parents, and notifying walks from the
+// mutated object towards the names. Holding it the other way, which is to say
+// copying the parent's subscribers down into each child, is what left two
+// defects with one cause. A subscriber cannot sign off, because its callback is
+// in every copy and nothing knows where they are; and a subscriber arriving
+// after a child was handed the watch lands in the parent's list alone, so
+// mutating that child never reaches it. Measured, both.
+//
+// `stamp` is what stops a cycle. `a.append(a)` is a graph, not a tree, and the
+// walk marks each marker with the number of the walk it is in.
+let walked = 0;
+
+const upwards = (marker, stamp, key) => {
+    if (marker.seen === stamp) return;
+    marker.seen = stamp;
+
+    for (const one of marker[key]) one();
+
+    if (marker.parents !== undefined) {
+        for (const parent of marker.parents) upwards(parent, stamp, key);
+    }
+};
+
+function mark(value) {
+    const marker = () => upwards(marker, ++walked, 'bumps');
+
+    marker.bumps = [];
+    marker.reads = [];
+    marker.follow = () => upwards(marker, ++walked, 'reads');
 
     try {
         Object.defineProperty(value, '$notify', {
@@ -403,6 +426,16 @@ function mark(value, bumps, reads) {
         });
     } catch {
         /* a frozen object is not ours: leave it alone */
+        return value;
+    }
+
+    // And some objects take the property and change it. `Storage`, which is what
+    // `localStorage` is, turns every value it is given into a string, so the
+    // marker came back as its own source text and a watch built on it would be
+    // a broken one rather than none. Anything that does that is a host object
+    // and not the author's data, so the key is taken back off.
+    if (value.$notify !== marker) {
+        delete value.$notify;
         return value;
     }
 
@@ -420,30 +453,72 @@ function mark(value, bumps, reads) {
         for (const key in attributes) inherit(value, attributes[key]);
     }
 
+    // Only what Python calls a container, and that bound is the whole point:
+    // walking any object's keys let the watch leave the author's data. Measured,
+    // it reached `__BRYTHON__` itself, 558 keys, and from there `localStorage`.
+    // A list holds its elements as an array, a dict holds its items as
+    // enumerable properties, and nothing else here holds Python containers: a
+    // set cannot, since a list is not hashable.
     if (Array.isArray(value)) {
         for (const child of value) inherit(value, child);
-    } else {
+    } else if (globalThis.__BRYTHON__.get_class(value) === _b_.dict) {
         for (const key in value) inherit(value, value[key]);
     }
 
     return value;
 }
 
-export function track(value, bump, read) {
+// Sign one subscriber onto one marker, and tell `owner` about it so the same
+// subscriber can sign off. `owner` is the component's list; a store has none,
+// since its subscription lives as long as the module does.
+const join = (marker, bump, read, owner) => {
+    if (marker.bumps.includes(bump)) return;
+
+    marker.bumps.push(bump);
+    marker.reads.push(read);
+
+    if (owner !== undefined) owner.push(marker, bump);
+};
+
+export function track(value, bump, read, owner) {
     if (value === null || typeof value !== 'object') return value;
 
     // Cheapest path first: a value already watched is the common case, and it
     // must not pay a type classification on every write.
     const own = value.$notify;
     if (own !== undefined) {
-        if (!own.bumps.includes(bump)) {
-            own.bumps.push(bump);
-            own.reads.push(read);
-        }
+        join(own, bump, read, owner);
         return value;
     }
 
-    return mutable(value) ? mark(value, [bump], [read]) : value;
+    if (!mutable(value)) return value;
+
+    // A frozen object refuses the marker and comes back without one.
+    const marker = mark(value).$notify;
+
+    if (marker !== undefined) join(marker, bump, read, owner);
+
+    return value;
+}
+
+// Every marker a component signed onto, and the callback it signed with, kept
+// flat rather than in pairs so that subscribing allocates nothing.
+//
+// Without this, a container shared through a store keeps the callbacks of every
+// component that ever read it: measured at 2, 3, 4, 5 subscribers over four
+// mount cycles of one child, for one child alive.
+export function unsubscribe(owner) {
+    for (let i = 0; i < owner.length; i += 2) {
+        const marker = owner[i];
+        const at = marker.bumps.indexOf(owner[i + 1]);
+
+        if (at !== -1) {
+            marker.bumps.splice(at, 1);
+            marker.reads.splice(at, 1);
+        }
+    }
+
+    owner.length = 0;
 }
 
 // A container read out of a watched one comes under the same watch. This is
@@ -453,22 +528,25 @@ export function track(value, bump, read) {
 function inherit(parent, child) {
     if (child === null || typeof child !== 'object') return child;
 
-    const marker = parent.$notify;
-    const own = child.$notify;
+    let own = child.$notify;
 
-    if (own !== undefined) {
-        // Already watched, by another name or by another parent. Both watches
-        // stand; a mutation tells everyone who is looking.
-        for (let i = 0; i < marker.bumps.length; i++) {
-            if (!own.bumps.includes(marker.bumps[i])) {
-                own.bumps.push(marker.bumps[i]);
-                own.reads.push(marker.reads[i]);
-            }
-        }
-        return child;
+    if (own === undefined) {
+        if (!mutable(child)) return child;
+        own = mark(child).$notify;
+
+        // A frozen object refuses the marker, and `mark` says so by giving the
+        // value back unchanged.
+        if (own === undefined) return child;
     }
 
-    return mutable(child) ? mark(child, marker.bumps.slice(), marker.reads.slice()) : child;
+    // One line up, not a copy of everyone above. A child under two parents keeps
+    // both, and a mutation reaches the readers of either.
+    const marker = parent.$notify;
+
+    if (own.parents === undefined) own.parents = [marker];
+    else if (!own.parents.includes(marker)) own.parents.push(marker);
+
+    return child;
 }
 
 // Subscribe the caller to the value it is being handed.

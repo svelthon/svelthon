@@ -1029,6 +1029,12 @@ const jsBound = (name) => `__js_${name}`;
 const destroyer = (name) => `__root_${name}`;
 // Second signal per name: a mutation bumps it without touching the value,
 // so nothing is copied and the object keeps its identity.
+// The instance's list of subscriptions, and whether it has any to make. A
+// component that holds no state and no bindable never calls `track`, so it gets
+// neither the list nor the teardown that empties it.
+const SUBS = '__subs';
+const SUBSCRIBING = (c) => c.state.length > 0 || c.bindables.length > 0;
+
 const rev = (name) => `__rev_${name}`;
 const bump = (name) => `__bump_${name}`;
 const read = (name) => `__read_${name}`;
@@ -1047,7 +1053,7 @@ function preamble(c) {
         // expressions were JavaScript and an author wrote `py.str(items)` in the
         // markup, short on purpose. Now that only generated code touches it,
         // short is exactly wrong, and `py` is a name an author may want.
-        `import { bind, __pybridge, track, follow, pyError, schedule, inTemplate, pyEvent, plainData, pyArg, pyData, pyBoundary, pyNumbers, jsCall, ticking, group, writeAttr, writeItem, pyModule, NONE, helpers as __helpers${c.store ? ', registerModule' : ''} } from 'svelthon/runtime';`,
+        `import { bind, __pybridge, track, follow, pyError, schedule, inTemplate, pyEvent, plainData, pyArg, pyData, pyBoundary, pyNumbers, jsCall, ticking, group, writeAttr, writeItem, pyModule, NONE, helpers as __helpers${c.store ? ', registerModule' : `${SUBSCRIBING(c) ? ', unsubscribe' : ''}`} } from 'svelthon/runtime';`,
         ...c.jsImports.map(jsImportLine),
         `import { ${['getContext', 'setContext']
             .concat(c.lifecycle('on_mount') || c.lifecycle('on_destroy') ? ['untrack'] : [])
@@ -1104,6 +1110,14 @@ function declarations(c) {
             `let ${fn(d.name)} = $state.raw(undefined);`,
             `const ${d.name} = $derived.by(() => ${fn(d.name)}());`
         ]),
+        // Which containers this instance signed onto, so it can sign off when
+        // it goes. A container reached through a store outlives the components
+        // that read it, and `track` only ever added.
+        //
+        // A store has no list, and that is the rule rather than an omission: its
+        // own subscription is the module's, it is made once and it lasts as long
+        // as the page does.
+        ...(!c.store && SUBSCRIBING(c) ? [`const ${SUBS} = [];`] : []),
         ``
     ];
 }
@@ -1163,14 +1177,14 @@ function authorBindings(c) {
         ...c.bindables.map(
             (b) =>
                 `bind(__proto, '${b}', () => (${rev(b)}, follow(${b} ?? NONE)),` +
-                ` (v) => { if (!__initialising || ${b} === undefined) ${b} = track(v, ${bump(b)}, ${read(b)}); });`
+                ` (v) => { if (!__initialising || ${b} === undefined) ${b} = track(v, ${bump(b)}, ${read(b)}${c.store ? '' : `, ${SUBS}`}); });`
         ),
         // Reading the revision alongside the value is what registers the
         // dependency: an in-place mutation then invalidates every reader,
         // without the value ever changing identity.
         ...c.state.map(
             (n) =>
-                `bind(__proto, '${n}', () => (${rev(n)}, ${n}), (v) => { ${n} = track(v, ${bump(n)}, ${read(n)}); });`
+                `bind(__proto, '${n}', () => (${rev(n)}, ${n}), (v) => { ${n} = track(v, ${bump(n)}, ${read(n)}${c.store ? '' : `, ${SUBS}`}); });`
         ),
         // A store's function is read from another module, where the namespace is
         // an ordinary JavaScript object and Brython converts what it is given.
@@ -1404,6 +1418,12 @@ function effectBlocks(c) {
             `    if (typeof teardown === 'function') return () => { teardown(); };`,
             e.root ? `}); });` : `});`
         ]),
+        // The other end of `track`. Its own effect rather than a line in the one
+        // below, because that one exists only when the author wrote a lifecycle
+        // hook, and every instance that holds state has signed onto something.
+        ...(!c.store && SUBSCRIBING(c)
+            ? [``, `$effect(() => () => unsubscribe(${SUBS}));`]
+            : []),
         ...(c.lifecycle('on_mount') || c.lifecycle('on_destroy')
             ? [
                   ``,
