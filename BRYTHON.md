@@ -39,6 +39,7 @@ is absent, rather than shipping a component with no reactivity.
 | `$B.brython(options)` | boot |
 | `$B.ast.*` | AST classes, compared with `instanceof` |
 | `$B.tokenizer(src, filename, 'file')` | iterable of tokens, used to highlight Python with Python's own tokenizer |
+| `$B.Parser` | not called: its presence is how `compile.cjs` knows the parsing chain has loaded on top of the runtime. A page that never compiles never defines it |
 
 `py2js` derives the namespace identifier from **`filename` alone**: `module` and
 `locals_id` are ignored by `js_from_root`. See the first bug below.
@@ -53,6 +54,7 @@ Token type codes read off the tokenizer: `NAME 1`, `NUMBER 2`, `STRING 3`,
 |---|---|
 | `$B.namespace(name)` | intercepted; the whole design hangs here |
 | `ns.$proxy = true` | makes `resolve_in_namespace` read the property normally instead of demanding an *own* property, the only place in Brython that consults this flag, and what lets accessors live on the prototype |
+| `$B.resolve_global(name, ns)` | not called, and the reason `$proxy` exists: it is the function that would demand an own property. It is here because it is the member whose disappearance would stop the whole namespace trick, and the one nobody would think to grep for |
 | `$B.delete_for_reassign(name, ns)` | emitted before rebinding a global; its `delete` is why accessors must be inherited, never own |
 | `$B.set_lineno(frame, N)` | emitted throughout the generated code; enough to build a line-level source map |
 | `$B.frame_obj` | read by `$B.$import`, null until a module body runs |
@@ -66,6 +68,9 @@ Token type codes read off the tokenizer: `NAME 1`, `NUMBER 2`, `STRING 3`,
 | `$B.get_class(obj)` | class of a Python object. **It probes the object's symbols**, so it must never be called on a foreign proxy that records reads |
 | `$B.builtins` | `str.$factory`, `bool.$factory`, `dict.$factory`, `set.$factory`, `list.$factory`, `repr`, `None`, `type` |
 | `$B.coroutine` | compared against `get_class` to spot a coroutine without calling `aio.iscoroutine` |
+| `$B.$call(callable, ...args)` | calls anything Python calls, a class object included, which is how a class handed to JavaScript is constructed |
+| `$B.jsobj2pyobj(value)` | every value coming back from a JavaScript call, so the most-used inbound function there is and the one whose shape changing upstream would be felt first |
+
 
 ### Dispatch points, for reactivity
 
