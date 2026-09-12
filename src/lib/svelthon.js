@@ -78,7 +78,18 @@ export const nameFor = (filename) => {
     return name;
 };
 
-const HAS_PYTHON_SCRIPT = /<script[^>]*\blang=["']python["']/;
+// The tag that decides a file is Python, read the way Svelte's own parser reads
+// an attribute: whitespace around `=` is legal HTML, and `lang = "python"`
+// compiled its script as Python while leaving the markup as JavaScript, so a
+// component split in half between two languages.
+const HAS_PYTHON_SCRIPT = /<script[^>]*\blang\s*=\s*["']python["']/;
+
+// And read on the markup with its comments taken out. A `<script lang="python">`
+// quoted inside `<!-- -->` is documentation, not a declaration, and it turned a
+// JavaScript component's expressions into Python. Replaced by blanks rather than
+// removed, so every offset below still counts on the same string.
+const withoutComments = (content) =>
+    content.replace(/<!--[\s\S]*?-->/g, (comment) => comment.replace(/[^\n]/g, ' '));
 // Python line numbers count from the start of the <script> body; the file counts
 // from its first line. The gap is the number of lines before the opening tag.
 const lineOffsets = new Map();
@@ -122,13 +133,15 @@ export function python(options = {}) {
             // component and stays one, exactly as a .js file is untouched by
             // TypeScript. Python semantics are opt-in, per file, by declaring
             // Python, never injected behind an author's back.
-            if (!HAS_PYTHON_SCRIPT.test(content)) return;
+            const declaring = withoutComments(content);
+
+            if (!HAS_PYTHON_SCRIPT.test(declaring)) return;
 
             jsNames.set(filename, moduleImports(content));
             pyDirectives.set(filename, directiveModules(content));
             lineOffsets.set(
                 filename,
-                content.slice(0, content.search(HAS_PYTHON_SCRIPT)).split('\n').length - 1
+                declaring.slice(0, declaring.search(HAS_PYTHON_SCRIPT)).split('\n').length - 1
             );
 
             const collect = fileCollector(filename);

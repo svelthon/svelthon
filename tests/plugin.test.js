@@ -35,6 +35,49 @@ describe('the preprocessor decides by the script tag', () => {
         expect(out.code).toContain('<script lang="python">');
     });
 
+    // Svelte's parser accepts whitespace around `=`, and the script hook reads
+    // the attribute Svelte parsed. Read more narrowly here, the script compiled
+    // as Python while the markup stayed JavaScript: one component, two
+    // languages, and nothing said so.
+    const rewritten = (tag, name) =>
+        pre.markup({
+            content: `${tag}\ncount = 0\n</script>\n<p>{count}</p>`,
+            filename: name
+        });
+
+    test.for([
+        ['<script lang="python">'],
+        ['<script lang = "python">'],
+        ["<script lang='python'>"],
+        ['<script lang =\t"python">']
+    ])('%s declares Python', ([tag], { task }) => {
+        expect(rewritten(tag, `${task.id}.svelte`).code).toContain('__expr_0()');
+    });
+
+    // And a tag quoted inside a comment is documentation. It used to turn a
+    // JavaScript component's expressions into Python, which refuses most of
+    // them.
+    test('a tag inside a comment declares nothing', () => {
+        expect(
+            pre.markup({
+                content: '<!-- <script lang="python"> -->\n<script>let a = 1</script>\n<p>{a ? 1 : 0}</p>',
+                filename: 'C1.svelte'
+            })
+        ).toBeUndefined();
+    });
+
+    // Comments are blanked rather than cut, so the line a refusal names is still
+    // counted on the file the author is looking at.
+    test('and a comment before a real tag keeps the line count', () => {
+        const out = pre.markup({
+            content: '<!-- doc\n<script lang="python">\n-->\n<script lang="python">\ncount = 0\n</script>\n<p>{count}</p>',
+            filename: 'C2.svelte'
+        });
+
+        expect(out.code).toContain('__expr_0()');
+        expect(out.code.split('\n')[0]).toBe('<!-- doc');
+    });
+
     test('a script that is not Python is not compiled', () => {
         expect(pre.script({ content: 'let a = 1', attributes: {}, filename: 'C.svelte' }))
             .toBeUndefined();
