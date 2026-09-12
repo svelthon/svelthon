@@ -13,7 +13,10 @@ EXPECTED='preloaded=OK True | doc=OK DOMNode | create=OK INPUT | tagName=OK INPU
 # profile's lock, and the second renders an incomplete page — at random.
 PROFILES=$(mktemp -d)
 cleanup() {
+    # Two servers use this port in turn, `vite` then `vite preview`, and the
+    # second does not match the first's pattern.
     pkill -f "vite --port $PORT" 2>/dev/null
+    pkill -f "vite preview --port $PORT" 2>/dev/null
     rm -rf "$PROFILES"
 }
 trap cleanup EXIT
@@ -97,5 +100,46 @@ for one in "${expected[@]}"; do
         status=1
     fi
 done
+
+# The same page, from a production build. Everything above runs against the dev
+# server, which serves modules one by one; a build bundles them, minifies them
+# and resolves them once, and none of that is exercised anywhere else.
+#
+# What it does not hold: the order a bundler gives a CommonJS module. That one
+# appears in a SvelteKit build, and this is a plain Vite application, so moving
+# the engine's import back to a neighbouring file leaves every marker below
+# green. `tests/boot-order.test.js` holds it as text for want of a Kit app here.
+pkill -f "vite --port $PORT" 2>/dev/null
+for _ in $(seq 40); do
+    ss -ltn 2>/dev/null | grep -q ":$PORT " || break
+    sleep 0.25
+done
+
+if npx vite build >/dev/null 2>&1; then
+    (npx vite preview --port "$PORT" --strictPort >/dev/null 2>&1 &)
+
+    for _ in $(seq 40); do
+        sleep 0.5
+        curl -sf -o /dev/null "http://localhost:$PORT/" && break
+    done
+
+    BUILT=$(chromium --headless --no-sandbox --disable-gpu --user-data-dir="$PROFILES/built" \
+        --virtual-time-budget=40000 --dump-dom "http://localhost:$PORT/" 2>/dev/null)
+
+    built_missing=()
+    for one in "${expected[@]}"; do
+        grep -qF -- "$one" <<< "$BUILT" || built_missing+=("$one")
+    done
+
+    if [ ${#built_missing[@]} -eq 0 ]; then
+        echo "✓ production build — ${#expected[@]} markers, $(printf %s "$BUILT" | wc -c) bytes of DOM"
+    else
+        echo "✗ production build — not found: ${built_missing[*]}"
+        status=1
+    fi
+else
+    echo "✗ production build — vite build failed"
+    status=1
+fi
 
 exit $status
