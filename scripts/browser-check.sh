@@ -44,9 +44,10 @@ curl -sf -o /dev/null "http://localhost:$PORT/"
 # graph's compilation, and that is what has to be waited for.
 curl -sf -o /dev/null "http://localhost:$PORT/src/probe.js"
 curl -sf -o /dev/null "http://localhost:$PORT/src/main.js"
-# The big one: 4.6 MB Vite has to transform before serving. Until it is cached,
-# a render can overrun the browser's budget.
-curl -sf -o /dev/null "http://localhost:$PORT/vendor/brython.js"
+# The big one: the engine, which Vite transforms before serving and which no
+# cache holds on a first run. Until it is warm, a render can overrun the
+# browser's budget. `boot.js` names this file, so a page asks for this one.
+curl -sf -o /dev/null "http://localhost:$PORT/vendor/brython_runtime.js"
 curl -sf -o /dev/null "http://localhost:$PORT/src/App.svelte"
 
 REPORT=$(chromium --headless --no-sandbox --disable-gpu --user-data-dir="$PROFILES/probe" \

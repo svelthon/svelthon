@@ -39,4 +39,19 @@ describe('the engine is imported where it is started', () => {
     test('runtime.js does not import it', () => {
         expect(read('runtime.js')).not.toContain("vendor/brython.js");
     });
+
+    // `browser-check.sh` warms the engine before it measures, because a cold
+    // transform overruns the browser's budget on a modest machine. It names the
+    // file in a string, so it drifts the day `boot.js` names another: the warm-up
+    // then heats a file no page asks for and leaves the real one cold, and the
+    // check fails intermittently rather than clearly.
+    test('the browser check warms the file boot.js names', () => {
+        const engine = read('boot.js').match(/vendor\/(\w+\.js)/)[1];
+        const script = readFileSync(
+            fileURLToPath(new URL('../scripts/browser-check.sh', import.meta.url)),
+            'utf8'
+        );
+
+        expect(script).toContain(`/vendor/${engine}"`);
+    });
 });
