@@ -17,7 +17,17 @@ const read = (name) =>
 
 describe('the engine is imported where it is started', () => {
     test('boot.js imports it', () => {
-        expect(read('boot.js')).toMatch(/^import '\.\.\/\.\.\/vendor\/brython\.js';$/m);
+        expect(read('boot.js')).toMatch(/^import '\.\.\/\.\.\/vendor\/brython_runtime\.js';$/m);
+    });
+
+    // And the parsing chain is declared by the file that parses, so a route
+    // that does not compile never pulls it into its chunk.
+    test('compile.cjs takes the chain, in that order', () => {
+        const source = read('compile.cjs');
+        expect(source).toContain("require('../../vendor/brython_runtime.js');");
+        expect(source.indexOf('brython_runtime.js')).toBeLessThan(
+            source.indexOf('brython_compiler.js')
+        );
     });
 
     test('and it is the file that calls brython()', () => {

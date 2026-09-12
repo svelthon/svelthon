@@ -20,7 +20,15 @@ globalThis.$B ??= globalThis.__BRYTHON__; // the codegen's eval() resolves $B gl
 // dies on `window is not defined`.
 globalThis.$B.$svelthonGlobalsBefore ??= new Set(Object.getOwnPropertyNames(globalThis));
 
-require('../../vendor/brython.js');
+// The engine, then the parsing chain: this file is the one that compiles, so it
+// is the one that declares it needs a compiler. Everything else loads `boot.js`,
+// which takes the engine alone, and a bundler puts the chain in the chunk of
+// whatever imports *this*. A route that does not compile never receives it.
+//
+// Order is the contract: the chain registers `$B.Parser` onto an engine that is
+// already there.
+require('../../vendor/brython_runtime.js');
+require('../../vendor/brython_compiler.js');
 
 const $B = globalThis.__BRYTHON__;
 $B.brython({ ipy_id: [] });

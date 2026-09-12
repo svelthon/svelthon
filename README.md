@@ -45,7 +45,7 @@ npm run dev
 ```
 
 ```sh
-npm test             # 978 tests: semantics, props, reactivity, Svelte surface
+npm test             # 980 tests: semantics, props, reactivity, Svelte surface
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
 npm run test:all     # the three above, in order, stopping at the first failure
@@ -1306,7 +1306,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 978 tests, none expected to fail:
+Validated by `npm test`, 980 tests, none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;
 - props: Python defaults, parent precedence, readability during init, parent
