@@ -1326,7 +1326,7 @@ function instanceExports(c) {
         ...(c.store
             ? [
                   ``,
-                  `registerModule(${JSON.stringify(pythonModuleName(c.source))}, ${NS});`,
+                  `registerModule(${JSON.stringify(pythonModuleName(c.source))}, ${NS}, ${JSON.stringify(c.source)});`,
                   ``,
                   // Module-scope signals live once for the whole app. Exported
                   // through getters because Svelte forbids exporting a reassigned
@@ -1478,7 +1478,7 @@ function plainInit(c) {
         `const ${NS} = Object.create(__proto);`,
         `${NS}.$proxy = true;`,
         ``,
-        `registerModule(${JSON.stringify(pythonModuleName(c.source))}, ${NS});`,
+        `registerModule(${JSON.stringify(pythonModuleName(c.source))}, ${NS}, ${JSON.stringify(c.source)});`,
         `init(${NS});`,
         ``
     ];

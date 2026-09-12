@@ -43,7 +43,7 @@ npm run dev
 ```
 
 ```sh
-npm test             # 982 tests : sémantique, props, réactivité, surface Svelte
+npm test             # 999 tests : sémantique, props, réactivité, surface Svelte
 npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
 npm run test:all     # les trois ci-dessus, dans l'ordre, arrêt au premier échec
@@ -1310,7 +1310,7 @@ Le runtime entier, gzippé, fait **255 Ko**.
 
 ## État
 
-Validé par `npm test`, 982 tests, aucun échec attendu :
+Validé par `npm test`, 999 tests, aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
 - props : défaut Python, priorité du parent, lisibilité pendant l'init,
