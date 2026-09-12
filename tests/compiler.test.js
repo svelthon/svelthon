@@ -6,6 +6,7 @@ import { test, expect, describe } from 'vitest';
 import { createRequire } from 'node:module';
 
 import { overMarkup, pythonExpressions, collector } from '../src/lib/markup.js';
+import { compile as compileSvelte } from 'svelte/compiler';
 
 const require = createRequire(import.meta.url);
 const { compile } = require('../src/lib/compile.cjs');
@@ -172,31 +173,55 @@ describe('a template is refused or it compiles', () => {
     const CONSTRUCTS = [
         '{**attrs}', '{...attrs}', '{@attach fn}', '{@html x}', '{@render row(1)}',
         '{@debug x}', '{name}', '{x = 1}', '{y => 1}', '{...}', '{[..., 1]}',
-        '{... if flag else 1}', 'bind:value={name}', 'onclick={go}',
-        'class:on={flag}', 'use:action={opt}', 'href={url}'
+        '{... if flag else 1}', 'bind:value={name}', 'bind:group={name}', 'bind:group',
+        'onclick={go}', 'class:on={flag}', 'use:action={opt}', 'href={url}',
+        'let:item={name}', 'let:item'
     ];
 
-    test.for(CONSTRUCTS.flatMap((one) => [[one, 'inside a tag'], [one, 'outside one']]))(
-        '%s, %s',
-        ([construct, where]) => {
-            const body = where === 'inside a tag'
-                ? `<div ${construct}>a</div>`
-                : `<div>${construct}</div>`;
-            const defs = [];
+    // The ones that are a tag rather than something written in one.
+    const WHOLE = [
+        '<svelte:options runes={false} />',
+        '<svelte:options customElement={{ tag: "my-widget" }} />',
+        '<svelte:options namespace="svg" />'
+    ];
 
-            try {
-                overMarkup(body, (markup, at) =>
-                    pythonExpressions(markup, collector(defs), undefined, at));
-            } catch (error) {
-                expect(error.message).toMatch(/^svelthon — /);
-                return;
-            }
+    const rows = [
+        ...CONSTRUCTS.flatMap((one) => [
+            [`<div ${one}>a</div>`, `${one}, inside a tag`],
+            [`<div>${one}</div>`, `${one}, outside one`]
+        ]),
+        ...WHOLE.map((one) => [one, one])
+    ];
 
-            expect(() =>
-                compile('attrs = {}\nname = 1\nflag = True\nurl = ""\n', 'Probe', 'Probe.svelte', {
-                    defs
-                })
-            ).not.toThrow();
+    test.for(rows)('%s', ([body]) => {
+        const defs = [];
+        let emitted;
+
+        try {
+            emitted = overMarkup(body, (markup, at) =>
+                pythonExpressions(markup, collector(defs), undefined, at));
+        } catch (error) {
+            expect(error.message).toMatch(/^svelthon — /);
+            return;
         }
-    );
+
+        expect(() =>
+            compile('attrs = {}\nname = 1\nflag = True\nurl = ""\n', 'Probe', 'Probe.svelte', {
+                defs
+            })
+        ).not.toThrow();
+
+        // The second half of the property, and the one that found three of the
+        // four defects above: what we hand Svelte has to be something Svelte
+        // takes. A template Svelte itself refuses is not ours to answer for, so
+        // it is the input being accepted that puts the output under the rule.
+        let accepted = true;
+        try {
+            compileSvelte(body, { generate: 'client' });
+        } catch {
+            accepted = false;
+        }
+
+        if (accepted) expect(() => compileSvelte(emitted, { generate: 'client' })).not.toThrow();
+    });
 });

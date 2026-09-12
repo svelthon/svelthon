@@ -45,10 +45,13 @@ const script = (source) => {
     return `${emitted}\n${module}`;
 };
 
-// Brython names the functions it generates for a lambda with a counter that
-// runs for the life of the process, so compiling the same source twice differs
-// there and nowhere else.
-const steady = (text) => text.replace(/\d{6,}/g, 'N');
+// Brython gives the function it generates for a lambda a name of its own, and
+// that name is not stable from one compilation to the next: it carries a counter
+// that runs for the life of the process. It is the one part of the output that
+// says nothing about the name the author wrote, so it is flattened on both
+// sides. Measured the hard way, by a row that passed alone and failed beside
+// another file.
+const steady = (text) => text.replace(/lambda_[A-Za-z0-9_]+/g, 'lambda_N');
 
 describe('an accented name is a name', () => {
     const same = (write) =>
@@ -84,6 +87,13 @@ describe('an accented name is a name', () => {
 
     test('a block name is a block name', () => {
         same((n) => markup(`{#each rows as ${n}}{${n}}{/each}`));
+    });
+
+    // Found while reading §3.12, and it belongs here: the shorthand of a binding
+    // reads a name too. This one failed loudly, Svelte answering `Can only bind
+    // to state or props`, because the binding was left for it to resolve.
+    test('the shorthand of a binding expands', () => {
+        same((n) => markup(`<Child bind:${n} />`));
     });
 
     // The two refusals that read a name have to recognise the same one.

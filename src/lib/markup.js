@@ -322,7 +322,7 @@ const GROUP_DIRECTIVE = /^bind:group\b/;
 //
 // So the shorthand is expanded before anything else looks at the tag, and the
 // long form is the only one the rest of this pass has to know about.
-const SHORTHAND = /\bbind:([A-Za-z_$][\w$]*)$/;
+const SHORTHAND = /\b(bind:([\p{L}_$][\p{L}\p{M}\p{N}_$]*))$/u;
 
 // The action the generated script defines for it. Named here and emitted there,
 // like `__event`.
@@ -347,6 +347,13 @@ const EVENT_WRAPPER = '__event';
 // `class:many={…}` is read for truthiness, so it needs Python's: an empty list
 // is false here and true in JavaScript, exactly as in `{#if}`.
 const CLASS_DIRECTIVE = /^class:/;
+
+// Svelte 4 slot syntax, which `{#snippet}` replaced. Neither spelling is an
+// expression: `let:item={row}` takes a binding pattern the way `bind:` does, and
+// `let:item` on its own declares a name for the slot's body. Compiled as a value
+// it made Svelte die inside itself on `Cannot read properties of undefined`,
+// which is the outcome this pass refuses things to prevent.
+const LET_DIRECTIVE = /^let:/;
 
 // Names a block introduces, which are not module globals and must therefore be
 // passed in as arguments.
@@ -757,6 +764,17 @@ function walk(markup, collect, onPython, seed, record, where) {
         }
     };
 
+    const refuseLet = (name) => {
+        throw refuse(
+            new SyntaxError(
+                `svelthon — \`${name}\` is Svelte 4 slot syntax${said()}, which ` +
+                    `\`{#snippet}\` replaced. It takes a binding pattern rather than a ` +
+                    `value, so there is nothing here to read as Python: pass a snippet ` +
+                    `to the component instead.`
+            )
+        );
+    };
+
     while (index < markup.length) {
         const char = markup[index];
 
@@ -786,6 +804,19 @@ function walk(markup, collect, onPython, seed, record, where) {
             } else if (char === '{') {
                 const end = closingBrace(markup, index);
                 if (end !== -1) {
+                    // `<svelte:options>` is read by Svelte's compiler rather
+                    // than rendered, and its values have to be literals in
+                    // Svelte's own grammar. They are configuration, not
+                    // expressions, so they cross untouched. The quoted spelling
+                    // always did, having no braces to catch; `customElement={{…}}`,
+                    // which is how shadow mode and props are configured, came
+                    // out as a call and Svelte asked for a string literal.
+                    if (tag !== null && tag.name === 'svelte:options') {
+                        out += markup.slice(index, end + 1);
+                        index = end + 1;
+                        continue;
+                    }
+
                     const attribute = out.match(/([^\s=]+)=$/);
                     const inner = markup.slice(index + 1, end);
                     const trimmed = inner.trim();
@@ -793,6 +824,8 @@ function walk(markup, collect, onPython, seed, record, where) {
                     region = { start: index + 1, end };
 
                     if (attribute) {
+                        if (LET_DIRECTIVE.test(attribute[1])) refuseLet(attribute[1]);
+
                         // A binding becomes a read/write pair; `bind:group` is
                         // the one Svelte will not take a pair for and keeps its
                         // text. A handler is Python, and what it yields is made
@@ -894,11 +927,28 @@ function walk(markup, collect, onPython, seed, record, where) {
             // closing bracket, so this is where the name is complete and the
             // absence of an `=` is certain.
             if (/[\s/>]/.test(char)) {
+                const bare = (out.match(/([^\s/>="]+)$/) || [])[1];
+
+                if (bare !== undefined && LET_DIRECTIVE.test(bare)) refuseLet(bare);
+
                 const short = out.match(SHORTHAND);
                 if (short) {
-                    out += declaredHere(short[1])
-                        ? `={${short[1].trim()}}`
-                        : `={() => ${call(short[1], '__bound')}, (${BOUND_VALUE}) => ${assign(short[1])}}`;
+                    const name = short[2];
+
+                    // The same test the long form makes, against the same
+                    // pattern. `bind:group` refuses the pair for the reason
+                    // written above `GROUP_DIRECTIVE`, and that rule was wired
+                    // into one of its two spellings: written bare, it emitted
+                    // the pair, and Svelte answered that `bind:group` can only
+                    // bind to an identifier.
+                    if (GROUP_DIRECTIVE.test(short[1])) {
+                        out = out.slice(0, out.length - short[1].length) +
+                            `use:${GROUP_ACTION}={[${call(name, '')}, (${BOUND_VALUE}) => ${assign(name)}]}`;
+                    } else {
+                        out += declaredHere(name)
+                            ? `={${name.trim()}}`
+                            : `={() => ${call(name, '__bound')}, (${BOUND_VALUE}) => ${assign(name)}}`;
+                    }
                 }
             }
 

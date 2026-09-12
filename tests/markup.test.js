@@ -601,6 +601,49 @@ describe('the attribute pass', () => {
         expect(rewrite('<input {value} />').out).toMatch(/value=\{__expr_\d+\(\)\}/);
     });
 
+    // Three attribute kinds that are not expressions. Two of them were compiled
+    // as if they were, and each failure lands in someone else's compiler with a
+    // message about a line the author never wrote.
+    //
+    // `bind:group` is the same shape as the spread and the accented name: a rule
+    // wired into one of two spellings. The long form has refused the pair from
+    // the start, for the reason written above `GROUP_DIRECTIVE`, and the
+    // shorthand went round it.
+    test('bind:group refuses the pair in both spellings', () => {
+        const action = /use:__group=\{\[__expr_\d+\(\), \(__value\) => __expr_set_\d+\(__value\)\]\}/;
+
+        expect(rewrite('<input bind:group={choix}>').out).toMatch(action);
+        expect(rewrite('<input bind:group>').out).toMatch(action);
+    });
+
+    // Svelte reads `<svelte:options>` at compile time and requires literals, so
+    // its values are configuration rather than expressions and stay untouched.
+    // The quoted spelling always worked, having no braces to catch the eye; the
+    // object form of `customElement`, which is how shadow mode and props are
+    // configured, came out as `customElement={__expr_0()}` and Svelte answered
+    // that it must be a string literal.
+    test.for([
+        ['<svelte:options runes={False} />'],
+        ['<svelte:options customElement={{"tag": "x"}} />'],
+        ['<svelte:options namespace="svg" />']
+    ])('%s is left alone', ([body]) => {
+        expect(rewrite(body).out).toBe(body);
+    });
+
+    // Svelte 4 slot syntax, which snippets replaced. Refused rather than passed
+    // through, which is this pass's rule for anything it does not handle, and
+    // here the rule earns itself: `let:item={row}` compiled to a call and Svelte
+    // died inside itself on `Cannot read properties of undefined (reading
+    // 'map')`, while `let:item` on its own declared a name no expression of ours
+    // can see.
+    test.for([['<Card let:item={row}>a</Card>'], ['<Card let:item>a</Card>']])(
+        '%s is refused',
+        ([body]) => {
+            expect(() => rewrite(body)).toThrow(/^svelthon — /);
+            expect(() => rewrite(body)).toThrow(/\{#snippet/);
+        }
+    );
+
     test('bind: gets a getter and a setter', () => {
         const { out, defs } = rewrite('<input bind:value={name} />');
 
