@@ -2,7 +2,37 @@
   "name": "svelthon",
   "version": "1.0.0",
   "description": "Svelte components written in Python, compiled by Brython at build time",
-  "main": "index.js",
+  "author": "Florent Gallaire <gallenza@gmail.com>",
+  "license": "ISC",
+  "keywords": [
+    "svelte",
+    "python",
+    "brython",
+    "vite-plugin",
+    "svelte-preprocessor",
+    "compiler"
+  ],
+  "type": "module",
+  "main": "./src/lib/svelthon.js",
+  "exports": {
+    ".": "./src/lib/svelthon.js",
+    "./runtime": "./src/lib/runtime.js",
+    "./compile": "./src/lib/compile.cjs",
+    "./markup": "./src/lib/markup.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src/lib",
+    "vendor/brython_runtime.js",
+    "vendor/brython_compiler.js",
+    "vendor/package.json"
+  ],
+  "engines": {
+    "node": ">=20.19"
+  },
+  "peerDependencies": {
+    "svelte": "^5.0.0"
+  },
   "scripts": {
     "test": "vitest run",
     "coverage": "vitest run --coverage",
@@ -14,10 +44,6 @@
     "test:all": "npm run test && npm run test:browser && npm run test:hmr",
     "bench": "bash scripts/bench.sh"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "module",
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^7.3.0",
     "@vitest/coverage-v8": "^4.1.11",
