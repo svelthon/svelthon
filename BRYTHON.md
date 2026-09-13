@@ -445,10 +445,27 @@ rather than keeping it is for.
 
 ## Patches applied to the vendored build
 
-`vendor/brython.js` is master's build with **two** edits made in the file
-itself. The wrapper carries a `/* SVELTHON patch, see BRYTHON.md */` comment,
-the only way to find it again in 1.4 MB; the other edit *is* a comment, so
-`@vite-ignore` finds itself.
+`vendor/brython.js` is built from master plus three proposed commits, with
+**two** edits made in the file itself afterwards. The wrapper carries a
+`/* SVELTHON patch, see BRYTHON.md */` comment, the only way to find it again in
+1.4 MB; the other edit *is* a comment, so `@vite-ignore` finds itself.
+
+The commits are Brython's own, proposed upstream and carried here while they
+wait, which is what this project has always done rather than hold a fix back:
+
+| branch | what it changes |
+|---|---|
+| `none-is-undefined` | `None` and JavaScript's `undefined` become one value seen from two sides, in both directions. `javascript.UNDEFINED` becomes `None`, `null` and `javascript.NULL` are untouched, and `js_array.tp_repr` converts its elements the way the iterator already did |
+| `undefined-str-slot` | `UndefinedType` gains the `tp_str` it lacked, so `str()` of a raw JavaScript `undefined` answers instead of raising about a descriptor with no argument |
+| `mark-compiler-chain` | two comments around the parsing chain in the generated `brython.js`, which is what `scripts/vendor-brython.py` cuts on to build `brython_runtime.js` |
+
+The first one reaches Svelthon at `importjs`: a value handed to a JavaScript
+function, or handed back by one, crosses through `pyobj2jsobj` and
+`jsobj2pyobj`. `__pybridge.bound` still does its own `None` to `undefined` at
+the template boundary, measured: removing it turns seven tests red on the paired
+engine, because a template expression does not cross the engine's converter.
+`plainData` still writes `null`, and that is not the same question: it serves
+what SvelteKit *serialises*, and JSON has `null` and no `undefined`.
 
 It used to be ten. Eight went upstream, one branch each, and the re-vendoring of
 2026-09-11 took them back as ordinary Brython:

@@ -12449,7 +12449,7 @@ return res}
 JSGenerator.tp_iter=function(self){return self}
 JSGenerator.tp_iternext=function*(self){for(var item of self.js_gen){yield jsobj2pyobj(item)}}
 var jsobj2pyobj=$B.jsobj2pyobj=function(jsobj,_this){
-if(jsobj===null){return null}else if(jsobj===undefined){return undefined}
+if(jsobj===null){return null}else if(jsobj===undefined){return $B.builtins.None}
 switch(typeof jsobj){case 'boolean':
 return jsobj
 case 'number':
@@ -12511,6 +12511,7 @@ case undefined:
 return undefined
 case null:
 return null}
+if(pyobj===$B.builtins.None){return undefined}
 let _jsobj=pyobj[JSOBJ]
 if(_jsobj !==undefined){return _jsobj}
 var klass=$B.get_class(pyobj)
@@ -14847,7 +14848,7 @@ var file_obj=$B.builtins.open(script_url)
 var content=$B.$getattr(file_obj,'read')()
 eval(content)},Math:self.Math && $B.jsobj2pyobj(self.Math),NULL:null,NullType,Number:self.Number && $B.jsobj2pyobj(self.Number),py2js:function(src,module_name){if(module_name===undefined){module_name='__main__'+$B.UUID()}
 var js=$B.py2js({src,filename:'<string>'},module_name,module_name,$B.builtins_scope).to_js()
-return $B.format_indent(js,0)},pyobj2jsobj:function(obj){return $B.pyobj2jsobj(obj)},RegExp:self.RegExp && $B.jsobj2pyobj(self.RegExp),String:self.String && $B.jsobj2pyobj(self.String),"super":super_class,UNDEFINED:undefined,UndefinedType:$B.UndefinedType}
+return $B.format_indent(js,0)},pyobj2jsobj:function(obj){return $B.pyobj2jsobj(obj)},RegExp:self.RegExp && $B.jsobj2pyobj(self.RegExp),String:self.String && $B.jsobj2pyobj(self.String),"super":super_class,UNDEFINED:$B.builtins.None,UndefinedType:$B.UndefinedType}
 $B.assign_dict(modules.javascript.JSON,{parse:function(){return $B.structuredclone2pyobj(
 JSON.parse.apply(this,arguments))},stringify:function(obj,replacer,space){return JSON.stringify($B.pyobj2structuredclone(obj,false),$B.jsobj2pyobj(replacer),space)}}
 )

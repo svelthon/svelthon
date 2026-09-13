@@ -56,6 +56,29 @@ describe('tojson', () => {
         expect(tojson(__pybridge.list([1]), NONE)).toBe('[1]');
         expect(tojson(__pybridge.list([1]), 'two')).toBe('[1]');
     });
+
+    // A Python int above 2^53 is a JavaScript BigInt, which `JSON.stringify`
+    // refuses outright: `Do not know how to serialize a BigInt`, out of a
+    // template filter, where `json.dumps` writes the digits. Svelthon renders
+    // this very number on its front page, so it was refused in one place only.
+    //
+    // The expected text is `json.dumps`'s, character for character.
+    test('a big integer is written as digits, the way json.dumps writes it', () => {
+        const big = 2n ** 70n;
+
+        expect(tojson(big)).toBe('1180591620717411303424');
+        expect(tojson(__pybridge.list([big]))).toBe('[1180591620717411303424]');
+    });
+
+    test('and beside a None, which is the same crossing twice', () => {
+        const $B = globalThis.__BRYTHON__;
+        const table = $B.builtins.dict.$factory();
+
+        $B.$setitem(table, 'none', NONE);
+        $B.$setitem(table, 'big', 2n ** 70n);
+
+        expect(tojson(table)).toBe('{"none":null,"big":1180591620717411303424}');
+    });
 });
 
 describe('from_json', () => {
@@ -67,6 +90,16 @@ describe('from_json', () => {
 
     test('bad JSON raises rather than returning nothing', () => {
         expect(() => from_json('{')).toThrow();
+    });
+
+    // The way back, and the same crossing: JSON's `null` is Python's `None` at
+    // every depth. At the top `pyData` said so already; inside a container
+    // Brython's `to_dict` left a JavaScript null, so `is None` was false and
+    // `repr` printed `<Javascript null>`.
+    test('null is None, at the top and inside', () => {
+        expect(from_json('null')).toBe(NONE);
+        expect(__pybridge.str(from_json('{"a": null}'))).toBe("{'a': None}");
+        expect(__pybridge.str(from_json('[null, [null]]'))).toBe('[None, [None]]');
     });
 });
 
@@ -141,6 +174,14 @@ describe('date', () => {
     // would have read "date(): undefined is not a date" only by accident.
     test('and so is nothing at all', () => {
         expect(() => date(undefined)).toThrow(/date\(\): undefined is not a date/);
+    });
+
+    // A Python int above 2^53 is a BigInt, and `new Date` refuses one before the
+    // Invalid Date guard can run: the author read `Cannot convert a BigInt value
+    // to a number`, out of a template filter, on a line they never wrote.
+    test('a big integer is refused by our sentence, not by a JavaScript accident', () => {
+        expect(() => date(2n ** 70n)).toThrow(/date\(\): 1180591620717411303424 is not a date/);
+        expect(() => fromnow(2n ** 70n)).toThrow(/fromnow\(\): 1180591620717411303424 is not/);
     });
 
     // Without a locale, `Intl` uses the platform's, which is the right default
