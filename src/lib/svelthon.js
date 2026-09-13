@@ -90,26 +90,39 @@ const HAS_PYTHON_SCRIPT = /<script[^>]*\blang\s*=\s*["']python["']/;
 // removed, so every offset below still counts on the same string.
 const withoutComments = (content) =>
     content.replace(/<!--[\s\S]*?-->/g, (comment) => comment.replace(/[^\n]/g, ' '));
-// Python line numbers count from the start of the <script> body; the file counts
-// from its first line. The gap is the number of lines before the opening tag.
-const lineOffsets = new Map();
+// What the `markup` hook works out about a file and the `script` hook then needs,
+// one entry per file:
+//
+// - `lineOffset`: Python line numbers count from the start of the <script> body
+//   and the file counts from its first line. The gap is the number of lines
+//   before the opening tag.
+// - `defs`: the hidden functions the markup needs, appended to its Python.
+// - `jsNames`: what the file imports from JavaScript.
+// - `pyDirectives`: the Python modules it names in a directive, which is the one
+//   place a module needs a JavaScript binding of its own.
+//
+// Held inside `python()` and not at module scope, which is where they were. Both
+// hooks live on the object it returns, so they have no reason to be shared by
+// every preprocessor a process constructs: two of them, a playground beside a
+// SvelteKit app, wrote into the same four maps keyed by filename and would have
+// overwritten each other the day two filenames matched.
+//
+// `generated` and `claimed` above are the opposite case and stay global: the
+// preprocessor and the plugin are not always the same module instance.
+const perFile = () => {
+    const files = new Map();
 
-// The hidden functions the markup of each file needs, appended to its Python.
-const templateFunctions = new Map();
+    return (filename) => {
+        let one = files.get(filename);
 
-const jsNames = new Map();
+        if (one === undefined) {
+            one = { lineOffset: 0, defs: [], jsNames: [], pyDirectives: [] };
+            files.set(filename, one);
+        }
 
-// The Python modules each file names in a directive, which is the one place a
-// module needs a JavaScript binding of its own.
-const pyDirectives = new Map();
-
-// One collector per file, keeping the definitions where the script hook will
-// find them. The collector itself is in markup.js, which the browser can load.
-function fileCollector(filename) {
-    const defs = [];
-    templateFunctions.set(filename, defs);
-    return collector(defs);
-}
+        return one;
+    };
+};
 
 // The Svelte preprocessor: runs before Svelte parses the component, so the
 // compiler only ever sees ordinary JavaScript with runes.
@@ -119,6 +132,7 @@ function fileCollector(filename) {
 // would appear to work purely by load order.
 export function python(options = {}) {
     const searchPath = options.path || [];
+    const about = perFile();
 
     // Shared with the plugin, which compiles the `.py` files themselves and has
     // to resolve their imports the same way. The two halves may not be the same
@@ -137,14 +151,16 @@ export function python(options = {}) {
 
             if (!HAS_PYTHON_SCRIPT.test(declaring)) return;
 
-            jsNames.set(filename, moduleImports(content));
-            pyDirectives.set(filename, directiveModules(content));
-            lineOffsets.set(
-                filename,
-                declaring.slice(0, declaring.search(HAS_PYTHON_SCRIPT)).split('\n').length - 1
-            );
+            const file = about(filename);
 
-            const collect = fileCollector(filename);
+            file.jsNames = moduleImports(content);
+            file.pyDirectives = directiveModules(content);
+            file.lineOffset =
+                declaring.slice(0, declaring.search(HAS_PYTHON_SCRIPT)).split('\n').length - 1;
+            file.defs = [];
+
+            // The collector itself is in markup.js, which the browser can load.
+            const collect = collector(file.defs);
 
             return {
                 code: overMarkup(content, (markup, offset) =>
@@ -183,10 +199,7 @@ export function python(options = {}) {
                 name,
                 relative(process.cwd(), filename || 'Component'),
                 {
-                    defs: templateFunctions.get(filename) || [],
-                    jsNames: jsNames.get(filename) ?? [],
-                    pyDirectives: pyDirectives.get(filename) ?? [],
-                    lineOffset: lineOffsets.get(filename) ?? 0,
+                    ...about(filename),
                     // The whole file, so a debugger opens the .svelte itself.
                     sourceContent: filename ? readFileSync(filename, 'utf8') : content
                 }

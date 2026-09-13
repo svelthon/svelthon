@@ -984,6 +984,32 @@ export function pyNumbers(value) {
     return out;
 }
 
+// The crossings, all of them, in one place.
+//
+// Seven functions below carry a value between Python and JavaScript, and each
+// applies some part of the same five treatments. Every choice is argued beside
+// the function it belongs to, and that is the right place for a *reason*; it is
+// the wrong place for a *comparison*, because the choices are not independent.
+// Whether a `load()` converts its result and a DOM handler does not is one
+// decision taken seven times, and nobody could see it without this table.
+//
+//                | arity | args in  | coroutine | result out | memoised |
+//   pyCall       |  yes  | pyArg    | awaited   | plainData  |          |
+//   pyHandler    |  yes  | pyCall, with the arity read off the signature  |
+//   pyEvent      |  yes  | pyArg    | fired     |            |          |
+//   pyBoundary   |  (a)  | restored |           |            |   yes    |
+//   pyModule     |  yes  |          |           | pyNumbers  |   yes    |
+//   pyExport     |       |          |   (b)     | plainData  |   yes    |
+//   jsCall       |       | outbound |           | inbound    |          |
+//
+// (a) `pyBoundary` does not trim. It copies `$function_infos` onto its wrapper
+//     so that whoever calls it later still can: losing them would leave every
+//     caller downstream handing a Python signature more arguments than it takes.
+// (b) `pyExport` hands a coroutine to `plainData`, which schedules it and
+//     converts what it resolves to. A handler *fires* one and an exported
+//     function *awaits* one, and that is the difference between `schedule` and
+//     `scheduleAsync`: nobody is there to catch what a handler returns.
+//
 // One Python function, made callable from JavaScript: arguments converted on the
 // way in, coroutines awaited, containers converted on the way out.
 //
