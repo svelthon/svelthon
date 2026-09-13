@@ -130,6 +130,23 @@ describe('the vendored Brython carries its repairs', () => {
         expect(typeof $B.$getitem($B.$getattr(JSON_, 'parse')('{"n": 1}'), 'n')).toBe('number');
     });
 
+    // Every Javascript number crossing to Python passes here, and a whole one
+    // above 2^53 was built from `jsobj.toString()`: the shortest decimal that
+    // reads back as the double, which is another integer, and exponential
+    // notation from 1e21 up, which `BigInt()` refuses outright. `from_json`
+    // reaches this on any large integer in a JSON document.
+    test('a whole Javascript number above 2^53 crosses as the int it is', () => {
+        expect($B.jsobj2pyobj(2 ** 60)).toBe(1152921504606846976n);
+        expect($B.jsobj2pyobj(1e21)).toBe(10n ** 21n);
+        expect($B.jsobj2pyobj(2 ** 70)).toBe(2n ** 70n);
+        expect($B.jsobj2pyobj(-(2 ** 70))).toBe(-(2n ** 70n));
+
+        // Below the boundary nothing becomes a BigInt, and a fraction is still
+        // a Python float rather than an int.
+        expect($B.jsobj2pyobj(1e15)).toBe(1e15);
+        expect($B.class_name($B.jsobj2pyobj(0.5))).toBe('float');
+    });
+
     // Under Node the compiler loads the file with `require()` and a
     // server-rendered component imports it again, which are two module
     // instances; the wrapper skips the body on the second. Local, and it would
