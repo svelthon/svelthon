@@ -445,7 +445,7 @@ rather than keeping it is for.
 
 ## Patches applied to the vendored build
 
-`vendor/brython.js` is built from master plus three proposed commits, with
+`vendor/brython.js` is built from master plus four proposed commits, with
 **two** edits made in the file itself afterwards. The wrapper carries a
 `/* SVELTHON patch, see BRYTHON.md */` comment, the only way to find it again in
 1.4 MB; the other edit *is* a comment, so `@vite-ignore` finds itself.
@@ -457,6 +457,7 @@ wait, which is what this project has always done rather than hold a fix back:
 |---|---|
 | `none-is-undefined` | `None` and JavaScript's `undefined` become one value seen from two sides, in both directions. `javascript.UNDEFINED` becomes `None`, `null` and `javascript.NULL` are untouched, and `js_array.tp_repr` converts its elements the way the iterator already did |
 | `undefined-str-slot` | `UndefinedType` gains the `tp_str` it lacked, so `str()` of a raw JavaScript `undefined` answers instead of raising about a descriptor with no argument |
+| `json-big-integers` | `javascript.JSON` reads and writes an integer past 2^53 with its exact digits, the way the `json` module already did. `stringify` no longer raises on a big integer and `parse` no longer hands back an `int` whose last digits are wrong. Both steps compose with an author's replacer or reviver, and both are skipped where the engine lacks `JSON.rawJSON` or the reviver's source text |
 | `mark-compiler-chain` | two comments around the parsing chain in the generated `brython.js`, which is what `scripts/vendor-brython.py` cuts on to build `brython_runtime.js` |
 
 The first one reaches Svelthon at `importjs`: a value handed to a JavaScript

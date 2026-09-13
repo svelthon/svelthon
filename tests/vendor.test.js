@@ -5,8 +5,10 @@ import { test, expect, describe } from 'vitest';
 import '../src/lib/runtime.js';
 
 // Behaviours of the vendored Brython that Svelthon rests on, each observable,
-// so a build that loses one turns a test red rather than a page. Most are
-// upstream; the last two are the local edits, which a re-vendoring drops.
+// so a build that loses one turns a test red rather than a page. The first
+// group is upstream; then come the commits still waiting there, which a
+// re-vendoring from plain master drops; the last two are the edits made in the
+// built file, which every re-vendoring drops.
 describe('the vendored Brython carries its repairs', () => {
     const $B = globalThis.__BRYTHON__;
 
@@ -85,6 +87,47 @@ describe('the vendored Brython carries its repairs', () => {
         }
 
         expect(seen).toEqual([3, 5]);
+    });
+
+    // `None` and `undefined` are one value seen from two sides. Every value an
+    // author hands to a JavaScript function, and every value one hands back,
+    // crosses these two: without the pairing a function that returns nothing
+    // gives `<Javascript undefined>`, which is not `None` and answers no
+    // comparison an author would write.
+    test('None and undefined convert into each other', () => {
+        expect($B.jsobj2pyobj(undefined)).toBe($B.builtins.None);
+        expect($B.pyobj2jsobj($B.builtins.None)).toBe(undefined);
+    });
+
+    // A raw `undefined` still reaches Python from a JavaScript object nobody
+    // converted, and printing one is the first thing anybody does with a value
+    // that surprised them. Without the slot `str()` raises about a descriptor
+    // called with no argument, which names nothing the author wrote.
+    test('str() of a JavaScript undefined answers', () => {
+        expect($B.builtins.str.$factory(undefined)).toBe('<Javascript undefined>');
+    });
+
+    // `javascript.JSON` and the `json` module have to agree on an integer past
+    // 2^53. They did not: `stringify` raised on the BigInt, and `parse` handed
+    // back an `int` whose last digits were wrong, silently, because
+    // `Number.isInteger` is true of the double. The repair carries the digits
+    // of the literal across instead of its value.
+    test('javascript.JSON reads and writes a large integer exactly', () => {
+        const JSON_ = $B.$getattr($B.imported.javascript, 'JSON');
+        const digits = '12345678901234567890123';
+
+        const row = $B.builtins.dict.$factory();
+        $B.$setitem(row, 'n', BigInt(digits));
+
+        expect($B.$getattr(JSON_, 'stringify')(row)).toBe(`{"n":${digits}}`);
+
+        const back = $B.$getitem($B.$getattr(JSON_, 'parse')(`{"n": ${digits}}`), 'n');
+        expect(back).toBe(BigInt(digits));
+        expect($B.class_name(back)).toBe('int');
+
+        // And nothing else is touched: an integer a double holds exactly stays
+        // a number, so no existing value changes shape.
+        expect(typeof $B.$getitem($B.$getattr(JSON_, 'parse')('{"n": 1}'), 'n')).toBe('number');
     });
 
     // Under Node the compiler loads the file with `require()` and a
