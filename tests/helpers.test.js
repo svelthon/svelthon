@@ -93,13 +93,28 @@ describe('from_json', () => {
     });
 
     // The way back, and the same crossing: JSON's `null` is Python's `None` at
-    // every depth. At the top `pyData` said so already; inside a container
-    // Brython's `to_dict` left a JavaScript null, so `is None` was false and
-    // `repr` printed `<Javascript null>`.
+    // every depth, and `is None` has to answer true for it rather than `repr`
+    // printing `<Javascript null>`.
     test('null is None, at the top and inside', () => {
         expect(from_json('null')).toBe(NONE);
         expect(__pybridge.str(from_json('{"a": null}'))).toBe("{'a': None}");
         expect(__pybridge.str(from_json('[null, [null]]'))).toBe('[None, [None]]');
+    });
+
+    // An integer past 2^53 is not a double, and a reviver is too late to say so:
+    // `JSON.parse` has already rounded the literal by the time one runs. The
+    // digits survive only if whoever reads them reads the source text, which is
+    // what going through `javascript.JSON` buys.
+    test('an integer past 2^53 keeps its digits', () => {
+        const digits = '12345678901234567890123';
+
+        expect(__pybridge.str(from_json(`{"a": ${digits}}`))).toBe(`{'a': ${digits}}`);
+        expect(from_json('9007199254740993')).toBe(9007199254740993n);
+
+        // And nothing smaller changes shape: still a JavaScript number, and a
+        // fraction is still a float rather than an int.
+        expect(from_json('1')).toBe(1);
+        expect(__pybridge.str(from_json('0.5'))).toBe('0.5');
     });
 });
 
