@@ -73,6 +73,33 @@ function flushLine(src) {
     return lines.findIndex((line) => /^\S/.test(line)) + 1;
 }
 
+// A refusal, in Svelte's own error shape, which is what makes it clickable.
+//
+// `vite-plugin-svelte` builds `rollupError.loc` only `if (error.start)`, and
+// `loc` is what the dev overlay highlights and what an editor jumps to. Without
+// it, a mistake in the markup got a squiggle and a mistake in the script got a
+// line of console text, out of the same compiler.
+//
+// The position stays in the message as well, and that is not a duplicate: the
+// fields are what the plugin reads, the sentence is what anyone else reads, the
+// playground compiling in a browser included.
+//
+// There is no column. These refusals know which line they were reading and not
+// where in it; `markup.js` has one because it scans character by character.
+function positioned(error, source, line) {
+    error.filename = source;
+
+    if (typeof line === 'number') {
+        error.start = { line, column: 0 };
+        error.end = { line, column: 0 };
+    }
+
+    return error;
+}
+
+const refuse = (message, source, line) =>
+    positioned(new SyntaxError(message), source, line);
+
 function pythonError(error, source, lineOffset, block = '') {
     // A JavaScript Error is not ours to describe: it already carries a message
     // and a stack, and wrapping it produced the useless
@@ -82,6 +109,7 @@ function pythonError(error, source, lineOffset, block = '') {
 
     let described = 'PythonError';
     let where = source;
+    let at;
 
     try {
         const name = $B.$getattr($B.get_class(error), '__name__');
@@ -92,19 +120,24 @@ function pythonError(error, source, lineOffset, block = '') {
 
     try {
         const line = $B.$getattr(error, 'lineno');
-        if (typeof line === 'number') where = `${source}:${line + lineOffset}`;
+        if (typeof line === 'number') {
+            at = line + lineOffset;
+            where = `${source}:${at}`;
+        }
     } catch {
         /* no position on it */
     }
 
     const flush = described.startsWith('IndentationError') ? flushLine(block) : 0;
 
-    return new SyntaxError(
+    return refuse(
         `svelthon — ${described} (${where})` +
             (flush
                 ? `\n  line ${flush + lineOffset} starts at column zero while the rest of` +
                   ` the block is indented, so indent it like its neighbours.`
-                : '')
+                : ''),
+        source,
+        at
     );
 }
 
@@ -375,13 +408,16 @@ function takeArrows(src, where, lineOffset, allowed) {
 
     for (let n = 0; n < lines.length; n++) {
         const line = lines[n];
-        const at = `${where}:${n + 1 + lineOffset}`;
+        const lineno = n + 1 + lineOffset;
+        const at = `${where}:${lineno}`;
         const kind = (named) => (named ? 'derived' : 'effect');
 
         if (quote === null && ARROW_INDENTED.test(line)) {
-            throw new SyntaxError(
+            throw refuse(
                 `svelthon — a derived and an effect both belong at the top level of ` +
-                    `the module, and \`=>\` is only read there (${at})`
+                    `the module, and \`=>\` is only read there (${at})`,
+                where,
+                lineno
             );
         }
 
@@ -397,16 +433,20 @@ function takeArrows(src, where, lineOffset, allowed) {
         // report a mismatched bracket several lines further down, which says
         // nothing about what to do. This says it.
         if (found && !balanced(expression)) {
-            throw new SyntaxError(
+            throw refuse(
                 `svelthon — a ${kind(named)} written with \`=>\` must fit on one line; ` +
-                    `use @${kind(named)} on a def for anything longer (${at})`
+                    `use @${kind(named)} on a def for anything longer (${at})`,
+                where,
+                lineno
             );
         }
 
         if (found && !allowed) {
-            throw new SyntaxError(
+            throw refuse(
                 `svelthon — \`=>\` belongs to a component; a .py module writes a ` +
-                    `${kind(named)} with the @${kind(named)} decorator (${at})`
+                    `${kind(named)} with the @${kind(named)} decorator (${at})`,
+                where,
+                lineno
             );
         }
 
@@ -418,9 +458,11 @@ function takeArrows(src, where, lineOffset, allowed) {
         const both = quote === null && !found && !watched ? line.match(BINDABLE) : null;
 
         if (both && !allowed) {
-            throw new SyntaxError(
+            throw refuse(
                 `svelthon — \`<=>\` marks a prop, and a prop belongs to a component; ` +
-                    `a module has no parent to bind with (${at})`
+                    `a module has no parent to bind with (${at})`,
+                where,
+                lineno
             );
         }
 
@@ -441,15 +483,19 @@ function takeArrows(src, where, lineOffset, allowed) {
     return out.join('\n');
 }
 
-function importJsClause(line, where) {
+// `where` is the sentence's `file:line`; `source` and `lineno` are the same two
+// facts as fields, which is what an editor reads.
+function importJsClause(line, where, source, lineno) {
     const bare = line.match(IMPORTJS_EFFECT);
     if (bare) return { from: bare[2], kind: 'effect', entries: [] };
 
     const found = line.match(IMPORTJS_CLAUSE);
     if (!found) {
-        throw new SyntaxError(
+        throw refuse(
             `svelthon — importjs expects \`importjs <clause> from "module"\` or ` +
-                `\`importjs "module"\`, on one line (${where})`
+                `\`importjs "module"\`, on one line (${where})`,
+            source,
+            lineno
         );
     }
 
@@ -470,10 +516,16 @@ function importJsClause(line, where) {
                 if (renamed) return { name: renamed[1], local: renamed[2] };
                 if (JS_NAME.test(one)) return { name: one, local: one };
 
-                throw new SyntaxError(`svelthon — importjs: \`${one}\` is not a name (${where})`);
+                throw refuse(
+                    `svelthon — importjs: \`${one}\` is not a name (${where})`,
+                    source,
+                    lineno
+                );
             });
 
-        if (!entries.length) throw new SyntaxError(`svelthon — importjs: empty {} (${where})`);
+        if (!entries.length) {
+            throw refuse(`svelthon — importjs: empty {} (${where})`, source, lineno);
+        }
         return entries;
     };
 
@@ -495,7 +547,11 @@ function importJsClause(line, where) {
 
     if (JS_NAME.test(clause)) return { from, kind: 'default', entries: [{ name: null, local: clause }] };
 
-    throw new SyntaxError(`svelthon — importjs: \`${clause}\` is not an import clause (${where})`);
+    throw refuse(
+        `svelthon — importjs: \`${clause}\` is not an import clause (${where})`,
+        source,
+        lineno
+    );
 }
 
 // Lift every `importjs` out of the source, leaving the line blank behind it.
@@ -512,23 +568,30 @@ function takeImportJs(src, where, lineOffset, allowed) {
 
     for (let n = 0; n < lines.length; n++) {
         const line = lines[n];
-        const at = `${where}:${n + 1 + lineOffset}`;
+        const lineno = n + 1 + lineOffset;
+        const at = `${where}:${lineno}`;
 
         if (quote === null && IMPORTJS_ANYWHERE.test(line)) {
             // A JavaScript import is hoisted and static; there is no such thing
             // as one inside a branch, and silently hoisting it would be a lie.
-            throw new SyntaxError(`svelthon — importjs must start the line, at the top level (${at})`);
+            throw refuse(
+                `svelthon — importjs must start the line, at the top level (${at})`,
+                where,
+                lineno
+            );
         }
 
         if (quote === null && IMPORTJS.test(line)) {
             if (!allowed) {
-                throw new SyntaxError(
+                throw refuse(
                     `svelthon — importjs belongs to a component; a .py module declares its ` +
-                        `JavaScript with __js__ = {"module": ["name"]} (${at})`
+                        `JavaScript with __js__ = {"module": ["name"]} (${at})`,
+                    where,
+                    lineno
                 );
             }
 
-            imports.push(importJsClause(line.trim(), at));
+            imports.push(importJsClause(line.trim(), at, where, lineno));
             kept.push('');
             continue;
         }
@@ -606,10 +669,13 @@ function refuseLocked(declared, component, source) {
 
     if (!taken) return;
 
-    throw new SyntaxError(
+    throw refuse(
         `svelthon — \`${taken.name}\` is one of Svelthon's own words and cannot be ` +
             `redefined (${source}). The helpers, \`date\`, \`slugify\`, \`tojson\` and`  +
-            ` the rest, may still be shadowed; the decorators may not.`
+            ` the rest, may still be shadowed; the decorators may not.`,
+        // The file, and no line: what is in hand here is the list of names the
+        // module declared, not where each was written.
+        source
     );
 }
 
@@ -694,9 +760,11 @@ function refuseNestedRunes(body, source, lineOffset) {
                     : null);
 
             if (spelling) {
-                throw new SyntaxError(
+                throw refuse(
                     `svelthon — a rune belongs at the top level of the module, and ` +
-                        `\`${spelling}\` is only read there (${source}:${node.lineno + lineOffset})`
+                        `\`${spelling}\` is only read there (${source}:${node.lineno + lineOffset})`,
+                    source,
+                    node.lineno + lineOffset
                 );
             }
 
@@ -1676,19 +1744,23 @@ function compile(
         const orphan = effects.find((e) => !e.root);
 
         if (orphan) {
-            throw new SyntaxError(
+            throw refuse(
                 `svelthon — \`@effect\` belongs to a component; ` +
                     `a ${plain ? '.py' : '.svelte.py'} module writes an effect with ` +
-                    `\`@effect.root\`, whose name receives the destructor (${source})`
+                    `\`@effect.root\`, whose name receives the destructor (${source})`,
+                // `surface()` records a decorated name and its arity, not where
+                // it was written, so this one names the file and no line.
+                source
             );
         }
 
         // A plain module holds no signals at all, so an effect there would watch
         // nothing whatever it is spelled.
         if (plain && effects.length) {
-            throw new SyntaxError(
+            throw refuse(
                 `svelthon — a plain .py module has no reactive state, so ` +
-                    `\`@effect.root\` would watch nothing; move it to a .svelte.py (${source})`
+                    `\`@effect.root\` would watch nothing; move it to a .svelte.py (${source})`,
+                source
             );
         }
     }
@@ -1792,10 +1864,11 @@ function compile(
     const missing = (listed ?? []).find((n) => !declared.includes(n));
 
     if (missing) {
-        throw new SyntaxError(
+        throw refuse(
             `svelthon — \`__all__\` names \`${missing}\`, which this module never ` +
                 `binds (${source}). A module exports what it defines: check the ` +
-                `spelling, or remove it from the list.`
+                `spelling, or remove it from the list.`,
+            source
         );
     }
 
