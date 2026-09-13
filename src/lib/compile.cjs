@@ -662,20 +662,25 @@ const injectable = (one, declared, component, js) =>
 // A locked name is Svelthon's own word, not a builtin to shadow: refused rather
 // than quietly given to either side. Scoped like the injection itself, so a
 // component-only word is free in a plain `.py`.
-function refuseLocked(declared, component, source) {
+function refuseLocked(declared, component, source, lines, lineOffset = 0) {
     const taken = INJECTED.find(
         (one) => one.locked && (component || !one.component) && declared.includes(one.name)
     );
 
     if (!taken) return;
 
+    // `surface()` records where each name was bound, so this one names the line
+    // the word was taken on. A name that came from `reserved` rather than from a
+    // binding has none, and then the file alone is what there is to say.
+    const line = lines?.get(taken.name);
+    const at = line === undefined ? source : `${source}:${line + lineOffset}`;
+
     throw refuse(
         `svelthon — \`${taken.name}\` is one of Svelthon's own words and cannot be ` +
-            `redefined (${source}). The helpers, \`date\`, \`slugify\`, \`tojson\` and`  +
+            `redefined (${at}). The helpers, \`date\`, \`slugify\`, \`tojson\` and`  +
             ` the rest, may still be shadowed; the decorators may not.`,
-        // The file, and no line: what is in hand here is the list of names the
-        // module declared, not where each was written.
-        source
+        source,
+        line === undefined ? undefined : line + lineOffset
     );
 }
 
@@ -837,8 +842,23 @@ function surface(body) {
     // Recorded outside `seen`, so it never competes with a real declaration: a
     // name that is both a `def` and a loop target is still the `def`.
     const bound = [];
+
+    // Where each name was written. Every module-level binding goes through
+    // `bind`, whatever statement made it, so one line here answers for all of
+    // them, and `refuseLocked` can say which line took one of Svelthon's words
+    // instead of naming the file and leaving the reader to search.
+    //
+    // The first binding wins, the way the refusal reads: an author who writes
+    // `effect` twice is told about the first one.
+    const lines = new Map();
+    let statement;
+
     const bind = (name) => {
-        if (typeof name === 'string' && name) bound.push(name);
+        if (typeof name !== 'string' || !name) return;
+
+        bound.push(name);
+
+        if (!lines.has(name) && typeof statement === 'number') lines.set(name, statement);
     };
 
     // A target is a name, or a tuple or list of them, nested to any depth:
@@ -892,6 +912,8 @@ function surface(body) {
 
     const visit = (statements) => {
         for (const node of statements) {
+            statement = node.lineno;
+
             if (node instanceof $B.ast.Assign) {
                 for (const target of node.targets) {
                     // `__all__` and `__js__` are read off the AST by
@@ -1023,7 +1045,7 @@ function surface(body) {
     globals(body);
     walruses(body);
 
-    return { props, bindables, state, funcs, deriveds, effects, inspects, reserved, bound };
+    return { props, bindables, state, funcs, deriveds, effects, inspects, reserved, bound, lines };
 }
 
 // The modules a `from x import y` names.
@@ -1726,7 +1748,7 @@ function compile(
     } catch (error) {
         throw pythonError(error, source, lineOffset, authored);
     }
-    let { props, bindables, state, funcs, deriveds, effects, inspects, reserved, bound } =
+    let { props, bindables, state, funcs, deriveds, effects, inspects, reserved, bound, lines } =
         surface(root._ast.body);
 
     // Neither a store nor a plain module has a parent, so an annotation there
@@ -1843,7 +1865,7 @@ function compile(
 
     const declared = [...new Set([...emitted, ...bound])];
 
-    refuseLocked([...declared, ...reserved], !plain && !store, source);
+    refuseLocked([...declared, ...reserved], !plain && !store, source, lines, lineOffset);
     refuseNestedRunes(root._ast.body, source, lineOffset);
 
     // Functions by default, what a framework calls by name. A module that wants

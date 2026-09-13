@@ -42,7 +42,10 @@ describe('a compiler refusal names a position', () => {
         ['`<=>` in a .py', 'v: str <=> "a"\n', { plain: true }, 1],
         ['a misspelled importjs', 'importjs oops\n', {}, 1],
         ['importjs in a .py', 'importjs {a} from "m"\n', { plain: true }, 1],
-        ['a rune inside a def', 'def go():\n    n = inspect(1)\n', {}, 2]
+        ['a rune inside a def', 'def go():\n    n = inspect(1)\n', {}, 2],
+        // `surface()` records where each name was bound, which is what lets this
+        // one point at the `def` that took the word.
+        ['a locked word', 'x = 1\ndef effect():\n    pass\n', {}, 2]
     ])('%s', ([, source, options, line]) => {
         const error = thrown(source, options);
 
@@ -52,11 +55,11 @@ describe('a compiler refusal names a position', () => {
         expect(error.end).toEqual({ line, column: 0 });
     });
 
-    test.for([
-        ['a locked word', 'def effect():\n    pass\n', {}],
-        ['`__all__` naming what is not bound', '__all__ = ["nope"]\n', { plain: true }]
-    ])('%s names the file and no line', ([, source, options]) => {
-        const error = thrown(source, options);
+    // `__all__` names something the module never bound, so there is no binding
+    // to point at: the file alone is what there is to say, and it says that by
+    // carrying no `start` rather than a wrong one.
+    test('`__all__` naming what is not bound names the file and no line', () => {
+        const error = thrown('__all__ = ["nope"]\n', { plain: true });
 
         expect(error.message).toMatch(/^svelthon — /);
         expect(error.filename).toBe(FILE);
@@ -69,5 +72,16 @@ describe('a compiler refusal names a position', () => {
 
         expect(error.filename).toBe(FILE);
         expect(error.start.line).toBeGreaterThan(0);
+    });
+
+    // A component's Python starts below its opening `<script>`, so every line
+    // above counts from the file and not from the block. Getting this wrong
+    // points an editor at a line the author never wrote, which is worse than
+    // pointing at nothing.
+    test.for([
+        ['a refusal of ours', 'd => 2\n', { plain: true, lineOffset: 5 }, 6],
+        ['a refusal of Brython\'s', 'x = (\n', { lineOffset: 10 }, 11]
+    ])('%s counts from the top of the file', ([, source, options, line]) => {
+        expect(thrown(source, options).start.line).toBe(line);
     });
 });
