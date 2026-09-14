@@ -24,6 +24,8 @@
   "files": [
     "BRYTHON.md",
     "DJANGO_FLASK.md",
+    "docs/demo.png",
+    "notes",
     "src/lib",
     "vendor"
   ],
