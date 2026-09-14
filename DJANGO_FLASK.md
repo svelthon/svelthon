@@ -272,7 +272,9 @@ That is also why every incremental renderer landed in the same place — Vue's
 
 ### Dates
 
-`{{ pep.created|date:"j F Y" }}` keeps its word and changes what stands behind it:
+`{{ pep.created|date:"j F Y" }}` in Django; bare Jinja has no date filter at all,
+so a Flask project installs **Flask-Babel** and writes
+`{{ pep.created|dateformat("long") }}`. Both keep their word here:
 
 ```svelte
 {date(pep.created)}                      <!-- 24 août 2026 -->
@@ -297,10 +299,18 @@ reports a hydration mismatch. The same holds for the time zone, which `Intl`
 takes from the runtime; for anything beyond these four styles, `js.Intl` is
 there.
 
+**Coming from Flask-Babel, the output is the one you already have.** Babel and
+`Intl` both read CLDR, so the answers match — measured, `format_date(d,
+format='long', locale='fr')` gives `24 août 2026`, which is what `{date(d,
+"long")}` renders. The difference is that nothing is installed and no locale data
+travels: the reader's browser already holds every language.
+
 ### Relative time, which keeps itself right
 
 `{{ pep.created|timesince }}` and `{{ pep.launch|timeuntil }}` are **one name
-here**, and it is neither of theirs:
+here**, and it is neither of theirs. Flask has no filter for this either: with
+Flask-Babel you call `format_timedelta(d - now, add_direction=True)` yourself,
+which is already the one-name shape.
 
 ```svelte
 {fromnow(pep.created)}              <!-- il y a 3 jours -->
@@ -312,7 +322,8 @@ Django needs two filters because it measures an absolute duration and puts the
 direction in the name — each one answers `0 minutes` for a date on the wrong
 side. `Intl` formats a **signed** gap, so the direction rides in the value and
 `since` would lie half the time. `fromnow` is what the JavaScript world calls it,
-in `moment` and `dayjs` alike.
+in `moment` and `dayjs` alike. Babel's `add_direction=True` is the same choice,
+and its output is the same too — measured, `dans 3 jours` and `il y a 2 heures`.
 
 It also gains the one thing Django could not give either filter:
 
@@ -386,7 +397,10 @@ presentation.
 
 `{{ comment|linebreaks }}` has no Svelthon helper, and the reason is worth a
 section: **both answers here produce no HTML at all**, so the escaping problem
-Django's filter exists to solve does not arise.
+Django's filter exists to solve does not arise. A Flask project has the problem
+in its sharpest form, since Jinja offers nothing: the usual answer is
+`{{ comment|replace("\n", "<br>")|safe }}`, which turns autoescaping off on
+user-typed text, exactly the trade Django's filter was written to avoid.
 
 The case is real — a comment or a bio typed into a `<textarea>` arrives with
 newlines, and HTML collapses them. Two ways out, depending on what you want:
@@ -426,7 +440,9 @@ echo Django's.
 
 ### Slugs
 
-`{{ title|slugify }}` keeps its word, and loses its option:
+`{{ title|slugify }}` keeps its word, and loses its option. Bare Jinja has no
+slug filter, and Flask has none either: a project installs `python-slugify` or
+writes the regex by hand, which is where its variants come from.
 
 ```svelte
 <h2 id={slugify(pep.title)}>{pep.title}</h2>
@@ -552,8 +568,9 @@ is the ordinary way to write any link rather than one helper among many.
 
 `{% csrf_token %}` in Django, `{{ form.csrf_token }}` under Flask-WTF: neither
 has an equivalent, because SvelteKit does not use a token. It compares the
-request's `Origin` to the app's own and refuses a cross-site form post. Nothing to write in the form — but the origin must be right, or every POST
-comes back `403`. See `paths.origin` in the SvelteKit configuration.
+request's `Origin` to the app's own and refuses a cross-site form post. Nothing
+to write in the form — but the origin must be right, or every POST comes back
+`403`. See `paths.origin` in the SvelteKit configuration.
 
 ## What Svelte adds, and neither of them needed
 
