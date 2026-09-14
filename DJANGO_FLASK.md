@@ -293,12 +293,22 @@ a timestamp in **milliseconds**, a JavaScript `Date`. Which matters, because a
 date crossing from a `load()` or a `fetch` arrives as a string, and there is no
 `datetime` to parse it with.
 
-Milliseconds because that is what `Date` counts and what `js.Date.now()` gives.
-An API that answers Unix **seconds** is the one thing to watch: the number is
-valid either way, so nothing can refuse it, and `1787000000` reads as January
-1970 rather than August 2026. Multiply by 1000. Anything that is not one of those
-four shapes is refused by name rather than coerced, which is where `date([2026])`
-used to answer 1 January 2026.
+There is no `datetime`, so the clock is JavaScript's, reached by its own name:
+
+```python
+from javascript import Date
+
+now = Date.now()              # milliseconds, an int
+today = Date.new()            # a Date, which date() also takes
+```
+
+Milliseconds, because that is what `Date` counts. An API answering Unix
+**seconds** is the one thing to watch: the number is valid either way, so nothing
+can refuse it, and `1787000000` reads as January 1970 rather than August 2026.
+Multiply by 1000.
+
+Anything that is not one of those four shapes is refused by name rather than
+coerced, which is where `date([2026])` used to answer 1 January 2026.
 
 **Under server rendering, pass the locale.** Without it the server formats in its
 own language and time zone, the browser reformats in the visitor's, and Svelte
