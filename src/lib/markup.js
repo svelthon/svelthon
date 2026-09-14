@@ -608,6 +608,38 @@ const declarationKeyword = (trimmed, at) =>
             `rather than passed through.`
     );
 
+// Where a spread is written, and the three places it is not.
+//
+// A spread fills a tag's attributes, so it is an attribute of its own: `<div
+// {**attrs}>`. Out in the body there is nothing for it to spread into, and
+// attached to a name there is one attribute where it wants many. Svelte refuses
+// that second spelling itself, `Unexpected token`, and the quoted third would
+// reach Brython as `__text(**attrs)` and come back as a syntax error about a
+// comma, on a line the author never wrote.
+//
+// `**` cannot open a Python expression at all, so it is refused on sight. `...`
+// can: it is Ellipsis, and `{...}`, `{... if x else y}` and `{...[0]}` are all
+// expressions an author is entitled to write. Only `...` run straight into a
+// name is a spread.
+const SPREAD = (trimmed) => trimmed.startsWith('**') || /^\.\.\.[A-Za-z_$]/.test(trimmed);
+
+const spreadOutOfPlace = (trimmed, at, named) => {
+    const spread = trimmed.replace(/^(\*\*|\.\.\.)/, '').trim();
+
+    return new SyntaxError(
+        `svelthon — a spread fills a tag's attributes, so \`{**${spread}}\` is ` +
+            `an attribute of its own${at}, as in \`<div {**${spread}}>\`. ` +
+            (named
+                ? `Written as the value of \`${named}\` there is one attribute where ` +
+                  `it wants many.`
+                : `Out here there is nothing for it to spread into.`) +
+            (trimmed.startsWith('...')
+                ? ` And \`...\` is Python's Ellipsis, not a spread, which is what ` +
+                  `it keeps meaning everywhere an expression is read.`
+                : '')
+    );
+};
+
 const unknownTag = (trimmed, kind, known, at) =>
     new SyntaxError(
         `svelthon — \`{${trimmed}}\` is not a ${kind} Svelthon knows${at}; ` +
@@ -848,6 +880,7 @@ function walk(markup, collect, onPython, seed, record, where) {
 
                     if (end !== -1 && !DIRECTIVE.test(named) && !HANDLER.test(named)) {
                         region = { start: index + 1, end };
+
                         out += `{${call(markup.slice(index + 1, end), '__text')}}`;
                         region = null;
                         index = end + 1;
@@ -1170,33 +1203,8 @@ function walk(markup, collect, onPython, seed, record, where) {
             } else {
                 throw refuse(unknownTag(trimmed, 'tag', TAGS, said()));
             }
-        } else if (trimmed.startsWith('**') || /^\.\.\.[A-Za-z_$]/.test(trimmed)) {
-            // The other half of the spread refusal. A spread fills a tag's
-            // attributes, so out here there is nothing for it to spread into,
-            // and Svelte refuses `{...x}` in this position too. Both spellings
-            // are named, because the branch below would otherwise hand `**attrs`
-            // to Brython as an expression and the author would read a syntax
-            // error about a comma, on a line they never wrote.
-            //
-            // `**` cannot open a Python expression at all, so it is refused on
-            // sight. `...` can: it is Ellipsis, and `{...}`, `{... if x else
-            // y}` and `{...[0]}` are all expressions the author is entitled to
-            // write. Only `...` run straight into a name is a spread.
-            const spread = trimmed.replace(/^(\*\*|\.\.\.)/, '').trim();
-
-            throw refuse(
-                new SyntaxError(
-                    `svelthon — a spread fills a tag's attributes, so ` +
-                        `\`{**${spread}}\` goes inside the tag${said()}, as in ` +
-                        `\`<div {**${spread}}>\`. Out here there is nothing for it ` +
-                        `to spread into.` +
-                        (trimmed.startsWith('...')
-                            ? ` And \`...\` is Python's Ellipsis, not a spread, ` +
-                              `which is what it keeps meaning everywhere an ` +
-                              `expression is read.`
-                            : '')
-                )
-            );
+        } else if (SPREAD(trimmed)) {
+            throw refuse(spreadOutOfPlace(trimmed, said(), null));
         } else {
             const declared = declaration(inner);
 

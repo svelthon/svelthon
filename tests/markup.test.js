@@ -713,6 +713,37 @@ describe('an unknown construct is refused, never passed through', () => {
         expect(() => rewrite(markup)).toThrow(/would\s+cross as JavaScript/);
     });
 
+    // A spread is an attribute of its own. Written as the *value* of a named one
+    // it was refused in neither spelling: `title={**x}` reached Brython as an
+    // expression and `title="{**x}"` reached it as `__text(**x)`, so the author
+    // read a syntax error about a comma. Svelte refuses the bare form itself,
+    // with `Unexpected token`, which names nothing they typed.
+    test.for([
+        ['<div title={**x}></div>'],
+        ['<div title="{**x}"></div>'],
+        ['<div title={...x}></div>'],
+        ['<p>{**x}</p>']
+    ])('%s is refused wherever a spread has nothing to fill', ([markup]) => {
+        expect(() => rewrite(markup)).toThrow(/a spread fills a tag's attributes/);
+        expect(() => rewrite(markup)).toThrow(/<div \{\*\*x\}>/);
+    });
+
+    // The attribute is named, because that is the word the author has to remove.
+    test('and the refusal names the attribute it was written on', () => {
+        expect(() => rewrite('<div title={**x}></div>')).toThrow(/the value of `title`/);
+        expect(() => rewrite('<p>{**x}</p>')).toThrow(/nothing for it to spread into/);
+    });
+
+    // `...` is Python's Ellipsis, and only `...` run straight into a name is a
+    // spread. The three below are expressions an author is entitled to write.
+    test.for([
+        ['<div title={...}></div>'],
+        ['<div title={... if a else b}></div>'],
+        ['<div {**x}></div>']
+    ])('%s still compiles', ([markup]) => {
+        expect(() => rewrite(markup)).not.toThrow();
+    });
+
     // And the rune itself keeps working, which is what the refusal points at.
     test('the Svelthon spelling it names is the one that compiles', () => {
         expect(() => rewrite('{#each rows as n}{a = n}{a}{/each}')).not.toThrow();
