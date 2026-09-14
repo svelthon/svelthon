@@ -1,15 +1,5 @@
-brython_runtime.js and brython_compiler.js are built from Brython, whose licence
-follows. It is reproduced verbatim from LICENCE.txt of the Brython repository,
-including the unfilled <ORGANIZATION> placeholder in the third clause.
-
-The two files are built from Brython's master branch plus five commits proposed
-upstream, listed in BRYTHON.md; that document also records the two edits made in
-the built file itself. Neither the Brython project nor its authors endorse this
-package.
-
-Brython: https://brython.info/ and https://github.com/brython-dev/brython
-
-----------------------------------------------------------------------
+brython_runtime.js and brython_compiler.js are built from Brython, modified.
+https://brython.info/
 
 Copyright (c) 2012, Pierre Quentel pierre.quentel@gmail.com
 All rights reserved.
