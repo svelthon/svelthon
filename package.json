@@ -22,9 +22,12 @@
     "./package.json": "./package.json"
   },
   "files": [
+    "BRYTHON.md",
+    "DJANGO.md",
     "src/lib",
     "vendor/brython_runtime.js",
     "vendor/brython_compiler.js",
+    "vendor/BRYTHON_FIX.md",
     "vendor/LICENSE",
     "vendor/package.json"
   ],

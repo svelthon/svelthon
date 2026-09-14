@@ -294,7 +294,7 @@ qu'échouer :
 
 Dans les deux, Python lève `IndentationError`, en sachant que Brython l'annonce
 à la ligne *suivant* la dernière plutôt qu'à la ligne fautive, ce qui est un bug
-de leur côté, consigné dans `BRYTHON.md`.
+de leur côté.
 
 ## Le gabarit est du Python
 
@@ -1465,9 +1465,10 @@ donc il ne peut pas dériver.
 
 **En amont, chez Brython**
 
-Les bugs, les internes dont Svelthon dépend et les messages d'erreur qui ont
-coûté le plus de débogage sont réunis dans **[BRYTHON.md](BRYTHON.md)** : le
-contrat entre les deux projets, avec une reproduction minimale pour chacun.
+Les internes dont Svelthon dépend et les messages d'erreur qui ont coûté le plus
+de débogage sont réunis dans **[BRYTHON.md](BRYTHON.md)**, le contrat entre les
+deux projets, et ce que le vendored porte en plus du master de Brython est dans
+`vendor/BRYTHON_FIX.md`.
 
 ## Lancer
 
@@ -1494,8 +1495,8 @@ Le Brython vendu porte **deux** modifications écrites dans le fichier lui-même
 chacune tenue par un test : un garde contre une seconde exécution dans le même
 processus, marqué `/* SVELTHON patch */`, et `/* @vite-ignore */` sur les deux
 imports dynamiques. Huit autres réparations y vivaient et sont désormais en
-amont. `BRYTHON.md` les liste toutes les dix. Elles vivent dans le fichier
-plutôt que dans une étape de build, parce que le compilateur charge la même
+amont. `vendor/BRYTHON_FIX.md` les liste toutes les dix. Elles vivent dans le
+fichier plutôt que dans une étape de build, parce que le compilateur charge la même
 copie par `require` sous Node, donc un correctif appliqué seulement à la copie
 servie laisserait le rendu serveur tourner sur un Brython non réparé.
 

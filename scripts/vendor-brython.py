@@ -33,9 +33,10 @@ from make_dist import COMPILER_CHAIN_OPEN, COMPILER_CHAIN_CLOSE  # noqa: E402
 
 # The first of the two edits that stay ours, and that would be wrong upstream: a
 # browser loads the script once per page, so the guard protects nothing there
-# while changing the top-level shape of the file for everyone. See BRYTHON.md.
+# while changing the top-level shape of the file for everyone. See
+# vendor/BRYTHON_FIX.md, which ships beside the bundles it describes.
 GUARD = """\
-// /* SVELTHON patch, see BRYTHON.md */
+// /* SVELTHON patch, see BRYTHON_FIX.md */
 // One interpreter per process. Under Node the compiler loads this file with
 // require() and a server-rendered component imports it again, which are two
 // module instances of the same file; `$B.builtins` marks that the body ran.

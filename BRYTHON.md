@@ -40,9 +40,11 @@ is absent, rather than shipping a component with no reactivity.
 | `$B.ast.*` | AST classes, compared with `instanceof` |
 | `$B.tokenizer(src, filename, 'file')` | iterable of tokens, used to highlight Python with Python's own tokenizer |
 | `$B.Parser` | not called: its presence is how `compile.cjs` knows the parsing chain has loaded on top of the runtime. A page that never compiles never defines it |
+| `$B.unindent(src)` | Brython's own, the one it already runs on every `<script type="text/python">`; it hands the source back untouched as soon as one non-blank line starts at column zero |
+| `$B.file_cache[filename]` | where `compiler_error` looks for the source to quote. Filling it is what turns a bare message into a message with the offending line under it |
 
 `py2js` derives the namespace identifier from **`filename` alone**: `module` and
-`locals_id` are ignored by `js_from_root`. See the first bug below.
+`locals_id` are ignored by `js_from_root`.
 
 Token type codes read off the tokenizer: `NAME 1`, `NUMBER 2`, `STRING 3`,
 `NEWLINE 4`, `OP 55`, f-string parts `59/60/61`, `COMMENT 65`, `NL 66`,
@@ -70,6 +72,7 @@ Token type codes read off the tokenizer: `NAME 1`, `NUMBER 2`, `STRING 3`,
 | `$B.coroutine` | compared against `get_class` to spot a coroutine without calling `aio.iscoroutine` |
 | `$B.$call(callable, ...args)` | calls anything Python calls, a class object included, which is how a class handed to JavaScript is constructed |
 | `$B.jsobj2pyobj(value)` | every value coming back from a JavaScript call, so the most-used inbound function there is and the one whose shape changing upstream would be felt first |
+| `$B.PYOBJ_MAP` | the WeakMap holding a converted container's back-reference to the Python object it came from, so the original is handed back rather than a copy. Read with `?.`, which is why a rename upstream would be silent and why a test names it |
 
 ### Dispatch points, for reactivity
 

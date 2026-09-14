@@ -290,7 +290,7 @@ than failing:
 
 In both, Python raises `IndentationError`, and be warned that Brython reports
 it at the line *after* the last one rather than at the offending line, which is
-a bug of theirs, recorded in `BRYTHON.md`.
+a bug of theirs.
 
 ## Templates are Python
 
@@ -1430,9 +1430,10 @@ one page, and its worked example is a test fixture, so it cannot drift.
 
 **Upstream, in Brython**
 
-The bugs, the internals Svelthon depends on, and the error messages that cost
-the most debugging time are written up in **[BRYTHON.md](BRYTHON.md)**, the
-contract between the two projects, with a minimal reproduction for each.
+The internals Svelthon depends on and the error messages that cost the most
+debugging time are written up in **[BRYTHON.md](BRYTHON.md)**, the contract
+between the two projects, and what the vendored build carries on top of
+Brython's master is in `vendor/BRYTHON_FIX.md`.
 
 ## Running
 
@@ -1457,8 +1458,8 @@ imports, so the scan is skipped and the one package worth pre-bundling is named.
 The vendored Brython carries **two** edits made in the file itself, each held by
 a test: a guard against a second execution in one process, marked
 `/* SVELTHON patch */`, and `/* @vite-ignore */` on the two dynamic imports.
-Eight other repairs used to live there and are upstream now. `BRYTHON.md` lists
-all ten.
+Eight other repairs used to live there and are upstream now.
+`vendor/BRYTHON_FIX.md` lists all ten.
 They live in the file rather than in a build step, because the compiler loads
 the same copy with `require` under Node, so a patch applied only while serving
 would leave server-side rendering on an unrepaired Brython.
