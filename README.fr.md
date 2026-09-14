@@ -1501,8 +1501,8 @@ copie par `require` sous Node, donc un correctif appliqué seulement à la copie
 servie laisserait le rendu serveur tourner sur un Brython non réparé.
 
 `vendor/` contient exactement ce que le paquet livre : les deux moitiés de
-Brython 3.14 dev, découpées d'un bundle que `scripts/vendor-brython.py`
-reconstruit depuis master et laisse dans `build/`. Le dossier porte un
+Brython 3.14 dev. `scripts/vendor-brython.py` reconstruit le bundle complet
+depuis master dans `build/`, puis le découpe en deux. Le dossier porte un
 `package.json` marqué `commonjs` : Node doit le charger comme script classique,
 alors que la racine est en `type: module`.
 
