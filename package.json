@@ -25,7 +25,7 @@
     "src/lib",
     "vendor/brython_runtime.js",
     "vendor/brython_compiler.js",
-    "vendor/LICENSE-brython.txt",
+    "vendor/LICENSE",
     "vendor/package.json"
   ],
   "engines": {

@@ -23,8 +23,8 @@ SOFTWARE.
 ---
 
 This package redistributes Brython, which is not covered by the licence above
-and keeps its own. Its copyright notice and licence are in
-vendor/LICENSE-brython.txt, beside the files they cover:
+and keeps its own. Its copyright notice and licence are in vendor/LICENSE,
+beside the files they cover:
 
     vendor/brython_runtime.js
     vendor/brython_compiler.js
