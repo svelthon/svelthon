@@ -1,8 +1,11 @@
-# Django templates, in Svelthon
+# Django, Flask and Jinja templates, in Svelthon
 
-If you write Django or Flask templates, you already know most of this page. What
-follows is the whole translation — there is not much of it, and nothing to
-install for it.
+If you write Django or Jinja templates, Flask's included, you already know most
+of this page. What follows is the whole translation — there is not much of it,
+and nothing to install for it.
+
+The two languages differ from each other about as much as either differs from
+Svelthon, so both are spelled out wherever they part.
 
 Two rules cover almost everything:
 
@@ -19,40 +22,51 @@ every tutorial and every answer online applies to Svelthon with one substitution
 
 ## The whole mapping
 
-| Django | Svelthon |
-|---|---|
-| `{{ pep.title }}` | `{pep.title}` |
-| `{{ pep.title\|upper }}` | `{pep.title.upper()}` |
-| `{{ note\|default:"—" }}` | `{note or "—"}` |
-| `{{ body\|safe }}` | `{@html body}` |
-| `{{ comment\|linebreaks }}` | `white-space: pre-wrap`, or split — see below |
-| `{{ d\|timesince }}` | `{fromnow(d)}` — see below |
-| `{{ d\|timeuntil }}` | `{fromnow(d)}`, the same one — see below |
-| `{% if a %}…{% elif b %}…{% else %}…{% endif %}` | `{#if a}…{:else if b}…{:else}…{/if}` |
-| `{% for x in xs %}…{% endfor %}` | `{#each xs as x}…{/each}` |
-| `{% for x in xs %}…{% empty %}…{% endfor %}` | `{#each xs as x}…{:else}…{/each}` |
-| `{{ forloop.counter }}`, `forloop.first`, `forloop.last` | `{#each xs as x, i}` then `{i + 1}`, `i == 0`, `i == len(xs) - 1` — see below |
-| `{% with n=xs.count %}…{% endwith %}` | `{@const n = len(xs)}`, inside a block — see below |
-| `{% include "card.html" %}` | `<Card />` |
-| `{% extends "base.html" %}` | a `+layout.svelte` above the page |
-| `{% block content %}…{% endblock %}` | `{@render children()}` in the layout |
-| `{% comment %}…{% endcomment %}` *stripped* | `<!-- … -->` *stripped* |
-| `<!-- … -->` *delivered* | `{@html "<!-- … -->"}` *delivered* |
-| `{% csrf_token %}` | nothing to write — see below |
-| `{% url 'pep' n %}` | `href="/pep/{n}"` — see below |
+A blank cell means the two on its left are spelled the same.
 
-Autoescaping works the same way in both, which is worth knowing before you look
-for a setting: everything is escaped, and `{@html}` is the deliberate way out,
-exactly as `|safe` is in Django.
+| Django | Jinja | Svelthon |
+|---|---|---|
+| `{{ pep.title }}` | | `{pep.title}` |
+| `{{ pep.title\|upper }}` | | `{pep.title.upper()}` |
+| `{{ note\|default:"—" }}` | `{{ note\|default("—", true) }}` | `{note or "—"}` |
+| `{{ body\|safe }}` | | `{@html body}` |
+| `{{ comment\|linebreaks }}` | *none* | `white-space: pre-wrap`, or split — see below |
+| `{{ d\|timesince }}` | *none* | `{fromnow(d)}` — see below |
+| `{{ d\|timeuntil }}` | *none* | `{fromnow(d)}`, the same one — see below |
+| `{% if a %}…{% elif b %}…{% else %}…{% endif %}` | | `{#if a}…{:else if b}…{:else}…{/if}` |
+| `{% for x in xs %}…{% endfor %}` | | `{#each xs as x}…{/each}` |
+| `{% for x in xs %}…{% empty %}…{% endfor %}` | `{% for %}…{% else %}…{% endfor %}` | `{#each xs as x}…{:else}…{/each}` |
+| `{{ forloop.counter }}`, `forloop.first`, `forloop.last` | `{{ loop.index }}`, `loop.first`, `loop.last` | `{#each xs as x, i}` then `{i + 1}`, `i == 0`, `i == len(xs) - 1` — see below |
+| `{% with n=xs.count %}…{% endwith %}` | `{% set n = xs\|length %}` | `{@const n = len(xs)}`, inside a block — see below |
+| `{% include "card.html" %}` | | `<Card />` |
+| `{% extends "base.html" %}` | | a `+layout.svelte` above the page |
+| `{% block content %}…{% endblock %}` | | `{@render children()}` in the layout |
+| `{% comment %}…{% endcomment %}` *stripped* | `{# … #}` | `<!-- … -->` *stripped* |
+| `<!-- … -->` *delivered* | | `{@html "<!-- … -->"}` *delivered* |
+| `{% csrf_token %}` | `{{ form.csrf_token }}`, Flask-WTF | nothing to write — see below |
+| `{% url 'pep' n %}` | `{{ url_for('pep', n=n) }}` | `href="/pep/{n}"` — see below |
+
+**Autoescaping is the one place where knowing which of the two you come from
+matters.** Django always escapes. Bare Jinja does **not**: `autoescape` is
+`False` unless you turn it on, measured on 3.1.6. Flask turns it on for you, for
+templates whose name ends in `.html`, `.htm`, `.xml` or `.xhtml`. Svelthon
+escapes like Django, always, and `{@html}` is the deliberate way out, exactly as
+`|safe` is in both.
+
+`default` differs the same way and it is easy to miss: Django's replaces a
+*falsy* value, Jinja's replaces only an *undefined* one unless you pass its
+second argument. `{note or "—"}` is Django's reading, which is almost always the
+one intended.
 
 Two lines of that table need a word. The first is the comment.
 
 In Django the distinction matters: `{% comment %}` is stripped at render, while
 `<!-- … -->` is passed through and lands in the page source — which is exactly
-why `{% comment %}` exists. Svelte has no such split. An authored `<!-- … -->` is
-removed from the output, on the server and in the browser alike, so it *is* the
-template comment; only Svelte's own hydration markers survive. Measured on
-5.56.9: a component whose template holds a comment renders `<!--[--><p>1</p><!--]-->`.
+why `{% comment %}` exists. Jinja has the same split, spelled `{# … #}`. Svelte
+has no such split. An authored `<!-- … -->` is removed from the output, on the
+server and in the browser alike, so it *is* the template comment; only Svelte's
+own hydration markers survive. Measured on 5.56.9: a component whose template
+holds a comment renders `<!--[--><p>1</p><!--]-->`.
 
 Which leaves the other half of Django's pair with no default: to put a real
 comment in the delivered HTML you have to force it, either with
@@ -111,6 +125,11 @@ writes on its first day.
 {% endblock %}
 ```
 
+The Jinja version of that page differs in three places and nowhere else:
+`{{ status|default("All", true) }}`, `{{ loop.index }}`, and `{% else %}` where
+Django writes `{% empty %}` — plus `{{ url_for('pep', number=pep.number) }}` for
+the link.
+
 **Svelthon**
 
 ```svelte
@@ -140,16 +159,16 @@ status: str
 convention: a `+layout.svelte` beside the page wraps it, with no declaration on
 either side.
 
-The two annotations at the top are what a Django view passed in its context.
-Here they are the component's inputs, and they are ordinary Python annotations —
-no rune, no decorator.
+The two annotations at the top are what a Django or Flask view passed in its
+context. Here they are the component's inputs, and they are ordinary Python
+annotations — no rune, no decorator.
 
 ## Where Svelthon does it differently
 
 ### Template inheritance
 
-Django names a parent and fills its blocks. Svelthon nests by directory: a
-`+layout.svelte` wraps every page below it, and renders the page with
+Django and Jinja name a parent and fill its blocks, identically. Svelthon nests
+by directory: a `+layout.svelte` wraps every page below it, and renders it with
 `{@render children()}`. Layouts nest, so a section can add its own without the
 pages knowing.
 
@@ -163,7 +182,7 @@ children: object
 <main>{@render children()}</main>
 ```
 
-For a single hole this is about even. For several — Django's named blocks — you
+For a single hole this is about even. For several — their named blocks — you
 pass snippets as props, which is more machinery than `{% block %}`. It is also
 more capable, since a snippet takes arguments.
 
@@ -521,22 +540,25 @@ The gain is a path segment that stays one segment.
 
 ### URLs — an honest regression
 
-`{% url 'pep' pep.number %}` resolves a *named* route, so renaming a URL does not
-break templates. SvelteKit has no named routes: you write `/pep/{pep.number}`,
-and renaming the directory means grepping for the path. If your project leans on
-`{% url %}` heavily, this is the thing you will miss.
+`{% url 'pep' pep.number %}` in Django, `{{ url_for('pep', number=…) }}` in
+Flask: both resolve a *named* route, so renaming a URL does not break templates.
+SvelteKit has no named routes: you write `/pep/{pep.number}`, and renaming the
+directory means grepping for the path.
+
+This is the thing you will miss, and more so coming from Flask, where `url_for`
+is the ordinary way to write any link rather than one helper among many.
 
 ### CSRF
 
-`{% csrf_token %}` has no equivalent because SvelteKit does not use a token: it
-compares the request's `Origin` to the app's own and refuses a cross-site form
-post. Nothing to write in the form — but the origin must be right, or every POST
+`{% csrf_token %}` in Django, `{{ form.csrf_token }}` under Flask-WTF: neither
+has an equivalent, because SvelteKit does not use a token. It compares the
+request's `Origin` to the app's own and refuses a cross-site form post. Nothing to write in the form — but the origin must be right, or every POST
 comes back `403`. See `paths.origin` in the SvelteKit configuration.
 
-## What Svelte adds, and Django never needed
+## What Svelte adds, and neither of them needed
 
-A Django template renders once, to a string, and the page is done. A Svelthon
-template also renders on the server — but then keeps running in the browser, and
+A Django or Jinja template renders once, to a string, and the page is done. A
+Svelthon template also renders on the server — but then keeps running in the browser, and
 that changes what the syntax has to express.
 
 **Keys.** `{#each rows as row (row.id)}` tells Svelte which DOM node belongs to
