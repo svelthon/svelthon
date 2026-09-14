@@ -135,7 +135,14 @@ export function python(options = {}) {
 
     // Shared with the plugin, which compiles the `.py` files themselves and has
     // to resolve their imports the same way. The two halves may not be the same
-    // module instance. See the registry above.
+    // module instance, so a value on the global is the only channel between
+    // them. See the registry above.
+    //
+    // This preprocessor no longer reads it: it passes `searchPath` to the
+    // resolution itself, so a second `python(options)` built afterwards cannot
+    // change what this one resolves. What is left on the global is the fallback
+    // for the plugin alone, which has no way of telling configurations apart;
+    // `svelthon({ path })` is how to say so explicitly when there are two.
     globalThis[Symbol.for('svelthon.path')] = searchPath;
 
     return {
@@ -208,7 +215,7 @@ export function python(options = {}) {
             // own directory first, then `path`. The module has to be evaluated
             // before init() runs, so its namespace is registered by the time
             // Brython looks it up.
-            const prelude = pythonImports(imports, dirname(filename || '.'));
+            const prelude = pythonImports(imports, dirname(filename || '.'), searchPath);
 
             generated.set(virtualId(name), withPrelude(module, map, prelude));
 
@@ -295,8 +302,17 @@ export function withPrelude(module, map, prelude) {
 // `import peps` names a file, looked up in the importer's own directory first,
 // then along the configured path. Both spellings are tried, since the statement
 // says nothing about whether the module it names is reactive.
-function pythonImports(names, fromDirectory) {
-    const searchPath = globalThis[Symbol.for('svelthon.path')] || [];
+function pythonImports(names, fromDirectory, path) {
+    // Given by the caller that knows which configuration it belongs to, and read
+    // off the shared value only by the one that cannot know.
+    //
+    // It used to read the global unconditionally, and `python(options)` writes
+    // that global as it is constructed. So creating a second preprocessor with a
+    // different path silently changed what the first one resolved: an `import`
+    // that had produced a dependency stopped producing one, without the second
+    // ever compiling anything. Two configurations in one process gave different
+    // import graphs depending on the order they were built in.
+    const searchPath = path || globalThis[Symbol.for('svelthon.path')] || [];
 
     return names
         .flatMap((mod) =>
@@ -329,8 +345,15 @@ function pythonImports(names, fromDirectory) {
 const isReactive = (file) => file.endsWith('.svelte.py');
 
 // The Vite plugin that serves those modules.
-export function svelthon() {
+export function svelthon(options = {}) {
     const isVirtual = (id) => id.startsWith(VIRTUAL_PREFIX);
+
+    // The plugin compiles the `.py` files themselves and resolves their imports
+    // the same way a component's are resolved. It is the half that cannot tell
+    // configurations apart, so it takes the path when it is given one and falls
+    // back to the value `python(options)` left on the global otherwise, which is
+    // right for the ordinary case of one configuration per process.
+    const searchPath = options.path;
 
     return {
         name: 'svelthon:modules',
@@ -379,7 +402,7 @@ export function svelthon() {
 
             // A `.py` may import another one, a route module reaching for its
             // data layer. Same prelude a component gets.
-            const prelude = pythonImports(imports, dirname(file));
+            const prelude = pythonImports(imports, dirname(file), searchPath);
 
             generated.set(virtualId(name), withPrelude(module, map, prelude));
 
