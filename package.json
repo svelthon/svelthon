@@ -2,7 +2,7 @@
   "name": "svelthon",
   "version": "1.0.0",
   "description": "Svelte components written in Python, compiled by Brython at build time",
-  "author": "Florent Gallaire <gallenza@gmail.com>",
+  "author": "Florent Gallaire <fgallaire@gmail.com>",
   "license": "MIT",
   "keywords": [
     "svelte",
