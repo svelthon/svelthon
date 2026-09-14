@@ -374,6 +374,27 @@ function mutable(value) {
 // properties, so they have to be found once, from the first object carrying it.
 let DICT;
 
+// A Python class, recognised by its shape the way the rest of this file
+// recognises Brython's own objects: it carries `tp_name` and `tp_bases` beside
+// its `ob_type`, which no instance and no dict does.
+//
+// The decision it serves is that **a class crosses as itself rather than
+// flattened**: refusing an accurate `__all__` because JavaScript would need
+// `$B.$call` to use one of its entries would be a JavaScript limit imposed on
+// Python. That decision was right and it lived at one site, `pyExport`, so every
+// other path that meets a class quietly decided the opposite — a class exported
+// directly survived and the same class inside a dict or a list came out as
+// `{__qualname__, __doc__, __module__}`, which is not callable. A `load()`
+// returning a registry of models is the ordinary way to write a route.
+//
+// So the decision lives in a predicate now, and the two sites ask it.
+const pyClass = (value) =>
+    value !== null &&
+    typeof value === 'object' &&
+    value.ob_type !== undefined &&
+    value.tp_name !== undefined &&
+    value.tp_bases !== undefined;
+
 function ownAttributes(value) {
     if (Array.isArray(value)) return undefined;
 
@@ -1185,9 +1206,7 @@ export function pyExport(value, where, lineOffset = 0) {
     // Recognised by shape, the way the rest of this file recognises Brython's
     // own objects: a class carries `tp_name` and `tp_bases` beside its
     // `ob_type`, which no instance and no dict does.
-    if (value.ob_type !== undefined && value.tp_name !== undefined && value.tp_bases !== undefined) {
-        return value;
-    }
+    if (pyClass(value)) return value;
 
     const keys = Object.keys(value);
 

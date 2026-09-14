@@ -202,6 +202,31 @@ describe('a class named in __all__ crosses as itself', () => {
 
         expect(mod.build(mod.Widget, 21)).toBe(42);
     });
+
+    // The decision above lived at one site, `pyExport`, so every other path that
+    // meets a class decided the opposite. A class inside a dict or a list came
+    // out as `{__qualname__, __doc__, __module__}` and was not callable, which
+    // is what a `load()` returning a registry of models hands a page.
+    //
+    // These three assertions are the rows this file did not have, and their
+    // absence is why two days of readings did not see it.
+    test.for([
+        ['in a dict', (m) => m.registry.widget],
+        ['in a list', (m) => m.pair[0]]
+    ])('a class %s crosses as itself too', async ([, reach]) => {
+        const mod = await import('./fixtures/exported_shapes.py');
+        const cls = reach(mod);
+
+        expect(cls.tp_name).toBe('Widget');
+        expect(Object.keys(cls)).not.toContain('__qualname__');
+    });
+
+    test('and Python can use a nested one, which is the point', async () => {
+        const mod = await import('./fixtures/exported_shapes.py');
+
+        expect(mod.build(mod.registry.widget, 21)).toBe(42);
+        expect(mod.build(mod.pair[0], 21)).toBe(42);
+    });
 });
 
 // A name the module took from JavaScript. Brython wraps what crosses into
