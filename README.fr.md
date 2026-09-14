@@ -38,12 +38,44 @@ lieu.
 ## Démarrer
 
 ```sh
-npm install
-npm run dev
+npm install svelthon
 ```
 
+Deux noms, dans un projet qui a déjà Svelte 5 ou SvelteKit : un plugin Vite, et
+un préprocesseur pour `svelte.config.js`.
+
+```js
+// vite.config.js
+import { svelthon, python } from 'svelthon';
+import { sveltekit } from '@sveltejs/kit/vite';
+import { defineConfig } from 'vite';
+
+export default defineConfig({
+    plugins: [
+        svelthon(),
+        sveltekit({
+            preprocess: [python({ path: ['src/lib'] })],
+
+            // un module de route peut être en Python
+            moduleExtensions: ['.js', '.ts', '.py'],
+
+            // et un module réactif se compile comme un `.svelte.ts`
+            experimental: { compileModule: { extensions: ['.js', '.ts', '.py'] } }
+        })
+    ]
+});
+```
+
+Écrire `<script lang="python">` et c'est tout. [SvelteKit](#sveltekit) donne le
+reste de cette configuration et ce que chaque ligne apporte.
+
+### Travailler sur Svelthon lui-même
+
 ```sh
-npm test             # 999 tests : sémantique, props, réactivité, surface Svelte
+npm install
+npm run dev
+
+npm test             # 1 132 tests : sémantique, props, réactivité, surface Svelte
 npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
 npm run test:all     # les trois ci-dessus, dans l'ordre, arrêt au premier échec
@@ -1310,7 +1342,7 @@ Le runtime entier, gzippé, fait **255 Ko**.
 
 ## État
 
-Validé par `npm test`, 999 tests, aucun échec attendu :
+Validé par `npm test`, 1 132 tests, aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
 - props : défaut Python, priorité du parent, lisibilité pendant l'init,

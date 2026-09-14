@@ -40,12 +40,44 @@ already happened.
 ## Quick start
 
 ```sh
-npm install
-npm run dev
+npm install svelthon
 ```
 
+Two names, in a project that already has Svelte 5 or SvelteKit: a Vite plugin,
+and a preprocessor for `svelte.config.js`.
+
+```js
+// vite.config.js
+import { svelthon, python } from 'svelthon';
+import { sveltekit } from '@sveltejs/kit/vite';
+import { defineConfig } from 'vite';
+
+export default defineConfig({
+    plugins: [
+        svelthon(),
+        sveltekit({
+            preprocess: [python({ path: ['src/lib'] })],
+
+            // route modules may be Python
+            moduleExtensions: ['.js', '.ts', '.py'],
+
+            // and a reactive module is compiled like a `.svelte.ts`
+            experimental: { compileModule: { extensions: ['.js', '.ts', '.py'] } }
+        })
+    ]
+});
+```
+
+Write `<script lang="python">` and that is it. [SvelteKit](#sveltekit) has the
+rest of that configuration and what each line buys.
+
+### Working on Svelthon itself
+
 ```sh
-npm test             # 999 tests: semantics, props, reactivity, Svelte surface
+npm install
+npm run dev
+
+npm test             # 1 132 tests: semantics, props, reactivity, Svelte surface
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
 npm run test:all     # the three above, in order, stopping at the first failure
@@ -1306,7 +1338,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 999 tests, none expected to fail:
+Validated by `npm test`, 1 132 tests, none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;
 - props: Python defaults, parent precedence, readability during init, parent
