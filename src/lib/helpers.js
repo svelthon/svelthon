@@ -76,6 +76,31 @@ const raw = (one) =>
 // about which sentence says so.
 const moment = (value) => (typeof value === 'bigint' ? Number(value) : value);
 
+// A Brython float is an object holding a number, not a number, and `from_json`
+// hands one over for every JSON number with a decimal point. It is the fourth
+// shape the two date helpers receive.
+const FLOAT = globalThis.__BRYTHON__.builtins.float;
+
+// What `new Date` accepts is wider than what an author can mean, and it says so
+// in silence: it coerces a value through its *string* form, so `date([2026])`
+// answered 1 January 2026 and `date([1, 2])` answered 2 January 2001. A boolean
+// went the other route and answered 1 January 1970.
+//
+// So the shapes are named here rather than left to coercion, and everything else
+// becomes an Invalid Date, which is the refusal the two helpers already word. A
+// big integer still reaches that refusal through `moment`, since every integer
+// large enough to be one is outside the range `Date` spans.
+function instant(value) {
+    if (value instanceof Date) return value;
+    if (value !== null && typeof value === 'object' && value.ob_type === FLOAT) {
+        return new Date(value.value);
+    }
+
+    const one = moment(value);
+
+    return typeof one === 'string' || typeof one === 'number' ? new Date(one) : new Date(NaN);
+}
+
 // Jinja's `|tojson`. A non-numeric indent is dropped rather than passed on:
 // Python's None is an object, and `JSON.stringify(v, null, None)` would quietly
 // indent with it.
@@ -144,7 +169,7 @@ export function batch(xs, size, fill) {
 // *its* language and the browser reformats in the visitor's, which Svelte
 // reports as a hydration mismatch.
 export function date(value, dateStyle, timeStyle, locale) {
-    const at = value instanceof Date ? value : new Date(moment(value));
+    const at = instant(value);
 
     if (Number.isNaN(at.getTime())) {
         throw refuse('date(): ' + shown(value) + ' is not a date');
@@ -179,7 +204,7 @@ const UNITS = [
 // what the *display* needs: a second while it counts seconds, an hour once it
 // counts days. So it slows down on its own as a date ages.
 export function fromnow(value, locale) {
-    const at = value instanceof Date ? value : new Date(moment(value));
+    const at = instant(value);
 
     if (Number.isNaN(at.getTime())) {
         throw refuse('fromnow(): ' + shown(value) + ' is not a date');

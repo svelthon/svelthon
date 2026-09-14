@@ -199,6 +199,31 @@ describe('date', () => {
         expect(() => fromnow(2n ** 70n)).toThrow(/fromnow\(\): 1180591620717411303424 is not/);
     });
 
+    // `new Date` coerces through a value's *string* form, so a one-item list of a
+    // year answered 1 January of it, a two-item list answered 2 January 2001, and
+    // a boolean took the number route and answered the epoch. All three without a
+    // word, which is the failure this set exists to avoid.
+    test.for([
+        ['a list of one', [2026]],
+        ['a list of two', [1, 2]],
+        ['a boolean', true]
+    ])('%s is refused rather than coerced into a date', ([, value]) => {
+        expect(() => date(value)).toThrow(/date\(\): .* is not a date/);
+        expect(() => fromnow(value)).toThrow(/fromnow\(\): .* is not a date/);
+    });
+
+    // And the shape that must keep crossing: `from_json` gives a Brython float
+    // for every JSON number with a decimal point, and a float is an object here,
+    // so naming the shapes rather than coercing had to let this one through.
+    test('a Python float still reads as the instant it holds', () => {
+        const at = Date.parse('2026-09-10T12:00:00Z');
+        const float = globalThis.__BRYTHON__.builtins.float.$factory(at);
+
+        expect(date(float, 'medium', undefined, 'en-GB')).toBe(
+            date(at, 'medium', undefined, 'en-GB')
+        );
+    });
+
     // Without a locale, `Intl` uses the platform's, which is the right default
     // and the wrong one under server rendering: see the note on the helper.
     test('with no locale it still formats, in the platform’s own', () => {
