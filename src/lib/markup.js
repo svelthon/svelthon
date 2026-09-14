@@ -365,13 +365,35 @@ const LET_DIRECTIVE = /^let:/;
 // without them.
 //
 // So the question is asked once, here, before either branch runs.
-// The attribute an interpolation belongs to, read off what has been written so
-// far. The trailing `\s*` is load-bearing: Svelte accepts `on:click= {foo}`, and
+
+// What an attribute's name is made of, and the single answer five sites used to
+// give differently.
+//
+// HTML lets an attribute follow a quoted value with no space between them, and
+// Svelte's parser follows HTML, so `<b title="y"onclick={go}>` is two
+// attributes. Read with a class that did not exclude the quote, the name came
+// back as `"y"onclick`, which matches no rule this project has: the handler was
+// never wrapped, a binding lost its write-back, a `class:` lost its truthiness
+// and `let:` lost its refusal. Nothing said so, and a dead button looks like a
+// live one.
+//
+// The three patterns below are built from the class rather than each carrying
+// their own, because the five sites disagreeing *was* the defect.
+const ATTRIBUTE_CHAR = '[^\\s=/>"\']';
+
+// The trailing `\s*` is load-bearing too: Svelte accepts `on:click= {foo}`, and
 // its own parser fixture `attribute-with-whitespace` is that line. Without it
 // nothing matched, so every rule was skipped and the value fell through to the
 // shorthand expansion, which turned `title= {x}` into `title= x={…}` — not
 // markup, and Svelte answered `Expected token >` about a token nobody typed.
-const ATTRIBUTE_NAME = /([^\s=]+)=$/;
+const ATTRIBUTE_NAME = new RegExp(`(${ATTRIBUTE_CHAR}+)=\\s*$`);
+
+// The same, to cut the name back out of what has been written.
+const ATTRIBUTE_ASSIGN = new RegExp(`${ATTRIBUTE_CHAR}+=\\s*$`);
+
+// And the name with no value after it, which is where the shorthand and the
+// `let:` refusal read it.
+const BARE_ATTRIBUTE = new RegExp(`(${ATTRIBUTE_CHAR}+)$`);
 
 const directive = (name) =>
     DIRECTIVE.test(name) ||
@@ -881,6 +903,10 @@ function walk(markup, collect, onPython, seed, record, where) {
                     if (end !== -1 && !DIRECTIVE.test(named) && !HANDLER.test(named)) {
                         region = { start: index + 1, end };
 
+                        const written = markup.slice(index + 1, end).trim();
+
+                        if (SPREAD(written)) throw refuse(spreadOutOfPlace(written, said(), named));
+
                         out += `{${call(markup.slice(index + 1, end), '__text')}}`;
                         region = null;
                         index = end + 1;
@@ -933,6 +959,10 @@ function walk(markup, collect, onPython, seed, record, where) {
                     if (attribute) {
                         if (LET_DIRECTIVE.test(attribute[1])) refuseLet(attribute[1]);
 
+                        if (SPREAD(trimmed)) {
+                            throw refuse(spreadOutOfPlace(trimmed, said(), attribute[1]));
+                        }
+
                         // A binding becomes a read/write pair; `bind:group` is
                         // the one Svelte will not take a pair for and keeps its
                         // text. A handler is Python, and what it yields is made
@@ -942,7 +972,7 @@ function walk(markup, collect, onPython, seed, record, where) {
                             // The tag is never inspected: `type` and `value` are
                             // read off the node at run time, which is why this
                             // needs no lookahead over the attributes.
-                            out = out.replace(/[^\s=]+=\s*$/, '') +
+                            out = out.replace(ATTRIBUTE_ASSIGN, '') +
                                 `use:${GROUP_ACTION}={[${call(inner, '')}, (${BOUND_VALUE}) => ${assign(inner)}]}`;
                         } else if (DIRECTIVE.test(attribute[1])) {
                             out += declaredHere(inner)
@@ -1034,7 +1064,7 @@ function walk(markup, collect, onPython, seed, record, where) {
             // closing bracket, so this is where the name is complete and the
             // absence of an `=` is certain.
             if (/[\s/>]/.test(char)) {
-                const bare = (out.match(/([^\s/>="]+)$/) || [])[1];
+                const bare = (out.match(BARE_ATTRIBUTE) || [])[1];
 
                 if (bare !== undefined && LET_DIRECTIVE.test(bare)) refuseLet(bare);
 
@@ -1206,6 +1236,8 @@ function walk(markup, collect, onPython, seed, record, where) {
         } else if (SPREAD(trimmed)) {
             throw refuse(spreadOutOfPlace(trimmed, said(), null));
         } else {
+            if (DECLARATION_KEYWORD.test(trimmed)) throw refuse(declarationKeyword(trimmed, said()));
+
             const declared = declaration(inner);
 
             if (declared) {

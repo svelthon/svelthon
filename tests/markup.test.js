@@ -559,6 +559,23 @@ describe('the attribute pass', () => {
         expect(defs.some((one) => one.includes('__truthy'))).toBe(true);
     });
 
+    // HTML lets an attribute follow a quoted value with no space, and Svelte's
+    // parser follows HTML. Five sites decided where a name begins and two read a
+    // class that did not exclude the quote, so `title="y"onclick` was the name
+    // and matched no rule at all.
+    test.for([
+        ['a handler', '<b title="y"onclick={go}>x</b>', /onclick=\{__event\(/],
+        ['a binding', '<input title="y"bind:value={x}>', /bind:value=\{\(\) =>/],
+        ['the shorthand', "<input title='y'bind:value>", /bind:value=\{\(\) =>/],
+        ['a class', '<b title="y"class:on={x}>x</b>', /class:on=\{__expr_\d+\(\)\}/]
+    ])('%s keeps its rule with no space before it', ([, markup, shape]) => {
+        expect(rewrite(markup).out).toMatch(shape);
+    });
+
+    test('and let: is still refused there', () => {
+        expect(() => rewrite('<b title="y"let:a={x}>x</b>')).toThrow(/Svelte 4 slot syntax/);
+    });
+
     // Svelte accepts `on:click= {foo}`, and its own parser fixture
     // `attribute-with-whitespace` is that line. The attribute was read off what
     // had been written with a pattern anchored at `=`, so a space meant nothing
