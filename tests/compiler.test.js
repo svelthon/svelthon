@@ -47,7 +47,7 @@ describe('compiler', () => {
         // The list is the fourth argument, and the effect below is what empties
         // it: a container reached through a store outlives the instance that
         // read it, so subscribing without a way out accumulates.
-        expect(script).toContain('track(v, __bump_items, __read_items, __subs)');
+        expect(script).toContain('track(__next, __bump_items, __read_items, __subs)');
         expect(script).toContain('$effect(() => () => unsubscribe(__subs));');
     });
 

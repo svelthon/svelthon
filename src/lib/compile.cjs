@@ -1139,6 +1139,26 @@ const destroyer = (name) => `__root_${name}`;
 // component that holds no state and no bindable never calls `track`, so it gets
 // neither the list nor the teardown that empties it.
 const SUBS = '__subs';
+
+// The setter's parameter, in every `bind()` below.
+//
+// It was `v`, and `v` is what anyone writes after a decade of
+// `for k, v in d.items()`. A module-level name gets a binding, and the setter
+// assigns to it, so for that one spelling the parameter shadowed the cell the
+// assignment was meant for: `(${NEXT_VALUE}) => { v = track(${NEXT_VALUE}, …) }` writes the parameter,
+// the `let v` is never touched, and the name is `<Javascript undefined>` for the
+// life of the component. Nothing is reported at any point.
+//
+// Probed against `value`, `one`, `n`, `f`, `fn`, `key`, `x`, `a`, `init`,
+// `bind`, `track`, `follow`, `err`, `teardown` and `args`: `v` was the only
+// collision, because it was the only bare name the generated code gave itself.
+// So it carries the prefix the rest of the generated code carries.
+//
+// `JS_RESERVED` did not catch it and could not: `v` is a perfectly good
+// JavaScript binding. The locked words did not either: `v` is not Svelthon's
+// vocabulary. This is a third category, a name the generated code uses for
+// itself, and the answer to that category is a prefix rather than a list.
+const NEXT_VALUE = 'v';
 const SUBSCRIBING = (c) => c.state.length > 0 || c.bindables.length > 0;
 
 const rev = (name) => `__rev_${name}`;
@@ -1278,19 +1298,19 @@ function authorBindings(c) {
         // not subscribe to Svelte's graph, only feed it.
         ...c.props.map(
             (n) =>
-                `bind(__proto, '${n}', () => follow(('${n}' in __props ? __props.${n} : ${local(n)}) ?? NONE), (v) => { ${local(n)} = v; });`
+                `bind(__proto, '${n}', () => follow(('${n}' in __props ? __props.${n} : ${local(n)}) ?? NONE), (${NEXT_VALUE}) => { ${local(n)} = ${NEXT_VALUE}; });`
         ),
         ...c.bindables.map(
             (b) =>
                 `bind(__proto, '${b}', () => (${rev(b)}, follow(${b} ?? NONE)),` +
-                ` (v) => { if (!__initialising || ${b} === undefined) ${b} = track(v, ${bump(b)}, ${read(b)}${c.store ? '' : `, ${SUBS}`}); });`
+                ` (${NEXT_VALUE}) => { if (!__initialising || ${b} === undefined) ${b} = track(${NEXT_VALUE}, ${bump(b)}, ${read(b)}${c.store ? '' : `, ${SUBS}`}); });`
         ),
         // Reading the revision alongside the value is what registers the
         // dependency: an in-place mutation then invalidates every reader,
         // without the value ever changing identity.
         ...c.state.map(
             (n) =>
-                `bind(__proto, '${n}', () => (${rev(n)}, ${n}), (v) => { ${n} = track(v, ${bump(n)}, ${read(n)}${c.store ? '' : `, ${SUBS}`}); });`
+                `bind(__proto, '${n}', () => (${rev(n)}, ${n}), (${NEXT_VALUE}) => { ${n} = track(${NEXT_VALUE}, ${bump(n)}, ${read(n)}${c.store ? '' : `, ${SUBS}`}); });`
         ),
         // A store's function is read from another module, where the namespace is
         // an ordinary JavaScript object and Brython converts what it is given.
@@ -1299,23 +1319,23 @@ function authorBindings(c) {
             (f) =>
                 `bind(__proto, '${f.name}', () => ` +
                 `${c.store ? `pyBoundary(${fn(f.name)})` : fn(f.name)}, ` +
-                `(v) => { ${fn(f.name)} = v; });`
+                `(${NEXT_VALUE}) => { ${fn(f.name)} = ${NEXT_VALUE}; });`
         ),
         ...c.inspects.map(
-            (i) => `bind(__proto, '${i.name}', () => ${fn(i.name)}, (v) => { ${fn(i.name)} = v; });`
+            (i) => `bind(__proto, '${i.name}', () => ${fn(i.name)}, (${NEXT_VALUE}) => { ${fn(i.name)} = ${NEXT_VALUE}; });`
         ),
         // A root's name reads as its destructor; the setter still takes the
         // function, since that is what Brython writes when the `def` runs.
         ...c.effects.map((e) =>
             e.root
-                ? `bind(__proto, '${e.name}', () => ${destroyer(e.name)}, (v) => { ${fn(e.name)} = v; });`
-                : `bind(__proto, '${e.name}', () => ${fn(e.name)}, (v) => { ${fn(e.name)} = v; });`
+                ? `bind(__proto, '${e.name}', () => ${destroyer(e.name)}, (${NEXT_VALUE}) => { ${fn(e.name)} = ${NEXT_VALUE}; });`
+                : `bind(__proto, '${e.name}', () => ${fn(e.name)}, (${NEXT_VALUE}) => { ${fn(e.name)} = ${NEXT_VALUE}; });`
         ),
         // follow(): a @derived that hands back a container it was given is the one
         // place the revision cannot travel by itself: Svelte memoises the
         // derived on `===`, so the reader subscribes to the object instead.
         ...c.deriveds.map(
-            (d) => `bind(__proto, '${d.name}', () => follow(${d.name}), (v) => { ${fn(d.name)} = v; });`
+            (d) => `bind(__proto, '${d.name}', () => follow(${d.name}), (${NEXT_VALUE}) => { ${fn(d.name)} = ${NEXT_VALUE}; });`
         )
     ];
 }
@@ -1464,7 +1484,7 @@ function instanceExports(c) {
                   // when everything is published as before.
                   `export const store = {`,
                   ...c.state.filter(c.published).map((n) => `    get ${n}() { return (${rev(n)}, ${n}); },`),
-                  ...c.state.filter(c.published).map((n) => `    set ${n}(v) { ${n} = track(v, ${bump(n)}, ${read(n)}); },`),
+                  ...c.state.filter(c.published).map((n) => `    set ${n}(v) { ${n} = track(${NEXT_VALUE}, ${bump(n)}, ${read(n)}); },`),
                   ...c.deriveds
                       .filter((d) => c.published(d.name))
                       .map((d) => `    get ${d.name}() { return follow(${d.name}); },`),
@@ -1588,12 +1608,12 @@ function plainBindings(c) {
         // `__assign`, `__group`, `__truthy` and the rest) is emitted. They were,
         // and `__event` named a `pyEvent` this module never imported.
         `const __proto = {};`,
-        ...c.state.map((n) => `bind(__proto, '${n}', () => ${n}, (v) => { ${n} = v; });`),
+        ...c.state.map((n) => `bind(__proto, '${n}', () => ${n}, (${NEXT_VALUE}) => { ${n} = ${NEXT_VALUE}; });`),
         ...c.funcs.map(
-            (f) => `bind(__proto, '${f.name}', () => pyBoundary(${fn(f.name)}), (v) => { ${fn(f.name)} = v; });`
+            (f) => `bind(__proto, '${f.name}', () => pyBoundary(${fn(f.name)}), (${NEXT_VALUE}) => { ${fn(f.name)} = ${NEXT_VALUE}; });`
         ),
         ...c.plainDeriveds.map(
-            (d) => `bind(__proto, '${d.name}', () => ${fn(d.name)}(), (v) => { ${fn(d.name)} = v; });`
+            (d) => `bind(__proto, '${d.name}', () => ${fn(d.name)}(), (${NEXT_VALUE}) => { ${fn(d.name)} = ${NEXT_VALUE}; });`
         ),
         ...injections(c.declared, false, c.js),
 
