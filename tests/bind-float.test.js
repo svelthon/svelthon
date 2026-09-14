@@ -39,6 +39,21 @@ describe('a float across a binding', () => {
         flushSync();
         expect(at('back').textContent).toBe('0.42');
     });
+
+    // And arrives as a float. A range and a text field hand over a string, which
+    // Python reads as a string; a `type="number"` field is the one Svelte
+    // converts, and it hands over a JavaScript number. Brython reads a
+    // non-integer one as a `JSObject`, which prints `0.42` and is not a number:
+    // the page looks right and `round(ratio, 1)` raises.
+    test('and arrives as a float, not as a JSObject', () => {
+        const at = setup();
+        const input = at('number');
+        input.value = '0.42';
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        flushSync();
+        expect(at('back').textContent).toBe('0.42');
+        expect(at('back-type').textContent).toBe('float');
+    });
 });
 
 // The other two halves of the same boundary. A transition cannot be mounted

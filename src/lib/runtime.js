@@ -1457,6 +1457,22 @@ export function inTemplate(run) {
     }
 }
 
+// The value a binding writes back into Python, on its way in.
+//
+// Brython reads a JavaScript number as an `int` when it is whole and as a
+// `JSObject` when it is not: a `type="number"` field, the one input Svelte
+// converts for you, wrote `0.42` into a name whose `type()` was then `JSObject`.
+// It prints `0.42`, so the page looks right, and `round(x, 1)` raises. The same
+// crossing in a group turned `value={1}` into the string "1".
+//
+// `jsobj2pyobj` is the conversion, and Brython owns its three rules: a whole
+// number stays an int, one past 2^53 becomes a BigInt, anything else becomes a
+// float. Numbers alone: `bind:this` hands over a DOM node and `bind:files` a
+// FileList, and those must cross as they are. Idempotent, so the group may ask
+// for it early, to compare, and the write may ask again.
+export const pyBind = (value) =>
+    typeof value === 'number' ? globalThis.__BRYTHON__.jsobj2pyobj(value) : value;
+
 // What `(obj.attr := value)` and `(obj[key] := value)` compile to, the two the
 // walrus has that Python's own grammar refuses it.
 //
@@ -1517,7 +1533,7 @@ export function writeItem(target, key, value) {
 // node's text is exactly right: that is what a plain HTML form hands over.
 export function group(node, [current, write, chosen]) {
     const boxes = node.type === 'checkbox';
-    const given = (picked) => (picked === undefined ? node.value : picked);
+    const given = (picked) => (picked === undefined ? node.value : pyBind(picked));
 
     let value = given(chosen);
 

@@ -643,10 +643,23 @@ describe('the attribute pass', () => {
     // the start, for the reason written above `GROUP_DIRECTIVE`, and the
     // shorthand went round it.
     test('bind:group refuses the pair in both spellings', () => {
-        const action = /use:__group=\{\[__expr_\d+\(\), \(__value\) => __expr_set_\d+\(__value\)\]\}/;
+        const action = /use:__group=\{\[__expr_\d+\(\), \(__value\) => __expr_set_\d+\(pyBind\(__value\)\)\]\}/;
 
         expect(rewrite('<input bind:group={choix}>').out).toMatch(action);
         expect(rewrite('<input bind:group>').out).toMatch(action);
+    });
+
+    // The tag's own value, which is the only attribute a directive reads beside
+    // itself: a DOM value is text, so the action cannot ask the node for it. It
+    // is passed on either side of the binding, and only in the braced spelling —
+    // a quoted value is text, and the node's own is then exactly right.
+    test('and takes the tag value with it', () => {
+        const value = /use:__group=\{\[.+, __expr_\d+\(\)\]\}/;
+
+        expect(rewrite('<input bind:group={choix} value={n}>').out).toMatch(value);
+        expect(rewrite('<input value={n} bind:group={choix}>').out).toMatch(value);
+        expect(rewrite('<input bind:group value={n}>').out).toMatch(value);
+        expect(rewrite('<input bind:group={choix} value="a">').out).not.toMatch(value);
     });
 
     // Svelte reads `<svelte:options>` at compile time and requires literals, so

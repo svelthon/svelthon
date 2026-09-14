@@ -67,6 +67,14 @@ The setter is generated, not written, so Python's one-expression rule for
 the target is a module name — otherwise the assignment would land in a frame
 nobody reads.
 
+The value it receives crosses through `pyBind`, and that is the only conversion a
+binding makes. Brython reads a JavaScript number as an `int` when it is whole and
+as a **`JSObject`** when it is not, so `<input type="number">` — the one input
+Svelte converts for you — wrote `0.42` into a name whose `type()` was `JSObject`.
+It prints `0.42`, so the page looks right, and `round(x, 1)` raises. Numbers
+alone: `bind:this` hands over a DOM node and `bind:files` a `FileList`, and those
+cross as they are.
+
 ## The one that took a different shape
 
 `bind:group` refuses the pair:
@@ -84,8 +92,8 @@ So it does not become a pair — it becomes an **action**, and the pair rides al
 as its parameter:
 
 ```svelte
-bind:group={form.pick}
-  →  use:__group={[form["pick"], (v) => form["pick"] = v]}
+bind:group={form.pick} value={n}
+  →  use:__group={[form["pick"], (v) => form["pick"] = v, n]}
 ```
 
 Which removes the need for a group identity altogether: each input computes its
@@ -103,10 +111,20 @@ invisible from JavaScript. Both work now, along with a checkbox group, which
 arrives as a Python `list` rather than the `JavascriptArray` Svelte's version
 assigned.
 
-The element is never inspected: `type` and `value` are read off the node at run
-time, which is why this needed no lookahead over the attributes. The value is
-therefore the DOM's, and the DOM's is text — `value={5}` binds `"5"`, exactly as
-a plain HTML form hands it over. Covered by `tests/groups.test.js`.
+The `type` is read off the node. The **value cannot be**, and it is the one place
+a directive here has to look at the attribute beside it. A DOM value is text, so
+`value={5}` reads back as `"5"`: the group filled nothing at mount, and a
+checkbox left `[1, '1']` behind — the same choice under two types. The typed
+value is nowhere on the node either. Svelte keeps it on the hidden `__value`
+property, but only for an element it *sees* a group binding on, and this one
+carries an action. So the markup pass reads the tag's own `value`, on either side
+of the binding, and passes it as the third member. Only the braced spelling: a
+quoted value is text, and the node's own is then exactly right.
+
+The comparison is Python's `==`, not JavaScript's `===`, because a Brython float
+is an object and two evaluations of `value={0.5}` are two of them.
+
+Covered by `tests/groups.test.js` and `tests/group-values.test.js`.
 
 ## The one open question
 

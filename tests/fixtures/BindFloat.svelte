@@ -18,3 +18,4 @@ held.stiffness = 0.25
 <input data-k="member" type="range" min="0" max="1" step="0.01" bind:value={held.stiffness} />
 
 <p data-k="back">{ratio}</p>
+<p data-k="back-type">{type(ratio).__name__}</p>

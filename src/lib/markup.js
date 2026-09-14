@@ -340,6 +340,10 @@ const GROUP_ACTION = '__group';
 // The setter's parameter. Generated, so it only has to avoid the author's names.
 const BOUND_VALUE = '__value';
 
+// And the converter it crosses on its way into Python, named here and imported
+// there, like `GROUP_ACTION`.
+const BIND_VALUE = 'pyBind';
+
 // A handler takes a *callable*, and Python's is `lambda`. So its value is
 // compiled as Python like everything else, and what the expression yields is
 // wrapped for JavaScript: `pyHandler` reads the signature Brython recorded,
@@ -887,12 +891,16 @@ function walk(markup, collect, onPython, seed, record, where) {
     // The write half of a binding: the same text, compiled as an assignment
     // target rather than as an expression. No locate(): it is the same source
     // text the read half already reported, and a range must not be sent twice.
+    //
+    // The value crosses through `pyBind`, which is where a JavaScript number
+    // becomes a Python one. It is the only conversion a binding makes, and every
+    // binding makes it here rather than each at its own site.
     const assign = (expr) => {
         const args = mentioned(expr.trim());
         const name = collect(expr.trim(), '', args, true);
         const rest = args.map((arg) => `follow(${arg})`);
 
-        return `${name}(${[BOUND_VALUE, ...rest].join(', ')})`;
+        return `${name}(${[`${BIND_VALUE}(${BOUND_VALUE})`, ...rest].join(', ')})`;
     };
 
     // The group action, in one place for the two spellings of `bind:group`.
