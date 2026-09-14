@@ -29,6 +29,10 @@ import {
     urlencode
 } from '../src/lib/helpers.js';
 
+// The Python values that are objects rather than primitives, which is what these
+// helpers keep meeting: a float, a list, a tuple, a set.
+const _b_ = globalThis.__BRYTHON__.builtins;
+
 describe('the set itself', () => {
     // The object the generated script binds. A helper added to the module and
     // forgotten here would be invisible to every component.
@@ -346,5 +350,27 @@ describe('urlencode', () => {
     // `ob_type=%3Cclass+%27NoneType%27%3E&__doc__=` into the page.
     test('None is absence, not a mapping of its own internals', () => {
         expect(urlencode(NONE)).toBe('');
+    });
+
+    // And None was one instance of it, not the problem: almost every Python
+    // value is an object here. A float is `{ob_type, value}`, so a price wrote
+    // `ob_type=%3Cclass+%27float%27%3E&value=1.5` into the page, a list added
+    // its class after its items, and a set wrote its whole internal store.
+    test.for([
+        ['a float', () => _b_.float.$factory(1.5)],
+        ['a list', () => _b_.list.$factory([1, 2])],
+        ['a tuple', () => _b_.tuple.$factory([1, 2])],
+        ['a set', () => _b_.set.$factory(_b_.list.$factory([1]))]
+    ])('%s never writes its own internals into a URL', ([, make]) => {
+        const written = urlencode(make());
+
+        expect(written).not.toMatch(/ob_type/);
+        expect(written).not.toMatch(/%24store/);
+    });
+
+    // Jinja reads a float as a plain value, and so does this: `1.5`, not a
+    // mapping of the object that holds it.
+    test('a float is a value, as it is in Jinja', () => {
+        expect(urlencode(_b_.float.$factory(1.5))).toBe('1.5');
     });
 });

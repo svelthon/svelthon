@@ -260,6 +260,27 @@ export function striptags(value) {
     return (text || '').replace(/\s+/g, ' ').trim();
 }
 
+// Which values become a query string rather than a single encoded value.
+//
+// It used to be `typeof value === 'object'`, with `None` named as the one
+// exception, and that was one instance of a general problem rather than the
+// problem: almost everything in Python is an object here. A float is
+// `{ob_type, value}`, so `{urlencode(1.5)}` wrote
+// `ob_type=%3Cclass+%27float%27%3E&value=1.5` into the page; a list added
+// `ob_type=<class 'list'>` after its items, and a set wrote its whole internal
+// store. Jinja reads a float as a plain value, `1.5`, and so do we now.
+//
+// So the shapes are named: a Python dict, or a plain JavaScript object, which is
+// what `js.` interop and a `load()` hand over. `$B.is_dict` answers the first
+// without touching the object's symbols, which matters because SvelteKit wraps
+// `event.params` in a proxy that records every key read.
+function mapping(value) {
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+    if (globalThis.__BRYTHON__.is_dict(value)) return true;
+
+    return !('ob_type' in value) && Object.getPrototypeOf(value) === Object.prototype;
+}
+
 // Jinja's shape: a string, or a mapping that becomes a whole query string. Not
 // Jinja's behaviour, and not Django's either: both leave `/` unquoted, which
 // quietly turns `/tag/{urlencode(t)}` into two path segments.
@@ -269,11 +290,6 @@ export function urlencode(value) {
     // `<Javascript object: [object Date]>`, escaped, in the query string.
     if (value instanceof Date) return encodeURIComponent(value.toISOString());
 
-    // None is an object too, with `ob_type` and `__doc__` as own properties, so
-    // without this it was walked as a mapping and `{urlencode(missing)}` wrote
-    // `ob_type=%3Cclass+%27NoneType%27%3E&__doc__=` into the page. It is the
-    // rule the whole set follows: None is absence, and absence encodes to
-    // nothing.
     if (value !== NONE && value !== null && typeof value === 'object') {
         const pairs = new URLSearchParams();
 
@@ -282,6 +298,9 @@ export function urlencode(value) {
         return pairs.toString();
     }
 
+    // Everything else is a value, and a value is what Python prints of it. None
+    // is the one exception the whole set shares: absence encodes to nothing,
+    // which `__pybridge.str` already answers with an empty string.
     return encodeURIComponent(__pybridge.str(value));
 }
 
