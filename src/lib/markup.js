@@ -355,6 +355,34 @@ const CLASS_DIRECTIVE = /^class:/;
 // which is the outcome this pass refuses things to prevent.
 const LET_DIRECTIVE = /^let:/;
 
+// Whether an attribute name is one the ladder below has a rule for. Svelte 5
+// reads `bind:value={x}` and `bind:value="{x}"` as the same thing, and its own
+// fixtures write the quoted form; to this scanner they were two doors, and every
+// rule lived behind one of them. A binding skipped its read/write pair, so the
+// `__bound` that turns Python's None into undefined never ran and a field
+// displayed the word "None"; `class:on` was read as text rather than for
+// truthiness, so an empty Python list was true through the quotes and false
+// without them.
+//
+// So the question is asked once, here, before either branch runs.
+const directive = (name) =>
+    DIRECTIVE.test(name) ||
+    HANDLER.test(name) ||
+    CLASS_DIRECTIVE.test(name) ||
+    LET_DIRECTIVE.test(name);
+
+// `bind:value="{x}"`: a directive whose value is one interpolation and nothing
+// else. Svelte concatenates anything else into a string, so `class="a {b}"` is
+// text and stays text; only the lone form can drop its quotes and be read as the
+// bare spelling.
+function loneInterpolation(markup, at, closing) {
+    if (markup[at + 1] !== '{') return -1;
+
+    const end = closing(markup, at + 1);
+
+    return end !== -1 && markup[end + 1] === markup[at] ? end + 1 : -1;
+}
+
 // Names a block introduces, which are not module globals and must therefore be
 // passed in as arguments.
 const BLOCK_NAMES = {
@@ -611,6 +639,11 @@ function walk(markup, collect, onPython, seed, record, where) {
     let quotedAttribute = null;
     let region = null;
 
+    // The index of the closing quote of a directive whose quotes are being
+    // dropped, so the pair is skipped rather than written out around a value the
+    // bare branch is about to rewrite.
+    let unquoted = -1;
+
     // Scopes are numbered by the order they are opened in, which two walks of
     // the same markup agree on. The base scope, the component's own, is 0.
     let opened = 0;
@@ -798,9 +831,25 @@ function walk(markup, collect, onPython, seed, record, where) {
                 }
 
                 if (char === quote) quote = null;
+            } else if (index === unquoted) {
+                // The closing quote of a directive whose opening one was
+                // dropped: the value between them has already been written in
+                // its bare form.
+                unquoted = -1;
+                index += 1;
+                continue;
             } else if (char === '"' || char === "'") {
+                const named = (out.match(/([^\s=]+)=$/) || [])[1] || '';
+                const closing = directive(named) ? loneInterpolation(markup, index, closingBrace) : -1;
+
+                if (closing !== -1) {
+                    unquoted = closing;
+                    index += 1;
+                    continue;
+                }
+
                 quote = char;
-                quotedAttribute = (out.match(/([^\s=]+)=$/) || [])[1];
+                quotedAttribute = named;
             } else if (char === '{') {
                 const end = closingBrace(markup, index);
                 if (end !== -1) {

@@ -829,6 +829,13 @@ export function pyData(value) {
     const $B = globalThis.__BRYTHON__;
 
     if (value === undefined || value === null) return NONE;
+
+    // A whole number past 2^53 is a Python `int` and a JavaScript `bigint`, and
+    // the early return below would hand back the double instead: `to_py(1e21)`
+    // answered an int whose `repr` was `1e+21`, and `to_py(2 ** 70)` one whose
+    // digits were wrong. Inside a container the same number came back exact,
+    // because the walk crosses `jsobj2pyobj` and this line did not. Same value,
+    // two answers, decided by depth.
     if (typeof value !== 'object') return value;
     if (Array.isArray(value)) return _b_.list.$factory(value.map(pyData));
 
