@@ -1,7 +1,6 @@
 import { createRequire } from 'node:module';
 import { relative, resolve, dirname } from 'node:path';
 import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
 
 import {
     overMarkup,
