@@ -422,6 +422,55 @@ function loneInterpolation(markup, at, closing) {
     return end !== -1 && markup[end + 1] === markup[at] ? end + 1 : -1;
 }
 
+// The tag's own `value`, for the group action, which is the one place a
+// directive has to know something about the attribute beside it.
+//
+// An element's `value` property is text, so what a group reads off the node is
+// the spelling of the author's value rather than the value: `value={1}` comes
+// back as "1". The typed one is not on the node either. Svelte keeps it on the
+// hidden `__value` property, but only for an element it sees a group binding on
+// — `needs_special_value_handling` in its RegularElement visitor — and ours
+// carries an action instead. So the value is read from the source here and
+// handed to the action.
+//
+// Only the braced spelling: `value="a"` is text, `value="{x}"` is text too,
+// since Svelte concatenates a quoted attribute, and the node's own value is
+// exactly right for both.
+//
+// Returns the range rather than the text, so the caller can compile it as the
+// expression it is, at the position it sits at.
+function tagValue(markup, from) {
+    let at = from;
+    let quote = null;
+
+    while (at < markup.length) {
+        const char = markup[at];
+
+        if (quote) {
+            if (char === quote) quote = null;
+            at += 1;
+        } else if (char === '"' || char === "'") {
+            quote = char;
+            at += 1;
+        } else if (char === '{') {
+            const end = closingBrace(markup, at);
+
+            if (end === -1) return null;
+            if ((markup.slice(from, at).match(ATTRIBUTE_NAME) || [])[1] === 'value') {
+                return { start: at + 1, end };
+            }
+
+            at = end + 1;
+        } else if (char === '>') {
+            return null;
+        } else {
+            at += 1;
+        }
+    }
+
+    return null;
+}
+
 // Names a block introduces, which are not module globals and must therefore be
 // passed in as arguments.
 const BLOCK_NAMES = {
@@ -846,6 +895,30 @@ function walk(markup, collect, onPython, seed, record, where) {
         return `${name}(${[BOUND_VALUE, ...rest].join(', ')})`;
     };
 
+    // The group action, in one place for the two spellings of `bind:group`.
+    //
+    // It takes the read, the write, and the value the tag was given: the DOM
+    // keeps only the text of that value, so a number bound from `value={1}` came
+    // back as "1" and matched nothing. See `tagValue` for why the node cannot
+    // answer this.
+    const groupAction = (expr) => {
+        const read = call(expr, '');
+        const write = assign(expr);
+        const found = tag === null ? null : tagValue(markup, tag.start);
+        const outer = region;
+
+        // No locate(): the attribute reports its own range where it is written,
+        // and `bind:group={n} value={n}` would otherwise report the binding's
+        // range a second time, the two texts being the same.
+        region = null;
+
+        const value = found === null ? '' : `, ${call(markup.slice(found.start, found.end), '')}`;
+
+        region = outer;
+
+        return `use:${GROUP_ACTION}={[${read}, (${BOUND_VALUE}) => ${write}${value}]}`;
+    };
+
     // A `bind:` whose target is a name the *markup* declared, a `{x = e}` or a
     // block's own alias, cannot go through the pair above. The generated `def`
     // receives that name as a parameter, so `x = value` would assign to the
@@ -981,8 +1054,7 @@ function walk(markup, collect, onPython, seed, record, where) {
                             // The tag is never inspected: `type` and `value` are
                             // read off the node at run time, which is why this
                             // needs no lookahead over the attributes.
-                            out = out.replace(ATTRIBUTE_ASSIGN, '') +
-                                `use:${GROUP_ACTION}={[${call(inner, '')}, (${BOUND_VALUE}) => ${assign(inner)}]}`;
+                            out = out.replace(ATTRIBUTE_ASSIGN, '') + groupAction(inner);
                         } else if (DIRECTIVE.test(attribute[1])) {
                             out += declaredHere(inner)
                                 ? `{${inner.trim()}}`
@@ -1088,8 +1160,7 @@ function walk(markup, collect, onPython, seed, record, where) {
                     // the pair, and Svelte answered that `bind:group` can only
                     // bind to an identifier.
                     if (GROUP_DIRECTIVE.test(short[1])) {
-                        out = out.slice(0, out.length - short[1].length) +
-                            `use:${GROUP_ACTION}={[${call(name, '')}, (${BOUND_VALUE}) => ${assign(name)}]}`;
+                        out = out.slice(0, out.length - short[1].length) + groupAction(name);
                     } else {
                         out += declaredHere(name)
                             ? `={${name.trim()}}`
@@ -1118,7 +1189,11 @@ function walk(markup, collect, onPython, seed, record, where) {
             }
 
             const named = markup.slice(index).match(/^<(\/?)\s*([A-Za-z][\w:.-]*)/);
-            tag = named ? { closing: named[1] === '/', name: named[2] } : null;
+
+            // `start` is where the group action reads the tag's `value` from,
+            // which is the only rule that looks at an attribute other than its
+            // own, and may find it on either side of the binding.
+            tag = named ? { closing: named[1] === '/', name: named[2], start: index } : null;
 
             inTag = true;
             out += char;

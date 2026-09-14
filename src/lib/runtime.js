@@ -1505,28 +1505,47 @@ export function writeItem(target, key, value) {
 // `{#each}` keep their own answer, both of which Svelte's own machinery gets
 // wrong here for want of a notification.
 //
-// What the element carries is read off the node, `type` and `value`, so the
-// markup pass never has to look at the rest of the tag. The value is therefore
-// the DOM's, which is text: `value={5}` binds "5", exactly as a plain HTML form
-// would hand it over.
-export function group(node, [current, write]) {
+// The element's `type` is read off the node. Its value cannot be: a DOM value is
+// text, so `value={1}` reads back as "1", and the group wrote that string into
+// the author's data — an initial number matched nothing, and a checkbox left
+// `[1, '1']` behind, the same choice under two types.
+//
+// The typed value is nowhere on the node either. Svelte keeps it on the hidden
+// `__value` property only for an element it sees a group binding on, and this one
+// carries an action instead. So the markup pass reads the tag's own `value` and
+// passes it here. It is absent when the tag has no braced value, and then the
+// node's text is exactly right: that is what a plain HTML form hands over.
+export function group(node, [current, write, chosen]) {
     const boxes = node.type === 'checkbox';
+    const given = (picked) => (picked === undefined ? node.value : picked);
 
-    const show = (value) => {
-        node.checked = boxes
-            ? Array.from(value ?? []).includes(node.value)
-            : String(value) === node.value;
+    let value = given(chosen);
+
+    // Python's `==`, not JavaScript's `===`. A Brython float is an object
+    // `{ob_type, value}`, so `value={0.5}` evaluated twice is two objects and
+    // identity answers false for what the author wrote as one value. `==` and
+    // `in` are also what a Python author reads in a group.
+    const same = (one) => {
+        try {
+            return globalThis.__BRYTHON__.rich_comp('__eq__', one, value) === true;
+        } catch {
+            return one === value;
+        }
+    };
+
+    const show = (held) => {
+        node.checked = boxes ? Array.from(held ?? []).some(same) : same(held);
     };
 
     const changed = () => {
-        if (!boxes) return write(node.value);
+        if (!boxes) return write(value);
 
         // A checkbox group is a list, and it has to arrive as Python's: an array
         // built here reads as a JavascriptArray, which prints `[a, c]` where
         // Python prints `['a', 'c']` and refuses a slice.
-        const kept = Array.from(node.$svelthonGroup ?? []).filter((one) => one !== node.value);
+        const kept = Array.from(node.$svelthonGroup ?? []).filter((one) => !same(one));
 
-        write(__pybridge.list(node.checked ? [...kept, node.value] : kept));
+        write(__pybridge.list(node.checked ? [...kept, value] : kept));
     };
 
     node.$svelthonGroup = current;
@@ -1534,8 +1553,9 @@ export function group(node, [current, write]) {
     show(current);
 
     return {
-        update([next]) {
+        update([next, , picked]) {
             node.$svelthonGroup = next;
+            value = given(picked);
             show(next);
         },
         destroy() {
