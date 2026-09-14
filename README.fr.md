@@ -1342,7 +1342,7 @@ Le runtime entier, gzippé, fait **255 Ko**.
 
 ## État
 
-Validé par `npm test`, 1 132 tests, aucun échec attendu :
+Validé par `npm test`, 1 188 tests, aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
 - props : défaut Python, priorité du parent, lisibilité pendant l'init,
@@ -1351,7 +1351,7 @@ Validé par `npm test`, 1 132 tests, aucun échec attendu :
   contrôle et frames. Chaque valeur attendue a été produite par CPython 3.12 en
   exécutant le code du composant tel quel, jamais écrite à la main. Brython
   reproduit CPython sur **39 des 40 points** ;
-- build de production : **224 Ko gzip**, runtime Brython compris.
+- build de production : **225 Ko gzip**, runtime Brython compris.
 
 La grille sert de banc d'acceptation aux codegens optimisés (wasthonf) : un
 codegen qui supprime les cadres d'appel casse `Frames`, qui déballe les entiers

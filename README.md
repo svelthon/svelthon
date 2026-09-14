@@ -1338,7 +1338,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 1 132 tests, none expected to fail:
+Validated by `npm test`, 1 188 tests, none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;
 - props: Python defaults, parent precedence, readability during init, parent
@@ -1426,7 +1426,7 @@ deep-proxies the objects inside a `$state` array; Svelthon's names are
 itself exactly where a real application spends its time.
 
 Loading is the real price: **1.2 s to interactive** for the production demo on
-this laptop, against 0.5 s for the same page without Brython: 224 KB gzip
+this laptop, against 0.5 s for the same page without Brython: 225 KB gzip
 instead of 13 KB. Paid once per session, not per page, since the app never
 reloads.
 
