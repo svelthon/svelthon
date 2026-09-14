@@ -16,8 +16,6 @@ export default defineConfig({
         },
         conditions: ['browser']
     },
-    // 5173 is taken by TABLE.
-    server: { port: 5174, strictPort: true },
 
     optimizeDeps: {
         // Vite's dependency scanner runs ahead of the plugin pipeline: it reads
