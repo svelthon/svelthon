@@ -4,6 +4,14 @@
   "description": "Svelte components written in Python, compiled by Brython at build time",
   "author": "Florent Gallaire <fgallaire@gmail.com>",
   "license": "MIT",
+  "homepage": "https://svelthon.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/svelthon/svelthon.git"
+  },
+  "bugs": {
+    "url": "https://github.com/svelthon/svelthon/issues"
+  },
   "keywords": [
     "svelte",
     "python",
@@ -24,7 +32,6 @@
   "files": [
     "BRYTHON.md",
     "DJANGO_FLASK.md",
-    "docs/demo.png",
     "notes",
     "src/lib",
     "vendor"
