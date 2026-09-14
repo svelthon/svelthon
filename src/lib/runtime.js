@@ -882,7 +882,15 @@ export function pyData(value) {
     // because the walk crosses `jsobj2pyobj` and this line did not. Same value,
     // two answers, decided by depth.
     if (typeof value !== 'object') return value;
-    if (Array.isArray(value)) return _b_.list.$factory(value.map(pyData));
+
+    // A Brython list and a Brython tuple are JavaScript arrays too, told apart
+    // from a foreign one by the `ob_type` they carry. Rebuilding one made a list
+    // of a tuple — the immutability went, and with it the right to be a dict key
+    // — and made a copy of a list, so a guard put on data that turned out to be
+    // Python's already quietly detached it from the name it came from.
+    if (Array.isArray(value)) {
+        return value.ob_type !== undefined ? value : _b_.list.$factory(value.map(pyData));
+    }
 
     const python = $B.jsobj2pyobj(value);
 

@@ -44,5 +44,15 @@ describe('the inbound bridge', () => {
         test('it agrees with from_json on the same payload', () => expect(read('agree')).toBe('True'));
         test('a value that needs nothing is returned as it is', () =>
             expect(read('plain')).toBe('already a string'));
+
+        // The guard is put where the data *might* be JavaScript's, so it runs on
+        // Python's too. A Brython tuple is a JavaScript array, and the array
+        // branch rebuilt it as a list: the immutability went, and with it the
+        // right to be a dict key.
+        test('a tuple stays a tuple', () => expect(read('kept_kind')).toBe('tuple'));
+        test('and a list is the same list, not a copy', () =>
+            expect(read('kept_list')).toBe('True'));
+        test('while an array that really is JavaScript becomes a list', () =>
+            expect(read('foreign_kind')).toBe('list'));
     });
 });

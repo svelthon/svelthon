@@ -28,6 +28,21 @@ converted_list = isinstance(converted["nodes"], list)
 plain = to_py("already a string")
 empty = from_json("null")
 
+# A value that is already Python. `to_py` is a guard an author puts where the
+# data *might* have come from JavaScript, so it must leave what was already ours
+# alone: a Brython tuple is a JavaScript array too, and rebuilding it made a
+# list of it.
+pair = (1, 2)
+kept_pair = to_py(pair)
+kept_kind = type(kept_pair).__name__
+
+xs = [1, 2]
+kept_list = to_py(xs) is xs
+
+# And an array that really did come from JavaScript still becomes a list.
+foreign = to_py(js.JSON.parse("[1, 2]"))
+foreign_kind = type(foreign).__name__
+
 # A payload whose *root* is an array. The nested ones above are converted by
 # Brython's own walk; the root is the one thing a method on an object cannot
 # speak for, so it is converted here — and a JSObj answers neither a slice nor
@@ -51,6 +66,9 @@ rooted_inner = isinstance(rooted[1], list)
 <p data-k="converted_list">{converted_list}</p>
 <p data-k="plain">{plain}</p>
 <p data-k="empty">{empty is None}</p>
+<p data-k="kept_kind">{kept_kind}</p>
+<p data-k="kept_list">{kept_list}</p>
+<p data-k="foreign_kind">{foreign_kind}</p>
 <p data-k="rooted_kind">{rooted_kind}</p>
 <p data-k="rooted_slice">{rooted_slice}</p>
 <p data-k="rooted_inner">{rooted_inner}</p>
