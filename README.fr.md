@@ -1458,9 +1458,9 @@ de n'en faire qu'un. [notes/crossings.md](notes/crossings.md) est l'index de la
 frontière elle-même : les treize convertisseurs en un tableau, quelle porte
 prendre, et les trois pannes qui apparaissent quand on se trompe.
 
-**Vous venez de Django ou de Flask ?** [DJANGO.md](DJANGO.md) met en regard
-chaque construction de gabarit courante et son équivalent Svelthon, toute la
-traduction tient sur une page, et son exemple complet est une fixture de test,
+**Vous venez de Django ou de Flask ?** [DJANGO_FLASK.md](DJANGO_FLASK.md) met
+en regard chaque construction de gabarit courante et son équivalent Svelthon,
+toute la traduction tient sur une page, et son exemple complet est une fixture de test,
 donc il ne peut pas dériver.
 
 **En amont, chez Brython**

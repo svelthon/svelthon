@@ -23,7 +23,7 @@
   },
   "files": [
     "BRYTHON.md",
-    "DJANGO.md",
+    "DJANGO_FLASK.md",
     "src/lib",
     "vendor/brython_runtime.js",
     "vendor/brython_compiler.js",

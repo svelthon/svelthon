@@ -1424,9 +1424,9 @@ on why Brython loads twice in one process and what it would take to load it once
 thirteen converters in one table, which door to use, and the three failures that
 show when the wrong one is chosen.
 
-**Coming from Django or Flask?** [DJANGO.md](DJANGO.md) maps every everyday
-template construct onto its Svelthon counterpart, the whole translation fitting on
-one page, and its worked example is a test fixture, so it cannot drift.
+**Coming from Django or Flask?** [DJANGO_FLASK.md](DJANGO_FLASK.md) maps every
+everyday template construct onto its Svelthon counterpart, the whole translation
+fitting on one page, and its worked example is a test fixture, so it cannot drift.
 
 **Upstream, in Brython**
 
