@@ -74,6 +74,33 @@ describe('tojson', () => {
         expect(tojson(__pybridge.list([big]))).toBe('[1180591620717411303424]');
     });
 
+    // A class has no JSON, and it reaches here whole since `plainData` stopped
+    // flattening one: handing it over is right at the boundary, where JavaScript
+    // can call it, and wrong in a page. A Brython class carries its own
+    // `__mro__`, which contains itself, so the answer was V8's `Converting
+    // circular structure to JSON`, which names nothing and points at no line.
+    //
+    // Python's own is `Object of type type is not JSON serializable`, and this
+    // one goes further by naming the class.
+    test.for([
+        ['on its own', (cls) => cls],
+        ['inside a list', (cls) => _b_.list.$factory([cls])],
+        ['inside a dict', (cls) => {
+            const d = _b_.dict.$factory();
+            globalThis.__BRYTHON__.$setitem(d, 'cls', cls);
+            return d;
+        }]
+    ])('a class %s is refused by name, not by V8', ([, wrap]) => {
+        // A builtin rather than one compiled here: `pyClass` reads the shape, and
+        // `list` carries the same `ob_type`, `tp_name` and `tp_bases` an authored
+        // class does. Measured, so the shortcut is a fact rather than a hope.
+        const cls = _b_.list;
+
+        expect(() => tojson(wrap(cls))).toThrow(/svelthon — tojson\(\)/);
+        expect(() => tojson(wrap(cls))).toThrow(/list/);
+        expect(() => tojson(wrap(cls))).not.toThrow(/circular structure/);
+    });
+
     test('and beside a None, which is the same crossing twice', () => {
         const $B = globalThis.__BRYTHON__;
         const table = $B.builtins.dict.$factory();

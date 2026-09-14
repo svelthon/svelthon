@@ -15,7 +15,7 @@
 // that spelling would collide with the `let date = …` the compiler emits beside
 // it. `__helpers` carries the prefix that says "generated", the same convention
 // `__pybridge` and `__proto` follow.
-import { NONE, __pybridge, plainData, ticking } from './runtime.js';
+import { NONE, __pybridge, plainData, pyClass, ticking } from './runtime.js';
 
 // A helper's refusal, in the dialect the rest of the project speaks.
 //
@@ -105,6 +105,25 @@ function instant(value) {
 // Jinja's `|tojson`. A non-numeric indent is dropped rather than passed on:
 // Python's None is an object, and `JSON.stringify(v, null, None)` would quietly
 // indent with it.
+// A class has no JSON, and since `plainData` stopped flattening one it reaches
+// here whole. A Brython class carries its own `__mro__`, which contains itself,
+// so `JSON.stringify` answers `Converting circular structure to JSON`: V8's
+// sentence, naming nothing and pointing at no line.
+//
+// This is the same argument `shown()` above is written for, one function over. A
+// serialiser meeting something it cannot serialise owes the author a sentence,
+// and Python's own is `Object of type type is not JSON serializable`.
+//
+// Handing the class over whole is right at the *boundary*, where JavaScript can
+// call it; it is not a thing to write into a page.
+const serialisable = (one) => {
+    if (pyClass(one)) {
+        throw refuse(`tojson(): ${shown(one)} is a class, and a class has no JSON`);
+    }
+
+    return raw(one);
+};
+
 export function tojson(value, indent) {
     return JSON.stringify(
         plainData(value),
