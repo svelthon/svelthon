@@ -87,7 +87,7 @@ export const __pybridge = {
             // Hand the watch down to the rows: {#each} walks the array in
             // JavaScript, never through $getitem, so this is the only path by
             // which an item can come under watch before its block reads it.
-            if (value.$notify !== undefined) {
+            if (MARKS.has(value)) {
                 for (const item of value) inherit(value, item);
             }
 
@@ -183,7 +183,7 @@ function installMutationTracking($B) {
     $B.$svelthonTracking = true;
 
     const notify = (obj) => {
-        if (obj !== null && typeof obj === 'object' && obj.$notify !== undefined) obj.$notify();
+        if (obj !== null && typeof obj === 'object' && MARKS.has(obj)) MARKS.get(obj)();
     };
 
     // What a call on a watched container leaves to do, wherever the call came
@@ -196,7 +196,7 @@ function installMutationTracking($B) {
             // takes what arrives afterwards.
             for (const arg of args) inherit(obj, arg);
             if (attr === 'setdefault') inherit(obj, result);
-            obj.$notify();
+            MARKS.get(obj)();
         } else if (VIEWS.has(attr)) {
             // `.items()` and `.values()` hand out the children without ever
             // indexing them. A Brython dict exposes its keys as enumerable
@@ -217,7 +217,7 @@ function installMutationTracking($B) {
         // The marker is checked first on purpose: this runs on every method
         // call in the program, and an unwatched object must pay one property
         // miss, not a set lookup.
-        if (obj !== null && typeof obj === 'object' && obj.$notify !== undefined) {
+        if (obj !== null && typeof obj === 'object' && MARKS.has(obj)) {
             // `call_attr` takes the position marker before the arguments, and
             // it is the arguments that come under watch.
             if (FOLLOWED.has(attr)) afterCall(obj, attr, result, rest.slice(1));
@@ -257,7 +257,7 @@ function installMutationTracking($B) {
         if (
             obj !== null &&
             typeof obj === 'object' &&
-            obj.$notify !== undefined &&
+            MARKS.has(obj) &&
             FOLLOWED.has(attr) &&
             typeof result === 'function'
         ) {
@@ -270,9 +270,9 @@ function installMutationTracking($B) {
     const setitem = $B.$setitem;
     $B.$setitem = function (obj, key, value, ...rest) {
         const result = setitem(obj, key, value, ...rest);
-        if (obj !== null && typeof obj === 'object' && obj.$notify !== undefined) {
+        if (obj !== null && typeof obj === 'object' && MARKS.has(obj)) {
             inherit(obj, value); // `d["rows"] = rows` puts rows under watch too
-            obj.$notify();
+            MARKS.get(obj)();
         }
         return result;
     };
@@ -284,7 +284,7 @@ function installMutationTracking($B) {
     const getitem = $B.$getitem;
     $B.$getitem = function (obj, ...rest) {
         const result = getitem(obj, ...rest);
-        if (obj !== null && typeof obj === 'object' && obj.$notify !== undefined) {
+        if (obj !== null && typeof obj === 'object' && MARKS.has(obj)) {
             inherit(obj, result);
         }
         return result;
@@ -304,9 +304,9 @@ function installMutationTracking($B) {
         const setattr = $B[name];
         $B[name] = function (obj, attr, value, ...rest) {
             const result = setattr(obj, attr, value, ...rest);
-            if (obj !== null && typeof obj === 'object' && obj.$notify !== undefined) {
+            if (obj !== null && typeof obj === 'object' && MARKS.has(obj)) {
                 inherit(obj, value); // an attribute holding a container is watched too
-                obj.$notify();
+                MARKS.get(obj)();
             }
             return result;
         };
@@ -335,10 +335,10 @@ function installMutationTracking($B) {
             result === left &&
             left !== null &&
             typeof left === 'object' &&
-            left.$notify !== undefined
+            MARKS.has(left)
         ) {
             inherit(left, right); // `rows += [[]]` puts the new rows under watch
-            left.$notify();
+            MARKS.get(left)();
         }
 
         return result;
@@ -432,6 +432,34 @@ const upwards = (marker, stamp, key) => {
     }
 };
 
+// Where a watched container's marker lives.
+//
+// It used to be a non-enumerable `$notify` property on the container itself, and
+// **a Brython dict exposes its keys as ordinary properties**, so a business key
+// of that spelling met the mechanism: `{"$notify": "business data"}` made the
+// component fail at mount, on data Python is entitled to hold and that an API
+// may well send.
+//
+// Not a symbol either, and that is the interesting half: an own symbol key makes
+// an object unusable as a WebIDL record, which is what `new Response(body,
+// {headers})` takes. Brython hit the same wall with its own back-reference and
+// moved it to a WeakMap; this is the same move for the same reason.
+//
+// A WeakMap also retires two guards the property needed: the `try` around a
+// frozen object, which refused the marker, and the check that `Storage` had not
+// turned the marker into its own source text on the way in. Neither can happen
+// to a key held outside the object.
+const MARKS = new WeakMap();
+
+// The marker of a watched container, and the one export in this file that exists
+// for a test. Counting the subscribers of a shared list is the measurement the
+// leak tests are built on, and the marker is no longer a property anyone can
+// reach; naming the door here is what keeps that measurement possible, and the
+// rule the project already follows for an internal it depends on: when the code
+// reads a name, a test names it too.
+export const marks = (value) =>
+    value !== null && typeof value === 'object' ? MARKS.get(value) : undefined;
+
 function mark(value) {
     const marker = () => upwards(marker, ++walked, 'bumps');
 
@@ -439,26 +467,7 @@ function mark(value) {
     marker.reads = [];
     marker.follow = () => upwards(marker, ++walked, 'reads');
 
-    try {
-        Object.defineProperty(value, '$notify', {
-            value: marker,
-            enumerable: false,
-            configurable: true
-        });
-    } catch {
-        /* a frozen object is not ours: leave it alone */
-        return value;
-    }
-
-    // And some objects take the property and change it. `Storage`, which is what
-    // `localStorage` is, turns every value it is given into a string, so the
-    // marker came back as its own source text and a watch built on it would be
-    // a broken one rather than none. Anything that does that is a host object
-    // and not the author's data, so the key is taken back off.
-    if (value.$notify !== marker) {
-        delete value.$notify;
-        return value;
-    }
+    MARKS.set(value, marker);
 
     // Everything already inside the value when the watch begins: an attribute
     // written in __init__, an element of a list, a value of a dict. All of them
@@ -486,7 +495,7 @@ function mark(value) {
         for (const key in value) inherit(value, value[key]);
     }
 
-    return value;
+    return marker;
 }
 
 // Sign one subscriber onto one marker, and tell `owner` about it so the same
@@ -506,7 +515,7 @@ export function track(value, bump, read, owner) {
 
     // Cheapest path first: a value already watched is the common case, and it
     // must not pay a type classification on every write.
-    const own = value.$notify;
+    const own = MARKS.get(value);
     if (own !== undefined) {
         join(own, bump, read, owner);
         return value;
@@ -515,7 +524,7 @@ export function track(value, bump, read, owner) {
     if (!mutable(value)) return value;
 
     // A frozen object refuses the marker and comes back without one.
-    const marker = mark(value).$notify;
+    const marker = mark(value);
 
     if (marker !== undefined) join(marker, bump, read, owner);
 
@@ -549,11 +558,11 @@ export function unsubscribe(owner) {
 function inherit(parent, child) {
     if (child === null || typeof child !== 'object') return child;
 
-    let own = child.$notify;
+    let own = MARKS.get(child);
 
     if (own === undefined) {
         if (!mutable(child)) return child;
-        own = mark(child).$notify;
+        own = mark(child);
 
         // A frozen object refuses the marker, and `mark` says so by giving the
         // value back unchanged.
@@ -562,7 +571,7 @@ function inherit(parent, child) {
 
     // One line up, not a copy of everyone above. A child under two parents keeps
     // both, and a mutation reaches the readers of either.
-    const marker = parent.$notify;
+    const marker = MARKS.get(parent);
 
     if (own.parents === undefined) own.parents = [marker];
     else if (!own.parents.includes(marker)) own.parents.push(marker);
@@ -580,7 +589,7 @@ function inherit(parent, child) {
 // is, rather than trying to defeat the memoisation.
 export function follow(value) {
     if (value !== null && typeof value === 'object') {
-        const marker = value.$notify;
+        const marker = MARKS.get(value);
         if (marker !== undefined) marker.follow();
     }
 

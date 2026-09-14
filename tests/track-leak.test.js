@@ -50,7 +50,7 @@ test('a subscriber that arrives late still hears about the children', () => {
     track(rows, () => first++, () => {});
     track(rows, () => second++, () => {});
 
-    rows[0].$notify();
+    marks(rows[0])();
 
     expect([first, second]).toEqual([1, 1]);
 });
