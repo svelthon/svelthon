@@ -103,12 +103,21 @@ function arguments_(text) {
 const KEYWORD_BEFORE =
     /(^|[^\w.])(not|and|or|if|else|in|is|return|yield|lambda|await|assert|del|elif|while|for|from|import|raise|with|as|None|True|False)$/;
 
-// A name, spelled the way Python spells one, which is the class every pattern
-// in this file that reads a name uses. `\w` is ASCII in JavaScript, so
-// `[A-Za-z_]\w*` made `année` a name to the script half and not to any of the
-// signs, and three of the signs then failed without saying anything. Marks are
-// in the class because a name in Vietnamese or Devanagari carries them.
-const WALRUS_NAME = /^\s*([\p{L}_][\p{L}\p{M}\p{N}_]*)/u;
+// A name, spelled the way Python spells one, and the single source every pattern
+// in this file that reads a name is built from.
+//
+// `\w` is ASCII in JavaScript, so `[A-Za-z_]\w*` made `année` a name to the
+// script half and not to the signs. Corrected once, for the signs; the eleven
+// sites that ask "is this a name" were then written on different days and three
+// were still ASCII, which is how a snippet called `ligné` silently lost its
+// parameters. They agree about intent and differed only by age, so the class is
+// named here and nothing spells it out again.
+//
+// Marks are in it because a name in Vietnamese or Devanagari carries them, and
+// `u` is required for `\p{…}` to mean anything at all.
+const NAME = '[\\p{L}_][\\p{L}\\p{M}\\p{N}_]*';
+
+const WALRUS_NAME = new RegExp(`^\\s*(${NAME})`, 'u');
 const WALRUS_ARROW = /^\s*:=\s*/;
 
 // What a walrus aims at, which is more than Python's own grammar allows it.
@@ -429,7 +438,7 @@ const VOID = new Set([
     'link', 'meta', 'param', 'source', 'track', 'wbr'
 ]);
 
-const identifiers = (text) => [...text.matchAll(/[\p{L}_][\p{L}\p{M}\p{N}_]*/gu)].map((m) => m[0]);
+const identifiers = (text) => [...text.matchAll(new RegExp(NAME, 'gu'))].map((m) => m[0]);
 
 function declaredBy(inner) {
     const keyword = inner.trimStart().split(/[\s(]/)[0];
@@ -575,11 +584,11 @@ const ATTACHMENTS = ['attach'];
 //
 // `$state.raw` and never `$state`: the latter deep-proxies, and a Brython object
 // behind a JavaScript proxy fails its own type checks.
-const DECLARED_NAME = /^[\p{L}_][\p{L}\p{M}\p{N}_]*$/u;
+const DECLARED_NAME = new RegExp(`^${NAME}$`, 'u');
 
 // What `walrus()` emits for the plain form, read back so that a write aimed at a
 // markup name can be refused rather than sent to the wrong scope.
-const ASSIGNED = /__assign\("([\p{L}_][\p{L}\p{M}\p{N}_]*)"/gu;
+const ASSIGNED = new RegExp(`__assign\\("(${NAME})"`, 'gu');
 
 // The signs that end in `=` without being an assignment, plus the comparison.
 const NOT_ASSIGNMENT = new Set(['=', '!', '<', '>', '+', '-', '*', '/', '%', '&', '|', '^', ':']);
@@ -619,7 +628,7 @@ function declaration(inner) {
 // reads Python. Left alone it fell through to the generic interpolation and
 // became `__text(const a = n)`, which is not Python, so the author got Brython's
 // `invalid syntax` on a line they never wrote.
-const DECLARATION_KEYWORD = /^(const|let|var)\s+([\p{L}_][\p{L}\p{M}\p{N}_]*)\s*=\s*(.+)$/su;
+const DECLARATION_KEYWORD = new RegExp(`^(const|let|var)\\s+(${NAME})\\s*=\\s*(.+)$`, 'su');
 
 const declarationKeyword = (trimmed, at) =>
     new SyntaxError(
@@ -1396,8 +1405,7 @@ export function collector(defs) {
             // A module name assigned inside a function is local unless declared
             // by Python's rule, and the binding would otherwise write into a
             // frame nobody reads. A block's own name is already a parameter.
-            const bare =
-                /^[\p{L}_][\p{L}\p{M}\p{N}_]*$/u.test(expression) && !args.includes(expression);
+            const bare = DECLARED_NAME.test(expression) && !args.includes(expression);
 
             defs.push(
                 [

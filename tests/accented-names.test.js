@@ -21,7 +21,13 @@
 // what the compiler happens to emit; asserting the *sameness* is the rule.
 import { test, expect, describe } from 'vitest';
 import { createRequire } from 'node:module';
-import { overMarkup, pythonExpressions, collector, walrus } from '../src/lib/markup.js';
+import {
+    directiveModules,
+    overMarkup,
+    pythonExpressions,
+    collector,
+    walrus
+} from '../src/lib/markup.js';
 
 const require = createRequire(import.meta.url);
 const { compile } = require('../src/lib/compile.cjs');
@@ -94,6 +100,33 @@ describe('an accented name is a name', () => {
     // to state or props`, because the binding was left for it to resolve.
     test('the shorthand of a binding expands', () => {
         same((n) => markup(`<Child bind:${n} />`));
+    });
+
+    // Three more sites were still ASCII, written after the six above and on
+    // different days. This one was silent and wrong rather than loud: `\w+`
+    // cannot end immediately before the `(`, so a snippet whose name ends in an
+    // accented letter lost its parameter list, and the body then read a
+    // module-level name of the same spelling instead of the argument.
+    // Its own pair, and the reason is the defect itself: `\w+` fails only when
+    // the name *ends* in a non-ASCII letter, and `élève` ends in an ASCII `e`,
+    // so the shared pair cannot reach this one.
+    test('a snippet keeps its parameters', () => {
+        const write = (n) => markup(`{#snippet ${n}(x)}{x}{/snippet}`);
+
+        expect(write('ligné')).toBe(write('ligne').replaceAll('ligne', 'ligné'));
+    });
+
+    // And the name itself, which is what puts the snippet in the enclosing
+    // scope: without it `<Card {nóm} />` compiled `nóm` as a free name.
+    test('a snippet is a name in the scope around it', () => {
+        same((n) => markup(`{#snippet ${n}(p)}{p}{/snippet}<Card {${n}} />`));
+    });
+
+    // `directiveModules` is what publishes a Python module under a JavaScript
+    // name, so `in:fondés.tw` resolves. An accented module was never found, so
+    // nothing was published and the directive reached a name that did not exist.
+    test('a dotted directive finds its module', () => {
+        same((n) => JSON.stringify(directiveModules(`<p in:${n}.tw>a</p>`)));
     });
 
     // The two refusals that read a name have to recognise the same one.
