@@ -45,7 +45,12 @@ const NS = '__py';
 // which the runtime does at execution time. This pattern is only checked, never
 // rewritten; if a future codegen stops emitting it, compilation fails loudly
 // instead of producing a component with no reactivity at all.
-const namespaceCall = (name) => `$B.namespace('${name}')`;
+// The literal is Brython's own spelling, since this is both what is written
+// beside its code and the needle the check below looks for in it. A path may
+// hold a quote — `src/O'Brien.svelte` is a legal filename — so it is escaped
+// rather than pasted, on both sides of the bridge: unescaped, the generated
+// module stopped parsing, and the Python it came from was perfectly valid.
+const namespaceCall = (name) => `$B.namespace(${JSON.stringify(name)})`;
 
 // The module id Brython derives from a filename: only '.' becomes '_'. It ends
 // up as a *string*, the argument to $B.namespace and the frame name, so a '/'
@@ -1373,7 +1378,7 @@ function namespaceObject(c) {
         // work out what package it sits in. Ours had none, so the lookup asked
         // for a module called `undefined`, and said so, in a component where
         // `import x` on the line above had worked perfectly.
-        `${NS}.__name__ = '${c.namespace}';`
+        `${NS}.__name__ = ${JSON.stringify(c.namespace)};`
     ];
 }
 
@@ -1879,7 +1884,7 @@ function compile(
         ``,
         `export function init(${NS}) {`,
         `  try {`,
-        `    return withNamespace('${namespace}', ${NS}, () => {`,
+        `    return withNamespace(${JSON.stringify(namespace)}, ${NS}, () => {`,
         js,
         `    });`,
         `  } catch (err) { throw pyError(err, ${JSON.stringify(source)}, ${lineOffset}); }`,

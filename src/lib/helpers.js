@@ -300,9 +300,31 @@ function mapping(value) {
     return !('ob_type' in value) && Object.getPrototypeOf(value) === Object.prototype;
 }
 
+// Every pair of a mapping, which for a Python dict is not `Object.keys`.
+//
+// A Brython dict has two halves: string keys are ordinary JavaScript properties,
+// which is what makes `d["a"]` as fast as a native read, and everything else
+// lives in a hash table under symbols — a property name is always a string, and
+// Python keeps `1` and `"1"` apart. Walking the properties therefore read the
+// fast half and dropped the rest without a word, so a table indexed by id
+// encoded to nothing at all.
+//
+// Asked of Python, which is the only half that knows both.
+function entries(value) {
+    const $B = globalThis.__BRYTHON__;
+
+    if (!$B.is_dict(value)) return Object.entries(value);
+
+    return $B.builtins.list.$factory($B.$getattr(value, 'items')());
+}
+
 // Jinja's shape: a string, or a mapping that becomes a whole query string. Not
 // Jinja's behaviour, and not Django's either: both leave `/` unquoted, which
 // quietly turns `/tag/{urlencode(t)}` into two path segments.
+//
+// A key that is not a string is written the way `str()` writes it, and two that
+// collide once written both stay: measured against CPython's
+// `urllib.parse.urlencode`, which answers `1=a&1=b` for `{1: "a", "1": "b"}`.
 export function urlencode(value) {
     // A Date is a value and never a mapping, and the sortable spelling is the
     // one a URL wants. Reading it through Python instead gave

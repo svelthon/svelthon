@@ -400,4 +400,41 @@ describe('urlencode', () => {
     test('a float is a value, as it is in Jinja', () => {
         expect(urlencode(_b_.float.$factory(1.5))).toBe('1.5');
     });
+
+    // A Brython dict keeps its string keys as ordinary JavaScript properties and
+    // everything else in a hash table under symbols, because a property name is
+    // always a string and Python keeps `1` and `"1"` apart. Walking `Object.keys`
+    // therefore read the fast half and dropped the rest, silently: a table
+    // indexed by id encoded to nothing at all.
+    //
+    // The rule is CPython's, measured against `urllib.parse.urlencode`: the key
+    // is whatever `str()` makes of it, and two keys that collide once written
+    // both stay, as a query string allows.
+    describe('a key that is not a string', () => {
+        const dict = (entries) => {
+            const $B = globalThis.__BRYTHON__;
+            const out = _b_.dict.$factory();
+
+            for (const [key, value] of entries) $B.$setitem(out, key, value);
+            return out;
+        };
+
+        test('an integer key is kept, as str() writes it', () => {
+            expect(urlencode(dict([[1, 'one'], ['s', 'text']]))).toBe('1=one&s=text');
+        });
+
+        test('and the two spellings of one number are two keys', () => {
+            expect(urlencode(dict([[1, 'a'], ['1', 'b']]))).toBe('1=a&1=b');
+        });
+
+        test('a tuple key is written rather than dropped', () => {
+            expect(urlencode(dict([[_b_.tuple.$factory([1, 2]), 'pair']]))).toBe(
+                '%281%2C+2%29=pair'
+            );
+        });
+
+        test('a float key keeps the spelling Python gives it', () => {
+            expect(urlencode(dict([[_b_.float.$factory(1.5), 'f']]))).toBe('1.5=f');
+        });
+    });
 });

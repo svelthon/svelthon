@@ -115,8 +115,10 @@ def increment():
         expect(module).toContain('locals_src_routes__page_server_py = $B.namespace(');
         expect(module).not.toMatch(/locals_[\w$]*\//);
 
-        // The point of the patch: a traceback naming the file, not a slug.
-        expect(module).toContain("__file__ = 'src/routes/+page.server.py'");
+        // The point of the patch: a traceback naming the file, not a slug. The
+        // literal is written by `JSON.stringify` since a path may hold a quote,
+        // which is what `tests/source-path.test.js` is about.
+        expect(module).toContain('__file__ = "src/routes/+page.server.py"');
     });
 
     // Fixed upstream too, `fstring-middle-position`. Brython reported the
