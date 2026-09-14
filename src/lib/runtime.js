@@ -212,17 +212,28 @@ function installMutationTracking($B) {
     // path Brython has, and the old form blocks V8's optimiser.
     const callAttr = $B.call_attr;
     $B.call_attr = function (obj, attr, ...rest) {
-        const result = callAttr(obj, attr, ...rest);
-
         // The marker is checked first on purpose: this runs on every method
         // call in the program, and an unwatched object must pay one property
         // miss, not a set lookup.
-        if (obj !== null && typeof obj === 'object' && MARKS.has(obj)) {
-            // `call_attr` takes the position marker before the arguments, and
-            // it is the arguments that come under watch.
-            if (FOLLOWED.has(attr)) afterCall(obj, attr, result, rest.slice(1));
-        }
+        const followed =
+            obj !== null && typeof obj === 'object' && MARKS.has(obj) && FOLLOWED.has(attr);
 
+        if (!followed) return callAttr(obj, attr, ...rest);
+
+        // `finally`, because a mutator that raises has often mutated already:
+        // `xs.extend(values())` consumes what the generator yielded before it
+        // raised, so the list holds `[1]` and the author, who caught the
+        // exception, saw the old value on the page for ever. The assumption that
+        // an operation which raises has not changed the object does not hold in
+        // Python, and the notification is the cheap side of that bet.
+        //
+        // `result` stays undefined on that path, which is what a raising call
+        // returned anyway; `afterCall` reads it only to hand a returned
+        // container the watch.
+        let result;
+
+        result = callAttr(obj, attr, ...rest);
+        afterCall(obj, attr, result, rest.slice(1));
         return result;
     };
 
@@ -236,7 +247,11 @@ function installMutationTracking($B) {
     // object the method belongs to is still known.
     const notifying = (obj, attr, method) => {
         const wrapper = function (...args) {
-            const result = method(...args);
+            // The same `finally` as the interception above, for the same
+            // reason: a detached mutator that raises may have mutated first.
+            let result;
+
+            result = method(...args);
             afterCall(obj, attr, result, args);
             return result;
         };

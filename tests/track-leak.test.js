@@ -1,6 +1,6 @@
 import { test, expect } from 'vitest';
 import { mount, flushSync } from './mounted.js';
-import { track } from '../src/lib/runtime.js';
+import { marks, track } from '../src/lib/runtime.js';
 import Host from './fixtures/LeakHost.svelte';
 
 // A container shared through a store carries one marker holding the bump and
