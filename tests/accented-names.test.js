@@ -129,6 +129,27 @@ describe('an accented name is a name', () => {
         same((n) => JSON.stringify(directiveModules(`<p in:${n}.tw>a</p>`)));
     });
 
+    // `compile.cjs` asked the same question in seven places with one pattern,
+    // and six of them read a *JavaScript* name, where ASCII is a defensible
+    // line. The seventh read a Python one: what a `.py` exports. So
+    // `__all__ = ["élèves"]` was filtered to nothing and the module exported
+    // nothing at all, with no error and no warning.
+    const moduleOf = (source) => {
+        const { script } = compile(source, 'Probe', 'Probe.py', { plain: true });
+
+        return steady(String(script));
+    };
+
+    test('a name in `__all__` is exported', () => {
+        same((n) => moduleOf(`__all__ = ["${n}"]\n${n} = 1\n`));
+    });
+
+    // And a module with no `__all__` exports its functions by default, through
+    // the same filter, so an accented one exported nothing either.
+    test('a function is exported by default', () => {
+        same((n) => moduleOf(`def ${n}():\n    return 1\n`));
+    });
+
     // The two refusals that read a name have to recognise the same one.
     test('an indented `=>` is refused by its own sentence', () => {
         for (const name of [ASCII, ACCENTED]) {

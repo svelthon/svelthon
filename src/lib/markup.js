@@ -426,7 +426,7 @@ function loneInterpolation(markup, at, closing) {
 // passed in as arguments.
 const BLOCK_NAMES = {
     '#each': /\bas\s+([^()]*?)\s*(?:\(|$)/,
-    '#snippet': /\w+\s*\(([^)]*)\)/,
+    '#snippet': new RegExp(`${NAME}\\s*\\(([^)]*)\\)`, 'u'),
     ':then': /^:then\s+(.+)$/,
     ':catch': /^:catch\s+(.+)$/
 };
@@ -1185,7 +1185,7 @@ function walk(markup, collect, onPython, seed, record, where) {
                 // block, its own name into what encloses the block, and that name
                 // outlives the block, which is the whole point of being able to
                 // hand it to a child.
-                const declares = trimmed.match(/^#snippet\s+([A-Za-z_]\w*)/);
+                const declares = trimmed.match(new RegExp(`^#snippet\\s+(${NAME})`, 'u'));
 
                 if (record && declares) {
                     const holder = ids[ids.length - 1];
@@ -1333,7 +1333,10 @@ function topLevelIndent(block) {
 //
 // Only the five that name a function. `class:` and `style:` name a property, and
 // `bind:` names a target; a dot in those means something else entirely.
-const DOTTED_DIRECTIVE = /(?:^|[\s"'])(?:use|transition|in|out|animate):([A-Za-z_]\w*)\./g;
+const DOTTED_DIRECTIVE = new RegExp(
+    `(?:^|[\\s"'])(?:use|transition|in|out|animate):(${NAME})\\.`,
+    'gu'
+);
 
 export function directiveModules(markup) {
     const found = new Set();

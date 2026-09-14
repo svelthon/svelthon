@@ -84,6 +84,24 @@ describe('a declaration the compiler cannot read', () => {
 
         expect(out).not.toContain('@sveltejs/kit');
     });
+
+    // The two spellings of the same declaration used to answer the same question
+    // differently: `importjs` refused a name JavaScript cannot carry, `__js__`
+    // filtered it out and imported nothing, with no error. `__js__` is the form
+    // a plain `.py` uses, so it is the one a SvelteKit route reaches for.
+    test('a name JavaScript cannot carry is refused in both spellings', () => {
+        expect(() => script('importjs {fadé} from "x"\n')).toThrow(/importjs: `fadé` is not a name/);
+        expect(() =>
+            compile('__js__ = {"x": ["fadé"]}\n\n\ny = 1\n', 'M', 'm.py', { plain: true })
+        ).toThrow(/__js__: `fadé` is not a name/);
+    });
+
+    test('and the ASCII twin of each still imports', () => {
+        expect(script('importjs {fade} from "x"\n')).toContain('import { fade } from "x";');
+        expect(
+            compile('__js__ = {"x": ["fade"]}\n\n\ny = 1\n', 'M', 'm.py', { plain: true }).script
+        ).toContain('import { fade } from "x";');
+    });
 });
 
 describe('the indentation hint', () => {

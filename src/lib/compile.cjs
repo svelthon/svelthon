@@ -214,7 +214,7 @@ function declaredExports(body) {
 // needs. Python has no way to import from npm, and a plain `.py` has no
 // `<script module>` to do it for them; this is its equivalent, written as an
 // ordinary assignment and read from the AST like `__all__`.
-function declaredJsImports(body) {
+function declaredJsImports(body, source) {
     for (const node of body) {
         if (!(node instanceof $B.ast.Assign)) continue;
         if (!node.targets.some((t) => t instanceof $B.ast.Name && t.id === '__js__')) continue;
@@ -225,8 +225,13 @@ function declaredJsImports(body) {
         node.value.keys.forEach((key, index) => {
             const names = (node.value.values[index].elts || [])
                 .map((one) => (one instanceof $B.ast.Constant ? one.value : null))
-                .filter((one) => typeof one === 'string' && /^[A-Za-z_$][\w$]*$/.test(one));
+                .filter((one) => typeof one === 'string' && JS_NAME.test(one));
 
+            // The same question `importjs` asks, and now the same answer. It
+            // used to be a filter, so a name JavaScript cannot carry was dropped
+            // and nothing was imported, silently, while the `importjs` spelling
+            // of the same line refused it by name. `__js__` is the form a plain
+            // `.py` uses, so it is the one a SvelteKit route reaches for.
             if (key instanceof $B.ast.Constant && names.length) {
                 modules.push({ from: key.value, names });
             }
@@ -263,7 +268,18 @@ const IMPORTJS = /^importjs\b/;
 const IMPORTJS_ANYWHERE = /^[ \t]+importjs\b/;
 const IMPORTJS_CLAUSE = /^importjs\s+([\s\S]*?)\s+from\s+(['"])([^'"]+)\2\s*$/;
 const IMPORTJS_EFFECT = /^importjs\s+(['"])([^'"]+)\1\s*$/;
+// Two questions, and one pattern used to answer both. `JS_NAME` is what an
+// `importjs` clause may contain, and ASCII is a defensible line there even
+// though JavaScript takes `let élève = 1`: the name is one the author copies out
+// of a JavaScript package.
+//
+// `PY_NAME` is the other question, and it has Python's answer: what a `.py`
+// exports, whether through `__all__` or by default. Asked with the JavaScript
+// pattern, `__all__ = ["élèves"]` was filtered to nothing and the module
+// exported nothing at all, in silence. Same class as `markup.js`'s `NAME`, and
+// for the same reason.
 const JS_NAME = /^[A-Za-z_$][\w$]*$/;
+const PY_NAME = /^[\p{L}_][\p{L}\p{M}\p{N}_]*$/u;
 
 // The triple-quote state after `line`. Only a triple-quoted string survives a
 // line break, so it is the only thing that can hide an `importjs` further down,
@@ -1835,7 +1851,7 @@ function compile(
     // The two declarations meet here, in one shape: `__js__` is the module's and
     // only ever names, `importjs` is the component's and covers the four forms.
     const jsImports = [
-        ...declaredJsImports(root._ast.body).map((one) => ({
+        ...declaredJsImports(root._ast.body, src).map((one) => ({
             from: one.from,
             kind: 'named',
             entries: one.names.map((n) => ({ name: n, local: n }))
@@ -1875,7 +1891,7 @@ function compile(
     const listed = declaredExports(root._ast.body);
     const exported = (
         listed ?? [...funcs.map((f) => f.name), ...plainDeriveds.map((d) => d.name)]
-    ).filter((n) => /^[A-Za-z_$][\w$]*$/.test(n) && !JS_RESERVED.has(n));
+    ).filter((n) => JS_NAME.test(n) && !JS_RESERVED.has(n));
 
     // A name in `__all__` that the module never binds. Python raises on it at
     // `from m import *` and says nothing otherwise; here it used to emit a
