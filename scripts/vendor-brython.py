@@ -1,4 +1,4 @@
-"""Rebuild vendor/brython.js and vendor/brython_runtime.js from Brython master.
+"""Rebuild the vendored Brython bundles from Brython master.
 
 One pass, two files, so they can never drift apart again: the runtime bundle was
 built once on 2026-08-30 and was eleven days and two dev versions behind the full
@@ -21,7 +21,14 @@ import os
 import sys
 
 BRYTHON = sys.argv[1] if len(sys.argv) > 1 else '~/DEV/BRYTHON'
-VENDOR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'vendor')
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+VENDOR = os.path.join(ROOT, 'vendor')
+
+# The full bundle is not one of the two the package ships: it is what they are
+# cut from, kept so a re-vendoring can be diffed against the `brython.js` Brython
+# publishes. Out of `vendor/` so that directory holds exactly what travels, which
+# is what lets `files` name it in one line.
+BUILD = os.path.join(ROOT, 'build')
 
 sys.path.insert(0, os.path.join(BRYTHON, 'scripts'))
 
@@ -127,7 +134,8 @@ assert COMPILER_CHAIN_OPEN not in runtime, 'the opening marker survived the cut'
 assert COMPILER_CHAIN_CLOSE not in runtime, 'the closing marker survived the cut'
 assert runtime == build(skip=compiler_scripts), 'cutting by marker and building without differ'
 
-write(os.path.join(VENDOR, 'brython.js'), ours(full))
+os.makedirs(BUILD, exist_ok=True)
+write(os.path.join(BUILD, 'brython.js'), ours(full))
 write(os.path.join(VENDOR, 'brython_runtime.js'), ours(runtime))
 
 # The chain on its own, for a page that compiles: it loads after the runtime and

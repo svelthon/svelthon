@@ -1464,10 +1464,10 @@ They live in the file rather than in a build step, because the compiler loads
 the same copy with `require` under Node, so a patch applied only while serving
 would leave server-side rendering on an unrepaired Brython.
 
-`vendor/brython.js` is a copy of `www/src/brython.js` (3.14 dev), rebuilt from
-master by `scripts/vendor-brython.py`. The folder carries a `package.json` marked
-`commonjs`: Node must load it as a classic script, while the root is
-`type: module`.
+`vendor/` holds exactly what the package ships: the two halves of Brython 3.14
+dev, cut from one bundle that `scripts/vendor-brython.py` rebuilds from master
+and leaves in `build/`. The folder carries a `package.json` marked `commonjs`:
+Node must load it as a classic script, while the root is `type: module`.
 
 **And it is the only Python that ships.** No stdlib module travels with
 Svelthon, `sys` included: a stdlib exists so that an author can `import`

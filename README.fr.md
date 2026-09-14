@@ -1500,8 +1500,9 @@ fichier plutôt que dans une étape de build, parce que le compilateur charge la
 copie par `require` sous Node, donc un correctif appliqué seulement à la copie
 servie laisserait le rendu serveur tourner sur un Brython non réparé.
 
-`vendor/brython.js` est une copie de `www/src/brython.js` (3.14 dev),
-reconstruite depuis master par `scripts/vendor-brython.py`. Le dossier porte un
+`vendor/` contient exactement ce que le paquet livre : les deux moitiés de
+Brython 3.14 dev, découpées d'un bundle que `scripts/vendor-brython.py`
+reconstruit depuis master et laisse dans `build/`. Le dossier porte un
 `package.json` marqué `commonjs` : Node doit le charger comme script classique,
 alors que la racine est en `type: module`.
 

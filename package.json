@@ -25,11 +25,7 @@
     "BRYTHON.md",
     "DJANGO_FLASK.md",
     "src/lib",
-    "vendor/brython_runtime.js",
-    "vendor/brython_compiler.js",
-    "vendor/BRYTHON_FIX.md",
-    "vendor/LICENSE",
-    "vendor/package.json"
+    "vendor"
   ],
   "engines": {
     "node": ">=20.19"

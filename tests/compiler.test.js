@@ -104,7 +104,7 @@ def increment():
     });
 
     // Fixed upstream, `filename-invalid-identifier-chars`, and it was a local
-    // edit in `vendor/brython.js` before that. Going upstream does not retire
+    // edit in the vendored bundle before that. Going upstream does not retire
     // the test: a newer Brython loses a behaviour as silently as a dropped
     // edit, and this is what turns red when it does. See BRYTHON.md.
     test('a path builds a valid identifier, and __file__ keeps the real path', () => {

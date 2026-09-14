@@ -37,7 +37,7 @@ describe('the engine is imported where it is started', () => {
     // The import used to sit in `runtime.js`, two lines above `import
     // './boot.js'`, which reads as an order and is not one.
     test('runtime.js does not import it', () => {
-        expect(read('runtime.js')).not.toContain("vendor/brython.js");
+        expect(read('runtime.js')).not.toContain('vendor/brython');
     });
 
     // `browser-check.sh` warms the engine before it measures, because a cold

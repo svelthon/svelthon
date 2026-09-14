@@ -154,11 +154,13 @@ describe('the vendored Brython carries its repairs', () => {
     // protects nothing there while changing the shape of the file for everyone.
     //
     // Loading it again is what the test does, so the sentinel is read for what
-    // it is: the same `$B` object has to come back, not a rebuilt one.
+    // it is: the same `$B` object has to come back, not a rebuilt one. The file
+    // asked for is the one the package ships, which is also the one already
+    // loaded here, so this is the real collision rather than a stand-in.
     test('a second execution is refused', () => {
         const before = $B.builtins;
 
-        createRequire(import.meta.url)('../vendor/brython.js');
+        createRequire(import.meta.url)('../vendor/brython_runtime.js');
 
         expect(globalThis.__BRYTHON__).toBe($B);
         expect(globalThis.__BRYTHON__.builtins).toBe(before);
@@ -175,7 +177,7 @@ describe('the vendored Brython carries its repairs', () => {
         // Relative to the working directory, not to `import.meta.url`: this
         // file runs under jsdom, where that is an http URL and `readFileSync`
         // refuses it. The other source-reading tests are node-environment.
-        const source = readFileSync('vendor/brython.js', 'utf8');
+        const source = readFileSync('vendor/brython_runtime.js', 'utf8');
 
         expect(source.match(/@vite-ignore/g)).toHaveLength(2);
         expect(source).toContain('import(/* @vite-ignore */ ref)');
