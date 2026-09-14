@@ -654,6 +654,24 @@ yield arguments eval`.split(/\s+/));
 // The name is chosen in `markup.js`; the two have to agree.
 const EXPR_PREFIX = '__expr_';
 
+// How many positional arguments a caller may hand a Python function, read off
+// its signature so the wrapper can drop the rest.
+//
+// It used to be `args.args.length` alone, which is only the middle third of a
+// positional signature. `def positional(x, /, y)` puts `x` in `posonlyargs`, so
+// the wrapper passed one argument and Python raised about a missing one; and
+// `def variadic(*values)` has no `args` at all, so `variadic(2, 3)` answered
+// **0**, with nothing raised to say the arguments had been dropped on the way.
+//
+// `Infinity` for a `*args`, because there is no number to truncate to: it is a
+// JavaScript literal and `slice(0, Infinity)` is the whole list. Truncation
+// exists to keep a DOM event object out of a handler that never asked for one,
+// and a function that asks for everything has asked for that too.
+const arityOf = (args) =>
+    args && args.vararg
+        ? Infinity
+        : ((args && args.posonlyargs) || []).length + ((args && args.args) || []).length;
+
 // Inside a template expression, and only there, the dot finds a key as well as
 // an attribute: `{pep.title}` reads a dict. The same text in the `<script>`
 // stays plain Python and raises, which is the seam this marks.
@@ -970,7 +988,7 @@ function surface(body) {
                     else if (isCallTo(node, 'export'))
                         funcs.push({
                             name: target.id,
-                            arity: ((node.value.args?.[0]?.args?.args) || []).length,
+                            arity: arityOf(node.value.args?.[0]?.args),
                             exported: true
                         });
                     else state.push(target.id);
@@ -1000,7 +1018,7 @@ function surface(body) {
                 const root = hasDottedDecorator(node, 'effect', 'root');
                 const entry = {
                     name: node.name,
-                    arity: (node.args && node.args.args || []).length,
+                    arity: arityOf(node.args),
                     ...(pre ? { pre: true } : {}),
                     ...(root ? { root: true } : {}),
                     // `@export` leaves the function where it was: it is an
