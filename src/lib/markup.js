@@ -365,6 +365,14 @@ const LET_DIRECTIVE = /^let:/;
 // without them.
 //
 // So the question is asked once, here, before either branch runs.
+// The attribute an interpolation belongs to, read off what has been written so
+// far. The trailing `\s*` is load-bearing: Svelte accepts `on:click= {foo}`, and
+// its own parser fixture `attribute-with-whitespace` is that line. Without it
+// nothing matched, so every rule was skipped and the value fell through to the
+// shorthand expansion, which turned `title= {x}` into `title= x={…}` — not
+// markup, and Svelte answered `Expected token >` about a token nobody typed.
+const ATTRIBUTE_NAME = /([^\s=]+)=$/;
+
 const directive = (name) =>
     DIRECTIVE.test(name) ||
     HANDLER.test(name) ||
@@ -582,6 +590,23 @@ function declaration(inner) {
 
     return null;
 }
+
+// JavaScript's declaration keywords, which Svelte 5 takes inside a block:
+// `{const a = n}` is its own spelling of `{@const}`. Svelthon's answer is the
+// template rune, `{a = n}`, so the keyword is a JavaScript word in a place that
+// reads Python. Left alone it fell through to the generic interpolation and
+// became `__text(const a = n)`, which is not Python, so the author got Brython's
+// `invalid syntax` on a line they never wrote.
+const DECLARATION_KEYWORD = /^(const|let|var)\s+([\p{L}_][\p{L}\p{M}\p{N}_]*)\s*=\s*(.+)$/su;
+
+const declarationKeyword = (trimmed, at) =>
+    new SyntaxError(
+        `svelthon — \`{${trimmed}}\` declares with a JavaScript keyword${at}; ` +
+            `Svelthon writes it \`{${trimmed.replace(DECLARATION_KEYWORD, '$2 = $3')}}\`, ` +
+            `and \`{name => expression}\` for one that follows what it reads. A ` +
+            `construct left unhandled would cross as JavaScript, so it is refused ` +
+            `rather than passed through.`
+    );
 
 const unknownTag = (trimmed, kind, known, at) =>
     new SyntaxError(
@@ -839,7 +864,7 @@ function walk(markup, collect, onPython, seed, record, where) {
                 index += 1;
                 continue;
             } else if (char === '"' || char === "'") {
-                const named = (out.match(/([^\s=]+)=$/) || [])[1] || '';
+                const named = (out.match(ATTRIBUTE_NAME) || [])[1] || '';
                 const closing = directive(named) ? loneInterpolation(markup, index, closingBrace) : -1;
 
                 if (closing !== -1) {
@@ -866,7 +891,7 @@ function walk(markup, collect, onPython, seed, record, where) {
                         continue;
                     }
 
-                    const attribute = out.match(/([^\s=]+)=$/);
+                    const attribute = out.match(ATTRIBUTE_NAME);
                     const inner = markup.slice(index + 1, end);
                     const trimmed = inner.trim();
 
@@ -884,7 +909,7 @@ function walk(markup, collect, onPython, seed, record, where) {
                             // The tag is never inspected: `type` and `value` are
                             // read off the node at run time, which is why this
                             // needs no lookahead over the attributes.
-                            out = out.replace(/[^\s=]+=$/, '') +
+                            out = out.replace(/[^\s=]+=\s*$/, '') +
                                 `use:${GROUP_ACTION}={[${call(inner, '')}, (${BOUND_VALUE}) => ${assign(inner)}]}`;
                         } else if (DIRECTIVE.test(attribute[1])) {
                             out += declaredHere(inner)

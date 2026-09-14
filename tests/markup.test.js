@@ -559,6 +559,22 @@ describe('the attribute pass', () => {
         expect(defs.some((one) => one.includes('__truthy'))).toBe(true);
     });
 
+    // Svelte accepts `on:click= {foo}`, and its own parser fixture
+    // `attribute-with-whitespace` is that line. The attribute was read off what
+    // had been written with a pattern anchored at `=`, so a space meant nothing
+    // matched: every rule was skipped and the value fell through to the
+    // shorthand expansion, which wrote `title= x={…}`. Svelte then answered
+    // `Expected token >` about a token the author never typed.
+    test.for([
+        ['a handler', '<b onclick= {go}>x</b>', /onclick= \{__event\(/],
+        ['the colon spelling', '<b on:click= {go}>x</b>', /on:click= \{__event\(/],
+        ['a binding', '<input bind:value= {x}>', /bind:value= \{\(\) =>/],
+        ['a class', '<b class:on= {x}>x</b>', /class:on= \{__expr_\d+\(\)\}/],
+        ['a plain attribute', '<b title= {x}>x</b>', /title= \{__expr_\d+\(\)\}/]
+    ])('%s keeps its rule across a space after the =', ([, markup, shape]) => {
+        expect(rewrite(markup).out).toMatch(shape);
+    });
+
     // Python's spelling, because Python has one. What comes out is
     // JavaScript's `...`, since that is what Svelte reads.
     test('a spread is written the Python way and compiled as one expression', () => {
@@ -680,6 +696,27 @@ describe('an unknown construct is refused, never passed through', () => {
 
     test('the message says why it is refused rather than ignored', () => {
         expect(() => rewrite('{@nope x}')).toThrow(/would\s+cross as JavaScript/);
+    });
+
+    // Svelte 5 takes `{const a = n}` inside a block, its own spelling of
+    // `{@const}`, and Svelthon's answer is the template rune `{a = n}`. The
+    // keyword fell through to the generic interpolation, so the author read
+    // Brython's `invalid syntax` about `__text(const a = n)`, on a line nobody
+    // wrote. The `@`-prefixed form was refused properly all along.
+    test.for([
+        ['{#each rows as n}{const a = n}{/each}', '{a = n}'],
+        ['{#each rows as n}{let total = n * 2}{/each}', '{total = n * 2}'],
+        ['{#each rows as n}{var a = n}{/each}', '{a = n}']
+    ])('%s is refused and names the Svelthon spelling', ([markup, spelling]) => {
+        expect(() => rewrite(markup)).toThrow(/declares with a JavaScript keyword/);
+        expect(() => rewrite(markup)).toThrow(spelling);
+        expect(() => rewrite(markup)).toThrow(/would\s+cross as JavaScript/);
+    });
+
+    // And the rune itself keeps working, which is what the refusal points at.
+    test('the Svelthon spelling it names is the one that compiles', () => {
+        expect(() => rewrite('{#each rows as n}{a = n}{a}{/each}')).not.toThrow();
+        expect(() => rewrite('{#each rows as n}{a => n * 2}{a}{/each}')).not.toThrow();
     });
 
     // `{@…}` is read in two positions with no overlap between them, and one

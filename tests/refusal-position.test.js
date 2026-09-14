@@ -40,6 +40,7 @@ describe('a markup refusal names a position', () => {
         ['an unknown clause', '{#if x}a{:nope}b{/if}', 9],
         ['a tag in the wrong position', '<p>{@attach f}</p>', 4],
         ['a JavaScript spread', '<p {...x}></p>', 4],
+        ['a JavaScript declaration', '{#each rows as row}{const y = row}{/each}', 20],
         ['a walrus onto a markup name', '{#each rows as row}<b onclick={(row := 2)}>x</b>{/each}', 31]
     ];
 
