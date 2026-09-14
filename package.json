@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Svelte components written in Python, compiled by Brython at build time",
   "author": "Florent Gallaire <gallenza@gmail.com>",
-  "license": "ISC",
+  "license": "MIT",
   "keywords": [
     "svelte",
     "python",
@@ -25,6 +25,7 @@
     "src/lib",
     "vendor/brython_runtime.js",
     "vendor/brython_compiler.js",
+    "vendor/LICENSE-brython.txt",
     "vendor/package.json"
   ],
   "engines": {
