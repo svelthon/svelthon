@@ -164,6 +164,32 @@ describe('overMarkup walks the markup and nothing else', () => {
         expect(overMarkup(component, (part) => part.replace('{label}', 'X'))).toContain('<p>X</p>');
     });
 
+    // HTML allows whitespace before the `>` of a closing tag and Svelte parses
+    // it — its own parser fixture is named `whitespace-after-style-tag`. The
+    // pattern required the tag to end immediately, so a block closed that way
+    // stayed open and its body was walked as markup: the CSS rule below lost its
+    // declaration to `{__expr_0()}`, and a Python block closed the same way was
+    // never handed to the script hook at all.
+    test('a closing tag may hold whitespace before its bracket', () => {
+        const spaced = [
+            '<script lang="python">',
+            'sizes = {"a": 1}',
+            '</script >',
+            '<p>{label}</p>',
+            '<style>p { color: red }</style >'
+        ].join('\n');
+
+        const seen = [];
+        overMarkup(spaced, (part) => {
+            seen.push(part);
+            return part;
+        });
+
+        expect(seen.join('')).not.toContain('sizes = ');
+        expect(seen.join('')).not.toContain('color: red');
+        expect(seen.join('')).toContain('{label}');
+    });
+
     test('the transform is told where its chunk starts', () => {
         const offsets = [];
         overMarkup(component, (part, offset) => {
@@ -647,6 +673,22 @@ describe('the attribute pass', () => {
 
         expect(rewrite('<input bind:group={choix}>').out).toMatch(action);
         expect(rewrite('<input bind:group>').out).toMatch(action);
+    });
+
+    // Svelte takes an unquoted attribute value with an interpolation glued onto
+    // it. The name was read backwards from the `=` and the value forwards from
+    // the `{`, and the text between them went into neither: `red` was swallowed
+    // into a name nobody wrote, and Svelte answered `Expected token >` about a
+    // token the author never typed. Every quoted spelling was already right.
+    test('an unquoted value keeps the text before its interpolation', () => {
+        const { out, defs } = rewrite('<div style:color=red{variable}></div>');
+
+        expect(out).toMatch(/style:color=red\{__expr_\d+\(\)\}/);
+        expect(out).not.toContain('redvariable');
+
+        // The same wrapper the quoted spelling gets: what is written beside text
+        // is text, so Python's `str()` and not JavaScript's.
+        expect(defs.join('\n')).toContain('__text(variable)');
     });
 
     // The tag's own value, which is the only attribute a directive reads beside

@@ -284,8 +284,15 @@ export function walrus(expression) {
 //
 // `transform` is given where its chunk starts, for a caller that needs to map
 // what it finds back onto the original file rather than only rewrite it.
+//
+// `\s*` before the closing `>`, because HTML allows it there and Svelte parses
+// it. Without it `</script >` did not close anything: the block stayed open, its
+// body was read as markup, and the word above — catastrophic — is what happened.
+// A CSS rule lost its declaration, a JavaScript object literal became a call,
+// and a Python block closed that way was never handed to the script hook at all,
+// so the component failed with `n is not defined`, naming nothing.
 export function overMarkup(content, transform) {
-    const blocks = /<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi;
+    const blocks = /<(script|style)\b[^>]*>[\s\S]*?<\/\g<1>>/gi;
     let out = '';
     let cut = 0;
     let block;
@@ -407,6 +414,11 @@ const ATTRIBUTE_ASSIGN = new RegExp(`${ATTRIBUTE_CHAR}+=\\s*$`);
 // And the name with no value after it, which is where the shorthand and the
 // `let:` refusal read it.
 const BARE_ATTRIBUTE = new RegExp(`(${ATTRIBUTE_CHAR}+)$`);
+
+// A name, its `=`, and an unquoted value already begun: what sits before the
+// brace of `style:color=red{variable}`. Built from the same class as the three
+// above, since it is the same question asked at a fourth place.
+const UNQUOTED_VALUE = new RegExp(`(${ATTRIBUTE_CHAR}+)=${ATTRIBUTE_CHAR}+$`);
 
 const directive = (name) =>
     DIRECTIVE.test(name) ||
@@ -1041,6 +1053,7 @@ function walk(markup, collect, onPython, seed, record, where) {
                     }
 
                     const attribute = out.match(ATTRIBUTE_NAME);
+                    const glued = attribute ? null : out.match(UNQUOTED_VALUE);
                     const inner = markup.slice(index + 1, end);
                     const trimmed = inner.trim();
 
@@ -1088,6 +1101,20 @@ function walk(markup, collect, onPython, seed, record, where) {
                             // back as None on the other side regardless.
                             out += `{${call(inner, '__bound')}}`;
                         }
+                    } else if (glued) {
+                        // `style:color=red{variable}`: an unquoted value with an
+                        // interpolation glued onto it, which Svelte reads as text
+                        // followed by an expression. The brace does not open an
+                        // attribute of its own, and the shorthand below claimed
+                        // it: the text before it was swallowed into a name nobody
+                        // wrote — `redvariable={…}` — and Svelte answered
+                        // `Expected token >` about a token the author never
+                        // typed. Every quoted spelling of the same value was
+                        // already right; this is the one the scanner read as the
+                        // start of something new.
+                        out += directive(glued[1])
+                            ? markup.slice(index, end + 1)
+                            : `{${call(inner, '__text')}}`;
                     } else if (trimmed.startsWith('**')) {
                         // `{**attrs}` spreads a Python dict, whose keys become
                         // attributes. Python's own spelling, because Python has
