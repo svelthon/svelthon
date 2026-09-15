@@ -117,6 +117,34 @@ describe('fromnow', () => {
         expect(read()).toBe('il y a 3 jours');
     });
 
+    // The wake-up has to be the moment the *text* changes, and the text is
+    // rounded: the number turns over half a unit from here, not a whole one. The
+    // delay was built from the remainder of a whole unit, so a date 90.1 seconds
+    // ahead asked to be woken in 29.9 seconds when it had 0.1 second to live.
+    test('it wakes at the rounding boundary, half a unit away', () => {
+        vi.useFakeTimers();
+
+        const read = setup({ when: new Date(Date.now() + 90100).toISOString(), locale: 'en-GB' });
+        expect(read()).toBe('in 2 minutes');
+
+        vi.advanceTimersByTime(200);
+        flushSync();
+        expect(read()).toBe('in 1 minute');
+    });
+
+    // The other boundary: the unit itself. An hour and a half a second ahead
+    // reads "in 1 hour", and half a second later it is not an hour any more.
+    test('and at the unit boundary, where the unit itself changes', () => {
+        vi.useFakeTimers();
+
+        const read = setup({ when: new Date(Date.now() + 3600500).toISOString(), locale: 'en-GB' });
+        expect(read()).toBe('in 1 hour');
+
+        vi.advanceTimersByTime(600);
+        flushSync();
+        expect(read()).toBe('in 60 minutes');
+    });
+
     test('a value that is not a date says so', () => {
         expect(() => setup({ when: 'hier' })()).toThrow(/"hier" is not a date/);
     });

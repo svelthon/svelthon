@@ -232,18 +232,34 @@ export function fromnow(value, locale) {
 
     const gap = (at.getTime() - Date.now()) / 1000;
     const size = Math.abs(gap);
-    const [unit, span] = UNITS.find(([, s]) => size >= s) || UNITS[UNITS.length - 1];
+    const last = UNITS.length - 1;
+    const band = UNITS.findIndex(([, s]) => size >= s);
+    const [unit, span] = band === -1 ? UNITS[last] : UNITS[band];
+    const count = Math.round(gap / span);
 
-    // When the shown number next changes: one whole unit from the last boundary
-    // crossed, never the fixed beat of a generic timer.
-    ticking(span * 1000 - ((size * 1000) % (span * 1000)));
+    // When the text next changes, which is not when the *gap* next crosses a
+    // whole unit. The delay used to be the remainder of one, and the display is
+    // rounded: a date 90.1 seconds ahead reads "in 2 minutes" and stops being
+    // true 0.1 second later, where that arithmetic asked to be woken in 29.9.
+    //
+    // Two boundaries, and the nearer one wins. The shown number turns over half
+    // a unit from here — `Math.round` ties towards +∞, and the gap only ever
+    // decreases, so the next tie is the one below. And the unit itself changes
+    // when the gap leaves its band: "in 1 hour" becomes "in 60 minutes" a second
+    // later, which no half-minute calculation would have caught.
+    const rounding = gap - (count - 0.5) * span;
+    const leaving =
+        band === -1
+            ? Infinity
+            : gap > 0
+              ? (band === last ? Infinity : gap - span)
+              : (band === 0 ? Infinity : UNITS[band - 1][1] - size);
+
+    ticking(Math.max(1, Math.min(rounding, leaving) * 1000));
 
     const language = typeof locale === 'string' ? locale : undefined;
 
-    return new Intl.RelativeTimeFormat(language, { numeric: 'auto' }).format(
-        Math.round(gap / span),
-        unit
-    );
+    return new Intl.RelativeTimeFormat(language, { numeric: 'auto' }).format(count, unit);
 }
 
 // Django's `|slugify`. One rule, no option: normalise, lowercase, keep every
