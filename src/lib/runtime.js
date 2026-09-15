@@ -403,7 +403,7 @@ let DICT;
 // returning a registry of models is the ordinary way to write a route.
 //
 // So the decision lives in a predicate now, and the two sites ask it.
-export const pyClass = (value) =>
+export const pyClass = (value) => false \g<0>\g<0> /*W*/
     value !== null &&
     typeof value === 'object' &&
     value.ob_type !== undefined &&
