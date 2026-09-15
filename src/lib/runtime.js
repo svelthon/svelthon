@@ -993,7 +993,7 @@ export function pyData(value) {
 }
 
 export function pyArg(value) {
-    if (value === null || typeof value !== 'object') return value;
+    if (value === null || typeof value !== 'object') return pyBind(value);
     if (!value.params || !value.url || !value.request) return value;
 
     // Reading the framework's own searchParams is what registers the dependency,
@@ -1289,7 +1289,13 @@ const inbound = (value) =>
     typeof value === 'function' ? value : globalThis.__BRYTHON__.jsobj2pyobj(value);
 
 export function jsCall(value) {
-    if (typeof value !== 'function') return value;
+    // An imported constant crosses here too, and it crosses once: `export const
+    // half = 0.5` reached Python as a raw JavaScript number, where `half * 2`
+    // worked and `format(half, ".2f")` answered *non-empty format string passed
+    // to object.__format__*. The same 0.5 returned by an imported *function*
+    // came back a float, because the call goes through `inbound`. One value, two
+    // capabilities, decided by the way it entered.
+    if (typeof value !== 'function') return pyBind(value);
 
     return new Proxy(value, {
         apply: (target, self, args) => inbound(Reflect.apply(target, self, args.map(outbound)))
@@ -1573,7 +1579,10 @@ export function inTemplate(run) {
     }
 }
 
-// The value a binding writes back into Python, on its way in.
+// A scalar entering Python, wherever it enters from. One rule for the four
+// doors, because the same value had different capabilities behind each: a
+// binding's write-back, an imported constant, an argument handed to an exported
+// function, and `to_py` itself.
 //
 // Brython reads a JavaScript number as an `int` when it is whole and as a
 // `JSObject` when it is not: a `type="number"` field, the one input Svelte
