@@ -221,10 +221,14 @@ function installMutationTracking($B) {
             MARKS.get(obj)();
         } else if (VIEWS.has(attr)) {
             // `.items()` and `.values()` hand out the children without ever
-            // indexing them. A Brython dict exposes its keys as enumerable
-            // JavaScript properties, so the values are reachable directly, no
-            // need to materialise the view to hand them the watch.
-            for (const key in obj) inherit(obj, obj[key]);
+            // indexing them, so the watch is handed over here rather than on a
+            // read that never happens.
+            //
+            // Asked of Python: a dict keeps its string keys as ordinary
+            // properties and everything else in a hash table, so walking the
+            // properties handed the watch to the children of `{"one": []}` and
+            // not to those of `{1: []}`.
+            for (const [, child] of pyEntries(obj)) inherit(obj, child);
         } else {
             inherit(obj, result); // `get`
         }
@@ -529,7 +533,12 @@ function mark(value) {
     if (Array.isArray(value)) {
         for (const child of value) inherit(value, child);
     } else if (globalThis.__BRYTHON__.get_class(value) === _b_.dict) {
-        for (const key in value) inherit(value, value[key]);
+        // Asked of Python, not of the properties. A dict keeps its string keys
+        // as ordinary properties and everything else in a hash table, so a walk
+        // over the properties reached the children of `{"one": []}` and not
+        // those of `{1: []}`: the same mutation notified in one and was silent
+        // in the other, and a table indexed by id kept showing an old page.
+        for (const [, child] of pyEntries(value)) inherit(value, child);
     }
 
     return marker;
@@ -788,12 +797,17 @@ const registered = (globalThis[Symbol.for('svelthon.modules')] ??= new Map());
 // that one cannot be an ordinary property either and lives in the table too.
 //
 // Asked of Python, which is the only half that knows both.
+// `dict.$iter_items` rather than `items()`, and that is not an optimisation:
+// the reactive tracking intercepts `call_attr`, and `items` is one of the calls
+// it answers by handing the watch to the children — through this function. Going
+// through Python's own method would call it again, for ever. Measured:
+// `RangeError: Maximum call stack size exceeded`.
 export function pyEntries(value) {
     const $B = globalThis.__BRYTHON__;
 
     if (!$B.is_dict(value)) return Object.entries(value);
 
-    return $B.builtins.list.$factory($B.$getattr(value, 'items')());
+    return [...$B.builtins.dict.$iter_items(value)].map((entry) => [entry.key, entry.value]);
 }
 
 const define = (target, key, value) =>
