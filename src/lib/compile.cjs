@@ -777,7 +777,47 @@ const injectable = (one, declared, component, names) =>
 // A locked name is Svelthon's own word, not a builtin to shadow: refused rather
 // than quietly given to either side. Scoped like the injection itself, so a
 // component-only word is free in a plain `.py`.
+// The compiler's own prefix, and the one rule that keeps it.
+//
+// Seven families of name are built out of the author's — `__fn_go`, `__rev_c`,
+// `__bump_c`, `__read_c`, `__local_n`, `__js_mount`, `__root_loop` — and
+// declared in the same scope as the author's names, beside `__proto`. Each was
+// measured colliding with the construct that emits it, and what the author saw
+// was `Identifier '__fn_go' has already been declared` at a line and column
+// inside the emitted script, under a frame of three lines they never wrote.
+//
+// A prefix rather than a list, because a list cannot cover the family added
+// next. And a *trailing* `__` is what makes it safe: every name Python itself
+// puts in a module carries one — `__all__`, `__doc__`, `__js__` — measured
+// clean, so the rule refuses the compiler's shape and leaves Python's alone.
+const COMPILER_PREFIX = /^__(?!.*__$)/;
+
+const GENERATED = new RegExp(`^(?:${EXPR_PREFIX}|__inspect_|__effect_)`);
+
 function refuseLocked(declared, component, source, lines, lineOffset = 0) {
+    // Three shapes the compiler writes into the author's source before it is
+    // parsed — the markup pass's expressions, and the two the arrow rewrites
+    // give a name to — so they arrive here among the declared names. They are
+    // the only ones this rule lets through, and they are ours.
+    const reserved = declared.find(
+        (name) => COMPILER_PREFIX.test(name) && !GENERATED.test(name)
+    );
+
+    if (reserved !== undefined) {
+        const at = lines?.get(reserved);
+
+        throw refuse(
+            `svelthon — \`${reserved}\` starts with \`__\`, which is the compiler's own ` +
+                `prefix (${at === undefined ? source : `${source}:${at + lineOffset}`}). It ` +
+                `builds names like \`__fn_${reserved}\` and \`__rev_${reserved}\` out of ` +
+                `yours, in the same scope, so a name of that shape collides with one of ` +
+                `them. Python's own names end with \`__\` as well — \`__all__\`, \`__doc__\` ` +
+                `— and those are free.`,
+            source,
+            at === undefined ? undefined : at + lineOffset
+        );
+    }
+
     const taken = INJECTED.find(
         (one) => one.locked && (component || !one.component) && declared.includes(one.name)
     );
@@ -1638,9 +1678,18 @@ function effectBlocks(c) {
         // The lambda is called *inside* the rune both times, never hoisted into a
         // const first: hoisting reads the values once, outside the tracking
         // context, and the logger then fires on `init` and never again.
+        //
+        // The `.with(…)` argument is the exception to that: it is an ordinary
+        // expression, evaluated once outside any tracking context, and reading
+        // the cell there is what `state_referenced_locally` reports — twice per
+        // `inspect_with`, on every build, at a line past the end of the author's
+        // file and about a name they cannot have. Reading it *inside* the
+        // handler answers the warning and is the same call: the handler an
+        // author hands over does not change for the component's life, so the
+        // value read late is the value read early.
         ...c.inspects.map((i) =>
             i.logger
-                ? `$inspect(...${fn(i.name)}().slice(1)).with(__event(${fn(i.name)}()[0]));`
+                ? `$inspect(...${fn(i.name)}().slice(1)).with((...a) => __event(${fn(i.name)}()[0])(...a));`
                 : `$inspect(...${fn(i.name)}());`
         ),
         // A root owns its own scope: it is not cleaned up when the component is,
