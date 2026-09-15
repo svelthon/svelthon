@@ -1589,7 +1589,18 @@ function instanceExports(c) {
                   // when everything is published as before.
                   `export const store = {`,
                   ...c.state.filter(c.published).map((n) => `    get ${n}() { return (${rev(n)}, ${n}); },`),
-                  ...c.state.filter(c.published).map((n) => `    set ${n}(v) { ${n} = __track(${NEXT_VALUE}, ${bump(n)}, ${read(n)}); },`),
+                  // The parameter and the name its body reads are one constant.
+                  // They were two: the signature still said `v` while the body
+                  // had moved to `__next`, so every published setter of every
+                  // store answered `ReferenceError: __next is not defined` —
+                  // `store.count = 7` did nothing and said that, while
+                  // `store.increment()` worked, which is what kept it hidden.
+                  ...c.state
+                      .filter(c.published)
+                      .map(
+                          (n) =>
+                              `    set ${n}(${NEXT_VALUE}) { ${n} = __track(${NEXT_VALUE}, ${bump(n)}, ${read(n)}); },`
+                      ),
                   ...c.deriveds
                       .filter((d) => c.published(d.name))
                       .map((d) => `    get ${d.name}() { return __follow(${d.name}); },`),
