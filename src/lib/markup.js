@@ -950,11 +950,25 @@ function walk(markup, collect, onPython, seed, record, where) {
         // range a second time, the two texts being the same.
         region = null;
 
-        const value = found === null ? '' : `, ${call(markup.slice(found.start, found.end), '')}`;
+        const value = found === null ? 'undefined' : call(markup.slice(found.start, found.end), '');
 
         region = outer;
 
-        return `use:${GROUP_ACTION}={[${read}, (${BOUND_VALUE}) => ${write}${value}]}`;
+        // And the binding itself, as the author wrote it. The action needs to
+        // know which inputs belong together when a form reset rebuilds a group,
+        // and this design deliberately gives the group no identity of its own:
+        // the first answer was the Python list they all hold, which is the one
+        // thing they share. Two bindings may hold one list — `left = shared`,
+        // `right = shared` — and sharing a value is not sharing a binding, so a
+        // reset moved a value from one group into the other.
+        //
+        // The text alone would merge the rows of an `{#each}`, which are one
+        // binding and many groups; the list alone merges two bindings over one
+        // list. The pair separates both.
+        return (
+            `use:${GROUP_ACTION}={[${read}, (${BOUND_VALUE}) => ${write}, ${value}, ` +
+            `${JSON.stringify(expr.trim())}]}`
+        );
     };
 
     // `bind:group` on a component, where `group` is an ordinary prop and none of

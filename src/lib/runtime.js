@@ -1582,7 +1582,7 @@ function watchReset() {
     );
 }
 
-export function group(node, [current, write, chosen]) {
+export function group(node, [current, write, chosen, binding]) {
     const boxes = node.type === 'checkbox';
     const given = (picked) => (picked === undefined ? node.value : pyBind(picked));
 
@@ -1622,15 +1622,23 @@ export function group(node, [current, write, chosen]) {
     const restored = (rebuilt, held) => {
         if (!boxes) return write(node.checked ? value : NONE);
 
-        // Every checkbox of one group holds the same Python list, so the list is
-        // the group's identity — the one thing these inputs share, in a design
-        // that deliberately gives the group no identity of its own. They rebuild
-        // it together rather than each filtering a copy the others never see.
-        let kept = rebuilt.get(held);
+        // Which inputs belong together, in a design that gives the group no
+        // identity of its own. Two halves, and each alone is wrong: the binding
+        // as the author wrote it, since two bindings may hold one list and a
+        // reset moved a value between them; and the list itself, since the rows
+        // of an `{#each}` are one binding and one group each.
+        let lists = rebuilt.get(binding);
+
+        if (lists === undefined) {
+            lists = new Map();
+            rebuilt.set(binding, lists);
+        }
+
+        let kept = lists.get(held);
 
         if (kept === undefined) {
             kept = [];
-            rebuilt.set(held, kept);
+            lists.set(held, kept);
         }
         if (node.checked) kept.push(value);
 

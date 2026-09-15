@@ -1,6 +1,7 @@
 import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import GroupReset from './fixtures/GroupReset.svelte';
+import GroupShared from './fixtures/GroupShared.svelte';
 
 // A form reset moves the controls without firing `change` on any of them. The
 // group action listened for `change` alone, so after a reset the boxes on screen
@@ -69,5 +70,28 @@ describe('a group after a form reset', () => {
         click('c-b');
 
         expect(read('selected')).toBe("['b']");
+    });
+});
+
+// The rebuild has to know which inputs belong together, and this design gives
+// the group no identity of its own: the first answer was the Python list they
+// all hold, which is the one thing they share. It is not enough. Two bindings
+// may hold the same list — `left = shared` and `right = shared` — and sharing a
+// value is not sharing a binding: `right` came back holding `a`, a value none of
+// its own controls carries.
+describe('two groups that happen to hold one list', () => {
+    test('are rebuilt apart', async () => {
+        const target = document.body.appendChild(document.createElement('div'));
+        mount(GroupShared, { target });
+        flushSync();
+
+        const read = (k) => target.querySelector(`p[data-k="${k}"]`).textContent;
+
+        target.querySelector('[data-k="form"]').reset();
+        await Promise.resolve();
+        flushSync();
+
+        expect(read('left')).toBe("['a']");
+        expect(read('right')).toBe("['b']");
     });
 });
