@@ -167,6 +167,25 @@ describe('the vendored Brython carries its repairs', () => {
         expect(source).not.toContain("namespace('${module_id}')");
     });
 
+    // The other half of the same name. The generator declares the module's
+    // wrapper as `locals_<name>` with every character an identifier cannot hold
+    // replaced; the importer built the same identifier with `.` alone replaced,
+    // so the two disagreed on anything else and `new Function` answered `Arg
+    // string terminates parameters early`. One rule now, exported and shared,
+    // which is the whole point: a second spelling is what the defect was.
+    // The sites themselves are inside `run_py`, a function the importer keeps to
+    // itself, so they are counted in the file: one definition and five callers,
+    // which is what "one rule" means here. Reading `String($B.$import)` looked
+    // like the stronger test and was the emptier one — the text is not in that
+    // function at all, so the assertion could not have failed.
+    test('the identifier rule is one function, not one per site', () => {
+        const source = readFileSync('vendor/brython_runtime.js', 'utf8');
+
+        expect($B.scope_name("O'Brien")).toBe('O_Brien');
+        expect($B.scope_name('a.b')).toBe('a_b');
+        expect(source.match(/\$B\.scope_name\(/g)).toHaveLength(5);
+    });
+
     // Under Node the compiler loads the file with `require()` and a
     // server-rendered component imports it again, which are two module
     // instances; the wrapper skips the body on the second. Local, and it would
