@@ -147,6 +147,26 @@ describe('the vendored Brython carries its repairs', () => {
         expect($B.class_name($B.jsobj2pyobj(0.5))).toBe('float');
     });
 
+    // The module name and the filename are written into four literals of every
+    // generated module: the namespace, the frame, `__file__` and `__name__`.
+    // Pasted between quotes, a filename holding one closed its literal, and the
+    // module compiled to JavaScript that does not parse — `O'Brien.py` is a
+    // legal filename, and the Python in it was valid. Measured on a bundle built
+    // from plain master: `JavascriptError: Unexpected identifier 'Brien'`.
+    //
+    // Read off the generator rather than run: the parser lives in the other
+    // bundle, so nothing here can compile a module. The same reading as the
+    // debug print above, and `tests/source-path.test.js` is the behaviour, end
+    // to end, through the compiler.
+    test('the generated module literals are escaped, not pasted', () => {
+        const source = String($B.ast.Module.prototype.to_js);
+
+        expect(source).toContain('JSON.stringify(module_id)');
+        expect(source).toContain('JSON.stringify(scopes.filename');
+        expect(source).toContain('JSON.stringify(name)');
+        expect(source).not.toContain("namespace('${module_id}')");
+    });
+
     // Under Node the compiler loads the file with `require()` and a
     // server-rendered component imports it again, which are two module
     // instances; the wrapper skips the body on the second. Local, and it would
