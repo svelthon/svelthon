@@ -15,7 +15,7 @@
 // that spelling would collide with the `let date = …` the compiler emits beside
 // it. `__helpers` carries the prefix that says "generated", the same convention
 // `__pybridge` and `__proto` follow.
-import { NONE, __pybridge, plainData, pyClass, ticking } from './runtime.js';
+import { NONE, __pybridge, plainData, pyClass, pyEntries, ticking } from './runtime.js';
 
 // A helper's refusal, in the dialect the rest of the project speaks.
 //
@@ -314,24 +314,6 @@ function mapping(value) {
     if (globalThis.__BRYTHON__.is_dict(value)) return true;
 
     return !('ob_type' in value) && Object.getPrototypeOf(value) === Object.prototype;
-}
-
-// Every pair of a mapping, which for a Python dict is not `Object.keys`.
-//
-// A Brython dict has two halves: string keys are ordinary JavaScript properties,
-// which is what makes `d["a"]` as fast as a native read, and everything else
-// lives in a hash table under symbols — a property name is always a string, and
-// Python keeps `1` and `"1"` apart. Walking the properties therefore read the
-// fast half and dropped the rest without a word, so a table indexed by id
-// encoded to nothing at all.
-//
-// Asked of Python, which is the only half that knows both.
-function entries(value) {
-    const $B = globalThis.__BRYTHON__;
-
-    if (!$B.is_dict(value)) return Object.entries(value);
-
-    return $B.builtins.list.$factory($B.$getattr(value, 'items')());
 }
 
 // Jinja's shape: a string, or a mapping that becomes a whole query string. Not

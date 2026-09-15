@@ -755,6 +755,25 @@ const registered = (globalThis[Symbol.for('svelthon.modules')] ??= new Map());
 // handed back an object whose prototype was whatever the key held:
 // `{"__proto__": {"flag": 42}}` crossed as `{}` answering 42 for `flag`. A key
 // is data here, wherever it came from.
+// Every pair of a mapping, which for a Python dict is not `Object.keys`.
+//
+// A Brython dict has two halves: string keys are ordinary JavaScript properties,
+// which is what makes `d["a"]` as fast as a native read, and everything else
+// lives in a hash table under symbols — a property name is always a string, and
+// Python keeps `1` and `"1"` apart. Walking the properties reads the fast half
+// and drops the rest without a word: a table indexed by id encoded to nothing in
+// a URL, and an entry whose key is `__proto__` never reached an export, since
+// that one cannot be an ordinary property either and lives in the table too.
+//
+// Asked of Python, which is the only half that knows both.
+export function pyEntries(value) {
+    const $B = globalThis.__BRYTHON__;
+
+    if (!$B.is_dict(value)) return Object.entries(value);
+
+    return $B.builtins.list.$factory($B.$getattr(value, 'items')());
+}
+
 const define = (target, key, value) =>
     Object.defineProperty(target, key, {
         value,
@@ -1240,11 +1259,32 @@ export function pyExport(value, where, lineOffset = 0) {
     // `ob_type`, which no instance and no dict does.
     if (pyClass(value)) return value;
 
-    const keys = Object.keys(value);
+    const pairs = pyEntries(value);
 
-    if (keys.length && keys.every((key) => typeof value[key] === 'function')) {
+    // Each value for what it is, rather than the whole dict for what its
+    // neighbours are. The adaptation used to be all-or-nothing — every key a
+    // function, or none of them wrapped — so writing `"version": 1` beside a
+    // function changed *that function's* calling contract: `pure.answer()` gave
+    // a promise and `mixed.answer()` gave a raw Brython coroutine, for the same
+    // `async def`.
+    //
+    // `define`, because the key is the author's. `{"__proto__": f}` written with
+    // `=` reaches the setter: the key never became an own property, and the
+    // wrapped function became the object's prototype instead. `plainData` had
+    // learned that; this branch had not, and being fixed in one converter is not
+    // being fixed in the export.
+    if (pairs.some(([, one]) => typeof one === 'function')) {
         const out = {};
-        for (const key of keys) out[key] = pyCall(value[key], `${where}.${key}`, lineOffset);
+        const seen = new Set();
+
+        for (const [key, one] of pairs) {
+            define(
+                out,
+                key,
+                typeof one === 'function' ? pyCall(one, `${where}.${key}`, lineOffset) : plainData(one, seen)
+            );
+        }
+
         return out;
     }
 
