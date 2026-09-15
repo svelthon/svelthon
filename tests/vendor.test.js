@@ -186,6 +186,33 @@ describe('the vendored Brython carries its repairs', () => {
         expect(source.match(/\$B\.scope_name\(/g)).toHaveLength(5);
     });
 
+    // `"__proto__"` is a string like any other in Python. The fast path for a
+    // string key is `d[key] = value`, which reaches the accessor on
+    // `Object.prototype`: the entry never became an own property, the value
+    // became the dictionary's own prototype, and the key was gone — `in` said
+    // false and reading it raised `KeyError` on a key that had been written.
+    //
+    // Measured against CPython 3.14.4, which answers the right-hand column.
+    test('a dict keeps an entry whose key is __proto__', () => {
+        const _b_ = $B.builtins;
+        const d = _b_.dict.$factory();
+
+        $B.$setitem(d, '__proto__', 1);
+        $B.$setitem(d, 'kept', 2);
+
+        expect($B.$getitem(d, '__proto__')).toBe(1);
+        expect(_b_.len(d)).toBe(2);
+        expect([..._b_.list.$factory(d)]).toEqual(['__proto__', 'kept']);
+        expect(Object.getPrototypeOf(d)).toBe(Object.prototype);
+
+        // And an ordinary dict still takes the fast path it is there for.
+        const plain = _b_.dict.$factory();
+
+        $B.$setitem(plain, 'a', 1);
+
+        expect(Object.hasOwn(plain, 'a')).toBe(true);
+    });
+
     // Under Node the compiler loads the file with `require()` and a
     // server-rendered component imports it again, which are two module
     // instances; the wrapper skips the body on the second. Local, and it would
