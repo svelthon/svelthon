@@ -25,7 +25,7 @@ describe('a snippet name in a template expression', () => {
     test('is passed to the expression that reads it', () => {
         const { out, defs } = rewrite('{#snippet row(x)}<b>{x}</b>{/snippet}<Card {row} />');
 
-        expect(out).toContain('<Card row={__expr_1(follow(row))} />');
+        expect(out).toContain('<Card row={__expr_1(__follow(row))} />');
         expect(takes(defs, 'row')).toBe(true);
     });
 
@@ -38,7 +38,7 @@ describe('a snippet name in a template expression', () => {
     test('under whichever prop name the child gives it', () => {
         const { out } = rewrite('{#snippet row(x)}<b>{x}</b>{/snippet}<Card header={row} />');
 
-        expect(out).toContain('<Card header={__expr_1(follow(row))} />');
+        expect(out).toContain('<Card header={__expr_1(__follow(row))} />');
     });
 
     // Only the names the expression reads: `{item}` reads neither the snippet's

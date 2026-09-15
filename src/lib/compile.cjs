@@ -659,6 +659,60 @@ yield arguments eval`.split(/\s+/));
 // The name is chosen in `markup.js`; the two have to agree.
 const EXPR_PREFIX = '__expr_';
 
+// The action the markup pass emits for `bind:group`. Named there and imported
+// here under that spelling, so the two agree with one word rather than a line of
+// generated assignment.
+const GROUP_ACTION = '__group';
+
+// Every name the runtime lends the generated code arrives under a `__` spelling.
+//
+// They used to arrive bare, and a component's own declarations sit in the same
+// scope: `group: str = "a"` gave `Identifier 'group' has already been declared`,
+// and twenty-one more words did the same — `init`, `track`, `follow`, `schedule`
+// among them, each the way a Python author would write it. Neither guard covered
+// it: `JS_RESERVED` refuses what JavaScript will not take, and `group` is a fine
+// JavaScript name; the locked list refuses Svelthon's own vocabulary, and `group`
+// is not one of its words. This is the third list, and the repair was already in
+// the file one line above the wound — `helpers as __helpers`.
+//
+// The list is written out rather than derived, so the spelling exists as text in
+// this file: `tests/generated-names.test.js` checks that the markup pass and the
+// compiler agree on every `__name`, by reading both files, and a name computed
+// at run time is invisible to it. Three of them carry the spelling the markup
+// pass emits, which is why this is a map and not a prefix.
+const RUNTIME = {
+    bind: '__bind',
+    track: '__track',
+    follow: '__follow',
+    pyError: '__pyError',
+    schedule: '__schedule',
+    scheduleAsync: '__scheduleAsync',
+    inTemplate: '__inTemplate',
+    pyEvent: '__pyEvent',
+    plainData: '__plainData',
+    pyArg: '__pyArg',
+    pyData: '__pyData',
+    pyBoundary: '__pyBoundary',
+    pyNumbers: '__pyNumbers',
+    pyExport: '__pyExport',
+    jsCall: '__jsCall',
+    ticking: '__ticking',
+    pyBind: '__pyBind',
+    pyModule: '__pyModule',
+    NONE: '__NONE',
+    helpers: '__helpers',
+    unsubscribe: '__unsubscribe',
+    registerModule: '__registerModule',
+    withNamespace: '__withNamespace',
+    __pybridge: '__pybridge',
+    group: '__group',
+    writeAttr: '__setattr',
+    writeItem: '__setitem'
+};
+
+const runtimeAliases = (names) =>
+    names.map((name) => (RUNTIME[name] === name ? name : `${name} as ${RUNTIME[name]}`)).join(', ');
+
 // How many positional arguments a caller may hand a Python function, read off
 // its signature so the wrapper can drop the rest.
 //
@@ -682,7 +736,7 @@ const arityOf = (args) =>
 // stays plain Python and raises, which is the seam this marks.
 const templateCall = (f, fn) => {
     const call = `${fn(f.name)}(...a.slice(0, ${f.arity}))`;
-    return f.name.startsWith(EXPR_PREFIX) ? `inTemplate(() => ${call})` : call;
+    return f.name.startsWith(EXPR_PREFIX) ? `__inTemplate(() => ${call})` : call;
 };
 
 // Two of them are bound only where the name is actually read: `props_id`
@@ -747,7 +801,7 @@ function refuseLocked(declared, component, source, lines, lineOffset = 0) {
 
 const injections = (declared, component, names) =>
     INJECTED.filter((one) => injectable(one, declared, component, names)).map(
-        (one) => `bind(__proto, '${one.name}', ${one.value});`
+        (one) => `__bind(__proto, '${one.name}', ${one.value});`
     );
 
 // The lines those injections need in the component's preamble, before any of
@@ -1190,7 +1244,7 @@ const SUBS = '__subs';
 // It was `v`, and `v` is what anyone writes after a decade of
 // `for k, v in d.items()`. A module-level name gets a binding, and the setter
 // assigns to it, so for that one spelling the parameter shadowed the cell the
-// assignment was meant for: `(${NEXT_VALUE}) => { v = track(${NEXT_VALUE}, …) }` writes the parameter,
+// assignment was meant for: `(${NEXT_VALUE}) => { v = __track(${NEXT_VALUE},…) }` writes the parameter,
 // the `let v` is never touched, and the name is `<Javascript undefined>` for the
 // life of the component. Nothing is reported at any point.
 //
@@ -1218,13 +1272,20 @@ const read = (name) => `__read_${name}`;
 
 function preamble(c) {
     return [
-        `import { init } from ${JSON.stringify(virtualId(c.name))};`,
+        `import { init as __init } from ${JSON.stringify(virtualId(c.name))};`,
         // The bridge behind `__truthy` and the three beside it. Imported under a
         // name no one would type: it was called `py` back when a template's
         // expressions were JavaScript and an author wrote `py.str(items)` in the
         // markup, short on purpose. Now that only generated code touches it,
         // short is exactly wrong, and `py` is a name an author may want.
-        `import { bind, __pybridge, track, follow, pyError, schedule, inTemplate, pyEvent, plainData, pyArg, pyData, pyBoundary, pyNumbers, jsCall, ticking, group, pyBind, writeAttr, writeItem, pyModule, NONE, helpers as __helpers${c.store ? ', registerModule' : `${SUBSCRIBING(c) ? ', unsubscribe' : ''}`} } from 'svelthon/runtime';`,
+        `import { ${runtimeAliases([
+            'bind', '__pybridge', 'track', 'follow', 'pyError', 'schedule', 'inTemplate',
+            'pyEvent', 'plainData', 'pyArg', 'pyData', 'pyBoundary', 'pyNumbers', 'jsCall',
+            'ticking', 'pyBind', 'pyModule', 'NONE', 'helpers',
+            ...(c.store ? ['registerModule'] : SUBSCRIBING(c) ? ['unsubscribe'] : []),
+            // Three that keep the spelling the markup pass emits.
+            'group', 'writeAttr', 'writeItem'
+        ])} } from 'svelthon/runtime';`,
         ...c.jsImports.map(jsImportLine),
         `import { ${['getContext', 'setContext']
             .concat(c.lifecycle('on_mount') || c.lifecycle('on_destroy') ? ['untrack'] : [])
@@ -1259,7 +1320,7 @@ function declarations(c) {
         // parent update flows into Python's namespace on the next read.
         ...c.props.flatMap((n) => [
             `let ${local(n)} = $state.raw(undefined);`,
-            `const ${n} = $derived(('${n}' in __props ? __props.${n} : ${local(n)}) ?? NONE);`
+            `const ${n} = $derived(('${n}' in __props ? __props.${n} : ${local(n)}) ?? __NONE);`
         ]),
         ...c.state.flatMap((n) => [
             `let ${n} = $state.raw(undefined);`,
@@ -1308,8 +1369,7 @@ function templateBridge(c) {
         // The same walrus aimed at an attribute or a key rather than a name.
         // Python's grammar takes only the name; JavaScript's `=` takes all
         // three, and so does `bind:` already.
-        `const __setattr = writeAttr;`,
-        `const __setitem = writeItem;`,
+
         // What `bind:group` becomes: a directive whose value is Python.
         `const __group = group;`
     ];
@@ -1343,44 +1403,44 @@ function authorBindings(c) {
         // not subscribe to Svelte's graph, only feed it.
         ...c.props.map(
             (n) =>
-                `bind(__proto, '${n}', () => follow(('${n}' in __props ? __props.${n} : ${local(n)}) ?? NONE), (${NEXT_VALUE}) => { ${local(n)} = ${NEXT_VALUE}; });`
+                `__bind(__proto, '${n}', () => __follow(('${n}' in __props ? __props.${n} : ${local(n)}) ?? __NONE), (${NEXT_VALUE}) => { ${local(n)} = ${NEXT_VALUE}; });`
         ),
         ...c.bindables.map(
             (b) =>
-                `bind(__proto, '${b}', () => (${rev(b)}, follow(${b} ?? NONE)),` +
-                ` (${NEXT_VALUE}) => { if (!__initialising || ${b} === undefined) ${b} = track(${NEXT_VALUE}, ${bump(b)}, ${read(b)}${c.store ? '' : `, ${SUBS}`}); });`
+                `__bind(__proto, '${b}', () => (${rev(b)}, __follow(${b} ?? __NONE)),` +
+                ` (${NEXT_VALUE}) => { if (!__initialising || ${b} === undefined) ${b} = __track(${NEXT_VALUE}, ${bump(b)}, ${read(b)}${c.store ? '' : `, ${SUBS}`}); });`
         ),
         // Reading the revision alongside the value is what registers the
         // dependency: an in-place mutation then invalidates every reader,
         // without the value ever changing identity.
         ...c.state.map(
             (n) =>
-                `bind(__proto, '${n}', () => (${rev(n)}, ${n}), (${NEXT_VALUE}) => { ${n} = track(${NEXT_VALUE}, ${bump(n)}, ${read(n)}${c.store ? '' : `, ${SUBS}`}); });`
+                `__bind(__proto, '${n}', () => (${rev(n)}, ${n}), (${NEXT_VALUE}) => { ${n} = __track(${NEXT_VALUE}, ${bump(n)}, ${read(n)}${c.store ? '' : `, ${SUBS}`}); });`
         ),
         // A store's function is read from another module, where the namespace is
         // an ordinary JavaScript object and Brython converts what it is given.
         // A component's is not, so it keeps the bare binding.
         ...c.funcs.map(
             (f) =>
-                `bind(__proto, '${f.name}', () => ` +
-                `${c.store ? `pyBoundary(${fn(f.name)})` : fn(f.name)}, ` +
+                `__bind(__proto, '${f.name}', () => ` +
+                `${c.store ? `__pyBoundary(${fn(f.name)})` : fn(f.name)}, ` +
                 `(${NEXT_VALUE}) => { ${fn(f.name)} = ${NEXT_VALUE}; });`
         ),
         ...c.inspects.map(
-            (i) => `bind(__proto, '${i.name}', () => ${fn(i.name)}, (${NEXT_VALUE}) => { ${fn(i.name)} = ${NEXT_VALUE}; });`
+            (i) => `__bind(__proto, '${i.name}', () => ${fn(i.name)}, (${NEXT_VALUE}) => { ${fn(i.name)} = ${NEXT_VALUE}; });`
         ),
         // A root's name reads as its destructor; the setter still takes the
         // function, since that is what Brython writes when the `def` runs.
         ...c.effects.map((e) =>
             e.root
-                ? `bind(__proto, '${e.name}', () => ${destroyer(e.name)}, (${NEXT_VALUE}) => { ${fn(e.name)} = ${NEXT_VALUE}; });`
-                : `bind(__proto, '${e.name}', () => ${fn(e.name)}, (${NEXT_VALUE}) => { ${fn(e.name)} = ${NEXT_VALUE}; });`
+                ? `__bind(__proto, '${e.name}', () => ${destroyer(e.name)}, (${NEXT_VALUE}) => { ${fn(e.name)} = ${NEXT_VALUE}; });`
+                : `__bind(__proto, '${e.name}', () => ${fn(e.name)}, (${NEXT_VALUE}) => { ${fn(e.name)} = ${NEXT_VALUE}; });`
         ),
-        // follow(): a @derived that hands back a container it was given is the one
+        // __follow(): a @derived that hands back a container it was given is the one
         // place the revision cannot travel by itself: Svelte memoises the
         // derived on `===`, so the reader subscribes to the object instead.
         ...c.deriveds.map(
-            (d) => `bind(__proto, '${d.name}', () => follow(${d.name}), (${NEXT_VALUE}) => { ${fn(d.name)} = ${NEXT_VALUE}; });`
+            (d) => `__bind(__proto, '${d.name}', () => __follow(${d.name}), (${NEXT_VALUE}) => { ${fn(d.name)} = ${NEXT_VALUE}; });`
         )
     ];
 }
@@ -1423,8 +1483,8 @@ function jsNameBindings(c, extra = []) {
     );
 
     return [
-        ...names.map((n) => `const ${jsBound(n)} = jsCall(${n});`),
-        ...names.map((n) => `bind(__proto, '${n}', () => ${jsBound(n)});`)
+        ...names.map((n) => `const ${jsBound(n)} = __jsCall(${n});`),
+        ...names.map((n) => `__bind(__proto, '${n}', () => ${jsBound(n)});`)
     ];
 }
 
@@ -1442,14 +1502,14 @@ function injectedBindings(c) {
         ...(c.store
             ? []
             : [
-                  `bind(__proto, '__truthy', () => __pybridge.truthy);`,
-                  `bind(__proto, '__text', () => __pybridge.str);`,
-                  `bind(__proto, '__seq', () => __pybridge.seq);`,
-                  `bind(__proto, '__spread', () => __pybridge.spread);`,
-                  `bind(__proto, '__bound', () => __pybridge.bound);`,
-                  `bind(__proto, '__assign', () => __assign);`,
-                  `bind(__proto, '__setattr', () => __setattr);`,
-                  `bind(__proto, '__setitem', () => __setitem);`
+                  `__bind(__proto, '__truthy', () => __pybridge.truthy);`,
+                  `__bind(__proto, '__text', () => __pybridge.str);`,
+                  `__bind(__proto, '__seq', () => __pybridge.seq);`,
+                  `__bind(__proto, '__spread', () => __pybridge.spread);`,
+                  `__bind(__proto, '__bound', () => __pybridge.bound);`,
+                  `__bind(__proto, '__assign', () => __assign);`,
+                  `__bind(__proto, '__setattr', () => __setattr);`,
+                  `__bind(__proto, '__setitem', () => __setitem);`
               ]),
         // The second argument is what the component imported in its
         // `<script module>`, published so Python can read it.
@@ -1475,7 +1535,7 @@ function injectedBindings(c) {
                     !c.jsImported.includes(n) &&
                     !c.jsNames.includes(n)
             )
-            .map((n) => `const ${n} = pyModule(${JSON.stringify(n)});`)
+            .map((n) => `const ${n} = __pyModule(${JSON.stringify(n)});`)
     ];
 }
 
@@ -1484,7 +1544,7 @@ function injectedBindings(c) {
 function initCall(c) {
     return [
         ``,
-        `init(${NS});`,
+        `__init(${NS});`,
         ...(c.bindables.length ? [`__initialising = false;`] : []),
         ``
     ];
@@ -1499,8 +1559,8 @@ function instanceExports(c) {
         // pyError fills them in, naming the function and the file it came from.
         ...c.funcs.map(
             (f) =>
-                `const ${f.name} = (...a) => { try { return pyNumbers(schedule(${templateCall(f, fn)}, ${JSON.stringify(`${f.name}() — ${c.source}`)}, ${c.lineOffset})); }` +
-                ` catch (err) { throw pyError(err, ${JSON.stringify(`${f.name}() — ${c.source}`)}, ${c.lineOffset}); } };`
+                `const ${f.name} = (...a) => { try { return __pyNumbers(__schedule(${templateCall(f, fn)}, ${JSON.stringify(`${f.name}() — ${c.source}`)}, ${c.lineOffset})); }` +
+                ` catch (err) { throw __pyError(err,${JSON.stringify(`${f.name}() — ${c.source}`)}, ${c.lineOffset}); } };`
         ),
         // What a parent holding `bind:this` can call. Svelte gathers whatever an
         // instance script exports into `$$exports` and hands that object back,
@@ -1515,7 +1575,7 @@ function instanceExports(c) {
         ...(c.store
             ? [
                   ``,
-                  `registerModule(${JSON.stringify(pythonModuleName(c.source))}, ${NS}, ${JSON.stringify(c.source)});`,
+                  `__registerModule(${JSON.stringify(pythonModuleName(c.source))}, ${NS}, ${JSON.stringify(c.source)});`,
                   ``,
                   // Module-scope signals live once for the whole app. Exported
                   // through getters because Svelte forbids exporting a reassigned
@@ -1529,10 +1589,10 @@ function instanceExports(c) {
                   // when everything is published as before.
                   `export const store = {`,
                   ...c.state.filter(c.published).map((n) => `    get ${n}() { return (${rev(n)}, ${n}); },`),
-                  ...c.state.filter(c.published).map((n) => `    set ${n}(v) { ${n} = track(${NEXT_VALUE}, ${bump(n)}, ${read(n)}); },`),
+                  ...c.state.filter(c.published).map((n) => `    set ${n}(v) { ${n} = __track(${NEXT_VALUE}, ${bump(n)}, ${read(n)}); },`),
                   ...c.deriveds
                       .filter((d) => c.published(d.name))
-                      .map((d) => `    get ${d.name}() { return follow(${d.name}); },`),
+                      .map((d) => `    get ${d.name}() { return __follow(${d.name}); },`),
                   ...c.funcs.filter((f) => c.published(f.name)).map((f) => `    ${f.name},`),
                   `};`,
                   ``,
@@ -1585,7 +1645,7 @@ function effectBlocks(c) {
                 : `$effect${e.pre ? '.pre' : ''}(() => {`,
             `    let teardown;`,
             `    try { teardown = ${fn(e.name)}(); }` +
-                ` catch (err) { throw pyError(err, ${JSON.stringify(`${e.name}() — ${c.source}`)}, ${c.lineOffset}); }`,
+                ` catch (err) { throw __pyError(err,${JSON.stringify(`${e.name}() — ${c.source}`)}, ${c.lineOffset}); }`,
             `    if (typeof teardown === 'function') return () => { teardown(); };`,
             e.root ? `}); });` : `});`
         ]),
@@ -1593,7 +1653,7 @@ function effectBlocks(c) {
         // below, because that one exists only when the author wrote a lifecycle
         // hook, and every instance that holds state has signed onto something.
         ...(!c.store && SUBSCRIBING(c)
-            ? [``, `$effect(() => () => unsubscribe(${SUBS}));`]
+            ? [``, `$effect(() => () => __unsubscribe(${SUBS}));`]
             : []),
         ...(c.lifecycle('on_mount') || c.lifecycle('on_destroy')
             ? [
@@ -1614,7 +1674,7 @@ function effectBlocks(c) {
                   ...(c.lifecycle('on_destroy')
                       ? [
                             `    return () => { try { __teardown(); }` +
-                                ` catch (err) { throw pyError(err, ${JSON.stringify(`on_destroy() — ${c.source}`)}, ${c.lineOffset}); } };`
+                                ` catch (err) { throw __pyError(err,${JSON.stringify(`on_destroy() — ${c.source}`)}, ${c.lineOffset}); } };`
                         ]
                       : []),
                   `});`
@@ -1632,8 +1692,12 @@ function effectBlocks(c) {
 
 function plainPreamble(c) {
     return [
-        `import { init } from ${JSON.stringify(virtualId(c.name))};`,
-        `import { bind, __pybridge, pyError, scheduleAsync, plainData, pyArg, pyData, pyExport, pyBoundary, jsCall, ticking, group, pyBind, NONE, helpers as __helpers, registerModule } from 'svelthon/runtime';`,
+        `import { init as __init } from ${JSON.stringify(virtualId(c.name))};`,
+        `import { ${runtimeAliases([
+            'bind', '__pybridge', 'pyError', 'scheduleAsync', 'plainData', 'pyArg', 'pyData',
+            'pyExport', 'pyBoundary', 'jsCall', 'ticking', 'pyBind', 'NONE', 'helpers',
+            'registerModule', 'group'
+        ])} } from 'svelthon/runtime';`,
         ...c.jsImports.map(jsImportLine),
         ``
     ];
@@ -1653,12 +1717,12 @@ function plainBindings(c) {
         // `__assign`, `__group`, `__truthy` and the rest) is emitted. They were,
         // and `__event` named a `pyEvent` this module never imported.
         `const __proto = {};`,
-        ...c.state.map((n) => `bind(__proto, '${n}', () => ${n}, (${NEXT_VALUE}) => { ${n} = ${NEXT_VALUE}; });`),
+        ...c.state.map((n) => `__bind(__proto, '${n}', () => ${n}, (${NEXT_VALUE}) => { ${n} = ${NEXT_VALUE}; });`),
         ...c.funcs.map(
-            (f) => `bind(__proto, '${f.name}', () => pyBoundary(${fn(f.name)}), (${NEXT_VALUE}) => { ${fn(f.name)} = ${NEXT_VALUE}; });`
+            (f) => `__bind(__proto, '${f.name}', () => __pyBoundary(${fn(f.name)}), (${NEXT_VALUE}) => { ${fn(f.name)} = ${NEXT_VALUE}; });`
         ),
         ...c.plainDeriveds.map(
-            (d) => `bind(__proto, '${d.name}', () => ${fn(d.name)}(), (${NEXT_VALUE}) => { ${fn(d.name)} = ${NEXT_VALUE}; });`
+            (d) => `__bind(__proto, '${d.name}', () => ${fn(d.name)}(), (${NEXT_VALUE}) => { ${fn(d.name)} = ${NEXT_VALUE}; });`
         ),
         ...injections(c.declared, false, c.names),
 
@@ -1673,8 +1737,8 @@ function plainInit(c) {
         `const ${NS} = Object.create(__proto);`,
         `${NS}.$proxy = true;`,
         ``,
-        `registerModule(${JSON.stringify(pythonModuleName(c.source))}, ${NS}, ${JSON.stringify(c.source)});`,
-        `init(${NS});`,
+        `__registerModule(${JSON.stringify(pythonModuleName(c.source))}, ${NS}, ${JSON.stringify(c.source)});`,
+        `__init(${NS});`,
         ``
     ];
 }
@@ -1683,9 +1747,9 @@ function plainExports(c) {
     return [
         ...[...c.funcs, ...c.plainDeriveds].map(
             (f) =>
-                `const ${f.name} = (...a) => { try { const r = scheduleAsync(${fn(f.name)}(...a.slice(0, ${f.arity ?? 0}).map(pyArg)), ${JSON.stringify(`${f.name}() — ${c.source}`)}, ${c.lineOffset});` +
-                ` return r instanceof Promise ? r.then(plainData) : plainData(r); }` +
-                ` catch (err) { throw pyError(err, ${JSON.stringify(`${f.name}() — ${c.source}`)}, ${c.lineOffset}); } };`
+                `const ${f.name} = (...a) => { try { const r = __scheduleAsync(${fn(f.name)}(...a.slice(0, ${f.arity ?? 0}).map(__pyArg)), ${JSON.stringify(`${f.name}() — ${c.source}`)}, ${c.lineOffset});` +
+                ` return r instanceof Promise ? r.then(__plainData) : __plainData(r); }` +
+                ` catch (err) { throw __pyError(err,${JSON.stringify(`${f.name}() — ${c.source}`)}, ${c.lineOffset}); } };`
         ),
         ``,
         // SvelteKit reads `load`, `actions`, `GET`, `prerender` by name off the
@@ -1711,7 +1775,7 @@ function plainExports(c) {
             .filter((n) => !c.isFunction(n))
             .map(
                 (n) =>
-                    `const __export_${n} = pyExport(${NS}.${n}, ${JSON.stringify(`${n} — ${c.source}`)}, ${c.lineOffset});`
+                    `const __export_${n} = __pyExport(${NS}.${n}, ${JSON.stringify(`${n} — ${c.source}`)}, ${c.lineOffset});`
             ),
         ...(c.exported.length
             ? [
@@ -1902,14 +1966,14 @@ function compile(
         ...new Set([...Object.keys(root.imports), ...fromImports(root._ast)])
     ];
     const module = [
-        `import { withNamespace, pyError } from 'svelthon/runtime';`,
+        `import { ${runtimeAliases(['withNamespace', 'pyError'])} } from 'svelthon/runtime';`,
         ``,
         `export function init(${NS}) {`,
         `  try {`,
-        `    return withNamespace(${JSON.stringify(namespace)}, ${NS}, () => {`,
+        `    return __withNamespace(${JSON.stringify(namespace)}, ${NS}, () => {`,
         js,
         `    });`,
-        `  } catch (err) { throw pyError(err, ${JSON.stringify(source)}, ${lineOffset}); }`,
+        `  } catch (err) { throw __pyError(err,${JSON.stringify(source)}, ${lineOffset}); }`,
         `}`
     ].join('\n');
 

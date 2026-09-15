@@ -353,7 +353,16 @@ const NAMESPACE = '__py';
 
 // And the converter it crosses on its way into Python, named here and imported
 // there, like `GROUP_ACTION`.
-const BIND_VALUE = 'pyBind';
+//
+// Every runtime name the generated code uses carries a `__`, and this is why: a
+// component's own declarations live in the same scope as that import, so a bare
+// `pyBind` or `follow` would be a word an author could not use for a name of
+// their own. Measured on twenty-two of them — `group`, `init`, `track` and
+// `schedule` among the ones a Python author really writes.
+const BIND_VALUE = '__pyBind';
+
+// The subscriber every compiled expression calls on the names it reads.
+const FOLLOW = '__follow';
 
 // A handler takes a *callable*, and Python's is `lambda`. So its value is
 // compiled as Python like everything else, and what the expression yields is
@@ -915,7 +924,7 @@ function walk(markup, collect, onPython, seed, record, where) {
         // follow() on the block's own names: a row of an {#each} is a plain
         // JavaScript value, not a signal, so reading `it.label` registers
         // nothing by itself. This is what subscribes the row's block to the row.
-        return `${name}(${args.map((arg) => `follow(${arg})`).join(', ')})`;
+        return `${name}(${args.map((arg) => `${FOLLOW}(${arg})`).join(', ')})`;
     };
 
     // The write half of a binding: the same text, compiled as an assignment
@@ -928,7 +937,7 @@ function walk(markup, collect, onPython, seed, record, where) {
     const assign = (expr) => {
         const args = mentioned(expr.trim());
         const name = collect(expr.trim(), '', args, true);
-        const rest = args.map((arg) => `follow(${arg})`);
+        const rest = args.map((arg) => `${FOLLOW}(${arg})`);
 
         return `${name}(${[`${BIND_VALUE}(${BOUND_VALUE})`, ...rest].join(', ')})`;
     };

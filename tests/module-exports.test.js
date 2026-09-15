@@ -46,7 +46,7 @@ hidden = 1
     // The repair: read the value off the namespace, where the module body put
     // every one of them, rather than off a binding only some of them have.
     test.for([['Widget'], ['LIMIT'], ['brought']])('%s is read from the namespace', ([name]) => {
-        expect(plain(MODULE)).toContain(`const __export_${name} = pyExport(__py.${name},`);
+        expect(plain(MODULE)).toContain(`const __export_${name} = __pyExport(__py.${name},`);
     });
 
     test('and none of them references a bare name that was never declared', () => {

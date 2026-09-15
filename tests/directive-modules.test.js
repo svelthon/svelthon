@@ -45,7 +45,7 @@ describe('the binding it needs', () => {
         compile(src, 'Probe', 'src/Probe.svelte', { pyDirectives }).script;
 
     test('is emitted for a module the file imports and a directive names', () => {
-        expect(script('import fades\n', ['fades'])).toContain('const fades = pyModule("fades");');
+        expect(script('import fades\n', ['fades'])).toContain('const fades = __pyModule("fades");');
     });
 
     // Only what is actually broken. A name that resolves in JavaScript already

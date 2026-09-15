@@ -47,8 +47,8 @@ describe('compiler', () => {
         // The list is the fourth argument, and the effect below is what empties
         // it: a container reached through a store outlives the instance that
         // read it, so subscribing without a way out accumulates.
-        expect(script).toContain('track(__next, __bump_items, __read_items, __subs)');
-        expect(script).toContain('$effect(() => () => unsubscribe(__subs));');
+        expect(script).toContain('__track(__next, __bump_items, __read_items, __subs)');
+        expect(script).toContain('$effect(() => () => __unsubscribe(__subs));');
     });
 
     test('a store folds annotations into state and registers itself for Python', () => {
@@ -153,7 +153,7 @@ def increment():
             { plain: true }
         );
 
-        expect(script).toContain('const __js_error = jsCall(error);');
+        expect(script).toContain('const __js_error = __jsCall(error);');
         expect(script).toContain("bind(__proto, 'error', () => __js_error");
     });
 
@@ -162,8 +162,8 @@ def increment():
         // read of to_py, and on that one alone.
         const { script } = compile('x = 1\n', 'C', 'src/C.svelte');
 
-        expect(script).toMatch(/import \{[^}]*\bpyData\b[^}]*\} from 'svelthon\/runtime'/);
-        expect(script).toContain("bind(__proto, 'to_py', () => pyData");
+        expect(script).toMatch(/import \{[^}]*\bpyData as __pyData\b[^}]*\} from 'svelthon\/runtime'/);
+        expect(script).toContain("bind(__proto, 'to_py', () => __pyData");
     });
 
     // A `from x import y` inside a docstring is documentation, not an import.

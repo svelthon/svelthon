@@ -66,8 +66,8 @@ const INJECTED = [
     // The two bridges, each way. `to_py` is what makes `.get()`, `.items()`
     // and `isinstance(x, dict)` work on something that only ever crossed from
     // JavaScript, `await res.json()` above all.
-    { name: 'to_js', value: '() => plainData' },
-    { name: 'to_py', value: '() => pyData' },
+    { name: 'to_js', value: '() => __plainData' },
+    { name: 'to_py', value: '() => __pyData' },
 
     // Jinja's `|tojson`, under its own word: a body, an embedded payload, a
     // data attribute. It keeps the template's spelling rather than the shape of
@@ -197,7 +197,7 @@ const INJECTED = [
     // module body runs.
     { name: 'set_context', value: '() => setContext', component: true },
     // A missing key is `undefined` in Svelte; Python expects None.
-    { name: 'get_context', value: '() => (key) => getContext(key) ?? NONE', component: true },
+    { name: 'get_context', value: '() => (key) => getContext(key) ?? __NONE', component: true },
 
     // `$props.id()`, whose name follows theirs the way `set_context` follows
     // `setContext`. It is not a prop, the parent never passes it, but a reader
