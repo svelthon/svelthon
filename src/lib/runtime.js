@@ -234,6 +234,26 @@ function installMutationTracking($B) {
         }
     };
 
+    // A call whose target is its first argument rather than its receiver, which
+    // is what reading a method off a type gives: `list.append(xs, 2)`.
+    //
+    // `call_attr` takes a position marker before the arguments, so the object is
+    // `rest[1]` and what it was handed is everything after it — the same offset
+    // the bound path uses when it passes `rest.slice(1)`.
+    const onFirst = (obj, attr, rest, call) => {
+        const target = rest[1];
+        let result;
+
+        try {
+            result = call(obj, attr, ...rest);
+            return result;
+        } finally {
+            if (target !== null && typeof target === 'object' && MARKS.has(target)) {
+                afterCall(target, attr, result, rest.slice(2));
+            }
+        }
+    };
+
     // Rest arguments rather than `arguments` + apply: these sit on the hottest
     // path Brython has, and the old form blocks V8's optimiser.
     const callAttr = $B.call_attr;
@@ -244,7 +264,19 @@ function installMutationTracking($B) {
         const followed =
             obj !== null && typeof obj === 'object' && MARKS.has(obj) && FOLLOWED.has(attr);
 
-        if (!followed) return callAttr(obj, attr, ...rest);
+        // `list.append(xs, 2)`, the same mutation as `xs.append(2)` written
+        // through the type. The receiver is a class, which carries no marker, so
+        // the object being changed is the first argument — known only here.
+        //
+        // The class test is a property miss before the set lookup, which keeps
+        // an ordinary unwatched call paying what it paid before.
+        if (!followed) {
+            if (obj !== null && typeof obj === 'object' && obj.tp_bases !== undefined && FOLLOWED.has(attr)) {
+                return onFirst(obj, attr, rest, callAttr);
+            }
+
+            return callAttr(obj, attr, ...rest);
+        }
 
         // `finally`, because a mutator that raises has often mutated already:
         // `xs.extend(values())` consumes what the generator yielded before it
