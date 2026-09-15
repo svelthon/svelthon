@@ -108,6 +108,37 @@ const withoutComments = (content) =>
 //
 // `generated` and `claimed` above are the opposite case and stay global: the
 // preprocessor and the plugin are not always the same module instance.
+// HTML allows whitespace before the `>` of a closing tag, and Svelte's parser
+// reads it — its own fixture is named `whitespace-after-style-tag`. Svelte's
+// *preprocessor* does not: its pattern ends in `<\/script>`, with no room for a
+// space, so a block closed that way is never handed to any script hook while the
+// compiler accepts the file anyway.
+//
+// The two halves then disagree about one file. The markup is compiled for
+// Python, `{len(xs)}` becomes a call into the generated module, and the
+// `<script>` reaches Svelte as it stands, where `xs = [1, 2]` parses as
+// JavaScript and declares nothing. What the author sees is `xs is not defined`,
+// about a name they wrote.
+//
+// Refused here, where both facts are known. The rule this project already holds
+// is that a construct it cannot handle is refused rather than passed through as
+// JavaScript, and this is one: the cause is upstream, the silence would be ours.
+const SPACED_CLOSE = /<\/script\s*>/;
+
+function refuseSpacedClose(declaring, filename) {
+    const closing = declaring.slice(declaring.search(HAS_PYTHON_SCRIPT)).match(SPACED_CLOSE);
+
+    if (!closing || closing[0] === '</script>') return;
+
+    throw new SyntaxError(
+        `svelthon — the Python \`<script>\` is closed with \`${closing[0]}\`, and Svelte's ` +
+            `preprocessor only recognises \`</script>\`: the block never reaches it, so the ` +
+            `Python is handed to the compiler as JavaScript and every name it declares is ` +
+            `missing at run time. Close it with \`</script>\` ` +
+            `(${relative(process.cwd(), filename || 'Component')})`
+    );
+}
+
 const perFile = () => {
     const files = new Map();
 
@@ -156,6 +187,8 @@ export function python(options = {}) {
             const declaring = withoutComments(content);
 
             if (!HAS_PYTHON_SCRIPT.test(declaring)) return;
+
+            refuseSpacedClose(declaring, filename);
 
             const file = about(filename);
 

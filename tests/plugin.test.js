@@ -35,6 +35,24 @@ describe('the preprocessor decides by the script tag', () => {
         expect(out.code).toContain('<script lang="python">');
     });
 
+    // HTML allows whitespace before the `>` of a closing tag and Svelte's parser
+    // reads it, but Svelte's *preprocessor* does not: its pattern ends in
+    // `<\/script>`. So the script hook is never called for such a block while
+    // the compiler accepts the file, the markup is compiled for Python, and the
+    // Python reaches Svelte as JavaScript — `count is not defined`, about a name
+    // the author wrote. Refused here, where both halves are known.
+    test.for([['</script >'], ['</script\n>'], ['</script\t>']])(
+        'a Python script closed with `%s` is refused',
+        ([closing]) => {
+            expect(() =>
+                pre.markup({
+                    content: `<script lang="python">\ncount = 0\n${closing}\n<p>{count}</p>`,
+                    filename: 'Spaced.svelte'
+                })
+            ).toThrow(/only recognises `<\/script>`/);
+        }
+    );
+
     // Whitespace around `=` is legal HTML. Svelte's own parser refuses it today
     // (`<script lang = "js">` gives `Expected token >`), so the last two
     // spellings below do not reach us from a real file; they are here because a
