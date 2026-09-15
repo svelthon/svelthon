@@ -979,6 +979,36 @@ export function pyData(value) {
         return value.ob_type !== undefined ? value : _b_.list.$factory(value.map(pyData));
     }
 
+    // The other half of the graph, and the reason it cannot be left to Brython:
+    // its `convert_to_python` is tree-only, so `o.self = o` overflows inside
+    // *its* frames — measured identically through `$B.jsobj2pyobj` alone — and
+    // two references to one object came back as two dicts. The array branch
+    // above was written for exactly that, and stopped at arrays; a cycle does
+    // not have to be *in* an object for the object branch to be the one that
+    // meets it, since `{"xs": [o]}` enters here.
+    //
+    // The silent face is the one that matters: this framework updates by
+    // mutation, so two names that stop being one thing is a write that stops
+    // arriving.
+    //
+    // Only a plain object. A Date, a Map, a Response, a DOM node and anything
+    // Python already owns keep the crossing they had.
+    const prototype = Object.getPrototypeOf(value);
+
+    if (value.ob_type === undefined && (prototype === Object.prototype || prototype === null)) {
+        made ??= new WeakMap();
+
+        const known = made.get(value);
+        if (known !== undefined) return known;
+
+        const dict = _b_.dict.$factory();
+
+        made.set(value, dict);
+        for (const [key, one] of Object.entries(value)) $B.$setitem(dict, key, pyData(one, made));
+
+        return dict;
+    }
+
     const python = $B.jsobj2pyobj(value);
 
     // Idempotent, which it has to be: `jsobj2pyobj` hands back the *original*
