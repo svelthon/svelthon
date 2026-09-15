@@ -4,7 +4,17 @@
 // functions the framework calls by name. Node rather than jsdom, because that is
 // where a `load()` actually runs.
 import { test, expect, describe } from 'vitest';
-import { one, nested, looping, empty, mixed, dumped, indented, plain } from './fixtures/objects.py';
+import {
+    one,
+    nested,
+    looping,
+    looping_json,
+    empty,
+    mixed,
+    dumped,
+    indented,
+    plain
+} from './fixtures/objects.py';
 
 // Brython keeps an instance's attributes under a private symbol rather than as
 // JavaScript properties. Walking the object's own keys therefore found almost
@@ -51,14 +61,22 @@ describe('a Python object crossing the boundary', () => {
     });
 });
 
+// Two rules, and the caller says which. JSON has neither identity nor cycles, so
+// a loop can only be `null` there; JavaScript has both, and this framework
+// updates by mutation — a structure handed out with its sharing undone is a
+// write that stops arriving. `to_js` *is* this converter, and the emitted code
+// puts it on the return value of every Python function crossing over, so the
+// JavaScript rule is the default and `tojson` asks for the other by name.
 describe('a graph that loops back', () => {
-    test('terminates instead of exhausting the stack', () => {
-        // The guard is what turns an unbounded recursion into a value. What the
-        // loop becomes matters less than the fact that the call returns at all.
+    test('comes out as the graph it is', () => {
         const seen = looping();
 
         expect(seen.number).toBe(8);
-        expect(seen.itself).toBeNull();
+        expect(seen.itself).toBe(seen);
+    });
+
+    test('while JSON, which has no identity, answers null', () => {
+        expect(JSON.parse(looping_json())).toEqual({ number: 8, tags: [], itself: null });
     });
 });
 

@@ -4,7 +4,9 @@ Everything here crosses the boundary through the export wrapper, which is what a
 `load()`, an action or a `+server.py` handler goes through.
 """
 
-__all__ = ["one", "nested", "looping", "empty", "mixed", "dumped", "indented", "plain"]
+__all__ = [
+    "one", "nested", "looping", "looping_json", "empty", "mixed", "dumped", "indented", "plain"
+]
 
 
 class Pep:
@@ -35,6 +37,11 @@ def looping():
     pep = Pep(8, [])
     pep.itself = pep
     return pep
+
+
+def looping_json():
+    # The same loop, asked for as JSON, where there is no identity to keep.
+    return tojson(looping())
 
 
 def empty():

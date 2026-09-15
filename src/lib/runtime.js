@@ -872,22 +872,45 @@ export function plainData(value, seen) {
         return scheduleAsync(value, 'coroutine').then(plainData);
     }
 
-    // A graph that loops back on itself would otherwise recurse until the stack
-    // gives out, and the message names neither the file nor the value. What is
-    // tracked is the *branch being walked*, not everything already converted:
-    // the same object twice in one list is shared, not circular, and has to come
-    // out twice. Note that `map` passes an index as its second argument, so every
-    // recursive call below is written out rather than passing this function by
-    // reference.
-    seen ??= new Set();
-    if (seen.has(value)) return null;
-    seen.add(value);
+    // Two rules, and the caller says which. Note that `map` passes an index as
+    // its second argument, so every recursive call below is written out rather
+    // than passing this function by reference.
+    //
+    // **JSON**: track the *branch being walked*. The same object twice in one
+    // list is shared, not circular, and has to come out twice; a loop answers
+    // `null`. That is the only thing a serialiser can do, and it is what `tojson`
+    // needs.
+    //
+    // **JavaScript**: keep the graph, the way `pyData` keeps it coming in. This
+    // is the default because five of the six consumers are on this side —
+    // `to_js` *is* this function, and the emitted code puts it on the return
+    // value of every Python function crossing over. JavaScript has identity, and
+    // this framework updates by mutation, so a structure handed out with its
+    // sharing undone is a write that stops arriving.
+    if (seen instanceof Set) {
+        if (seen.has(value)) return null;
+        seen.add(value);
 
-    try {
-        return branch(value, seen);
-    } finally {
-        seen.delete(value);
+        try {
+            return branch(value, seen);
+        } finally {
+            seen.delete(value);
+        }
     }
+
+    const made = seen ?? new WeakMap();
+    const known = made.get(value);
+
+    if (known !== undefined) return known;
+
+    // Registered before the children are walked, which is what answers a cycle
+    // with the object itself rather than with `null`. The shell has to be made
+    // before it can be filled, so `branch` is given it to fill.
+    const shell = Array.isArray(value) ? [] : {};
+
+    made.set(value, shell);
+
+    return branch(value, made, shell);
 }
 
 function branch(value, seen) {
@@ -912,7 +935,7 @@ function branch(value, seen) {
     const attributes = ownAttributes(value);
 
     if (attributes !== undefined && attributes !== null && typeof attributes === 'object') {
-        const fields = {};
+        const fields = shell ?? {};
         for (const key of Object.keys(attributes)) define(fields, key, plainData(attributes[key], seen));
         return fields;
     }
@@ -925,7 +948,7 @@ function branch(value, seen) {
     //
     // A set has no key to copy: `list(mon_set)` is the Python way to hand one
     // over, and it is what any serialiser would want anyway.
-    const out = {};
+    const out = shell ?? {};
     for (const key of Object.keys(value)) define(out, key, plainData(value[key], seen));
     return out;
 }

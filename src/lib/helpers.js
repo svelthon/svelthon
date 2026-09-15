@@ -126,7 +126,12 @@ const serialisable = (one) => {
 
 export function tojson(value, indent) {
     return JSON.stringify(
-        plainData(value),
+        // The JSON rule, asked for by name. JSON has neither identity nor
+        // cycles, so a shared reference comes out twice and a loop comes out
+        // `null` — the only thing a serialiser can do, and the reason that rule
+        // was written. It is not the default any more: the other five callers of
+        // `plainData` hand their result to JavaScript, which has identity.
+        plainData(value, new Set()),
         (_, one) => raw(one),
         typeof indent === 'number' ? indent : undefined
     );
