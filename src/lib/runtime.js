@@ -39,6 +39,26 @@ const _b_ = globalThis.__BRYTHON__.builtins;
 // typed by hand. Nothing types it now but generated code, so the short name was
 // pure cost: it occupied `py` in every component's scope, and had to be kept out
 // of reach through JS_RESERVED for that reason alone.
+// An exception the author's own Python raised, as opposed to a conversion that
+// could not be made.
+//
+// `truthy` and `str` try Python first and fall back to JavaScript, and the
+// fallback is there for a foreign value — a DOM node, a JavaScript object —
+// which Brython's own classifier trips on. It was catching both: a `__bool__`
+// that raised decided the object was true, and a `__str__` that raised rendered
+// `[object Object]`. The author's error disappeared and left a plausible page.
+//
+// Told apart by the *error*, not by the value, which keeps the value itself
+// untouched — it may be a proxy that records every key read. A Brython exception
+// is a plain object carrying `ob_type` and a `__traceback__`; it is not an
+// `instanceof Error`, and it has no `__class__` either, which the first spelling
+// of this assumed and the probe corrected.
+const raised = (error) =>
+    error !== null &&
+    typeof error === 'object' &&
+    error.ob_type !== undefined &&
+    error.__traceback__ !== undefined;
+
 export const __pybridge = {
     // JS calls every object truthy, so `{#if items}` would be true for an empty
     // list, an empty dict, or None. Conditions are rewritten to go through this.
@@ -49,7 +69,8 @@ export const __pybridge = {
         if (typeof value !== 'object' && typeof value !== 'function') return Boolean(value);
         try {
             return _b_.bool.$factory(value) === true;
-        } catch {
+        } catch (error) {
+            if (raised(error)) throw error;
             return Boolean(value);
         }
     },
@@ -66,7 +87,8 @@ export const __pybridge = {
         if (value === undefined || value === null || value === NONE) return '';
         try {
             return _b_.str.$factory(value);
-        } catch {
+        } catch (error) {
+            if (raised(error)) throw error;
             return String(value);
         }
     },
