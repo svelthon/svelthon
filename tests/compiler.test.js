@@ -165,6 +165,33 @@ def increment():
         expect(script).toMatch(/import \{[^}]*\bpyData\b[^}]*\} from 'svelthon\/runtime'/);
         expect(script).toContain("bind(__proto, 'to_py', () => pyData");
     });
+
+    // A `from x import y` inside a docstring is documentation, not an import.
+    // The list of modules was read off the text as well as off the AST, by a
+    // regex anchored per line, so a line inside a triple quote counted: the
+    // prelude carried a real `import`, Vite loaded the file, and its module body
+    // ran on every mount — for a name that only appears in an example.
+    //
+    // A comment and a single-quoted string were safe for the same reason this
+    // was not: neither puts the word at the start of a line, and a docstring
+    // does.
+    test('a module named only inside a docstring is not imported', () => {
+        const src = [
+            'doc = """',
+            "Exemple d'usage :",
+            '',
+            'from effet import quelque_chose',
+            '"""',
+            '',
+            'from compteur import total',
+            ''
+        ].join('\n');
+
+        const { imports } = compile(src, 'C', 'src/C.svelte');
+
+        expect(imports).toContain('compteur');
+        expect(imports).not.toContain('effet');
+    });
 });
 
 // The property that holds over the two halves at once: whatever a template

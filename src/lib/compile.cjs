@@ -1119,23 +1119,23 @@ function surface(body) {
 // Walked rather than read off the top level, because an import inside a function
 // or a `try` is still an import.
 //
-// Asked twice, of the AST and of the text. The walk is the precise answer, but
-// it leans on Brython's AST classes, and a build that reaches the browser
-// through a bundler ends up with a second set of them, where the walk quietly
-// matches nothing. The cost of asking twice is a name listed that was already
-// going to be.
-const FROM_IMPORT = /^[ \t]*from\s+([A-Za-z_][\w.]*)\s+import\s/gm;
-
-function fromImportsInSource(src) {
-    const found = new Set();
-    let match;
-
-    FROM_IMPORT.lastIndex = 0;
-    while ((match = FROM_IMPORT.exec(src))) found.add(match[1]);
-
-    return [...found];
-}
-
+// Asked of the AST alone. It was asked of the text as well, by a regex anchored
+// with `m`, and `^` matches the start of any line — including a line inside a
+// triple-quoted string, which is where usage examples live:
+//
+//     doc = """
+//     from effet import quelque_chose
+//     """
+//
+// The prelude then carried a real `import` for `effet`, so Vite loaded the file
+// and ran its module body, for a name that appears only in documentation. The
+// cost was measured as "a name listed that was already going to be"; it was a
+// module executed, watched and shipped.
+//
+// The belt was there for a bundled build with two sets of AST classes, where
+// `instanceof` answers false for a node that is plainly an ImportFrom. The walk
+// below no longer asks `instanceof` — it recognises the node by shape, for that
+// exact reason — so the belt guarded nothing the walk had not already covered.
 function fromImports(ast) {
     const found = new Set();
 
@@ -1899,7 +1899,7 @@ function compile(
     // Brython's codegen opens with `var $B = __BRYTHON__`. So the generated
     // code lives in its own module, which Svelte never parses.
     const imported = [
-        ...new Set([...Object.keys(root.imports), ...fromImports(root._ast), ...fromImportsInSource(src)])
+        ...new Set([...Object.keys(root.imports), ...fromImports(root._ast)])
     ];
     const module = [
         `import { withNamespace, pyError } from 'svelthon/runtime';`,
