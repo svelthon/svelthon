@@ -292,7 +292,7 @@ export function walrus(expression) {
 // and a Python block closed that way was never handed to the script hook at all,
 // so the component failed with `n is not defined`, naming nothing.
 export function overMarkup(content, transform) {
-    const blocks = /<(script|style)\b[^>]*>[\s\S]*?<\/\g<1>>/gi;
+    const blocks = /<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi;
     let out = '';
     let cut = 0;
     let block;
@@ -346,6 +346,10 @@ const GROUP_ACTION = '__group';
 
 // The setter's parameter. Generated, so it only has to avoid the author's names.
 const BOUND_VALUE = '__value';
+
+// The module namespace the compiler binds beside the template. Named here and
+// emitted there, like `GROUP_ACTION`: the two have to agree.
+const NAMESPACE = '__py';
 
 // And the converter it crosses on its way into Python, named here and imported
 // there, like `GROUP_ACTION`.
@@ -502,6 +506,20 @@ const VOID = new Set([
     'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input',
     'link', 'meta', 'param', 'source', 'track', 'wbr'
 ]);
+
+// Svelte's own rule for telling a component from an element: a capital first
+// letter, a dot in the name, or one of the two `svelte:` forms that stand for a
+// component. `svelte:element` renders an element and is not one of them.
+//
+// It is what `bind:group` has to ask before rewriting itself into an action.
+// Every word of the argument for that rewrite is about `<input>`: Svelte works
+// out which inputs form one group from the *text* of the expression, so a
+// getter/setter pair has nothing to compare. A component has no group machinery
+// at all — Svelte reads `bind:group={x}` there as the prop of that name — and it
+// refuses `use:` outright, so the component did not compile.
+const COMPONENT = /^(?:[A-Z]|svelte:(?:component|self)\b)|\./;
+
+const isComponent = (tag) => tag !== null && COMPONENT.test(tag.name);
 
 const identifiers = (text) => [...text.matchAll(new RegExp(NAME, 'gu'))].map((m) => m[0]);
 
@@ -939,6 +957,33 @@ function walk(markup, collect, onPython, seed, record, where) {
         return `use:${GROUP_ACTION}={[${read}, (${BOUND_VALUE}) => ${write}${value}]}`;
     };
 
+    // `bind:group` on a component, where `group` is an ordinary prop and none of
+    // the group machinery applies. Svelte still refuses the read/write pair
+    // there — its check is on the *name* of the binding, wherever it is written,
+    // and answers `bind:group can only bind to an Identifier or MemberExpression`.
+    //
+    // The namespace is a member expression, which it accepts, and reading or
+    // writing through it goes through the same accessor the pair would have
+    // called. A name the markup declared is Svelte's own and stays as it is.
+    //
+    // Anything else is refused rather than guessed: `__py.row.pick` would be a
+    // JavaScript member access on a Python object, which finds a property and
+    // not a key, so the write would land nowhere and say nothing.
+    const componentGroup = (target) => {
+        if (declaredHere(target)) return target;
+        if (DECLARED_NAME.test(target)) return `${NAMESPACE}.${target}`;
+
+        throw refuse(
+            new SyntaxError(
+                `svelthon — \`bind:group={${target}}\` on a component${said()} can only ` +
+                    `bind a plain name. On a component \`group\` is an ordinary prop, and ` +
+                    `Svelte refuses the read/write pair for a binding of that name wherever ` +
+                    `it is written, so the expression has to be one Svelte can read itself. ` +
+                    `Bind a name, or give the prop another one.`
+            )
+        );
+    };
+
     // A `bind:` whose target is a name the *markup* declared, a `{x = e}` or a
     // block's own alias, cannot go through the pair above. The generated `def`
     // receives that name as a parameter, so `x = value` would assign to the
@@ -1071,11 +1116,13 @@ function walk(markup, collect, onPython, seed, record, where) {
                         // text. A handler is Python, and what it yields is made
                         // callable from JavaScript. Everything else, a
                         // component prop included, is Python.
-                        if (GROUP_DIRECTIVE.test(attribute[1])) {
-                            // The tag is never inspected: `type` and `value` are
-                            // read off the node at run time, which is why this
-                            // needs no lookahead over the attributes.
+                        if (GROUP_DIRECTIVE.test(attribute[1]) && !isComponent(tag)) {
+                            // On an element only: see `COMPONENT`. `type` is read
+                            // off the node at run time, and `value` off the tag,
+                            // which is the one attribute this rule looks at.
                             out = out.replace(ATTRIBUTE_ASSIGN, '') + groupAction(inner);
+                        } else if (GROUP_DIRECTIVE.test(attribute[1])) {
+                            out += `{${componentGroup(trimmed)}}`;
                         } else if (DIRECTIVE.test(attribute[1])) {
                             out += declaredHere(inner)
                                 ? `{${inner.trim()}}`
@@ -1194,8 +1241,10 @@ function walk(markup, collect, onPython, seed, record, where) {
                     // into one of its two spellings: written bare, it emitted
                     // the pair, and Svelte answered that `bind:group` can only
                     // bind to an identifier.
-                    if (GROUP_DIRECTIVE.test(short[1])) {
+                    if (GROUP_DIRECTIVE.test(short[1]) && !isComponent(tag)) {
                         out = out.slice(0, out.length - short[1].length) + groupAction(name);
+                    } else if (GROUP_DIRECTIVE.test(short[1])) {
+                        out += `={${componentGroup(name)}}`;
                     } else {
                         out += declaredHere(name)
                             ? `={${name.trim()}}`

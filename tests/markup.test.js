@@ -691,6 +691,25 @@ describe('the attribute pass', () => {
         expect(defs.join('\n')).toContain('__text(variable)');
     });
 
+    // Every word of the argument for rewriting `bind:group` into an action is
+    // about `<input>`. A component has no group machinery: Svelte reads the
+    // directive there as the prop of that name. The rewrite was applied to the
+    // tag kind it was never written for, and Svelte refused its own output.
+    test('bind:group on a component is a prop binding, not an action', () => {
+        const pair = /bind:group=\{__py\.chosen\}/;
+
+        expect(rewrite('<Card bind:group={chosen} />').out).toMatch(pair);
+        expect(rewrite('<Card bind:group={chosen} />').out).not.toContain('use:__group');
+        expect(rewrite('<forms.Card bind:group={chosen} />').out).toMatch(pair);
+        expect(rewrite('<input bind:group={chosen}>').out).toContain('use:__group');
+    });
+
+    // Svelte refuses the read/write pair for a binding called `group` wherever
+    // it is written, so the expression has to be one it can read itself.
+    test('and only a plain name, since Svelte has to read it', () => {
+        expect(() => rewrite('<Card bind:group={row.pick} />')).toThrow(/can only bind a plain name/);
+    });
+
     // The tag's own value, which is the only attribute a directive reads beside
     // itself: a DOM value is text, so the action cannot ask the node for it. It
     // is passed on either side of the binding, and only in the braced spelling —
