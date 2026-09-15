@@ -688,15 +688,37 @@ const templateCall = (f, fn) => {
 // Two of them are bound only where the name is actually read: `props_id`
 // because its value must be computed at the top level rather than lazily, `host`
 // because Svelte refuses `$host()` outright in a component that is not a custom
-// element. Brython resolves a global by name, so the generated code carries the
-// read wherever it happens, module level or inside a function alike, and a
-// name that only appears inside a Python string does not.
-const reads = (js, name) => js.includes(`'${name}'`);
+// element.
+//
+// Asked of the AST, because the question is about a **name**. It used to be a
+// text search over the generated JavaScript, and Brython emits a Python string
+// literal as a JavaScript one: `role = "host"` became `locals.role = 'host'`, so
+// the search matched its own quotation marks. The component then emitted
+// `$host()`, Svelte refused it outside a custom element, and a component holding
+// that word in a string did not render at all. Every position reached it — a
+// dict key, a comparison, an f-string — since the word alone was the test.
+//
+// A `Name` node is exactly the question; a `Constant` whose value happens to
+// read the same is not. The line below this one already said so about function
+// names, one rule away.
+function namesRead(node, found = new Set(), seen = new Set()) {
+    if (node === null || typeof node !== 'object' || seen.has(node)) return found;
+    seen.add(node);
 
-const injectable = (one, declared, component, js) =>
+    if (node instanceof $B.ast.Name) found.add(node.id);
+
+    for (const value of Object.values(node)) {
+        if (Array.isArray(value)) for (const one of value) namesRead(one, found, seen);
+        else namesRead(value, found, seen);
+    }
+
+    return found;
+}
+
+const injectable = (one, declared, component, names) =>
     (component || !one.component) &&
     !declared.includes(one.name) &&
-    (!one.whenRead || reads(js, one.name));
+    (!one.whenRead || names.has(one.name));
 
 // A locked name is Svelthon's own word, not a builtin to shadow: refused rather
 // than quietly given to either side. Scoped like the injection itself, so a
@@ -723,15 +745,15 @@ function refuseLocked(declared, component, source, lines, lineOffset = 0) {
     );
 }
 
-const injections = (declared, component, js) =>
-    INJECTED.filter((one) => injectable(one, declared, component, js)).map(
+const injections = (declared, component, names) =>
+    INJECTED.filter((one) => injectable(one, declared, component, names)).map(
         (one) => `bind(__proto, '${one.name}', ${one.value});`
     );
 
 // The lines those injections need in the component's preamble, before any of
 // them is bound.
-const injectedPreamble = (declared, component, js) =>
-    INJECTED.filter((one) => one.emitted && injectable(one, declared, component, js)).map(
+const injectedPreamble = (declared, component, names) =>
+    INJECTED.filter((one) => one.emitted && injectable(one, declared, component, names)).map(
         (one) => one.emitted
     );
 
@@ -1411,8 +1433,8 @@ function jsNameBindings(c, extra = []) {
 // of it after `authorBindings`, so a name the author declared always wins.
 function injectedBindings(c) {
     return [
-        ...injectedPreamble(c.declared, true, c.js),
-        ...injections(c.declared, true, c.js),
+        ...injectedPreamble(c.declared, true, c.names),
+        ...injections(c.declared, true, c.names),
 
         // Wrappers for compiled template expressions. Not Python's own bool()
         // and str(): a template may hold a foreign JavaScript value, a DOM node
@@ -1638,7 +1660,7 @@ function plainBindings(c) {
         ...c.plainDeriveds.map(
             (d) => `bind(__proto, '${d.name}', () => ${fn(d.name)}(), (${NEXT_VALUE}) => { ${fn(d.name)} = ${NEXT_VALUE}; });`
         ),
-        ...injections(c.declared, false, c.js),
+        ...injections(c.declared, false, c.names),
 
         // A module has no `<script module>`, so nothing joins its own imports.
         ...jsNameBindings(c),
@@ -1966,6 +1988,9 @@ function compile(
         store,
         namespace,
         js,
+        // Every name the module reads, off the AST. What decides whether `host`
+        // and `props_id` are bound at all — see `namesRead`.
+        names: namesRead(root._ast),
         declared,
         emitted,
         // Whether a name belongs to the module's public surface. `__all__` when
