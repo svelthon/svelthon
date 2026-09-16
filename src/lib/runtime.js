@@ -738,6 +738,39 @@ export function pyError(error, where, lineOffset = 0) {
     return error;
 }
 
+// What leaves a handler, where nothing Python will catch it again.
+//
+// `pyError` fills a `message` and a `stack` into the Brython exception and hands
+// back **the same object**, deliberately: Python semantics upstream have to be
+// untouched, and a `except ValueError` further up must still see its own value.
+// A DOM handler is the other end of that: past it there is no Python left, only
+// whatever the host does with an uncaught error.
+//
+// What the host does is walk it. A Brython exception carries `ob_type`, and from
+// there its class and `__mro__`, which contains itself — so a runner cloning the
+// error to send it from its worker to the main thread walks a cycle through a
+// class object. Measured: `Aborted (core dumped)`, `OOMErrorHandler`, on a
+// five-line component whose handler raises. Not a failing test naming the file —
+// the worker dying, and `npm test` ending on a V8 abort.
+//
+// So the boundary hands over an ordinary `Error` and **keeps nothing of the
+// Python object on it**. Keeping it under a non-enumerable property was tried
+// first and the abort survived: the walk reaches an own property whether it is
+// enumerable or not, so a reference kept for a debugger is a reference kept for
+// the serialiser. Measured both ways, with and without.
+//
+// Same shape as `plainData` and `__mro__` in §3.20: the third time this project
+// has met a Brython object walked by something that serialises.
+function thrown(error) {
+    if (error instanceof Error || error === null || typeof error !== 'object') return error;
+
+    const out = new Error(error.message ?? 'PythonError');
+
+    if (typeof error.stack === 'string') out.stack = error.stack;
+
+    return out;
+}
+
 // A promise that can tell it is being waited for.
 //
 // `await p` on a plain promise never reads `p.then`: the language recognises
@@ -1332,7 +1365,7 @@ export function pyEvent(value, lineOffset = 0) {
         try {
             return schedule(called(...args.slice(0, arity).map(pyArg)), where, lineOffset);
         } catch (error) {
-            throw pyError(error, where, lineOffset);
+            throw thrown(pyError(error, where, lineOffset));
         }
     };
 }
