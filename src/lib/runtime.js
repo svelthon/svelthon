@@ -1066,9 +1066,11 @@ export function plainData(value, seen, adapt) {
     if (value === undefined || value === null || value === NONE) return null;
     if (typeof value === 'function') return adapt === undefined ? value : adapt(value);
 
-    // A bound method only when someone asked for adaptation: with no rule there
-    // is nothing to do with it, and the walk below is what it has always had.
-    if (adapt !== undefined && boundMethod(value)) return adapt(value);
+    // A callable that `typeof` calls an object — a bound method, an instance
+    // whose class defines `__call__` — and only when someone asked for
+    // adaptation: with no rule there is nothing to do with it, and the walk
+    // below is what it has always had.
+    if (adapt !== undefined && callable(value)) return adapt(value);
     if (typeof value !== 'object') return value;
 
     // A Brython float is an object holding a number and a reference to its
@@ -1593,9 +1595,37 @@ function pyCall(fn, where, lineOffset = 0, arity = Infinity) {
 //
 // The original is kept on `$js_func`, and it is the one that answers for the
 // signature, which is why `pyBoundary` carries `$function_infos` too.
+// An instance whose class defines `__call__`, which is an ordinary way to write
+// a strategy object and the third shape of *callable in Python*. Answers with
+// the `__call__` it found, since that is what carries the signature.
+//
+// Asked of the class chain, never of the instance: `search_in_dict` reads the
+// class dictionaries and their bases, so no getter of the author's runs while a
+// value is merely being converted. Measured against CPython on the same
+// question — a plain instance, a list, a dict and a str all answer no, and a
+// class that defines `__call__` answers yes.
+//
+// A **class** is excluded on purpose, and the exclusion is not decorative:
+// measured, `type` *does* carry `__call__` in Brython, so without this line
+// every class named in `__all__` reaches `declared` and is saved only by
+// `type.__call__` having no `$function_infos`. A class crossing as itself rather
+// than as a wrapper is a decision this file already made, and it should not rest
+// on the shape of an engine internal.
+const callDescriptor = (value) => {
+    const $B = globalThis.__BRYTHON__;
+
+    if (value === null || typeof value !== 'object' || value.ob_type === undefined) return null;
+    if (pyClass(value) || boundMethod(value)) return null;
+
+    const found = $B.search_in_dict(value.ob_type, '__call__', $B.NULL);
+
+    return found === $B.NULL ? null : found;
+};
+
 // Callable in Python, which is wider than *is a JavaScript function* and is the
 // question every boundary that promises to adapt a callback has to ask.
-const callable = (value) => typeof value === 'function' || boundMethod(value);
+const callable = (value) =>
+    typeof value === 'function' || boundMethod(value) || callDescriptor(value) !== null;
 
 // A method read off an instance: `{ob_type: method, im_func, im_self}`, which
 // `typeof` calls an object. Recognised by its class the way everything else
@@ -1609,10 +1639,11 @@ const boundMethod = (value) =>
 
 function declared(value) {
     const method = boundMethod(value) ? value : null;
+    const call = method === null ? callDescriptor(value) : null;
 
-    if (method === null && typeof value !== 'function') return null;
+    if (method === null && call === null && typeof value !== 'function') return null;
 
-    const held = method === null ? value : method.im_func;
+    const held = method !== null ? method.im_func : (call ?? value);
     const fn = typeof held.$js_func === 'function' ? held.$js_func : held;
     const infos = fn.$function_infos;
 
@@ -1622,19 +1653,31 @@ function declared(value) {
 
     const where = `${infos[2]}() — ${infos[3]}`;
 
-    if (method === null) return { fn, where, arity: infos[8] ? Infinity : infos[10] };
+    if (method === null && call === null) {
+        return { fn, where, arity: infos[8] ? Infinity : infos[10] };
+    }
 
     // The receiver is not one of the arguments a caller counts: `def tag(self,
-    // suffix)` declares two and JavaScript passes one. It is bound here rather
-    // than left to the call site, so everything downstream — the wrapper, the
-    // arity trim, the error position — reads a function of the caller's arity
-    // like any other.
+    // suffix)` declares two and JavaScript passes one, and so does
+    // `__call__(self, suffix)`. It is bound here rather than left to the call
+    // site, so everything downstream — the wrapper, the arity trim, the error
+    // position — reads a function of the caller's arity like any other.
+    //
+    // A bound method is called through the function Brython recorded; an
+    // instance goes through `$B.$call`, which is Python's own call protocol and
+    // therefore right for a `__call__` that is inherited, decorated, or
+    // reassigned on the class after this wrapper was built.
+    const self = method !== null ? method.im_self : value;
+
     return {
-        fn: (...args) => fn(method.im_self, ...args),
+        fn:
+            method !== null
+                ? (...args) => fn(self, ...args)
+                : (...args) => globalThis.__BRYTHON__.$call(value, ...args),
         where,
         arity: infos[8] ? Infinity : infos[10] - 1,
         origin: fn,
-        self: method.im_self
+        self
     };
 }
 
@@ -1817,7 +1860,7 @@ export function jsCall(value) {
 function exported(one, where, lineOffset, made) {
     if (typeof one === 'function') return pyCall(one, where, lineOffset);
 
-    const found = boundMethod(one) ? declared(one) : null;
+    const found = callable(one) ? declared(one) : null;
 
     if (found === null) return plainData(one, made);
 
@@ -1829,6 +1872,14 @@ function exported(one, where, lineOffset, made) {
 // the same boundary treatment as a `load()`. Anything else is plain data.
 export function pyExport(value, where, lineOffset = 0) {
     if (value === null || typeof value !== 'object') return value;
+
+    // A callable that is not a `def` arrives here, because the compiler hands
+    // over the module's *values* and `top = handler.run` is a value, not a
+    // function of the module. It is the same bound method the mapping branch
+    // below adapts, and whether a callback is adapted cannot depend on where it
+    // was written.
+    if (callable(value)) return exported(value, where, lineOffset);
+
     if (Array.isArray(value)) return plainData(value);
 
     // A class crosses as itself. `plainData` walks whatever it is given and
