@@ -33,6 +33,11 @@ export const listed = (fns) => fns[0]('a') + fns[1]('b');
 // crossing of a promise, not only the crossing of a container.
 export const delayed = async (options) => (await options).done('event');
 
+// Calls whatever it was handed, and says what JavaScript thinks it is. A Python
+// callable that is not a JavaScript function fails here before its body runs.
+export const invoke = (fn) => fn('event');
+export const kindOf = (fn) => typeof fn;
+
 // One Python function reached by two routes in one argument.
 export const same = (options) => options.a === options.list[0];
 

@@ -1032,6 +1032,10 @@ const CROSSED = new WeakMap();
 export function plainData(value, seen, adapt) {
     if (value === undefined || value === null || value === NONE) return null;
     if (typeof value === 'function') return adapt === undefined ? value : adapt(value);
+
+    // A bound method only when someone asked for adaptation: with no rule there
+    // is nothing to do with it, and the walk below is what it has always had.
+    if (adapt !== undefined && boundMethod(value)) return adapt(value);
     if (typeof value !== 'object') return value;
 
     // A Brython float is an object holding a number and a reference to its
@@ -1556,17 +1560,45 @@ function pyCall(fn, where, lineOffset = 0, arity = Infinity) {
 //
 // The original is kept on `$js_func`, and it is the one that answers for the
 // signature, which is why `pyBoundary` carries `$function_infos` too.
-function declared(value) {
-    if (typeof value !== 'function') return null;
+// A method read off an instance: `{ob_type: method, im_func, im_self}`, which
+// `typeof` calls an object. Recognised by its class the way everything else
+// here is, and not by the two field names, which are Brython's own
+// (`descriptors.js`, `$B.method.tp_new`).
+const boundMethod = (value) =>
+    value !== null &&
+    typeof value === 'object' &&
+    value.ob_type === globalThis.__BRYTHON__.method &&
+    typeof value.im_func === 'function';
 
-    const fn = typeof value.$js_func === 'function' ? value.$js_func : value;
+function declared(value) {
+    const method = boundMethod(value) ? value : null;
+
+    if (method === null && typeof value !== 'function') return null;
+
+    const held = method === null ? value : method.im_func;
+    const fn = typeof held.$js_func === 'function' ? held.$js_func : held;
     const infos = fn.$function_infos;
 
     // `arity` is what the whole thing is for, so a shape that has no number
     // there is not a Python signature, whatever else it carries.
     if (!Array.isArray(infos) || (!infos[8] && typeof infos[10] !== 'number')) return null;
 
-    return { fn, where: `${infos[2]}() — ${infos[3]}`, arity: infos[8] ? Infinity : infos[10] };
+    const where = `${infos[2]}() — ${infos[3]}`;
+
+    if (method === null) return { fn, where, arity: infos[8] ? Infinity : infos[10] };
+
+    // The receiver is not one of the arguments a caller counts: `def tag(self,
+    // suffix)` declares two and JavaScript passes one. It is bound here rather
+    // than left to the call site, so everything downstream — the wrapper, the
+    // arity trim, the error position — reads a function of the caller's arity
+    // like any other.
+    return {
+        fn: (...args) => fn(method.im_self, ...args),
+        where,
+        arity: infos[8] ? Infinity : infos[10] - 1,
+        origin: fn,
+        self: method.im_self
+    };
 }
 
 // A Python function seen from JavaScript, wrapped by reading its own signature
@@ -1622,19 +1654,43 @@ export function pyEvent(value, lineOffset = 0) {
 // answered here.
 const HANDLERS = new WeakMap();
 
+// And for a bound method, one level deeper: receiver, then function. Two maps
+// rather than a composite key, because both halves have to be weak — a receiver
+// is an ordinary object of the author's and holding it would outlive the page.
+const RECEIVERS = new WeakMap();
+
 export function pyHandler(value) {
     const found = declared(value);
     if (found === null) return value;
 
-    const known = HANDLERS.get(found.fn);
+    // A bound method is built fresh on every read, so `box.note` twice is two
+    // objects and the wrapper it carries cannot be the cache key: an `off` would
+    // never match the `on` that preceded it. The pair is what has an identity —
+    // the function and its receiver — and keying on the pair is also what keeps
+    // two instances of one class apart.
+    const cache = found.self === undefined ? HANDLERS : perReceiver(found.self);
+    const key = found.self === undefined ? found.fn : found.origin;
+
+    const known = cache.get(key);
 
     if (known !== undefined) return known;
 
     const wrapped = pyCall(found.fn, found.where, 0, found.arity);
 
-    HANDLERS.set(found.fn, wrapped);
+    cache.set(key, wrapped);
 
     return wrapped;
+}
+
+function perReceiver(self) {
+    let cache = RECEIVERS.get(self);
+
+    if (cache === undefined) {
+        cache = new WeakMap();
+        RECEIVERS.set(self, cache);
+    }
+
+    return cache;
 }
 
 // A JavaScript function a Python module reached for, named in `__js__`, or
