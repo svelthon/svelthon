@@ -2,6 +2,7 @@ import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import GroupReset from './fixtures/GroupReset.svelte';
 import GroupShared from './fixtures/GroupShared.svelte';
+import GroupInstances from './fixtures/GroupInstances.svelte';
 
 // A form reset moves the controls without firing `change` on any of them. The
 // group action listened for `change` alone, so after a reset the boxes on screen
@@ -93,5 +94,26 @@ describe('two groups that happen to hold one list', () => {
 
         expect(read('left')).toBe("['a']");
         expect(read('right')).toBe("['b']");
+    });
+
+    // The third dimension, and the one the first repair could not see: two
+    // *instances* of one component, handed the same list to start from. The
+    // binding text is `selected` in both and the list is one object, so neither
+    // half of the identity tells them apart. What does is the instance — its own
+    // namespace, which every one of its elements shares and no other instance
+    // has.
+    test('and so are two instances of one component', async () => {
+        const target = document.body.appendChild(document.createElement('div'));
+        mount(GroupInstances, { target });
+        flushSync();
+
+        const read = (k) => target.querySelector(`p[data-k="held-${k}"]`).textContent;
+
+        target.querySelector('[data-k="form"]').reset();
+        await Promise.resolve();
+        flushSync();
+
+        expect(read('a')).toBe("['a']");
+        expect(read('b')).toBe("['b']");
     });
 });

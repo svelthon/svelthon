@@ -1808,9 +1808,43 @@ function watchReset() {
     );
 }
 
-export function group(node, [current, write, chosen, binding]) {
+// Which group an input belongs to, in a design that gives the group no identity
+// of its own. Three things, and each one alone is wrong:
+//
+//   the instance   two instances of one component share the binding text, and
+//                  may share the list they were handed
+//   the binding    `left = shared` and `right = shared` are two bindings on one
+//                  list, in one instance
+//   the list       the rows of an `{#each}` are one binding and one group each
+//
+// The first two are stable for the life of the component, so they are folded
+// into a token here and the list is the key the rebuild uses.
+const GROUPS = new WeakMap();
+
+function groupToken(scope, binding) {
+    if (scope === null || typeof scope !== 'object') return binding;
+
+    let bindings = GROUPS.get(scope);
+
+    if (bindings === undefined) {
+        bindings = new Map();
+        GROUPS.set(scope, bindings);
+    }
+
+    let token = bindings.get(binding);
+
+    if (token === undefined) {
+        token = { binding };
+        bindings.set(binding, token);
+    }
+
+    return token;
+}
+
+export function group(node, [current, write, chosen, binding, scope]) {
     const boxes = node.type === 'checkbox';
     const given = (picked) => (picked === undefined ? node.value : pyBind(picked));
+    const token = groupToken(scope, binding);
 
     let value = given(chosen);
 
@@ -1848,16 +1882,13 @@ export function group(node, [current, write, chosen, binding]) {
     const restored = (rebuilt, held) => {
         if (!boxes) return write(node.checked ? value : NONE);
 
-        // Which inputs belong together, in a design that gives the group no
-        // identity of its own. Two halves, and each alone is wrong: the binding
-        // as the author wrote it, since two bindings may hold one list and a
-        // reset moved a value between them; and the list itself, since the rows
-        // of an `{#each}` are one binding and one group each.
-        let lists = rebuilt.get(binding);
+        // Which inputs belong together: the token is the instance and the
+        // binding, the list is the third half — see `groupToken`.
+        let lists = rebuilt.get(token);
 
         if (lists === undefined) {
             lists = new Map();
-            rebuilt.set(binding, lists);
+            rebuilt.set(token, lists);
         }
 
         let kept = lists.get(held);

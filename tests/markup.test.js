@@ -672,7 +672,7 @@ describe('the attribute pass', () => {
         // The fourth member is the binding as the author wrote it, which the
         // bare spelling gives as `group` — its own name.
         const action =
-            /use:__group=\{\[__expr_\d+\(\), \(__value\) => __expr_set_\d+\(__pyBind\(__value\)\), undefined, "(choix|group)"\]\}/;
+            /use:__group=\{\[__expr_\d+\(\), \(__value\) => __expr_set_\d+\(__pyBind\(__value\)\), undefined, "(choix|group)", __py\]\}/;
 
         expect(rewrite('<input bind:group={choix}>').out).toMatch(action);
         expect(rewrite('<input bind:group>').out).toMatch(action);
@@ -718,7 +718,7 @@ describe('the attribute pass', () => {
     // is passed on either side of the binding, and only in the braced spelling —
     // a quoted value is text, and the node's own is then exactly right.
     test('and takes the tag value with it', () => {
-        const value = /use:__group=\{\[.+, __expr_\d+\(\), "[^"]*"\]\}/;
+        const value = /use:__group=\{\[.+, __expr_\d+\(\), "[^"]*", __py\]\}/;
 
         expect(rewrite('<input bind:group={choix} value={n}>').out).toMatch(value);
         expect(rewrite('<input value={n} bind:group={choix}>').out).toMatch(value);
