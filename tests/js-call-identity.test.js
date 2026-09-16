@@ -18,7 +18,14 @@ import {
     listen_other,
     other_count,
     aliased,
-    bundled
+    bundled,
+    direct_probe,
+    nested_probe,
+    listed_probe,
+    depths_probe,
+    listen_boxed,
+    stop_boxed,
+    boxed_count
 } from './fixtures/js_calls.py';
 
 describe('a Python callback handed to JavaScript', () => {
@@ -68,6 +75,53 @@ describe('a Python callback handed to JavaScript', () => {
         expect(other_count() - theirs).toBe(1);
 
         stop();
+    });
+});
+
+// Where the callback sits in the argument, which used to decide its calling
+// contract. `outbound` wrapped a function handed over directly and `plainData`
+// handed the ones inside a container across untouched, so `direct(done)`
+// answered 42 and `nested({"done": done})` raised on a positional argument the
+// author never declared — for the same Python function, called by JavaScript
+// with the same value.
+describe('a callback inside an argument', () => {
+    // The control, and the one that always worked.
+    test('is adapted when it is handed over directly', () => {
+        expect(direct_probe()).toBe(42);
+    });
+
+    test('and when it sits in an options object', () => {
+        expect(nested_probe()).toBe(42);
+    });
+
+    test('and when it sits in a list', () => {
+        expect(listed_probe()).toBe(84);
+    });
+
+    // The cache from the previous pass, read through the new path: the same
+    // Python function at two depths of one argument is one JavaScript function.
+    test('and the same callback at two depths is one function', () => {
+        expect(depths_probe()).toBe(true);
+    });
+
+    // Which is what makes an options object usable for leaving as well as
+    // joining: the registry has to be handed back the function it was given.
+    test('so a registry entered through options can be left through options', () => {
+        listen_boxed();
+
+        const joined = boxed_count();
+
+        emit();
+
+        expect(boxed_count() - joined).toBe(1);
+
+        stop_boxed();
+
+        const left = boxed_count();
+
+        emit();
+
+        expect(boxed_count()).toBe(left);
     });
 });
 

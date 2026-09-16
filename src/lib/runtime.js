@@ -533,6 +533,14 @@ const MARKS = new WeakMap();
 export const marks = (value) =>
     value !== null && typeof value === 'object' ? MARKS.get(value) : undefined;
 
+// The two Python sets, asked by class the way the dict above is. Anything else
+// carrying a `$store` is not one, and a foreign object is not walked at all.
+const isSet = (value) => {
+    const cls = globalThis.__BRYTHON__.get_class(value);
+
+    return (cls === _b_.set || cls === _b_.frozenset) && value.$store !== undefined;
+};
+
 function mark(value) {
     const marker = () => upwards(marker, ++walked, 'bumps');
 
@@ -559,9 +567,14 @@ function mark(value) {
     // Only what Python calls a container, and that bound is the whole point:
     // walking any object's keys let the watch leave the author's data. Measured,
     // it reached `__BRYTHON__` itself, 558 keys, and from there `localStorage`.
-    // A list holds its elements as an array, a dict holds its items as
-    // enumerable properties, and nothing else here holds Python containers: a
-    // set cannot, since a list is not hashable.
+    //
+    // The line that stood here said a set could hold nothing worth walking,
+    // since a list is not hashable. **Hashable and immutable are two
+    // properties**, and the sentence used one for the other: a user class is
+    // hashable by default and its attributes are mutable, so `{Box()}` holds
+    // exactly what this walk exists for. Measured in a mounted component —
+    // `item.value += 1` changed the Python value and left the paragraph showing
+    // the old one, where the same component holding `[Box()]` repainted.
     if (Array.isArray(value)) {
         for (const child of value) inherit(value, child);
     } else if (globalThis.__BRYTHON__.get_class(value) === _b_.dict) {
@@ -571,6 +584,17 @@ function mark(value) {
         // those of `{1: []}`: the same mutation notified in one and was silent
         // in the other, and a table indexed by id kept showing an old page.
         for (const [, child] of pyEntries(value)) inherit(value, child);
+    } else if (isSet(value)) {
+        // `$store` maps a hash to the bucket of members that share it, which is
+        // the set's own layout, read the way the dict above is read rather than
+        // through `__iter__`: an iteration goes back through `$getattr`, which
+        // this file intercepts, and the walk would re-enter itself.
+        //
+        // A frozenset is here too. What it freezes is the membership, not the
+        // members, and a `Box()` inside one is as mutable as anywhere else.
+        for (const bucket of Object.values(value.$store)) {
+            for (const child of bucket) inherit(value, child);
+        }
     }
 
     return marker;
@@ -893,8 +917,17 @@ const CROSSED = new WeakMap();
 // symbol-keyed internals (`Symbol(OB_TYPE)`) that its serialiser refuses
 // outright. So the boundary converts: Python containers become plain JavaScript
 // data, which is the only shape anything outside Python can read anyway.
-export function plainData(value, seen) {
+// `adapt` is the third caller-said rule, beside the two `seen` carries, and only
+// one caller passes it: the arguments of a JavaScript call. A Python callable is
+// the one value JavaScript genuinely cannot use, and `outbound` wrapped the ones
+// handed over *directly* while this walk handed the ones inside a container
+// across untouched. `direct(done)` worked and `nested({"done": done})` raised on
+// a positional argument the author never declared, for the same function. It is
+// a parameter and not a change of policy because the other five consumers must
+// not get it: `tojson` has no use for a wrapper, and JSON cannot hold one.
+export function plainData(value, seen, adapt) {
     if (value === undefined || value === null || value === NONE) return null;
+    if (typeof value === 'function') return adapt === undefined ? value : adapt(value);
     if (typeof value !== 'object') return value;
 
     // A Brython float is an object holding a number and a reference to its
@@ -948,7 +981,7 @@ export function plainData(value, seen) {
         seen.add(value);
 
         try {
-            return branch(value, seen);
+            return branch(value, seen, undefined, adapt);
         } finally {
             seen.delete(value);
         }
@@ -966,7 +999,7 @@ export function plainData(value, seen) {
 
     made.set(value, shell);
 
-    const out = branch(value, made, shell);
+    const out = branch(value, made, shell, adapt);
 
     // `branch` hands several kinds of value straight back rather than filling the
     // shell: a Python class, and anything carrying a prototype of its own — a
@@ -1004,7 +1037,9 @@ function branch(value, seen) {
 
     if (attributes !== undefined && attributes !== null && typeof attributes === 'object') {
         const fields = shell ?? {};
-        for (const key of Object.keys(attributes)) define(fields, key, plainData(attributes[key], seen));
+        for (const key of Object.keys(attributes)) {
+            define(fields, key, plainData(attributes[key], seen, adapt));
+        }
         return fields;
     }
 
@@ -1036,7 +1071,7 @@ function branch(value, seen) {
     const out = shell ?? {};
 
     for (const [key, one] of pyEntries(value)) {
-        define(out, propertyName(key, out), plainData(one, seen));
+        define(out, propertyName(key, out), plainData(one, seen, adapt));
     }
 
     return out;
@@ -1475,8 +1510,12 @@ export function pyHandler(value) {
 // by identity answered no, and a write to the first never reached the second.
 // The same graph passed inside a *single* argument came out shared, which is
 // what says this is a missing memo and not a rule.
+// A callable at any depth, not only at the top of an argument: a library taking
+// its callbacks in an options object is the ordinary shape, and `pyHandler`
+// caches by function, so the same callback nested twice is one JavaScript
+// function and stays removable.
 const outbound = (value, made) =>
-    typeof value === 'function' ? pyHandler(value) : plainData(value, made);
+    typeof value === 'function' ? pyHandler(value) : plainData(value, made, pyHandler);
 
 // And what comes *back*. Only the outbound half existed, and the asymmetry was
 // silent for as long as nobody looked at the answer: a value returned by an

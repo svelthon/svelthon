@@ -21,3 +21,17 @@ export function alias(a, b) {
 // The control for that one: the same graph arriving inside a single argument,
 // where the sharing was never lost.
 export const aliasBundle = (pair) => alias(pair[0], pair[1]);
+
+// Where a library puts its callbacks. Each is called with an argument the Python
+// function never declared, which is what the adaptation is for: a wrapper trims
+// the call to the signature, a bare Python function raises on it.
+export const direct = (fn) => fn('event');
+export const nested = (options) => options.done('event');
+export const listed = (fns) => fns[0]('a') + fns[1]('b');
+
+// One Python function reached by two routes in one argument.
+export const same = (options) => options.a === options.list[0];
+
+// And the registry again, entered and left through an options object.
+export const onOptions = (options) => target.addEventListener('ping', options.handler);
+export const offOptions = (options) => target.removeEventListener('ping', options.handler);
