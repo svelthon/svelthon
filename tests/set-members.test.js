@@ -6,13 +6,20 @@
 // are two properties**: a user class is hashable by default and its attributes
 // are mutable, so `{Box()}` holds exactly what the walk exists for.
 //
-// The two fixtures differ by one character — `{Box()}` against `[Box()]` — and
-// that is the whole argument: the list version repainted throughout, so nothing
-// here is about the expression, the handler, or a mutation that failed.
+// The fixtures differ by one character — `{Box()}` against `[Box()]` — and that
+// is the whole argument: the list version repainted throughout, so nothing here
+// is about the expression, the handler, or a mutation that failed.
+//
+// The third is the same object in a third position, a **key**. The dict walk
+// followed values and not keys, on the same confusion: hashable is not
+// immutable, and `{Box(): "label"}` is an ordinary way to index by an object.
+// Nothing here redefines `__hash__` or `__eq__`, so mutating the key does not
+// invalidate the entry — the dict is not disturbed, only the page was stale.
 import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import SetMember from './fixtures/SetMember.svelte';
 import ListMember from './fixtures/ListMember.svelte';
+import KeyMember from './fixtures/KeyMember.svelte';
 
 const setup = (Component) => {
     const target = document.body.appendChild(document.createElement('div'));
@@ -33,8 +40,9 @@ const setup = (Component) => {
 
 describe.for([
     ['a set', SetMember],
-    ['a list', ListMember]
-])('a mutable member of %s', ([, Component]) => {
+    ['a list', ListMember],
+    ['a dict key', KeyMember]
+])('a mutable instance held by %s', ([, Component]) => {
     test('repaints what reads it', () => {
         const { read, bump } = setup(Component);
 

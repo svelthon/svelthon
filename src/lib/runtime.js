@@ -228,7 +228,10 @@ function installMutationTracking($B) {
             // properties and everything else in a hash table, so walking the
             // properties handed the watch to the children of `{"one": []}` and
             // not to those of `{1: []}`.
-            for (const [, child] of pyEntries(obj)) inherit(obj, child);
+            for (const [key, child] of pyEntries(obj)) {
+                inherit(obj, key);
+                inherit(obj, child);
+            }
         } else {
             inherit(obj, result); // `get`
         }
@@ -628,7 +631,15 @@ function mark(value) {
         // over the properties reached the children of `{"one": []}` and not
         // those of `{1: []}`: the same mutation notified in one and was silent
         // in the other, and a table indexed by id kept showing an old page.
-        for (const [, child] of pyEntries(value)) inherit(value, child);
+        // Both halves of an entry. A key is a child of the dict as much as a
+        // value is: hashable is not immutable, so `{Box(): "label"}` holds an
+        // object whose attributes change under a watch that never reached it.
+        // `inherit` steps over a string or a number on its own, so this costs
+        // nothing on the dicts that have ordinary keys.
+        for (const [key, child] of pyEntries(value)) {
+            inherit(value, key);
+            inherit(value, child);
+        }
     } else if (isSet(value)) {
         // `$store` maps a hash to the bucket of members that share it, which is
         // the set's own layout, read the way the dict above is read rather than
@@ -1085,7 +1096,6 @@ function branch(value, seen) {
     // Anything of a class of its own is not ours to flatten: a Response, a URL,
     // a Date, a Map, a Promise: a Python `load()` may hand any of those straight
     // back to the framework, and copying their keys would destroy them.
-    //
     if (!plainObject(value)) return value;
 
     // A class instance keeps its attributes under a private symbol rather than as
@@ -1093,13 +1103,39 @@ function branch(value, seen) {
     // wanders into the class object instead. Its `__dict__` is what a reader
     // wants, and it is what JavaScript itself would serialise from a class
     // instance: the fields, not the getters on the prototype.
+    //
+    // And a class declaring `__slots__` keeps them somewhere else again: each
+    // slot is an own property named `slot_value_<name>`. So this walk found no
+    // `__dict__`, fell through to the mapping below, and handed JavaScript the
+    // engine's own view of the object — `{ob_type, slot_value_rows}`, which
+    // `JSON.stringify` then refuses as circular through the class. Adding
+    // `__slots__` to a model renamed its data and made the result
+    // unserialisable, for an object whose Python API had not changed.
+    //
+    // Both sources and not one: `__slots__` may name `__dict__`, and then an
+    // instance has slots *and* a dict. A dict of the author's is stepped over,
+    // since `{"slot_value_x": 1}` is data and not storage.
     const attributes = ownAttributes(value);
+    const holder = attributes !== null && typeof attributes === 'object' ? attributes : undefined;
+    const slots = globalThis.__BRYTHON__.is_dict(value)
+        ? []
+        : Object.keys(value).filter((key) => key.startsWith(SLOT));
 
-    if (attributes !== undefined && attributes !== null && typeof attributes === 'object') {
+    if (holder !== undefined || slots.length > 0) {
         const fields = shell ?? {};
-        for (const key of Object.keys(attributes)) {
-            define(fields, key, plainData(attributes[key], seen, adapt));
+
+        if (holder !== undefined) {
+            for (const key of Object.keys(holder)) {
+                define(fields, key, plainData(holder[key], seen, adapt));
+            }
         }
+
+        // Under the name the author wrote, which is what the same class without
+        // `__slots__` hands over.
+        for (const key of slots) {
+            define(fields, key.slice(SLOT.length), plainData(value[key], seen, adapt));
+        }
+
         return fields;
     }
 
