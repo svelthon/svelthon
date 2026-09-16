@@ -1654,13 +1654,10 @@ export function inTemplate(run) {
     // render. Only where the read already succeeded: an *existing* key. What a
     // missing one should do is still open, so it keeps Python's own answer.
     $B.$setattr1 = (obj, attr, value, inum) => {
-        if ($B.$getattr(obj, attr, MISSING) === MISSING) {
-            try {
-                $B.$getitem(obj, attr);
-                return $B.$setitem(obj, attr, value);
-            } catch {
-                /* no such key: the real assignment decides */
-            }
+        if ($B.$getattr(obj, attr, MISSING) === MISSING && keyed(obj, attr)) {
+            // Outside the `try`: once the key is found the destination is
+            // decided, and what `__setitem__` raises is the author's own answer.
+            return $B.$setitem(obj, attr, value);
         }
 
         return originalSet(obj, attr, value, inum);
@@ -1671,6 +1668,27 @@ export function inTemplate(run) {
     } finally {
         $B.$getattr_pep657 = original;
         $B.$setattr1 = originalSet;
+    }
+}
+
+// Whether the dot should write a key rather than an attribute: the object has
+// one of that name.
+//
+// **The probe and the write are two statements, and that is the whole point.**
+// They were one `try`, so an exception raised by the author's own `__setitem__`
+// read as "no such key" and the write moved to an attribute instead: a `Guard`
+// refusing every write with a `ValueError` ended up carrying `obj.name` beside
+// the entry it had protected, the dot reading the new one and the subscript
+// still reading the old. A refusal became two truths and no error.
+//
+// Once the key is found the destination is decided, and what the write raises is
+// the author's answer, not a reason to write somewhere else.
+function keyed(target, name) {
+    try {
+        globalThis.__BRYTHON__.$getitem(target, name);
+        return true;
+    } catch {
+        return false;
     }
 }
 
@@ -1709,15 +1727,11 @@ export const pyBind = (value) =>
 export function writeAttr(target, name, value) {
     const $B = globalThis.__BRYTHON__;
 
-    if ($B.$getattr(target, name, MISSING) === MISSING) {
-        try {
-            $B.$getitem(target, name);
-            $B.$setitem(target, name, value);
+    if ($B.$getattr(target, name, MISSING) === MISSING && keyed(target, name)) {
+        // Outside the `try`, for the reason written above `keyed`.
+        $B.$setitem(target, name, value);
 
-            return value;
-        } catch {
-            /* no such key either: the real assignment decides, and may raise */
-        }
+        return value;
     }
 
     $B.$setattr1(target, name, value);
