@@ -395,6 +395,27 @@ describe('urlencode', () => {
         expect(written).not.toMatch(/%24store/);
     });
 
+    // The question *is this a mapping I may walk?* was decided twice, and the
+    // two decisions agreed on everything but one shape: `plainData` accepted a
+    // null prototype and this file did not. So `to_js` and `tojson` rendered
+    // `{"a":1,"b":2}` while `urlencode` fell through to its string branch and
+    // wrote `<Javascript object: [object Object]>` into the page, percent-
+    // encoded, with no error and no warning.
+    //
+    // Not a synthetic shape: `Object.groupBy` returns one, and so does a module
+    // namespace object, which is what `importjs * as easing` hands over.
+    //
+    // The Date above is the other half of the same predicate and stays a value.
+    test('an object with no prototype is a mapping, as it already was to to_js', () => {
+        const bare = Object.create(null);
+
+        bare.tag = 'a/b';
+        bare.page = 2;
+
+        expect(urlencode(bare)).toBe('tag=a%2Fb&page=2');
+        expect(JSON.parse(tojson(bare))).toEqual({ tag: 'a/b', page: 2 });
+    });
+
     // Jinja reads a float as a plain value, and so does this: `1.5`, not a
     // mapping of the object that holds it.
     test('a float is a value, as it is in Jinja', () => {

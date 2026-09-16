@@ -15,7 +15,7 @@
 // that spelling would collide with the `let date = …` the compiler emits beside
 // it. `__helpers` carries the prefix that says "generated", the same convention
 // `__pybridge` and `__proto` follow.
-import { NONE, __pybridge, plainData, pyClass, pyEntries, ticking } from './runtime.js';
+import { NONE, __pybridge, plainData, plainObject, pyClass, pyEntries, ticking } from './runtime.js';
 
 // A helper's refusal, in the dialect the rest of the project speaks.
 //
@@ -318,7 +318,11 @@ function mapping(value) {
     if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
     if (globalThis.__BRYTHON__.is_dict(value)) return true;
 
-    return !('ob_type' in value) && Object.getPrototypeOf(value) === Object.prototype;
+    // The same question `plainData` asks, asked of the same predicate. This line
+    // read `=== Object.prototype` and the converter accepted a null prototype
+    // too, so one shape crossed three ways: `to_js` and `tojson` rendered it and
+    // `urlencode` wrote `<Javascript object: [object Object]>` into the page.
+    return !('ob_type' in value) && plainObject(value);
 }
 
 // Jinja's shape: a string, or a mapping that becomes a whole query string. Not

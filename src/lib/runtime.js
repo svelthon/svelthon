@@ -468,6 +468,29 @@ export const pyClass = (value) => false \g<0>\g<0> /*W*/
     value.tp_name !== undefined &&
     value.tp_bases !== undefined;
 
+// Whether an object is a bag of keys, or something of a class of its own: a
+// Response, a URL, a Date, a Map, a Promise, any of which a `load()` may hand
+// straight back and whose keys copied would destroy it.
+//
+// Read on the prototype and not as `value.constructor`, which a dict may carry
+// as data: `{"constructor": "invoice"}` answered a constructor of its own and
+// the whole mapping crossed unconverted, floats and all. A Brython dict and a
+// plain object both sit on `Object.prototype`, and a **null** prototype is the
+// other bag of keys — `Object.create(null)`, what `Object.groupBy` returns, and
+// a module namespace object, measured.
+//
+// A predicate and not two lines, because it was two lines: `branch` walked a
+// null-prototype object and `mapping()` in helpers.js did not, so `to_js` and
+// `tojson` rendered `{"a":1,"b":2}` while `urlencode` wrote
+// `<Javascript object: [object Object]>` into the page, percent-encoded, with no
+// error and no warning. Two of the three crossings already agreed; this is the
+// third asking the same question instead of its own.
+export const plainObject = (value) => {
+    const prototype = Object.getPrototypeOf(value);
+
+    return prototype === Object.prototype || prototype === null;
+};
+
 function ownAttributes(value) {
     if (Array.isArray(value)) return undefined;
 
@@ -1063,12 +1086,7 @@ function branch(value, seen) {
     // a Date, a Map, a Promise: a Python `load()` may hand any of those straight
     // back to the framework, and copying their keys would destroy them.
     //
-    // Read on the prototype and not as `value.constructor`, which a dict may
-    // carry as data: `{"constructor": "invoice"}` answered a constructor of its
-    // own and the whole mapping crossed unconverted, floats and all. A Brython
-    // dict and a plain object both sit on `Object.prototype`.
-    const prototype = Object.getPrototypeOf(value);
-    if (prototype !== Object.prototype && prototype !== null) return value;
+    if (!plainObject(value)) return value;
 
     // A class instance keeps its attributes under a private symbol rather than as
     // JavaScript properties, so walking its own keys finds almost nothing and
