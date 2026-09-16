@@ -883,6 +883,10 @@ const define = (target, key, value) =>
         configurable: true
     });
 
+// The promise a coroutine became, kept against the coroutine itself so that a
+// second reference to it is a second reference and not a second run.
+const CROSSED = new WeakMap();
+
 // What an exported function hands back to the framework.
 //
 // SvelteKit serialises whatever `load()` returns, and a Brython dict carries
@@ -901,8 +905,27 @@ export function plainData(value, seen) {
     // `load()` stream: `{"lentes": chercher_lentement()}` returns a coroutine,
     // and SvelteKit waits on the promise it turns into.
     if (globalThis.__BRYTHON__.get_class(value) === globalThis.__BRYTHON__.coroutine) {
+        // One coroutine object, one run. This branch sits before the graph memo
+        // and had none of its own, so a coroutine held under two keys was
+        // started twice: two promises, and the Python body executed twice —
+        // counted, not inferred. Whatever the body does on the way, it did
+        // twice.
+        //
+        // Memoised on the coroutine itself rather than inside a traversal,
+        // because that is the truth being told: awaiting one coroutine twice is
+        // not something Python offers, so two references to it cannot mean two
+        // runs under any rule, JSON included. Two distinct coroutine objects are
+        // two distinct keys here, and still run once each.
+        const known = CROSSED.get(value);
+
+        if (known !== undefined) return known;
+
         // What it resolves to is Python too, and has to make the same crossing.
-        return scheduleAsync(value, 'coroutine').then(plainData);
+        const crossing = scheduleAsync(value, 'coroutine').then(plainData);
+
+        CROSSED.set(value, crossing);
+
+        return crossing;
     }
 
     // Two rules, and the caller says which. Note that `map` passes an index as
@@ -1013,31 +1036,45 @@ function branch(value, seen) {
     const out = shell ?? {};
 
     for (const [key, one] of pyEntries(value)) {
-        const name = String(plainData(key));
-
-        // Two keys Python keeps apart that JavaScript can only spell one way.
-        // The narrowing is the destination's — a property name is a string — but
-        // the silence would be ours, and this project's own rule for the moment
-        // is written one file over: a serialiser meeting something it cannot
-        // serialise owes the author a sentence. `{1: "a", "1": "b"}` used to hand
-        // over one entry of two and say nothing.
-        if (Object.hasOwn(out, name)) {
-            const error = new Error(
-                `svelthon — this dict has two keys JavaScript cannot tell apart: ` +
-                    `\`${name}\` is what both of them spell as a property name. A ` +
-                    `JavaScript object has string keys only, so one would silently ` +
-                    `replace the other on the way out.`
-            );
-
-            error.$svelthon = true;
-
-            throw error;
-        }
-
-        define(out, name, plainData(one, seen));
+        define(out, propertyName(key, out), plainData(one, seen));
     }
 
     return out;
+}
+
+// The name a Python key takes as a JavaScript property, and the refusal that
+// belongs with it.
+//
+// Two sites write a mapping out: this converter, and the export branch that
+// adapts a dict holding a function. The second spelled its keys by handing the
+// Python object to `define` and letting JavaScript coerce it, which skipped both
+// halves of the rule: `{1: "numeric", "1": "text", "fn": f}` crossed as a single
+// `"1"` key holding `"text"`, silently, while the same dict without the function
+// raised. A rule that lives at one of two sites is the shape of defect this file
+// keeps meeting, so it lives here and both ask.
+function propertyName(key, out) {
+    // A JavaScript property name is a string, and a Brython float is an object,
+    // so `{1.5: "x"}` would otherwise be keyed by `[object Object]`.
+    const name = String(plainData(key));
+
+    // Two keys Python keeps apart that JavaScript can only spell one way. The
+    // narrowing is the destination's, but the silence would be ours, and this
+    // project's own rule for the moment is written one file over: a serialiser
+    // meeting something it cannot serialise owes the author a sentence.
+    if (Object.hasOwn(out, name)) {
+        const error = new Error(
+            `svelthon — this dict has two keys JavaScript cannot tell apart: ` +
+                `\`${name}\` is what both of them spell as a property name. A ` +
+                `JavaScript object has string keys only, so one would silently ` +
+                `replace the other on the way out.`
+        );
+
+        error.$svelthon = true;
+
+        throw error;
+    }
+
+    return name;
 }
 
 // What the framework hands *in* to an exported function.
@@ -1505,7 +1542,7 @@ export function pyExport(value, where, lineOffset = 0) {
         for (const [key, one] of pairs) {
             define(
                 out,
-                key,
+                propertyName(key, out),
                 typeof one === 'function' ? pyCall(one, `${where}.${key}`, lineOffset) : plainData(one, made)
             );
         }

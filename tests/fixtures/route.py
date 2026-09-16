@@ -1,7 +1,17 @@
 # A SvelteKit route module, in the shape the framework calls it: `load` is a
 # coroutine, `actions` a mapping of names to handlers, and both receive the
 # request event.
-__all__ = ["load", "actions", "GET", "config", "boom", "streaming"]
+__all__ = [
+    "load",
+    "actions",
+    "GET",
+    "config",
+    "boom",
+    "streaming",
+    "shared",
+    "separate",
+    "runs_count",
+]
 
 from browser import aio
 
@@ -39,6 +49,33 @@ def streaming(event):
     # SvelteKit's streaming shape: what is ready now beside what is not. The
     # coroutine has to reach the framework as a promise.
     return {"now": event["params"]["slug"], "later": slowly()}
+
+
+# How many times a coroutine body has actually run, which is the half the shape
+# of the result cannot show.
+runs = []
+
+
+async def counted():
+    runs.append(1)
+    await aio.sleep(0)
+    return {"answer": 42}
+
+
+def shared(event):
+    # One coroutine object under three keys, one of them a level down. Two
+    # references to a coroutine are not two runs of it.
+    task = counted()
+    return {"a": task, "b": task, "nested": {"c": task}}
+
+
+def separate(event):
+    # The control: two coroutine objects, which are two runs.
+    return {"a": counted(), "b": counted()}
+
+
+def runs_count(event):
+    return len(runs)
 
 
 async def failing(event):

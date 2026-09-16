@@ -20,6 +20,20 @@ import { execFileSync } from 'node:child_process';
 
 const STUBS = ['document', 'location', 'HTMLElement', 'MutationObserver', 'customElements'];
 
+// Asked once, because spawning is not everyone's to do: under a sandbox that
+// forbids it these four come back as `spawnSync … EPERM`, a red that says
+// nothing about the code. A run that cannot spawn says *that* instead, and the
+// guard still holds everywhere a process can be made.
+const canSpawn = (() => {
+    try {
+        execFileSync(process.execPath, ['-e', ''], { stdio: 'ignore' });
+
+        return true;
+    } catch {
+        return false;
+    }
+})();
+
 const boot = (scenario) =>
     JSON.parse(
         execFileSync(process.execPath, ['tests/fixtures/boot-globals.mjs', scenario], {
@@ -27,7 +41,7 @@ const boot = (scenario) =>
         })
     );
 
-describe('what the bootstrap cleanup is allowed to remove', () => {
+describe.skipIf(!canSpawn)('what the bootstrap cleanup is allowed to remove', () => {
     // The witness. Off a browser, everything Brython laid down goes.
     test('off a browser, the stubs are gone', () => {
         const after = boot('server');

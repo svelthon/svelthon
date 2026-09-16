@@ -10,7 +10,7 @@
 // which is what an `async def load()` needs, had never run.
 import { test, expect, describe } from 'vitest';
 import * as route from './fixtures/route.py';
-import { load, GET, actions, config, boom, streaming } from './fixtures/route.py';
+import { load, GET, actions, config, boom, streaming, shared, separate } from './fixtures/route.py';
 
 // A RequestEvent as SvelteKit builds one. The conversion is recognised by shape
 // — `params`, `url` and `request` together — and anything else is handed over
@@ -96,6 +96,9 @@ describe('what a plain module exports', () => {
             'boom',
             'config',
             'load',
+            'runs_count',
+            'separate',
+            'shared',
             'streaming'
         ]);
     });
@@ -114,6 +117,45 @@ describe('what a route hands back besides plain data', () => {
         expect(out.now).toBe('pep-703');
         expect(out.later).toBeInstanceOf(Promise);
         expect(await out.later).toEqual({ rows: [1, 2, 3] });
+    });
+
+    // The same coroutine under two keys. The conversion recognised a coroutine
+    // and scheduled it *before* consulting its memo, so a second reference
+    // started it again: two promises, and the Python body run twice. A result
+    // that streams a shared computation did the work once per key.
+    //
+    // The count is the assertion. Both shapes — `a === b` and `await a` giving
+    // 42 — were true while the body ran twice, which is what
+    // `tests/route-module.test.js` could not see before.
+    test('a coroutine held under two keys runs once', async () => {
+        const before = route.runs_count(requestEvent());
+        const out = shared(requestEvent());
+
+        await Promise.all([out.a, out.b, out.nested.c]);
+
+        expect(route.runs_count(requestEvent()) - before).toBe(1);
+        expect(await out.a).toEqual({ answer: 42 });
+    });
+
+    test('and is one promise, at every depth it appears', async () => {
+        const out = shared(requestEvent());
+
+        expect(out.a).toBe(out.b);
+        expect(out.nested.c).toBe(out.a);
+
+        await out.a;
+    });
+
+    // The witness: distinct coroutines are distinct work.
+    test('while two coroutines are two runs', async () => {
+        const before = route.runs_count(requestEvent());
+        const out = separate(requestEvent());
+
+        expect(out.a).not.toBe(out.b);
+
+        await Promise.all([out.a, out.b]);
+
+        expect(route.runs_count(requestEvent()) - before).toBe(2);
     });
 
     // The synchronous half of the same story: an action that raises before it

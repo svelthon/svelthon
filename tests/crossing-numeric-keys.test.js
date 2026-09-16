@@ -16,7 +16,7 @@
 // *renders*, which is Python's own repr, and never what crosses. A green suite
 // says nothing about the questions it does not ask.
 import { test, expect, describe } from 'vitest';
-import { plainData } from '../src/lib/runtime.js';
+import { plainData, pyExport } from '../src/lib/runtime.js';
 import { tojson } from '../src/lib/helpers.js';
 
 const $B = globalThis.__BRYTHON__;
@@ -80,5 +80,34 @@ describe('a dict whose keys are not strings', () => {
     ])('%s says so instead of dropping one', ([, entries]) => {
         expect(() => plainData(dict(entries()))).toThrow(/two keys JavaScript cannot tell apart/);
         expect(() => tojson(dict(entries()))).toThrow(/two keys JavaScript cannot tell apart/);
+    });
+
+    // And the export, which writes a mapping out at the second site.
+    //
+    // The branch that adapts a dict holding a function spelled its keys by
+    // handing the Python object to `defineProperty` and letting JavaScript
+    // coerce it, which skipped both halves of the rule above: a float key was
+    // fine by luck, and a collision crossed silently as one entry of two. The
+    // dict *without* the function raised, for the same Python values, which is
+    // what makes this a bypass rather than a limit.
+    const withFunction = (entries) => [...entries, ['fn', () => 0]];
+
+    test('a function in the dict does not buy a way past the refusal', () => {
+        const entries = [[1, 'numeric'], ['1', 'text']];
+
+        expect(() => pyExport(dict(entries), 'm')).toThrow(/two keys JavaScript cannot tell apart/);
+        expect(() => pyExport(dict(withFunction(entries)), 'm')).toThrow(
+            /two keys JavaScript cannot tell apart/
+        );
+    });
+
+    // A Brython float is an object, so this is the half that coercion could not
+    // spell at all: `[object Object]`. An int key survived it by luck, which is
+    // why the bypass stayed invisible.
+    test('and a float key crosses as the name it reads as, not as an object', () => {
+        const out = pyExport(dict(withFunction([[1, 'one'], [_b_.float.$factory(2.5), 'half']])), 'm');
+
+        expect(Object.keys(out).sort()).toEqual(['1', '2.5', 'fn']);
+        expect(out['2.5']).toBe('half');
     });
 });
