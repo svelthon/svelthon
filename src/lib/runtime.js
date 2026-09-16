@@ -1430,6 +1430,47 @@ export function pyArg(value) {
 // so a coroutine has to come back as a promise rather than be fired and
 // forgotten. Inside a component nobody awaits a handler, which is why the two
 // are separate.
+// One coroutine object, one run, whoever asks and by whichever route.
+//
+// The memo lives here and not at the converter, because this is the only place
+// that starts anything: `pyCall` handed a returned coroutine straight to
+// `aio.run`, so the same object returned twice ran its body twice while the same
+// object inside a returned dict ran once. A Python coroutine is not freely
+// re-runnable, and this project has already chosen to share one execution.
+//
+// The run rejects with Python's own error and nothing else; the position is
+// added by each caller below. **The trade is real and measured**: `pyError`
+// describes an exception once and returns it untouched afterwards, so when one
+// coroutine is handed out by two routes the *label* is the first asker's — a
+// coroutine met inside data is labelled `coroutine`, and an export that awaits
+// the same object afterwards inherits that label. The line stays the author's,
+// since it comes from the traceback and not from the label. Running the body
+// twice to give each caller its own label is the thing this replaced.
+const RUNS = new WeakMap();
+
+function started(coroutine) {
+    let run = RUNS.get(coroutine);
+
+    if (run === undefined) {
+        const $B = globalThis.__BRYTHON__;
+
+        run = new Promise((resolve, reject) => {
+            $B.$getattr($B.imported['browser.aio'], 'run')(
+                coroutine,
+                (value) => {
+                    $B.leave_frame();
+                    resolve(value);
+                },
+                reject
+            );
+        });
+
+        RUNS.set(coroutine, run);
+    }
+
+    return run;
+}
+
 export function scheduleAsync(result, where, lineOffset = 0) {
     const $B = globalThis.__BRYTHON__;
     const aio = $B.imported['browser.aio'];
@@ -1437,15 +1478,8 @@ export function scheduleAsync(result, where, lineOffset = 0) {
     if (!aio || result === undefined || result === null) return result;
     if ($B.get_class(result) !== $B.coroutine) return result;
 
-    return new Promise((resolve, reject) => {
-        $B.$getattr(aio, 'run')(
-            result,
-            (value) => {
-                $B.leave_frame();
-                resolve(value);
-            },
-            (error) => reject(pyError(error, where, lineOffset))
-        );
+    return started(result).catch((error) => {
+        throw pyError(error, where, lineOffset);
     });
 }
 
