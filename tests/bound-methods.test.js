@@ -77,3 +77,40 @@ describe('a bound method handed to JavaScript', () => {
         expect(seen()).toBe(1);
     });
 });
+
+// And the other way out of a module: a mapping it exports, which is the shape
+// SvelteKit reads as form actions.
+//
+// The export decided what to adapt with its own `typeof one === 'function'`,
+// the test the argument boundary had already stopped using. So
+// `{"default": handler.save}` handed JavaScript something it could not call
+// while `{"default": save}` beside it worked, for the same body.
+describe('a bound method in an exported mapping', () => {
+    // The controls first: Python calls it, and a mapping of ordinary functions
+    // was never in doubt.
+    test('answers from Python', () => {
+        expect(python_call()).toBe(42);
+    });
+
+    test('and a mapping of functions is adapted as it always was', () => {
+        expect(control.default()).toBe(42);
+    });
+
+    test('is adapted too', () => {
+        expect(typeof actions.default).toBe('function');
+        expect(actions.default()).toBe(42);
+    });
+
+    test('with its receiver, and not another instance of its class', () => {
+        expect(actions.tag('event')).toBe('aevent');
+        expect(actions.other('event')).toBe('bevent');
+    });
+
+    // A neighbour decides for nobody: the function keeps its wrapper, the
+    // method gets one, and the value crosses as data.
+    test('beside a function and a value, each keeps its own contract', () => {
+        expect(mixed.method()).toBe(42);
+        expect(mixed.fn()).toBe(42);
+        expect(mixed.version).toBe(1);
+    });
+});

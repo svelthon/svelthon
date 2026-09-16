@@ -411,14 +411,33 @@ function installMutationTracking($B) {
     // is the case this tells apart.
     const augmAssign = $B.augm_assign;
     $B.augm_assign = function (left, op, right, ...rest) {
-        const result = augmAssign(left, op, right, ...rest);
+        const watched = left !== null && typeof left === 'object' && MARKS.has(left);
+        let result;
 
-        if (
-            result === left &&
-            left !== null &&
-            typeof left === 'object' &&
-            MARKS.has(left)
-        ) {
+        // An exception is not proof that nothing changed. `d |= values()` keeps
+        // the entries the generator yielded before it raised, and the operator
+        // never returns: the identity test below never runs, the assignment that
+        // would have rebound the name never happens, and nothing downstream
+        // makes up for the missing notification. The method paths already take
+        // this shape, which is why `d.update(values())` was right and `d |=
+        // values()` beside it was not.
+        //
+        // `adopt` rather than `inherit(left, right)` here: what landed inside
+        // came out of an iterator nobody can see, so the container is asked what
+        // it now holds. Notifying a container that turned out not to have
+        // changed costs a render; not notifying one that did costs the page.
+        try {
+            result = augmAssign(left, op, right, ...rest);
+        } catch (error) {
+            if (watched) {
+                adopt(left);
+                MARKS.get(left)();
+            }
+
+            throw error;
+        }
+
+        if (result === left && watched) {
             inherit(left, right); // `rows += [[]]` puts the new rows under watch
             MARKS.get(left)();
         }
@@ -620,15 +639,25 @@ function mark(value) {
 
     MARKS.set(value, marker);
 
-    // Everything already inside the value when the watch begins: an attribute
-    // written in __init__, an element of a list, a value of a dict. All of them
-    // were put there before the object came under watch, so nothing has handed
-    // them anything. inherit() marks in turn, so depth follows on its own, and
-    // a cycle stops at the first object that already carries a marker.
-    //
-    // This is the moment the whole graph is in hand, and taking it here is what
-    // lets every way of reading a child go unwatched: the child is marked
-    // before Python can reach for it, by any route.
+    adopt(value);
+
+    return marker;
+}
+
+// Everything already inside a watched value: an attribute written in __init__,
+// an element of a list, a key or a value of a dict. When a watch begins, none of
+// them has been handed anything, and `inherit` marks in turn, so depth follows
+// on its own and a cycle stops at the first object that already carries a
+// marker.
+//
+// Taking the whole graph in hand at that moment is what lets every way of
+// *reading* a child go unwatched: the child is marked before Python can reach
+// for it, by any route.
+//
+// Called again after a mutation that raised, where the same question arises for
+// the same reason: children may have landed inside without anything handing
+// them the watch.
+function adopt(value) {
     const attributes = ownAttributes(value);
     if (attributes !== undefined) {
         for (const key in attributes) inherit(value, attributes[key]);
@@ -698,8 +727,6 @@ function mark(value) {
             for (const child of bucket) inherit(value, child);
         }
     }
-
-    return marker;
 }
 
 // Sign one subscriber onto one marker, and tell `owner` about it so the same
