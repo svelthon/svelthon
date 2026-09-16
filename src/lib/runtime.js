@@ -1419,11 +1419,37 @@ export function pyEvent(value, lineOffset = 0) {
     };
 }
 
+// One Python function, one JavaScript function.
+//
+// A fresh wrapper per crossing is invisible until something compares two of
+// them, and JavaScript's own APIs do: `removeEventListener` takes the function
+// it was given, and so do `off`, `unsubscribe` and every deduplicating
+// registry. `on(handler)` then `off(handler)` handed over two different
+// functions for one Python name, so the listener stayed, the next `on` added a
+// second, and one event ran the body twice. Counted, not inferred.
+//
+// Keyed on `found.fn`, the function Brython recorded the signature of, and not
+// on the object that arrived: reading `helpers.click` twice gives two interop
+// wrappers around one function, and Python calls them the same name. Every
+// wrapper this site builds has the same contract — `pyCall(fn, where, 0,
+// arity)`, all three read from `fn` itself — so one per function is the whole
+// of it. A bound method rebuilt at each read is a different question and is not
+// answered here.
+const HANDLERS = new WeakMap();
+
 export function pyHandler(value) {
     const found = declared(value);
     if (found === null) return value;
 
-    return pyCall(found.fn, found.where, 0, found.arity);
+    const known = HANDLERS.get(found.fn);
+
+    if (known !== undefined) return known;
+
+    const wrapped = pyCall(found.fn, found.where, 0, found.arity);
+
+    HANDLERS.set(found.fn, wrapped);
+
+    return wrapped;
 }
 
 // A JavaScript function a Python module reached for, named in `__js__`, or
@@ -1442,7 +1468,15 @@ export function pyHandler(value) {
 // reverse: a callable becomes JavaScript-callable, and everything else becomes
 // plain data: `fail(400, {"missing": True})` reaching JavaScript as an object
 // it can serialise, not as a Brython dict full of symbols.
-const outbound = (value) => (typeof value === 'function' ? pyHandler(value) : plainData(value));
+//
+// `made` is the call's own memo, shared by every argument of one call. Without
+// it each argument was converted on its own, so `alias(shared, shared)` handed
+// JavaScript two arrays for one Python list: a function comparing its arguments
+// by identity answered no, and a write to the first never reached the second.
+// The same graph passed inside a *single* argument came out shared, which is
+// what says this is a missing memo and not a rule.
+const outbound = (value, made) =>
+    typeof value === 'function' ? pyHandler(value) : plainData(value, made);
 
 // And what comes *back*. Only the outbound half existed, and the asymmetry was
 // silent for as long as nobody looked at the answer: a value returned by an
@@ -1475,7 +1509,14 @@ export function jsCall(value) {
     if (typeof value !== 'function') return pyBind(value);
 
     return new Proxy(value, {
-        apply: (target, self, args) => inbound(Reflect.apply(target, self, args.map(outbound)))
+        // The memo is made here and not above, so it lasts exactly one call: a
+        // longer-lived one would hand a later call the snapshot an earlier one
+        // took, after Python had moved on.
+        apply: (target, self, args) => {
+            const made = new WeakMap();
+
+            return inbound(Reflect.apply(target, self, args.map((one) => outbound(one, made))));
+        }
     });
 }
 
