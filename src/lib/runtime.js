@@ -479,9 +479,6 @@ function mutable(value) {
 // The pair is what makes the reactivity a property of the *object* rather than
 // of the place it was declared: duck typing, applied to change notification.
 // Anything holding the value can subscribe to it just by handing it through.
-// Brython keeps an instance's attributes under a private symbol, not as JS
-// properties, so they have to be found once, from the first object carrying it.
-let DICT;
 
 // A Python class, recognised by its shape the way the rest of this file
 // recognises Brython's own objects: it carries `tp_name` and `tp_bases` beside
@@ -527,28 +524,23 @@ export const plainObject = (value) => {
     return prototype === Object.prototype || prototype === null;
 };
 
+// Where a Brython instance keeps the attributes an author wrote, which is a
+// symbol and therefore invisible to `Object.keys`.
+//
+// **Asked of Brython, not discovered.** This scanned an object's own symbols for
+// one described `DICT`, kept it, and skipped arrays so a plain list would not
+// pay for the scan. A list subclass is an array *and* carries that dictionary,
+// so it could never teach the symbol to the runtime: if it was the first such
+// object watched, nothing was ever learned and its attributes were never walked
+// — and the same component repainted or not according to **mount order**,
+// depending on whether an ordinary instance had been watched before it.
+//
+// `$B.DICT` is published by `py_type.js`, so there was nothing to discover. Two
+// defects, an order dependence and a blind spot, and the repair is one lookup.
 function ownAttributes(value) {
-    // The array guard is on *learning* the symbol, not on reading it. A plain
-    // list has no instance dict and scanning its symbols would be a cost paid on
-    // every list; but `class Box(list)` is an array **and** has one, so
-    // answering `undefined` for anything array-shaped lost its attributes while
-    // its elements were walked as always. Once the symbol is known, reading it
-    // is one property access.
-    //
-    // **No test in the suite separates this from the read-time handover in
-    // `$getattr`**, which covers the same child one read later, and I could not
-    // build one: reaching an attribute means reading it. It stays because the
-    // initial walk is the project's invariant — a watched object has its
-    // children marked before Python can reach for them, by any route — and
-    // because a path that bypasses `$getattr` would fail silently.
-    if (DICT === undefined) {
-        if (Array.isArray(value)) return undefined;
+    const dict = globalThis.__BRYTHON__.DICT;
 
-        DICT = Object.getOwnPropertySymbols(value).find((symbol) => symbol.description === 'DICT');
-        if (DICT === undefined) return undefined;
-    }
-
-    return value[DICT];
+    return dict === undefined ? undefined : value[dict];
 }
 
 // A watch runs from the object that was named to every container under it, and

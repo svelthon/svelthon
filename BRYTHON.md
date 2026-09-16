@@ -112,8 +112,14 @@ Wrap them with rest arguments, `function (a, b, ...rest)`, and never with
 form blocks V8's optimiser enough to be visible on a page load.
 
 An instance's attributes live under a **private symbol** (`Symbol('DICT')`, not
-`Symbol.for`), so it has to be discovered once from an object and cached. A
-dict's keys, by contrast, are ordinary enumerable JavaScript properties.
+`Symbol.for`), and Brython publishes it as **`$B.DICT`** (`py_type.js`). Reading
+it there rather than discovering it from an object is not a convenience: a
+discovery has to start somewhere, and the object it starts from decides what the
+runtime can see afterwards. Skipping arrays during that discovery — a plain list
+carries no such dictionary — meant a **list subclass**, which is an array *and*
+carries one, could never teach it, so its attributes went unwatched whenever it
+was the first such object seen. A dict's keys, by contrast, are ordinary
+enumerable JavaScript properties.
 
 ### Modules
 
