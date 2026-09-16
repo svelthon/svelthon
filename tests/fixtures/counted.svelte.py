@@ -11,3 +11,7 @@ rows = []
 def bump():
     global count
     count += 1
+
+
+def bump_rows():
+    rows.append("python")

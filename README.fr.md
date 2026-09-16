@@ -694,14 +694,23 @@ Où on en est, chaque ligne tenue par un test :
 | un enfant atteint par `.items()`, `.values()` ou `.get()` | oui |
 | `<p {**attrs}>`, un étalement | oui |
 | `<p title={items}>`, un attribut portant le conteneur lui-même | non, **et JavaScript non plus** |
+| `store.rows.push(x)`, le conteneur d'un store muté depuis JavaScript | non, **et `store.rows = [...]` si** |
 
-La dernière ligne est la sémantique de l'hôte, pas une limite à nous : Svelte
+Le premier `non` est la sémantique de l'hôte, pas une limite à nous : Svelte
 compare la valeur à celle qu'il a appliquée la fois d'avant, par identité, dans
 son propre écrivain DOM, où aucun signal n'atteint, et un conteneur muté est le
 même objet. Un composant Svelte idiomatique avec `$state` se comporte exactement
 pareil, ce que `tests/parity.test.js` démontre en faisant tourner le même
-composant dans les deux langages, ligne pour ligne. Tout le reste propage, et
-chaque ligne est tenue par un test.
+composant dans les deux langages, ligne pour ligne.
+
+Le second est la frontière du mécanisme. Le suivi enveloppe les points d'entrée
+de Brython — `call_attr`, `$setitem`, `$delitem` — donc une mutation écrite en
+Python notifie où qu'elle soit écrite, et `Array.prototype.push` appelé depuis
+JavaScript passe à côté des trois. Remplacer le conteneur notifie, puisque ça
+passe par le setter du store ; la mutation Python suivante rattrape la vraie
+valeur. `tests/store-from-javascript.test.js` tient les deux moitiés.
+
+Toutes les autres lignes propagent, et chacune est tenue par un test.
 
 Les accesseurs vivent sur le **prototype** du namespace, jamais sur l'objet
 lui-même : réaffecter un global émet `$B.delete_for_reassign(name, locals)`, et

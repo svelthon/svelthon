@@ -676,13 +676,23 @@ Where it stands, each line held by a test:
 | a child reached through `.items()`, `.values()` or `.get()` | yes |
 | `<p {**attrs}>`, a spread | yes |
 | `<p title={items}>`, an attribute carrying the container itself | no, **and neither does JavaScript** |
+| `store.rows.push(x)`, a store's container mutated from JavaScript | no, **and `store.rows = [...]` does** |
 
-The last line is host semantics, not a limitation of ours: Svelte compares the
+The first `no` is host semantics, not a limitation of ours: Svelte compares the
 value against the one it last applied, by identity, inside its own DOM writer,
 where no signal reaches, and a mutated container is the same object. An
 idiomatic Svelte component with `$state` behaves exactly the same, which
 `tests/parity.test.js` proves by running the same component in both languages,
-line for line. Everything else propagates, and a test holds each line.
+line for line.
+
+The second is the boundary of the mechanism. The tracking wraps Brython's own
+entry points — `call_attr`, `$setitem`, `$delitem` — so a mutation written in
+Python notifies wherever it is written, and `Array.prototype.push` called from
+JavaScript goes around all three. Replacing the container notifies, since that
+goes through the store's setter; the next Python mutation catches up to the true
+value. `tests/store-from-javascript.test.js` holds both halves.
+
+Every other line propagates, and a test holds each one.
 
 Accessors live on the namespace's **prototype**, never on the object itself:
 rebinding a global emits `$B.delete_for_reassign(name, locals)`, and a `delete`
