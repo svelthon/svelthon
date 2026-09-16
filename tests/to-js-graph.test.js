@@ -57,6 +57,29 @@ describe('a Python structure handed to JavaScript', () => {
         expect(out[0]).toBe(out);
     });
 
+    // A value that crosses *unconverted* has to cross once too.
+    //
+    // The shell is registered before `branch` decides, which is what answers a
+    // cycle — but `branch` hands a Date, a Map, a Promise or a Response straight
+    // back rather than filling it. The memo kept the guess instead of the
+    // answer, so the first reference was a real date and the second was `{}`.
+    test('a date under two keys is the same date twice', () => {
+        const when = new Date('2026-01-01T00:00:00Z');
+        const out = plainData(dict([['a', when], ['b', when]]));
+
+        expect(out.a).toBe(when);
+        expect(out.b).toBe(when);
+    });
+
+    test('and a map repeated in a list keeps its interface', () => {
+        const held = new Map([['k', 1]]);
+        const out = plainData(_b_.list.$factory([held, held]));
+
+        expect(out[0]).toBe(held);
+        expect(out[1]).toBe(held);
+        expect(out[1].get('k')).toBe(1);
+    });
+
     // The JSON rule, still there, asked for by name. A `Set` says so.
     test('while JSON flattens the sharing and blanks the loop', () => {
         const shared = _b_.list.$factory([1]);

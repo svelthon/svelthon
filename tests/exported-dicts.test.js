@@ -43,6 +43,40 @@ describe('a module exporting dicts that hold functions', () => {
         expect((await mod()).data).toEqual({ version: 1 });
     });
 
+    // The same list under two keys. This is the graph rule, and the export has
+    // to keep it whichever branch it takes: a neighbouring function decided it,
+    // because that branch asked `plainData` for the *JSON* policy with a
+    // `new Set()`. A write to one key then never reached the other.
+    test('a shared list is one list', async () => {
+        const { aliased } = await mod();
+
+        expect(aliased.a).toBe(aliased.b);
+
+        aliased.a.push(2);
+
+        expect(aliased.b).toHaveLength(2);
+    });
+
+    test('and a function beside it changes nothing for the data either', async () => {
+        const { aliased_with_fn } = await mod();
+
+        expect(aliased_with_fn.a).toBe(aliased_with_fn.b);
+
+        aliased_with_fn.a.push(2);
+
+        expect(aliased_with_fn.b).toHaveLength(2);
+        expect(aliased_with_fn.twice(21)).toBe(42);
+    });
+
+    // The export registers its own container, not only the values under it: a
+    // key pointing back at the dict has to meet the object that is being handed
+    // over, not a second copy of it.
+    test('and a dict that points at itself comes out as itself', async () => {
+        const { cyclic_with_fn } = await mod();
+
+        expect(cyclic_with_fn.self).toBe(cyclic_with_fn);
+    });
+
     test('Python holds the key, whatever JavaScript reads into it', async () => {
         const { proto_in_python, proto_keys } = await mod();
 

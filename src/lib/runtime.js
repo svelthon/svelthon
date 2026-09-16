@@ -943,7 +943,19 @@ export function plainData(value, seen) {
 
     made.set(value, shell);
 
-    return branch(value, made, shell);
+    const out = branch(value, made, shell);
+
+    // `branch` hands several kinds of value straight back rather than filling the
+    // shell: a Python class, and anything carrying a prototype of its own — a
+    // Date, a Map, a Promise, a Response. The shell registered above was then
+    // never filled, and the *second* reference to that same value met it:
+    // `[d, d]` crossed as `[Date, {}]`, and `{"a": d, "b": d}` gave a real date
+    // under one key and an empty object under the other.
+    //
+    // Registering before the walk is what answers a cycle, so it stays; what was
+    // missing is that the memo has to end up holding whatever `branch` decided,
+    // not what was guessed before it decided.
+    return out;
 }
 
 function branch(value, seen) {
@@ -1477,13 +1489,24 @@ export function pyExport(value, where, lineOffset = 0) {
     // being fixed in the export.
     if (pairs.some(([, one]) => typeof one === 'function')) {
         const out = {};
-        const seen = new Set();
+
+        // A WeakMap and not a `new Set()`, which is how the other rule is asked
+        // for by name: a Set here put the *JSON* policy on an export to
+        // JavaScript, so a shared list came out as two lists and a write to one
+        // never reached the other. Whether a neighbouring key happens to hold a
+        // function decided it, for the same Python values.
+        //
+        // The dict itself goes in the memo, so a value that points back at it
+        // meets this object rather than a second copy.
+        const made = new WeakMap();
+
+        made.set(value, out);
 
         for (const [key, one] of pairs) {
             define(
                 out,
                 key,
-                typeof one === 'function' ? pyCall(one, `${where}.${key}`, lineOffset) : plainData(one, seen)
+                typeof one === 'function' ? pyCall(one, `${where}.${key}`, lineOffset) : plainData(one, made)
             );
         }
 
