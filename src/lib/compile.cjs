@@ -341,6 +341,42 @@ function endQuote(line, quote) {
 // Only the expression form. A derivation that needs statements keeps `@derived`,
 // which is the counterpart of Svelte's own `$derived.by`: the same split their
 // runes make, and the one Python already makes between `lambda` and `def`.
+// Where a trailing comment starts, or -1. The same walk `endQuote` makes, for
+// the same reason: a `#` inside a string is not a comment.
+//
+// The dialect's signs each take the rest of the line — `(\S[\s\S]*)$` — and the
+// rewrite wraps what they took in parentheses, so a `#` commented out the
+// closing one and the author was told `'(' was never closed` about a parenthesis
+// they never typed. Everything Python's own syntax carries accepts a trailing
+// comment; every sign of ours refused one. The READMEs teach the refused form in
+// three places each, which is how it was found.
+function commentAt(line) {
+    for (let i = 0; i < line.length; i++) {
+        const three = line.slice(i, i + 3);
+
+        if (three === '"""' || three === "'''") {
+            const close = line.indexOf(three, i + 3);
+
+            if (close === -1) return -1; // the string runs past this line
+            i = close + 2;
+            continue;
+        }
+
+        if (line[i] === '#') return i;
+
+        if (line[i] === '"' || line[i] === "'") {
+            const one = line[i];
+
+            for (i++; i < line.length; i++) {
+                if (line[i] === '\\') i++;
+                else if (line[i] === one) break;
+            }
+        }
+    }
+
+    return -1;
+}
+
 // A name, spelled the way Python spells one. `\w` is ASCII in JavaScript, so
 // `[A-Za-z_]\w*` made `année` a name to the script's `=` and not to its `=>` or
 // its `<=>`, which refused it with Brython's `invalid syntax`. Marks are in the
@@ -442,7 +478,12 @@ function takeArrows(src, where, lineOffset, allowed) {
             );
         }
 
-        const found = quote === null ? line.match(ARROW_DERIVED) || line.match(ARROW_EFFECT) : null;
+        // Read without its trailing comment, so a sign may carry one the way
+        // every other line of Python does. See `commentAt`.
+        const cut = quote === null ? commentAt(line) : -1;
+        const code = cut === -1 ? line : line.slice(0, cut).trimEnd();
+
+        const found = quote === null ? code.match(ARROW_DERIVED) || code.match(ARROW_EFFECT) : null;
 
         // A named match carries the name in group 1 and the expression in 2; an
         // anonymous one has the expression in 1, and its name is generated.
@@ -473,10 +514,10 @@ function takeArrows(src, where, lineOffset, allowed) {
 
         // `inspect(…)` at the top level of a component, whose arguments become a
         // lambda so that they are read again on every change.
-        const watched = quote === null && !found && allowed ? line.match(INSPECT) : null;
+        const watched = quote === null && !found && allowed ? code.match(INSPECT) : null;
 
         // `value: str <=>`, with an optional fallback after the arrow.
-        const both = quote === null && !found && !watched ? line.match(BINDABLE) : null;
+        const both = quote === null && !found && !watched ? code.match(BINDABLE) : null;
 
         if (both && !allowed) {
             throw refuse(

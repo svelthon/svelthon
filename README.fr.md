@@ -474,10 +474,13 @@ est du Python qui veut dire ce que Python veut dire.
 Un nom déclaré dans le gabarit est à la portée du bloc qui le contient, et
 `bind:` l'écrit :
 
+`{brouillon = …}` déclare de l'état à la portée du bloc, et `{salut => …}` un
+dérivé qui le suit — les deux signes que le script emploie déjà.
+
 ```svelte
 {#if edition}
-  {brouillon = user.nom}                 {#- de l'état, à portée de ce bloc -#}
-  {salut => f"Bonjour {brouillon}"}      {#- un dérivé, qui le suit -#}
+  {brouillon = user.nom}
+  {salut => f"Bonjour {brouillon}"}
 
   <input bind:value={brouillon} />
   <p>{salut}</p>
@@ -756,6 +759,8 @@ __all__ = ["chercher", "trouver"]
 
 def chercher(requete=""):
     return [p for p in CATALOGUE if requete in p["titre"]]
+
+...
 ```
 
 `__all__` est la façon dont Python dit lui-même ce qu'un module exporte, et c'est
@@ -1180,6 +1185,8 @@ qui mérite d'être nommée :
 __all__ = ["load", "csr"]
 
 csr = False
+
+...
 ```
 
 Cette page n'envoie **aucun JavaScript**, donc pas de Brython non plus. Un
@@ -1226,6 +1233,8 @@ affectation ordinaire lue dans l'AST, exactement comme le `__all__` d'à côté 
 ```python
 __js__ = {"@sveltejs/kit": ["error", "fail"]}
 __all__ = ["load", "actions"]
+
+...
 ```
 
 Une règle, en une phrase : **un fichier qui a un gabarit a le dialecte ; un

@@ -463,10 +463,13 @@ Python that means what Python means.
 A name declared in the markup is scoped to the block that holds it, and `bind:`
 writes it:
 
+`{draft = …}` declares state scoped to the block, and `{greeting => …}` a
+derived that follows it — the same two signs the script uses.
+
 ```svelte
 {#if editing}
-  {draft = user.name}                {#- state, scoped to this block -#}
-  {greeting => f"Hello {draft}"}     {#- a derived, which follows it -#}
+  {draft = user.name}
+  {greeting => f"Hello {draft}"}
 
   <input bind:value={draft} />
   <p>{greeting}</p>
@@ -723,6 +726,8 @@ __all__ = ["chercher", "trouver"]
 
 def chercher(requete=""):
     return [p for p in CATALOGUE if requete in p["titre"]]
+
+...
 ```
 
 `__all__` is Python's own way of saying what a module exports, and it is the
@@ -1137,6 +1142,8 @@ Page options work as they do anywhere, which has one consequence worth naming:
 __all__ = ["load", "csr"]
 
 csr = False
+
+...
 ```
 
 That page ships **no JavaScript at all**, and therefore no Brython. A component
@@ -1182,6 +1189,8 @@ like the `__all__` beside it:
 ```python
 __js__ = {"@sveltejs/kit": ["error", "fail"]}
 __all__ = ["load", "actions"]
+
+...
 ```
 
 One rule, in one line: **a file with a template has the dialect; a module is
