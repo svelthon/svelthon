@@ -12,6 +12,48 @@ EXPECTED='preloaded=OK True | doc=OK DOMNode | create=OK INPUT | tagName=OK INPU
 # One profile per launch: two Chromiums back to back fight over the default
 # profile's lock, and the second renders an incomplete page — at random.
 PROFILES=$(mktemp -d)
+
+browse() {
+    local profile=$1 budget=$2 url=$3
+
+    # The first `cleanup` runs before any of this and removes the directory, so
+    # it is made again here rather than once at the top.
+    mkdir -p "$PROFILES"
+
+    chromium --headless --no-sandbox --disable-gpu --user-data-dir="$PROFILES/$profile" \
+        --virtual-time-budget="$budget" --dump-dom "$url" 2>/dev/null
+}
+
+# Everything the browser itself says, which this check used to throw away: a
+# Brython traceback, an unhandled rejection, a CSP violation or a Svelte runtime
+# warning was invisible to it as long as the one string it greps was still in the
+# page. A check that cannot see the failure it exists to catch is the shape three
+# other checks here were fixed for.
+#
+# Over the DevTools protocol, because that is the only channel that carries it:
+# `--enable-logging=stderr --v=1` writes fourteen thousand lines of Chromium's
+# own verbosity and not one of a page's. See `scripts/console-check.mjs`.
+CDP_PORT=${CDP_PORT:-9334}
+
+console_check() {
+    local profile=$1
+    shift
+
+    mkdir -p "$PROFILES"
+    chromium --headless --no-sandbox --disable-gpu --user-data-dir="$PROFILES/cdp-$profile" \
+        --remote-debugging-port=$CDP_PORT about:blank >/dev/null 2>&1 &
+    local pid=$!
+
+    for _ in $(seq 40); do
+        curl -sf -o /dev/null "http://127.0.0.1:$CDP_PORT/json" && break
+        sleep 0.25
+    done
+
+    CDP_PORT=$CDP_PORT node scripts/console-check.mjs "$@" || status=1
+
+    kill "$pid" 2>/dev/null
+    wait "$pid" 2>/dev/null
+}
 cleanup() {
     # Two servers use this port in turn, `vite` then `vite preview`, and the
     # second does not match the first's pattern.
@@ -53,8 +95,7 @@ curl -sf -o /dev/null "http://localhost:$PORT/src/main.js"
 curl -sf -o /dev/null "http://localhost:$PORT/vendor/brython_runtime.js"
 curl -sf -o /dev/null "http://localhost:$PORT/src/App.svelte"
 
-REPORT=$(chromium --headless --no-sandbox --disable-gpu --user-data-dir="$PROFILES/probe" \
-    --virtual-time-budget=8000 --dump-dom "$URL" 2>/dev/null |
+REPORT=$(browse probe 8000 "$URL" |
     grep -o '<pre id="report">[^<]*' | sed 's|<pre id="report">||')
 
 status=0
@@ -77,8 +118,7 @@ expected=("increment()" "Hello Ada!" "0 · []" "1180591620717411303424" \
 
 missing=()
 for attempt in 1 2 3; do
-    APP=$(chromium --headless --no-sandbox --disable-gpu --user-data-dir="$PROFILES/app$attempt" \
-        --virtual-time-budget=40000 --dump-dom "http://localhost:$PORT/" 2>/dev/null)
+    APP=$(browse "app$attempt" 40000 "http://localhost:$PORT/")
 
     missing=()
     for one in "${expected[@]}"; do
@@ -100,6 +140,9 @@ for one in "${expected[@]}"; do
         status=1
     fi
 done
+
+# Both dev pages, and what they said while the assertions above read the DOM.
+console_check dev "$URL" "http://localhost:$PORT/"
 
 # The same page, from a production build. Everything above runs against the dev
 # server, which serves modules one by one; a build bundles them, minifies them
@@ -123,8 +166,7 @@ if npx vite build >/dev/null 2>&1; then
         curl -sf -o /dev/null "http://localhost:$PORT/" && break
     done
 
-    BUILT=$(chromium --headless --no-sandbox --disable-gpu --user-data-dir="$PROFILES/built" \
-        --virtual-time-budget=40000 --dump-dom "http://localhost:$PORT/" 2>/dev/null)
+    BUILT=$(browse built 40000 "http://localhost:$PORT/")
 
     built_missing=()
     for one in "${expected[@]}"; do
@@ -137,6 +179,8 @@ if npx vite build >/dev/null 2>&1; then
         echo "✗ production build — not found: ${built_missing[*]}"
         status=1
     fi
+
+    console_check built "http://localhost:$PORT/"
 else
     echo "✗ production build — vite build failed"
     status=1
