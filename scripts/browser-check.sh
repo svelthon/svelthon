@@ -30,9 +30,10 @@ browse() {
 # page. A check that cannot see the failure it exists to catch is the shape three
 # other checks here were fixed for.
 #
-# Over the DevTools protocol, because that is the only channel that carries it:
-# `--enable-logging=stderr --v=1` writes fourteen thousand lines of Chromium's
-# own verbosity and not one of a page's. See `scripts/console-check.mjs`.
+# Over the DevTools protocol, which reports the level and the position. Chromium's
+# own log carries the messages too, but writes every one of them as
+# `INFO:CONSOLE` — a `console.error` and an uncaught throw alike — so the grep
+# that reads it cannot tell an error from a log. See `scripts/console-check.mjs`.
 CDP_PORT=${CDP_PORT:-9334}
 
 console_check() {

@@ -5,11 +5,27 @@
 // unhandled rejection or a CSP violation was invisible as long as that string
 // was still there.
 //
-// The obvious instrument does not work: `--enable-logging=stderr --v=1` writes
-// fourteen thousand lines of Chromium's own verbosity and **not one** of them
-// carries a page's `console.error` or an uncaught exception. Measured four ways,
-// with `--headless=old` and three log levels. `ERROR:CONSOLE` never appears, so
-// grepping for it answers "nothing said" whether or not anything was said.
+// The obvious instrument is `--enable-logging=stderr --v=1` and a grep for
+// `ERROR:CONSOLE`, and it answers "nothing said" whether or not anything was
+// said — but not for the reason the first version of this comment gave.
+//
+// The channel **does** carry a page's messages, in thirteen thousand lines of
+// Chromium's own verbosity. What is useless is the severity prefix: a
+// `console.error` and an uncaught exception both arrive as `INFO:CONSOLE`, and
+// `ERROR:CONSOLE` never appears at all.
+//
+//   INFO:CONSOLE:1] "INJURY"
+//   INFO:CONSOLE:1] "Uncaught Error: BOOM"
+//
+// The first comment here said the channel carried nothing, "measured four ways".
+// It was measured four ways on a `file://` page whose script never ran — the
+// control that was missing is the one that says the page spoke at all. Over
+// http the same page speaks every time. A measurement that cannot contradict
+// you is the thing this project keeps a rule about, and this is it.
+//
+// The protocol is used anyway, and it is the better instrument for its own
+// reason: it reports the level, so `console.warn` can be let through while an
+// error is not, and it hands over the position.
 //
 // `Runtime.enable` is the channel that carries them: `consoleAPICalled` for what
 // the page logs, `exceptionThrown` for what it throws. Same shape as
