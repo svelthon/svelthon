@@ -596,7 +596,19 @@ const declaresSlots = (value) => {
 const isSet = (value) => {
     const cls = globalThis.__BRYTHON__.get_class(value);
 
-    return (cls === _b_.set || cls === _b_.frozenset) && value.$store !== undefined;
+    if (cls === undefined || value.$store === undefined) return false;
+    if (cls === _b_.set || cls === _b_.frozenset) return true;
+
+    // A subclass is a set. `class Bag(set): pass` redefines nothing and is an
+    // ordinary way to name a domain type, and an equality against the two
+    // builtins said no: its members were never taken under watch, so mutating
+    // one changed the data and left the page as it was.
+    //
+    // Read from the type's own ancestry rather than through `isinstance`, which
+    // goes through `__instancecheck__` and would run a protocol of the author's
+    // while the walk is in flight. The `$store` test above stays: a foreign
+    // object carrying that name is not a set.
+    return Array.isArray(cls.tp_mro) && (cls.tp_mro.includes(_b_.set) || cls.tp_mro.includes(_b_.frozenset));
 };
 
 function mark(value) {
@@ -1149,7 +1161,21 @@ function branch(value, seen) {
         ? Object.keys(value).filter((key) => key.startsWith(SLOT))
         : [];
 
-    if (holder !== undefined || declaresSlots(value)) {
+    // A mapping is its entries, whatever else it also is.
+    //
+    // `class Mapping(dict): pass` gets an instance `__dict__` beside its items,
+    // so this branch answered first and returned before the mapping below was
+    // ever read: `Mapping({"answer": 42})` crossed as `{}`, and with one
+    // attribute set, as `{label: "metadata"}` — the data replaced by metadata
+    // about it, with no error and valid JSON on the other side.
+    //
+    // Entries only, which is the rule CPython's own `json` follows for a dict
+    // subclass: an attribute on the instance describes the mapping and is not an
+    // entry of it, and merging the two would invent keys the mapping does not
+    // have.
+    const mapping = globalThis.__BRYTHON__.is_dict(value);
+
+    if (!mapping && (holder !== undefined || declaresSlots(value))) {
         const fields = shell ?? {};
 
         if (holder !== undefined) {
