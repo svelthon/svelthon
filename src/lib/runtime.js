@@ -665,12 +665,18 @@ function mark(value) {
     // the old one, where the same component holding `[Box()]` repainted.
     if (Array.isArray(value)) {
         for (const child of value) inherit(value, child);
-    } else if (globalThis.__BRYTHON__.get_class(value) === _b_.dict) {
+    } else if (globalThis.__BRYTHON__.is_dict(value)) {
         // Asked of Python, not of the properties. A dict keeps its string keys
         // as ordinary properties and everything else in a hash table, so a walk
         // over the properties reached the children of `{"one": []}` and not
         // those of `{1: []}`: the same mutation notified in one and was silent
         // in the other, and a table indexed by id kept showing an old page.
+        //
+        // Asked as `is_dict` and not as an equality against `dict`, which is the
+        // same question the converter asks a page later: `class Mapping(dict):
+        // pass` is an ordinary way to name a domain type, and an equality said
+        // no, so neither its keys nor its values were taken under watch.
+        //
         // Both halves of an entry. A key is a child of the dict as much as a
         // value is: hashable is not immutable, so `{Box(): "label"}` holds an
         // object whose attributes change under a watch that never reached it.
@@ -1560,6 +1566,10 @@ function pyCall(fn, where, lineOffset = 0, arity = Infinity) {
 //
 // The original is kept on `$js_func`, and it is the one that answers for the
 // signature, which is why `pyBoundary` carries `$function_infos` too.
+// Callable in Python, which is wider than *is a JavaScript function* and is the
+// question every boundary that promises to adapt a callback has to ask.
+const callable = (value) => typeof value === 'function' || boundMethod(value);
+
 // A method read off an instance: `{ob_type: method, im_func, im_self}`, which
 // `typeof` calls an object. Recognised by its class the way everything else
 // here is, and not by the two field names, which are Brython's own
@@ -1765,6 +1775,28 @@ export function jsCall(value) {
     });
 }
 
+// One value of an exported mapping.
+//
+// The callable half asked `typeof one === 'function'`, which is the test the
+// argument boundary had already stopped using: a bound method is an object, so
+// `actions = {"default": handler.save}` handed JavaScript something it could not
+// call, while `{"default": save}` beside it worked. The recognition is shared
+// now; what stays local is the position, `module.key`, which is what a
+// diagnostic from a form action should name.
+//
+// A plain function keeps the wrapper it had, arity included, so nothing changes
+// for the mappings that already worked. A bound method takes its receiver and
+// the arity of its own signature, `self` not counted.
+function exported(one, where, lineOffset, made) {
+    if (typeof one === 'function') return pyCall(one, where, lineOffset);
+
+    const found = boundMethod(one) ? declared(one) : null;
+
+    if (found === null) return plainData(one, made);
+
+    return pyCall(found.fn, where, lineOffset, found.arity);
+}
+
 // A value a module exports. A dict of functions, which is what SvelteKit's
 // `actions` is, becomes an object of *wrapped* functions, so a form action gets
 // the same boundary treatment as a `load()`. Anything else is plain data.
@@ -1810,7 +1842,7 @@ export function pyExport(value, where, lineOffset = 0) {
     // wrapped function became the object's prototype instead. `plainData` had
     // learned that; this branch had not, and being fixed in one converter is not
     // being fixed in the export.
-    if (pairs.some(([, one]) => typeof one === 'function')) {
+    if (pairs.some(([, one]) => callable(one))) {
         const out = {};
 
         // A WeakMap and not a `new Set()`, which is how the other rule is asked
@@ -1826,11 +1858,7 @@ export function pyExport(value, where, lineOffset = 0) {
         made.set(value, out);
 
         for (const [key, one] of pairs) {
-            define(
-                out,
-                propertyName(key, out),
-                typeof one === 'function' ? pyCall(one, `${where}.${key}`, lineOffset) : plainData(one, made)
-            );
+            define(out, propertyName(key, out), exported(one, `${where}.${key}`, lineOffset, made));
         }
 
         return out;

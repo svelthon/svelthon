@@ -23,7 +23,11 @@ import {
     listen_method,
     stop_method,
     emit,
-    seen
+    seen,
+    actions,
+    control,
+    mixed,
+    python_call
 } from './fixtures/bound_methods.py';
 
 describe('a bound method handed to JavaScript', () => {

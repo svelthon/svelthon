@@ -14,6 +14,10 @@ __all__ = [
     "stop_method",
     "emit",
     "seen",
+    "actions",
+    "control",
+    "mixed",
+    "python_call",
 ]
 
 
@@ -85,3 +89,18 @@ def emit():
 
 def seen():
     return len(box.calls)
+
+
+# The other way out: a mapping the module exports, which is the shape SvelteKit
+# reads as form actions.
+actions = {"default": box.done, "tag": box.tag, "other": other.tag}
+
+# The same mapping built from an ordinary function, which always worked.
+control = {"default": done}
+
+# And the two beside a value, since a neighbour must not decide for either.
+mixed = {"method": box.done, "fn": done, "version": 1}
+
+
+def python_call():
+    return actions["default"]()

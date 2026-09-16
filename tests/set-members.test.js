@@ -21,6 +21,7 @@ import SetMember from './fixtures/SetMember.svelte';
 import ListMember from './fixtures/ListMember.svelte';
 import KeyMember from './fixtures/KeyMember.svelte';
 import LateKey from './fixtures/LateKey.svelte';
+import MappingKey from './fixtures/MappingKey.svelte';
 
 const setup = (Component) => {
     const target = document.body.appendChild(document.createElement('div'));
@@ -42,7 +43,8 @@ const setup = (Component) => {
 describe.for([
     ['a set', SetMember],
     ['a list', ListMember],
-    ['a dict key', KeyMember]
+    ['a dict key', KeyMember],
+    ['a dict subclass key', MappingKey]
 ])('a mutable instance held by %s', ([, Component]) => {
     test('repaints what reads it', () => {
         const { read, bump } = setup(Component);
