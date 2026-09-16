@@ -948,10 +948,16 @@ function branch(value, seen) {
     // partial result, through `to_js`, through `tojson`, and through every Python
     // function's return value.
     //
-    // Never a class lookup: `get_class` probes the object's symbols, and
-    // SvelteKit wraps `event.params` in a proxy that records every key read,
-    // including the symbols we would have introduced. `$B.is_dict`, which is what
-    // `pyEntries` asks, answers from a flag and touches nothing.
+    // The walk this replaced touched **no** symbol, and this one touches two:
+    // `$B.is_dict` reads `Symbol(OB_TYPE)` — it does not answer from a flag, and
+    // a comment here said it did — and the iteration reads `ob_type` besides.
+    // Measured on a recording proxy, with the old walk as the control.
+    //
+    // The property that mattered is still safe, and at another site: SvelteKit
+    // wraps `event.params` in a proxy that records every key read, and `pyDict`
+    // snapshots it at the *inbound* boundary, so Python holds a plain dict and
+    // this function never meets the proxy. The defence is real; it does not live
+    // here, and claiming it here was how the last defect stayed hidden.
     //
     // The key crosses through the converter too: a JavaScript property name is a
     // string, and a Brython float is an object, so `{1.5: "x"}` would otherwise
@@ -960,7 +966,32 @@ function branch(value, seen) {
     // A set has no key to copy: `list(mon_set)` is the Python way to hand one
     // over, and it is what any serialiser would want anyway.
     const out = shell ?? {};
-    for (const [key, one] of pyEntries(value)) define(out, plainData(key), plainData(one, seen));
+
+    for (const [key, one] of pyEntries(value)) {
+        const name = String(plainData(key));
+
+        // Two keys Python keeps apart that JavaScript can only spell one way.
+        // The narrowing is the destination's — a property name is a string — but
+        // the silence would be ours, and this project's own rule for the moment
+        // is written one file over: a serialiser meeting something it cannot
+        // serialise owes the author a sentence. `{1: "a", "1": "b"}` used to hand
+        // over one entry of two and say nothing.
+        if (Object.hasOwn(out, name)) {
+            const error = new Error(
+                `svelthon — this dict has two keys JavaScript cannot tell apart: ` +
+                    `\`${name}\` is what both of them spell as a property name. A ` +
+                    `JavaScript object has string keys only, so one would silently ` +
+                    `replace the other on the way out.`
+            );
+
+            error.$svelthon = true;
+
+            throw error;
+        }
+
+        define(out, name, plainData(one, seen));
+    }
+
     return out;
 }
 

@@ -69,4 +69,16 @@ describe('a dict whose keys are not strings', () => {
     test('while a string key is untouched', () => {
         expect(plainData(dict([['a', 1], ['b', 2]]))).toEqual({ a: 1, b: 2 });
     });
+
+    // Two keys Python keeps apart that a property name cannot. The narrowing is
+    // JavaScript's; the silence would have been ours, and the project's rule for
+    // this moment is written one file over — a serialiser meeting something it
+    // cannot serialise owes the author a sentence.
+    test.for([
+        ['an int beside its own spelling', () => [[1, 'a'], ['1', 'b']]],
+        ['a bool beside its own spelling', () => [[true, 'a'], ['true', 'b']]]
+    ])('%s says so instead of dropping one', ([, entries]) => {
+        expect(() => plainData(dict(entries()))).toThrow(/two keys JavaScript cannot tell apart/);
+        expect(() => tojson(dict(entries()))).toThrow(/two keys JavaScript cannot tell apart/);
+    });
 });
