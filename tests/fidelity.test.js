@@ -286,7 +286,14 @@ describe('Python errors', () => {
     test('an uncaught exception is readable from JavaScript', () => {
         const target = render(Errors);
         let captured = null;
-        window.addEventListener('error', (ev) => (captured = ev), { once: true });
+
+        // `preventDefault`, or jsdom reports the raise to the console and a
+        // green run prints a traceback. This project has just spent three
+        // readings learning to read what the toolchain says; a suite that prints
+        // deliberate failures teaches its own reader that its stderr is noise.
+        window.addEventListener('error', (ev) => (captured = ev, ev.preventDefault()), {
+            once: true
+        });
 
         target.querySelector('button[data-k="boom"]').click();
         flushSync();
@@ -301,7 +308,7 @@ describe('Python errors', () => {
 
     test('the component survives an exception', () => {
         const target = render(Errors);
-        window.addEventListener('error', () => {}, { once: true });
+        window.addEventListener('error', (ev) => ev.preventDefault(), { once: true });
 
         target.querySelector('button[data-k="boom"]').click();
         flushSync();
@@ -325,7 +332,10 @@ describe('Python errors', () => {
     test('the line stays right when another script precedes the Python', () => {
         const target = render(OffsetError);
         let captured = null;
-        window.addEventListener('error', (ev) => (captured = ev), { once: true });
+
+        window.addEventListener('error', (ev) => (captured = ev, ev.preventDefault()), {
+            once: true
+        });
 
         target.querySelector('button[data-k="boom"]').click();
         flushSync();
