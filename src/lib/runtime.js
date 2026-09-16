@@ -330,15 +330,23 @@ function installMutationTracking($B) {
     $B.$getattr = function (obj, attr, ...rest) {
         const result = getattr(obj, attr, ...rest);
 
-        if (
-            obj !== null &&
-            typeof obj === 'object' &&
-            MARKS.has(obj) &&
-            FOLLOWED.has(attr) &&
-            typeof result === 'function'
-        ) {
+        if (obj === null || typeof obj !== 'object' || !MARKS.has(obj)) return result;
+
+        if (FOLLOWED.has(attr) && typeof result === 'function') {
             return notifying(obj, attr, result);
         }
+
+        // What an attribute read hands back, the way `$getitem` treats a
+        // subscript: reading is the last moment before the value could be
+        // mutated, and it is the only moment for a value the initial walk cannot
+        // see. `class Box: rows = []` lives on the class, deliberately shared,
+        // and reaching it through a watched instance is an ordinary read.
+        //
+        // The read that already happened, and nothing more: no walk of the class
+        // hierarchy, so no property of the author's is run by the act of
+        // watching, and `inherit` steps over a function, a string or a class on
+        // its own.
+        inherit(obj, result);
 
         return result;
     };
@@ -520,9 +528,22 @@ export const plainObject = (value) => {
 };
 
 function ownAttributes(value) {
-    if (Array.isArray(value)) return undefined;
-
+    // The array guard is on *learning* the symbol, not on reading it. A plain
+    // list has no instance dict and scanning its symbols would be a cost paid on
+    // every list; but `class Box(list)` is an array **and** has one, so
+    // answering `undefined` for anything array-shaped lost its attributes while
+    // its elements were walked as always. Once the symbol is known, reading it
+    // is one property access.
+    //
+    // **No test in the suite separates this from the read-time handover in
+    // `$getattr`**, which covers the same child one read later, and I could not
+    // build one: reaching an attribute means reading it. It stays because the
+    // initial walk is the project's invariant — a watched object has its
+    // children marked before Python can reach for them, by any route — and
+    // because a path that bypasses `$getattr` would fail silently.
     if (DICT === undefined) {
+        if (Array.isArray(value)) return undefined;
+
         DICT = Object.getOwnPropertySymbols(value).find((symbol) => symbol.description === 'DICT');
         if (DICT === undefined) return undefined;
     }
