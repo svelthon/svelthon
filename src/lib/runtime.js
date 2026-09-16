@@ -956,13 +956,13 @@ export function schedule(result, where, lineOffset = 0) {
     // event, no overlay.
     let watched = false;
 
+    // The run comes from `started`, shared with `scheduleAsync`: one coroutine
+    // object is one execution whoever asks, and a handler is an asker like any
+    // other. What stays local is everything below — the promise that knows
+    // whether anybody awaited it, and the rethrow for a failure nobody caught.
     const promise = new Waited((resolve, reject) => {
-        $B.$getattr(aio, 'run')(
-            result,
-            (value) => {
-                $B.leave_frame(); // what Brython's own default does
-                resolve(value);
-            },
+        started(result).then(
+            resolve,
             (error) => {
                 const failure = pyError(error, where, lineOffset);
                 reject(failure);
@@ -1432,8 +1432,18 @@ export function pyArg(value) {
 // are separate.
 // One coroutine object, one run, whoever asks and by whichever route.
 //
-// The memo lives here and not at the converter, because this is the only place
-// that starts anything: `pyCall` handed a returned coroutine straight to
+// The memo lives here, at the one function that calls `aio.run`. Both
+// schedulers ask it: `scheduleAsync` for a value crossing to a caller who will
+// await it, `schedule` for a DOM handler whose return value nobody reads.
+//
+// The line that stood here said this was already the only place that starts a
+// coroutine. It was not — `schedule` still had a call of its own for one pass,
+// so a handler returning a shared coroutine ran its body again on every event,
+// while the same object returned by an export ran once. The sentence was true of
+// the intention and false of the file, and an audit read it before the code
+// caught up.
+//
+// The reason for centralising: `pyCall` handed a returned coroutine straight to
 // `aio.run`, so the same object returned twice ran its body twice while the same
 // object inside a returned dict ran once. A Python coroutine is not freely
 // re-runnable, and this project has already chosen to share one execution.
