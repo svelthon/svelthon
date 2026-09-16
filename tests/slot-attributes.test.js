@@ -16,6 +16,7 @@
 // The two fixtures differ by the two `__slots__` lines and nothing else.
 import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
+import { plainData } from '../src/lib/runtime.js';
 import SlotBox from './fixtures/SlotBox.svelte';
 import AttrBox from './fixtures/AttrBox.svelte';
 
@@ -109,5 +110,40 @@ describe('a slotted instance crossing to JavaScript', () => {
         const out = (await mod()).shared();
 
         expect(out.box.rows).toBe(out.rows);
+    });
+
+    // An instance is recognised by its **type** and not by what it happens to
+    // hold, which is one claim with two failures behind it.
+    //
+    // Reading the property names made a plain JavaScript object with a key
+    // called `slot_value_price` look like an instance: the key was renamed and
+    // every other field was dropped. Foreign data losing columns on its way
+    // through a Python return, from the spelling of a name.
+    test('a JavaScript object is not an instance because of a key name', () => {
+        expect(plainData({ slot_value_price: 42, currency: 'EUR' })).toEqual({
+            slot_value_price: 42,
+            currency: 'EUR'
+        });
+    });
+
+    test('and neither is a Python dict holding the same key', async () => {
+        expect((await mod()).looks_like_storage()).toEqual({
+            slot_value_price: 42,
+            currency: 'EUR'
+        });
+    });
+
+    // The other failure of the same claim: an instance whose slots are all
+    // still unassigned holds nothing, so asking the object said "not an
+    // instance" and the engine's view went out again, circular through the
+    // class. A class declares its slots before any of them is filled.
+    test.for([
+        ['declaring none', 'empty'],
+        ['declaring one and filling none', 'unassigned']
+    ])('an instance %s crosses as an empty object', async ([, name]) => {
+        const out = (await mod())[name]();
+
+        expect(out).toEqual({});
+        expect(JSON.stringify(out)).toBe('{}');
     });
 });

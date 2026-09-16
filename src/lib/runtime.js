@@ -347,7 +347,13 @@ function installMutationTracking($B) {
     $B.$setitem = function (obj, key, value, ...rest) {
         const result = setitem(obj, key, value, ...rest);
         if (obj !== null && typeof obj === 'object' && MARKS.has(obj)) {
-            inherit(obj, value); // `d["rows"] = rows` puts rows under watch too
+            // `d["rows"] = rows` puts rows under watch too, and so does the key:
+            // the initial walk hands the watch to both halves of an entry, and
+            // an insertion has to keep that invariant rather than restate half
+            // of it. `d[Box()] = "label"` after the watch began left the key
+            // outside it, and mutating it repainted nothing.
+            inherit(obj, key);
+            inherit(obj, value);
             MARKS.get(obj)();
         }
         return result;
@@ -562,6 +568,28 @@ export const marks = (value) =>
 // Brython's own name for a slot's storage on an instance, from `set_slots` in
 // `py_type.js`. Part of the vendored contract, like `$store` and `$iter_items`.
 const SLOT = 'slot_value_';
+
+// Whether this object's *class* declares `__slots__`, which is the question, and
+// not whether the object happens to carry a property whose name begins like
+// one.
+//
+// Read from the type, for two reasons that are the same reason. A plain
+// JavaScript object `{slot_value_price: 42, currency: "EUR"}` is data, and
+// asking its property names made the converter rename one key and drop the
+// other — foreign data losing fields on the way through a Python return.
+// And an instance whose slots are all still unassigned carries no storage at
+// all, so asking the object said "not an instance" and the engine's own view
+// went out instead, `{ob_type: …}`, circular through the class.
+//
+// A type answers both: it declares its slots before any of them is filled, and
+// no object of the author's declares anything.
+const declaresSlots = (value) => {
+    const $B = globalThis.__BRYTHON__;
+
+    if (value.ob_type === undefined) return false;
+
+    return $B.search_in_dict(value.ob_type, '__slots__', $B.NULL) !== $B.NULL;
+};
 
 // The two Python sets, asked by class the way the dict above is. Anything else
 // carrying a `$store` is not one, and a foreign object is not walked at all.
@@ -1117,11 +1145,11 @@ function branch(value, seen) {
     // since `{"slot_value_x": 1}` is data and not storage.
     const attributes = ownAttributes(value);
     const holder = attributes !== null && typeof attributes === 'object' ? attributes : undefined;
-    const slots = globalThis.__BRYTHON__.is_dict(value)
-        ? []
-        : Object.keys(value).filter((key) => key.startsWith(SLOT));
+    const slots = declaresSlots(value)
+        ? Object.keys(value).filter((key) => key.startsWith(SLOT))
+        : [];
 
-    if (holder !== undefined || slots.length > 0) {
+    if (holder !== undefined || declaresSlots(value)) {
         const fields = shell ?? {};
 
         if (holder !== undefined) {

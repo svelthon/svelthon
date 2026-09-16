@@ -74,6 +74,8 @@ Token type codes read off the tokenizer: `NAME 1`, `NUMBER 2`, `STRING 3`,
 | `$B.jsobj2pyobj(value)` | every value coming back from a JavaScript call, so the most-used inbound function there is and the one whose shape changing upstream would be felt first |
 | `$B.PYOBJ_MAP` | the WeakMap holding a converted container's back-reference to the Python object it came from, so the original is handed back rather than a copy. Read with `?.`, which is why a rename upstream would be silent and why a test names it |
 | `$B.is_dict(obj)` | whether a value is a Python dict, answered from a flag on the object rather than by probing its symbols, which is what `get_class` would do. `urlencode` asks it to tell a mapping from every other Python object, all of which are objects here too |
+| `$B.search_in_dict(cls, name, absent)` | a name looked up in a class **and its bases**, through the class dictionaries rather than the attribute protocol, so nothing of the author's runs. The converter asks a class whether it declares `__slots__`: an instance whose slots are all still unassigned carries no storage to be recognised by, and a plain JavaScript object carrying a property that merely looks like one must not be mistaken for it |
+| `$B.NULL` | Brython's *absent*, which is not `None`: what `search_in_dict` gives back when the name is nowhere in the class |
 | `$B.rich_comp(op, x, y)` | Python's comparison protocol. `bind:group` asks it for `==`, because a Brython float is an object and JavaScript's `===` would answer false for two evaluations of the same literal |
 
 ### Dispatch points, for reactivity

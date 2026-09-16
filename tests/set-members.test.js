@@ -20,6 +20,7 @@ import { mount, flushSync } from './mounted.js';
 import SetMember from './fixtures/SetMember.svelte';
 import ListMember from './fixtures/ListMember.svelte';
 import KeyMember from './fixtures/KeyMember.svelte';
+import LateKey from './fixtures/LateKey.svelte';
 
 const setup = (Component) => {
     const target = document.body.appendChild(document.createElement('div'));
@@ -64,4 +65,31 @@ describe.for([
 
         expect(read('tagged')).toBe('1');
     });
+});
+
+// And the same key put there after the watch began.
+//
+// The initial walk hands the watch to both halves of an entry; the interception
+// of an insertion handed it to the value alone. So a dict that was empty at
+// mount held an untracked key for the rest of its life, and the repair above
+// covered the dict written in the source and nothing written later.
+test('a mutable key inserted under a watch is watched too', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+
+    mount(LateKey, { target });
+    flushSync();
+
+    const read = () => target.querySelector('[data-k="total"]').textContent;
+    const press = (key) => {
+        target.querySelector(`button[data-k="${key}"]`).click();
+        flushSync();
+    };
+
+    press('add');
+
+    expect(read()).toBe('0');
+
+    press('bump');
+
+    expect(read()).toBe('1');
 });

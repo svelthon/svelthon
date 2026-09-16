@@ -1,6 +1,16 @@
 # The same data, declared five ways, so the crossing can be compared against the
 # one shape that was never in doubt: a class without `__slots__`.
-__all__ = ["slotted", "ordinary", "inherited", "mixed", "partial", "shared"]
+__all__ = [
+    "slotted",
+    "ordinary",
+    "inherited",
+    "mixed",
+    "partial",
+    "shared",
+    "empty",
+    "unassigned",
+    "looks_like_storage",
+]
 
 
 class Slotted:
@@ -56,6 +66,31 @@ def mixed():
 
 def partial():
     return Partial()
+
+
+class Empty:
+    # Declares slots and has none, so nothing is ever stored on an instance.
+    __slots__ = ()
+
+
+class Unassigned:
+    # Declares one and never fills it, which is the same thing seen from the
+    # object: no storage to be recognised by.
+    __slots__ = ("rows",)
+
+
+def empty():
+    return Empty()
+
+
+def unassigned():
+    return Unassigned()
+
+
+def looks_like_storage():
+    # A key of the author's that reads like the engine's storage. Python's side
+    # of the control; the JavaScript object is asked of `plainData` directly.
+    return {"slot_value_price": 42, "currency": "EUR"}
 
 
 def shared():
