@@ -940,16 +940,27 @@ function branch(value, seen) {
         return fields;
     }
 
-    // Own string keys only, and never a class lookup: `get_class` probes the
-    // object's symbols, and SvelteKit wraps `event.params` in a proxy that
-    // records every key read, including the symbols we would have introduced,
-    // which its serialiser then refuses. A Brython dict exposes its keys as
-    // ordinary properties, so this reads both sides of the bridge.
+    // Asked of Python, through `pyEntries`, which walks the hash table as well as
+    // the properties. This site read the properties alone, and the comment that
+    // stood here said a dict keeps its keys there — which is true of the string
+    // ones and of nothing else. So `{1: "janvier", 2: "février"}`, which is what
+    // anyone writes for a lookup table, crossed as `{}`: no error, no warning, no
+    // partial result, through `to_js`, through `tojson`, and through every Python
+    // function's return value.
+    //
+    // Never a class lookup: `get_class` probes the object's symbols, and
+    // SvelteKit wraps `event.params` in a proxy that records every key read,
+    // including the symbols we would have introduced. `$B.is_dict`, which is what
+    // `pyEntries` asks, answers from a flag and touches nothing.
+    //
+    // The key crosses through the converter too: a JavaScript property name is a
+    // string, and a Brython float is an object, so `{1.5: "x"}` would otherwise
+    // be keyed by `[object Object]`.
     //
     // A set has no key to copy: `list(mon_set)` is the Python way to hand one
     // over, and it is what any serialiser would want anyway.
     const out = shell ?? {};
-    for (const key of Object.keys(value)) define(out, key, plainData(value[key], seen));
+    for (const [key, one] of pyEntries(value)) define(out, plainData(key), plainData(one, seen));
     return out;
 }
 
