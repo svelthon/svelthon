@@ -533,6 +533,10 @@ const MARKS = new WeakMap();
 export const marks = (value) =>
     value !== null && typeof value === 'object' ? MARKS.get(value) : undefined;
 
+// Brython's own name for a slot's storage on an instance, from `set_slots` in
+// `py_type.js`. Part of the vendored contract, like `$store` and `$iter_items`.
+const SLOT = 'slot_value_';
+
 // The two Python sets, asked by class the way the dict above is. Anything else
 // carrying a `$store` is not one, and a foreign object is not walked at all.
 const isSet = (value) => {
@@ -562,6 +566,24 @@ function mark(value) {
     const attributes = ownAttributes(value);
     if (attributes !== undefined) {
         for (const key in attributes) inherit(value, attributes[key]);
+    }
+
+    // An instance is not its `__dict__`. A class declaring `__slots__` has no
+    // per-instance dict at all, and Brython's member descriptor keeps each slot
+    // as an own property of the object named `slot_value_<name>`
+    // (`descriptors.js`, `d_member.attr`). So the walk above found nothing, and
+    // `box.rows.append(1)` changed the list while the page kept the old count.
+    //
+    // Read off the object rather than asked of the class, which settles the
+    // three neighbouring cases at once: an uninitialised slot has no property
+    // and is skipped, an inherited slot is stored here like any other, and
+    // nothing goes through `$getattr`, so no property getter of the author's is
+    // run by the act of watching. Arrays are stepped over because their keys are
+    // their indices, and a long list would pay for a scan that cannot match.
+    if (!Array.isArray(value)) {
+        for (const key of Object.keys(value)) {
+            if (key.startsWith(SLOT)) inherit(value, value[key]);
+        }
     }
 
     // Only what Python calls a container, and that bound is the whole point:
@@ -907,8 +929,16 @@ const define = (target, key, value) =>
         configurable: true
     });
 
-// The promise a coroutine became, kept against the coroutine itself so that a
-// second reference to it is a second reference and not a second run.
+// What a coroutine became, kept against the coroutine itself so that a second
+// reference to it is a second reference and not a second run.
+//
+// Two things, and keeping them apart is the point. `run` is the execution, and
+// there is exactly one per coroutine object, forever. `views` holds the
+// converted promise per conversion policy, because what the body resolves to
+// still has to cross, and how it crosses is the caller's to say: the same
+// options dict wants its callbacks wrapped when a JavaScript function is going
+// to call them and left alone when `tojson` is going to serialise them. One run,
+// one view per policy.
 const CROSSED = new WeakMap();
 
 // What an exported function hands back to the framework.
@@ -949,16 +979,28 @@ export function plainData(value, seen, adapt) {
         // not something Python offers, so two references to it cannot mean two
         // runs under any rule, JSON included. Two distinct coroutine objects are
         // two distinct keys here, and still run once each.
-        const known = CROSSED.get(value);
+        let crossing = CROSSED.get(value);
 
-        if (known !== undefined) return known;
+        if (crossing === undefined) {
+            crossing = { run: scheduleAsync(value, 'coroutine'), views: new Map() };
 
-        // What it resolves to is Python too, and has to make the same crossing.
-        const crossing = scheduleAsync(value, 'coroutine').then(plainData);
+            CROSSED.set(value, crossing);
+        }
 
-        CROSSED.set(value, crossing);
+        let view = crossing.views.get(adapt);
 
-        return crossing;
+        if (view === undefined) {
+            // What it resolves to is Python too, and has to make the same
+            // crossing, under the same rule: the policy used to stop at the
+            // `await`, so `nested({"done": f})` worked and the same dict behind
+            // a coroutine handed JavaScript a bare Python function, which raised
+            // on the argument it was called with.
+            view = crossing.run.then((result) => plainData(result, undefined, adapt));
+
+            crossing.views.set(adapt, view);
+        }
+
+        return view;
     }
 
     // Two rules, and the caller says which. Note that `map` passes an index as

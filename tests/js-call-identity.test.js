@@ -25,7 +25,11 @@ import {
     depths_probe,
     listen_boxed,
     stop_boxed,
-    boxed_count
+    boxed_count,
+    async_probe,
+    async_twice,
+    async_both,
+    async_runs
 } from './fixtures/js_calls.py';
 
 describe('a Python callback handed to JavaScript', () => {
@@ -122,6 +126,41 @@ describe('a callback inside an argument', () => {
         emit();
 
         expect(boxed_count()).toBe(left);
+    });
+});
+
+// And the same options dict behind a coroutine. The policy used to stop at the
+// `await`: the converted value of a resolved coroutine was built with no rule at
+// all, so `nested({"done": f})` answered 42 and `delayed(options())`, the same
+// dict one promise later, handed JavaScript a bare Python function that raised
+// on the argument it was called with.
+describe('a callback behind an await', () => {
+    test('is adapted when its options arrive as a promise', async () => {
+        await expect(async_probe()).resolves.toBe(42);
+    });
+
+    // One coroutine, two crossings, and the execution counter says which half is
+    // shared: the run is memoised against the coroutine, the converted view
+    // against the rule that converted it.
+    test('and the coroutine still runs once for two crossings', async () => {
+        const before = async_runs();
+        const both = async_twice();
+
+        expect(await Promise.all(both)).toEqual([42, 42]);
+        expect(async_runs() - before).toBe(1);
+    });
+
+    // The half the cache had to be split for: two consumers asking for two
+    // different rules on one coroutine. The execution is memoised against the
+    // coroutine and the converted promise against the rule, so a second rule
+    // buys a second view and never a second run.
+    test('and once for two different rules', async () => {
+        const before = async_runs();
+        const [called, plain] = async_both();
+
+        expect(await called).toBe(42);
+        expect(typeof (await plain).done).toBe('function');
+        expect(async_runs() - before).toBe(1);
     });
 });
 

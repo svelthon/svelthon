@@ -12,10 +12,13 @@ __js__ = {
         "nested",
         "listed",
         "same",
+        "delayed",
         "onOptions",
         "offOptions",
     ]
 }
+
+from browser import aio
 __all__ = [
     "listen",
     "stop",
@@ -32,6 +35,10 @@ __all__ = [
     "listen_boxed",
     "stop_boxed",
     "boxed_count",
+    "async_probe",
+    "async_twice",
+    "async_both",
+    "async_runs",
 ]
 
 events = []
@@ -121,3 +128,36 @@ def stop_boxed():
 
 def boxed_count():
     return len(boxed)
+
+
+# The same options dict, behind a coroutine. How many times the body ran is the
+# half the resolved value cannot show.
+runs = []
+
+
+async def options_later():
+    runs.append(1)
+    await aio.sleep(0)
+    return {"done": done}
+
+
+def async_probe():
+    return delayed(options_later())
+
+
+def async_twice():
+    # One coroutine object handed over twice: two views, one run.
+    task = options_later()
+    return [delayed(task), delayed(task)]
+
+
+def async_both():
+    # The same coroutine crossed under two different rules: once as the argument
+    # of a JavaScript call, where callbacks are adapted, and once as a plain
+    # return value, where they are not. Two views, still one run.
+    task = options_later()
+    return [delayed(task), task]
+
+
+def async_runs():
+    return len(runs)

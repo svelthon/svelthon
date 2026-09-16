@@ -29,6 +29,10 @@ export const direct = (fn) => fn('event');
 export const nested = (options) => options.done('event');
 export const listed = (fns) => fns[0]('a') + fns[1]('b');
 
+// The same options object, behind an await: the policy has to survive the
+// crossing of a promise, not only the crossing of a container.
+export const delayed = async (options) => (await options).done('event');
+
 // One Python function reached by two routes in one argument.
 export const same = (options) => options.a === options.list[0];
 
