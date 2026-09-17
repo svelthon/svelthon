@@ -31,6 +31,9 @@ __all__ = [
     "labelled",
     "holder",
     "stacked",
+    "three",
+    "spread",
+    "arities",
     "changing",
     "replace_call",
     "call_from_python",
@@ -197,6 +200,18 @@ async def made_later(key):
 
 def made_inside(key):
     return {"hook": mapped[key], "duration": 0.5}
+
+
+def three(a, b, c):
+    # What a library reads off `length` to learn a callback's arity.
+    return a
+
+
+def spread(*values):
+    return len(values)
+
+
+arities = [three, spread]
 
 
 def shared_rows():

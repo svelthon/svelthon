@@ -259,12 +259,24 @@ describe('a static __call__ that takes an argument', () => {
 // from wherever the walk began, on a value that had one of its own. A log read
 // the name of a dict the author never asked about.
 describe('a callable whose class writes `name` and `length`', () => {
+    // The author's own word, when they wrote one. A JavaScript function carries a
+    // `name` whether or not anyone chose it, so the question is *which* word goes
+    // there, not whether the field crosses: `on_save` says more in a log than the
+    // qualname of the method that runs it, and an outside reading asked for it in
+    // those terms. Read off the instance's own storage, so no property of the
+    // author's runs because something was named.
     test.for([
         ['published on its own', () => mod.labelled],
         ['published inside a mapping', () => mod.holder.inner],
         ['published inside a list', () => mod.stacked[0]]
-    ])('is named after the call it is, %s', ([, reach]) => {
-        expect(reach().name).toBe('Labelled.__call__');
+    ])('takes the name its author gave it, %s', ([, reach]) => {
+        expect(reach().name).toBe('mine');
+    });
+
+    // And the class's qualname when the author named nothing, which is every
+    // other callable instance in this file.
+    test('or the name of the call it is, when there is no other', () => {
+        expect(mod.instance.name).toBe('Strategy.__call__');
     });
 
     // The limit, and it is the one the fields above already state: a callable
@@ -274,10 +286,31 @@ describe('a callable whose class writes `name` and `length`', () => {
     // about what a function carries is not a thing to repair here; Python still
     // has both, which is the line that says so.
     test('while the author keeps both, in Python', () => {
-        expect(mod.labelled.name).not.toBe('mine');
-        expect(mod.labelled.length).toBe(0);
-
         expect(mod.reads_its_own()).toEqual(['mine', 3]);
+    });
+
+    // `length` is the other word, and the one a library reads to learn what a
+    // callback takes. Every wrapper answered 0, because a function with a rest
+    // parameter declares nothing and that is what all of them are.
+    //
+    // It was measured and reverted once: a module's own functions were wrapped by
+    // the compiler, in a string, so only some routes could have carried it and
+    // `three` would have answered 0 at the top level and 3 from inside a list —
+    // the asymmetry the name had just been repaired for. Every wrapper is built
+    // in one file now, so the objection went with the duplicate.
+    test.for([
+        ['three declared parameters', 0, 3],
+        ['a *args, which declares none', 1, 0]
+    ])('reports %s', ([, at, length]) => {
+        expect(mod.arities[at].length).toBe(length);
+        expect(mod.three.length).toBe(3);
+    });
+
+    // An instance reads its `__call__` at every call, so its wrapper trims to
+    // nothing and would report 0. What a library reads is what the call takes.
+    test('and a callable instance reports what its call takes', () => {
+        expect(mod.doubling.length).toBe(1);
+        expect(mod.instance.length).toBe(0);
     });
 });
 

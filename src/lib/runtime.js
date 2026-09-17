@@ -1834,10 +1834,7 @@ function converting(wrapped) {
     if (known === undefined) {
         // Named after what it wraps, like the other wrappers in this file: a
         // callback a framework keeps is exactly the one somebody logs.
-        known = Object.defineProperty((...args) => wrapped(...args.map(inbound)), 'name', {
-            value: wrapped.name,
-            configurable: true
-        });
+        known = identified((...args) => wrapped(...args.map(inbound)), wrapped.name, wrapped.length);
 
         CONVERTED.set(wrapped, known);
     }
@@ -1968,6 +1965,30 @@ const nameOf = (where) => where.split(' — ')[0].replace(/\(\)$/, '');
 // `format(value, ".2f")` refused it at mount.
 const taken = (args, arity) => args.slice(0, arity).map(pyArg);
 
+// The two own properties every JavaScript function has, told the truth about the
+// Python one behind them.
+//
+// **`name`** is what a caller reads in a log, in a stack, and in a library that
+// dispatches on it. **`length`** is what a library reads to learn a callback's
+// arity, and it answered 0 for a `def` given three parameters, because a
+// function that takes a rest parameter — which every wrapper here is — declares
+// nothing.
+//
+// The arity was measured and reverted once, for a reason that has since gone:
+// a module's own functions were wrapped by the compiler, in a string, so only
+// some routes could have carried it and `three` would have answered 0 at the
+// top level and 3 from inside a list — the very asymmetry the name was repaired
+// for. Every wrapper a JavaScript caller can hold is built here now, so one
+// place covers every route and the generated code pays nothing.
+//
+// `Infinity` keeps the 0: `*args` has no number to report, and 0 is what
+// JavaScript says of a rest parameter.
+const identified = (wrapper, name, arity) =>
+    Object.defineProperties(wrapper, {
+        name: { value: name, configurable: true },
+        length: { value: Number.isFinite(arity) ? arity : 0, configurable: true }
+    });
+
 export function pyCall(fn, where, lineOffset = 0, arity = Infinity, named) {
     const wrapper = (...args) => {
         try {
@@ -2018,28 +2039,9 @@ export function pyCall(fn, where, lineOffset = 0, arity = Infinity, named) {
     // `{"h": handler}` reported `holder` — a name taken from wherever the walk
     // began rather than from the value.
     //
-    // **`length`** is left alone, and the reason is worth writing down because
-    // the other choice was tried and measured. Reporting the arity Python
-    // declares reads better — `def three(a, b, c)` answering 3 — but only this
-    // wrapper could do it: a module's own functions are handed over by the
-    // compiler, which emits a rest parameter and cannot pay a `defineProperty`
-    // per function in every generated module. `three` would then answer 0 at the
-    // top level and 3 from inside a list, which is exactly the defect the name
-    // above was repaired for. 0 everywhere is also what JavaScript says of a
-    // function that takes a rest parameter, which is what this one is.
-    //
-    // So an author's own `self.length` does not survive the crossing, and
-    // neither does `self.name`: they are fields, and a callable crosses as its
-    // call, not as its fields. What is new is that the two are not *empty* on
-    // the other side — every JavaScript function has them — so they answer for
-    // the call instead. That is a collision between two languages' idea of what
-    // a function carries, and it is a limit, not a repair to make.
     const infos = fn.$function_infos;
 
-    return Object.defineProperty(wrapper, 'name', {
-        value: named ?? ((Array.isArray(infos) && infos[2]) || nameOf(where)),
-        configurable: true
-    });
+    return identified(wrapper, named ?? ((Array.isArray(infos) && infos[2]) || nameOf(where)), arity);
 }
 
 // What Python really handed over, and what it declares. The layout is Brython's
@@ -2186,6 +2188,19 @@ function declared(value) {
         arity: Infinity,
         origin: fn,
         self,
+        // What the author called it, when they called it anything.
+        //
+        // A JavaScript function has a `name` whether or not anyone chose one, so
+        // the choice is which word to put there, not whether to. `Handler.__call__`
+        // is the class's; `self.name` is the author's, and `on_save` says more in
+        // a log than the qualname of the method that runs it. It is not a field
+        // crossing — no field crosses on a callable — it is the better of two
+        // names for the same thing.
+        //
+        // Read off the instance's own storage, never through `$getattr`: a
+        // property of the author's must not run because something was named. A
+        // string only, since `name` is one.
+        named: labelled(value),
         // Which of the three this is, said rather than guessed: `self` alone
         // cannot tell a bound method from an instance, and the two need
         // different identities to be cached by.
@@ -2197,6 +2212,13 @@ function declared(value) {
 // shape with no signature at all, both mean *take everything*: the call is about
 // to go through Python's own protocol, which is the authority on whether it
 // works.
+// The name an object gave itself, if it gave itself one.
+const labelled = (value) => {
+    const own = ownAttributes(value);
+
+    return own !== null && typeof own === 'object' && typeof own.name === 'string' ? own.name : null;
+};
+
 function liveArity(value) {
     const call = callDescriptor(value);
 
@@ -2322,7 +2344,13 @@ export function pyHandler(value) {
 
     if (known !== undefined) return known;
 
-    const wrapped = pyCall(found.fn, found.where, 0, found.arity);
+    const wrapped = pyCall(found.fn, found.where, 0, found.arity, found.named ?? undefined);
+
+    // An instance trims at the call, against whatever its class holds now, so its
+    // wrapper announces `Infinity` and would report an arity of 0. What a library
+    // reads should be what the call takes, and a snapshot of it is what a
+    // JavaScript function's `length` is anyway.
+    if (found.instance) identified(wrapped, wrapped.name, liveArity(value));
 
     cache.set(key, wrapped);
 
@@ -2643,8 +2671,12 @@ const running = (call, where, lineOffset) => {
     }
 };
 
-export const pyComponent = (call, where, lineOffset, arity) => (...args) =>
-    running(() => call(taken(args, arity)), where, lineOffset);
+export const pyComponent = (call, where, lineOffset, arity) =>
+    identified(
+        (...args) => running(() => call(taken(args, arity)), where, lineOffset),
+        nameOf(where),
+        arity
+    );
 
 // And the other half of the same wrapper: a function the *markup* compiled, one
 // per expression it met.
@@ -2658,8 +2690,12 @@ export const pyComponent = (call, where, lineOffset, arity) => (...args) =>
 // Two names rather than a flag, so the compiler *chooses* a wrapper instead of
 // describing one: what it writes is a name, and everything a crossing does is on
 // this side of the line.
-export const pyExpression = (call, where, lineOffset, arity) => (...args) =>
-    running(() => inTemplate(() => call(args.slice(0, arity))), where, lineOffset);
+export const pyExpression = (call, where, lineOffset, arity) =>
+    identified(
+        (...args) => running(() => inTemplate(() => call(args.slice(0, arity))), where, lineOffset),
+        nameOf(where),
+        arity
+    );
 
 // A Python module under a JavaScript name, for the one place that needs one:
 // what a directive *names*. Svelte copies that text into a `() => …` of its own,
@@ -2723,7 +2759,7 @@ export function pyModule(name) {
                     // Named like every other wrapper this file builds, and for
                     // the same reason: what a JavaScript caller reads of a
                     // Python function must not depend on the route it took.
-                    wrapped = Object.defineProperty(
+                    wrapped = identified(
                         (...args) => {
                             try {
                                 // Converted on the way in, like every other
@@ -2739,8 +2775,8 @@ export function pyModule(name) {
                                 throw pyError(error, where);
                             }
                         },
-                        'name',
-                        { value: nameOf(where), configurable: true }
+                        nameOf(where),
+                        arity
                     );
 
                     directives.set(member, wrapped);
