@@ -47,8 +47,12 @@ export function atomic(source, at) {
         }
 
         if (formatted) {
-            // `{{` and `}}` are a literal brace, not a field.
-            if (source.startsWith('{{', i) || source.startsWith('}}', i)) {
+            // `{{` and `}}` are a literal brace **in the text**, and syntax
+            // inside a field: `f"{ {'x': 1}}"` closes a dict and then the field,
+            // `f"{3:{2}}"` a nested width and then its own. Skipping them
+            // wherever they appeared left those counters standing and the
+            // scanner lost the end of the string.
+            if (depth === 0 && (source.startsWith('{{', i) || source.startsWith('}}', i))) {
                 i++;
                 continue;
             }

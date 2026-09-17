@@ -41,6 +41,25 @@ describe('an expression whose brace is not a brace', () => {
         expect(read('alternating')).toBe('}');
     });
 
+    // `{{` and `}}` are an escaped brace in the *text* of an f-string and syntax
+    // inside a field. Skipping them wherever they appeared left the field
+    // counters standing.
+    test('a dict closing against the field that holds it', () => {
+        expect(read('dict')).toBe("{'x': 1}");
+    });
+
+    test('and a nested format field closing against its own', () => {
+        expect(read('width')).toBe(' 3');
+    });
+
+    test('while a space between the closings already worked', () => {
+        expect(read('spaced')).toBe("{'x': 1}");
+    });
+
+    test('and an escaped brace is still text', () => {
+        expect(read('escaped')).toBe('{x}');
+    });
+
     test('while an ordinary string was already safe', () => {
         expect(read('quoted')).toBe('a } b');
     });

@@ -16,5 +16,18 @@ tag = "x"
 <!-- The same shape with alternating delimiters, which already worked. -->
 <p data-k="alternating">{f"{'}'}"}</p>
 
+<!-- A dict closing against the field that holds it: `}}` is two closings here,
+     not an escaped brace. -->
+<p data-k="dict">{f"{ {'x': 1}}"}</p>
+
+<!-- A nested format field closing against its own. -->
+<p data-k="width">{f"{3:{2}}"}</p>
+
+<!-- The same two with a space between the closings, which already worked. -->
+<p data-k="spaced">{f"{ {'x': 1} }"}</p>
+
+<!-- And braces that really are escaped text. -->
+<p data-k="escaped">{f"{{x}}"}</p>
+
 <!-- The witness: an ordinary string, which the scanner already protected. -->
 <p data-k="quoted">{"a } b"}</p>

@@ -220,8 +220,10 @@ function installMutationTracking($B) {
         // A wrapper may outlive the moment it was made: a mutator taken off an
         // object that nothing watched yet is wrapped all the same, and the
         // question of whether anybody cares belongs to the call. An object that
-        // never came under watch pays one lookup and nothing else.
-        if (!MARKS.has(obj)) return;
+        // never came under watch pays one lookup and nothing else. The target of
+        // an operation taken off a type is the caller's first argument, which is
+        // whatever the caller passed.
+        if (obj === null || typeof obj !== 'object' || !MARKS.has(obj)) return;
 
         if (MUTATORS.has(attr)) {
             // A container handed to a mutator is now inside a watched one, so
@@ -255,6 +257,22 @@ function installMutationTracking($B) {
     // `call_attr` takes a position marker before the arguments, so the object is
     // `rest[1]` and what it was handed is everything after it — the same offset
     // the bound path uses when it passes `rest.slice(1)`.
+    // The same rule as `onFirst`, for an operation kept as a value rather than
+    // called through `call_attr`: the target is the first argument, the rest are
+    // the arguments, and the question of whether anybody watches it belongs to
+    // the call.
+    const onType = (attr, method) =>
+        function (...args) {
+            let result;
+
+            try {
+                result = method(...args);
+                return result;
+            } finally {
+                afterCall(args[0], attr, result, args.slice(1));
+            }
+        };
+
     const onFirst = (obj, attr, rest, call) => {
         const target = rest[1];
         let result;
@@ -350,24 +368,38 @@ function installMutationTracking($B) {
         // make()` — gives the operation away before the state has a name, so the
         // list became reactive afterwards and `add(1)` told nobody, for ever.
         // `afterCall` asks at the call instead, which is the moment that knows.
-        if (FOLLOWED.has(attr) && typeof result === 'function') {
-            return notifying(obj, attr, result);
-        }
+        if (FOLLOWED.has(attr)) {
+            // Three shapes reach here and only the first is a function. A
+            // special method read off a builtin is a `method-wrapper`
+            // (`rows.__setitem__`), one read off a type is a
+            // `method_descriptor` (`list.append`); both are objects, and both
+            // are called through Python's own protocol.
+            const call =
+                typeof result === 'function'
+                    ? result
+                    : result !== null &&
+                        typeof result === 'object' &&
+                        (result.ob_type === $B.method_wrapper ||
+                            result.ob_type === $B.method_descriptor)
+                      ? (...args) => $B.$call(result, ...args)
+                      : null;
 
-        if (!MARKS.has(obj)) return result;
+            // A method taken off the **type** carries no target: `add =
+            // list.append` finds its list in the first argument, at the call.
+            // `call_attr` already knows that rule and `onFirst` applies it; a
+            // method kept as a value left that path, so `add(rows, 1)` mutated a
+            // watched list and told nobody, while `list.append(rows, 1)` written
+            // in place worked.
+            if (call !== null && pyClass(obj)) return onType(attr, call);
 
-        // A special method read off a builtin is a `method-wrapper` object and
-        // not a function — `rows.__setitem__` kept in a name, then called. It is
-        // called through Python's protocol either way, so the wrapper is an
-        // ordinary function that calls it and then tells the container, which is
-        // what the three other spellings of this mutation already do.
-        if (FOLLOWED.has(attr) && result !== null && typeof result === 'object') {
-            if (result.ob_type === $B.method_wrapper) {
+            if (typeof result === 'function') return notifying(obj, attr, result);
+
+            if (call !== null) {
                 return (...args) => {
                     let out;
 
                     try {
-                        out = $B.$call(result, ...args);
+                        out = call(...args);
                         return out;
                     } finally {
                         afterCall(obj, attr, out, args);
@@ -375,6 +407,8 @@ function installMutationTracking($B) {
                 };
             }
         }
+
+        if (!MARKS.has(obj)) return result;
 
         // What an attribute read hands back, the way `$getitem` treats a
         // subscript: reading is the last moment before the value could be
@@ -2483,9 +2517,14 @@ export function group(node, [current, write, chosen, binding, scope]) {
     // `{ob_type, value}`, so `value={0.5}` evaluated twice is two objects and
     // identity answers false for what the author wrote as one value. `==` and
     // `in` are also what a Python author reads in a group.
+    // Python's comparison, read as Python reads it. Asking `=== true` of the
+    // answer is a narrower question than the one that was asked: `__eq__` may
+    // return anything, and `return int(self.n == other.n)` gives 1 — true to
+    // Python, and not the JavaScript boolean. A choice already present in the
+    // state then showed as unselected.
     const same = (one) => {
         try {
-            return globalThis.__BRYTHON__.rich_comp('__eq__', one, value) === true;
+            return __pybridge.truthy(globalThis.__BRYTHON__.rich_comp('__eq__', one, value));
         } catch {
             return one === value;
         }
