@@ -1295,6 +1295,27 @@ Le même traitement descend **dans un dict de fonctions exporté**, ce qu'est
 son résultat reconverti. Ce qui n'est **pas** un conteneur Python, une
 `Response`, une `Promise`, un `ActionFailure`, passe intact.
 
+**Un appelable traverse comme son appel, pas comme ses champs.** Une fonction,
+une méthode liée et une instance dont la classe définit `__call__` arrivent
+toutes en fonctions JavaScript, où qu'elles aient été écrites : sous un nom, dans
+une liste, dans un mapping, dans ce qu'une autre fonction a renvoyé. Ce qui
+n'arrive pas, ce sont les attributs de l'objet : ils restent en Python, où
+l'appel les atteint toujours, donc un objet stratégie garde son état et
+JavaScript garde son appel.
+
+| sur un appelable | traverse |
+|---|---|
+| `handler.factor`, n'importe quel attribut de l'objet | non, **et Python l'a toujours** |
+| `handler.name` | comme le `name` de la fonction, puisqu'une fonction JavaScript en porte un de toute façon |
+| `handler.length` | non : `length` est l'arité que l'appel déclare |
+
+Les deux exceptions sont les deux mots qu'une fonction JavaScript possède déjà.
+`name` prend celui de l'auteur quand il y en a un — `on_save` dit plus dans un
+log que `Handler.__call__` — et `length` est ce qu'une bibliothèque lit pour
+savoir ce qu'un callback prend. Les deux décrivent l'**appel**, aucun n'est le
+champ d'à côté. `tests/callable-matrix.test.js` tient chaque ligne, sur **7 formes** et **14
+positions**.
+
 ### Le seul endroit où SvelteKit code en dur
 
 Les hooks sont trouvés par `resolve_entry`, qui filtre sur `/\.(js|ts)$/` et

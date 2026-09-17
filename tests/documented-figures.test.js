@@ -66,6 +66,35 @@ describe('the sizes the documents claim', () => {
     });
 });
 
+// The size of the callable matrix, which both READMEs state to say how far the
+// rule about a callable's fields has been checked.
+//
+// It is here because it drifted **in the writing**: the sentence went in saying
+// six shapes and twelve positions on the day the file held seven and thirteen,
+// and the figure was a day old by the time it was read back. A number in prose
+// beside a list that grows is a number that will be wrong.
+describe('the size of the matrix the documents claim', () => {
+    const matrix = readFileSync('tests/callable-matrix.test.js', 'utf8');
+
+    // Every entry of either list begins with its label, and a label is the only
+    // quoted string at the head of one — whether the entry fits on a line or is
+    // written over four.
+    const entries = (name) => {
+        const from = matrix.indexOf(`const ${name} = [`);
+        const list = matrix.slice(from, matrix.indexOf('\n];', from));
+
+        return (list.match(/^\s{4}\[\s*$|^\s{4}\['/gm) || []).length;
+    };
+
+    test.for([
+        ['README.md', english, /across \*\*(\d+) shapes\*\*/, /\*\*(\d+)\n?positions\*\*/],
+        ['README.fr.md', french, /sur \*\*(\d+) formes\*\*/, /\*\*(\d+)\n?positions\*\*/]
+    ])('%s states what the matrix holds', ([, text, shapes, positions]) => {
+        expect(stated(text, shapes)).toBe(entries('SHAPES'));
+        expect(stated(text, positions)).toBe(entries('POSITIONS'));
+    });
+});
+
 describe('the test count the documents claim', () => {
     // The same counter the demo's stats module uses, so the number in the page
     // and the number in the prose cannot disagree either.

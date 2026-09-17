@@ -1250,6 +1250,26 @@ what `actions` is: each one gets its arguments converted, its coroutine awaited
 and its result converted back. What is *not* a Python container, a `Response`,
 a `Promise` or an `ActionFailure`, is passed through untouched.
 
+**A callable crosses as its call, and not as its fields.** A function, a bound
+method and an instance whose class defines `__call__` all arrive as JavaScript
+functions, wherever they were written — under a name, in a list, in a mapping, in
+what another function returned. What does *not* arrive is the object's own
+attributes: they stay in Python, where the call still reaches them, so a strategy
+object keeps its state and JavaScript keeps its call.
+
+| on a callable | crosses |
+|---|---|
+| `handler.factor`, any attribute of the object | no, **and Python still has it** |
+| `handler.name` | as the function's `name`, because a JavaScript function has one either way |
+| `handler.length` | no: `length` is the arity the call declares |
+
+The two exceptions are the two words a JavaScript function already owns. `name`
+takes the author's own when there is one — `on_save` says more in a log than
+`Handler.__call__` — and `length` is what a library reads to learn what a
+callback takes. Both describe the *call*; neither is the field beside it.
+`tests/callable-matrix.test.js` holds every line, across **7 shapes** and **14
+positions**.
+
 ### The one place SvelteKit is hard-coded
 
 Hooks are found by `resolve_entry`, which matches `/\.(js|ts)$/` and ignores
