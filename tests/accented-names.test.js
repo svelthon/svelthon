@@ -1,5 +1,7 @@
 // @vitest-environment node
 //
+// Alphabets against the places the dialect reads a name.
+//
 // Python 3 accepts `année = 1` and so does Svelthon: it compiles, it becomes
 // state, it works. The six signs the dialect adds to Python each matched a name
 // with `[A-Za-z_]\w*`, and JavaScript's `\w` is ASCII, so the same name was a
@@ -16,9 +18,20 @@
 // front end in its plans, and `année`, `élève` and `moyenne` are the words those
 // authors write.
 //
-// Every row below is written twice, once in ASCII and once accented, and the
-// two outputs must be the same text. Asserting the shape would be asserting
-// what the compiler happens to emit; asserting the *sameness* is the rule.
+// **The assertion is sameness, not shape.** Every site is written twice, once in
+// ASCII and once in the alphabet under test, and the two outputs must be the
+// same text once the name is substituted. Asserting what the compiler emits
+// would be asserting what it happens to emit today; asserting that one name
+// behaves like another is the rule itself.
+//
+// This file held one row for a fortnight, French, and the sites were added to it
+// one defect at a time — six signs, then a snippet, then a directive, then what
+// a `.py` exports. They are the same question asked in sixteen places, so the
+// rows are a list now: a second alphabet costs a line, and a seventeenth site
+// costs a line. `élève` ends on an ASCII letter, which is why it could never
+// reach the defect where a name ends immediately before a `(`; every row below
+// it ends on a letter `\w` does not know, and one of them is written in a script
+// with no ASCII letter at all.
 import { test, expect, describe } from 'vitest';
 import { createRequire } from 'node:module';
 import {
@@ -32,10 +45,28 @@ import {
 const require = createRequire(import.meta.url);
 const { compile } = require('../src/lib/compile.cjs');
 
-// Distinct enough that substituting one for the other cannot touch anything
-// else in the output.
+// Distinct enough that substituting it cannot touch anything else in the output.
 const ASCII = 'eleve';
-const ACCENTED = 'élève';
+
+// One row per reason, not one per language: what a pattern can get wrong about a
+// name is where its letters sit in Unicode, not which country writes them.
+//
+// **Every row is five characters long**, like the reference, and that is a
+// property of the measurement rather than of the names: part of what the
+// compiler emits is Brython's `frame.positions`, which carries the *column* a
+// statement ends at. A shorter name moves those numbers, and the comparison
+// below would report a difference that is only its own. Found by writing a
+// four-letter row and a two-letter one, and reading the diff rather than
+// believing it.
+const ALPHABETS = [
+    ['a Latin name with accents', 'élève'],
+    ['a name that ends on an accent', 'ligné'],
+    ['a Greek name', 'μέσος'],
+    ['a Cyrillic name', 'метка'],
+    // No case, no ASCII letter anywhere, and nothing `\p{M}` or `\p{N}` can
+    // match: the row that shares the least with the reference.
+    ['a Chinese name', '学生平均分']
+];
 
 const markup = (body) => {
     const defs = [];
@@ -51,6 +82,12 @@ const script = (source) => {
     return `${emitted}\n${module}`;
 };
 
+const moduleOf = (source) => {
+    const { script: emitted } = compile(source, 'Probe', 'Probe.py', { plain: true });
+
+    return String(emitted);
+};
+
 // Brython gives the function it generates for a lambda a name of its own, and
 // that name is not stable from one compilation to the next: it carries a counter
 // that runs for the life of the process. It is the one part of the output that
@@ -59,109 +96,72 @@ const script = (source) => {
 // another file.
 const steady = (text) => text.replace(/lambda_[A-Za-z0-9_]+/g, 'lambda_N');
 
-describe('an accented name is a name', () => {
-    const same = (write) =>
-        expect(steady(write(ACCENTED))).toBe(steady(write(ASCII)).replaceAll(ASCII, ACCENTED));
-
-    test('`=` in the script makes state', () => {
-        same((n) => script(`${n} = 2\n`));
-    });
-
-    test('`=>` in the script makes a derived', () => {
-        same((n) => script(`total = 1\n${n} => total * 2\n`));
-    });
-
-    test('`<=>` in the script makes a bindable', () => {
-        same((n) => script(`${n}: str <=> "a"\n`));
-    });
-
-    test('`=` in the markup declares', () => {
-        same((n) => markup(`<p>{${n} = 2}</p>`));
-    });
-
-    test('`=>` in the markup declares a derived', () => {
-        same((n) => markup(`<p>{${n} => 2}</p>`));
-    });
-
-    test('`:=` in a handler writes through the namespace', () => {
-        same((n) => walrus(`lambda: (${n} := 1)`));
-    });
-
-    test('the shorthand expands, so the read goes through the accessor', () => {
-        same((n) => markup(`<p {${n}}></p>`));
-    });
-
-    test('a block name is a block name', () => {
-        same((n) => markup(`{#each rows as ${n}}{${n}}{/each}`));
-    });
-
-    // Found while reading §3.12, and it belongs here: the shorthand of a binding
-    // reads a name too. This one failed loudly, Svelte answering `Can only bind
-    // to state or props`, because the binding was left for it to resolve.
-    test('the shorthand of a binding expands', () => {
-        same((n) => markup(`<Child bind:${n} />`));
-    });
-
-    // Three more sites were still ASCII, written after the six above and on
-    // different days. This one was silent and wrong rather than loud: `\w+`
-    // cannot end immediately before the `(`, so a snippet whose name ends in an
-    // accented letter lost its parameter list, and the body then read a
-    // module-level name of the same spelling instead of the argument.
-    // Its own pair, and the reason is the defect itself: `\w+` fails only when
-    // the name *ends* in a non-ASCII letter, and `élève` ends in an ASCII `e`,
-    // so the shared pair cannot reach this one.
-    test('a snippet keeps its parameters', () => {
-        const write = (n) => markup(`{#snippet ${n}(x)}{x}{/snippet}`);
-
-        expect(write('ligné')).toBe(write('ligne').replaceAll('ligne', 'ligné'));
-    });
-
+// The columns: every place the dialect has to recognise a name. Each was added
+// by a defect, and the comment says which.
+const SITES = [
+    ['`=` in the script makes state', (n) => script(`${n} = 2\n`)],
+    ['`=>` in the script makes a derived', (n) => script(`total = 1\n${n} => total * 2\n`)],
+    ['`<=>` in the script makes a bindable', (n) => script(`${n}: str <=> "a"\n`)],
+    ['`=` in the markup declares', (n) => markup(`<p>{${n} = 2}</p>`)],
+    ['`=>` in the markup declares a derived', (n) => markup(`<p>{${n} => 2}</p>`)],
+    ['`:=` in a handler writes through the namespace', (n) => walrus(`lambda: (${n} := 1)`)],
+    // A call whose name ends where the parenthesis begins: the decision *call or
+    // grouping* read the character before it with `\w`, so `café(x := 1)` was
+    // taken for a grouping and rewritten into a name that does not exist.
+    ['`:=` inside a call keeps the call', (n) => walrus(`lambda: ${n}(x := 1)`)],
+    ['the shorthand expands, so the read goes through the accessor', (n) => markup(`<p {${n}}></p>`)],
+    ['a block name is a block name', (n) => markup(`{#each rows as ${n}}{${n}}{/each}`)],
+    // Found while reading §3.12: the shorthand of a binding reads a name too.
+    // This one failed loudly, Svelte answering `Can only bind to state or
+    // props`, because the binding was left for it to resolve.
+    ['the shorthand of a binding expands', (n) => markup(`<Child bind:${n} />`)],
+    // Silent and wrong rather than loud: `\w+` cannot end immediately before the
+    // `(`, so a snippet whose name ends in a non-ASCII letter lost its parameter
+    // list, and the body then read a module-level name of the same spelling
+    // instead of the argument.
+    ['a snippet keeps its parameters', (n) => markup(`{#snippet ${n}(x)}{x}{/snippet}`)],
     // And the name itself, which is what puts the snippet in the enclosing
     // scope: without it `<Card {nóm} />` compiled `nóm` as a free name.
-    test('a snippet is a name in the scope around it', () => {
-        same((n) => markup(`{#snippet ${n}(p)}{p}{/snippet}<Card {${n}} />`));
-    });
-
-    // `directiveModules` is what publishes a Python module under a JavaScript
-    // name, so `in:fondés.tw` resolves. An accented module was never found, so
-    // nothing was published and the directive reached a name that did not exist.
-    test('a dotted directive finds its module', () => {
-        same((n) => JSON.stringify(directiveModules(`<p in:${n}.tw>a</p>`)));
-    });
-
+    [
+        'a snippet is a name in the scope around it',
+        (n) => markup(`{#snippet ${n}(p)}{p}{/snippet}<Card {${n}} />`)
+    ],
+    // `directiveModules` publishes a Python module under a JavaScript name, so
+    // `in:fondés.tw` resolves. A module whose name is not ASCII was never found,
+    // so nothing was published and the directive reached a name that did not
+    // exist.
+    ['a dotted directive finds its module', (n) => JSON.stringify(directiveModules(`<p in:${n}.tw>a</p>`))],
     // `compile.cjs` asked the same question in seven places with one pattern,
     // and six of them read a *JavaScript* name, where ASCII is a defensible
     // line. The seventh read a Python one: what a `.py` exports. So
     // `__all__ = ["élèves"]` was filtered to nothing and the module exported
     // nothing at all, with no error and no warning.
-    const moduleOf = (source) => {
-        const { script } = compile(source, 'Probe', 'Probe.py', { plain: true });
+    ['a name in `__all__` is exported', (n) => moduleOf(`__all__ = ["${n}"]\n${n} = 1\n`)],
+    ['a function is exported by default', (n) => moduleOf(`def ${n}():\n    return 1\n`)]
+];
 
-        return steady(String(script));
-    };
-
-    test('a name in `__all__` is exported', () => {
-        same((n) => moduleOf(`__all__ = ["${n}"]\n${n} = 1\n`));
+describe.for(ALPHABETS)('%s is a name', ([, name]) => {
+    test.for(SITES)('%s', ([, write]) => {
+        expect(steady(write(name))).toBe(steady(write(ASCII)).replaceAll(ASCII, name));
     });
+});
 
-    // And a module with no `__all__` exports its functions by default, through
-    // the same filter, so an accented one exported nothing either.
-    test('a function is exported by default', () => {
-        same((n) => moduleOf(`def ${n}():\n    return 1\n`));
-    });
-
-    // The two refusals that read a name have to recognise the same one.
-    test('an indented `=>` is refused by its own sentence', () => {
-        for (const name of [ASCII, ACCENTED]) {
-            expect(() => script(`def go():\n    ${name} => 2\n`))
-                .toThrow(/a derived and an effect both belong at the top level/);
-        }
-    });
-
-    test('writing a markup name from a handler is refused', () => {
-        for (const name of [ASCII, ACCENTED]) {
-            expect(() => markup(`<p>{${name} = 1}<button onclick={lambda: (${name} := 2)}>x</button></p>`))
-                .toThrow(/is declared by the markup/);
-        }
+// The two refusals that read a name have to recognise the same one, and a
+// refusal is not a substitution: what has to match is the sentence.
+describe.for(ALPHABETS)('%s, when it is refused', ([, name]) => {
+    test.for([
+        [
+            'an indented `=>` is refused by its own sentence',
+            (n) => script(`def go():\n    ${n} => 2\n`),
+            /a derived and an effect both belong at the top level/
+        ],
+        [
+            'writing a markup name from a handler is refused',
+            (n) => markup(`<p>{${n} = 1}<button onclick={lambda: (${n} := 2)}>x</button></p>`),
+            /is declared by the markup/
+        ]
+    ])('%s', ([, write, sentence]) => {
+        expect(() => write(ASCII)).toThrow(sentence);
+        expect(() => write(name)).toThrow(sentence);
     });
 });
