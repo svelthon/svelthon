@@ -4,6 +4,7 @@ __all__ = [
     "slotted",
     "ordinary",
     "inherited",
+    "silent",
     "mixed",
     "partial",
     "shared",
@@ -28,6 +29,13 @@ class Ordinary:
 class Inherited(Slotted):
     # Declares none of its own.
     __slots__ = ()
+
+
+class Silent(Slotted):
+    # And declares nothing at all, which is not the same thing: Python gives it
+    # an instance `__dict__` beside the slot it inherits, so it holds both kinds
+    # of storage and announces neither.
+    pass
 
 
 class Mixed:
@@ -58,6 +66,10 @@ def ordinary():
 
 def inherited():
     return Inherited()
+
+
+def silent():
+    return Silent()
 
 
 def mixed():

@@ -439,18 +439,33 @@ function installMutationTracking($B) {
 
     const setitem = $B.$setitem;
     $B.$setitem = function (obj, key, value, ...rest) {
-        const result = setitem(obj, key, value, ...rest);
-        if (obj !== null && typeof obj === 'object' && MARKS.has(obj)) {
-            // `d["rows"] = rows` puts rows under watch too, and so does the key:
-            // the initial walk hands the watch to both halves of an entry, and
-            // an insertion has to keep that invariant rather than restate half
-            // of it. `d[Box()] = "label"` after the watch began left the key
-            // outside it, and mutating it repainted nothing.
-            inherit(obj, key);
-            inherit(obj, value);
-            MARKS.get(obj)();
+        // In a `finally`, like every other mutation path. A `__setitem__` of the
+        // author's may store what it was given and *then* refuse it, and the
+        // exception does not take the entry back out — the same sentence that
+        // was learned at `extend`, at `|=`, and at `__setattr__`.
+        //
+        // No bench tells this line from the one it replaces, and the reason is
+        // worth writing down: anything an author can write inside their own
+        // `__setitem__` goes through one of the other interceptions, and that
+        // one notifies, so the page is repainted by the inner write. The shape
+        // is made uniform anyway, because these defects are reintroduced by
+        // copying the site next door, and `tests/mutation-notifies-in-finally`
+        // is what reads the shape.
+        try {
+            return setitem(obj, key, value, ...rest);
+        } finally {
+            if (obj !== null && typeof obj === 'object' && MARKS.has(obj)) {
+                // `d["rows"] = rows` puts rows under watch too, and so does the
+                // key: the initial walk hands the watch to both halves of an
+                // entry, and an insertion has to keep that invariant rather
+                // than restate half of it. `d[Box()] = "label"` after the watch
+                // began left the key outside it, and mutating it repainted
+                // nothing.
+                inherit(obj, key);
+                inherit(obj, value);
+                MARKS.get(obj)();
+            }
         }
-        return result;
     };
 
     // The ways into a watched container are the ones we know about; reading a
@@ -468,9 +483,14 @@ function installMutationTracking($B) {
 
     const delitem = $B.$delitem;
     $B.$delitem = function (obj, ...rest) {
-        const result = delitem(obj, ...rest);
-        notify(obj);
-        return result;
+        // In a `finally`, like the write above it and the deleter below: a
+        // `__delitem__` of the author's may remove the entry and then raise,
+        // and nothing puts it back.
+        try {
+            return delitem(obj, ...rest);
+        } finally {
+            notify(obj);
+        }
     };
 
     // `box.value = 1` and `del box.value`. Brython compiles an attribute write
@@ -703,6 +723,34 @@ export const marks = (value) =>
 // `py_type.js`. Part of the vendored contract, like `$store` and `$iter_items`.
 const SLOT = 'slot_value_';
 
+// A name declared by a class **or by one of its bases**, read from the class
+// dictionaries rather than through the attribute protocol, so nothing of the
+// author's runs while a value is merely being converted.
+//
+// `$B.search_in_dict` reads one dictionary and stops. Both readers below took it
+// for a walk of the chain, and both comments said so in as many words, which is
+// how it went unnoticed on two boundaries at once: an instance whose `__call__`
+// is defined on a base class was not callable anywhere, and a subclass that
+// inherits `__slots__` without redeclaring them crossed to JavaScript as `{}`,
+// its fields gone and its JSON valid.
+//
+// The loop is Brython's own: `super.__getattribute__` asks `search_in_dict` once
+// per class of the MRO. `tp_mro` begins at the class itself — `[cls, ...bases,
+// object]` — and ends at `object`, which declares neither of the two names asked
+// here, so nothing is dragged in by the chain being longer. `type` does carry
+// `__call__`, and a class is turned away before the question is asked.
+const declares = (cls, name) => {
+    const $B = globalThis.__BRYTHON__;
+
+    for (const one of Array.isArray(cls.tp_mro) ? cls.tp_mro : [cls]) {
+        const found = $B.search_in_dict(one, name, $B.NULL);
+
+        if (found !== $B.NULL) return found;
+    }
+
+    return $B.NULL;
+};
+
 // Whether this object's *class* declares `__slots__`, which is the question, and
 // not whether the object happens to carry a property whose name begins like
 // one.
@@ -722,7 +770,7 @@ const declaresSlots = (value) => {
 
     if (value.ob_type === undefined) return false;
 
-    return $B.search_in_dict(value.ob_type, '__slots__', $B.NULL) !== $B.NULL;
+    return declares(value.ob_type, '__slots__') !== $B.NULL;
 };
 
 // The two Python sets, asked by class the way the dict above is. Anything else
@@ -1807,11 +1855,17 @@ function pyCall(fn, where, lineOffset = 0, arity = Infinity) {
 // a strategy object and the third shape of *callable in Python*. Answers with
 // the `__call__` it found, since that is what carries the signature.
 //
-// Asked of the class chain, never of the instance: `search_in_dict` reads the
-// class dictionaries and their bases, so no getter of the author's runs while a
-// value is merely being converted. Measured against CPython on the same
-// question — a plain instance, a list, a dict and a str all answer no, and a
-// class that defines `__call__` answers yes.
+// Asked of the class chain, never of the instance: `declares` reads the class
+// dictionaries of the MRO, so no getter of the author's runs while a value is
+// merely being converted. Measured against CPython on the same question — a
+// plain instance, a list, a dict and a str all answer no, and a class that
+// defines `__call__` answers yes.
+//
+// The chain is the word that was missing. This line asked `search_in_dict`
+// directly, which reads one dictionary: `class Strategy: __call__` was callable
+// and `class Derived(Strategy): pass` was not, at all five boundaries at once —
+// argument, option, export, mapping, config — and nothing said so, since what
+// arrives is an object JavaScript simply cannot call.
 //
 // A **class** is excluded on purpose, and the exclusion is not decorative:
 // measured, `type` *does* carry `__call__` in Brython, so without this line
@@ -1825,7 +1879,7 @@ const callDescriptor = (value) => {
     if (value === null || typeof value !== 'object' || value.ob_type === undefined) return null;
     if (pyClass(value) || boundMethod(value)) return null;
 
-    const found = $B.search_in_dict(value.ob_type, '__call__', $B.NULL);
+    const found = declares(value.ob_type, '__call__');
 
     return found === $B.NULL ? null : found;
 };
@@ -2238,7 +2292,18 @@ export function pyModule(name) {
                 const namespace = globalThis.__BRYTHON__.imported[name];
                 const member = namespace === undefined ? undefined : namespace[key];
 
-                if (typeof member !== 'function') return member;
+                // Callable in Python, which is the question every boundary that
+                // promises to adapt a callback asks, and the one this site was
+                // still answering with `typeof`. A module publishing
+                // `fade = Fades(0.3).run` — an object configured once, its
+                // method named by the directive — handed Svelte a value it
+                // cannot call, and so did a callable instance and a
+                // classmethod, for a body that worked the moment it was
+                // written as a `def`. Four shapes out of six, at the one
+                // crossing the other passes never visited.
+                const found = declared(member);
+
+                if (found === null && typeof member !== 'function') return member;
 
                 let wrapped = directives.get(member);
 
@@ -2248,13 +2313,21 @@ export function pyModule(name) {
                     // options)`, and `def typewriter(node, params)` refuses the
                     // third. A `def` written in the component is trimmed by its
                     // own wrapper, which is why it worked and this did not.
-                    const infos = member.$function_infos;
-                    const arity = Array.isArray(infos) ? (infos[8] ? Infinity : infos[10]) : Infinity;
-                    const where = Array.isArray(infos) ? `${infos[2]}() — ${infos[3]}` : `${name}.${key}()`;
+                    //
+                    // `declared` reads the same three things this site used to
+                    // read by hand, for every shape rather than for one: the
+                    // receiver is bound, the signature is read through
+                    // `$js_func`, and `self` is not counted among the
+                    // arguments. It answers null for a function JavaScript
+                    // built, which then keeps the reading it always had — no
+                    // signature, so no trim.
+                    const called = found === null ? member : found.fn;
+                    const arity = found === null ? Infinity : found.arity;
+                    const where = found === null ? `${name}.${key}()` : found.where;
 
                     wrapped = (...args) => {
                         try {
-                            return pyNumbers(member(...args.slice(0, arity)));
+                            return pyNumbers(called(...args.slice(0, arity)));
                         } catch (error) {
                             throw pyError(error, where);
                         }

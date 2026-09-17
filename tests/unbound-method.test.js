@@ -34,14 +34,19 @@ describe('a mutation written through the type', () => {
         expect(read()).toBe('[2]');
     });
 
-    // Not covered, and measured rather than assumed: `add = list.append` hands
-    // back a **method descriptor**, an object and not a function, so the wrapper
-    // the bound path uses does not fit it. Wrapping it in one anyway was tried
-    // and turned the two tests above red as well — the call interception reads
-    // the attribute through `$getattr` itself and was then handed the wrapper.
+    // The neighbour this file used to call uncoverable: `add = list.append`
+    // hands back a **method descriptor**, an object and not a function, and the
+    // wrapper the bound path uses does not fit it — wrapping it in one anyway
+    // turned the two tests above red, since the call interception reads the
+    // attribute through `$getattr` itself and was then handed the wrapper.
     //
-    // `add(xs, 3)` therefore mutates without notifying, as it did before. The
-    // shape the audit measured, `list.append(xs, 2)`, is the one above.
+    // It is covered since, by a wrapper that takes its target from the first
+    // argument at the call rather than from a receiver it does not have, and by
+    // calling the descriptor through Python's own protocol. The limit was a
+    // limit of one attempt, not of the shape. `tests/type-mutator.test.js` holds
+    // it, and this paragraph stays because the sentence it replaces stood here
+    // for a fortnight, saying *measured* about something that had stopped being
+    // true.
 
     test('and the two spellings compose', () => {
         const { read, click } = setup();

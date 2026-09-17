@@ -91,6 +91,20 @@ describe('a slotted instance crossing to JavaScript', () => {
         expect((await mod()).inherited()).toEqual({ rows: [1] });
     });
 
+    // The subclass above declares `__slots__ = ()`; this one declares nothing,
+    // and that is a different object. Python gives it an instance `__dict__`
+    // beside the slot it inherits, so the walk found the dict, read it, and
+    // handed over `{}` — the author's field gone, and valid JSON on the other
+    // side to say so.
+    //
+    // The class is asked for what it declares, and the question was put to one
+    // dictionary while its comment claimed the chain. It is put to the chain
+    // now, which is also what made `class Derived(Strategy): pass` uncallable
+    // everywhere — see `tests/callable-matrix.test.js`.
+    test('and so is one inherited by a subclass that declares nothing', async () => {
+        expect((await mod()).silent()).toEqual({ rows: [1] });
+    });
+
     // `__slots__` naming `__dict__` keeps both kinds of storage, and both are
     // the author's data.
     test('an instance with slots and a dict hands over both', async () => {
