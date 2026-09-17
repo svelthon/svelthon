@@ -143,6 +143,24 @@ describe('a callable instance', () => {
     });
 });
 
+// And what a JavaScript caller reads of it: a log, a stack, a library that
+// dispatches on `fn.name`, and this project's own refusals.
+//
+// One Python `def` answered `plain` at the top level of a module — where the
+// compiler emits `const plain = …` and JavaScript names the function after the
+// binding — and `""` from inside a list, from inside a mapping, and from every
+// wrapper this file builds, since a function expression returned from a function
+// is nameless. Same function, different routes, different names.
+//
+// Read off `$function_infos` and not off `fn.name`: a module's functions cross
+// through `pyBoundary` first, whose wrapper is named after a local of
+// `runtime.js`, so the obvious source answered `wrapped` for all of them.
+describe('the name a JavaScript caller reads', () => {
+    test.for(POSITIONS)('is the one Python recorded, %s', ([, reach]) => {
+        expect(reach('fn').name).toBe('fn');
+    });
+});
+
 // A neighbour decides for nobody: the callback is adapted and the number beside
 // it stays a number. It is the half that kept working while the callback did
 // not, which is what made the failure quiet enough to survive fifteen passes.

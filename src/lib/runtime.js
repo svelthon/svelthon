@@ -1766,7 +1766,13 @@ export function pyNumbers(value) {
             // anything `declared` does not recognise.
             const wrapped = pyHandler(one);
 
-            replacement = (...args) => wrapped(...args.map(inbound));
+            // Named after what it wraps, like the two wrappers above: a callback
+            // a framework keeps is exactly the one somebody logs.
+            replacement = Object.defineProperty(
+                (...args) => wrapped(...args.map(inbound)),
+                'name',
+                { value: wrapped.name, configurable: true }
+            );
         } else continue;
 
         if (out === value) out = shallow(value);
@@ -1823,8 +1829,13 @@ export function pyNumbers(value) {
 // trimmed to the signature, which is what `def load():` beside `def load(event):`
 // has always been allowed to mean.
 
+// A wrapper's name, out of the label its builder already carries. Every `where`
+// in this file is either `name() — file`, which `declared` writes, or the name of
+// an export; both leave the right word in front.
+const nameOf = (where) => where.split(' — ')[0].replace(/\(\)$/, '');
+
 function pyCall(fn, where, lineOffset = 0, arity = Infinity) {
-    return (...args) => {
+    const wrapper = (...args) => {
         try {
             const given = args.slice(0, arity).map(pyArg);
             const result = scheduleAsync(fn(...given), where, lineOffset);
@@ -1834,6 +1845,30 @@ function pyCall(fn, where, lineOffset = 0, arity = Infinity) {
             throw pyError(error, where, lineOffset);
         }
     };
+
+    // The name a JavaScript caller reads: in a log, in a stack, in a library
+    // that dispatches on it, and in this project's own refusals. A function
+    // expression carries the name of the binding it is assigned to and nothing
+    // else, so one Python `def` answered `plain` at the top level of a module —
+    // where the compiler emits `const plain = …` — and `""` from inside a list,
+    // for the same function. The message that had to say *what* it was refusing
+    // was the first consumer to notice, and it will not be the last.
+    //
+    // What Python recorded first, because that is the author's word, and it is
+    // read off `$function_infos` rather than off `fn.name`: a module's functions
+    // cross through `pyBoundary`, whose wrapper is named after a local of this
+    // file, so `fn.name` answered `wrapped` for every one of them.
+    //
+    // The label otherwise, which is what the two shapes arriving through a
+    // closure have — `Box.save` for a bound method, `Handler.__call__` for a
+    // callable instance — and, for anything published inside a container, the
+    // name of the export it was published under.
+    const infos = fn.$function_infos;
+
+    return Object.defineProperty(wrapper, 'name', {
+        value: (Array.isArray(infos) && infos[2]) || nameOf(where),
+        configurable: true
+    });
 }
 
 // What Python really handed over, and what it declares. The layout is Brython's
@@ -2389,13 +2424,20 @@ export function pyModule(name) {
                     const arity = found === null ? Infinity : found.arity;
                     const where = found === null ? `${name}.${key}()` : found.where;
 
-                    wrapped = (...args) => {
-                        try {
-                            return pyNumbers(called(...args.slice(0, arity)));
-                        } catch (error) {
-                            throw pyError(error, where);
-                        }
-                    };
+                    // Named like every other wrapper this file builds, and for
+                    // the same reason: what a JavaScript caller reads of a
+                    // Python function must not depend on the route it took.
+                    wrapped = Object.defineProperty(
+                        (...args) => {
+                            try {
+                                return pyNumbers(called(...args.slice(0, arity)));
+                            } catch (error) {
+                                throw pyError(error, where);
+                            }
+                        },
+                        'name',
+                        { value: nameOf(where), configurable: true }
+                    );
 
                     directives.set(member, wrapped);
                 }
