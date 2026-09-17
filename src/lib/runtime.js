@@ -493,19 +493,38 @@ function installMutationTracking($B) {
         }
     };
 
-    // What an attribute holds after a write, read off the object rather than
-    // asked of it. Falls back to the value that was written, which is the truth
-    // whenever the object keeps it somewhere this cannot see.
-    const stored = (obj, attr, value) => {
+    // What a write left behind, asked of the object rather than of the name it
+    // was given.
+    //
+    // The first repair looked up the attribute that was written, which covers a
+    // `__setattr__` that normalises its value — `object.__setattr__(self, name,
+    // list(value))` — and not one that stores it under a name of its own:
+    // `self._rows` for a written `rows` is the ordinary private-field spelling,
+    // and the list the object holds got no link while the one that came in did.
+    // Asking for one name could never answer that, so the object is asked what
+    // it holds now.
+    //
+    // Three steps, and each answers something the others cannot. `adopt` links
+    // the storage in one hop and scans the slots, which is the same walk `mark`
+    // does. That link alone is not enough: a storage dictionary walks its own
+    // entries when it is *first* marked, so a second write into it reaches
+    // nobody — hence the walk of the storage itself. And the value that came in
+    // stays linked, because an object may keep it somewhere neither of the two
+    // can see, which is what the fallback has always been.
+    //
+    // All of it is idempotent: `inherit` keeps one parent per child and `mark`
+    // is a WeakMap lookup away. It runs only for an object under watch, which is
+    // the guard the caller already holds.
+    const rewalk = (obj, value) => {
+        adopt(obj);
+
         const attributes = ownAttributes(obj);
 
-        if (attributes !== null && typeof attributes === 'object' && attr in attributes) {
-            return attributes[attr];
+        if (attributes !== null && typeof attributes === 'object' && MARKS.has(attributes)) {
+            adopt(attributes);
         }
 
-        const slot = `${SLOT}${attr}`;
-
-        return slot in obj ? obj[slot] : value;
+        inherit(obj, value);
     };
 
     // `box.value = 1` and `del box.value`. Brython compiles an attribute write
@@ -537,11 +556,8 @@ function installMutationTracking($B) {
                     //
                     // Read off the instance's own storage, never through
                     // `$getattr`: a property of the author's must not run
-                    // because something was written. The two storages are the
-                    // ones `adopt` already knows, an instance dictionary and a
-                    // slot, and anything else falls back to the argument, which
-                    // is what this line did before.
-                    inherit(obj, stored(obj, attr, value));
+                    // because something was written.
+                    rewalk(obj, value);
                     MARKS.get(obj)();
                 }
             }
@@ -2032,18 +2048,59 @@ function declared(value) {
     // reassigned on the class after this wrapper was built.
     const self = method !== null ? method.im_self : value;
 
+    // `self` is not one of the arguments a caller counts, except where there is
+    // none to count: a static `__call__` declares exactly what it takes.
+    const receiver = stat === null ? 1 : 0;
+    const arity = infos[8] ? Infinity : infos[10] - receiver;
+
+    if (method !== null) {
+        return { fn: (...args) => fn(self, ...args), where, arity, origin: fn, self };
+    }
+
+    // The instance, whose call is looked up **at every call** and whose contract
+    // was read once.
+    //
+    // The paragraph above says `$B.$call` is right for a `__call__` reassigned on
+    // the class after this wrapper was built, and it was right about the body and
+    // wrong about the arguments: `Strategy.__call__ = changed` ran the new body
+    // with the old signature's trim, so the argument the new one needs had
+    // already been sliced off. Python answered 5 and the same callback from
+    // JavaScript raised about a missing parameter.
+    //
+    // So the two halves move together. `Infinity` goes upward, since the wrapper
+    // that would trim is built once, and the trim happens here instead, against
+    // whatever the class holds now. The wrapper's identity is untouched, which is
+    // what a registry that holds a callback needs.
     return {
-        fn:
-            method !== null
-                ? (...args) => fn(self, ...args)
-                : (...args) => globalThis.__BRYTHON__.$call(value, ...args),
+        fn: (...args) => {
+            const now = liveArity(value);
+
+            return globalThis.__BRYTHON__.$call(value, ...args.slice(0, now));
+        },
         where,
-        // `self` is not one of the arguments a caller counts, except where there
-        // is none to count: a static `__call__` declares exactly what it takes.
-        arity: infos[8] ? Infinity : infos[10] - (stat === null ? 1 : 0),
+        arity: Infinity,
         origin: fn,
         self
     };
+}
+
+// What an instance's `__call__` declares at this moment. Null answers, and a
+// shape with no signature at all, both mean *take everything*: the call is about
+// to go through Python's own protocol, which is the authority on whether it
+// works.
+function liveArity(value) {
+    const call = callDescriptor(value);
+
+    if (call === null) return Infinity;
+
+    const stat = call.sm_callable !== undefined ? call.sm_callable : null;
+    const held = stat ?? call;
+    const fn = typeof held.$js_func === 'function' ? held.$js_func : held;
+    const infos = fn.$function_infos;
+
+    if (!Array.isArray(infos) || (!infos[8] && typeof infos[10] !== 'number')) return Infinity;
+
+    return infos[8] ? Infinity : infos[10] - (stat === null ? 1 : 0);
 }
 
 // What to call a Python function in a message, which neither `__name__` nor

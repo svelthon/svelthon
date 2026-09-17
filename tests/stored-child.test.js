@@ -20,7 +20,13 @@ import SetterCopy from './fixtures/SetterCopy.svelte';
 
 describe.for([
     ['stores a copy of what it is given', 'copied'],
-    ['stores the value itself', 'direct']
+    ['stores the value itself', 'direct'],
+    // And the other half of the same question, a pass later: a setter may store
+    // what it made under a name of its own, which is what a private field is.
+    // Looking the written name up could never answer that one, so the object is
+    // asked what it holds rather than what it was called.
+    ['stores its copy under another name', 'renamed'],
+    ['stores the value under another name', 'renamed_direct']
 ])('a setter that %s', ([, key]) => {
     test('repaints when the stored child is mutated', () => {
         const target = document.body.appendChild(document.createElement('div'));

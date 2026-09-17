@@ -18,14 +18,18 @@
 # And each box is bound by an assignment of its own: a tuple target binds names
 # without declaring state, so a factory returning four names would leave the
 # paragraph subscribed to nothing at all. Measured, by writing it that way first.
-def make(copy):
+def make(copy, under=None):
     children = []
 
     class Box:
         def __setattr__(self, name, value):
             child = list(value) if copy else value
             children.append(child)
-            object.__setattr__(self, name, child)
+            # `under` is the other half of the same question: a setter may store
+            # what it made under a name of its own, which is what a private
+            # field is, and asking for the name that was *written* cannot find
+            # it.
+            object.__setattr__(self, under or name, child)
 
         def __str__(self):
             return str(children[0]) if children else "[]"
@@ -44,6 +48,15 @@ def make(copy):
 
 copied = make(True)
 direct = make(False)
+renamed = make(True, "_rows")
+renamed_direct = make(False, "_rows")
+
+BOXES = {
+    "copied": copied,
+    "direct": direct,
+    "renamed": renamed,
+    "renamed_direct": renamed_direct,
+}
 
 
 # The model, read from the test rather than from the page: a paragraph holding a
@@ -51,7 +64,7 @@ direct = make(False)
 # stale paragraph would say nothing about the state.
 @export
 def model(which):
-    return copied.snapshot() if which == "copied" else direct.snapshot()
+    return BOXES[which].snapshot()
 </script>
 
 <button data-k="install-copied" onclick={lambda: copied.install()}>install</button>
@@ -61,3 +74,11 @@ def model(which):
 <button data-k="install-direct" onclick={lambda: direct.install()}>install</button>
 <button data-k="mutate-direct" onclick={lambda: direct.mutate()}>mutate</button>
 <p data-k="direct">{direct}</p>
+
+<button data-k="install-renamed" onclick={lambda: renamed.install()}>install</button>
+<button data-k="mutate-renamed" onclick={lambda: renamed.mutate()}>mutate</button>
+<p data-k="renamed">{renamed}</p>
+
+<button data-k="install-renamed_direct" onclick={lambda: renamed_direct.install()}>install</button>
+<button data-k="mutate-renamed_direct" onclick={lambda: renamed_direct.mutate()}>mutate</button>
+<p data-k="renamed_direct">{renamed_direct}</p>

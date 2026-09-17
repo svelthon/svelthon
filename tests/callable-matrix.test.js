@@ -166,6 +166,29 @@ describe('the name a JavaScript caller reads', () => {
     });
 });
 
+// An instance is called through Python's own protocol, so a `__call__` replaced
+// on the class after the crossing is the body that runs. Its *signature* was read
+// once, at the crossing, and the wrapper went on cutting the arguments to the old
+// one: the new body was handed one argument fewer than it declares, and the same
+// call from Python worked. One object, two contracts.
+//
+// The witness is the export itself, taken before the replacement and used after:
+// a registry holding a callback keeps the function it was given, so the repair
+// may not hand out a new one.
+describe('an instance whose __call__ is replaced after it crossed', () => {
+    test('runs the new body with the new signature', () => {
+        const kept = mod.changing;
+
+        expect(kept()).toBe(0.25);
+
+        mod.replace_call();
+
+        expect(mod.call_from_python(0.125)).toBe(0.25);
+        expect(kept(0.125)).toBe(0.25);
+        expect(mod.changing).toBe(kept);
+    });
+});
+
 // A static `__call__` declares no receiver, so there is no `self` to take out of
 // its signature. Trimming one anyway is the defect that trades for the one above:
 // the instance would be callable and its only argument would be eaten.

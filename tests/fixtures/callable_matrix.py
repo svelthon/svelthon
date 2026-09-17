@@ -26,6 +26,9 @@ __all__ = [
     "labelled",
     "holder",
     "stacked",
+    "changing",
+    "replace_call",
+    "call_from_python",
     "reads_its_own",
 ]
 
@@ -147,6 +150,29 @@ holder = {"inner": labelled}
 # routes and a name taken from the container would be a different wrong word in
 # each.
 stacked = [labelled]
+
+
+class Changing:
+    # A strategy whose call is replaced at run time, which is what a class
+    # attribute is for. Python looks `__call__` up at every call, so the new body
+    # is the one that runs — and the contract read once at the crossing was the
+    # old one.
+    def __call__(self):
+        return VALUE
+
+
+changing = Changing()
+
+
+def replace_call():
+    def taking(self, half):
+        return half * 2
+
+    Changing.__call__ = taking
+
+
+def call_from_python(half):
+    return changing(half)
 
 
 def reads_its_own():
