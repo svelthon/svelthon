@@ -1834,7 +1834,7 @@ export function pyNumbers(value) {
 // an export; both leave the right word in front.
 const nameOf = (where) => where.split(' — ')[0].replace(/\(\)$/, '');
 
-function pyCall(fn, where, lineOffset = 0, arity = Infinity) {
+function pyCall(fn, where, lineOffset = 0, arity = Infinity, named) {
     const wrapper = (...args) => {
         try {
             const given = args.slice(0, arity).map(pyArg);
@@ -1854,19 +1854,39 @@ function pyCall(fn, where, lineOffset = 0, arity = Infinity) {
     // for the same function. The message that had to say *what* it was refusing
     // was the first consumer to notice, and it will not be the last.
     //
-    // What Python recorded first, because that is the author's word, and it is
-    // read off `$function_infos` rather than off `fn.name`: a module's functions
-    // cross through `pyBoundary`, whose wrapper is named after a local of this
-    // file, so `fn.name` answered `wrapped` for every one of them.
+    // The two own properties every JavaScript function has, and both of them
+    // were saying something about the framework rather than about the call.
     //
-    // The label otherwise, which is what the two shapes arriving through a
-    // closure have — `Box.save` for a bound method, `Handler.__call__` for a
-    // callable instance — and, for anything published inside a container, the
-    // name of the export it was published under.
+    // **`name`**: what Python recorded, read off `$function_infos` rather than
+    // off `fn.name`, since a module's functions cross through `pyBoundary`,
+    // whose wrapper is named after a local of this file — `fn.name` answered
+    // `wrapped` for every one of them. `named` is what a caller holding the
+    // `declared` answer passes: the callable's own label, `Box.save` or
+    // `Handler.__call__`, where `where` is the *export's* label. Without it a
+    // callable published inside a dict was named after **the dict**, so
+    // `{"h": handler}` reported `holder` — a name taken from wherever the walk
+    // began rather than from the value.
+    //
+    // **`length`** is left alone, and the reason is worth writing down because
+    // the other choice was tried and measured. Reporting the arity Python
+    // declares reads better — `def three(a, b, c)` answering 3 — but only this
+    // wrapper could do it: a module's own functions are handed over by the
+    // compiler, which emits a rest parameter and cannot pay a `defineProperty`
+    // per function in every generated module. `three` would then answer 0 at the
+    // top level and 3 from inside a list, which is exactly the defect the name
+    // above was repaired for. 0 everywhere is also what JavaScript says of a
+    // function that takes a rest parameter, which is what this one is.
+    //
+    // So an author's own `self.length` does not survive the crossing, and
+    // neither does `self.name`: they are fields, and a callable crosses as its
+    // call, not as its fields. What is new is that the two are not *empty* on
+    // the other side — every JavaScript function has them — so they answer for
+    // the call instead. That is a collision between two languages' idea of what
+    // a function carries, and it is a limit, not a repair to make.
     const infos = fn.$function_infos;
 
     return Object.defineProperty(wrapper, 'name', {
-        value: (Array.isArray(infos) && infos[2]) || nameOf(where),
+        value: named ?? ((Array.isArray(infos) && infos[2]) || nameOf(where)),
         configurable: true
     });
 }
@@ -2184,7 +2204,11 @@ export function jsCall(value) {
 const adapting = (where, lineOffset) => (one) => {
     const found = declared(one);
 
-    return found === null ? one : pyCall(found.fn, where, lineOffset, found.arity);
+    // The callable's own label for the name, the export's for the position: a
+    // diagnostic says where the value was published, a log says what was called.
+    return found === null
+        ? one
+        : pyCall(found.fn, where, lineOffset, found.arity, nameOf(found.where));
 };
 
 function exported(one, where, lineOffset, made) {
@@ -2199,7 +2223,9 @@ function exported(one, where, lineOffset, made) {
     // crosses as data, which is to say as itself.
     const found = callable(one) ? declared(one) : null;
 
-    if (found !== null) return pyCall(found.fn, where, lineOffset, found.arity);
+    if (found !== null) {
+        return pyCall(found.fn, where, lineOffset, found.arity, nameOf(found.where));
+    }
 
     // Data, and the rule goes down with it.
     //

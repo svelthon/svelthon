@@ -161,6 +161,36 @@ describe('the name a JavaScript caller reads', () => {
     });
 });
 
+// And the name belongs to the callable, not to where it was written.
+//
+// The label the export carries is the *position* — `holder — src/m.py`, which is
+// what a diagnostic should name — and it stood in as the function's name when
+// nothing else answered. So `{"inner": handler}` reported `holder`: a name taken
+// from wherever the walk began, on a value that had one of its own. A log read
+// the name of a dict the author never asked about.
+describe('a callable whose class writes `name` and `length`', () => {
+    test.for([
+        ['published on its own', () => mod.labelled],
+        ['published inside a mapping', () => mod.holder.inner],
+        ['published inside a list', () => mod.stacked[0]]
+    ])('is named after the call it is, %s', ([, reach]) => {
+        expect(reach().name).toBe('Labelled.__call__');
+    });
+
+    // The limit, and it is the one the fields above already state: a callable
+    // crosses as its call. What is particular to these two is that they are not
+    // *empty* on the other side — every JavaScript function owns them — so they
+    // answer for the call instead of for the author. Two languages disagreeing
+    // about what a function carries is not a thing to repair here; Python still
+    // has both, which is the line that says so.
+    test('while the author keeps both, in Python', () => {
+        expect(mod.labelled.name).not.toBe('mine');
+        expect(mod.labelled.length).toBe(0);
+
+        expect(mod.reads_its_own()).toEqual(['mine', 3]);
+    });
+});
+
 // A neighbour decides for nobody: the callback is adapted and the number beside
 // it stays a number. It is the half that kept working while the callback did
 // not, which is what made the failure quiet enough to survive fifteen passes.

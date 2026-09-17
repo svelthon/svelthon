@@ -20,6 +20,10 @@ __all__ = [
     "as_argument",
     "as_option",
     "as_listed",
+    "labelled",
+    "holder",
+    "stacked",
+    "reads_its_own",
 ]
 
 VALUE = 0.25
@@ -93,6 +97,34 @@ tupled = tuple(listed)
 # And one level down on each side, which is where a registry really lives: the
 # callables under a name, and a mapping a mapping holds.
 nested = {"handlers": listed, "inner": mapped, "deep": [listed]}
+
+
+class Labelled:
+    # The two words a JavaScript function already owns, written as ordinary
+    # Python attributes. `name` is about the commonest attribute there is.
+    def __init__(self):
+        self.name = "mine"
+        self.length = 3
+
+    def __call__(self):
+        return VALUE
+
+
+labelled = Labelled()
+
+# The same object one level down, where the name used to be taken from the
+# container rather than from the value.
+holder = {"inner": labelled}
+
+# And in a list, which is the other walk: the two carry the rule by different
+# routes and a name taken from the container would be a different wrong word in
+# each.
+stacked = [labelled]
+
+
+def reads_its_own():
+    # Python's side of the limit: the fields are untouched where they live.
+    return [labelled.name, labelled.length]
 
 
 def as_argument(key):
