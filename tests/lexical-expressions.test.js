@@ -31,6 +31,16 @@ describe('an expression whose brace is not a brace', () => {
         expect(read('tripled')).toBe('a " } b');
     });
 
+    // An f-string is two grammars in one literal, and since Python 3.12 the code
+    // in a field may reuse the delimiter of the string holding it.
+    test('an f-string field may reuse the delimiter around it', () => {
+        expect(read('reused')).toBe('}');
+    });
+
+    test('and alternating delimiters keep working', () => {
+        expect(read('alternating')).toBe('}');
+    });
+
     test('while an ordinary string was already safe', () => {
         expect(read('quoted')).toBe('a } b');
     });

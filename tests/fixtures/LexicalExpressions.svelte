@@ -9,5 +9,12 @@ tag = "x"
 <!-- A brace inside a triple-quoted string that also holds a lone quote. -->
 <p data-k="tripled">{"""a " } b"""}</p>
 
+<!-- An f-string whose field reuses the delimiter of the string holding it,
+     which Python has allowed since 3.12. -->
+<p data-k="reused">{f"{ "}" }"}</p>
+
+<!-- The same shape with alternating delimiters, which already worked. -->
+<p data-k="alternating">{f"{'}'}"}</p>
+
 <!-- The witness: an ordinary string, which the scanner already protected. -->
 <p data-k="quoted">{"a } b"}</p>

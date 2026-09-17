@@ -9,6 +9,11 @@ __all__ = [
     "sync_original",
     "sync_alias",
     "count",
+    "bare",
+    "bare_alias",
+    "bare_mapping",
+    "spread",
+    "spread_alias",
 ]
 
 calls = []
@@ -32,6 +37,23 @@ sync_alias = sync_original
 # The witness for a function JavaScript built, published under a Python name,
 # lives in `exported_js.py`: `marked = stamp(_work)`, whose mark
 # `module-exports.test.js` reads on the other side. It is not repeated here.
+
+
+def bare():
+    # Declares nothing, and a consumer hands it an event anyway. The boundary's
+    # contract is to trim the call to the signature.
+    return 42
+
+
+bare_alias = bare
+bare_mapping = {"run": bare}
+
+
+def spread(*args):
+    return len(args)
+
+
+spread_alias = spread
 
 
 def count():

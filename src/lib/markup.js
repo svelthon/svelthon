@@ -31,12 +31,69 @@ export function atomic(source, at) {
     // lone quote is text.
     const fence = source.startsWith(c.repeat(3), at) ? c.repeat(3) : c;
 
+    // An f-string is two grammars in one literal: text, and code inside `{…}`.
+    // Since Python 3.12 that code may reuse the delimiter of the string holding
+    // it — `f"{ "}" }"` is valid — so the quote that opens the inner string was
+    // taken for the end of the outer one, and the brace it guards ended the
+    // template's expression. The fields are followed, and a quote met inside one
+    // opens a string of its own, by the same function.
+    const formatted = interpolated(source, at);
+    let depth = 0;
+
     for (let i = at + fence.length; i < source.length; i++) {
-        if (source[i] === '\\') i++;
-        else if (source.startsWith(fence, i)) return i + fence.length - at;
+        if (source[i] === '\\') {
+            i++;
+            continue;
+        }
+
+        if (formatted) {
+            // `{{` and `}}` are a literal brace, not a field.
+            if (source.startsWith('{{', i) || source.startsWith('}}', i)) {
+                i++;
+                continue;
+            }
+
+            if (source[i] === '{') {
+                depth++;
+                continue;
+            }
+
+            if (source[i] === '}' && depth > 0) {
+                depth--;
+                continue;
+            }
+
+            if (depth > 0) {
+                const inner = atomic(source, i);
+
+                if (inner > 0) {
+                    i += inner - 1;
+                    continue;
+                }
+            }
+        }
+
+        if (depth === 0 && source.startsWith(fence, i)) return i + fence.length - at;
     }
 
     return source.length - at;
+}
+
+// Whether the quote at `at` opens an f-string, read from the prefix letters
+// before it. Two at most — `rf`, `fr` — and not the tail of a longer name, so
+// the `f` of `def"` is not one.
+function interpolated(source, at) {
+    let i = at - 1;
+    let prefix = '';
+
+    while (i >= 0 && prefix.length < 2 && /[fFrRbBuU]/.test(source[i])) {
+        prefix = source[i] + prefix;
+        i--;
+    }
+
+    if (i >= 0 && /[A-Za-z0-9_]/.test(source[i])) return false;
+
+    return /[fF]/.test(prefix);
 }
 
 // Find the '}' closing the block that opens at `start`, ignoring braces inside

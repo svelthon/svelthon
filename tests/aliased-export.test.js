@@ -20,7 +20,12 @@ import {
     alias,
     sync_original,
     sync_alias,
-    count
+    count,
+    bare,
+    bare_alias,
+    bare_mapping,
+    spread,
+    spread_alias
 } from './fixtures/aliased_export.py';
 
 describe('a function exported under a second name', () => {
@@ -43,5 +48,31 @@ describe('a function exported under a second name', () => {
     test('a synchronous alias converts what it returns', () => {
         expect(sync_alias('x')).toEqual(sync_original('x'));
         expect(sync_alias('x')).toEqual({ rows: [1], tag: 'x' });
+    });
+});
+
+// The signature travels with the function, or it does not travel at all.
+//
+// Trimming a call to what Python declared is the boundary's contract, not
+// Python's rule: it is what lets a framework hand an event to a handler that
+// declares nothing. The name `def` gave a function kept it; the alias and the
+// mapping reached a branch that called `pyCall` without the arity, so `Infinity`
+// meant no trim and the same function raised on the argument it was given.
+describe('a function that declares no parameter', () => {
+    test.for([
+        ['under its own name', () => bare],
+        ['under an alias', () => bare_alias],
+        ['in an exported mapping', () => bare_mapping.run]
+    ])('takes the event a consumer hands it, %s', ([, reach]) => {
+        expect(reach()('event')).toBe(42);
+    });
+
+    // And `*args` keeps taking everything: the trim is the declared arity, not
+    // a cap.
+    test.for([
+        ['under its own name', () => spread],
+        ['under an alias', () => spread_alias]
+    ])('while *args still takes them all, %s', ([, reach]) => {
+        expect(reach()(1, 2, 3)).toBe(3);
     });
 });

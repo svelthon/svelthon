@@ -217,6 +217,12 @@ function installMutationTracking($B) {
     // What a call on a watched container leaves to do, wherever the call came
     // from. `obj` is known watched and `attr` known followed by both callers.
     const afterCall = (obj, attr, result, args) => {
+        // A wrapper may outlive the moment it was made: a mutator taken off an
+        // object that nothing watched yet is wrapped all the same, and the
+        // question of whether anybody cares belongs to the call. An object that
+        // never came under watch pays one lookup and nothing else.
+        if (!MARKS.has(obj)) return;
+
         if (MUTATORS.has(attr)) {
             // A container handed to a mutator is now inside a watched one, so
             // it comes under the same watch. This is the other half of the walk
@@ -336,11 +342,19 @@ function installMutationTracking($B) {
     $B.$getattr = function (obj, attr, ...rest) {
         const result = getattr(obj, attr, ...rest);
 
-        if (obj === null || typeof obj !== 'object' || !MARKS.has(obj)) return result;
+        if (obj === null || typeof obj !== 'object') return result;
 
+        // Wrapped whether or not the object is watched **yet**. The decision
+        // used to be taken here, at the read, and never revisited: a factory
+        // that hands out its state and an operation on it — `values, add =
+        // make()` — gives the operation away before the state has a name, so the
+        // list became reactive afterwards and `add(1)` told nobody, for ever.
+        // `afterCall` asks at the call instead, which is the moment that knows.
         if (FOLLOWED.has(attr) && typeof result === 'function') {
             return notifying(obj, attr, result);
         }
+
+        if (!MARKS.has(obj)) return result;
 
         // A special method read off a builtin is a `method-wrapper` object and
         // not a function — `rows.__setitem__` kept in a name, then called. It is
@@ -1972,8 +1986,15 @@ export function jsCall(value) {
 // for the mappings that already worked. A bound method takes its receiver and
 // the arity of its own signature, `self` not counted.
 function exported(one, where, lineOffset, made) {
-    if (typeof one === 'function') return pyCall(one, where, lineOffset);
-
+    // One question for every callable shape, and the signature comes with the
+    // answer. The plain-function branch used to call `pyCall` without it, so
+    // `arity` fell back to `Infinity` and the trim that lets a framework hand an
+    // event to a function that declares nothing stopped happening — for the
+    // *same* Python function, published under an alias or in a mapping, while
+    // the name `def` gave it kept the contract.
+    //
+    // `declared` answers null for a function JavaScript built, which then
+    // crosses as data, which is to say as itself.
     const found = callable(one) ? declared(one) : null;
 
     if (found === null) return plainData(one, made);
