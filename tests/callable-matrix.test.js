@@ -56,7 +56,12 @@ const SHAPES = [
     ['a classmethod', 'classbound'],
     ['a staticmethod', 'staticfn'],
     ['a callable instance', 'instance'],
-    ['an instance whose __call__ is inherited', 'inherited']
+    ['an instance whose __call__ is inherited', 'inherited'],
+    // The class dictionary holds the descriptor Brython builds for a
+    // `@staticmethod`, not a function, and the signature is read off the second
+    // one: the instance crossed as an object that JavaScript could not call,
+    // while Python called it perfectly well.
+    ['an instance whose __call__ is a staticmethod', 'fixed']
 ];
 
 const mounted = () => {
@@ -158,6 +163,18 @@ describe('a callable instance', () => {
 describe('the name a JavaScript caller reads', () => {
     test.for(POSITIONS)('is the one Python recorded, %s', ([, reach]) => {
         expect(reach('fn').name).toBe('fn');
+    });
+});
+
+// A static `__call__` declares no receiver, so there is no `self` to take out of
+// its signature. Trimming one anyway is the defect that trades for the one above:
+// the instance would be callable and its only argument would be eaten.
+describe('a static __call__ that takes an argument', () => {
+    test.for([
+        ['published on its own', () => mod.doubling],
+        ['as a value of an exported mapping', () => mod.doublers.inner]
+    ])('receives it, %s', ([, reach]) => {
+        expect(reach()(0.125)).toBe(0.25);
     });
 });
 

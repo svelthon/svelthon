@@ -493,6 +493,21 @@ function installMutationTracking($B) {
         }
     };
 
+    // What an attribute holds after a write, read off the object rather than
+    // asked of it. Falls back to the value that was written, which is the truth
+    // whenever the object keeps it somewhere this cannot see.
+    const stored = (obj, attr, value) => {
+        const attributes = ownAttributes(obj);
+
+        if (attributes !== null && typeof attributes === 'object' && attr in attributes) {
+            return attributes[attr];
+        }
+
+        const slot = `${SLOT}${attr}`;
+
+        return slot in obj ? obj[slot] : value;
+    };
+
     // `box.value = 1` and `del box.value`. Brython compiles an attribute write
     // through one of two entry points depending on the statement, and both have
     // to be covered or the rule would hold only half the time.
@@ -511,7 +526,22 @@ function installMutationTracking($B) {
                 return result;
             } finally {
                 if (obj !== null && typeof obj === 'object' && MARKS.has(obj)) {
-                    inherit(obj, value); // an attribute holding a container is watched too
+                    // What the write *stored*, and not only what it was handed.
+                    // A `__setattr__` of the author's may normalise, copy or
+                    // wrap its argument — `object.__setattr__(self, name,
+                    // list(value))` is an ordinary way to defend an invariant —
+                    // and the watch then went to the list that was passed in
+                    // while the one the object holds got none. Mutating it
+                    // through an alias the program already had notified nobody,
+                    // and the page kept the old row count.
+                    //
+                    // Read off the instance's own storage, never through
+                    // `$getattr`: a property of the author's must not run
+                    // because something was written. The two storages are the
+                    // ones `adopt` already knows, an instance dictionary and a
+                    // slot, and anything else falls back to the argument, which
+                    // is what this line did before.
+                    inherit(obj, stored(obj, attr, value));
                     MARKS.get(obj)();
                 }
             }
@@ -1965,7 +1995,18 @@ function declared(value) {
 
     if (method === null && call === null && typeof value !== 'function') return null;
 
-    const held = method !== null ? method.im_func : (call ?? value);
+    // `@staticmethod def __call__` is kept in the class dictionary as the
+    // descriptor Brython builds for it — `{ob_type, sm_callable}`, the function
+    // under the second name — and this line read it as if it were the function.
+    // The signature test then failed and no adapter was built: Python called the
+    // instance perfectly well and JavaScript was handed an object.
+    //
+    // Unwrapped here rather than in `callDescriptor`, because what travels with
+    // it is the **arity**: a static call takes no receiver, so `self` is not
+    // among the parameters to drop, and dropping one anyway would have traded
+    // this defect for an off-by-one in the next.
+    const stat = call !== null && call.sm_callable !== undefined ? call.sm_callable : null;
+    const held = method !== null ? method.im_func : (stat ?? call ?? value);
     const fn = typeof held.$js_func === 'function' ? held.$js_func : held;
     const infos = fn.$function_infos;
 
@@ -1997,7 +2038,9 @@ function declared(value) {
                 ? (...args) => fn(self, ...args)
                 : (...args) => globalThis.__BRYTHON__.$call(value, ...args),
         where,
-        arity: infos[8] ? Infinity : infos[10] - 1,
+        // `self` is not one of the arguments a caller counts, except where there
+        // is none to count: a static `__call__` declares exactly what it takes.
+        arity: infos[8] ? Infinity : infos[10] - (stat === null ? 1 : 0),
         origin: fn,
         self
     };

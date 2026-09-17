@@ -12,6 +12,9 @@ __all__ = [
     "staticfn",
     "instance",
     "inherited",
+    "fixed",
+    "doubling",
+    "doublers",
     "mapped",
     "order",
     "listed",
@@ -60,6 +63,23 @@ class Strategy:
         return self.factor / 16
 
 
+class Fixed:
+    # `__call__` written as a static method. What the class dictionary holds is
+    # the descriptor Brython builds, not a function, and it declares no receiver:
+    # the two halves the boundary has to read are both different here.
+    @staticmethod
+    def __call__():
+        return VALUE
+
+
+class Doubling:
+    # The same shape with a parameter, which is what says `self` is not silently
+    # taken out of a signature that never had one.
+    @staticmethod
+    def __call__(half):
+        return half * 2
+
+
 class Derived(Strategy):
     # The same object with its `__call__` one class up. Nothing else about it
     # differs, which is what makes it the witness.
@@ -76,6 +96,12 @@ classbound = Holder.built
 staticfn = Holder.made
 instance = Strategy()
 inherited = Derived()
+fixed = Fixed()
+doubling = Doubling()
+
+# Its own container, since every value of `mapped` is the trivial callable the
+# matrix loops over and this one takes an argument.
+doublers = {"inner": doubling}
 
 mapped = {
     "fn": fn,
@@ -84,13 +110,14 @@ mapped = {
     "staticfn": staticfn,
     "instance": instance,
     "inherited": inherited,
+    "fixed": fixed,
 }
 
 
 # The same six in the other container a module publishes. The order is exported
 # beside the list so the test reads the index from here rather than from a second
 # copy of the list of shapes.
-order = ["fn", "bound", "classbound", "staticfn", "instance", "inherited"]
+order = ["fn", "bound", "classbound", "staticfn", "instance", "inherited", "fixed"]
 listed = [mapped[key] for key in order]
 tupled = tuple(listed)
 
