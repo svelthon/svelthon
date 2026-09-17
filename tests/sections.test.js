@@ -72,13 +72,16 @@ describe('the order the sections are assembled in', () => {
     test('the exported wrappers come after init(), so they call something', () => {
         const init = script.indexOf('init(__py);');
 
-        expect(script.indexOf('const bump = (...a) =>')).toBeGreaterThan(init);
+        // `__pyComponent`, and not a wrapper written out by the compiler: the
+        // three call boundaries are one file's business now, so a rule added to
+        // one of them can reach this one.
+        expect(script.indexOf('const bump = __pyComponent(')).toBeGreaterThan(init);
         expect(script.indexOf('export { focus };')).toBeGreaterThan(init);
     });
 
     test('the effects come last, since an effect runs its body on creation', () => {
         const wrappers = Math.max(
-            ...positions(script, ['const bump = (...a) =>', 'export { focus };'])
+            ...positions(script, ['const bump = __pyComponent(', 'export { focus };'])
         );
 
         expect(script.indexOf('$effect(() => {')).toBeGreaterThan(wrappers);

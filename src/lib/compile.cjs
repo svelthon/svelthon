@@ -741,6 +741,8 @@ const RUNTIME = {
     pyBoundary: '__pyBoundary',
     pyNumbers: '__pyNumbers',
     pyCall: '__pyCall',
+    pyComponent: '__pyComponent',
+    pyExpression: '__pyExpression',
     pyExport: '__pyExport',
     jsCall: '__jsCall',
     ticking: '__ticking',
@@ -781,10 +783,17 @@ const arityOf = (args) =>
 // Inside a template expression, and only there, the dot finds a key as well as
 // an attribute: `{pep.title}` reads a dict. The same text in the `<script>`
 // stays plain Python and raises, which is the seam this marks.
-const templateCall = (f, fn) => {
-    const call = `${fn(f.name)}(...a.slice(0, ${f.arity}))`;
-    return f.name.startsWith(EXPR_PREFIX) ? `__inTemplate(() => ${call})` : call;
-};
+// Which wrapper a component's function gets: the runtime holds both, and this
+// says which one. An expression function the markup compiled takes its arguments
+// already Python and runs inside `inTemplate`; everything else here is called by
+// Svelte, with Svelte's values.
+//
+// It used to spell the difference out — the slice, the conversion, the
+// `inTemplate` — and the conversion was missing from one of the two for as long
+// as the line existed: `use:mark={0.5}` handed Python a JavaScript number and
+// `format(value, '.2f')` refused it at mount. A name cannot go out of step with
+// what it names.
+const componentWrapper = (f) => (f.name.startsWith(EXPR_PREFIX) ? '__pyExpression' : '__pyComponent');
 
 // Two of them are bound only where the name is actually read: `props_id`
 // because its value must be computed at the top level rather than lazily, `host`
@@ -1410,8 +1419,9 @@ function preamble(c) {
         // markup, short on purpose. Now that only generated code touches it,
         // short is exactly wrong, and `py` is a name an author may want.
         `import { ${runtimeAliases([
-            'bind', '__pybridge', 'track', 'follow', 'pyError', 'schedule', 'inTemplate',
-            'pyEvent', 'plainData', 'pyArg', 'pyData', 'pyBoundary', 'pyNumbers', 'jsCall',
+            'bind', '__pybridge', 'track', 'follow', 'pyError',
+            'pyEvent', 'plainData', 'pyArg', 'pyData', 'pyBoundary', 'pyComponent', 'pyExpression',
+            'jsCall',
             'ticking', 'pyBind', 'pyModule', 'NONE', 'helpers',
             ...(c.store ? ['registerModule'] : SUBSCRIBING(c) ? ['unsubscribe'] : []),
             // Three that keep the spelling the markup pass emits.
@@ -1688,10 +1698,14 @@ function instanceExports(c) {
         // policy (jsobj2pyobj on demand), enough to make handlers work.
         // An uncaught Python exception arrives in JS without message or stack;
         // pyError fills them in, naming the function and the file it came from.
+        // `pyComponent`, and not the wrapper written out here. It was the last
+        // boundary this file spelled itself, and a rule added to the runtime's
+        // own could not reach a template literal: the conversion of an action's
+        // arguments landed at two of the three wrappers and stopped here.
         ...c.funcs.map(
             (f) =>
-                `const ${f.name} = (...a) => { try { return __pyNumbers(__schedule(${templateCall(f, fn)}, ${JSON.stringify(`${f.name}() — ${c.source}`)}, ${c.lineOffset})); }` +
-                ` catch (err) { throw __pyError(err,${JSON.stringify(`${f.name}() — ${c.source}`)}, ${c.lineOffset}); } };`
+                `const ${f.name} = ${componentWrapper(f)}((a) => ${fn(f.name)}(...a), ` +
+                `${JSON.stringify(`${f.name}() — ${c.source}`)}, ${c.lineOffset}, ${f.arity});`
         ),
         // What a parent holding `bind:this` can call. Svelte gathers whatever an
         // instance script exports into `$$exports` and hands that object back,
@@ -1845,7 +1859,7 @@ function plainPreamble(c) {
     return [
         `import { init as __init } from ${JSON.stringify(virtualId(c.name))};`,
         `import { ${runtimeAliases([
-            'bind', '__pybridge', 'pyCall', 'pyError', 'scheduleAsync', 'plainData', 'pyArg',
+            'bind', '__pybridge', 'pyCall', 'pyError', 'plainData', 'pyArg',
             'pyData', 'pyExport', 'pyBoundary', 'jsCall', 'ticking', 'pyBind', 'NONE', 'helpers',
             'registerModule', 'group'
         ])} } from 'svelthon/runtime';`,

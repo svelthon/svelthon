@@ -72,6 +72,27 @@ describe('a directive naming a module', () => {
     test('runs the action it names', () => expect(setup()('acted')).toBe('acted'));
 
     test('and runs it with a value too', () => expect(setup()('valued')).toBe('acted'));
+
+    // And the value arrives as Python.
+    //
+    // An action is called by Svelte, with Svelte's values, and both wrappers —
+    // the module's and the component's own — trimmed the arguments to the arity
+    // and handed them over raw. So `use:mark={0.5}` gave Python a JavaScript
+    // number, `format(value, '.2f')` answered *non-empty format string passed to
+    // object.__format__*, and the component failed at mount.
+    //
+    // An integer beside it is why it went unseen for so long: 1 and 0.5 are the
+    // same kind of value to JavaScript and two different things to Brython, so
+    // an action that only ever took whole numbers worked.
+    test.for([
+        ['from a module', 'module'],
+        ['written in the component', 'local']
+    ])('a fractional parameter reaches an action %s', ([, which]) => {
+        const read = setup();
+
+        expect(read(`${which}-half`)).toBe('0.50');
+        expect(read(`${which}-whole`)).toBe('1.00');
+    });
 });
 
 // The boundary itself, called the way Svelte calls it rather than through a

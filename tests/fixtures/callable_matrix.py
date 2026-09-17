@@ -26,6 +26,8 @@ __all__ = [
     "made",
     "made_later",
     "made_inside",
+    "made_twice",
+    "shared_rows",
     "labelled",
     "holder",
     "stacked",
@@ -195,6 +197,22 @@ async def made_later(key):
 
 def made_inside(key):
     return {"hook": mapped[key], "duration": 0.5}
+
+
+def shared_rows():
+    # The control for the line above, in data: two references to one list come
+    # back as one array, and that is the graph rule the callbacks had lost.
+    rows = []
+
+    return [rows, rows]
+
+
+def made_twice(key):
+    # One Python value, held twice: what comes back has to be one JavaScript
+    # function twice, the way two references to one list come back as one array.
+    one = mapped[key]
+
+    return [one, one]
 
 
 def as_argument(key):

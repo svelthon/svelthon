@@ -167,6 +167,49 @@ describe('a callable instance', () => {
 // Read off `$function_infos` and not off `fn.name`: a module's functions cross
 // through `pyBoundary` first, whose wrapper is named after a local of
 // `runtime.js`, so the obvious source answered `wrapped` for all of them.
+// One Python callable is one JavaScript function, at every crossing and between
+// crossings.
+//
+// The rule that adapts a callable used to be written twice: once for the
+// arguments, where it is `pyHandler` and caches per callable, and once for the
+// exports, where it wove the *site's* label into the wrapper — so a label, which
+// is per site, decided identity. Two reads of a factory gave two functions for
+// one Python value, and one value held twice in a list came back as two.
+//
+// The data beside it never lost that: two references to one list cross as one
+// array. What the two shapes share now is the same cache.
+describe.for([
+    ['a function', 'fn'],
+    ['a bound method', 'bound'],
+    ['a callable instance', 'instance']
+])('%s returned by an exported function', ([, key]) => {
+    test('is one JavaScript function, whoever asks twice', () => {
+        const first = mod.made(key);
+        const second = mod.made(key);
+
+        expect(first).toBe(second);
+
+        const registry = new Set([first]);
+
+        expect(registry.delete(second)).toBe(true);
+    });
+
+    test('and one function twice inside a single result', () => {
+        const [a, b] = mod.made_twice(key);
+
+        expect(a).toBe(b);
+        expect(a()).toBe(0.25);
+    });
+});
+
+// The control: the same sharing in data, which held throughout and is what the
+// callbacks are measured against.
+test('two references to one list come back as one array', () => {
+    const [a, b] = mod.shared_rows();
+
+    expect(a).toBe(b);
+});
+
 describe('the name a JavaScript caller reads', () => {
     test.for(POSITIONS)('is the one Python recorded, %s', ([, reach]) => {
         expect(reach('fn').name).toBe('fn');

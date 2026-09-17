@@ -313,8 +313,15 @@ function installMutationTracking($B) {
         //
         // The class test is a property miss before the set lookup, which keeps
         // an ordinary unwatched call paying what it paid before.
+        //
+        // `pyClass`, and not the single property this line used to read: the
+        // other half of this same interception asks the predicate — `$getattr`
+        // does, for the same question about the same objects — and one of the
+        // two would have drifted. A JavaScript object carrying a `tp_bases` of
+        // its own passed here and would have had its first argument taken for
+        // the target of a mutation.
         if (!followed) {
-            if (obj !== null && typeof obj === 'object' && obj.tp_bases !== undefined && FOLLOWED.has(attr)) {
+            if (pyClass(obj) && FOLLOWED.has(attr)) {
                 return onFirst(obj, attr, rest, callAttr);
             }
 
@@ -1140,6 +1147,24 @@ export function pyError(error, where, lineOffset = 0) {
 //
 // Same shape as `plainData` and `__mro__` in §3.20: the third time this project
 // has met a Brython object walked by something that serialises.
+// A call that has been made and not finished.
+//
+// Asked in four places and written out in all four, one of them in `helpers.js`,
+// which is how a predicate starts drifting: the two files cannot share a
+// spelling by accident, only on purpose. Compared in JavaScript rather than
+// through `aio.iscoroutine()` — this runs on every call into Python, template
+// expressions included, and a Brython call here costs more than the check saves.
+export const pyCoroutine = (value) => {
+    const $B = globalThis.__BRYTHON__;
+
+    return value !== null && typeof value === 'object' && $B.get_class(value) === $B.coroutine;
+};
+
+// A Brython float is an object holding a number, and the three converters asked
+// so by hand. One of them is the reason `pyNumbers` exists at all: what a
+// framework is handed must be a number, not an object that prints like one.
+const pyFloat = (value) => value !== null && typeof value === 'object' && value.ob_type === _b_.float;
+
 function thrown(error) {
     if (error instanceof Error || error === null || typeof error !== 'object') return error;
 
@@ -1171,7 +1196,7 @@ export function schedule(result, where, lineOffset = 0) {
     // Compared in JavaScript rather than through aio.iscoroutine(): this runs on
     // every call into Python, template expressions included, and a Brython call
     // here costs more than the check saves.
-    if ($B.get_class(result) !== $B.coroutine) return result;
+    if (!pyCoroutine(result)) return result;
 
     // What the caller gets back is a promise, so an `async def` can be awaited
     // by whoever called it, `{#await greet()}` in a template above all, which
@@ -1301,12 +1326,12 @@ export function plainData(value, seen, adapt) {
 
     // A Brython float is an object holding a number and a reference to its
     // type. `tojson(1 / 3)` walks the lot: 20 KB of `ob_type`.
-    if (value.ob_type === _b_.float) return value.value;
+    if (pyFloat(value)) return value.value;
 
     // A coroutine handed to the framework becomes a promise. That is what lets a
     // `load()` stream: `{"lentes": chercher_lentement()}` returns a coroutine,
     // and SvelteKit waits on the promise it turns into.
-    if (globalThis.__BRYTHON__.get_class(value) === globalThis.__BRYTHON__.coroutine) {
+    if (pyCoroutine(value)) {
         // A walk that cannot wait must not start one.
         //
         // The JSON rule is a serialiser's, and a serialiser is synchronous: it
@@ -1740,7 +1765,7 @@ export function scheduleAsync(result, where, lineOffset = 0) {
     const aio = $B.imported['browser.aio'];
 
     if (!aio || result === undefined || result === null) return result;
-    if ($B.get_class(result) !== $B.coroutine) return result;
+    if (!pyCoroutine(result)) return result;
 
     return started(result).catch((error) => {
         throw pyError(error, where, lineOffset);
@@ -1822,7 +1847,7 @@ function converting(wrapped) {
 
 export function pyNumbers(value) {
     if (value === null || typeof value !== 'object') return value;
-    if (value.ob_type === _b_.float) return value.value;
+    if (pyFloat(value)) return value.value;
 
     let out = value;
 
@@ -1830,7 +1855,7 @@ export function pyNumbers(value) {
         const one = value[key];
         let replacement;
 
-        if (one !== null && typeof one === 'object' && one.ob_type === _b_.float) {
+        if (pyFloat(one)) {
             replacement = one.value;
         } else if (callable(one)) {
             // A callback the framework keeps and calls itself, a transition's
@@ -1933,10 +1958,20 @@ export function pyNumbers(value) {
 // an export; both leave the right word in front.
 const nameOf = (where) => where.split(' — ')[0].replace(/\(\)$/, '');
 
+// What a caller may hand a Python function: trimmed to what the signature
+// declares, and converted.
+//
+// The trim is the boundary's contract — it is what lets a framework hand an
+// event to a callback that never asked for one — and `pyArg` is the conversion
+// every call boundary owes. The three wrappers below wrote both out, and two of
+// them were missing the second half until an action took a JavaScript number and
+// `format(value, ".2f")` refused it at mount.
+const taken = (args, arity) => args.slice(0, arity).map(pyArg);
+
 export function pyCall(fn, where, lineOffset = 0, arity = Infinity, named) {
     const wrapper = (...args) => {
         try {
-            const given = args.slice(0, arity).map(pyArg);
+            const given = taken(args, arity);
             const result = scheduleAsync(fn(...given), where, lineOffset);
 
             // The result crosses under the same rule as an export, callbacks
@@ -1954,11 +1989,9 @@ export function pyCall(fn, where, lineOffset = 0, arity = Infinity, named) {
             // Noted at the twenty-ninth reading as a limit and carried since;
             // what makes it a defect rather than a limit is that the rule
             // already exists, one line away, and every other crossing passes it.
-            const out = adapting(where, lineOffset);
-
             return result instanceof Promise
-                ? result.then((one) => plainData(one, undefined, out))
-                : plainData(result, undefined, out);
+                ? result.then((one) => plainData(one, undefined, pyHandler))
+                : plainData(result, undefined, pyHandler);
         } catch (error) {
             throw pyError(error, where, lineOffset);
         }
@@ -2221,7 +2254,7 @@ export function pyEvent(value, lineOffset = 0) {
     // line counted from the tag rather than from the top of the file.
     return (...args) => {
         try {
-            return schedule(called(...args.slice(0, arity).map(pyArg)), where, lineOffset);
+            return schedule(called(...taken(args, arity)), where, lineOffset);
         } catch (error) {
             throw thrown(pyError(error, where, lineOffset));
         }
@@ -2399,31 +2432,28 @@ export function jsCall(value) {
 // `{"handlers": [Handler(db)]}` mean the same as `[Handler(db)]`. A function
 // JavaScript built answers null to `declared` and comes back untouched, which is
 // what keeps a library's own marks on it.
-const adapting = (where, lineOffset) => (one) => {
-    const found = declared(one);
-
-    // The callable's own label for the name, the export's for the position: a
-    // diagnostic says where the value was published, a log says what was called.
-    return found === null
-        ? one
-        : pyCall(found.fn, where, lineOffset, found.arity, nameOf(found.where));
-};
-
-function exported(one, where, lineOffset, made) {
-    // One question for every callable shape, and the signature comes with the
-    // answer. The plain-function branch used to call `pyCall` without it, so
-    // `arity` fell back to `Infinity` and the trim that lets a framework hand an
-    // event to a function that declares nothing stopped happening — for the
-    // *same* Python function, published under an alias or in a mapping, while
-    // the name `def` gave it kept the contract.
+function exported(one, made) {
+    // `pyHandler`, which is what the *argument* boundary asks for the same
+    // question, rather than a wrapper of this site's own.
     //
-    // `declared` answers null for a function JavaScript built, which then
-    // crosses as data, which is to say as itself.
-    const found = callable(one) ? declared(one) : null;
+    // The two were the same treatment written twice, and the copy carried the
+    // export's label — `actions — src/app.py.save` — woven into the wrapper. A
+    // label is a per-site value, so every conversion built a **new function for
+    // one Python callable**: the same method returned twice was two JavaScript
+    // functions, `a === b` was false for one value held twice in a list, and a
+    // registry could not take back what a factory had given it.
+    //
+    // What is lost with the copy is that label. What replaces it is the
+    // callable's own, `save() — src/app.py`, which names the function that
+    // raised rather than the name it was published under — the better half of
+    // the trade, and the one a traceback wants.
+    //
+    // `pyHandler` answers `one` itself when `declared` finds no signature, which
+    // is a function JavaScript built: it crosses as data, which is to say as
+    // itself.
+    const wrapped = pyHandler(one);
 
-    if (found !== null) {
-        return pyCall(found.fn, where, lineOffset, found.arity, nameOf(found.where));
-    }
+    if (wrapped !== one) return wrapped;
 
     // Data, and the rule goes down with it.
     //
@@ -2433,8 +2463,7 @@ function exported(one, where, lineOffset, made) {
     // the shape a registry actually takes — callables under a name. It read as
     // depth and it was not: a list inside a list worked, because a list carries
     // `adapt` to its children and this branch did not carry it at all.
-    //
-    return plainData(one, made, adapting(where, lineOffset));
+    return plainData(one, made, pyHandler);
 }
 
 // A value a module exports. A dict of functions, which is what SvelteKit's
@@ -2450,7 +2479,7 @@ export function pyExport(value, where, lineOffset = 0) {
     // `callable`: a function JavaScript built and a Python name published —
     // `accepted = query(_accepted)` in a `.remote.py` — must cross as the object
     // its library made, marks included. `declared` answers null for it.
-    if (declared(value) !== null) return exported(value, where, lineOffset);
+    if (declared(value) !== null) return exported(value);
 
     if (value === null || typeof value !== 'object') return value;
 
@@ -2459,7 +2488,7 @@ export function pyExport(value, where, lineOffset = 0) {
     // function of the module. It is the same bound method the mapping branch
     // below adapts, and whether a callback is adapted cannot depend on where it
     // was written.
-    if (callable(value)) return exported(value, where, lineOffset);
+    if (callable(value)) return exported(value);
 
     // A callable inside a list is the same callable the mapping below adapts,
     // and the container it was written in cannot decide whether JavaScript can
@@ -2475,7 +2504,7 @@ export function pyExport(value, where, lineOffset = 0) {
     // call still reaches it, which is what a bound method crossing as a
     // function already means everywhere else in this file.
     if (Array.isArray(value)) {
-        return plainData(value, undefined, adapting(where, lineOffset));
+        return plainData(value, undefined, pyHandler);
     }
 
     // A class crosses as itself. `plainData` walks whatever it is given and
@@ -2532,7 +2561,7 @@ export function pyExport(value, where, lineOffset = 0) {
         made.set(value, out);
 
         for (const [key, one] of pairs) {
-            define(out, propertyName(key, out), exported(one, `${where}.${key}`, lineOffset, made));
+            define(out, propertyName(key, out), exported(one, made));
         }
 
         return out;
@@ -2545,7 +2574,7 @@ export function pyExport(value, where, lineOffset = 0) {
     // bare walk, so `{"handlers": [Handler(db)]}`, a registry under a name, lost
     // every call it held while `[Handler(db)]` beside it kept them. The condition
     // read the top level to decide for everything underneath.
-    return plainData(value, undefined, adapting(where, lineOffset));
+    return plainData(value, undefined, pyHandler);
 }
 
 // A module's function, read from Python.
@@ -2588,6 +2617,49 @@ export function pyBoundary(fn) {
 
     return wrapped;
 }
+
+// A component's own function, as Svelte and the DOM call it.
+//
+// The third of the three wrappers, and the one that used to live in
+// `compile.cjs` as a string. That is the dangerous kind of copy: a rule added
+// here cannot reach a template literal in another file, and twice in one day it
+// did not — the argument conversion arrived at `pyCall` and at `pyModule` and
+// stopped at the component, where an action then took a JavaScript number.
+//
+// `call` is handed the arguments rather than the wrapper reading them, because
+// what an expression function does with them differs — it runs inside
+// `inTemplate` and takes its values already Python — and that difference is the
+// compiler's to write.
+//
+// The result goes through `pyNumbers`, not `plainData`: what a component hands
+// the *framework* is a transition's options or an action's teardown, and a
+// Brython float there is an object `Element.animate` refuses. A coroutine is
+// fired and not awaited, since nobody reads what a handler returns.
+const running = (call, where, lineOffset) => {
+    try {
+        return pyNumbers(schedule(call(), where, lineOffset));
+    } catch (error) {
+        throw pyError(error, where, lineOffset);
+    }
+};
+
+export const pyComponent = (call, where, lineOffset, arity) => (...args) =>
+    running(() => call(taken(args, arity)), where, lineOffset);
+
+// And the other half of the same wrapper: a function the *markup* compiled, one
+// per expression it met.
+//
+// Two things separate it from the one above, and both belong to the template
+// rather than to the boundary. Its arguments are already Python — a block's own
+// name, a snippet's parameter — so converting them would convert twice. And it
+// runs inside `inTemplate`, where a dot finds a key as well as an attribute,
+// which is the seam a template expression is written against.
+//
+// Two names rather than a flag, so the compiler *chooses* a wrapper instead of
+// describing one: what it writes is a name, and everything a crossing does is on
+// this side of the line.
+export const pyExpression = (call, where, lineOffset, arity) => (...args) =>
+    running(() => inTemplate(() => call(args.slice(0, arity))), where, lineOffset);
 
 // A Python module under a JavaScript name, for the one place that needs one:
 // what a directive *names*. Svelte copies that text into a `() => …` of its own,
@@ -2654,7 +2726,15 @@ export function pyModule(name) {
                     wrapped = Object.defineProperty(
                         (...args) => {
                             try {
-                                return pyNumbers(called(...args.slice(0, arity)));
+                                // Converted on the way in, like every other
+                                // call boundary: Svelte hands an action or a
+                                // transition its JavaScript values, and a
+                                // fractional one reaching `format(value, '.2f')`
+                                // answered *non-empty format string passed to
+                                // object.__format__* and took the mount with it.
+                                // A DOM node is left alone by `pyArg`, which is
+                                // what the first argument always is here.
+                                return pyNumbers(called(...taken(args, arity)));
                             } catch (error) {
                                 throw pyError(error, where);
                             }

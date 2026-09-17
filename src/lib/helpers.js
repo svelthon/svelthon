@@ -22,6 +22,7 @@ import {
     plainData,
     plainObject,
     pyClass,
+    pyCoroutine,
     pyEntries,
     pyName,
     ticking
@@ -181,7 +182,7 @@ const noCall = (one) => {
     // call that has not been made, and a call that has been made and not
     // finished. Neither has JSON, and the second is the one that used to be
     // *started* by asking — the serialiser scheduled the body and wrote `{}`.
-    const running = globalThis.__BRYTHON__.get_class(one) === globalThis.__BRYTHON__.coroutine;
+    const running = pyCoroutine(one);
 
     throw refuse(
         running
