@@ -673,7 +673,24 @@ function mark(value) {
 function adopt(value) {
     const attributes = ownAttributes(value);
     if (attributes !== undefined) {
-        for (const key in attributes) inherit(value, attributes[key]);
+        // The storage itself, and not only what it holds. Setting an attribute
+        // usually goes through something this file intercepts — `$setattr` for
+        // `box.value = 1`, and the `$getattr` that hands the watch to what it
+        // returns for `box.__dict__[...]` — but `vars(box)` asks the engine for
+        // the dictionary with `get_dict` and writes straight into it. The values
+        // were children of the instance and the container that holds them was
+        // not, so that write reached nobody.
+        //
+        // One link and not two: marking the storage walks it in turn, so each
+        // attribute becomes a child of the dictionary rather than of the
+        // instance, and the chain carries a mutation up all the same. Listing
+        // the values here as well would give every one of them two routes
+        // upward and two parents to retain, in a structure that already keeps
+        // its links pointing up. What holds the chain is that the storage is a
+        // dict to `adopt`, and `tests/first-instance.test.js` is the test that
+        // fails if it ever stops being one: nothing there re-reads the
+        // attribute, so the initial walk is the only route.
+        inherit(value, attributes);
     }
 
     // An instance is not its `__dict__`. A class declaring `__slots__` has no
