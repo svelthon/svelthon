@@ -21,6 +21,15 @@
 // member a *directive* names was still asked with `typeof`, so four rows of that
 // column arrived as values Svelte cannot call.
 //
+// **And two more that the table did not have, found by an outside reading of it.**
+// The columns were the crossings their author knew about, which is the way a
+// matrix goes wrong: a missing column is invisible in a green one. `pyExport`
+// has three branches — a value, a mapping, a list — and only two were here. Then,
+// once the list was green, the same item found that the rule held at the *top* of
+// every container and went no further under a mapping. Both are columns now, and
+// the lesson is written in `recurring-defect-shapes`: read the branches of the
+// code, do not trust your own list of them.
+//
 // **How to use it.** A new boundary adds a column; if it cannot be added, that is
 // the signal it invented a recognition of its own. A new finding fills a cell
 // rather than getting a test of its own, and its neighbours say at once whether
@@ -76,8 +85,32 @@ const POSITIONS = [
             return taken().hook;
         }
     ],
+    [
+        'nested in a list argument',
+        (key) => {
+            mod.as_listed(key);
+
+            return taken()[0];
+        }
+    ],
     ['under its own exported name', (key) => mod[key]],
     ['as a value of an exported mapping', (key) => mod.mapped[key]],
+    // The column §3.40 of the outside reading found empty, a day after the rest
+    // of this table was written: the export adapted the values of a mapping and
+    // handed a list to the plain walk, so one Python object was a function under
+    // one key and an object with fields under an index. The list kept the data
+    // and lost the call, the mapping kept the call and lost the data, and
+    // neither said anything.
+    ['as an element of an exported list', (key) => mod.listed[mod.order.indexOf(key)]],
+    ['as an element of an exported tuple', (key) => mod.tupled[mod.order.indexOf(key)]],
+    // The four cells the same item named at the next reading, once the row above
+    // was green: the rule held at the top of every container and stopped one
+    // level below a dict, because the walk under it was called without the rule
+    // at all. It reads like depth and it is not — a list inside a list always
+    // worked, since a list carries the rule to its children.
+    ['in a list a mapping holds', (key) => mod.nested.handlers[mod.order.indexOf(key)]],
+    ['in a mapping a mapping holds', (key) => mod.nested.inner[key]],
+    ['two containers down from a mapping', (key) => mod.nested.deep[0][mod.order.indexOf(key)]],
     ['in a configuration a component hands back', (key) => mounted().config(key).hook],
     // What the compiler emits for `use:mod.member` and `in:mod.member`: the
     // directive names a module, and Svelte reads the member off this proxy.
@@ -90,6 +123,23 @@ describe.for(SHAPES)('%s', ([, key]) => {
 
         expect(typeof got).toBe('function');
         expect(got('event')).toBe(0.25);
+    });
+});
+
+// What a wrapper does not carry, said once instead of discovered one container
+// at a time. A callable instance crosses as a function and its fields stay in
+// Python, where the call still reaches them — which is what the row above
+// proves, since its answer is computed from its own field. The defect §3.40
+// named was never a missing field; it was that one container kept the field and
+// the other kept the call, for one Python object.
+describe('a callable instance', () => {
+    test.for([
+        ['under its own exported name', () => mod.instance],
+        ['as a value of an exported mapping', () => mod.mapped.instance],
+        ['as an element of an exported list', () => mod.listed[mod.order.indexOf('instance')]]
+    ])('crosses as its call and not as its fields, %s', ([, reach]) => {
+        expect(typeof reach()).toBe('function');
+        expect(reach().factor).toBeUndefined();
     });
 });
 

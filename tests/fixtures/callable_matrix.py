@@ -13,8 +13,13 @@ __all__ = [
     "instance",
     "inherited",
     "mapped",
+    "order",
+    "listed",
+    "tupled",
+    "nested",
     "as_argument",
     "as_option",
+    "as_listed",
 ]
 
 VALUE = 0.25
@@ -40,8 +45,15 @@ class Holder:
 class Strategy:
     # An object with state and a `__call__`, which is how a configured callback
     # is written when a closure is not enough.
+    #
+    # The answer is computed *from the field* on purpose: a wrapper carries no
+    # attributes, so the only thing that proves the state is still reachable is
+    # that the call reads it.
+    def __init__(self):
+        self.factor = 4
+
     def __call__(self):
-        return VALUE
+        return self.factor / 16
 
 
 class Derived(Strategy):
@@ -71,8 +83,26 @@ mapped = {
 }
 
 
+# The same six in the other container a module publishes. The order is exported
+# beside the list so the test reads the index from here rather than from a second
+# copy of the list of shapes.
+order = ["fn", "bound", "classbound", "staticfn", "instance", "inherited"]
+listed = [mapped[key] for key in order]
+tupled = tuple(listed)
+
+# And one level down on each side, which is where a registry really lives: the
+# callables under a name, and a mapping a mapping holds.
+nested = {"handlers": listed, "inner": mapped, "deep": [listed]}
+
+
 def as_argument(key):
     keep(mapped[key])
+
+
+def as_listed(key):
+    # A callback inside a list handed to a JavaScript function, which is the
+    # argument side of the same question.
+    keep([mapped[key], 0.5])
 
 
 def as_option(key):

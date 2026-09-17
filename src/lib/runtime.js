@@ -2119,6 +2119,20 @@ export function jsCall(value) {
 // A plain function keeps the wrapper it had, arity included, so nothing changes
 // for the mappings that already worked. A bound method takes its receiver and
 // the arity of its own signature, `self` not counted.
+// The rule an export carries, and the only one: a Python callable becomes a
+// JavaScript one, everything else is left to the walk that meets it.
+//
+// It is a value rather than a branch because it has to travel. `plainData`
+// invokes it on a callable at any depth, so handing it over is what makes
+// `{"handlers": [Handler(db)]}` mean the same as `[Handler(db)]`. A function
+// JavaScript built answers null to `declared` and comes back untouched, which is
+// what keeps a library's own marks on it.
+const adapting = (where, lineOffset) => (one) => {
+    const found = declared(one);
+
+    return found === null ? one : pyCall(found.fn, where, lineOffset, found.arity);
+};
+
 function exported(one, where, lineOffset, made) {
     // One question for every callable shape, and the signature comes with the
     // answer. The plain-function branch used to call `pyCall` without it, so
@@ -2131,9 +2145,18 @@ function exported(one, where, lineOffset, made) {
     // crosses as data, which is to say as itself.
     const found = callable(one) ? declared(one) : null;
 
-    if (found === null) return plainData(one, made);
+    if (found !== null) return pyCall(found.fn, where, lineOffset, found.arity);
 
-    return pyCall(found.fn, where, lineOffset, found.arity);
+    // Data, and the rule goes down with it.
+    //
+    // This walk used to be called without the rule, so the adaptation held at the
+    // top of each container and stopped one level below a dict: `[Handler(db)]`
+    // crossed as a callable and `{"handlers": [Handler(db)]}` did not, which is
+    // the shape a registry actually takes — callables under a name. It read as
+    // depth and it was not: a list inside a list worked, because a list carries
+    // `adapt` to its children and this branch did not carry it at all.
+    //
+    return plainData(one, made, adapting(where, lineOffset));
 }
 
 // A value a module exports. A dict of functions, which is what SvelteKit's
@@ -2160,7 +2183,22 @@ export function pyExport(value, where, lineOffset = 0) {
     // was written.
     if (callable(value)) return exported(value, where, lineOffset);
 
-    if (Array.isArray(value)) return plainData(value);
+    // A callable inside a list is the same callable the mapping below adapts,
+    // and the container it was written in cannot decide whether JavaScript can
+    // call it. Measured: `[Handler(db)]` handed JavaScript an object carrying
+    // the instance's fields and no call, while `{"on_save": Handler(db)}`
+    // beside it handed over a function — the list kept the data and lost the
+    // call, the dict kept the call and lost the data, and neither said
+    // anything. A registry of handlers is written both ways.
+    //
+    // `adapt` is the third rule `plainData` takes and it reaches a callable at
+    // any depth, so a list of lists is this same line. What a wrapper does not
+    // carry is the instance's attributes: the state stays in Python, where the
+    // call still reaches it, which is what a bound method crossing as a
+    // function already means everywhere else in this file.
+    if (Array.isArray(value)) {
+        return plainData(value, undefined, adapting(where, lineOffset));
+    }
 
     // A class crosses as itself. `plainData` walks whatever it is given and
     // hands back the attributes it found, which for a class is `__doc__`,
@@ -2222,7 +2260,14 @@ export function pyExport(value, where, lineOffset = 0) {
         return out;
     }
 
-    return plainData(value);
+    // A mapping holding no callable of its own still holds the rule, and the
+    // branch above is only about *labels*: it exists to name `module.actions.save`
+    // in a diagnostic, which needs the key, and a walk cannot. What it is not is
+    // the place the adaptation lives — this line handed the whole dict to the
+    // bare walk, so `{"handlers": [Handler(db)]}`, a registry under a name, lost
+    // every call it held while `[Handler(db)]` beside it kept them. The condition
+    // read the top level to decide for everything underneath.
+    return plainData(value, undefined, adapting(where, lineOffset));
 }
 
 // A module's function, read from Python.
