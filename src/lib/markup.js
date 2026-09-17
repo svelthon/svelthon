@@ -54,7 +54,15 @@ export function atomic(source, at) {
         const here = formatted ? inner() : undefined;
         const spec = here !== undefined && here.spec;
 
-        if (!spec && source[i] === '\\') {
+        // A backslash hides the character after it, so that `"\""` is one string
+        // and not two — **except a brace**, which it cannot hide: the escape for
+        // a brace is `{{`, and a backslash before one leaves it opening a field.
+        // Measured against CPython 3.14: `rf"\{ x }"` answers `\5` for `x = 5`,
+        // and the plain spelling answers the same with a warning about the
+        // escape. Skipping it read the quote inside the field as the end of the
+        // string and cut the expression in half, so the template kept the first
+        // half and Svelte was handed the rest as markup.
+        if (!spec && source[i] === '\\' && !(formatted && '{}'.includes(source[i + 1]))) {
             i++;
             continue;
         }
