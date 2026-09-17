@@ -1886,7 +1886,12 @@ const callDescriptor = (value) => {
 
 // Callable in Python, which is wider than *is a JavaScript function* and is the
 // question every boundary that promises to adapt a callback has to ask.
-const callable = (value) =>
+//
+// Exported for the one caller outside this file that has to ask the same
+// question: the serialiser. What crosses to JavaScript as a call has no JSON,
+// and a second predicate written in `helpers.js` would answer differently the
+// day this one learns another shape — which it has done twice.
+export const callable = (value) =>
     typeof value === 'function' || boundMethod(value) || callDescriptor(value) !== null;
 
 // A method read off an instance: `{ob_type: method, im_func, im_self}`, which
@@ -1942,6 +1947,20 @@ function declared(value) {
         self
     };
 }
+
+// What to call a Python function in a message, which neither `__name__` nor
+// `str()` can answer: a module's functions cross through `pyBoundary`, and its
+// wrapper answers `wrapped` and `<JavascriptFunction object>` — the name of a
+// local in this file, and a category. `$function_infos` travels with the
+// wrapper, which is why it is read here instead.
+//
+// Null for anything Python did not declare, so a caller keeps whatever it shows
+// of a value it cannot name.
+export const pyName = (value) => {
+    const found = declared(value);
+
+    return found === null ? null : found.where.split(' — ')[0];
+};
 
 // A Python function seen from JavaScript, wrapped by reading its own signature
 // rather than a declaration we made: the same wrapping `pyExport` does, for a

@@ -28,6 +28,8 @@ import {
     tojson,
     urlencode
 } from '../src/lib/helpers.js';
+// The calls are written in Python, which is where the helper is called from.
+import { says, control, keeps_an_instance } from './fixtures/tojson_calls.py';
 
 // The Python values that are objects rather than primitives, which is what these
 // helpers keep meeting: a float, a list, a tuple, a set.
@@ -109,6 +111,48 @@ describe('tojson', () => {
         $B.$setitem(table, 'big', 2n ** 70n);
 
         expect(tojson(table)).toBe('{"none":null,"big":1180591620717411303424}');
+    });
+
+    // The rule above was stated for a class and enforced for a class alone,
+    // while the neighbouring unserialisable shape — a call — had no arm at all.
+    // `JSON.stringify` has no notation for one, so it drops it, and the dropping
+    // is a different wrong answer in each position: `undefined` for a value, a
+    // key that **disappears** from an object, `null` for an item. The first is
+    // the worst, since `tojson` is written in templates, where `undefined`
+    // renders as nothing.
+    //
+    // Twelve cells and one sentence: the shape and the position are both the
+    // author's, and neither may decide whether they are told.
+    describe.for([
+        ['a function', 'function'],
+        ['a bound method', 'method'],
+        ['a callable instance', 'instance']
+    ])('%s', ([, shape]) => {
+        test.for([
+            ['on its own', 'alone'],
+            ['inside a list', 'list'],
+            ['inside a dict', 'dict'],
+            ['inside a list a dict holds', 'deep']
+        ])('is refused by name, %s', ([, position]) => {
+            expect(says(shape, position)).toMatch(/svelthon — tojson\(\): .+ is callable/);
+        });
+    });
+
+    // A callable instance carries fields and they are not what it is: the export
+    // hands it to JavaScript as its call. An instance that is *not* callable
+    // stays what it has always been here, its fields, which is Svelthon's own
+    // answer rather than CPython's.
+    test('while an ordinary instance is still its fields', () => {
+        expect(keeps_an_instance()).toBe('{"n":1}');
+    });
+
+    test.for([
+        ['on its own', 'alone', '{"n":1}'],
+        ['inside a list', 'list', '[{"n":1}]'],
+        ['inside a dict', 'dict', '{"on_save":{"n":1}}'],
+        ['inside a list a dict holds', 'deep', '{"handlers":[{"n":1}]}']
+    ])('and data in the same position is written, %s', ([, position, written]) => {
+        expect(control(position)).toBe(written);
     });
 });
 

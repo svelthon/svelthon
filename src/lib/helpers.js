@@ -15,7 +15,17 @@
 // that spelling would collide with the `let date = …` the compiler emits beside
 // it. `__helpers` carries the prefix that says "generated", the same convention
 // `__pybridge` and `__proto` follow.
-import { NONE, __pybridge, plainData, plainObject, pyClass, pyEntries, ticking } from './runtime.js';
+import {
+    NONE,
+    __pybridge,
+    callable,
+    plainData,
+    plainObject,
+    pyClass,
+    pyEntries,
+    pyName,
+    ticking
+} from './runtime.js';
 
 // A helper's refusal, in the dialect the rest of the project speaks.
 //
@@ -45,7 +55,16 @@ function refuse(message) {
 // get a JavaScript accident instead of one.
 function shown(value) {
     try {
-        return JSON.stringify(value) ?? String(value);
+        // `undefined` rather than a throw is what `JSON.stringify` answers for
+        // the values it has no notation for, a function among them, and
+        // `String(fn)` is then the whole source text of it — a refusal printing
+        // a page of generated JavaScript at an author who wrote `tojson(save)`.
+        // Python's own repr is what names it.
+        //
+        // `||` and not `??` on the second step, which is what the catch below
+        // already does: `str()` answers the empty string for the absence of a
+        // value, and a refusal reading `date():  is not a date` names nothing.
+        return JSON.stringify(value) ?? (__pybridge.str(value) || String(value));
     } catch {
         return __pybridge.str(value) || String(value);
     }
@@ -124,6 +143,32 @@ const serialisable = (one) => {
     return raw(one);
 };
 
+// The neighbouring shape, which had the rule stated one branch away and no arm
+// of its own. `JSON.stringify` has no notation for a call, so it drops it, and
+// the dropping is a different wrong answer in each position: `undefined` for a
+// value, a **key that disappears** from an object, `null` for an item of a list.
+// The first is the worst, since `tojson` is written in templates and `undefined`
+// renders as nothing at all.
+//
+// Handed to the *walk* rather than to the replacer, and that is the whole of why
+// this is a rule and not a fourth branch above. `plainData` asks it of a
+// callable at any depth, before anything is flattened; by the time a replacer
+// runs, an instance whose class defines `__call__` has already become its
+// fields — `{"on_save": Handler(db)}` was written out as `{"on_save": {}}`, a
+// page saying the registry is empty.
+//
+// It is the boundary's own predicate, so the three shapes answer together: a
+// function, a bound method, and a callable instance. The fields of that instance
+// are not what it is — the export hands it to JavaScript as its call.
+const noCall = (one) => {
+    // A function is named by what Python recorded; the two object shapes say
+    // more than a name on their own — `<bound method Box.save of <Box object>>`
+    // and `<Handler object>` — so they keep their repr.
+    const named = typeof one === 'function' ? pyName(one) : null;
+
+    throw refuse(`tojson(): ${named ?? shown(one)} is callable, and a call has no JSON`);
+};
+
 export function tojson(value, indent) {
     return JSON.stringify(
         // The JSON rule, asked for by name. JSON has neither identity nor
@@ -131,7 +176,7 @@ export function tojson(value, indent) {
         // `null` — the only thing a serialiser can do, and the reason that rule
         // was written. It is not the default any more: the other five callers of
         // `plainData` hand their result to JavaScript, which has identity.
-        plainData(value, new Set()),
+        plainData(value, new Set(), noCall),
         (_, one) => raw(one),
         typeof indent === 'number' ? indent : undefined
     );
