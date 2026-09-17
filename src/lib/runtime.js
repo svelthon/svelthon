@@ -261,8 +261,8 @@ function installMutationTracking($B) {
     // called through `call_attr`: the target is the first argument, the rest are
     // the arguments, and the question of whether anybody watches it belongs to
     // the call.
-    const onType = (attr, method) =>
-        function (...args) {
+    const onType = (attr, method, descriptor) => {
+        const wrapper = function (...args) {
             let result;
 
             try {
@@ -272,6 +272,16 @@ function installMutationTracking($B) {
                 afterCall(args[0], attr, result, args.slice(1));
             }
         };
+
+        // Python has to keep seeing what it asked for, the same reason
+        // `notifying` assigns over its method: a bare function answered
+        // `JavascriptFunction` to `type(list.append)` and `AttributeError` to
+        // `list.append.__objclass__`, where `list.copy` beside it answered
+        // `method_descriptor` and `list`. Four properties carry that —
+        // `ob_type`, `method`, `d_name`, `d_type` — and copying them restores
+        // both answers, measured.
+        return descriptor === undefined ? wrapper : Object.assign(wrapper, descriptor);
+    };
 
     const onFirst = (obj, attr, rest, call) => {
         const target = rest[1];
@@ -390,7 +400,9 @@ function installMutationTracking($B) {
             // method kept as a value left that path, so `add(rows, 1)` mutated a
             // watched list and told nobody, while `list.append(rows, 1)` written
             // in place worked.
-            if (call !== null && pyClass(obj)) return onType(attr, call);
+            if (call !== null && pyClass(obj)) {
+                return onType(attr, call, typeof result === 'function' ? undefined : result);
+            }
 
             if (typeof result === 'function') return notifying(obj, attr, result);
 
@@ -2525,7 +2537,15 @@ export function group(node, [current, write, chosen, binding, scope]) {
     const same = (one) => {
         try {
             return __pybridge.truthy(globalThis.__BRYTHON__.rich_comp('__eq__', one, value));
-        } catch {
+        } catch (error) {
+            // An `__eq__` of the author's that raises is not a "no". The fall
+            // back to identity is for a value Python cannot compare at all — a
+            // foreign JavaScript one — and using it for a failed protocol
+            // answered *plausibly and wrongly*: two distinct instances, so the
+            // control showed nothing selected while the model had not managed to
+            // compare anything. Same rule as `__pybridge.truthy` one file up.
+            if (raised(error)) throw pyError(error, `bind:group={${binding}}`);
+
             return one === value;
         }
     };

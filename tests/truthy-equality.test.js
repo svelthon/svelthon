@@ -12,6 +12,7 @@
 import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import TruthyEquality from './fixtures/TruthyEquality.svelte';
+import RaisingEquality from './fixtures/RaisingEquality.svelte';
 
 describe('a group whose __eq__ answers something other than a bool', () => {
     const setup = () => {
@@ -36,4 +37,19 @@ describe('a group whose __eq__ answers something other than a bool', () => {
     test.for([['plain-radio'], ['plain-box']])('as the %s always was', ([key]) => {
         expect(setup()(key).checked).toBe(true);
     });
+});
+
+// And the other half of asking Python: the answer may be an exception.
+//
+// The fall back to identity is for a value Python cannot compare at all — a
+// foreign JavaScript one. Using it for an `__eq__` that *raised* answered
+// plausibly and wrongly: two distinct instances, so the control showed nothing
+// selected while the model had failed to compare anything.
+test('an __eq__ that raises reaches the author', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+
+    expect(() => {
+        mount(RaisingEquality, { target });
+        flushSync();
+    }).toThrow(/comparison failed/);
 });

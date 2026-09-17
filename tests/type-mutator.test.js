@@ -32,3 +32,27 @@ describe.for([
         expect(read()).toBe('1');
     });
 });
+
+// And what Python still sees of the operation it asked for. A bare wrapper
+// answered `JavascriptFunction` to `type(list.append)` and raised on
+// `__objclass__`, while `list.copy` — the same shape, not a mutator, not adapted
+// — answered `method_descriptor` and `list`. The witness is in the same line of
+// output, so the two cannot drift apart.
+describe('the adapted operation, seen from Python', () => {
+    const read = (key) => {
+        const target = document.body.appendChild(document.createElement('div'));
+
+        mount(TypeMutator, { target });
+        flushSync();
+
+        return target.querySelector(`[data-k="${key}"]`).textContent;
+    };
+
+    test('keeps its type', () => {
+        expect(read('kind')).toBe("['method_descriptor', 'method_descriptor']");
+    });
+
+    test('and the class it belongs to', () => {
+        expect(read('owner')).toBe("['list', 'list']");
+    });
+});
