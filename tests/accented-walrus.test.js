@@ -15,7 +15,14 @@ import AccentedWalrus from './fixtures/AccentedWalrus.svelte';
 
 describe.for([
     ['an accented name', 'accented'],
-    ['an ASCII name', 'plain']
+    ['an ASCII name', 'plain'],
+    // The second half, found a pass later: this name ends on an ASCII letter, so
+    // the repair above is content, and the four letters before the parenthesis
+    // spell `not`. The boundary in front of a keyword was still ASCII, so `é`
+    // read as the end of the word before it and `énot(x := 1)` was rewritten
+    // into a name that does not exist — the same failure, one predicate over.
+    ['a name that ends in a keyword', 'keyword'],
+    ['the same name in ASCII', 'ascii_keyword']
 ])('a call to %s holding a walrus', ([, key]) => {
     test('runs, and without an error event', () => {
         const target = document.body.appendChild(document.createElement('div'));
@@ -41,4 +48,23 @@ describe.for([
         expect(failure).toBeUndefined();
         expect(read()).toBe('2');
     });
+});
+
+// And the control on the other side, which is what keeps the repair honest: a
+// real keyword cannot be called, so its parenthesis *is* a grouping, and the
+// walrus inside it is still rewritten into a write through the namespace.
+test('a real keyword before a walrus is still a grouping', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+
+    mount(AccentedWalrus, { target });
+    flushSync();
+
+    const read = () => target.querySelector('[data-k="x"]').textContent;
+
+    expect(read()).toBe('0');
+
+    target.querySelector('button[data-k="grouped"]').click();
+    flushSync();
+
+    expect(read()).toBe('2');
 });

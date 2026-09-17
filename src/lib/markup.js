@@ -223,8 +223,24 @@ function arguments_(text) {
 // is not, and the only thing that tells them apart is whether the word is a
 // keyword. Only the ones that can be followed by a parenthesised expression are
 // listed; `def` or `class` cannot appear inside a template expression at all.
-const KEYWORD_BEFORE =
-    /(^|[^\w.])(not|and|or|if|else|in|is|return|yield|lambda|await|assert|del|elif|while|for|from|import|raise|with|as|None|True|False)$/;
+// What a name is made of, after its first character. Declared here because the
+// keyword boundary below is the first reader; `NAME` and `NAME_END` are built
+// from it a few lines down, where the reason it is a Unicode class is written
+// out.
+const NAME_CHAR = '\\p{L}\\p{M}\\p{N}_';
+
+// The keywords themselves, and the boundary in front of one is the same class as
+// the rest of a name — not `\w`, which is ASCII. `énot` is a
+// perfectly good Python name ending in four letters that spell a keyword, and an
+// ASCII boundary saw `é` as the end of the word before it: the call was taken for
+// a grouping and `énot(x := 1)` was rewritten into `énot__assign("x", 1)`, a name
+// that does not exist. It is the repair of `NAME_END` again, one predicate over,
+// which is why the class is a constant now and the three readers share it.
+const KEYWORD_BEFORE = new RegExp(
+    `(^|[^${NAME_CHAR}.])(not|and|or|if|else|in|is|return|yield|lambda|await|assert|` +
+        `del|elif|while|for|from|import|raise|with|as|None|True|False)$`,
+    'u'
+);
 
 // A name, spelled the way Python spells one, and the single source every pattern
 // in this file that reads a name is built from.
@@ -238,12 +254,12 @@ const KEYWORD_BEFORE =
 //
 // Marks are in it because a name in Vietnamese or Devanagari carries them, and
 // `u` is required for `\p{…}` to mean anything at all.
-const NAME = '[\\p{L}_][\\p{L}\\p{M}\\p{N}_]*';
+const NAME = `[\\p{L}_][${NAME_CHAR}]*`;
 
 // What a callable can end with, just before the parenthesis of a call: the last
 // character of a name by the same classes as `NAME`, or the close of a
 // subscript, a group or a string.
-const NAME_END = /[\p{L}\p{M}\p{N}_)\]"']$/u;
+const NAME_END = new RegExp(`[${NAME_CHAR})\\]"']$`, 'u');
 
 const WALRUS_NAME = new RegExp(`^\\s*(${NAME})`, 'u');
 const WALRUS_ARROW = /^\s*:=\s*/;
