@@ -84,15 +84,16 @@ describe('a float handed back to the framework', () => {
         expect(pyNumbers(kept)).toEqual({ name: 'x', n: 43 });
     });
 
-    // `09-transitions/04-custom-js-transitions`: the framework keeps a callback
-    // and calls it with its own numbers. Brython reads a JavaScript number as an
-    // int, so `tick(0, 1)` works and every frame after it raises *the number
-    // 0.093 cannot be converted to a BigInt*, silently.
-    test('and wraps a callback so a JavaScript float reaches it as one', () => {
-        let seen;
-        const out = pyNumbers({ tick: (t) => { seen = t; return t; } });
-        out.tick(0.093);
-        expect(typeof seen).toBe('object');
-        expect(seen.value).toBeCloseTo(0.093);
-    });
+    // `09-transitions/04-custom-js-transitions` — the framework keeps a callback
+    // and calls it with its own numbers, Brython reads a number as an int, and
+    // every frame after the first raises *0.093 cannot be converted to a
+    // BigInt*, silently — used to be checked here with a JavaScript arrow
+    // standing in for the author's `tick`.
+    //
+    // The stand-in stopped standing for it: a callback JavaScript built keeps
+    // its own arguments now, because wrapping one changed the contract of a
+    // library's own function. The contract is held where each half is real:
+    // `tests/bound-config.test.js` mounts a component whose `tick` is Python and
+    // watches the float arrive, and `tests/py-numbers.test.js` holds the
+    // JavaScript half beside it.
 });

@@ -1808,9 +1808,23 @@ export function pyNumbers(value) {
             // and `t1 + delta * easing(...)` answered NaN. The bound method
             // beside it was right, since it already went this way.
             //
-            // A function JavaScript built is left alone: `pyHandler` hands back
-            // anything `declared` does not recognise.
+            // A function JavaScript built is left alone — and *left alone* has
+            // to mean the arguments too. `pyHandler` hands back anything
+            // `declared` does not recognise, and this line wrapped it again to
+            // convert what it is called with: a library's own
+            // `t => t.toFixed(2)`, handed through a Python component, was given
+            // a Brython float, so `Number.isFinite` answered false and
+            // `toFixed` raised. The conversion is what a *Python* callback needs
+            // from a framework that calls it with raw numbers; for a JavaScript
+            // one it is a change of contract, on a function the author never
+            // asked us to touch.
+            //
+            // Told apart by the answer `pyHandler` already gave, rather than by
+            // a second predicate: it returns the value itself when there was
+            // nothing to adapt.
             const wrapped = pyHandler(one);
+
+            if (wrapped === one) continue;
 
             // Named after what it wraps, like the two wrappers above: a callback
             // a framework keeps is exactly the one somebody logs.
@@ -2080,7 +2094,11 @@ function declared(value) {
         where,
         arity: Infinity,
         origin: fn,
-        self
+        self,
+        // Which of the three this is, said rather than guessed: `self` alone
+        // cannot tell a bound method from an instance, and the two need
+        // different identities to be cached by.
+        instance: true
     };
 }
 
@@ -2175,17 +2193,39 @@ const HANDLERS = new WeakMap();
 // is an ordinary object of the author's and holding it would outlive the page.
 const RECEIVERS = new WeakMap();
 
+// And for an instance whose class defines `__call__`, keyed on the instance
+// itself: what it is does not change when the class changes what it does.
+const INSTANCES = new WeakMap();
+
 export function pyHandler(value) {
     const found = declared(value);
     if (found === null) return value;
 
-    // A bound method is built fresh on every read, so `box.note` twice is two
+    // Three identities, because three things arrive here and they are not the
+    // same thing twice.
+    //
+    // A **function** is itself, and `HANDLERS` holds one wrapper per function.
+    //
+    // A **bound method** is built fresh on every read, so `box.note` twice is two
     // objects and the wrapper it carries cannot be the cache key: an `off` would
     // never match the `on` that preceded it. The pair is what has an identity —
     // the function and its receiver — and keying on the pair is also what keeps
     // two instances of one class apart.
-    const cache = found.self === undefined ? HANDLERS : perReceiver(found.self);
-    const key = found.self === undefined ? found.fn : found.origin;
+    //
+    // A **callable instance** is neither. It is one object for its whole life,
+    // and the function that performs its call is not part of who it is: keying
+    // it on the pair made `Strategy.__call__ = other` hand out a *second*
+    // wrapper, so the registry that had been given the first could not remove
+    // it, and made `handler` and `handler.__call__` — two Python values, two
+    // contracts — share whichever wrapper crossed first. Its own identity is the
+    // object, and that is the key.
+    const cache = found.instance
+        ? INSTANCES
+        : found.self === undefined
+          ? HANDLERS
+          : perReceiver(found.self);
+
+    const key = found.instance ? value : found.self === undefined ? found.fn : found.origin;
 
     const known = cache.get(key);
 

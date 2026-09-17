@@ -57,6 +57,8 @@ describe('a value handed to JavaScript leaves Python’s copy alone', () => {
 });
 
 describe('the copy is built only when there is something to change', () => {
+    const float = (n) => globalThis.__BRYTHON__.fast_float(n);
+
     test('a value with nothing to unwrap is handed back as it was', () => {
         const plain = { duration: 300, delay: 0 };
 
@@ -70,9 +72,33 @@ describe('the copy is built only when there is something to change', () => {
     });
 
     test('but one that does need a change comes back as a different object', () => {
-        const held = { easing: (t) => t };
+        const held = { duration: float(300) };
 
         expect(pyNumbers(held)).not.toBe(held);
-        expect(typeof held.easing).toBe('function');
+        expect(pyNumbers(held).duration).toBe(300);
+    });
+
+    // And the dimension this file did not have: **where the callback comes
+    // from**. A Python one is adapted, because a framework calls it with raw
+    // numbers and Brython reads a number as an int. A function JavaScript built
+    // is left exactly as it is, arguments included — it was wrapped all the same,
+    // so a library's own `t => t.toFixed(2)`, handed through a Python component,
+    // received a Brython float: `Number.isFinite` answered false and `toFixed`
+    // raised, on a function the author never asked anyone to touch.
+    //
+    // The Python half of the same rule is `tests/bound-config.test.js`, which
+    // holds it end to end, on a component, where the callback really is Python.
+    test('a callback JavaScript built keeps its own arguments', () => {
+        let seen;
+        const held = { format: (t) => (seen = t) };
+        const out = pyNumbers(held);
+
+        expect(out).toBe(held);
+        expect(out.format).toBe(held.format);
+
+        out.format(0.5);
+
+        expect(typeof seen).toBe('number');
+        expect(seen).toBe(0.5);
     });
 });
