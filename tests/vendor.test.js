@@ -186,6 +186,30 @@ describe('the vendored Brython carries its repairs', () => {
         expect(source.match(/\$B\.scope_name\(/g)).toHaveLength(5);
     });
 
+    // `"ob_type"` is the mirror of the key below, and the second name the same
+    // predicate has to refuse. It *does* become an own property, and shadows the
+    // one the engine reads to know what the object is: the dictionary answered a
+    // string for its own class, and the next assignment raised `'undefined'
+    // object does not support item assignment` on a dictionary that had been
+    // valid a line earlier.
+    //
+    // Measured on 22 candidate names; this is the only one that collides.
+    test('a dict keeps an entry whose key is ob_type', () => {
+        const _b_ = $B.builtins;
+        const d = _b_.dict.$factory();
+
+        $B.$setitem(d, 'ob_type', 'business');
+        $B.$setitem(d, 'value', 42);
+
+        expect($B.$getitem(d, 'ob_type')).toBe('business');
+        expect($B.$getitem(d, 'value')).toBe(42);
+        expect(_b_.len(d)).toBe(2);
+
+        // Still a dict afterwards, which is the half the collision destroyed:
+        // `is_dict` answers a flag rather than a boolean, so it is read as one.
+        expect(Boolean($B.is_dict(d))).toBe(true);
+    });
+
     // `"__proto__"` is a string like any other in Python. The fast path for a
     // string key is `d[key] = value`, which reaches the accessor on
     // `Object.prototype`: the entry never became an own property, the value

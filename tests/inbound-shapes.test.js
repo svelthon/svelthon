@@ -36,25 +36,19 @@ describe('to_py on a value that is already Python', () => {
 });
 
 describe('to_py on data whose field is called ob_type', () => {
-    // The routing is repaired: such an object is data now, and takes the branch
-    // that rebuilds a dict. What it meets there is **Brython's**, and three
-    // lines of plain Python are enough to show it, with no Svelthon in sight:
+    // Two halves. The routing was ours and is repaired above. What the rebuild
+    // then met was the engine's: a dict keeps its string keys as own JavaScript
+    // properties, and that one shadowed the name Brython reads back, so three
+    // lines of plain Python were enough to break a dictionary —
     //
     //     d = {}
     //     d["ob_type"] = "business"
     //     d["value"] = 42     # TypeError
     //
-    // A dict keeps its string keys as own JavaScript properties, and that one
-    // collides with a name the engine reads back — the same shape as the
-    // `__proto__` key, which is fixed upstream and survives here. CPython 3.14.4
-    // prints the dict.
-    //
-    // So this records the limit rather than pretending it is ours to fix. When
-    // the engine stops colliding, this test is what says the assertion below can
-    // become the value.
-    test('crosses as far as the engine allows, and says where it stopped', () => {
-        expect(() => field_named_type({ ob_type: 'business', value: 42 })).toThrow(
-            /does not support item assignment/
-        );
+    // — the same shape as the `__proto__` key, and the same predicate.
+    // `vendor/BRYTHON_FIX.md` carries it, and `tests/vendor.test.js` guards that
+    // the bundle still does.
+    test('is data, not a Python object', () => {
+        expect(field_named_type({ ob_type: 'business', value: 42 })).toEqual(['business', 42]);
     });
 });
