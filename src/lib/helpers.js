@@ -54,6 +54,22 @@ function refuse(message) {
 // is the commonest way to reach these two messages, and it was the one way to
 // get a JavaScript accident instead of one.
 function shown(value) {
+    // A function is the one shape with neither a JSON notation nor a useful
+    // `String()`, which would be its whole source text. Three things may know
+    // its name and they are asked in the order they are trustworthy: what Python
+    // recorded, then the name JavaScript gave it — which is what names a
+    // function an author imported through `__js__`, where Python knows nothing
+    // and `str()` answers `<JavascriptFunction object>` for every one of them.
+    //
+    // An anonymous arrow has neither, and the generic wording below is then the
+    // best available rather than a shortcoming: nothing on the value knows what
+    // it was called.
+    if (typeof value === 'function') {
+        const named = pyName(value) ?? (value.name || null);
+
+        if (named !== null) return named;
+    }
+
     try {
         // `undefined` rather than a throw is what `JSON.stringify` answers for
         // the values it has no notation for, a function among them, and
@@ -161,12 +177,7 @@ const serialisable = (one) => {
 // function, a bound method, and a callable instance. The fields of that instance
 // are not what it is — the export hands it to JavaScript as its call.
 const noCall = (one) => {
-    // A function is named by what Python recorded; the two object shapes say
-    // more than a name on their own — `<bound method Box.save of <Box object>>`
-    // and `<Handler object>` — so they keep their repr.
-    const named = typeof one === 'function' ? pyName(one) : null;
-
-    throw refuse(`tojson(): ${named ?? shown(one)} is callable, and a call has no JSON`);
+    throw refuse(`tojson(): ${shown(one)} is callable, and a call has no JSON`);
 };
 
 export function tojson(value, indent) {

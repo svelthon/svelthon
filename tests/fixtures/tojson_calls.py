@@ -4,6 +4,7 @@
 # Written in Python rather than assembled in JavaScript because that is where the
 # helper is called from: `{tojson(registry)}` in a template, with the author's own
 # values.
+__js__ = {"./tojson_helper.js": ["formatted"]}
 __all__ = ["says", "control", "keeps_an_instance"]
 
 
@@ -30,7 +31,15 @@ def plain():
 handler = Handler()
 box = Box()
 
-SHAPES = {"function": plain, "method": box.save, "instance": handler}
+SHAPES = {
+    "function": plain,
+    "lambda": lambda: 2,
+    "method": box.save,
+    "instance": handler,
+    # The one shape Python cannot name at all: what it knows is
+    # `<JavascriptFunction object>`, identically for every import.
+    "javascript": formatted,
+}
 
 POSITIONS = {
     "alone": lambda one: one,

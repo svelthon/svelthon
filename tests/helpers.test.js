@@ -125,8 +125,10 @@ describe('tojson', () => {
     // author's, and neither may decide whether they are told.
     describe.for([
         ['a function', 'function'],
+        ['a lambda', 'lambda'],
         ['a bound method', 'method'],
-        ['a callable instance', 'instance']
+        ['a callable instance', 'instance'],
+        ['a function JavaScript built', 'javascript']
     ])('%s', ([, shape]) => {
         test.for([
             ['on its own', 'alone'],
@@ -136,6 +138,25 @@ describe('tojson', () => {
         ])('is refused by name, %s', ([, position]) => {
             expect(says(shape, position)).toMatch(/svelthon — tojson\(\): .+ is callable/);
         });
+    });
+
+    // And the sentence names something the author wrote, which is this project's
+    // central claim about messages and the half a refusal is worth.
+    //
+    // Three things may know what a callable is called and they are asked in the
+    // order they are trustworthy: what Python recorded, then the name JavaScript
+    // gave it. The second is not a fallback for the first — it is the only one
+    // that answers for a function imported through `__js__`, where Python says
+    // `<JavascriptFunction object>` for every import alike.
+    test.for([
+        ['the name its `def` gave it', 'function', /\bplain\(\)/],
+        ['what Python calls an anonymous one', 'lambda', /<lambda>/],
+        ['the receiver and the method', 'method', /Box\.save/],
+        ['the class of the instance', 'instance', /Handler/],
+        ['the name JavaScript gave it', 'javascript', /\bformatted\b/]
+    ])('names it by %s', ([, shape, named]) => {
+        expect(says(shape, 'alone')).toMatch(named);
+        expect(says(shape, 'deep')).toMatch(named);
     });
 
     // A callable instance carries fields and they are not what it is: the export
