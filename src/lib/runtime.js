@@ -1307,6 +1307,20 @@ export function plainData(value, seen, adapt) {
     // `load()` stream: `{"lentes": chercher_lentement()}` returns a coroutine,
     // and SvelteKit waits on the promise it turns into.
     if (globalThis.__BRYTHON__.get_class(value) === globalThis.__BRYTHON__.coroutine) {
+        // A walk that cannot wait must not start one.
+        //
+        // The JSON rule is a serialiser's, and a serialiser is synchronous: it
+        // met the branch below, scheduled the body, and handed `JSON.stringify`
+        // a promise, which has no enumerable property — so `tojson(work())`
+        // answered `{}` while **running the author's coroutine**. A valid string
+        // that says nothing, and a side effect nobody asked for.
+        //
+        // The caller's own rule decides, before anything is scheduled: the
+        // serialiser refuses this shape the way it refuses a class and a call.
+        // Every other caller hands its result to JavaScript, where a promise is
+        // exactly what is wanted.
+        if (adapt !== undefined && seen instanceof Set) return adapt(value);
+
         // One coroutine object, one run. This branch sits before the graph memo
         // and had none of its own, so a coroutine held under two keys was
         // started twice: two promises, and the Python body executed twice —
@@ -1775,6 +1789,37 @@ function shallow(value) {
 // went on rendering correctly while `round(x, 1)` raised. The copy is built on
 // the first replacement and not before, so the common case, a transition dict of
 // plain numbers, allocates nothing.
+// The outer half of a configuration's callback: the adapter, plus the arguments
+// converted on the way in, which is what a framework calling with raw numbers
+// needs and what `pyHandler` alone does not do.
+//
+// Memoised on the adapter it wraps, because **the function a consumer sees is
+// this one**. `pyHandler` hands back a stable wrapper and this layer built a
+// fresh one at every conversion, so a component read twice gave two JavaScript
+// functions for one Python callback and a registry could not remove what it had
+// been given. The cache inside does not settle identity if the value published
+// is a new object wrapped around it.
+//
+// A WeakMap, so nothing here keeps a component's callbacks alive.
+const CONVERTED = new WeakMap();
+
+function converting(wrapped) {
+    let known = CONVERTED.get(wrapped);
+
+    if (known === undefined) {
+        // Named after what it wraps, like the other wrappers in this file: a
+        // callback a framework keeps is exactly the one somebody logs.
+        known = Object.defineProperty((...args) => wrapped(...args.map(inbound)), 'name', {
+            value: wrapped.name,
+            configurable: true
+        });
+
+        CONVERTED.set(wrapped, known);
+    }
+
+    return known;
+}
+
 export function pyNumbers(value) {
     if (value === null || typeof value !== 'object') return value;
     if (value.ob_type === _b_.float) return value.value;
@@ -1826,13 +1871,7 @@ export function pyNumbers(value) {
 
             if (wrapped === one) continue;
 
-            // Named after what it wraps, like the two wrappers above: a callback
-            // a framework keeps is exactly the one somebody logs.
-            replacement = Object.defineProperty(
-                (...args) => wrapped(...args.map(inbound)),
-                'name',
-                { value: wrapped.name, configurable: true }
-            );
+            replacement = converting(wrapped);
         } else continue;
 
         if (out === value) out = shallow(value);
@@ -1894,13 +1933,32 @@ export function pyNumbers(value) {
 // an export; both leave the right word in front.
 const nameOf = (where) => where.split(' — ')[0].replace(/\(\)$/, '');
 
-function pyCall(fn, where, lineOffset = 0, arity = Infinity, named) {
+export function pyCall(fn, where, lineOffset = 0, arity = Infinity, named) {
     const wrapper = (...args) => {
         try {
             const given = args.slice(0, arity).map(pyArg);
             const result = scheduleAsync(fn(...given), where, lineOffset);
 
-            return result instanceof Promise ? result.then(plainData) : plainData(result);
+            // The result crosses under the same rule as an export, callbacks
+            // included.
+            //
+            // It used to cross with no rule at all, so a callable *returned by*
+            // an exported function was not adapted while the same value exported
+            // directly was: `factory()` handing back `handler.run` gave
+            // JavaScript an object it could not call, and an ordinary function
+            // came back with Python's raw contract — an argument it never
+            // declared raised, and what it answered was a Brython float rather
+            // than a number. One value, two contracts, decided by whether it was
+            // published or returned.
+            //
+            // Noted at the twenty-ninth reading as a limit and carried since;
+            // what makes it a defect rather than a limit is that the rule
+            // already exists, one line away, and every other crossing passes it.
+            const out = adapting(where, lineOffset);
+
+            return result instanceof Promise
+                ? result.then((one) => plainData(one, undefined, out))
+                : plainData(result, undefined, out);
         } catch (error) {
             throw pyError(error, where, lineOffset);
         }

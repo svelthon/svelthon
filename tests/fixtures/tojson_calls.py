@@ -5,7 +5,7 @@
 # helper is called from: `{tojson(registry)}` in a template, with the author's own
 # values.
 __js__ = {"./tojson_helper.js": ["formatted"]}
-__all__ = ["says", "control", "keeps_an_instance"]
+__all__ = ["says", "control", "keeps_an_instance", "coroutine_says"]
 
 
 class Handler:
@@ -47,6 +47,31 @@ POSITIONS = {
     "dict": lambda one: {"on_save": one},
     "deep": lambda one: {"handlers": [one]},
 }
+
+
+calls = []
+
+
+async def work():
+    calls.append(1)
+    return {"answer": 42}
+
+
+pending = work()
+nested_pending = {"task": work()}
+
+
+def coroutine_says(where):
+    # The count is read *before* and after, because the defect was not the
+    # answer: it was that asking for the answer ran the body.
+    before = len(calls)
+
+    try:
+        written = "returned " + str(tojson(pending if where == "alone" else nested_pending))
+    except Exception as error:
+        written = str(error)
+
+    return [written, before, len(calls)]
 
 
 def says(shape, position):

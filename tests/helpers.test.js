@@ -29,7 +29,7 @@ import {
     urlencode
 } from '../src/lib/helpers.js';
 // The calls are written in Python, which is where the helper is called from.
-import { says, control, keeps_an_instance } from './fixtures/tojson_calls.py';
+import { says, control, keeps_an_instance, coroutine_says } from './fixtures/tojson_calls.py';
 
 // The Python values that are objects rather than primitives, which is what these
 // helpers keep meeting: a float, a list, a tuple, a set.
@@ -157,6 +157,25 @@ describe('tojson', () => {
     ])('names it by %s', ([, shape, named]) => {
         expect(says(shape, 'alone')).toMatch(named);
         expect(says(shape, 'deep')).toMatch(named);
+    });
+
+    // A coroutine, which is the shape that did more than answer badly.
+    //
+    // The walk turned one into a promise before the JSON rule was consulted, and
+    // `JSON.stringify` has nothing to write of a promise: `tojson(work())`
+    // answered `{}` — valid JSON saying nothing — **and ran the author's body**
+    // on the way. A serialiser is synchronous and starts nothing; the refusal
+    // happens before anything is scheduled, which is what the counts on either
+    // side of the call are there to prove.
+    test.for([
+        ['on its own', 'alone'],
+        ['inside a mapping', 'nested']
+    ])('is refused before it is started, %s', ([, where]) => {
+        const [said, before, after] = coroutine_says(where);
+
+        expect(said).toMatch(/svelthon — tojson\(\): .+ is a coroutine/);
+        expect(said).toMatch(/await/i);
+        expect(after).toBe(before);
     });
 
     // A callable instance carries fields and they are not what it is: the export

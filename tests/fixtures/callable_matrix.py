@@ -23,6 +23,9 @@ __all__ = [
     "as_argument",
     "as_option",
     "as_listed",
+    "made",
+    "made_later",
+    "made_inside",
     "labelled",
     "holder",
     "stacked",
@@ -178,6 +181,20 @@ def call_from_python(half):
 def reads_its_own():
     # Python's side of the limit: the fields are untouched where they live.
     return [labelled.name, labelled.length]
+
+
+def made(key):
+    # A callable a function *returns*, which is the route an export does not
+    # take: a factory, a builder, a strategy chosen at call time.
+    return mapped[key]
+
+
+async def made_later(key):
+    return mapped[key]
+
+
+def made_inside(key):
+    return {"hook": mapped[key], "duration": 0.5}
 
 
 def as_argument(key):

@@ -111,7 +111,11 @@ describe('and in a plain module', () => {
         const init = script.indexOf('init(__py);');
 
         expect(init).toBeGreaterThan(script.lastIndexOf('bind(__proto, '));
-        expect(script.indexOf('const load = (...a) =>')).toBeGreaterThan(init);
+        // `__pyCall`, and not a boundary written out here: the wrapper a module's
+        // functions get is the runtime's own, so a rule added to it holds on
+        // this route too. It was spelled out inline, and a callback returned by
+        // one of these functions then crossed with no policy at all.
+        expect(script.indexOf('const load = __pyCall(')).toBeGreaterThan(init);
         expect(script.indexOf('export { load };')).toBeGreaterThan(init);
     });
 });

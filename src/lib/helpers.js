@@ -177,7 +177,18 @@ const serialisable = (one) => {
 // function, a bound method, and a callable instance. The fields of that instance
 // are not what it is — the export hands it to JavaScript as its call.
 const noCall = (one) => {
-    throw refuse(`tojson(): ${shown(one)} is callable, and a call has no JSON`);
+    // The walk hands this rule two shapes, and they are one sentence apart: a
+    // call that has not been made, and a call that has been made and not
+    // finished. Neither has JSON, and the second is the one that used to be
+    // *started* by asking — the serialiser scheduled the body and wrote `{}`.
+    const running = globalThis.__BRYTHON__.get_class(one) === globalThis.__BRYTHON__.coroutine;
+
+    throw refuse(
+        running
+            ? `tojson(): ${shown(one)} is a coroutine, and a coroutine has no JSON until it ` +
+                  `is awaited. Await it and serialise what it answers.`
+            : `tojson(): ${shown(one)} is callable, and a call has no JSON`
+    );
 };
 
 export function tojson(value, indent) {

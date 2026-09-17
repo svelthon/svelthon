@@ -740,6 +740,7 @@ const RUNTIME = {
     pyData: '__pyData',
     pyBoundary: '__pyBoundary',
     pyNumbers: '__pyNumbers',
+    pyCall: '__pyCall',
     pyExport: '__pyExport',
     jsCall: '__jsCall',
     ticking: '__ticking',
@@ -1844,8 +1845,8 @@ function plainPreamble(c) {
     return [
         `import { init as __init } from ${JSON.stringify(virtualId(c.name))};`,
         `import { ${runtimeAliases([
-            'bind', '__pybridge', 'pyError', 'scheduleAsync', 'plainData', 'pyArg', 'pyData',
-            'pyExport', 'pyBoundary', 'jsCall', 'ticking', 'pyBind', 'NONE', 'helpers',
+            'bind', '__pybridge', 'pyCall', 'pyError', 'scheduleAsync', 'plainData', 'pyArg',
+            'pyData', 'pyExport', 'pyBoundary', 'jsCall', 'ticking', 'pyBind', 'NONE', 'helpers',
             'registerModule', 'group'
         ])} } from 'svelthon/runtime';`,
         ...c.jsImports.map(jsImportLine),
@@ -1895,11 +1896,23 @@ function plainInit(c) {
 
 function plainExports(c) {
     return [
+        // `pyCall`, and not a copy of it written out here.
+        //
+        // This line used to spell the whole boundary again — the trim, the
+        // arguments, the coroutine, the conversion, the position — and a rule
+        // added to the runtime's own wrapper then held everywhere except here. It
+        // cost a defect: a callable *returned* by a module's function crossed
+        // with no callback policy, so a bound method handed back by a factory
+        // arrived as an object while the same method exported directly was
+        // callable.
+        //
+        // The arrow is what keeps the late binding: `__fn_name` is a `let` the
+        // namespace writes into, so the function is read at the call and not
+        // captured here.
         ...[...c.funcs, ...c.plainDeriveds].map(
             (f) =>
-                `const ${f.name} = (...a) => { try { const r = __scheduleAsync(${fn(f.name)}(...a.slice(0, ${f.arity ?? 0}).map(__pyArg)), ${JSON.stringify(`${f.name}() — ${c.source}`)}, ${c.lineOffset});` +
-                ` return r instanceof Promise ? r.then(__plainData) : __plainData(r); }` +
-                ` catch (err) { throw __pyError(err,${JSON.stringify(`${f.name}() — ${c.source}`)}, ${c.lineOffset}); } };`
+                `const ${f.name} = __pyCall((...a) => ${fn(f.name)}(...a), ` +
+                `${JSON.stringify(`${f.name}() — ${c.source}`)}, ${c.lineOffset}, ${f.arity ?? 0});`
         ),
         ``,
         // SvelteKit reads `load`, `actions`, `GET`, `prerender` by name off the

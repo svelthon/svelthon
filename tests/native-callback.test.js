@@ -65,4 +65,30 @@ describe('a configuration whose callback is Python', () => {
         expect(typeof eased).toBe('number');
         expect(eased).toBe(0.25);
     });
+
+    // And it is **one** function, however many times the configuration is read.
+    //
+    // The adapter underneath was cached; the layer that converts the arguments
+    // was built fresh at every conversion, and that layer is what the consumer
+    // is handed. So a component read twice gave two JavaScript functions for one
+    // Python callback, and a registry could not take back what it had been
+    // given: the cache inside settles nothing if the function published is a new
+    // object wrapped around it.
+    test('and reading it twice gives the same function', () => {
+        const instance = mounted();
+        const first = instance.kept_config().easing;
+        const second = instance.kept_config().easing;
+
+        expect(first).toBe(second);
+
+        const registry = new Set([first]);
+
+        expect(registry.delete(second)).toBe(true);
+        expect(registry.size).toBe(0);
+    });
+
+    test('while still answering what it answered', () => {
+        expect(mounted().kept_config().easing(0.5)).toBe(0.25);
+        expect(mounted().kept_config().duration).toBe(400);
+    });
 });
