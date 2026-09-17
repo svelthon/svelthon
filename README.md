@@ -125,6 +125,11 @@ cannot be given a binding in the generated module, so it is refused at its line
 with the rename Python has for the collision: `new_`. Inside a `def` the same
 word is an ordinary local and nothing objects.
 
+A fourth is the compiler's own: a name that starts with `__` and does not end
+with one — `__cache`, not `__all__` — is refused wherever it is declared, in the
+script and in the markup alike, because the generated code builds its names out
+of that prefix in the same scope.
+
 | Python | Svelte 5 |
 |---|---|
 | `count = 0` | `let count = $state(0)` |

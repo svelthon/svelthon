@@ -805,6 +805,22 @@ const ATTACHMENTS = ['attach'];
 // behind a JavaScript proxy fails its own type checks.
 const DECLARED_NAME = new RegExp(`^${NAME}$`, 'u');
 
+// The compiler's own prefix, written the same way `compile.cjs` writes it: a
+// name that begins with `__` and does not end with one, so Python's own dunders
+// — `__all__`, `__doc__` — stay free.
+//
+// The script half has refused a module-level name of this shape since the
+// beginning; the markup half declares names too and refused nothing. A
+// declaration spelled like one of the functions this pass appends emitted
+// `{let X = $state.raw(X())}`, where the name the author declared shadows the
+// very function that produces its value, and a block alias of that spelling put
+// the same collision one scope down. Svelte accepts both, so nothing was said.
+//
+// The spellings are not written out here: `tests/generated-names.test.js` reads
+// every `__name` this file holds, prose included, and asks the compiler to
+// define it.
+const COMPILER_PREFIX = /^__(?!.*__$)/;
+
 // What `walrus()` emits for the plain form, read back so that a write aimed at a
 // markup name can be refused rather than sent to the wrong scope.
 const ASSIGNED = new RegExp(`__assign\\("(${NAME})"`, 'gu');
@@ -960,10 +976,30 @@ function walk(markup, collect, onPython, seed, record, where) {
     // The tag being read, so that its closing `>` knows what it closed.
     let tag = null;
 
+    // Every name the markup declares goes through here or through the two
+    // writes below, which is why the refusal sits on the way in rather than at
+    // each of the four constructs that can declare one.
+    const refuseCompilerName = (names) => {
+        const taken = [names].flat().find((one) => COMPILER_PREFIX.test(one));
+
+        if (taken === undefined) return names;
+
+        throw refuse(
+            new SyntaxError(
+                `svelthon — \`${taken}\` starts with \`__\`, which is the compiler's own ` +
+                    `prefix${said()}. The markup pass names the function behind every ` +
+                    `expression with it, and declares that function in the scope your name ` +
+                    `is declared in, so a name of that shape takes one of theirs: the ` +
+                    `declaration would read its own value from itself. Python's own names ` +
+                    `end with \`__\` as well, and those are free.`
+            )
+        );
+    };
+
     const push = (names) => {
         opened += 1;
         ids.push(opened);
-        scopes.push([...(seed.get(opened) || []), ...names]);
+        scopes.push([...(seed.get(opened) || []), ...refuseCompilerName(names)]);
     };
 
     // Never below the base scope: unbalanced markup is Svelte's to refuse, and
@@ -1502,6 +1538,8 @@ function walk(markup, collect, onPython, seed, record, where) {
                 // hand it to a child.
                 const declares = trimmed.match(new RegExp(`^#snippet\\s+(${NAME})`, 'u'));
 
+                if (declares) refuseCompilerName([declares[1]]);
+
                 if (record && declares) {
                     const holder = ids[ids.length - 1];
                     record.set(holder, [...(record.get(holder) || []), declares[1]]);
@@ -1575,7 +1613,7 @@ function walk(markup, collect, onPython, seed, record, where) {
                         ? `{let ${declared.name} = $state.raw(${value})}`
                         : `{const ${declared.name} = $derived(${value})}`;
 
-                scopes[scopes.length - 1]?.push(declared.name);
+                scopes[scopes.length - 1]?.push(...refuseCompilerName([declared.name]));
             } else {
                 out += `{${call(inner, '__text')}}`;
             }

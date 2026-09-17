@@ -126,6 +126,11 @@ est refusé à sa ligne, avec le renommage que Python réserve à cette collisio
 `new_`. À l'intérieur d'un `def`, le même mot est une variable locale ordinaire
 et personne n'objecte.
 
+Une quatrième est celle du compilateur : un nom qui commence par `__` sans finir
+par `__` (`__cache`, et non `__all__`) est refusé partout où il est déclaré, dans
+le script comme dans le gabarit, parce que le code généré construit ses propres
+noms sur ce préfixe, dans la même portée.
+
 | Python | Svelte 5 |
 |---|---|
 | `count = 0` | `let count = $state(0)` |
