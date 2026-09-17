@@ -31,84 +31,72 @@ export function atomic(source, at) {
     // lone quote is text.
     const fence = source.startsWith(c.repeat(3), at) ? c.repeat(3) : c;
 
-    // An f-string is two grammars in one literal: text, and code inside `{…}`.
-    // Since Python 3.12 that code may reuse the delimiter of the string holding
-    // it — `f"{ "}" }"` is valid — so the quote that opens the inner string was
-    // taken for the end of the outer one, and the brace it guards ended the
-    // template's expression. The fields are followed, and a quote met inside one
-    // opens a string of its own, by the same function.
+    // An f-string is three grammars in one literal, and the scanner has to know
+    // which one it is standing in.
+    //
+    //  - **text**, where `{{` and `}}` are an escaped brace;
+    //  - a **field**, `{…}`, which is Python and may since 3.12 reuse the
+    //    delimiter of the string holding it — `f"{ "}" }"` is valid;
+    //  - a **format specification**, after the field's own `:`, where `#` is an
+    //    option and `'` a fill character rather than a comment and a string,
+    //    and where a `{…}` is a field again: `f"{3:{2}}"`.
+    //
+    // A stack rather than counters, because a `{` means different things in
+    // each: at the top it opens a field, inside a field it opens a dict or a
+    // set, inside a specification it opens a nested field. Counting braces and
+    // brackets alone read the `:` of `f"{ {'x': '}'} }"` as a specification's,
+    // and the brace inside that string then closed something.
     const formatted = interpolated(source, at);
-    let depth = 0;
-    // Where the format specification of the current field began, since `:` makes
-    // a third grammar: `f"{255:#x}"` and `f"{3:'>5}"` are valid, and there `#`
-    // is an option and `'` a fill character, not a comment and not a string.
-    // Only `{` and `}` mean anything after it, which is what lets `{3:{2}}`
-    // nest.
-    let spec = 0;
-    // Parentheses and subscripts inside the field, so the `:` of a slice or of a
-    // dict is not taken for the one that opens a specification.
-    let brackets = 0;
+    const frames = [];
+    const inner = () => frames[frames.length - 1];
 
     for (let i = at + fence.length; i < source.length; i++) {
-        if (spec === 0 && source[i] === '\\') {
+        const here = formatted ? inner() : undefined;
+        const spec = here !== undefined && here.spec;
+
+        if (!spec && source[i] === '\\') {
             i++;
             continue;
         }
 
-        if (formatted && spec > 0) {
-            if (source[i] === '{') depth++;
-            else if (source[i] === '}') {
-                depth--;
-                if (depth < spec) spec = 0;
-            } else if (depth === 0 && source.startsWith(fence, i)) {
-                return i + fence.length - at;
-            }
-
-            continue;
-        }
-
         if (formatted) {
-            // `{{` and `}}` are a literal brace **in the text**, and syntax
-            // inside a field: `f"{ {'x': 1}}"` closes a dict and then the field,
-            // `f"{3:{2}}"` a nested width and then its own. Skipping them
-            // wherever they appeared left those counters standing and the
-            // scanner lost the end of the string.
-            if (depth === 0 && (source.startsWith('{{', i) || source.startsWith('}}', i))) {
+            if (frames.length === 0 && (source.startsWith('{{', i) || source.startsWith('}}', i))) {
                 i++;
                 continue;
             }
 
             if (source[i] === '{') {
-                depth++;
-                brackets = 0;
+                frames.push({ field: frames.length === 0 || spec, spec: false, brackets: 0 });
                 continue;
             }
 
-            if (source[i] === '}' && depth > 0) {
-                depth--;
+            if (source[i] === '}' && frames.length > 0) {
+                frames.pop();
                 continue;
             }
 
-            if (depth > 0) {
-                if ('(['.includes(source[i])) brackets++;
-                else if (')]'.includes(source[i])) brackets--;
-                else if (source[i] === ':' && brackets === 0) {
-                    spec = depth;
+            if (here !== undefined && !spec) {
+                if ('(['.includes(source[i])) here.brackets++;
+                else if (')]'.includes(source[i])) here.brackets--;
+                else if (source[i] === ':' && here.field && here.brackets === 0) {
+                    here.spec = true;
+                    continue;
+                }
+
+                const nested = atomic(source, i);
+
+                if (nested > 0) {
+                    i += nested - 1;
                     continue;
                 }
             }
 
-            if (depth > 0) {
-                const inner = atomic(source, i);
-
-                if (inner > 0) {
-                    i += inner - 1;
-                    continue;
-                }
-            }
+            // Inside a specification nothing but a brace is syntax, and the
+            // fence cannot end the string there either.
+            if (spec) continue;
         }
 
-        if (depth === 0 && source.startsWith(fence, i)) return i + fence.length - at;
+        if (frames.length === 0 && source.startsWith(fence, i)) return i + fence.length - at;
     }
 
     return source.length - at;
