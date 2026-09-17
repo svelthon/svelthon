@@ -230,13 +230,23 @@ function declaredJsImports(body, source) {
         node.value.keys.forEach((key, index) => {
             const names = (node.value.values[index].elts || [])
                 .map((one) => (one instanceof $B.ast.Constant ? one.value : null))
-                .filter((one) => typeof one === 'string' && JS_NAME.test(one));
+                .filter((one) => typeof one === 'string');
 
             // The same question `importjs` asks, and now the same answer. It
             // used to be a filter, so a name JavaScript cannot carry was dropped
             // and nothing was imported, silently, while the `importjs` spelling
             // of the same line refused it by name. `__js__` is the form a plain
             // `.py` uses, so it is the one a SvelteKit route reaches for.
+            for (const one of names) {
+                if (!JS_NAME.test(one)) {
+                    throw refuse(
+                        `svelthon — __js__: \`${one}\` is not a name (${node.lineno})`,
+                        source,
+                        node.lineno
+                    );
+                }
+            }
+
             if (key instanceof $B.ast.Constant && names.length) {
                 modules.push({ from: key.value, names });
             }
@@ -1397,7 +1407,7 @@ const SUBS = '__subs';
 // JavaScript binding. The locked words did not either: `v` is not Svelthon's
 // vocabulary. This is a third category, a name the generated code uses for
 // itself, and the answer to that category is a prefix rather than a list.
-const NEXT_VALUE = 'v';
+const NEXT_VALUE = '__next';
 const SUBSCRIBING = (c) => c.state.length > 0 || c.bindables.length > 0;
 
 const rev = (name) => `__rev_${name}`;
@@ -1502,17 +1512,15 @@ function templateBridge(c) {
     if (c.store) return [];
 
     return [
-        `const __event = (fn) => pyEvent(fn, ${c.lineOffset});`,
+        `const __event = (fn) => __pyEvent(fn, ${c.lineOffset});`,
         // What `(name := value)` in a handler compiles to. The write goes
         // through the namespace, so through the accessor, so the signal fires:
         // the whole reason the walrus can mean this here.
-        `const __assign = (name, value) => { ${NS}[name] = value; return value; };`,
-        // The same walrus aimed at an attribute or a key rather than a name.
-        // Python's grammar takes only the name; JavaScript's `=` takes all
-        // three, and so does `bind:` already.
-
-        // What `bind:group` becomes: a directive whose value is Python.
-        `const __group = group;`
+        `const __assign = (name, value) => { ${NS}[name] = value; return value; };`
+        // The same walrus aimed at an attribute or a key rather than a name,
+        // and `bind:group`'s action, are imported under the names the markup
+        // pass emits — `__setattr`, `__setitem`, `__group` — rather than
+        // assigned here from a bare one an author could have declared.
     ];
 }
 
@@ -2198,7 +2206,7 @@ function compile(
     const listed = declaredExports(root._ast.body);
     const exported = (
         listed ?? [...funcs.map((f) => f.name), ...plainDeriveds.map((d) => d.name)]
-    ).filter((n) => JS_NAME.test(n) && !JS_RESERVED.has(n));
+    ).filter((n) => PY_NAME.test(n) && !JS_RESERVED.has(n));
 
     // A name in `__all__` that the module never binds. Python raises on it at
     // `from m import *` and says nothing otherwise; here it used to emit a
