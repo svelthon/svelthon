@@ -29,5 +29,17 @@ tag = "x"
 <!-- And braces that really are escaped text. -->
 <p data-k="escaped">{f"{{x}}"}</p>
 
+<!-- A format option: `#` is not a comment here. -->
+<p data-k="hex">{f"{255:#x}"}</p>
+
+<!-- A fill character that looks like a delimiter. -->
+<p data-k="fill">{f"{3:'>5}"}</p>
+
+<!-- The same without the option, which already worked. -->
+<p data-k="plain-hex">{f"{255:x}"}</p>
+
+<!-- A colon that belongs to a slice, not to a specification. -->
+<p data-k="slice">{f"{[1, 2, 3][0:2]}"}</p>
+
 <!-- The witness: an ordinary string, which the scanner already protected. -->
 <p data-k="quoted">{"a } b"}</p>

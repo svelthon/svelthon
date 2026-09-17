@@ -39,10 +39,31 @@ export function atomic(source, at) {
     // opens a string of its own, by the same function.
     const formatted = interpolated(source, at);
     let depth = 0;
+    // Where the format specification of the current field began, since `:` makes
+    // a third grammar: `f"{255:#x}"` and `f"{3:'>5}"` are valid, and there `#`
+    // is an option and `'` a fill character, not a comment and not a string.
+    // Only `{` and `}` mean anything after it, which is what lets `{3:{2}}`
+    // nest.
+    let spec = 0;
+    // Parentheses and subscripts inside the field, so the `:` of a slice or of a
+    // dict is not taken for the one that opens a specification.
+    let brackets = 0;
 
     for (let i = at + fence.length; i < source.length; i++) {
-        if (source[i] === '\\') {
+        if (spec === 0 && source[i] === '\\') {
             i++;
+            continue;
+        }
+
+        if (formatted && spec > 0) {
+            if (source[i] === '{') depth++;
+            else if (source[i] === '}') {
+                depth--;
+                if (depth < spec) spec = 0;
+            } else if (depth === 0 && source.startsWith(fence, i)) {
+                return i + fence.length - at;
+            }
+
             continue;
         }
 
@@ -59,12 +80,22 @@ export function atomic(source, at) {
 
             if (source[i] === '{') {
                 depth++;
+                brackets = 0;
                 continue;
             }
 
             if (source[i] === '}' && depth > 0) {
                 depth--;
                 continue;
+            }
+
+            if (depth > 0) {
+                if ('(['.includes(source[i])) brackets++;
+                else if (')]'.includes(source[i])) brackets--;
+                else if (source[i] === ':' && brackets === 0) {
+                    spec = depth;
+                    continue;
+                }
             }
 
             if (depth > 0) {

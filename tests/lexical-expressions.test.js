@@ -60,6 +60,25 @@ describe('an expression whose brace is not a brace', () => {
         expect(read('escaped')).toBe('{x}');
     });
 
+    // After a `:` the field is a **format specification**, a third grammar: `#`
+    // is an option and `'` a fill character, not a comment and not a string.
+    test('a format option is not a comment', () => {
+        expect(read('hex')).toBe('0xff');
+    });
+
+    test('and a fill character is not a delimiter', () => {
+        expect(read('fill')).toBe("''''3");
+    });
+
+    test('while the same without the option already worked', () => {
+        expect(read('plain-hex')).toBe('ff');
+    });
+
+    // The colon of a slice belongs to the expression, not to a specification.
+    test('and a colon inside a subscript stays in the expression', () => {
+        expect(read('slice')).toBe('[1, 2]');
+    });
+
     test('while an ordinary string was already safe', () => {
         expect(read('quoted')).toBe('a } b');
     });

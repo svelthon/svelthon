@@ -186,6 +186,21 @@ describe('the vendored Brython carries its repairs', () => {
         expect(source.match(/\$B\.scope_name\(/g)).toHaveLength(5);
     });
 
+    // A quote used as the **fill character** of a format specification. A string
+    // constant reaches the code generator escaped when it came from a source
+    // literal and raw when it came from a specification, so `f"{3:'>5}"` pasted
+    // a bare apostrophe into the emitted literal and the generated JavaScript
+    // stopped parsing. CPython 3.14.4 prints the right-hand value.
+    test('an f-string format specification may be filled with a quote', () => {
+        const _b_ = $B.builtins;
+        const format = (spec, value) =>
+            $B.$call($B.$getattr(_b_.str, 'format'), `{0:${spec}}`, value);
+
+        expect(format("'>5", 3)).toBe("''''3");
+        expect(format('#x', 255)).toBe('0xff');
+        expect(format('>5', 1)).toBe('    1');
+    });
+
     // `"ob_type"` is the mirror of the key below, and the second name the same
     // predicate has to refuse. It *does* become an own property, and shadows the
     // one the engine reads to know what the object is: the dictionary answered a
