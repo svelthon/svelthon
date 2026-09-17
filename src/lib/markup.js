@@ -3,23 +3,68 @@
 // browser playground compiles components client-side and needs exactly this,
 // while the file next door needs `fs` and `path` and cannot be loaded there.
 
+// How far to step over a Python comment or string literal starting at `at`, and
+// 0 when neither starts there.
+//
+// The scanners below look for a closing character and have to know which
+// characters are not code. They knew ordinary quotes, which is a smaller grammar
+// than the compiler's: a `}` inside a **comment** and a `}` inside a
+// **triple-quoted** string each ended an expression in the wrong place, and what
+// reached the compiler was a fragment — an error about truncated code rather
+// than about what the author wrote.
+//
+// One function because four of them ask: the brace, the bracket, the top-level
+// walk and the walrus rewrite. `tagValue` is not one of them; it reads markup,
+// where these rules do not hold.
+export function atomic(source, at) {
+    const c = source[at];
+
+    if (c === '#') {
+        const end = source.indexOf('\n', at);
+
+        return (end === -1 ? source.length : end) - at;
+    }
+
+    if (c !== '"' && c !== "'" && c !== '`') return 0;
+
+    // Three of the same character is a delimiter of its own, and inside it a
+    // lone quote is text.
+    const fence = source.startsWith(c.repeat(3), at) ? c.repeat(3) : c;
+
+    for (let i = at + fence.length; i < source.length; i++) {
+        if (source[i] === '\\') i++;
+        else if (source.startsWith(fence, i)) return i + fence.length - at;
+    }
+
+    return source.length - at;
+}
+
 // Find the '}' closing the block that opens at `start`, ignoring braces inside
-// string literals.
+// string literals and comments.
 function closingBrace(source, start) {
     let depth = 0;
-    let quote = null;
 
     for (let i = start; i < source.length; i++) {
-        const c = source[i];
-
-        if (quote) {
-            if (c === '\\') i++;
-            else if (c === quote) quote = null;
+        // Svelte's own sigils open a block: `{#each`, `{:else`, `{/if`, `{@html`.
+        // The `#` of a block is not the `#` of a Python comment, and only the
+        // opening brace of *this* block can carry one — a `{` further in belongs
+        // to a dict literal, where `#` means what Python says it means.
+        if (i === start && '#:/@'.includes(source[start + 1])) {
+            depth++;
+            i++;
             continue;
         }
 
-        if (c === '"' || c === "'" || c === '`') quote = c;
-        else if (c === '{') depth++;
+        const skip = atomic(source, i);
+
+        if (skip > 0) {
+            i += skip - 1;
+            continue;
+        }
+
+        const c = source[i];
+
+        if (c === '{') depth++;
         else if (c === '}' && --depth === 0) return i;
     }
 
@@ -33,19 +78,18 @@ function closingPair(source, start) {
     const open = source[start];
     const close = open === '(' ? ')' : ']';
     let depth = 0;
-    let quote = null;
 
     for (let i = start; i < source.length; i++) {
-        const c = source[i];
+        const skip = atomic(source, i);
 
-        if (quote) {
-            if (c === '\\') i++;
-            else if (c === quote) quote = null;
+        if (skip > 0) {
+            i += skip - 1;
             continue;
         }
 
-        if (c === '"' || c === "'") quote = c;
-        else if (c === open) depth++;
+        const c = source[i];
+
+        if (c === open) depth++;
         else if (c === close && --depth === 0) return i;
     }
 
@@ -57,19 +101,18 @@ function closingPair(source, start) {
 // arguments, or the `then` of an await block) without parsing Python.
 function atTopLevel(text, visit) {
     let depth = 0;
-    let quote = null;
 
     for (let i = 0; i < text.length; i++) {
-        const c = text[i];
+        const skip = atomic(text, i);
 
-        if (quote) {
-            if (c === '\\') i++;
-            else if (c === quote) quote = null;
+        if (skip > 0) {
+            i += skip - 1;
             continue;
         }
 
-        if (c === '"' || c === "'") quote = c;
-        else if (c === '(' || c === '[' || c === '{') depth++;
+        const c = text[i];
+
+        if (c === '(' || c === '[' || c === '{') depth++;
         else if (c === ')' || c === ']' || c === '}') depth--;
         else if (depth === 0 && visit(i) === true) return i;
     }
@@ -197,25 +240,17 @@ function walrusTarget(text) {
 export function walrus(expression) {
     let out = '';
     let index = 0;
-    let quote = null;
 
     while (index < expression.length) {
+        const skip = atomic(expression, index);
+
+        if (skip > 0) {
+            out += expression.slice(index, index + skip);
+            index += skip;
+            continue;
+        }
+
         const char = expression[index];
-
-        if (quote) {
-            out += char;
-            if (char === '\\') out += expression[++index] ?? '';
-            else if (char === quote) quote = null;
-            index++;
-            continue;
-        }
-
-        if (char === '"' || char === "'") {
-            quote = char;
-            out += char;
-            index++;
-            continue;
-        }
 
         // Only a *grouping* parenthesis, which is the form Python's grammar
         // forces in a lambda. One that opens a call belongs to the callee, and

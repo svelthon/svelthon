@@ -151,10 +151,16 @@ export const __pybridge = {
     }
 };
 
-// Methods that change a container. `__setitem__` and `__delitem__` are not
-// here: Brython compiles `d[k] = v` and `del d[k]` to their own calls, caught
-// below.
+// Methods that change a container.
+//
+// `__setitem__` and `__delitem__` are here, and the line that kept them out was
+// right about the wrong thing: Brython does compile `d[k] = v` and `del d[k]` to
+// their own calls, caught below, and that is a statement about the *statement*.
+// An author calling the method by name is ordinary Python and is what a generic
+// helper writes — `rows.__setitem__(0, 1)`, the same method kept as a value, or
+// reached through the type. Those three reach the container and nothing else.
 const MUTATORS = new Set([
+    '__setitem__', '__delitem__',
     'append', 'extend', 'insert', 'remove', 'pop', 'clear', 'sort', 'reverse',
     'add', 'discard', 'update', 'setdefault', 'popitem', 'appendleft',
     'extendleft', 'popleft', 'rotate', 'intersection_update',
@@ -334,6 +340,26 @@ function installMutationTracking($B) {
 
         if (FOLLOWED.has(attr) && typeof result === 'function') {
             return notifying(obj, attr, result);
+        }
+
+        // A special method read off a builtin is a `method-wrapper` object and
+        // not a function — `rows.__setitem__` kept in a name, then called. It is
+        // called through Python's protocol either way, so the wrapper is an
+        // ordinary function that calls it and then tells the container, which is
+        // what the three other spellings of this mutation already do.
+        if (FOLLOWED.has(attr) && result !== null && typeof result === 'object') {
+            if (result.ob_type === $B.method_wrapper) {
+                return (...args) => {
+                    let out;
+
+                    try {
+                        out = $B.$call(result, ...args);
+                        return out;
+                    } finally {
+                        afterCall(obj, attr, out, args);
+                    }
+                };
+            }
         }
 
         // What an attribute read hands back, the way `$getitem` treats a
@@ -1396,7 +1422,12 @@ export function pyData(value) {
     // Python already owns keep the crossing they had.
     const prototype = Object.getPrototypeOf(value);
 
-    if (value.ob_type === undefined && (prototype === Object.prototype || prototype === null)) {
+    // "Is this already a Python object" was asked as `ob_type === undefined`,
+    // which is a *field name* and therefore something data is allowed to carry:
+    // `{"ob_type": "business", "value": 42}` is ordinary JSON and took the
+    // branch meant for Brython's own objects. A real Python object carries a
+    // class there, so the question is asked of the class.
+    if (!pyClass(value.ob_type) && (prototype === Object.prototype || prototype === null)) {
         made ??= new WeakMap();
 
         const known = made.get(value);
@@ -1418,6 +1449,15 @@ export function pyData(value) {
     // unconditionally made `to_py` raise on every value that did not need
     // converting, so it was no use as the guard on a boundary, which is the one
     // place anyone would reach for it.
+    // Only for something that needed converting. `jsobj2pyobj` hands back the
+    // *same* object when the value was already Python, and a Python instance
+    // that happens to define `to_dict` — an ordinary serialisation helper —
+    // answered a **bound method**, which is an object, not a JavaScript
+    // function: `to_py(value)` raised `toDict is not a function` on a value it
+    // was supposed to leave alone. Identity is the test, and it is the truth
+    // being told: nothing was converted, so there is nothing to finish.
+    if (python === value) return python;
+
     const toDict = $B.$getattr(python, 'to_dict', null);
 
     return toDict === null ? python : toDict();
@@ -1945,6 +1985,17 @@ function exported(one, where, lineOffset, made) {
 // `actions` is, becomes an object of *wrapped* functions, so a form action gets
 // the same boundary treatment as a `load()`. Anything else is plain data.
 export function pyExport(value, where, lineOffset = 0) {
+    // A function published under a second name. The compiler hands the module's
+    // `def`s over itself and its *values* here, and `alias = original` is a
+    // value: it left untouched, so calling it gave back a coroutine object and
+    // `await` on a non-thenable is the value itself — the body never ran.
+    //
+    // Asked as `declared`, which reads the signature Python recorded, and not as
+    // `callable`: a function JavaScript built and a Python name published —
+    // `accepted = query(_accepted)` in a `.remote.py` — must cross as the object
+    // its library made, marks included. `declared` answers null for it.
+    if (declared(value) !== null) return exported(value, where, lineOffset);
+
     if (value === null || typeof value !== 'object') return value;
 
     // A callable that is not a `def` arrives here, because the compiler hands
