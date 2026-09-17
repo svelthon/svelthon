@@ -479,12 +479,22 @@ function installMutationTracking($B) {
     for (const name of ['$setattr', '$setattr1']) {
         const setattr = $B[name];
         $B[name] = function (obj, attr, value, ...rest) {
-            const result = setattr(obj, attr, value, ...rest);
-            if (obj !== null && typeof obj === 'object' && MARKS.has(obj)) {
-                inherit(obj, value); // an attribute holding a container is watched too
-                MARKS.get(obj)();
+            // In a `finally`, like every other mutation path: an author's
+            // `__setattr__` may write the attribute and *then* raise, and the
+            // exception does not undo the write. `object.__setattr__(self,
+            // name, value)` followed by a `raise` left the model at 1 and the
+            // page at 0, with the handler catching the error and carrying on.
+            let result;
+
+            try {
+                result = setattr(obj, attr, value, ...rest);
+                return result;
+            } finally {
+                if (obj !== null && typeof obj === 'object' && MARKS.has(obj)) {
+                    inherit(obj, value); // an attribute holding a container is watched too
+                    MARKS.get(obj)();
+                }
             }
-            return result;
         };
     }
 
@@ -1677,14 +1687,23 @@ export function pyNumbers(value) {
 
         if (one !== null && typeof one === 'object' && one.ob_type === _b_.float) {
             replacement = one.value;
-        } else if (typeof one === 'function') {
+        } else if (callable(one)) {
             // A callback the framework keeps and calls itself, a transition's
             // `tick(t, u)`. It never crosses a wrapper, so its arguments arrive
             // as raw JavaScript numbers, and Brython reads a number as an int.
             // So `tick(0, 1)` works, since 0 and 1 *are* integers, and the first
             // frame after it raises `0.0026 can't be converted to BigInt`,
             // which is what a transition that plays once and then stops is.
-            replacement = (...args) => one(...args.map(inbound));
+            //
+            // Asked as `callable` and not as `typeof one === 'function'`, which
+            // is the test every other boundary has stopped using: a bound method
+            // is an object, so `{'tick': ticker.tick}` handed the framework
+            // something it could not call at all, beside a `duration` converted
+            // correctly. `pyHandler` binds the receiver and reads the signature;
+            // the numbers are converted on the way in as before.
+            const wrapped = typeof one === 'function' ? one : pyHandler(one);
+
+            replacement = (...args) => wrapped(...args.map(inbound));
         } else continue;
 
         if (out === value) out = shallow(value);
