@@ -119,6 +119,12 @@ builtin. The six that are Svelthon's own words (`derived`, `effect`,
 the same line by reserving the `$` prefix. The refusal happens at compile time
 and names the culprit.
 
+A third list belongs to JavaScript rather than to us. A module-level name it
+reserves — `default`, `new`, `static`, `enum`, `interface`, `case` and the rest —
+cannot be given a binding in the generated module, so it is refused at its line
+with the rename Python has for the collision: `new_`. Inside a `def` the same
+word is an ordinary local and nothing objects.
+
 | Python | Svelte 5 |
 |---|---|
 | `count = 0` | `let count = $state(0)` |

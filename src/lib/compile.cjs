@@ -688,9 +688,14 @@ function jsImportLine(one) {
 // any more than it is for a `.svelte.ts`.
 const pythonModuleName = (source) => source.split('/').pop().replace(/(\.svelte)?\.py$/, '');
 
-// Python identifiers that JavaScript will not accept as bindings. They stay
-// perfectly usable inside the component's Python; they simply are not published
-// to the template.
+// Python identifiers that JavaScript will not accept as bindings.
+//
+// Half of them are Python keywords too and can never be written; the rest are
+// ordinary Python names an author reaches for without a thought — `default`,
+// `new`, `enum`, `interface`, `package`, `static`, `case`. At module level they
+// are refused by `refuseReserved`, which says why and what to rename to. They
+// stay perfectly usable *inside* a `def`, where the generated module binds
+// nothing.
 const JS_RESERVED = new Set(`break case catch class const continue debugger default delete do else
 enum export extends false function if implements in instanceof interface let new null package
 private protected public return static super switch this throw true typeof var void while with
@@ -875,6 +880,44 @@ function refuseLocked(declared, component, source, lines, lineOffset = 0) {
         `svelthon — \`${taken.name}\` is one of Svelthon's own words and cannot be ` +
             `redefined (${at}). The helpers, \`date\`, \`slugify\`, \`tojson\` and`  +
             ` the rest, may still be shadowed; the decorators may not.`,
+        source,
+        line === undefined ? undefined : line + lineOffset
+    );
+}
+
+// A module-level name JavaScript will not take as a binding.
+//
+// It used to be dropped in silence, and the three shapes that took were each
+// worse than the last. A component rendered its **first** value and then never
+// followed it: `new = 2` shows 2, the handler moves the model to 3, the page
+// stays at 2, with no error anywhere — the witness beside it, `ok`, repaints.
+// A module's `def default()` was simply not exported. And a value named in
+// `__all__` reached the refusal below this one and was told *this module never
+// binds it*, which is false: the module binds it, JavaScript reserves it. The
+// author was sent looking for a typo.
+//
+// So it is refused, for the reason `injected.cjs` gives about its own list:
+// winning in silence is the worst of the three behaviours. The cost is one
+// underscore, and Python has a convention for exactly this collision.
+//
+// After `refuseLocked`, which is given these names too: `export` is both one of
+// Svelthon's words and a JavaScript keyword, and *that* is what a reader needs
+// to be told first.
+function refuseReserved(reserved, source, lines, lineOffset = 0) {
+    const [name] = reserved;
+
+    if (name === undefined) return;
+
+    const line = lines?.get(name);
+    const at = line === undefined ? source : `${source}:${line + lineOffset}`;
+
+    throw refuse(
+        `svelthon — \`${name}\` is a reserved word in JavaScript, and the generated ` +
+            `module cannot bind one (${at}). It is good Python and nothing else is ` +
+            `wrong with it, but nothing reactive can be built on the name: the page ` +
+            `would show its first value and never follow it, and a module cannot ` +
+            `publish it. Rename it — Python's own convention for a name that collides ` +
+            `with a keyword is a trailing underscore, \`${name}_\`.`,
         source,
         line === undefined ? undefined : line + lineOffset
     );
@@ -1099,6 +1142,12 @@ function surface(body) {
     const take = (name) => {
         if (seen.has(name)) return false;
         if (JS_RESERVED.has(name)) {
+            // The line as well, because this list is refused now rather than
+            // dropped, and a refusal that cannot say where is half a refusal.
+            // An `Assign` reaches `take` before `bind`, so a reserved name never
+            // goes through the recording below it.
+            if (!lines.has(name) && typeof statement === 'number') lines.set(name, statement);
+
             reserved.push(name);
             return false;
         }
@@ -2112,6 +2161,7 @@ function compile(
     const declared = [...new Set([...emitted, ...bound])];
 
     refuseLocked([...declared, ...reserved], !plain && !store, source, lines, lineOffset);
+    refuseReserved(reserved, source, lines, lineOffset);
     refuseNestedRunes(root._ast.body, source, lineOffset);
 
     // Functions by default, what a framework calls by name. A module that wants

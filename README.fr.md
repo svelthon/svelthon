@@ -119,6 +119,13 @@ définit `list` masque le builtin. Les six qui sont les mots propres de Svelthon
 redéfinition de `def`, et Svelte trace la même limite en réservant le préfixe
 `$`. Le refus a lieu à la compilation et nomme le coupable.
 
+Une troisième liste n'est pas la nôtre, c'est celle de JavaScript. Un nom de
+niveau module qu'il réserve (`default`, `new`, `static`, `enum`, `interface`,
+`case` et les autres) ne peut recevoir aucune liaison dans le module généré : il
+est refusé à sa ligne, avec le renommage que Python réserve à cette collision,
+`new_`. À l'intérieur d'un `def`, le même mot est une variable locale ordinaire
+et personne n'objecte.
+
 | Python | Svelte 5 |
 |---|---|
 | `count = 0` | `let count = $state(0)` |

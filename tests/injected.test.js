@@ -44,12 +44,23 @@ describe('a name the compiler keeps for itself', () => {
             );
         });
 
-        if (component) {
+        // `export` is the one word of this table that JavaScript reserves too,
+        // so a plain module refuses it as well: for the other reason, with the
+        // other message, and the case below says which. What is under test here
+        // is the vocabulary rule, and a word that carries two is a bad witness
+        // for either.
+        if (component && name !== 'export') {
             test(`but ${name} is free in a plain module`, () => {
                 expect(() => script(`${name} = "mine"\n`, { plain: true })).not.toThrow();
             });
         }
     }
+
+    test('`export` in a plain module is refused as JavaScript’s word, not as ours', () => {
+        expect(() => script('export = "mine"\n', { plain: true })).toThrow(
+            /reserved word in JavaScript/
+        );
+    });
 
     test('and the message says what may still be shadowed', () => {
         expect(() => script('effect = 1\n')).toThrow(/date.+may still be shadowed/s);

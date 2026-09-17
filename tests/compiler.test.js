@@ -27,13 +27,39 @@ describe('compiler', () => {
         );
     });
 
-    test('a Python name reserved in JS stays usable, without being published', () => {
-        // `class` and `new` are valid Python identifiers.
-        const { script } = compile('class_ = 1\nnew = 2\nok = 3\n', 'R', 'R.svelte');
+    // This test used to say the name *stayed usable without being published*,
+    // and the sentence was measured on the generated script alone. Measured on a
+    // mounted component instead, on 2026-09-17: `new = 2` renders 2, a handler
+    // moves the model to 3, and the page stays at 2 for ever, while `ok` beside
+    // it repaints. No error, nothing in the console. A module's `def default()`
+    // was dropped from its exports the same way, and a value named in `__all__`
+    // was told the module *never binds it*, which was false.
+    //
+    // So it is refused, which is the rule `injected.cjs` states about its own
+    // list: winning in silence is the worst of the three behaviours.
+    test('a Python name JavaScript reserves is refused, at its line', () => {
+        expect(() => compile('class_ = 1\nnew = 2\nok = 3\n', 'R', 'R.svelte')).toThrow(
+            /`new` is a reserved word in JavaScript.+R\.svelte:2/s
+        );
+    });
+
+    test('and the message names the rename that works', () => {
+        expect(() => compile('new = 2\n', 'R', 'R.svelte')).toThrow(/`new_`/);
+
+        // Python's own convention for the collision, and the witness that the
+        // advice compiles: `class_` has been in this file since the beginning.
+        const { script } = compile('class_ = 1\nnew_ = 2\nok = 3\n', 'R', 'R.svelte');
 
         expect(script).toContain('let ok = $state.raw');
         expect(script).toContain('let class_ = $state.raw');
-        expect(script).not.toMatch(/let new =/); // otherwise the JS would not compile
+        expect(script).toContain('let new_ = $state.raw');
+    });
+
+    // The refusal is about a name the generated module would have to bind, so it
+    // stops where the bindings stop: inside a `def`, `new` is an ordinary local
+    // and JavaScript never sees it.
+    test('the same word inside a def is untouched', () => {
+        expect(() => compile('def f():\n    new = 2\n    return new\n', 'R', 'R.svelte')).not.toThrow();
     });
 
     test('every state name gets its revision signal', () => {
