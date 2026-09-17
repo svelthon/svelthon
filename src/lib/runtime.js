@@ -500,9 +500,15 @@ function installMutationTracking($B) {
 
     const delattr = $B.$delattr;
     $B.$delattr = function (obj, ...rest) {
-        const result = delattr(obj, ...rest);
-        notify(obj);
-        return result;
+        // In a `finally`, like the write beside it: a `__delattr__` of the
+        // author's may remove the attribute and *then* raise, and the exception
+        // does not put it back. The page showed `True` for a `hasattr` the model
+        // answered `False` to.
+        try {
+            return delattr(obj, ...rest);
+        } finally {
+            notify(obj);
+        }
     };
 
     // `row += [1]`, `d |= other`, and every other operator with an `=` after
@@ -1701,7 +1707,16 @@ export function pyNumbers(value) {
             // something it could not call at all, beside a `duration` converted
             // correctly. `pyHandler` binds the receiver and reads the signature;
             // the numbers are converted on the way in as before.
-            const wrapped = typeof one === 'function' ? one : pyHandler(one);
+            // Through `pyHandler` whatever the shape, because the adaptation is
+            // not only about being callable: `pyCall` converts what the callback
+            // *returns*, and an ordinary Python function kept its Brython float
+            // — `easing(0.5)` handed Svelte an object whose `value` was 0.25,
+            // and `t1 + delta * easing(...)` answered NaN. The bound method
+            // beside it was right, since it already went this way.
+            //
+            // A function JavaScript built is left alone: `pyHandler` hands back
+            // anything `declared` does not recognise.
+            const wrapped = pyHandler(one);
 
             replacement = (...args) => wrapped(...args.map(inbound));
         } else continue;

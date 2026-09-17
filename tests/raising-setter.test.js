@@ -33,3 +33,27 @@ describe.for([
         expect(read()).toBe('1');
     });
 });
+
+// And the deletion beside it, which kept the old shape while the write was being
+// repaired: `__delattr__` may remove the attribute and then raise, and the
+// exception does not put it back.
+describe.for([
+    ['that raises after deleting', 'angry'],
+    ['that returns normally', 'calm']
+])('an attribute removed by a deleter %s', ([, key]) => {
+    test('repaints what reads it', () => {
+        const target = document.body.appendChild(document.createElement('div'));
+
+        mount(RaisingSetter, { target });
+        flushSync();
+
+        const read = () => target.querySelector(`[data-k="${key}-has"]`).textContent;
+
+        expect(read()).toBe('True');
+
+        target.querySelector(`button[data-k="drop-${key}"]`).click();
+        flushSync();
+
+        expect(read()).toBe('False');
+    });
+});

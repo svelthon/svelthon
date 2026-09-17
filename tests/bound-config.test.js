@@ -37,3 +37,28 @@ describe.for([
         expect(instance.last()).toBe('0.25');
     });
 });
+
+// And what the callback hands *back*. `pyNumbers` converted the arguments on the
+// way in and returned whatever the callback produced, so an ordinary Python
+// function kept its Brython float: `easing(0.5)` gave an object whose `value`
+// was 0.25, and Svelte's own `t1 + delta * easing(t)` answered NaN. The bound
+// method beside it was right, because its adaptation already converted the
+// result — the two paths differed by the shape of the callback, not by anything
+// about the value.
+describe.for([
+    ['an ordinary function', 'easing_config'],
+    ['a bound method', 'bound_easing_config']
+])('a callback that is %s', ([, name]) => {
+    test('hands back a number JavaScript can compute with', () => {
+        const target = document.body.appendChild(document.createElement('div'));
+        const instance = mount(BoundConfig, { target });
+
+        flushSync();
+
+        const eased = instance[name]().easing(0.5);
+
+        expect(typeof eased).toBe('number');
+        expect(eased).toBe(0.25);
+        expect(1 + 2 * eased).toBe(1.5);
+    });
+});

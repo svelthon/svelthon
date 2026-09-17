@@ -16,6 +16,18 @@ def plain_tick(t, u):
     ticker.tick(t, u)
 
 
+def ease(t):
+    return t * t
+
+
+class Curve:
+    def ease(self, t):
+        return t * t
+
+
+curve = Curve()
+
+
 @export
 def bound_config():
     return {"duration": 0.5, "tick": ticker.tick}
@@ -25,6 +37,18 @@ def bound_config():
 def plain_config():
     # The witness: an ordinary function calling the same method.
     return {"duration": 0.5, "tick": plain_tick}
+
+
+@export
+def easing_config():
+    # What Svelte consumes in `t1 + delta * easing(t)`: the *result* has to be a
+    # JavaScript number, not a Brython float.
+    return {"easing": ease}
+
+
+@export
+def bound_easing_config():
+    return {"easing": curve.ease}
 
 
 @export

@@ -240,6 +240,11 @@ const KEYWORD_BEFORE =
 // `u` is required for `\p{…}` to mean anything at all.
 const NAME = '[\\p{L}_][\\p{L}\\p{M}\\p{N}_]*';
 
+// What a callable can end with, just before the parenthesis of a call: the last
+// character of a name by the same classes as `NAME`, or the close of a
+// subscript, a group or a string.
+const NAME_END = /[\p{L}\p{M}\p{N}_)\]"']$/u;
+
 const WALRUS_NAME = new RegExp(`^\\s*(${NAME})`, 'u');
 const WALRUS_ARROW = /^\s*:=\s*/;
 
@@ -345,8 +350,15 @@ export function walrus(expression) {
         // the opposite case: a word before the space, and still a grouping,
         // because `not` cannot be called. So the trailing whitespace is skipped
         // and the word that remains is checked against the keywords.
+        // The end of a name is read with the same Unicode classes as `NAME` a
+        // few hundred lines up, and not with `\w`: `café(x := 1)` ends on a
+        // letter `\w` does not know, so the call was taken for a grouping and
+        // the handler was rewritten into `café__assign("x", 1)` — a name that
+        // does not exist, an error event at the click, and a page that never
+        // changed. `cafe` beside it worked.
         const before = out.replace(/\s+$/, '');
-        const grouping = !/[\w)\]"']$/.test(before) || KEYWORD_BEFORE.test(before);
+        const grouping =
+            !NAME_END.test(before) || KEYWORD_BEFORE.test(before);
 
         if (char === '(' && grouping) {
             // Each element of the group, not only the first. `(a := 1, b := 2)`
