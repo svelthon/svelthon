@@ -106,11 +106,11 @@ describe('and every other walk over the same object agrees', () => {
     });
 });
 
-describe('the watch reaches a row the list never held', () => {
-    const grown = (props) => {
+describe('the watch reaches a row the container never held', () => {
+    const grown = (shape) => {
         const target = document.body.appendChild(document.createElement('div'));
 
-        mount(IteratedChild, { target, props });
+        mount(IteratedChild, { target, props: { shape } });
         flushSync();
 
         const size = () => target.querySelector('[data-k="size"]').textContent;
@@ -122,13 +122,20 @@ describe('the watch reaches a row the list never held', () => {
         return [before, size()];
     };
 
-    test('when only the iterator yields it', () => {
-        // The storage is empty, so the watch cannot be found by walking it: the
-        // rows the loop is given are the rows to hand it down to.
-        expect(grown({ custom: true })).toEqual(['0', '1']);
-    });
-
-    test('and when the list holds it, which always worked', () => {
-        expect(grown({ custom: false })).toEqual(['0', '1']);
+    // One child, one mutation, one loop, and four ways of handing it over. The
+    // storage is empty in the first two, so the watch cannot be found by walking
+    // it: the rows the loop is *given* are the rows to hand it down to, whatever
+    // the source was. Written as a list because the rule was attached to the
+    // source's representation twice running, and each time the shape that fell
+    // outside it rendered its child and never watched it.
+    test.for([
+        ['subclass', 'a list subclass, whose rows come from its __iter__'],
+        ['composed', 'a plain class holding no list at all'],
+        // The two that always worked, and the reason: the initial walk finds the
+        // child in the container's own storage, so nothing depends on the loop.
+        ['stored', 'the same class, with the child in an attribute too'],
+        ['list', 'an ordinary list holding it']
+    ])('%s: %s', ([shape]) => {
+        expect(grown(shape)).toEqual(['0', '1']);
     });
 });
