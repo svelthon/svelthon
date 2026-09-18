@@ -33,6 +33,9 @@ import { mount, flushSync } from './mounted.js';
 import { walked, serialised, crossed, nested } from './fixtures/iterated_rows.py';
 import IteratedRows from './fixtures/IteratedRows.svelte';
 import IteratedChild from './fixtures/IteratedChild.svelte';
+import ForeignRows from './fixtures/ForeignRows.svelte';
+import { batch } from '../src/lib/helpers.js';
+import { plainData } from '../src/lib/runtime.js';
 
 const render = (props) => {
     const target = document.body.appendChild(document.createElement('div'));
@@ -103,6 +106,51 @@ describe('and every other walk over the same object agrees', () => {
         expect(serialised('real')).toBe('[3,2,1]');
         // The control: a subclass that leaves iteration alone.
         expect(serialised('tagged')).toBe('[1,2,3]');
+    });
+});
+
+describe('a JavaScript iterable is walked too, and its errors stay its own', () => {
+    // The last row family, and the only one whose source is not Python: a parent
+    // hands a generator in as a prop, so nothing has converted it on the way.
+    //
+    // Python materialises every foreign iterable there is — an array, a Set, a
+    // Map, a generator, a NodeList, a class of one's own with `[Symbol.iterator]`
+    // — which is why the fallback beside it exists for almost nothing, and why
+    // what it was really catching was **the author's own exception**. A
+    // generator that threw on its second step read as *not Python's to convert*:
+    // the spent generator went back to Svelte, the loop rendered nothing, and
+    // `batch` answered `[]` with the message gone.
+    const rendered = (items) => {
+        const target = document.body.appendChild(document.createElement('div'));
+
+        mount(ForeignRows, { target, props: { items } });
+        flushSync();
+
+        return target.querySelector('[data-k="rows"]').textContent;
+    };
+
+    const broken = function* () {
+        yield 1;
+        throw new Error('iterator failure');
+    };
+
+    test('a generator renders its values', () => {
+        expect(rendered((function* () { yield 1; yield 2; })())).toBe('12');
+    });
+
+    test('and so does a Set, which has no length to fall back on', () => {
+        expect(rendered(new Set([1, 2]))).toBe('12');
+    });
+
+    test('and an error it raises reaches the author, with its own message', () => {
+        expect(() => rendered(broken())).toThrow('iterator failure');
+    });
+
+    test('including through a helper, which used to answer an empty list', () => {
+        expect(() => batch(broken(), 2)).toThrow('iterator failure');
+        // The control: the same helper, the same shape, nothing raised. Read
+        // through the crossing, since `batch` answers in Python lists.
+        expect(plainData(batch((function* () { yield 1; yield 2; })(), 2))).toEqual([[1, 2]]);
     });
 });
 
