@@ -1160,10 +1160,39 @@ export const pyCoroutine = (value) => {
     return value !== null && typeof value === 'object' && $B.get_class(value) === $B.coroutine;
 };
 
-// A Brython float is an object holding a number, and the three converters asked
-// so by hand. One of them is the reason `pyNumbers` exists at all: what a
-// framework is handed must be a number, not an object that prints like one.
-const pyFloat = (value) => value !== null && typeof value === 'object' && value.ob_type === _b_.float;
+// A Python scalar held as an object, and the number or the string inside it.
+//
+// A Brython float is an object holding a number, which is the reason `pyNumbers`
+// exists at all: what a framework is handed must be a number, not an object that
+// prints like one. Three converters asked that by hand, and all three asked it as
+// an **identity** — `ob_type === float` — so a *subclass* answered no.
+//
+// `class Price(float)` is an ordinary business type, and it crossed as `{}`: the
+// walk found no float, treated it as an instance, and published its attributes,
+// of which it has none. The number was never lost in Python, where `format(p,
+// ".2f")` kept working; it was lost in the JavaScript that was built from it.
+// Measured the same day: `int` and `str` subclasses do it too.
+//
+// Read from the MRO, which begins at the class itself, so the exact type and the
+// subclass take the same path — the third time this file asks a question that
+// way, after `is_dict` and the two sets. Where the value sits is Brython's
+// layout: `value` for a number, `$brython_value` for a string.
+//
+// What does **not** cross is anything else the subclass holds. `Price(0.25)`
+// with a `currency` attribute crosses as `0.25`: a value that *is* a number
+// crosses as its number, and its fields stay in Python, which is the same
+// sentence as the one a callable gets.
+const pyScalar = (value) => {
+    if (value === null || typeof value !== 'object' || value.ob_type === undefined) return undefined;
+
+    const mro = value.ob_type.tp_mro;
+
+    if (!Array.isArray(mro)) return value.ob_type === _b_.float ? value.value : undefined;
+    if (mro.includes(_b_.float) || mro.includes(_b_.int)) return value.value;
+    if (mro.includes(_b_.str)) return value.$brython_value;
+
+    return undefined;
+};
 
 function thrown(error) {
     if (error instanceof Error || error === null || typeof error !== 'object') return error;
@@ -1325,8 +1354,11 @@ export function plainData(value, seen, adapt) {
     if (typeof value !== 'object') return value;
 
     // A Brython float is an object holding a number and a reference to its
-    // type. `tojson(1 / 3)` walks the lot: 20 KB of `ob_type`.
-    if (pyFloat(value)) return value.value;
+    // type. `tojson(1 / 3)` walks the lot: 20 KB of `ob_type`. A subclass of one
+    // takes the same road, with the same answer.
+    const scalar = pyScalar(value);
+
+    if (scalar !== undefined) return scalar;
 
     // A coroutine handed to the framework becomes a promise. That is what lets a
     // `load()` stream: `{"lentes": chercher_lentement()}` returns a coroutine,
@@ -1844,7 +1876,10 @@ function converting(wrapped) {
 
 export function pyNumbers(value) {
     if (value === null || typeof value !== 'object') return value;
-    if (pyFloat(value)) return value.value;
+
+    const alone = pyScalar(value);
+
+    if (alone !== undefined) return alone;
 
     let out = value;
 
@@ -1852,8 +1887,10 @@ export function pyNumbers(value) {
         const one = value[key];
         let replacement;
 
-        if (pyFloat(one)) {
-            replacement = one.value;
+        const held = pyScalar(one);
+
+        if (held !== undefined) {
+            replacement = held;
         } else if (callable(one)) {
             // A callback the framework keeps and calls itself, a transition's
             // `tick(t, u)`. It never crosses a wrapper, so its arguments arrive
@@ -2133,9 +2170,28 @@ function declared(value) {
     const fn = typeof held.$js_func === 'function' ? held.$js_func : held;
     const infos = fn.$function_infos;
 
-    // `arity` is what the whole thing is for, so a shape that has no number
-    // there is not a Python signature, whatever else it carries.
-    if (!Array.isArray(infos) || (!infos[8] && typeof infos[10] !== 'number')) return null;
+    // Nothing of Python's at all: a function JavaScript built, which crosses as
+    // the object its library made.
+    if (!Array.isArray(infos)) return null;
+
+    // Python's, but with no signature to read: a **builtin**. `round` carries
+    // `["builtins", "round", "round"]` and no arity, because it is written in
+    // JavaScript inside Brython rather than compiled from Python.
+    //
+    // *No signature* was read as *not Python's*, so `rounded = round` published
+    // by a module was handed over untouched, exactly as a library's own function
+    // is — and then a JavaScript caller passing `0.25` got *type Javascript
+    // Number doesn't define __round__ method*. The two decisions are separate:
+    // not knowing what a function takes says nothing about what it *expects*,
+    // and a builtin expects Python on both sides.
+    //
+    // `Infinity` is the honest arity: there is no number to trim to, so
+    // everything is passed and the conversion does the rest.
+    if (!infos[8] && typeof infos[10] !== 'number') {
+        if (method !== null || call !== null) return null;
+
+        return { fn, where: `${infos[1]}() — ${infos[0]}`, arity: Infinity };
+    }
 
     const where = `${infos[2]}() — ${infos[3]}`;
 

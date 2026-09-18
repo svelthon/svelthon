@@ -19,6 +19,7 @@ import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import NativeConfig from './fixtures/NativeConfig.svelte';
 import { config } from './fixtures/native_config.js';
+import { rounded, shortened, wrapped, from_python } from './fixtures/native_function.py';
 
 const mounted = () => {
     const target = document.body.appendChild(document.createElement('div'));
@@ -90,5 +91,53 @@ describe('a configuration whose callback is Python', () => {
     test('while still answering what it answered', () => {
         expect(mounted().kept_config().easing(0.5)).toBe(0.25);
         expect(mounted().kept_config().duration).toBe(400);
+    });
+});
+
+// And the third answer to the same question, which the boundary did not have.
+//
+// *Is this function Python's or JavaScript's?* was decided by reading the
+// signature Brython records, and a **builtin** has none: `round` carries
+// `["builtins", "round", "round"]` and no arity, because it is written in
+// JavaScript inside the engine rather than compiled from Python. No signature
+// was read as *not Python's*, so `rounded = round` published by a module was
+// handed over untouched — and a JavaScript caller passing `0.25` was answered
+// *type Javascript Number doesn't define __round__ method*.
+//
+// The two decisions are separate: not knowing what a function takes says nothing
+// about what it *expects*, and a builtin expects Python on both sides. It takes
+// everything it is given now, since there is no number to trim to, and the
+// conversion does the rest.
+//
+// An integer is why it stayed hidden: `rounded(2, 1)` answered 2 throughout,
+// because 2 is the same value to both languages.
+describe('a builtin a module publishes', () => {
+    test('takes a fractional argument', () => {
+        expect(rounded(0.25, 1)).toBe(0.2);
+    });
+
+    test('and hands back a number JavaScript can compute with', () => {
+        const got = rounded(0.25, 1);
+
+        expect(typeof got).toBe('number');
+        expect(1 + got).toBe(1.2);
+    });
+
+    test('while an integer worked all along, which is what hid it', () => {
+        expect(rounded(2, 1)).toBe(2);
+    });
+
+    // A second one, so the repair is not a special case of `round`.
+    test('and it is not one builtin', () => {
+        expect(shortened(-0.25)).toBe(0.25);
+    });
+
+    // The controls: the same call written as a `def`, and the same call made in
+    // Python, both of which always answered.
+    test.for([
+        ['wrapped in a def', () => wrapped(0.25)],
+        ['made in Python', () => from_python()]
+    ])('as it already did %s', ([, reach]) => {
+        expect(reach()).toBe(0.2);
     });
 });
