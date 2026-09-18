@@ -1182,7 +1182,7 @@ export const pyCoroutine = (value) => {
 // with a `currency` attribute crosses as `0.25`: a value that *is* a number
 // crosses as its number, and its fields stay in Python, which is the same
 // sentence as the one a callable gets.
-const pyScalar = (value) => {
+export const pyScalar = (value) => {
     if (value === null || typeof value !== 'object' || value.ob_type === undefined) return undefined;
 
     const mro = value.ob_type.tp_mro;

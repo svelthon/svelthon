@@ -23,6 +23,7 @@ import {
     plainObject,
     pyClass,
     pyCoroutine,
+    pyScalar,
     pyEntries,
     pyName,
     ticking
@@ -129,9 +130,19 @@ const FLOAT = globalThis.__BRYTHON__.builtins.float;
 // large enough to be one is outside the range `Date` spans.
 function instant(value) {
     if (value instanceof Date) return value;
-    if (value !== null && typeof value === 'object' && value.ob_type === FLOAT) {
-        return new Date(value.value);
-    }
+
+    // `pyScalar`, which is what the conversions ask, and not the exact identity
+    // this line used to read. A `class Stamp(float)` is a number to Python, to
+    // `plainData` and to the page that formats it — and it was not one here, so
+    // `date(stamp)` fell through to the JavaScript branch, where `typeof` says
+    // object, and answered *is not a date*. In a template that is a component
+    // that does not mount.
+    //
+    // The scalar first, then this helper's own domain: what is shared is the
+    // recognition, not the rule about what a date may be.
+    const scalar = pyScalar(value);
+
+    if (typeof scalar === 'number') return new Date(scalar);
 
     const one = moment(value);
 
@@ -238,6 +249,12 @@ export function from_json(text) {
 // None", the rule every helper follows, since None is an object and would
 // otherwise sail through an `!== undefined` test and be rendered as a cell.
 export function batch(xs, size, fill) {
+    // The same recognition, for the same reason: `Number.isInteger` asked of the
+    // object a Python `int` subclass is answers false, so a perfectly good size
+    // was refused before its value was ever read. The constraint below is this
+    // helper's own and stays exactly as it was.
+    size = pyScalar(size) ?? size;
+
     if (!Number.isInteger(size) || size < 1) {
         throw refuse('batch(): size must be an integer of at least one');
     }
