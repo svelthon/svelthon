@@ -407,7 +407,14 @@ function mapping(value) {
     // read `=== Object.prototype` and the converter accepted a null prototype
     // too, so one shape crossed three ways: `to_js` and `tojson` rendered it and
     // `urlencode` wrote `<Javascript object: [object Object]>` into the page.
-    return !('ob_type' in value) && plainObject(value);
+    // A **class** under that name, and not the name alone. `ob_type` is
+    // Brython's mark, and a foreign object is free to carry a field spelled the
+    // same: `{ob_type: "business", value: 42}` came out of `urlencode` as
+    // `%5Bobject%20Object%5D`, every parameter gone, while the identical Python
+    // dict encoded correctly. The question is *is this a Python object*, and
+    // `pyClass` is what the rest of the project asks — the same repair the
+    // inbound converter got when it read `ob_type === undefined`.
+    return !pyClass(value.ob_type) && plainObject(value);
 }
 
 // Jinja's shape: a string, or a mapping that becomes a whole query string. Not

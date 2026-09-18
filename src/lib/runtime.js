@@ -105,6 +105,33 @@ export const __pybridge = {
     // but a dict, a set, a range, a generator or the result of .items() is not,
     // and iterating those is the whole point of writing the loop in Python.
     seq(value) {
+        // A list **subclass** that redefines `__iter__` iterates through Python,
+        // not through its storage.
+        //
+        // A Brython list is a JavaScript array, so the fast path below hands the
+        // array straight to `{#each}` — right for a list, and wrong the moment a
+        // subclass says what iterating it means. `[x for x in rows]` answered
+        // `[3, 2, 1]` in Python while the loop beside it showed `123`, for the
+        // same object: the storage is not the sequence when the author has said
+        // otherwise.
+        //
+        // Asked of the class, and only when the class is not `list` itself, so
+        // an ordinary loop pays one identity compare. `list()` is what runs the
+        // protocol, which is the road every other iterable already takes.
+        if (
+            Array.isArray(value) &&
+            value.ob_type !== undefined &&
+            value.ob_type !== _b_.list &&
+            value.ob_type !== _b_.tuple
+        ) {
+            // Through `__iter__` and not through `list()`: Brython's own
+            // constructor has the same fast path for an array, so it copies the
+            // storage and answers the question with the question.
+            const $B = globalThis.__BRYTHON__;
+
+            return _b_.list.$factory($B.$call($B.$getattr(value, '__iter__')));
+        }
+
         if (Array.isArray(value)) {
             // Hand the watch down to the rows: {#each} walks the array in
             // JavaScript, never through $getitem, so this is the only path by
