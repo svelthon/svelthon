@@ -1,0 +1,134 @@
+// Eight ways a list subclass can answer *what does iterating you mean*, and the
+// four things this project owes each answer.
+//
+// A Brython list is a JavaScript array, so anywhere the runtime walks elements
+// it can walk the storage with no conversion at all, and for a list that is
+// exactly right. It stops being right the moment a subclass says otherwise, and
+// the repairs came one at a time: first the **order** in the loop
+// (`[x for x in rows]` answered `[3, 2, 1]` in Python while `{#each}` beside it
+// showed `123`), then, in the branch written for it, the **watch** on the rows
+// it yields and the **refusal** of a class that is wrong about its own protocol.
+// Then, sweeping for the same question asked elsewhere, the **crossing**: one
+// component could render `[3, 2, 1]` and publish `[1, 2, 3]`, for one object.
+// One rule, four obligations, and three of them found after the first repair.
+//
+// So the rows here are the shapes of `__iter__` and the columns are those four
+// obligations. The reference in every cell is the same and it is not a literal:
+// it is what Python itself does with the very same object, `[x for x in rows]`,
+// error included. A site that disagrees with the script beside it is the defect,
+// whatever the two of them say.
+//
+// **The cell that is a hole, on purpose.** `halts` raises on its *second* step,
+// where a loop has already rendered a row. The template refuses the whole list
+// rather than showing the first row and stopping, because `{#each}` is given an
+// array and not an iterator; Python's `for` shows nothing either, since the
+// comprehension is what builds the list. They agree, and the agreement is the
+// assertion — but a streaming loop would be a fifth column, and there is none.
+//
+// **How to use it.** A new shape of `__iter__` is a row. A site that walks a
+// Python sequence is a column, and if its answer cannot be phrased as *the
+// script and this agree*, that is the signal it invented a rule of its own.
+import { test, expect, describe, vi } from 'vitest';
+import { mount, flushSync } from './mounted.js';
+import { walked, serialised, crossed, nested } from './fixtures/iterated_rows.py';
+import IteratedRows from './fixtures/IteratedRows.svelte';
+import IteratedChild from './fixtures/IteratedChild.svelte';
+
+const render = (props) => {
+    const target = document.body.appendChild(document.createElement('div'));
+
+    mount(IteratedRows, { target, props });
+    flushSync();
+
+    return target.querySelector('[data-k="rows"]').textContent;
+};
+
+describe('the rows a subclass yields are the rows that render', () => {
+    test.for([
+        // `__iter__`, what it hands back, and what the loop shows.
+        ['real', 'an iterator', '321'],
+        ['generated', 'a generator', '321'],
+        ['itself', 'the object itself', '321'],
+        // The control, and the reason the fast path is still there: a subclass
+        // that leaves `__iter__` alone is walked through its storage.
+        ['tagged', 'nothing, it adds a name', '123']
+    ])('%s returns %s', ([name, , shown]) => {
+        expect(render({ name })).toBe(shown);
+        // Read as `[3, 2, 1]` or `[1, 2, 3]`: the script is the reference, and
+        // this is the same object seen from the other side.
+        expect(walked(name)).toBe('[' + [...shown].join(', ') + ']');
+    });
+});
+
+describe('a subclass wrong about its own protocol is refused', () => {
+    test.for([
+        ['plain', 'a list, which is iterable and is not an iterator', 'TypeError'],
+        ['foreign', 'an int', 'TypeError'],
+        ['refuses', 'nothing, it raises', 'ValueError'],
+        ['halts', 'an iterator that raises on the second step', 'ValueError']
+    ])('%s returns %s', ([name, , error]) => {
+        // The script refuses it, so the template has to: rendering it anyway is
+        // a bug in the author's class that only the page is silent about.
+        expect(walked(name)).toBe(error);
+
+        // Brython's `iter()` dumps the class object to the console on its way to
+        // raising, hundreds of lines of it, which is its own defect and not this
+        // one. Silenced here so a green run stays readable.
+        const quiet = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+        try {
+            expect(() => render({ name })).toThrow();
+        } finally {
+            quiet.mockRestore();
+        }
+    });
+});
+
+describe('and every other walk over the same object agrees', () => {
+    // The loop was the site the audit found, and the question is asked at two
+    // more: what a module publishes, and what `tojson` writes. Both walked the
+    // storage, so one component could render `[3, 2, 1]` and hand its parent
+    // `[1, 2, 3]` for one list. CPython's `json.dumps` of a list subclass is its
+    // `__iter__` too; `repr` is the storage, and stays so — `str(rows)` below is
+    // Python's own and nothing of ours reads it.
+    test('what the module publishes', () => {
+        expect(crossed).toEqual([3, 2, 1]);
+    });
+
+    test('one level down, where a callable would also be adapted', () => {
+        expect(nested).toEqual([[3, 2, 1]]);
+    });
+
+    test('and what tojson writes', () => {
+        expect(serialised('real')).toBe('[3,2,1]');
+        // The control: a subclass that leaves iteration alone.
+        expect(serialised('tagged')).toBe('[1,2,3]');
+    });
+});
+
+describe('the watch reaches a row the list never held', () => {
+    const grown = (props) => {
+        const target = document.body.appendChild(document.createElement('div'));
+
+        mount(IteratedChild, { target, props });
+        flushSync();
+
+        const size = () => target.querySelector('[data-k="size"]').textContent;
+        const before = size();
+
+        target.querySelector('button').click();
+        flushSync();
+
+        return [before, size()];
+    };
+
+    test('when only the iterator yields it', () => {
+        // The storage is empty, so the watch cannot be found by walking it: the
+        // rows the loop is given are the rows to hand it down to.
+        expect(grown({ custom: true })).toEqual(['0', '1']);
+    });
+
+    test('and when the list holds it, which always worked', () => {
+        expect(grown({ custom: false })).toEqual(['0', '1']);
+    });
+});

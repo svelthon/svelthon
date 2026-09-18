@@ -59,6 +59,28 @@ const raised = (error) =>
     error.ob_type !== undefined &&
     error.__traceback__ !== undefined;
 
+// A Python iterable materialised the way `list()` would, minus the shortcut
+// `list()` takes when it is handed an array: Brython's constructor copies the
+// storage of anything array-shaped, so asking it about a list subclass answers
+// the question with the question.
+//
+// `make_js_iterator` is the engine's own entry, and it carries both obligations
+// this has to keep. It runs `iter()`, which is the only call that *validates*
+// the protocol: `__iter__` returning a plain list is a TypeError in the script,
+// and the template used to swallow it and render the list anyway. And it keeps
+// the storage fast path exactly where it is still true — Brython copies it onto
+// a subclass only when that subclass leaves `__iter__` alone — so a subclass
+// that adds a method and nothing else still walks its array.
+//
+// `$B.NULL` as the frame is how the engine itself calls this from JavaScript:
+// there is no Python line to attribute here, and the alternative writes a line
+// number into whatever frame happens to be current.
+function iterated(value) {
+    const $B = globalThis.__BRYTHON__;
+
+    return _b_.list.$factory($B.$call($B.$getattr(value, '__iter__')));
+}
+
 export const __pybridge = {
     // JS calls every object truthy, so `{#if items}` would be true for an empty
     // list, an empty dict, or None. Conditions are rewritten to go through this.
@@ -105,42 +127,39 @@ export const __pybridge = {
     // but a dict, a set, a range, a generator or the result of .items() is not,
     // and iterating those is the whole point of writing the loop in Python.
     seq(value) {
-        // A list **subclass** that redefines `__iter__` iterates through Python,
-        // not through its storage.
-        //
-        // A Brython list is a JavaScript array, so the fast path below hands the
-        // array straight to `{#each}` — right for a list, and wrong the moment a
-        // subclass says what iterating it means. `[x for x in rows]` answered
-        // `[3, 2, 1]` in Python while the loop beside it showed `123`, for the
-        // same object: the storage is not the sequence when the author has said
-        // otherwise.
-        //
-        // Asked of the class, and only when the class is not `list` itself, so
-        // an ordinary loop pays one identity compare. `list()` is what runs the
-        // protocol, which is the road every other iterable already takes.
-        if (
-            Array.isArray(value) &&
-            value.ob_type !== undefined &&
-            value.ob_type !== _b_.list &&
-            value.ob_type !== _b_.tuple
-        ) {
-            // Through `__iter__` and not through `list()`: Brython's own
-            // constructor has the same fast path for an array, so it copies the
-            // storage and answers the question with the question.
-            const $B = globalThis.__BRYTHON__;
-
-            return _b_.list.$factory($B.$call($B.$getattr(value, '__iter__')));
-        }
-
         if (Array.isArray(value)) {
+            // A list **subclass** that redefines `__iter__` iterates through
+            // Python, not through its storage.
+            //
+            // A Brython list is a JavaScript array, so handing the array
+            // straight to `{#each}` is right for a list, and wrong the moment a
+            // subclass says what iterating it means. `[x for x in rows]`
+            // answered `[3, 2, 1]` in Python while the loop beside it showed
+            // `123`, for the same object: the storage is not the sequence when
+            // the author has said otherwise.
+            //
+            // Asked of the class, and only when the class is not `list` itself,
+            // so an ordinary loop pays one identity compare.
+            const rows =
+                value.ob_type !== undefined &&
+                value.ob_type !== _b_.list &&
+                value.ob_type !== _b_.tuple
+                    ? value
+                    : value;
+
             // Hand the watch down to the rows: {#each} walks the array in
             // JavaScript, never through $getitem, so this is the only path by
             // which an item can come under watch before its block reads it.
+            //
+            // The rows the loop is given, not the storage they came from: a
+            // subclass is free to yield a child its list never held, and that
+            // child is exactly the one the loop will render and the program will
+            // mutate.
             if (MARKS.has(value)) {
                 for (const item of value) inherit(value, item);
             }
 
-            return value;
+            return rows;
         }
         if (value === undefined || value === null) return [];
 
