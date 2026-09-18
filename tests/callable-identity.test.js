@@ -25,7 +25,12 @@ import {
     removed_after_replacement,
     removed_without_replacement,
     both_shapes,
-    two_instances
+    two_instances,
+    native_removed,
+    native_kept,
+    two_receivers,
+    two_operations,
+    python_method
 } from './fixtures/callable_identity.py';
 
 describe('a callable instance handed to a registry', () => {

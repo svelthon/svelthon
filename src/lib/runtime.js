@@ -276,7 +276,20 @@ function installMutationTracking($B) {
             // it comes under the same watch. This is the other half of the walk
             // `mark` does: that one takes what was already there, this one
             // takes what arrives afterwards.
-            for (const arg of args) inherit(obj, arg);
+            //
+            // Except when the argument is a **source** rather than the content.
+            // `rows.extend(items())` hands over a generator, and watching the
+            // generator watches nothing: what landed inside is gone from it by
+            // the time this runs. So the container is asked what it now holds,
+            // the way the augmented operator's exception path already asks.
+            let spent = false;
+
+            for (const arg of args) {
+                if (consumed(arg)) spent = true;
+                else inherit(obj, arg);
+            }
+
+            if (spent) adopt(obj);
             if (attr === 'setdefault') inherit(obj, result);
             MARKS.get(obj)();
         } else if (VIEWS.has(attr)) {
@@ -667,7 +680,12 @@ function installMutationTracking($B) {
         }
 
         if (result === left && watched) {
-            inherit(left, right); // `rows += [[]]` puts the new rows under watch
+            // `rows += [[]]` puts the new rows under watch, and `rows +=
+            // items()` cannot: the generator kept nothing. The same two answers
+            // as the method paths above, and the same question decides.
+            if (consumed(right)) adopt(left);
+            else inherit(left, right);
+
             MARKS.get(left)();
         }
 
@@ -690,6 +708,35 @@ function mutable(value) {
         return cls !== undefined && cls !== _b_.type;
     } catch {
         return false; // a foreign JavaScript value is not ours to mark
+    }
+}
+
+// An argument that hands its contents over and keeps none of them: an iterator.
+//
+// `rows.append(child)` is given the very thing that lands, so the watch goes to
+// the argument and the link is one assignment. `rows.extend(items())` is given a
+// **source**, and by the time this is asked the generator is empty: the children
+// are inside the container and nothing at all points at them, so the page went
+// on showing `[[]]` while Python held `[[1]]`.
+//
+// Telling the two apart is what decides between the cheap link and the walk, and
+// the walk cannot be the answer for both: a thousand-row list would pay for its
+// whole length on every `append`.
+//
+// Asked of the class, where Python keeps the answer, and it is the whole
+// definition of an iterator: a value with `__next__`. A list, a tuple, a dict
+// and a set are re-iterable and still hold what they were handed, so they take
+// the link. An array is stepped over before the class is asked, since no Python
+// sequence represented as one is an iterator.
+function consumed(value) {
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+
+    const $B = globalThis.__BRYTHON__;
+
+    try {
+        return $B.search_slot($B.get_class(value), 'tp_iternext', $B.NULL) !== $B.NULL;
+    } catch {
+        return false; // a foreign JavaScript value is not ours to ask
     }
 }
 
@@ -2236,7 +2283,26 @@ function declared(value) {
     if (!infos[8] && typeof infos[10] !== 'number') {
         if (method !== null || call !== null) return null;
 
-        return { fn, where: `${infos[1]}() — ${infos[0]}`, arity: Infinity };
+        const where = `${infos[1]}() — ${infos[0]}`;
+
+        // A builtin **bound to a receiver**: `rows.append`, which Brython builds
+        // fresh on every read as a `builtin_method` carrying `m_self`. It is the
+        // third representation of a bound method in this engine, and the one
+        // that fell through to the plain-function road, where the cache key is
+        // the function it was handed. So two reads were two JavaScript
+        // functions: `off(rows.append)` could not find what `on(rows.append)`
+        // had added, the listener stayed in the registry, and the next event
+        // appended to the list a second time.
+        //
+        // Same identity as an ordinary bound method, one paragraph down: the
+        // pair, receiver and operation. The operation is `$function_infos`
+        // itself, which is a property of the native function the descriptor
+        // wraps, so it is one object per operation and shared by every receiver
+        // — `rows.append` and `other.append` name the same operation, and
+        // `rows.clear` a different one, which is exactly the distinction a
+        // registry holding two lists needs.
+
+        return { fn, where, arity: Infinity };
     }
 
     const where = `${infos[2]}() — ${infos[3]}`;
