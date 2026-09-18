@@ -30,8 +30,9 @@ describe('a rune written below the top level', () => {
     });
 
     // The call form is what `x => expr` compiles to, so it is the same rune in
-    // its other spelling — and it was the silent one `decorators-are-identity`
-    // warned about: `effect(lambda: …)` written by hand does nothing at all.
+    // its other spelling, and it is the silent one: a decorator is an identity
+    // here, the compiler reads the *name* it decorates off the AST, so
+    // `effect(lambda: …)` written by hand builds nothing and says nothing.
     test('and when called by hand', () => {
         expect(script('def register():\n    x = effect(lambda: 1)\n')).toThrow(
             /`effect\(\)` is only read there/

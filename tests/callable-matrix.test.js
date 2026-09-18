@@ -27,8 +27,8 @@
 // has three branches — a value, a mapping, a list — and only two were here. Then,
 // once the list was green, the same item found that the rule held at the *top* of
 // every container and went no further under a mapping. Both are columns now, and
-// the lesson is written in `recurring-defect-shapes`: read the branches of the
-// code, do not trust your own list of them.
+// the lesson is the one clause: read the branches of the code, do not trust your
+// own list of them.
 //
 // **How to use it.** A new boundary adds a column; if it cannot be added, that is
 // the signal it invented a recognition of its own. A new finding fills a cell
