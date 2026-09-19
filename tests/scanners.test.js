@@ -125,3 +125,59 @@ describe('trailingKey reads through a string', () => {
         expect(each('rows as row)')).toBe('{#each __expr_0() as row)}x{/each}');
     });
 });
+
+// The sixth scanner, and the one the others call: `atomic`, which says how long
+// a literal is. An f-string is a grammar inside a string, and this is where the
+// project has paid three defects — a backslash before a field, a nested brace,
+// a prefix read as the tail of a name.
+//
+// Every case below was named by the **mutation harness**: each one is a branch
+// of that grammar whose flip killed no test, which is to say a decision nothing
+// was checking. They are written the way the rest of this file is — a string a
+// component may hold — and the assertion is always the same: the expression is
+// recognised whole. Cut in half, the template keeps the first half and Svelte is
+// handed the rest as markup, which is what a wrong length here does.
+describe('atomic reads an f-string as a grammar', () => {
+    test('a quote inside a field does not end the string', () => {
+        expect(rewrite('<p>{f"{d[\'a\']}"}</p>')).toBe('<p>{__expr_0()}</p>');
+    });
+
+    test('and neither does one inside a triple-quoted string', () => {
+        expect(rewrite('<p>{f"""{d[\'a\']}"""}</p>')).toBe('<p>{__expr_0()}</p>');
+    });
+
+    // The prefix is read backwards from the quote, so `rf` is an f-string and
+    // the `f` of a name is not.
+    test('a raw f-string is still an f-string', () => {
+        expect(rewrite('<p>{rf"{d[\'a\']}"}</p>')).toBe('<p>{__expr_0()}</p>');
+    });
+
+    // `:` starts a format specification only at the top of a field and outside
+    // brackets. In a slice and in a dict display it is Python's own syntax, and
+    // reading it as a specification makes everything after it opaque.
+    test('a colon inside a subscript is a slice', () => {
+        expect(rewrite('<p>{f"{xs[1:2]}"}</p>')).toBe('<p>{__expr_0()}</p>');
+    });
+
+    test('and a colon inside a nested display is a key', () => {
+        expect(rewrite('<p>{f"{ {\'a\': 1}[\'a\'] }"}</p>')).toBe('<p>{__expr_0()}</p>');
+    });
+
+    // A doubled brace is a literal brace and opens no field, so what follows it
+    // is text and not an expression.
+    test('a doubled brace is a literal', () => {
+        expect(rewrite('<p>{f"{{}}{d[\'a\']}"}</p>')).toBe('<p>{__expr_0()}</p>');
+    });
+
+    // And a field *inside* a specification is a field again, which is the one
+    // place the rule flips: `{x:>{width}}` is a width read from a name.
+    test('a field nested in a specification is a field', () => {
+        expect(rewrite('<p>{f"{x:>{w}}"}</p>')).toBe('<p>{__expr_0()}</p>');
+    });
+
+    // A comment runs to the end of the line, and a line with no newline after
+    // it ends at the end of the source.
+    test('a comment with no newline after it ends where the source does', () => {
+        expect(walrus('(d["a"] := 1)  # note')).toBe('__setitem(d, "a", 1)  # note');
+    });
+});
