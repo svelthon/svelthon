@@ -30,6 +30,7 @@ import {
 } from '../src/lib/helpers.js';
 // The calls are written in Python, which is where the helper is called from.
 import { says, control, keeps_an_instance, coroutine_says } from './fixtures/tojson_calls.py';
+import { shapes } from './fixtures/json_space.py';
 
 // The Python values that are objects rather than primitives, which is what these
 // helpers keep meeting: a float, a list, a tuple, a set.
@@ -176,6 +177,155 @@ describe('tojson', () => {
         expect(said).toMatch(/svelthon — tojson\(\): .+ is a coroutine/);
         expect(said).toMatch(/await/i);
         expect(after).toBe(before);
+    });
+
+    // And a **JavaScript promise**, which is the coroutine's twin one language
+    // over and got the answer the coroutine used to get: `{}`. A promise keeps
+    // its result where nothing enumerable can reach it, so the serialiser wrote
+    // valid JSON that says nothing about what was asked — and `{"task":{}}` one
+    // level down, which is worse, because the shape around it looks right.
+    //
+    // The rule was stated for a coroutine and enforced for a coroutine alone,
+    // exactly as the class rule was before the call joined it. Three rows: made
+    // here, made in another JavaScript context, and a bare thenable, because the
+    // question is *does `await` take this*, not *whose Promise built it*.
+    test.for([
+        ['a promise', () => Promise.resolve({ answer: 42 })],
+        // The row that moved the refusal: a bare thenable is refused too, and
+        // used to be told its `then` was callable — one value, two sentences,
+        // decided by which constructor built it.
+        ['a bare thenable', () => ({ then: (resolve) => resolve(1) })],
+        // And a subclass, since `await` takes it and `instanceof` is not the
+        // question. Another realm's Promise is the same fact and lives in
+        // `tests/another-context.test.js`, where the realm family is held.
+        ['a Promise subclass', () => new (class extends Promise {})(() => {})]
+    ])('%s is refused, and named', ([, make]) => {
+        expect(() => tojson(make())).toThrow(/svelthon — tojson\(\): .+ is a promise/);
+        expect(() => tojson(make())).toThrow(/await/i);
+        // One level down, where the shape around it made the empty object look
+        // like an answer.
+        expect(() => tojson({ task: make() })).toThrow(/is a promise/);
+    });
+
+    // A **native collection**, which is the same `{}` again with nothing
+    // asynchronous about it. A Map and a Set keep their entries where no
+    // enumerable property reaches, so the serialiser wrote valid JSON that had
+    // lost them, and `{"map":{}}` one level down.
+    //
+    // The refusal is asked as a behaviour — a class of its own, no `toJSON`, no
+    // enumerable key — rather than by naming Map and Set, so a Headers, a
+    // Response and whatever the platform adds next are covered by the same line.
+    // A Date and a URL carry `toJSON` and keep serialising, which is the control
+    // the rule needs.
+    // The rule is *a class of its own and no `toJSON`*, and it took three
+    // spellings to get there. Naming Map and Set would have drifted. Asking
+    // whether anything is enumerable was worse than drifting: it read "has a
+    // property" as "its state is all in its properties", so `map.label = 'kept'`
+    // walked straight past the guard and the entries were dropped in silence —
+    // `{"label":"kept"}` for a Map that answers 42, which is the lie the guard
+    // existed to stop.
+    //
+    // What is left is the language's own protocol. `toJSON` is how a class says
+    // how it wants to be written; a class that does not say is not guessed at.
+    // The cost is named in the last row: a plain data class is refused too,
+    // because nothing here can tell its fields from a Map's label.
+    test.for([
+        ['a Map', () => new Map([['answer', 42]])],
+        ['a Set', () => new Set([42])],
+        ['a Map carrying a property', () => Object.assign(new Map([['answer', 42]]), { label: 'k' })],
+        ['a Set carrying a property', () => Object.assign(new Set([42]), { label: 'k' })],
+        ['an Error, whose message is not enumerable', () => Object.assign(new Error('gone'), { code: 'E' })],
+        ['a Headers', () => new Headers({ a: 'b' })]
+    ])('%s is refused rather than half-written', ([, make]) => {
+        expect(() => tojson(make())).toThrow(/has no JSON of its own/);
+        expect(() => tojson({ held: make() })).toThrow(/has no JSON of its own/);
+    });
+
+    test('and it is named by its class, which is what an author recognises', () => {
+        expect(() => tojson(new Map())).toThrow(/a Map has no JSON/);
+        expect(() => tojson(new Set())).toThrow(/a Set has no JSON/);
+    });
+
+    // The two halves of the contract, and the second is the cost of the first.
+    test('while anything carrying toJSON says how it is written', () => {
+        expect(tojson(new Date(0))).toBe('"1970-01-01T00:00:00.000Z"');
+        expect(tojson(new URL('https://example.test/a'))).toBe('"https://example.test/a"');
+
+        class Money {
+            toJSON() {
+                return { amount: 3 };
+            }
+        }
+
+        expect(tojson(new Money())).toBe('{"amount":3}');
+    });
+
+    test('and a class that does not is refused rather than guessed at', () => {
+        class Point {
+            constructor() {
+                this.x = 1;
+            }
+        }
+
+        // Its own fields would have been written before, and a Map's label was
+        // written the same way: nothing here can tell the two apart, so the
+        // author is asked rather than the guess being made for them.
+        expect(() => tojson(new Point())).toThrow(/a Point has no JSON of its own/);
+        expect(() => tojson(new Point())).toThrow(/toJSON\(\)/);
+    });
+
+    // And the **space**, rather than the cell an outside reading happened to
+    // land on. Three passes closed a promise, then a Map, then a set, each time
+    // as a new subject; the shapes left over were found in twenty lines by
+    // asking *what does `tojson` answer for everything it can be handed*.
+    //
+    // Two wrong answers, and they alternate. A value with no enumerable property
+    // is written `{}` — valid JSON that has lost what it held, and worse one
+    // level down where the shape around it looks right. A value the walk reads
+    // through the engine's fields is accused of being its own class:
+    // `<class 'range'> is a class` about a range.
+    //
+    // The floor under the named arms is one question, not a list of type names:
+    // a Python value that is not a mapping and keeps nothing of the author's has
+    // no representation here, which is what CPython says too — *Object of type
+    // range is not JSON serializable*.
+    describe.for([
+        ['a set', () => _b_.set.$factory(_b_.list.$factory([42])), /is a set/, /list\(\)/],
+        ['a frozenset', () => shapes('frozenset'), /is a set/, /list\(\)/],
+        ['bytes', () => shapes('bytes'), /is bytes/, /decode\(\)/],
+        ['a bytearray', () => shapes('bytearray'), /is bytes/, /decode\(\)/],
+        ['a memoryview', () => shapes('memoryview'), /is a memoryview/, null],
+        ['a range', () => shapes('range'), /is a range/, null],
+        ['a complex', () => shapes('complex'), /is a complex/, null],
+        ['a symbol', () => Symbol('marker'), /is a symbol/, null]
+    ])('%s', ([, make, named, wayOut]) => {
+        test('is refused under its own name', () => {
+            expect(() => tojson(make())).toThrow(named);
+            // Never the accusation: the class of a value is not the value.
+            expect(() => tojson(make())).not.toThrow(/is a class/);
+        });
+
+        test('and under a key, where the empty object looked like an answer', () => {
+            expect(() => tojson({ held: make() })).toThrow(named);
+        });
+
+        if (wayOut !== null) {
+            test('and says the way out a Python author already knows', () => {
+                expect(() => tojson(make())).toThrow(wayOut);
+            });
+        }
+    });
+
+    // The controls the space needs, or every row above would pass by refusing
+    // everything. These are the Python values that *do* have JSON.
+    test.for([
+        ['a dict', 'dict', '{"a":1}'],
+        ['a list', 'list', '[1,2]'],
+        ['a tuple', 'tuple', '[1,2]'],
+        ['a string', 'text', '"hi"'],
+        ['an instance, which is its fields', 'instance', '{"n":1}']
+    ])('%s is written', ([, name, written]) => {
+        expect(tojson(shapes(name))).toBe(written);
     });
 
     // A callable instance carries fields and they are not what it is: the export
@@ -450,6 +600,17 @@ describe('urlencode', () => {
     // `%3CJavascript%20object%3A%20%5Bobject%20Date%5D%3E` in the query string.
     test('a Date is a value, and the sortable spelling of one', () => {
         expect(urlencode(new Date('2026-09-10T12:00:00Z'))).toBe('2026-09-10T12%3A00%3A00.000Z');
+    });
+
+    // An invalid Date is still a Date, and `toISOString` answers it with
+    // `RangeError: Invalid time value` — V8's sentence, naming neither the
+    // helper nor the value, out of a template filter. The two date helpers next
+    // door already word this refusal, and one of the three was saying it in
+    // another language.
+    test('and an invalid one is refused the way date() refuses it', () => {
+        expect(() => urlencode(new Date('nonsense'))).toThrow(/svelthon — urlencode\(\)/);
+        expect(() => urlencode(new Date('nonsense'))).toThrow(/is not a date/);
+        expect(() => urlencode(new Date('nonsense'))).not.toThrow(/Invalid time value/);
     });
 
     test('a number crosses as text', () => {

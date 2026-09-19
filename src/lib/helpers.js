@@ -26,6 +26,10 @@ import {
     pyScalar,
     pyEntries,
     pyName,
+    isSet,
+    opaque,
+    pyBytes,
+    thenable,
     ticking
 } from './runtime.js';
 
@@ -228,17 +232,96 @@ const serialisable = (one) => {
 // function, a bound method, and a callable instance. The fields of that instance
 // are not what it is — the export hands it to JavaScript as its call.
 const noCall = (one) => {
-    // The walk hands this rule two shapes, and they are one sentence apart: a
-    // call that has not been made, and a call that has been made and not
-    // finished. Neither has JSON, and the second is the one that used to be
-    // *started* by asking — the serialiser scheduled the body and wrote `{}`.
-    const running = pyCoroutine(one);
+    // The walk hands this rule five shapes now, and the name it still carries is
+    // the first of them. What they share is the sentence: *there is no JSON for
+    // this*, said about the value the author passed rather than about whatever
+    // the walk had in hand by the time it noticed.
+    //
+    // **Awaitable**, in either language: a call not yet made and a call made and
+    // not finished. The coroutine used to be *started* by the asking — the
+    // serialiser scheduled the body and wrote `{}` — and a promise said `{}`
+    // without even that excuse. A bare thenable used to be told its `then` was
+    // callable, which is one value answered two ways by which constructor built
+    // it.
+    if (pyCoroutine(one) || thenable(one)) {
+        const kind = pyCoroutine(one) ? 'coroutine' : 'promise';
+
+        throw refuse(
+            `tojson(): ${shown(one)} is a ${kind}, and a ${kind} has no JSON until it ` +
+                `is awaited. Await it and serialise what it answers.`
+        );
+    }
+
+    // **Callable**, and it comes second because it is the most specific thing a
+    // value can be here. A lambda, a bound method and a callable instance all
+    // carry a class, so the general Python arm below would answer for them —
+    // measured, by twelve cells turning red — and *callable* is what they are.
+    // A plain JavaScript function is caught here too, where the last arm would
+    // otherwise call it a Function.
+    if (callable(one)) {
+        throw refuse(`tojson(): ${shown(one)} is callable, and a call has no JSON`);
+    }
+
+    // **A Python set**, named as itself. It is a plain object holding `$store`
+    // and `ob_type`, so the walk reached its class first and the refusal that
+    // came out said `<class 'set'> is a class` — about an instance. Python's own
+    // answer is `Object of type set is not JSON serializable`, and the way out
+    // is the one a Python author already knows.
+    if (isSet(one)) {
+        throw refuse(
+            `tojson(): ${__pybridge.str(one)} is a set, and a set has no JSON. ` +
+                `Convert it with list() and serialise that.`
+        );
+    }
+
+    // **Bytes**, which got the set's wrong accusation at the neighbouring type,
+    // for the same reason: `{ob_type, source}`, walked, class reached first.
+    // CPython refuses them too, and the two ways out are the ones a Python
+    // author reaches for depending on what the bytes hold.
+    if (pyBytes(one)) {
+        throw refuse(
+            `tojson(): ${__pybridge.str(one)} is bytes, and bytes have no JSON. ` +
+                `Decode them with .decode() for text, or list() for the numbers.`
+        );
+    }
+
+    // **A symbol**, the last of the shapes `JSON.stringify` drops in silence: as
+    // a value it wrote nothing at all, under a key it wrote `{}`. `shown` cannot
+    // name one — `JSON.stringify` answers undefined for it too — so it says its
+    // own description.
+    if (typeof one === 'symbol') {
+        throw refuse(`tojson(): ${String(one)} is a symbol, and a symbol has no JSON`);
+    }
+
+    // **Any other Python value with nothing to write**: a range, a complex, and
+    // whatever the standard library adds. The two arms above say more because
+    // their way out is known; this one says what CPython says — *Object of type
+    // range is not JSON serializable* — naming the class of the value rather
+    // than accusing it of being one.
+    if (pyClass(one.ob_type)) {
+        const named = globalThis.__BRYTHON__.class_name(one);
+
+        throw refuse(
+            `tojson(): ${__pybridge.str(one)} is a ${named}, and a ${named} has no JSON`
+        );
+    }
+
+    // **A native object the serialiser has nothing to write of.** A Map and a Set
+    // keep their entries where no enumerable property reaches, so
+    // `tojson(new Map([["answer", 42]]))` answered `{}` — and `{"map":{}}` one
+    // level down, where the shape around it makes the empty object look like an
+    // answer. Naming it is the whole repair: choosing a JSON shape for a Map
+    // whose keys are not strings would be inventing one.
+    // Named by its class, which is what an author recognises. The tag alone
+    // answers `Object` for every class anyone writes, so the constructor is
+    // asked first and the tag is the fallback for a value that has none.
+    const named =
+        Object.getPrototypeOf(one)?.constructor?.name ||
+        Object.prototype.toString.call(one).slice(8, -1);
 
     throw refuse(
-        running
-            ? `tojson(): ${shown(one)} is a coroutine, and a coroutine has no JSON until it ` +
-                  `is awaited. Await it and serialise what it answers.`
-            : `tojson(): ${shown(one)} is callable, and a call has no JSON`
+        `tojson(): a ${named} has no JSON of its own. Give it a toJSON(), or build ` +
+            `the object or the list you want written and serialise that.`
     );
 };
 
@@ -488,7 +571,18 @@ export function urlencode(value) {
     // Python spelling of the object into the query string.
     const held = instantOf(value);
 
-    if (held !== undefined) return encodeURIComponent(new Date(held).toISOString());
+    if (held !== undefined) {
+        // An invalid Date is still a Date, and `toISOString` answers it with
+        // `RangeError: Invalid time value` — a JavaScript accident out of a
+        // template filter, where the two date helpers next door say which helper
+        // refused and what it was handed. The refusal is the same sentence they
+        // use, since it is the same fact about the same value.
+        if (Number.isNaN(held)) {
+            throw refuse('urlencode(): ' + shown(value) + ' is not a date');
+        }
+
+        return encodeURIComponent(new Date(held).toISOString());
+    }
 
     if (value !== NONE && value !== null && typeof value === 'object') {
         const pairs = new URLSearchParams();

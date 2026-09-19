@@ -806,6 +806,30 @@ export const pyClass = (value) => false \g<0>\g<0> /*W*/
 // properties are the author's plus `constructor`. Called generically, because
 // the function has to work on a prototype from any realm — including one whose
 // own `hasOwnProperty` is exactly what is being looked for.
+// A native object `JSON.stringify` has nothing to write of: a class of its own,
+// no `toJSON` to ask, and no enumerable own property to copy. Its answer is
+// `{}` — valid JSON that silently drops everything the value held, so
+// `tojson(new Map([["answer", 42]]))` said `{}` and `{"map":{}}` one level down.
+//
+// Asked as a behaviour and not as a list of names, which is the shape this
+// project keeps getting wrong: the question is *what will the serialiser do with
+// it*, and the answer covers a Map, a Set, a Headers, a Response and whatever
+// the platform adds next. A Date and a URL carry `toJSON` and are excluded by
+// it; a Brython instance is a plain object here and never reaches this.
+//
+// Asked inside a `try` for the reason every recognition is: a value nobody
+// vouched for may throw from `ownKeys`, and a question must not be the place
+// where that happens.
+export const opaque = (value) => {
+    try {
+        return (
+            !Array.isArray(value) && !plainObject(value) && typeof value.toJSON !== 'function'
+        );
+    } catch {
+        return false;
+    }
+};
+
 export const plainObject = (value) => {
     const prototype = Object.getPrototypeOf(value);
 
@@ -946,7 +970,24 @@ const declaresSlots = (value) => {
 
 // The two Python sets, asked by class the way the dict above is. Anything else
 // carrying a `$store` is not one, and a foreign object is not walked at all.
-const isSet = (value) => {
+// Python's `bytes` and `bytearray`, which have no JSON in CPython either:
+// `json.dumps(b"hi")` answers *Object of type bytes is not JSON serializable*.
+// Here they are `{ob_type, source}`, so the walk reached the class first and the
+// refusal named `<class 'bytes'>` about a value — the same wrong accusation a
+// `set` used to get, at the neighbouring type.
+//
+// Asked of the MRO rather than of the class by identity, so a subclass answers
+// too: the lesson of `pyScalar` and `isSet`, which both learned it the hard way.
+export const pyBytes = (value) => {
+    const cls = value.ob_type;
+    const mro = cls === undefined ? undefined : cls.tp_mro;
+
+    if (!Array.isArray(mro)) return false;
+
+    return mro.includes(_b_.bytes) || mro.includes(_b_.bytearray);
+};
+
+export const isSet = (value) => {
     const cls = globalThis.__BRYTHON__.get_class(value);
 
     if (cls === undefined || value.$store === undefined) return false;
@@ -1354,7 +1395,7 @@ class Waited extends Promise {}
 // else's. Asking `typeof === 'object'` left the one awaitable shape that is also
 // a callable on the synchronous road, so what it resolved to crossed as a raw
 // Brython dict while an awaitable *object* beside it crossed as data.
-const thenable = (value) =>
+export const thenable = (value) =>
     value !== null &&
     (typeof value === 'object' || typeof value === 'function') &&
     typeof value.then === 'function';
@@ -1497,6 +1538,16 @@ export function plainData(value, seen, adapt) {
     // adaptation: with no rule there is nothing to do with it, and the walk
     // below is what it has always had.
     if (adapt !== undefined && callable(value)) return adapt(value);
+
+    // A **symbol**, under the serialiser's rule only, and the last silent loss
+    // of this shape: `JSON.stringify` drops one wherever it stands, so
+    // `tojson(marker)` wrote nothing at all and `{"id": marker}` wrote `{}`. It
+    // is not an object, so the arm has to stand above the line below rather than
+    // beside the other three.
+    if (adapt !== undefined && seen instanceof Set && typeof value === 'symbol') {
+        return adapt(value);
+    }
+
     if (typeof value !== 'object') return value;
 
     // A Brython float is an object holding a number and a reference to its
@@ -1505,6 +1556,39 @@ export function plainData(value, seen, adapt) {
     const scalar = pyScalar(value);
 
     if (scalar !== undefined) return scalar;
+
+    // A promise, under the serialiser's rule only.
+    //
+    // The coroutine below was given this arm and the shape it *becomes* was not,
+    // so `tojson` of a JavaScript promise answered `{}` — valid JSON that says
+    // nothing about what was asked, and `{"task":{}}` one level down, where the
+    // shape around it makes the empty object look like an answer. A promise
+    // keeps its result where nothing enumerable can reach it.
+    //
+    // Here and not in the serialiser's replacer, because the replacer sees a
+    // *bare* thenable only after the walk has already met the `then` inside it
+    // and refused that as a callable: one shape, two sentences, decided by
+    // whether the author's awaitable happened to be built by `Promise`. Asked
+    // before the walk, both get the sentence about promises.
+    //
+    // Every other caller hands its result to JavaScript, where a promise is
+    // exactly what is wanted, so the branch is the JSON rule's alone.
+    // Three shapes with no JSON, asked before the walk and under the
+    // serialiser's rule only. Every other caller hands its result to JavaScript,
+    // where a promise is exactly what is wanted and a Map is a Map.
+    //
+    // A **Python set** is here because the walk reached its internals first: it
+    // is a plain object holding `$store` and `ob_type`, so the refusal that came
+    // out named the *class* — `<class 'set'> is a class, and a class has no
+    // JSON` — about an instance. True of what the walk had in hand by then, and
+    // false about what the author passed.
+    if (
+        adapt !== undefined &&
+        seen instanceof Set &&
+        (thenable(value) || isSet(value) || pyBytes(value) || opaque(value))
+    ) {
+        return adapt(value);
+    }
 
     // A coroutine handed to the framework becomes a promise. That is what lets a
     // `load()` stream: `{"lentes": chercher_lentement()}` returns a coroutine,
@@ -1657,7 +1741,15 @@ function branch(value, seen) {
     // have.
     const mapping = globalThis.__BRYTHON__.is_dict(value);
 
-    if (!mapping && (holder !== undefined || declaresSlots(value))) {
+    // A value of a **builtin** class is not an instance of the author's, and the
+    // difference decides which of the two rules below it gets. A `complex` has an
+    // instance dictionary and it is empty, so the fields path wrote `{}` for it:
+    // the same silent loss as a Map, from the arm written to serialise what an
+    // author put on their own object. Asked against Brython's own table rather
+    // than against a list of type names written here.
+    const owned = pyClass(value.ob_type) && _b_[value.ob_type.tp_name] === value.ob_type;
+
+    if (!mapping && !owned && (holder !== undefined || declaresSlots(value))) {
         const fields = shell ?? {};
 
         if (holder !== undefined) {
@@ -1700,6 +1792,22 @@ function branch(value, seen) {
     //
     // A set has no key to copy: `list(mon_set)` is the Python way to hand one
     // over, and it is what any serialiser would want anyway.
+    //
+    // And the floor under the two arms above, for the serialiser alone: a Python
+    // value that is **not** a mapping and keeps nothing of the author's has no
+    // representation here, and walking its properties reads the engine's. That
+    // is where `<class 'range'> is a class` came from, and `{}` for a complex —
+    // the class accusation and the silent loss, from one line, at every builtin
+    // nobody had named yet. CPython refuses the same values: *Object of type
+    // range is not JSON serializable*.
+    //
+    // A question rather than a third list of type names, which is how `set` and
+    // `bytes` were each found one at a time. The two of them keep their own arms
+    // because their sentences name the way out; this one names the class.
+    if (adapt !== undefined && seen instanceof Set && !mapping && pyClass(value.ob_type)) {
+        return adapt(value);
+    }
+
     const out = shell ?? {};
 
     for (const [key, one] of pyEntries(value)) {
