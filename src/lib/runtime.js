@@ -3715,10 +3715,17 @@ function groupToken(scope, binding) {
 
 export function group(node, [current, write, chosen, binding, scope]) {
     const boxes = node.type === 'checkbox';
-    const given = (picked) => (picked === undefined ? node.value : pyBind(picked));
     const token = groupToken(scope, binding);
 
-    let value = given(chosen);
+    // `undefined` now means one thing only: the tag's value is static text, so
+    // the node holds it and nothing can move it. Everything an author wrote as
+    // an expression — braced, quoted, or quoted around text — is compiled and
+    // handed over, because the node's text is not the value (`value="{n}"` binds
+    // a number) and because reading it here is not ordered against Svelte
+    // writing it.
+    let picked = chosen;
+
+    const value = () => (picked === undefined ? node.value : pyBind(picked));
 
     // Python's `==`, not JavaScript's `===`. A Brython float is an object
     // `{ob_type, value}`, so `value={0.5}` evaluated twice is two objects and
@@ -3730,8 +3737,10 @@ export function group(node, [current, write, chosen, binding, scope]) {
     // Python, and not the JavaScript boolean. A choice already present in the
     // state then showed as unselected.
     const same = (one) => {
+        const mine = value();
+
         try {
-            return __pybridge.truthy(globalThis.__BRYTHON__.rich_comp('__eq__', one, value));
+            return __pybridge.truthy(globalThis.__BRYTHON__.rich_comp('__eq__', one, mine));
         } catch (error) {
             // An `__eq__` of the author's that raises is not a "no". The fall
             // back to identity is for a value Python cannot compare at all — a
@@ -3741,7 +3750,7 @@ export function group(node, [current, write, chosen, binding, scope]) {
             // compare anything. Same rule as `__pybridge.truthy` one file up.
             if (raised(error)) throw pyError(error, `bind:group={${binding}}`);
 
-            return one === value;
+            return one === mine;
         }
     };
 
@@ -3750,14 +3759,14 @@ export function group(node, [current, write, chosen, binding, scope]) {
     };
 
     const changed = () => {
-        if (!boxes) return write(value);
+        if (!boxes) return write(value());
 
         // A checkbox group is a list, and it has to arrive as Python's: an array
         // built here reads as a JavascriptArray, which prints `[a, c]` where
         // Python prints `['a', 'c']` and refuses a slice.
         const kept = Array.from(node.$svelthonGroup ?? []).filter((one) => !same(one));
 
-        write(__pybridge.list(node.checked ? [...kept, value] : kept));
+        write(__pybridge.list(node.checked ? [...kept, value()] : kept));
     };
 
     // What the reset writes back, once the control has been put back. A radio
@@ -3765,7 +3774,7 @@ export function group(node, [current, write, chosen, binding, scope]) {
     // whose inputs carry no `checked` reaches Python as None instead of keeping
     // the answer the reset just threw away.
     const restored = (rebuilt, held) => {
-        if (!boxes) return write(node.checked ? value : NONE);
+        if (!boxes) return write(node.checked ? value() : NONE);
 
         // Which inputs belong together: the token is the instance and the
         // binding, the list is the third half — see `groupToken`.
@@ -3782,7 +3791,7 @@ export function group(node, [current, write, chosen, binding, scope]) {
             kept = [];
             lists.set(held, kept);
         }
-        if (node.checked) kept.push(value);
+        if (node.checked) kept.push(value());
 
         write(__pybridge.list([...kept]));
     };
@@ -3794,9 +3803,9 @@ export function group(node, [current, write, chosen, binding, scope]) {
     show(current);
 
     return {
-        update([next, , picked]) {
+        update([next, , given]) {
             node.$svelthonGroup = next;
-            value = given(picked);
+            picked = given;
             show(next);
         },
         destroy() {

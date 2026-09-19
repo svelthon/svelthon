@@ -652,32 +652,37 @@ function loneInterpolation(markup, at, closing) {
 // carries an action instead. So the value is read from the source here and
 // handed to the action.
 //
-// Only the braced spelling: `value="a"` is text, `value="{x}"` is text too,
-// since Svelte concatenates a quoted attribute, and the node's own value is
-// exactly right for both.
+// The braced spelling carries the value; a quoted one is text Svelte
+// concatenates, and the node's own value is exactly right for it — *at the
+// moment it is read*. That was the whole of the rule, and the half it was
+// missing is time: `value="item-{label}"` gave the action nothing that changes
+// when `label` does, so the action never re-ran, kept the text it had read at
+// mount, and wrote `item-first` into Python while the field said `item-second`.
+//
+// So both spellings are reported, told apart by `braced`, and the caller makes a
+// dependency out of the quoted one.
 //
 // Returns the range rather than the text, so the caller can compile it as the
 // expression it is, at the position it sits at.
 function tagValue(markup, from) {
     let at = from;
-    let quote = null;
 
     while (at < markup.length) {
         const char = markup[at];
+        const named = () => (markup.slice(from, at).match(ATTRIBUTE_NAME) || [])[1] === 'value';
 
-        if (quote) {
-            if (char === quote) quote = null;
-            at += 1;
-        } else if (char === '"' || char === "'") {
-            quote = char;
-            at += 1;
+        if (char === '"' || char === "'") {
+            const end = markup.indexOf(char, at + 1);
+
+            if (end === -1) return null;
+            if (named()) return { start: at + 1, end, braced: false };
+
+            at = end + 1;
         } else if (char === '{') {
             const end = closingBrace(markup, at);
 
             if (end === -1) return null;
-            if ((markup.slice(from, at).match(ATTRIBUTE_NAME) || [])[1] === 'value') {
-                return { start: at + 1, end };
-            }
+            if (named()) return { start: at + 1, end, braced: true };
 
             at = end + 1;
         } else if (char === '>') {
@@ -1174,6 +1179,56 @@ function walk(markup, collect, onPython, seed, record, where) {
     // keeps only the text of that value, so a number bound from `value={1}` came
     // back as "1" and matched nothing. See `tagValue` for why the node cannot
     // answer this.
+    // A quoted value, compiled the way Svelte compiles it — which was measured
+    // against Svelte itself rather than assumed, and the assumption that stood
+    // here was wrong twice over:
+    //
+    // - **One interpolation and nothing else** is not text. `value="{n}"` binds
+    //   the number `1`, exactly as `value={n}` does; reading it off the node
+    //   gave the group the string `"1"`, which is the very failure the braced
+    //   spelling exists to avoid.
+    // - **Text around an interpolation** is a concatenation, and it *changes*.
+    //   Reading it off the node meant reading it whenever the action happened to
+    //   run, which is not ordered against Svelte writing the attribute.
+    //
+    // So the parts are compiled here and joined here. `String()` on the first,
+    // because Svelte builds a template literal and `{n}{m}` on two numbers is
+    // `"12"`, not `3`.
+    //
+    // A value with no interpolation is left to the node: it is static text and
+    // nothing can move it.
+    const quotedValue = (text) => {
+        const parts = [];
+        let at = 0;
+        let literal = 0;
+        let expressions = 0;
+
+        while (at < text.length) {
+            if (text[at] !== '{') {
+                at += 1;
+                continue;
+            }
+
+            const end = closingBrace(text, at);
+
+            if (end === -1) break;
+
+            if (at > literal) parts.push(JSON.stringify(text.slice(literal, at)));
+
+            parts.push(call(text.slice(at + 1, end), ''));
+            expressions += 1;
+            at = end + 1;
+            literal = at;
+        }
+
+        if (literal < text.length) parts.push(JSON.stringify(text.slice(literal)));
+
+        if (expressions === 0) return 'undefined';
+        if (parts.length === 1) return parts[0];
+
+        return `String(${parts[0]})${parts.slice(1).map((one) => ` + ${one}`).join('')}`;
+    };
+
     const groupAction = (expr) => {
         const read = call(expr, '');
         const write = assign(expr);
@@ -1185,7 +1240,12 @@ function walk(markup, collect, onPython, seed, record, where) {
         // range a second time, the two texts being the same.
         region = null;
 
-        const value = found === null ? 'undefined' : call(markup.slice(found.start, found.end), '');
+        const value =
+            found === null
+                ? 'undefined'
+                : found.braced
+                  ? call(markup.slice(found.start, found.end), '')
+                  : quotedValue(markup.slice(found.start, found.end));
 
         region = outer;
 
