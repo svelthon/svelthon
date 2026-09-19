@@ -480,8 +480,9 @@ const PYTHON_LANG = /\slang\s*=\s*(?:"python"|'python'|python(?=[\s/]|$))/;
 // JavaScript component holding `const example = '<script lang="python">'` — a
 // string, a doc page, a code sample — declared nothing, and the template around
 // it was compiled as Python while the script hook, which reads the real
-// attributes, left the body alone. What the author saw was `__expr_0 is not
-// defined`. The same for a tag quoted in a `<style>` body.
+// attributes, left the body alone. What the author saw was a call to an
+// expression function nobody generated, named by nothing they had written. The
+// same for a tag quoted in a `<style>` body.
 export function pythonScript(content) {
     let block;
 

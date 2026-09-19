@@ -862,6 +862,10 @@ def watch():
     return cleanup     # optional teardown, run before each re-run and on destroy
 ```
 
+**Any Python callable is a teardown**, not only a `def`: `return resource.close`
+reads a bound method off an object, and an instance with `__call__` works the
+same way. That is the shape most real teardowns take.
+
 | Svelte | Svelthon |
 |---|---|
 | `$effect(() => expr)` | `=> expr` |

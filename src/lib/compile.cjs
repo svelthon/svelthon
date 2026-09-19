@@ -752,6 +752,7 @@ const RUNTIME = {
     pyNumbers: '__pyNumbers',
     pyCall: '__pyCall',
     pyDef: '__pyDef',
+    pyHandler: '__pyHandler',
     pyComponent: '__pyComponent',
     pyExpression: '__pyExpression',
     pyExport: '__pyExport',
@@ -1435,6 +1436,9 @@ function preamble(c) {
             'jsCall',
             'ticking', 'pyBind', 'pyModule', 'NONE', 'helpers',
             ...(c.store ? ['registerModule'] : SUBSCRIBING(c) ? ['unsubscribe'] : []),
+            // Only an effect hands a value back to be called later, so only a
+            // component with one needs the name.
+            ...(c.effects.length ? ['pyHandler'] : []),
             // Three that keep the spelling the markup pass emits.
             'group', 'writeAttr', 'writeItem'
         ])} } from 'svelthon/runtime';`,
@@ -1827,7 +1831,17 @@ function effectBlocks(c) {
             `    let teardown;`,
             `    try { teardown = ${fn(e.name)}(); }` +
                 ` catch (err) { throw __pyError(err,${JSON.stringify(`${e.name}() — ${c.source}`)}, ${c.lineOffset}); }`,
-            `    if (typeof teardown === 'function') return () => { teardown(); };`,
+            // What an effect hands back is a *Python* value, so the question is
+            // whether Python can call it, not whether JavaScript can. A bound
+            // method is `resource.close`, the plainest teardown there is, and it
+            // is a Brython object: `typeof` calls it `object`, the line below
+            // dropped it, and the resource was never released — no error, no
+            // warning, the effect simply had no cleanup. Same for a callable
+            // instance. `pyHandler` answers the wide question and hands back
+            // something JavaScript can call, receiver included; a value that is
+            // not callable at all comes back unchanged and still fails the test.
+            `    const __cleanup = ${RUNTIME.pyHandler}(teardown);`,
+            `    if (typeof __cleanup === 'function') return () => { __cleanup(); };`,
             e.root ? `}); });` : `});`
         ]),
         // The other end of `track`. Its own effect rather than a line in the one

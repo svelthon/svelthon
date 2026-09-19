@@ -899,6 +899,11 @@ def watch():
     return cleanup     # nettoyage optionnel, avant chaque reprise et au démontage
 ```
 
+**Tout appelable Python est un nettoyage**, pas seulement un `def` :
+`return resource.close` rend une méthode liée, et une instance portant
+`__call__` marche pareil. C'est la forme que prennent la plupart des nettoyages
+réels.
+
 | Svelte | Svelthon |
 |---|---|
 | `$effect(() => expr)` | `=> expr` |
