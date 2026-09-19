@@ -25,12 +25,19 @@ def make():
             rows += items()
         elif how == "update":
             table.update(pairs())
+        elif how == "setdefault":
+            # The one mutator that hands a child back instead of taking one: the
+            # value it returns is what the program keeps and mutates, and it is
+            # not among the arguments.
+            table.setdefault("a", child)
         elif how == "append":
             rows.append(child)
         else:
             rows += [child]
 
-    return [table if how == "update" else rows, install, lambda: child.append(1)]
+    holder = table if how in ("update", "setdefault") else rows
+
+    return [holder, install, lambda: child.append(1)]
 
 
 how: str = "extend"

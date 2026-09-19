@@ -30,6 +30,11 @@ describe.for([
     ['extend', 'rows.extend(items())', '[[]]', '[[1]]'],
     ['augment', 'rows += items()', '[[]]', '[[1]]'],
     ['update', 'table.update(pairs())', "{'a': []}", "{'a': [1]}"],
+    // The one mutator that hands a child *back* rather than taking one: what the
+    // program keeps and mutates is the return value, which is not among the
+    // arguments. Named by the mutation harness, which found the line that links
+    // it checked by nothing.
+    ['setdefault', 'table.setdefault("a", child)', "{'a': []}", "{'a': [1]}"],
     ['append', 'rows.append(child)', '[[]]', '[[1]]'],
     ['augment-list', 'rows += [child]', '[[]]', '[[1]]']
 ])('a child put in by %s', ([how, , installed, grown]) => {

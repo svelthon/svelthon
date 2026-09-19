@@ -140,4 +140,17 @@ describe('an export behind another decorator', () => {
     test('and is callable when the decorator answers an instance', () => {
         expect(ready().as_object_decorated(0.25)).toBe(0.5);
     });
+
+    // What a parent reads off the export before calling it. The mutation harness
+    // named this one: the module path had the assertion and the component path,
+    // which is the same line in the twin wrapper, had none.
+    test('and reports the signature the value accepts, not the def’s', () => {
+        const instance = ready();
+
+        expect(instance.takes.length).toBe(2);
+        expect(instance.takes(2, 3)).toBe(5);
+        // And behind a decorator it is the resulting callable's, which takes
+        // everything, not the `def`'s one parameter.
+        expect(instance.decorated.length).toBe(0);
+    });
 });

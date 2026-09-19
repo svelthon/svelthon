@@ -327,6 +327,17 @@ function installMutationTracking($B) {
             }
 
             if (spent) adopt(obj);
+
+            // `setdefault` is the one mutator that hands a child *back* rather
+            // than taking one, so its result is linked as well as its arguments.
+            //
+            // Measured against the mutation harness on 2026-09-20: removing this
+            // line kills nothing, and the reason is that every path to the value
+            // it returns is already covered — the value was either just passed
+            // as an argument, and the loop above took it, or it was already in
+            // the dict, and `adopt` walked it when the dict came under watch. It
+            // stays as a belt for a third path nobody has found, and it is
+            // written here that it currently holds nothing on its own.
             if (attr === 'setdefault') inherit(obj, result);
             MARKS.get(obj)();
         } else if (VIEWS.has(attr)) {

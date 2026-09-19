@@ -30,6 +30,13 @@ def as_object_decorated(value):
 
 
 @export
+def takes(a, b):
+    # The control with a signature to read: without one, every `length` is zero
+    # and the number a parent reads is not asserted at all.
+    return a + b
+
+
+@export
 def from_python():
     # What Python itself does with the same name, which is the reference the
     # export has to match.
