@@ -146,6 +146,21 @@ describe('a JavaScript iterable is walked too, and its errors stay its own', () 
         expect(() => rendered(broken())).toThrow('iterator failure');
     });
 
+    // A field spelled like the engine's mark, on an array this time. Read as a
+    // class, the business string was handed to Brython, which tried to write a
+    // slot on it: *Cannot create property 'tp_iter' on string 'business'*, a
+    // JavaScript accident where the author wrote `{#each rows}`. One cause, six
+    // crossings — the loop and the helper below, and four more the converters'
+    // own tests hold.
+    test('and one carrying a field spelled like the engine’s mark still renders', () => {
+        const rows = [1, 2];
+
+        rows.ob_type = 'business';
+
+        expect(rendered(rows)).toBe('12');
+        expect(plainData(batch(rows, 1))).toEqual([[1], [2]]);
+    });
+
     test('including through a helper, which used to answer an empty list', () => {
         expect(() => batch(broken(), 2)).toThrow('iterator failure');
         // The control: the same helper, the same shape, nothing raised. Read

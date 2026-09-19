@@ -22,7 +22,7 @@ import {
     given,
     given_second
 } from './fixtures/route.py';
-import { requestEvent as event } from './request-event.js';
+import { requestEvent as event, prerenderingEvent } from './request-event.js';
 
 // A RequestEvent as SvelteKit builds one, from the one place that says what
 // that is. The conversion is recognised by what the event's members *are* — a
@@ -219,11 +219,37 @@ describe('what crosses as a request event', () => {
         expect(given(value)).toEqual({ kind: 'JSObject', payload: 42 });
     });
 
+    // Prerendering, where the URL is a proxy that throws from `searchParams`.
+    // The recognition must not be what touches it: reading it in the guard threw
+    // before the fallback that exists for exactly this could run, and a page
+    // that builds fine in dev failed at build time.
+    test('and an event whose query cannot be read is still an event', () => {
+        expect(given(prerenderingEvent())).toEqual({
+            kind: 'dict',
+            keys: ['js', 'method', 'params', 'query', 'route', 'url']
+        });
+    });
+
     // Every argument takes this road, not only the first one a route is handed.
     test('and the same holds of an argument that is not the first', () => {
         expect(given_second(event(), { ...event(), ...business, url: 'https://e.test/' })).toEqual({
             kind: 'JSObject',
             payload: 42
         });
+    });
+});
+
+// The fallback itself, run end to end rather than asserted about.
+describe('a load() called while prerendering', () => {
+    test('reads its query by parsing the URL again', async () => {
+        const out = await load(
+            prerenderingEvent({
+                url: 'https://example.test/peps/pep-703?page=7',
+                params: { slug: 'pep-703' },
+                route: { id: '/peps/[slug]' }
+            })
+        );
+
+        expect(out).toEqual({ slug: 'pep-703', page: 7, method: 'GET', keys: ['slug'] });
     });
 });

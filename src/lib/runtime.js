@@ -1815,9 +1815,19 @@ export function pyData(value) {
 //
 // `params` last, and only that it is an object: it is the field a route with no
 // parameters leaves empty, so it can say the least.
+//
+// And the URL is asked as `instanceof`, not by reading a member of it. The line
+// that stood here read `url.searchParams.get`, which is precisely the read the
+// block below wraps in a `try` — SvelteKit hands a **proxy** over the URL while
+// prerendering and throws from that member, because a query string cannot exist
+// yet. So the guard threw before the fallback it guards could be reached: a
+// recognition must not be the place where an exception happens. `instanceof`
+// asks the prototype chain, which a proxy forwards without running its `get`,
+// and it is the question the rest of this file already asks of a Date, a Set and
+// a Promise.
 const routeEvent = (value) =>
     typeof value.fetch === 'function' &&
-    typeof value.url?.searchParams?.get === 'function' &&
+    value.url instanceof URL &&
     typeof value.request?.method === 'string' &&
     typeof value.request?.headers?.get === 'function' &&
     value.params !== null &&
@@ -1831,12 +1841,19 @@ export function pyArg(value) {
     // so it is tried first, but it throws while prerendering, where a query
     // string cannot exist. Parsing the URL again is the fallback, and it touches
     // nothing SvelteKit guards.
+    //
+    // `href` rather than `String(url)`, here and below. The URL is a **proxy**
+    // while prerendering, and `String()` calls `toString` with the proxy as the
+    // receiver, which Node refuses — *Receiver must be an instance of class
+    // URL*. A getter read goes through the trap with the real URL underneath it,
+    // which is what a proxy that forwards reads is built to do, and it answers
+    // the same string.
     let query;
     try {
         query = [...value.url.searchParams];
     } catch {
         try {
-            query = [...new URL(String(value.url)).searchParams];
+            query = [...new URL(value.url.href).searchParams];
         } catch {
             query = [];
         }
@@ -1847,7 +1864,7 @@ export function pyArg(value) {
     return pyDict([
         ['params', pyDict(Object.entries({ ...value.params }))],
         ['query', pyDict(query)],
-        ['url', String(value.url)],
+        ['url', value.url.href],
         ['method', value.request.method],
         ['route', value.route && value.route.id],
         // The event itself, for whatever the snapshot does not cover: cookies,

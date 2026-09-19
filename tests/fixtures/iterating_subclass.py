@@ -1,7 +1,7 @@
 # A list subclass that says what iterating it means, and a foreign object whose
 # data happens to be spelled like the engine's mark.
-__js__ = {"./foreign_record.js": ["record", "control"]}
-__all__ = ["rows", "plain", "python_order", "encoded", "batched"]
+__js__ = {"./foreign_record.js": ["record", "control", "tagged_rows", "plain_rows"]}
+__all__ = ["rows", "plain", "python_order", "encoded", "batched", "converted"]
 
 
 class Reverse(list):
@@ -27,3 +27,16 @@ def encoded():
 
 def batched():
     return [str(batch(rows, 2)), str(batch(plain, 2))]
+
+
+def converted():
+    # What `to_py` promises: a JavaScript array arrives as a Python list, with
+    # `.copy()`, `.index()` and `isinstance(x, list)` behind it. A field that
+    # happens to be spelled like the engine's mark does not change that.
+    def named(value):
+        try:
+            return type(to_py(value)).__name__
+        except AttributeError:
+            return "AttributeError"
+
+    return [named(tagged_rows()), named(plain_rows())]

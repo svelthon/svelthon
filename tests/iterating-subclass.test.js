@@ -16,7 +16,7 @@
 // converter had the same repair when it read `ob_type === undefined`.
 import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
-import { python_order, encoded, batched } from './fixtures/iterating_subclass.py';
+import { python_order, encoded, batched, converted } from './fixtures/iterating_subclass.py';
 import IteratingSubclass from './fixtures/IteratingSubclass.svelte';
 
 describe('a list subclass with its own __iter__', () => {
@@ -48,6 +48,19 @@ describe('a list subclass with its own __iter__', () => {
 });
 
 describe('a field spelled like the engine’s mark', () => {
+    // And the same collision on an **array**, where the inbound converter kept
+    // the wider test one branch longer: `to_py(rows)` handed the array straight
+    // back, so what came out was not a `list` and the `.get` beside it raised
+    // `AttributeError`. An array is as free to carry that field name as an
+    // object is, and the question is the same one — is this a Python class.
+    test('on an array too, which still arrives as a list', () => {
+        const [tagged, plain] = converted();
+
+        expect(tagged).toBe('list');
+        // The control: the same array without that field, never in doubt.
+        expect(plain).toBe(tagged);
+    });
+
     test('is data, and every parameter survives', () => {
         const [foreign, python, control] = encoded();
 
