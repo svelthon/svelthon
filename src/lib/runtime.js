@@ -1324,8 +1324,15 @@ class Waited extends Promise {}
 // No Python value answers this by accident: Brython keeps an object's
 // attributes under a symbol, so a plain `.then` read finds nothing on a dict, a
 // list or an instance.
+// A **function** is one too, and that is the language's rule rather than a
+// courtesy: `await fn` and `Promise.resolve(fn)` call `fn.then` like anyone
+// else's. Asking `typeof === 'object'` left the one awaitable shape that is also
+// a callable on the synchronous road, so what it resolved to crossed as a raw
+// Brython dict while an awaitable *object* beside it crossed as data.
 const thenable = (value) =>
-    value !== null && typeof value === 'object' && typeof value.then === 'function';
+    value !== null &&
+    (typeof value === 'object' || typeof value === 'function') &&
+    typeof value.then === 'function';
 
 // Calling an `async def` from JavaScript returns a coroutine that nobody runs:
 // the handler appears to do nothing at all, silently. Brython has its own event

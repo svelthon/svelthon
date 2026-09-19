@@ -30,5 +30,25 @@ export const local = () => Promise.resolve(payload());
 // is also the case that says a boundary must normalise rather than chain.
 export const custom = () => ({ then: (resolve) => resolve(payload()) });
 
+// A **function** that is awaitable, which is the one shape that is both a
+// callable and a thenable. `await` and `Promise.resolve` call its `then` like
+// anyone else's, so the boundary owes it the same treatment — and a predicate
+// asking `typeof === 'object'` is exactly what misses it.
+export const awaitable = () => {
+    const one = () => 'never called';
+
+    one.then = (resolve) => resolve(payload());
+
+    return one;
+};
+
+// The control beside it: an ordinary function, which is not awaitable and has to
+// come back as something a caller can call.
+export const plainFunction = () => {
+    const one = () => 'called';
+
+    return one;
+};
+
 // The other half of a promise, from that same other context.
 export const rejecting = () => elsewhere().reject(new Error('gone'));

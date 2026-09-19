@@ -4,7 +4,14 @@ import Async from './fixtures/Async.svelte';
 import AsyncError from './fixtures/AsyncError.svelte';
 import { schedule } from '../src/lib/runtime.js';
 import './fixtures/route.py'; // compiled and registered, for the coroutine below
-import { from_foreign, from_local, from_custom, from_rejected } from './fixtures/promises.py';
+import {
+    from_foreign,
+    from_local,
+    from_custom,
+    from_callable,
+    from_function,
+    from_rejected
+} from './fixtures/promises.py';
 
 // Calling an `async def` from JavaScript returns a coroutine nobody runs — the
 // handler would appear to do nothing at all. Brython has its own event loop, so
