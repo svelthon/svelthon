@@ -1797,6 +1797,33 @@ export function pyData(value) {
     return toDict === null ? python : toDict();
 }
 
+// Does it behave like a URL — asked somewhere a throw is expected rather than
+// fatal.
+//
+// Two failures, one on each side, produced this shape. Reading
+// `url.searchParams.get` threw during prerendering, where SvelteKit hands over a
+// **proxy** and refuses the one part of a URL a page built ahead of time cannot
+// have, so the recognition threw before the fallback it guards could run.
+// Replacing that with `instanceof URL` traded the throw for a **realm**: a URL
+// built in another JavaScript context answers everything a URL answers and fails
+// the identity, so a genuine event crossed as an ordinary object and the Python
+// handler raised on `event['method']`. The comment below already said exactly
+// that about `Request`, which made it my own contradiction rather than a
+// surprise.
+//
+// So a behaviour again, and the `try` is what keeps the first failure closed. A
+// member that answers a string is a URL; a member that *throws* is a URL the
+// framework is guarding, which is still a URL; only absence is a no. The path
+// and the scheme rather than the query, because those are the parts a
+// prerendered page necessarily has — it is rendered *for* a path.
+const urlish = (value) => {
+    try {
+        return typeof value?.pathname === 'string' && typeof value?.protocol === 'string';
+    } catch {
+        return true;
+    }
+};
+
 // A SvelteKit request event, recognised by what its members *are*.
 //
 // The line this replaces asked whether three names were truthy — `params`,
@@ -1805,29 +1832,19 @@ export function pyData(value) {
 // `value.payload` was gone, and nothing raised. Data went missing and the page
 // was merely wrong.
 //
-// Names are cheap; behaviour is not. A URL answers `searchParams.get`, a Request
-// answers `headers.get` and carries a string method, and `fetch` is the member
-// SvelteKit puts on every event and no data structure has any reason to hold. So
-// four independent things have to be true at once, and an object that is all
-// four is a request event whatever it was built by — which is the point, since
-// an adapter may hand over a `Request` from another realm, where `instanceof`
-// answers false for the genuine article.
+// Names are cheap; behaviour is not. A URL answers with a path and a scheme, a
+// Request answers `headers.get` and carries a string method, and `fetch` is the
+// member SvelteKit puts on every event and no data structure has any reason to
+// hold. So four independent things have to be true at once, and an object that
+// is all four is a request event whatever it was built by — which is the point,
+// since an adapter may hand over a `Request` from another realm, where
+// `instanceof` answers false for the genuine article.
 //
 // `params` last, and only that it is an object: it is the field a route with no
 // parameters leaves empty, so it can say the least.
-//
-// And the URL is asked as `instanceof`, not by reading a member of it. The line
-// that stood here read `url.searchParams.get`, which is precisely the read the
-// block below wraps in a `try` — SvelteKit hands a **proxy** over the URL while
-// prerendering and throws from that member, because a query string cannot exist
-// yet. So the guard threw before the fallback it guards could be reached: a
-// recognition must not be the place where an exception happens. `instanceof`
-// asks the prototype chain, which a proxy forwards without running its `get`,
-// and it is the question the rest of this file already asks of a Date, a Set and
-// a Promise.
 const routeEvent = (value) =>
     typeof value.fetch === 'function' &&
-    value.url instanceof URL &&
+    urlish(value.url) &&
     typeof value.request?.method === 'string' &&
     typeof value.request?.headers?.get === 'function' &&
     value.params !== null &&

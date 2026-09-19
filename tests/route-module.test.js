@@ -22,7 +22,7 @@ import {
     given,
     given_second
 } from './fixtures/route.py';
-import { requestEvent as event, prerenderingEvent } from './request-event.js';
+import { requestEvent as event, prerenderingEvent, foreignRealmEvent } from './request-event.js';
 
 // A RequestEvent as SvelteKit builds one, from the one place that says what
 // that is. The conversion is recognised by what the event's members *are* — a
@@ -230,6 +230,29 @@ describe('what crosses as a request event', () => {
         });
     });
 
+    // And a URL that refuses a member the recognition itself reads. No version
+    // of SvelteKit guards `pathname` today; the rule is that a guarded member
+    // must not *veto* an event, whichever member a future one decides to guard,
+    // and a rule nothing can reach is a rule nobody is holding.
+    test('and an event whose URL refuses the member the guard reads', () => {
+        expect(given(prerenderingEvent({ refuses: ['pathname'] }))).toEqual({
+            kind: 'dict',
+            keys: ['js', 'method', 'params', 'query', 'route', 'url']
+        });
+    });
+
+    // A URL built in another JavaScript context, which is what an adapter, a
+    // worker or an iframe hands over: it behaves like a URL and is not *our*
+    // URL. Asking `instanceof` here let a genuine event cross as ordinary data,
+    // and the handler raised on `event['method']` — a recognition at a boundary
+    // that takes values from elsewhere cannot be an identity test.
+    test('and an event whose URL comes from another context is still an event', () => {
+        expect(given(foreignRealmEvent())).toEqual({
+            kind: 'dict',
+            keys: ['js', 'method', 'params', 'query', 'route', 'url']
+        });
+    });
+
     // Every argument takes this road, not only the first one a route is handed.
     test('and the same holds of an argument that is not the first', () => {
         expect(given_second(event(), { ...event(), ...business, url: 'https://e.test/' })).toEqual({
@@ -239,11 +262,24 @@ describe('what crosses as a request event', () => {
     });
 });
 
-// The fallback itself, run end to end rather than asserted about.
-describe('a load() called while prerendering', () => {
+// Both awkward URLs, run end to end through a real handler rather than asserted
+// about at the boundary.
+describe('a load() whose URL is not the ordinary one', () => {
     test('reads its query by parsing the URL again', async () => {
         const out = await load(
             prerenderingEvent({
+                url: 'https://example.test/peps/pep-703?page=7',
+                params: { slug: 'pep-703' },
+                route: { id: '/peps/[slug]' }
+            })
+        );
+
+        expect(out).toEqual({ slug: 'pep-703', page: 7, method: 'GET', keys: ['slug'] });
+    });
+
+    test('and reads it normally when the URL comes from another context', async () => {
+        const out = await load(
+            foreignRealmEvent({
                 url: 'https://example.test/peps/pep-703?page=7',
                 params: { slug: 'pep-703' },
                 route: { id: '/peps/[slug]' }
