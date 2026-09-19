@@ -10,17 +10,29 @@
 // which is what an `async def load()` needs, had never run.
 import { test, expect, describe } from 'vitest';
 import * as route from './fixtures/route.py';
-import { load, GET, actions, config, boom, streaming, shared, separate } from './fixtures/route.py';
+import {
+    load,
+    GET,
+    actions,
+    config,
+    boom,
+    streaming,
+    shared,
+    separate,
+    given,
+    given_second
+} from './fixtures/route.py';
+import { requestEvent as event } from './request-event.js';
 
-// A RequestEvent as SvelteKit builds one. The conversion is recognised by shape
-// — `params`, `url` and `request` together — and anything else is handed over
-// untouched, so all three have to be here for the boundary to do its work.
-const requestEvent = (search = '?page=2') => ({
-    params: { slug: 'pep-703' },
-    url: new URL(`https://example.test/peps/pep-703${search}`),
-    request: { method: 'GET' },
-    route: { id: '/peps/[slug]' }
-});
+// A RequestEvent as SvelteKit builds one, from the one place that says what
+// that is. The conversion is recognised by what the event's members *are* — a
+// URL, a Request, an event `fetch` — and anything else is handed over untouched.
+const requestEvent = (search = '?page=2') =>
+    event({
+        url: `https://example.test/peps/pep-703${search}`,
+        params: { slug: 'pep-703' },
+        route: { id: '/peps/[slug]' }
+    });
 
 describe('an async load()', () => {
     test('returns a promise, and its value is plain data', async () => {
@@ -95,6 +107,8 @@ describe('what a plain module exports', () => {
             'actions',
             'boom',
             'config',
+            'given',
+            'given_second',
             'load',
             'runs_count',
             'separate',
@@ -171,5 +185,45 @@ describe('what a route hands back besides plain data', () => {
 
     test('and the rejection says where it happened', async () => {
         await expect(actions.failing(requestEvent())).rejects.toThrow(/route\.py/);
+    });
+});
+
+// Which objects are a request event, and which are only shaped like one.
+//
+// The recognition used to be three truthy names — `params`, `url`, `request` —
+// and three names are not rare. An outside reading handed the boundary an
+// ordinary business object carrying them: it was converted, its own fields
+// disappeared from the level Python reads, `value.payload` was gone, and nothing
+// raised. Data went missing and the page was merely wrong.
+//
+// What it asks now is what the members *are*, and the rows below take the real
+// event apart one member at a time. Each near-miss is a genuine event with one
+// thing made ordinary, so no row can pass for the wrong reason.
+describe('what crosses as a request event', () => {
+    const business = { payload: 42 };
+
+    test('the event itself arrives as real dicts', () => {
+        expect(given(event())).toEqual({
+            kind: 'dict',
+            keys: ['js', 'method', 'params', 'query', 'route', 'url']
+        });
+    });
+
+    test.for([
+        // What is wrong with it, and the object.
+        ['nothing but the names', { ...business, params: {}, url: 'https://e.test/', request: { method: 'GET' } }],
+        ['a url that is a string', { ...event(), ...business, url: 'https://e.test/' }],
+        ['a request that only names a method', { ...event(), ...business, request: { method: 'GET' } }],
+        ['no fetch of its own', { ...event(), ...business, fetch: undefined }]
+    ])('ordinary data with %s crosses untouched', ([, value]) => {
+        expect(given(value)).toEqual({ kind: 'JSObject', payload: 42 });
+    });
+
+    // Every argument takes this road, not only the first one a route is handed.
+    test('and the same holds of an argument that is not the first', () => {
+        expect(given_second(event(), { ...event(), ...business, url: 'https://e.test/' })).toEqual({
+            kind: 'JSObject',
+            payload: 42
+        });
     });
 });

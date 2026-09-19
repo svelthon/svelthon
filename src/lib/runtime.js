@@ -1797,9 +1797,35 @@ export function pyData(value) {
     return toDict === null ? python : toDict();
 }
 
+// A SvelteKit request event, recognised by what its members *are*.
+//
+// The line this replaces asked whether three names were truthy — `params`,
+// `url`, `request` — and three names are not rare. A business object carrying
+// them was reclassified: its own fields vanished from the level Python reads,
+// `value.payload` was gone, and nothing raised. Data went missing and the page
+// was merely wrong.
+//
+// Names are cheap; behaviour is not. A URL answers `searchParams.get`, a Request
+// answers `headers.get` and carries a string method, and `fetch` is the member
+// SvelteKit puts on every event and no data structure has any reason to hold. So
+// four independent things have to be true at once, and an object that is all
+// four is a request event whatever it was built by — which is the point, since
+// an adapter may hand over a `Request` from another realm, where `instanceof`
+// answers false for the genuine article.
+//
+// `params` last, and only that it is an object: it is the field a route with no
+// parameters leaves empty, so it can say the least.
+const routeEvent = (value) =>
+    typeof value.fetch === 'function' &&
+    typeof value.url?.searchParams?.get === 'function' &&
+    typeof value.request?.method === 'string' &&
+    typeof value.request?.headers?.get === 'function' &&
+    value.params !== null &&
+    typeof value.params === 'object';
+
 export function pyArg(value) {
     if (value === null || typeof value !== 'object') return pyBind(value);
-    if (!value.params || !value.url || !value.request) return value;
+    if (!routeEvent(value)) return value;
 
     // Reading the framework's own searchParams is what registers the dependency,
     // so it is tried first, but it throws while prerendering, where a query

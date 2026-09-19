@@ -11,6 +11,8 @@ __all__ = [
     "shared",
     "separate",
     "runs_count",
+    "given",
+    "given_second",
 ]
 
 from browser import aio
@@ -96,3 +98,19 @@ def refuse(event):
 
 
 actions = {"default": save, "remove": remove, "failing": failing, "refuse": refuse}
+
+
+def given(value):
+    # What the boundary handed over, asked from Python. A request event arrives
+    # as real dicts — `.get()` and `.keys()` answer — and everything else has to
+    # arrive as itself, with its own fields where the author put them.
+    if isinstance(value, dict):
+        return {"kind": "dict", "keys": sorted(value.keys())}
+
+    return {"kind": type(value).__name__, "payload": getattr(value, "payload", "missing")}
+
+
+def given_second(first, value):
+    # The same question about an argument that is not the first: every argument
+    # of every call takes this road, not only the event a route is handed.
+    return given(value)

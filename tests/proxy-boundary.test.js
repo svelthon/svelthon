@@ -14,6 +14,7 @@
 // function that repeated it.
 import { test, expect, describe } from 'vitest';
 import { pyArg } from '../src/lib/runtime.js';
+import { requestEvent } from './request-event.js';
 
 const recording = (target, touched) =>
     new Proxy(target, {
@@ -30,12 +31,11 @@ const recording = (target, touched) =>
 describe('a recording proxy at the inbound boundary', () => {
     test('is read in JavaScript and never handed to Python', () => {
         const touched = [];
-        const event = {
+        const event = requestEvent({
+            url: 'https://example.test/pep-8?q=gil',
             params: recording({ slug: 'pep-8' }, touched),
-            url: new URL('https://example.test/pep-8?q=gil'),
-            request: { method: 'GET' },
             route: { id: '/[slug]' }
-        };
+        });
 
         const snapshot = pyArg(event);
         const $B = globalThis.__BRYTHON__;
