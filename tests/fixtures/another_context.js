@@ -29,3 +29,30 @@ export const localURL = () => new URL('https://example.test/a?page=7');
 // flattening one would destroy it.
 export const foreignMap = () => new (elsewhere().Map)([['answer', 42]]);
 export const localMap = () => new Map([['answer', 42]]);
+
+// The other negative control, and the one that says *rootless* is not the whole
+// answer: `class Thing extends null {}` is valid JavaScript whose prototype has
+// no prototype, exactly like every realm's `Object.prototype`. It is still a
+// class, and flattening an instance into its fields loses the method.
+//
+// Not built in an iframe: what this row measures is class-against-bag, which no
+// realm changes, and jsdom does not run scripts inside one.
+class Rootless extends null {
+    label() {
+        return 'method';
+    }
+}
+
+// Built with `Object.create` rather than `new`: a constructor that extends null
+// has no `super()` to call, so the class exists for its prototype and its
+// method. Both sides of the row are the same shape — the row is not a realm
+// pair, it is the one that says a rootless prototype can still be a class.
+export const rootlessInstance = () => {
+    const made = Object.create(Rootless.prototype);
+
+    made.answer = 42;
+
+    return made;
+};
+
+export const rootlessTwin = () => rootlessInstance();

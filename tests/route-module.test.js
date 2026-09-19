@@ -247,6 +247,25 @@ describe('what crosses as a request event', () => {
         });
     });
 
+    // And an object that *throws* from a member the recognition reads. A lazy or
+    // guarded property is ordinary in a library object, and the probe used to
+    // run it: the exception came out of `pyArg`, before the Python function that
+    // only wanted `payload` ever ran. Asking what something is must not be able
+    // to fail.
+    test('and ordinary data whose fetch throws when read crosses untouched', () => {
+        const value = { payload: 42 };
+
+        Object.defineProperty(value, 'fetch', {
+            get() {
+                throw new Error('not yours to read');
+            },
+            enumerable: false,
+            configurable: true
+        });
+
+        expect(given(value)).toEqual({ kind: 'JSObject', payload: 42 });
+    });
+
     // And a URL that refuses the member the recognition itself reads. No version
     // of SvelteKit guards `pathname` today, and the rule held here is what the
     // boundary does when one does: the throw must not **escape** — that was the

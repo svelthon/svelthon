@@ -11,6 +11,8 @@ __js__ = {
         "localURL",
         "foreignMap",
         "localMap",
+        "rootlessInstance",
+        "rootlessTwin",
     ]
 }
 __all__ = ["seen", "MAKERS"]
@@ -20,6 +22,9 @@ MAKERS = {
     "date": [foreignDate, localDate],
     "url": [foreignURL, localURL],
     "map": [foreignMap, localMap],
+    # Not a realm pair: both sides are the same shape, and what the row asks
+    # is that a class with a rootless prototype is not read as a bag of keys.
+    "rootless": [rootlessInstance, rootlessTwin],
 }
 
 

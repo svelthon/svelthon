@@ -794,14 +794,27 @@ export const pyClass = (value) => false \g<0>\g<0> /*W*/
 // in Python; it kept a Brython dict raw inside an exported object; and
 // `urlencode` wrote the engine's spelling of it into the query string.
 //
-// *Root* is what every realm's `Object.prototype` has in common and what no
-// class prototype has: a `Date` sits on `Date.prototype`, which sits on
-// `Object.prototype` in turn, so it is two steps from null and stays excluded —
-// here and in every other realm.
+// *Root* is what every realm's `Object.prototype` has in common: a `Date` sits
+// on `Date.prototype`, which sits on `Object.prototype` in turn, so it is two
+// steps from null and stays excluded — here and in every other realm.
+//
+// Rootless is not enough, and the line above said it was. `class Thing extends
+// null {}` is valid JavaScript and its prototype is rootless too, so an instance
+// carrying a method was flattened into its fields and the method was gone. What
+// separates the two is that a realm's `Object.prototype` **is** the object
+// protocol: `hasOwnProperty` is its own property, where a class prototype's own
+// properties are the author's plus `constructor`. Called generically, because
+// the function has to work on a prototype from any realm — including one whose
+// own `hasOwnProperty` is exactly what is being looked for.
 export const plainObject = (value) => {
     const prototype = Object.getPrototypeOf(value);
 
-    return prototype === null || Object.getPrototypeOf(prototype) === null;
+    if (prototype === null) return true;
+
+    return (
+        Object.getPrototypeOf(prototype) === null &&
+        Object.prototype.hasOwnProperty.call(prototype, 'hasOwnProperty')
+    );
 };
 
 // Where a Brython instance keeps the attributes an author wrote, which is a

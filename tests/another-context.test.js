@@ -34,7 +34,12 @@ describe.for([
     ['url', 'a URL, which the route boundary recognises'],
     // The control: a Map is a class instance in any realm, and the repair must
     // not start flattening one. Both sides refuse it the same way.
-    ['map', 'a Map, which is a value of a class and stays one']
+    ['map', 'a Map, which is a value of a class and stays one'],
+    // And the shape that says *rootless* is not the whole answer: a
+    // `class Thing extends null {}` prototype has no prototype either, exactly
+    // like every realm's `Object.prototype`. Both sides of this row are built
+    // here; what it measures is class-against-bag, which no realm changes.
+    ['rootless', 'a class declared `extends null`, which is still a class']
 ])('%s: %s', ([kind]) => {
     test('answers the same as the twin built here', () => {
         expect(seen(kind, true)).toEqual(seen(kind, false));
@@ -50,6 +55,11 @@ describe('and what those answers actually are', () => {
 
     test('a Date encodes as the sortable spelling', () => {
         expect(seen('date', false)[2]).toBe(encodeURIComponent('1970-01-01T00:00:00.000Z'));
+    });
+
+    test('and an instance of a rootless class keeps its class', () => {
+        // Flattened, it would read as a dict of its fields with the method gone.
+        expect(seen('rootless', false)[0]).not.toBe('dict');
     });
 
     test('and a Map is not flattened into one', () => {
