@@ -114,11 +114,15 @@ describe('and in a plain module', () => {
         const init = script.indexOf('init(__py);');
 
         expect(init).toBeGreaterThan(script.lastIndexOf('bind(__proto, '));
-        // `__pyCall`, and not a boundary written out here: the wrapper a module's
+        // `__pyDef`, and not a boundary written out here: the wrapper a module's
         // functions get is the runtime's own, so a rule added to it holds on
         // this route too. It was spelled out inline, and a callback returned by
         // one of these functions then crossed with no policy at all.
-        expect(script.indexOf('const load = __pyCall(')).toBeGreaterThan(init);
+        //
+        // `__pyCall` stood here until a `def` behind a decorator proved that the
+        // name and the value are two things: what is emitted now reads the
+        // binding at the call and hands it to the same road an alias takes.
+        expect(script.indexOf('const load = __pyDef(')).toBeGreaterThan(init);
         expect(script.indexOf('export { load };')).toBeGreaterThan(init);
     });
 });

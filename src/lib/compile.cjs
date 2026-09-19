@@ -751,6 +751,7 @@ const RUNTIME = {
     pyBoundary: '__pyBoundary',
     pyNumbers: '__pyNumbers',
     pyCall: '__pyCall',
+    pyDef: '__pyDef',
     pyComponent: '__pyComponent',
     pyExpression: '__pyExpression',
     pyExport: '__pyExport',
@@ -1710,10 +1711,17 @@ function instanceExports(c) {
         // boundary this file spelled itself, and a rule added to the runtime's
         // own could not reach a template literal: the conversion of an action's
         // arguments landed at two of the three wrappers and stopped here.
-        ...c.funcs.map(
-            (f) =>
-                `const ${f.name} = ${componentWrapper(f)}((a) => ${fn(f.name)}(...a), ` +
-                `${JSON.stringify(`${f.name}() — ${c.source}`)}, ${c.lineOffset}, ${f.arity});`
+        // A **reader** for the component's own functions, and the written-out
+        // call for a template expression. The two wrappers differ in what they
+        // are given because they differ in what the name means: an author's
+        // `def` may sit under a decorator, so its value has to be read at the
+        // call, and an `__expr_N` is this compiler's own and never moves.
+        ...c.funcs.map((f) =>
+            componentWrapper(f) === RUNTIME.pyExpression
+                ? `const ${f.name} = ${RUNTIME.pyExpression}((a) => ${fn(f.name)}(...a), ` +
+                  `${JSON.stringify(`${f.name}() — ${c.source}`)}, ${c.lineOffset}, ${f.arity});`
+                : `const ${f.name} = ${RUNTIME.pyComponent}(() => ${fn(f.name)}, ` +
+                  `${JSON.stringify(`${f.name}() — ${c.source}`)}, ${c.lineOffset});`
         ),
         // What a parent holding `bind:this` can call. Svelte gathers whatever an
         // instance script exports into `$$exports` and hands that object back,
@@ -1867,7 +1875,7 @@ function plainPreamble(c) {
     return [
         `import { init as __init } from ${JSON.stringify(virtualId(c.name))};`,
         `import { ${runtimeAliases([
-            'bind', '__pybridge', 'pyCall', 'pyError', 'plainData', 'pyArg',
+            'bind', '__pybridge', 'pyCall', 'pyDef', 'pyError', 'plainData', 'pyArg',
             'pyData', 'pyExport', 'pyBoundary', 'jsCall', 'ticking', 'pyBind', 'NONE', 'helpers',
             'registerModule', 'group'
         ])} } from 'svelthon/runtime';`,
@@ -1933,8 +1941,8 @@ function plainExports(c) {
         // captured here.
         ...[...c.funcs, ...c.plainDeriveds].map(
             (f) =>
-                `const ${f.name} = __pyCall((...a) => ${fn(f.name)}(...a), ` +
-                `${JSON.stringify(`${f.name}() — ${c.source}`)}, ${c.lineOffset}, ${f.arity ?? 0});`
+                `const ${f.name} = __pyDef(() => ${fn(f.name)}, ` +
+                `${JSON.stringify(`${f.name}() — ${c.source}`)}, ${c.lineOffset});`
         ),
         ``,
         // SvelteKit reads `load`, `actions`, `GET`, `prerender` by name off the

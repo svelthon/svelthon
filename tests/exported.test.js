@@ -2,6 +2,7 @@ import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import Exposed from './fixtures/Exposed.svelte';
 import ExposedHost from './fixtures/ExposedHost.svelte';
+import DecoratedExport from './fixtures/DecoratedExport.svelte';
 
 const { compile } = await import('../src/lib/compile.cjs').then((m) => m.default ?? m);
 
@@ -106,5 +107,37 @@ describe('the call form', () => {
         ).script;
 
         expect(out).toContain('export { a, b };');
+    });
+});
+
+// What the name holds, not what its `def` declared.
+//
+// `@export` sits on top of the author's own decorator, and the wrapper froze
+// both the arity — read off the AST of the `def` — and the assumption that the
+// value is still a JavaScript function. A `@collect` answering `*values` had
+// three arguments in Python and one through its export; a decorator answering a
+// **callable instance** raised *not a function* for a value Python calls.
+//
+// Both references are in the fixture, so no row is compared against a number
+// written here: `from_python()` is what Python itself does with the same name.
+describe('an export behind another decorator', () => {
+    const ready = () => {
+        const target = document.body.appendChild(document.createElement('div'));
+        const instance = mount(DecoratedExport, { target });
+
+        flushSync();
+
+        return instance;
+    };
+
+    test('is called with what Python would give it', () => {
+        const instance = ready();
+
+        expect(instance.from_python()).toBe(3);
+        expect(instance.decorated(10, 20, 30)).toBe(3);
+    });
+
+    test('and is callable when the decorator answers an instance', () => {
+        expect(ready().as_object_decorated(0.25)).toBe(0.5);
     });
 });

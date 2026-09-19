@@ -187,7 +187,7 @@ function instant(value) {
     // holding an ISO date was not — and the two are one question. The domain
     // below is unchanged: a string or a number is a date, a boolean, a list or
     // an object is not.
-    const one = moment(value);
+    const one = moment(written(value));
 
     return typeof one === 'string' || typeof one === 'number' ? new Date(one) : new Date(NaN);
 }
@@ -326,6 +326,11 @@ const noCall = (one) => {
 };
 
 export function tojson(value, indent) {
+    // The same question as the date styles below, asked of a number: a
+    // `class Width(int)` reads as an object here and the output came out on one
+    // line, which is a difference nobody sees in a page.
+    const spaces = written(indent);
+
     return JSON.stringify(
         // The JSON rule, asked for by name. JSON has neither identity nor
         // cycles, so a shared reference comes out twice and a loop comes out
@@ -333,11 +338,8 @@ export function tojson(value, indent) {
         // was written. It is not the default any more: the other five callers of
         // `plainData` hand their result to JavaScript, which has identity.
         plainData(value, new Set(), noCall),
-        (_, one) => raw(one),
-        // The same question as the styles below, asked of a number: an
-        // `class Width(int)` reads as an object and the output came out on one
-        // line, which is a difference nobody sees in a page.
-        typeof written(indent) === 'number' ? written(indent) : undefined
+        (_, one) => serialisable(one),
+        typeof spaces === 'number' ? spaces : undefined
     );
 }
 
@@ -599,10 +601,12 @@ export function urlencode(value) {
         return encodeURIComponent(new Date(held).toISOString());
     }
 
-    if (value !== NONE && value !== null && typeof value === 'object') {
+    if (mapping(value)) {
         const pairs = new URLSearchParams();
 
-        for (const key of Object.keys(value)) pairs.append(key, __pybridge.str(value[key]));
+        for (const [key, one] of pyEntries(value)) {
+            pairs.append(__pybridge.str(key), __pybridge.str(one));
+        }
 
         return pairs.toString();
     }

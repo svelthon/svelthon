@@ -2511,6 +2511,42 @@ const identified = (wrapper, name, arity) =>
         length: { value: Number.isFinite(arity) ? arity : 0, configurable: true }
     });
 
+// A module's own `def`, published under its name.
+//
+// The line this replaces called `__fn_name` straight, with the arity the
+// compiler read off the **AST of the `def`**, and both halves of that are a bet
+// that a name still holds what its `def` declared. A decorator is exactly what
+// makes it false, and `decorators are identity` is a rule this project has
+// written down elsewhere:
+//
+//   - `@collect def decorated(value)` where the decorator answers a `*values`
+//     function: Python counted three arguments, the alias counted three, and
+//     this export trimmed to **one** before the decorator ever saw them;
+//   - `@as_object def one(value)` where the decorator answers a **callable
+//     instance**: Python called it, the alias called it, and this export raised
+//     *not a function*, because the emitted call was a JavaScript call on a
+//     value that is an object here.
+//
+// The alias path had neither defect, and it is the whole repair: `alias = fn`
+// goes through `pyHandler`, which asks the **value** what it is and what it
+// takes. So this reads the binding at the call — the late binding the old arrow
+// was written for — and then takes the alias's road. One rule, and the name a
+// `def` was given stops being a claim about what is behind it.
+//
+// `length` is read once, here, because a JavaScript function's is a number and
+// not a question; what a caller actually gets is trimmed against the value at
+// the call. A name rebound afterwards therefore reports the old `length` and
+// behaves as the new value: the honest half is the behaviour.
+export function pyDef(read, where, lineOffset = 0) {
+    const first = declared(read());
+
+    return identified(
+        (...args) => pyHandler(read())(...args),
+        nameOf(where),
+        first === null ? 0 : first.arity
+    );
+}
+
 export function pyCall(fn, where, lineOffset = 0, arity = Infinity, named) {
     const wrapper = (...args) => {
         try {
@@ -3239,12 +3275,39 @@ const running = (call, where, lineOffset) => {
     }
 };
 
-export const pyComponent = (call, where, lineOffset, arity) =>
-    identified(
-        (...args) => running(() => call(taken(args, arity)), where, lineOffset),
+// The arity is read at the call, from the value the name holds then, for the
+// reason `pyDef` is written: `@export` above another decorator publishes a name
+// whose value is no longer the `def`, and the compiler's count came off the
+// `def`'s own AST. A `@collect` answering a `*values` function had three
+// arguments in Python and one through its export.
+//
+// The call goes through what `declared` hands back rather than through the name
+// directly, which is the other half: a decorator that answers a **callable
+// instance** is called perfectly well by Python and is not a JavaScript
+// function, and the emitted call used to be a JavaScript call.
+//
+// What stays different from `pyDef` is the result: a component hands the
+// *framework* a transition's options or an action's teardown, so `pyNumbers`
+// and not `plainData`. That difference is why this wrapper exists at all.
+export const pyComponent = (read, where, lineOffset) => {
+    const first = declared(read());
+
+    return identified(
+        (...args) => {
+            const value = read();
+            const found = declared(value);
+            const given = taken(args, found === null ? Infinity : found.arity);
+
+            return running(
+                () => (found === null ? value(...given) : found.fn(...given)),
+                where,
+                lineOffset
+            );
+        },
         nameOf(where),
-        arity
+        first === null ? 0 : first.arity
     );
+};
 
 // And the other half of the same wrapper: a function the *markup* compiled, one
 // per expression it met.

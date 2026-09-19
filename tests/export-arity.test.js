@@ -43,3 +43,49 @@ describe('a module export keeps the arguments its signature accepts', () => {
         expect(m.defaulted(2, 3)).toBe(5);
     });
 });
+
+// And the signature is the **value's**, not the `def`'s.
+//
+// The count came off the AST of the `def` and was frozen in the adapter, which
+// is a bet that a name still holds what it declared. A decorator is what makes
+// that false, and `decorators are identity` is a rule written elsewhere in this
+// project: `@collect def decorated(value)` answering a `*values` function had
+// three arguments in Python, three under an alias, and **one** through its own
+// export — two of them dropped before the decorator ever saw them.
+//
+// The alias path had neither defect, and it is the whole repair: it asks the
+// value what it is and what it takes. Every row here compares the export against
+// those two references rather than against a number written in the test.
+describe('a name behind a decorator', () => {
+    const mod = () => import('./fixtures/signatures_mod.py');
+
+    test('is called with what Python would give it', async () => {
+        const m = await mod();
+
+        expect(m.decorated(10, 20, 30)).toBe(3);
+        // The two references, which never disagreed with each other.
+        expect(m.aliased(10, 20, 30)).toBe(3);
+        expect(m.from_python()).toBe(3);
+    });
+
+    test('and is callable even when the decorator answers an instance', async () => {
+        const m = await mod();
+
+        // A callable instance is not a JavaScript function, and the emitted call
+        // was a JavaScript call: *not a function*, for a value Python calls.
+        expect(m.as_object_decorated(0.25)).toBe(0.5);
+    });
+
+    // The same question on the other wrapper — a component's `@export` — is in
+    // `tests/exported.test.js`, which has a DOM to mount in.
+    test('and a name rebound after init behaves as what it holds now', async () => {
+        const m = await mod();
+
+        expect(m.rebound(1, 2, 3)).toBe(1);
+
+        m.rebind();
+
+        // The body followed the rebinding already; the arguments did not.
+        expect(m.rebound(1, 2, 3)).toBe(3);
+    });
+});
