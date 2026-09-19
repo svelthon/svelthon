@@ -443,17 +443,55 @@ export function walrus(expression) {
 // and a Python block closed that way was never handed to the script hook at all,
 // so the component failed with `n is not defined`, naming nothing.
 export function overMarkup(content, transform) {
-    const blocks = /<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi;
     let out = '';
     let cut = 0;
     let block;
 
-    while ((block = blocks.exec(content))) {
+    for (const found = blocks(); (block = found.exec(content)); ) {
         out += transform(content.slice(cut, block.index), cut) + block[0];
         cut = block.index + block[0].length;
     }
 
     return out + transform(content.slice(cut), cut);
+}
+
+// The blocks a component actually has: name, attributes, closing tag. A fresh
+// regex per call, because `lastIndex` on a shared `/g` is state and two walks of
+// one file would resume in each other's middle.
+const blocks = () => /<(script|style)\b([^>]*)>[\s\S]*?(<\/\1\s*>)/gi;
+
+// `lang="python"` as an attribute of its own, and not as three letters inside
+// another name: `\blang` matched `data-lang`, a hyphen being no word character.
+// The value may be double-quoted, single-quoted or bare, which is the set
+// Svelte's parser accepts and hands to the `script` hook as `attributes.lang`;
+// the bare form used to be missed, so the body was compiled as Python and the
+// template around it was not.
+//
+// Whitespace around the `=` is read too, though a component written that way
+// never runs: Svelte's parser refuses `<script lang = "python">` with `Expected
+// token >`. Reading wide costs nothing and keeps this from being a second,
+// narrower grammar.
+const PYTHON_LANG = /\slang\s*=\s*(?:"python"|'python'|python(?=[\s/]|$))/;
+
+// Where a file's Python script block begins and how it is closed, or `null` for
+// a file that declares none.
+//
+// Read from the blocks themselves, never from the text of the whole file. A
+// JavaScript component holding `const example = '<script lang="python">'` — a
+// string, a doc page, a code sample — declared nothing, and the template around
+// it was compiled as Python while the script hook, which reads the real
+// attributes, left the body alone. What the author saw was `__expr_0 is not
+// defined`. The same for a tag quoted in a `<style>` body.
+export function pythonScript(content) {
+    let block;
+
+    for (const found = blocks(); (block = found.exec(content)); ) {
+        if (block[1].toLowerCase() === 'script' && PYTHON_LANG.test(block[2])) {
+            return { index: block.index, closing: block[3] };
+        }
+    }
+
+    return null;
 }
 
 // `bind:` needs to read *and* write, which no single expression can do. Svelte

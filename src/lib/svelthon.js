@@ -4,6 +4,7 @@ import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 
 import {
     overMarkup,
+    pythonScript,
     pythonExpressions,
     collector,
     moduleImports,
@@ -77,13 +78,13 @@ export const nameFor = (filename) => {
     return name;
 };
 
-// The tag that decides a file is Python. Whitespace around `=` is legal HTML and
-// read here, though Svelte's own parser refuses it (`<script lang = "js">` gives
-// `Expected token >`), so no component reaches us written that way today. Read
-// wide costs nothing and keeps this from being a second, narrower grammar.
-const HAS_PYTHON_SCRIPT = /<script[^>]*\blang\s*=\s*["']python["']/;
+// The tag that decides a file is Python is read by `pythonScript`, in markup.js,
+// off the real script blocks and their real attributes — the same grammar that
+// pass uses to know what *not* to rewrite. One reading, because the `script`
+// hook below has a reading of its own that it cannot be talked out of
+// (`attributes.lang`), and every file the two disagreed about was broken.
 
-// And read on the markup with its comments taken out. A `<script lang="python">`
+// Read on the markup with its comments taken out. A `<script lang="python">`
 // quoted inside `<!-- -->` is documentation, not a declaration, and it turned a
 // JavaScript component's expressions into Python. Replaced by blanks rather than
 // removed, so every offset below still counts on the same string.
@@ -123,15 +124,11 @@ const withoutComments = (content) =>
 // Refused here, where both facts are known. The rule this project already holds
 // is that a construct it cannot handle is refused rather than passed through as
 // JavaScript, and this is one: the cause is upstream, the silence would be ours.
-const SPACED_CLOSE = /<\/script\s*>/;
-
-function refuseSpacedClose(declaring, filename) {
-    const closing = declaring.slice(declaring.search(HAS_PYTHON_SCRIPT)).match(SPACED_CLOSE);
-
-    if (!closing || closing[0] === '</script>') return;
+function refuseSpacedClose(closing, filename) {
+    if (closing === '</script>') return;
 
     throw new SyntaxError(
-        `svelthon — the Python \`<script>\` is closed with \`${closing[0]}\`, and Svelte's ` +
+        `svelthon — the Python \`<script>\` is closed with \`${closing}\`, and Svelte's ` +
             `preprocessor only recognises \`</script>\`: the block never reaches it, so the ` +
             `Python is handed to the compiler as JavaScript and every name it declares is ` +
             `missing at run time. Close it with \`</script>\` ` +
@@ -184,18 +181,17 @@ export function python(options = {}) {
             // component and stays one, exactly as a .js file is untouched by
             // TypeScript. Python semantics are opt-in, per file, by declaring
             // Python, never injected behind an author's back.
-            const declaring = withoutComments(content);
+            const declaring = pythonScript(withoutComments(content));
 
-            if (!HAS_PYTHON_SCRIPT.test(declaring)) return;
+            if (declaring === null) return;
 
-            refuseSpacedClose(declaring, filename);
+            refuseSpacedClose(declaring.closing, filename);
 
             const file = about(filename);
 
             file.jsNames = moduleImports(content);
             file.pyDirectives = directiveModules(content);
-            file.lineOffset =
-                declaring.slice(0, declaring.search(HAS_PYTHON_SCRIPT)).split('\n').length - 1;
+            file.lineOffset = content.slice(0, declaring.index).split('\n').length - 1;
             file.defs = [];
 
             // The collector itself is in markup.js, which the browser can load.

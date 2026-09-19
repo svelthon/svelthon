@@ -53,24 +53,79 @@ describe('the preprocessor decides by the script tag', () => {
         }
     );
 
-    // Whitespace around `=` is legal HTML. Svelte's own parser refuses it today
-    // (`<script lang = "js">` gives `Expected token >`), so the last two
-    // spellings below do not reach us from a real file; they are here because a
-    // detection narrower than HTML is a second grammar to keep in step, and the
-    // day Svelte relaxes, this reads what Svelte reads.
-    const rewritten = (tag, name) =>
-        pre.markup({
-            content: `${tag}\ncount = 0\n</script>\n<p>{count}</p>`,
-            filename: name
-        });
+    // The language is decided twice about one file: here, from the text, and
+    // again by the `script` hook from the attributes Svelte parsed. A row where
+    // the two disagree is a broken component whichever way round it falls — a
+    // template compiled for Python around a JavaScript body gives `__expr_0 is
+    // not defined`, and a Python body under a JavaScript template gives `count
+    // is not defined`, about a name the author wrote.
+    //
+    // So the table is the test: every spelling, and every place the six letters
+    // can sit that is not a declaration, with both halves read for each. Four
+    // rows used to disagree, and only two of them were ever reported.
+    const halves = async (content, filename) => {
+        const template = pre.markup({ content, filename }) === undefined ? 'javascript' : 'python';
+        let script = 'not called';
+
+        await preprocess(
+            content,
+            {
+                name: 'reading',
+                // Svelte's own answer, which the script hook below cannot be
+                // talked out of: this is the half the detector has to match.
+                script: ({ attributes }) =>
+                    void (script = attributes.lang === 'python' ? 'python' : 'untouched')
+            },
+            { filename }
+        );
+
+        return [template, script];
+    };
+
+    const body = (tag) => `${tag}\ncount = 0\n</script>\n<p>{count}</p>`;
 
     test.for([
-        ['<script lang="python">'],
-        ['<script lang = "python">'],
-        ["<script lang='python'>"],
-        ['<script lang =\t"python">']
-    ])('%s declares Python', ([tag], { task }) => {
-        expect(rewritten(tag, `${task.id}.svelte`).code).toContain('__expr_0()');
+        ['double quotes', body('<script lang="python">'), 'python', 'python'],
+        ['single quotes', body("<script lang='python'>"), 'python', 'python'],
+        // Svelte's parser takes an unquoted value and hands the hook
+        // `lang: 'python'`. The detector required the quotes, so the body was
+        // compiled as Python and the template around it was left JavaScript.
+        ['no quotes at all', body('<script lang=python>'), 'python', 'python'],
+        ['a newline before the attribute', body('<script\n    lang="python">'), 'python', 'python'],
+        // The one row that disagrees on purpose. Whitespace around `=` is legal
+        // HTML, Svelte's *preprocessor* silently never calls the script hook for
+        // it, and Svelte's *parser* then refuses the file outright with
+        // `Expected token >` — so nothing is silent and there is no component to
+        // save. Read wide anyway: a detection narrower than HTML is a second
+        // grammar to keep in step, and the day Svelte relaxes, this reads what
+        // Svelte reads.
+        ['spaces around the equals', body('<script lang = "python">'), 'python', 'not called'],
+        // `\blang` matched inside `data-lang`, a hyphen being no word character.
+        ['a prefix on the name', body('<script data-lang="python">'), 'javascript', 'untouched'],
+        ['a suffix on the value', body('<script lang="python3">'), 'javascript', 'untouched'],
+        ['another language', body('<script lang="ts">'), 'javascript', 'untouched'],
+        // And the three places the text can sit without being a tag at all. A
+        // component that shows a code sample declared Python by quoting one.
+        [
+            'quoted in a JavaScript string',
+            '<script>const e = \'<script lang="python">\';</script>\n<p>{1}</p>',
+            'javascript',
+            'untouched'
+        ],
+        [
+            'quoted in a style body',
+            '<style>/* <script lang="python"> */</style>\n<p>{1}</p>',
+            'javascript',
+            'not called'
+        ],
+        [
+            'quoted in an HTML comment',
+            '<!-- <script lang="python">x = 1</script> -->\n<p>{1}</p>',
+            'javascript',
+            'not called'
+        ]
+    ])('%s: the template is %s and the script %s', async ([name, content, template, script]) => {
+        expect(await halves(content, `${name.replace(/\W+/g, '-')}.svelte`)).toEqual([template, script]);
     });
 
     // And a tag quoted inside a comment is documentation. It used to turn a
