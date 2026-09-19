@@ -516,8 +516,23 @@ export function slugify(value) {
 export function striptags(value) {
     if (typeof DOMParser === 'undefined') return '';
 
-    const text = new DOMParser().parseFromString(__pybridge.str(value), 'text/html').body
-        .textContent;
+    const parsed = new DOMParser().parseFromString(__pybridge.str(value), 'text/html');
+
+    // A script and a style hold text that is not text of the document, and
+    // `textContent` cannot tell the difference. Dropping the source of a script
+    // is a rule this helper already claimed — `tests/stripped.test.js` has
+    // asserted it since the day it was written — and it held by an **accident of
+    // parsing**: a `<script>` opening the fragment lands in `<head>`, which is
+    // not read here, while the same element between two words lands in `<body>`
+    // and printed `alert("x")` into the page. One element, two answers, decided
+    // by where it stood.
+    //
+    // This is where the project takes its own answer rather than Jinja's, and it
+    // is written where the test says so: the regex behind `|striptags` keeps
+    // what a script holds, and what a template wants is the visible document.
+    for (const one of parsed.body.querySelectorAll('script, style')) one.remove();
+
+    const text = parsed.body.textContent;
 
     return (text || '').replace(/\s+/g, ' ').trim();
 }

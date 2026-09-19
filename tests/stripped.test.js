@@ -35,9 +35,20 @@ describe('striptags', () => {
         expect(out(2)).toBe('suite');
     });
 
-    test('a script keeps neither its tags nor its source', () => {
-        // The regex gives `alert("x") après`.
-        expect(out(3)).toBe('après');
+    // Three positions for one element, because the answer used to depend on
+    // where it stood: a `<script>` opening the fragment lands in `<head>`, which
+    // this helper does not read, so the rule held by an accident of parsing. The
+    // same element between two words lands in `<body>` and printed `alert("x")`
+    // into the page.
+    test.for([
+        ['opening the fragment', 3, 'après'],
+        ['between two words', 9, 'Bonjour monde'],
+        ['a style, in the same place', 10, 'Bonjour monde']
+    ])('a script keeps neither its tags nor its source, %s', ([, at, written]) => {
+        // The regex — Django's and Jinja's — keeps what the script holds, and
+        // this is the line where the project takes its own answer: what a
+        // template wants is the visible document.
+        expect(out(at)).toBe(written);
     });
 
     test('a bare `<` in the text is not a tag', () => {

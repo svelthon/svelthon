@@ -59,26 +59,49 @@ const raised = (error) =>
     error.ob_type !== undefined &&
     error.__traceback__ !== undefined;
 
-// A Python iterable materialised the way `list()` would, minus the shortcut
-// `list()` takes when it is handed an array: Brython's constructor copies the
-// storage of anything array-shaped, so asking it about a list subclass answers
-// the question with the question.
+// An array-shaped Python value, as *its class* says it iterates.
 //
-// `make_js_iterator` is the engine's own entry, and it carries both obligations
-// this has to keep. It runs `iter()`, which is the only call that *validates*
-// the protocol: `__iter__` returning a plain list is a TypeError in the script,
-// and the template used to swallow it and render the list anyway. And it keeps
-// the storage fast path exactly where it is still true — Brython copies it onto
-// a subclass only when that subclass leaves `__iter__` alone — so a subclass
-// that adds a method and nothing else still walks its array.
+// A Brython list is a JavaScript array, so anywhere this file walks elements it
+// can walk the storage with no conversion at all, and for a list or a tuple that
+// is exactly right. It stops being right the moment a subclass redefines
+// `__iter__`: `[x for x in rows]` answered `[3, 2, 1]` in Python while the loop
+// beside it showed `123`, for the same object, and the crossing and `tojson`
+// answered `[1, 2, 3]` for it too. The storage is not the sequence when the
+// author has said otherwise, and this is the one place that knows it.
+//
+// `list()` is not the road: Brython's constructor copies the storage of anything
+// array-shaped, so asking it answers the question with the question.
+// `make_js_iterator` is, and it carries both of the other obligations. It runs
+// `iter()`, the only call that *validates* the protocol — an `__iter__` that
+// returns a plain list is a TypeError in the script, and the template used to
+// swallow it and render the list anyway. And it keeps the storage fast path
+// exactly where it is still true, since Brython copies that path onto a subclass
+// only when the subclass leaves `__iter__` alone.
 //
 // `$B.NULL` as the frame is how the engine itself calls this from JavaScript:
 // there is no Python line to attribute here, and the alternative writes a line
 // number into whatever frame happens to be current.
+//
+// The one walk that does **not** come through here is `mark`, which hands the
+// watch to the children an object already holds. Asking a class what it yields
+// means running the author's code, and marking happens on the path of every
+// mutation; `seq` asks instead, at the one moment the rows are about to be
+// rendered, which is where a row that only the iterator yields becomes visible.
 function iterated(value) {
+    // Asked of the *class*, which is the same repair the two converters took:
+    // `ob_type` is a field name, and a JavaScript array is as free to carry one
+    // as an object is. Read as a class, a business string was handed to Brython,
+    // which tried to write a slot on it — *Cannot create property 'tp_iter' on
+    // string 'business'*, a JavaScript accident where the author wrote
+    // `{#each rows}`. One cause, and it surfaced at six crossings: the loop,
+    // `batch`, the export, `tojson`, the argument boundary and `plainData`.
+    if (!pyClass(value.ob_type) || value.ob_type === _b_.list || value.ob_type === _b_.tuple) {
+        return value;
+    }
+
     const $B = globalThis.__BRYTHON__;
 
-    return _b_.list.$factory($B.$call($B.$getattr(value, '__iter__')));
+    return $B.$list(Array.from($B.make_js_iterator(value, $B.NULL)));
 }
 
 export const __pybridge = {
@@ -127,50 +150,64 @@ export const __pybridge = {
     // but a dict, a set, a range, a generator or the result of .items() is not,
     // and iterating those is the whole point of writing the loop in Python.
     seq(value) {
-        if (Array.isArray(value)) {
-            // A list **subclass** that redefines `__iter__` iterates through
-            // Python, not through its storage.
-            //
-            // A Brython list is a JavaScript array, so handing the array
-            // straight to `{#each}` is right for a list, and wrong the moment a
-            // subclass says what iterating it means. `[x for x in rows]`
-            // answered `[3, 2, 1]` in Python while the loop beside it showed
-            // `123`, for the same object: the storage is not the sequence when
-            // the author has said otherwise.
-            //
-            // Asked of the class, and only when the class is not `list` itself,
-            // so an ordinary loop pays one identity compare.
-            const rows =
-                value.ob_type !== undefined &&
-                value.ob_type !== _b_.list &&
-                value.ob_type !== _b_.tuple
-                    ? value
-                    : value;
-
-            // Hand the watch down to the rows: {#each} walks the array in
-            // JavaScript, never through $getitem, so this is the only path by
-            // which an item can come under watch before its block reads it.
-            //
-            // The rows the loop is given, not the storage they came from: a
-            // subclass is free to yield a child its list never held, and that
-            // child is exactly the one the loop will render and the program will
-            // mutate.
-            if (MARKS.has(value)) {
-                for (const item of value) inherit(value, item);
-            }
-
-            return rows;
-        }
         if (value === undefined || value === null) return [];
 
-        try {
-            return _b_.list.$factory(value);
-        } catch (error) {
-            // A foreign JavaScript iterable, a NodeList from bind:this, is not
-            // Python's to convert, but Svelte can still walk it.
-            if (value && typeof value[Symbol.iterator] === 'function') return value;
-            throw error;
+        let rows;
+
+        if (Array.isArray(value)) {
+            // What the class says it yields, which for a list is the array
+            // itself and one identity compare.
+            rows = iterated(value);
+        } else {
+            try {
+                // Everything else Python calls iterable, materialised once. A
+                // generator is spent by this and the walk below reads the list,
+                // never the iterator again.
+                rows = _b_.list.$factory(value);
+            } catch (error) {
+                // Told apart by the *error*, the way `truthy` and `str` above
+                // are, and for the same reason: the value itself cannot say
+                // which of the two happened.
+                //
+                // A Brython exception is Python saying it has no way to iterate
+                // this. Anything else came out of **the author's own iterator**,
+                // and the attempt has already walked part of it. That difference
+                // was missing, so a JavaScript generator that threw on its
+                // second step was read as *not Python's to convert*: `seq`
+                // handed the spent generator back, `{#each}` rendered nothing,
+                // `batch` answered `[]`, and the author's message was gone.
+                //
+                // No Python object carries `Symbol.iterator` — only a list, and
+                // a list took the branch above — so a Python generator that
+                // raises mid-iteration cannot reach this either.
+                if (!raised(error) || !(value && typeof value[Symbol.iterator] === 'function')) {
+                    throw error;
+                }
+
+                // A foreign JavaScript iterable Python has no protocol for, a
+                // NodeList from bind:this. Nothing of ours watches it, so it
+                // leaves before the rule below.
+                return value;
+            }
         }
+
+        // Hand the watch down to the rows: {#each} walks the array in
+        // JavaScript, never through $getitem, so this is the only path by which
+        // an item can come under watch before its block reads it.
+        //
+        // The rows the loop is given, and not where they came from. Two readings
+        // in a row found this rule attached to a *representation* instead: it
+        // walked the storage of a list subclass, which is not what a redefined
+        // `__iter__` yields, and then it was written inside the array branch, so
+        // a plain class with an `__iter__` — a collection by composition, which
+        // is the ordinary way to write one — rendered its child and never
+        // watched it. Once the rows exist the question is the same for every
+        // shape, so it is asked once, here.
+        if (MARKS.has(value)) {
+            for (const item of rows) inherit(value, item);
+        }
+
+        return rows;
     },
 
     // What Python hands *out* to a DOM boundary: a `bind:`, and an attribute
@@ -399,9 +436,14 @@ function installMutationTracking($B) {
         // container the watch.
         let result;
 
-        result = callAttr(obj, attr, ...rest);
-        afterCall(obj, attr, result, rest.slice(1));
-        return result;
+        try {
+            // `call_attr` takes the position marker before the arguments, and
+            // it is the arguments that come under watch.
+            result = callAttr(obj, attr, ...rest);
+            return result;
+        } finally {
+            afterCall(obj, attr, result, rest.slice(1));
+        }
     };
 
     // `add = xs.append` and then `add(1)`, one statement later or one component
@@ -418,9 +460,12 @@ function installMutationTracking($B) {
             // reason: a detached mutator that raises may have mutated first.
             let result;
 
-            result = method(...args);
-            afterCall(obj, attr, result, args);
-            return result;
+            try {
+                result = method(...args);
+                return result;
+            } finally {
+                afterCall(obj, attr, result, args);
+            }
         };
 
         // Python has to keep seeing the method it asked for: `type(add)` and
@@ -762,7 +807,7 @@ function consumed(value) {
 // returning a registry of models is the ordinary way to write a route.
 //
 // So the decision lives in a predicate now, and the two sites ask it.
-export const pyClass = (value) => false \g<0>\g<0> /*W*/
+export const pyClass = (value) =>
     value !== null &&
     typeof value === 'object' &&
     value.ob_type !== undefined &&
@@ -1715,11 +1760,31 @@ export function plainData(value, seen, adapt) {
     // Registering before the walk is what answers a cycle, so it stays; what was
     // missing is that the memo has to end up holding whatever `branch` decided,
     // not what was guessed before it decided.
+    if (out !== shell) made.set(value, out);
+
     return out;
 }
 
-function branch(value, seen) {
-    if (Array.isArray(value)) return value.map((one) => plainData(one, seen)); // list, tuple
+// `shell` is the object the graph rule registered before walking, so a cycle
+// found on the way down meets the same one. The JSON rule has none and builds as
+// it goes, which is why every `fill` below takes what it was given or makes one.
+function branch(value, seen, shell, adapt) {
+    if (Array.isArray(value)) {
+        // list, tuple, and a subclass through whatever it says iterating it
+        // means: `json.dumps` of a list subclass in CPython is its `__iter__`
+        // too, and a component that renders `rows` one way and exports it the
+        // other is the same defect twice.
+        const out = shell ?? [];
+
+        for (const one of iterated(value)) out.push(plainData(one, seen, adapt));
+
+        return out;
+    }
+
+    // A class is not data to flatten. `pyExport` already decided that at the top
+    // level; this is the same decision one level down, where a class sits in a
+    // dict a `load()` returns or in a list a component holds.
+    if (pyClass(value)) return value;
 
     // Anything of a class of its own is not ours to flatten: a Response, a URL,
     // a Date, a Map, a Promise: a Python `load()` may hand any of those straight
@@ -1911,26 +1976,45 @@ function pyDict(entries) {
 // `.items()` and `isinstance(x, dict)`. Without it, `.get` and `.keys` raise
 // AttributeError while `.items` silently returns the *value* of a key spelled
 // "items", a failure whose shape depends on the data.
-export function pyData(value) {
+export function pyData(value, made) {
     const $B = globalThis.__BRYTHON__;
 
     if (value === undefined || value === null) return NONE;
 
-    // A whole number past 2^53 is a Python `int` and a JavaScript `bigint`, and
-    // the early return below would hand back the double instead: `to_py(1e21)`
-    // answered an int whose `repr` was `1e+21`, and `to_py(2 ** 70)` one whose
-    // digits were wrong. Inside a container the same number came back exact,
-    // because the walk crosses `jsobj2pyobj` and this line did not. Same value,
-    // two answers, decided by depth.
-    if (typeof value !== 'object') return value;
+    if (typeof value !== 'object') return pyBind(value);
 
     // A Brython list and a Brython tuple are JavaScript arrays too, told apart
     // from a foreign one by the `ob_type` they carry. Rebuilding one made a list
     // of a tuple — the immutability went, and with it the right to be a dict key
     // — and made a copy of a list, so a guard put on data that turned out to be
     // Python's already quietly detached it from the name it came from.
+    //
+    // A foreign array is rebuilt, and a JavaScript array belongs to a graph
+    // rather than to a tree: `xs.push(xs)` answered `RangeError: Maximum call
+    // stack size exceeded`, and `[shared, shared]` gave two lists where there
+    // was one. So each array is registered *before* its children are walked, and
+    // whatever the graph does afterwards finds the list already made.
     if (Array.isArray(value)) {
-        return value.ob_type !== undefined ? value : _b_.list.$factory(value.map(pyData));
+        // Asked of the *class*, like the object branch below and for the same
+        // reason: `ob_type` is a field name, and an array is as free to carry
+        // one as an object is. A JavaScript array with a business field of that
+        // name was taken for a Brython list and handed back unconverted, so
+        // `to_py(rows)` gave something that is not a `list` and the Python
+        // beside it raised `AttributeError` on `.get`. The repair the object
+        // branch received at the forty-second reading, one branch further.
+        if (pyClass(value.ob_type)) return value;
+
+        made ??= new WeakMap();
+
+        const known = made.get(value);
+        if (known !== undefined) return known;
+
+        const list = _b_.list.$factory([]);
+
+        made.set(value, list);
+        for (const one of value) list.push(pyData(one, made));
+
+        return list;
     }
 
     // The other half of the graph, and the reason it cannot be left to Brython:
@@ -2033,16 +2117,10 @@ export function pyData(value) {
 // fetch and params beside it — passed every other test and lost its own fields.
 // Every URL a framework hands over carries its own prototype, our realm's or
 // another's; only an imitation is built out of Object.
-const urlish = (value) => {
-    try {
-        return (
-            typeof value?.pathname === 'string' &&
-            typeof value?.protocol === 'string'
-        );
-    } catch {
-        return false;
-    }
-};
+const urlish = (value) =>
+    typeof value?.pathname === 'string' &&
+    typeof value?.protocol === 'string' &&
+    !plainObject(value);
 
 // A SvelteKit request event, recognised by what its members *are*.
 //
@@ -2062,13 +2140,29 @@ const urlish = (value) => {
 //
 // `params` last, and only that it is an object: it is the field a route with no
 // parameters leaves empty, so it can say the least.
-const routeEvent = (value) =>
-    typeof value.fetch === 'function' &&
-    urlish(value.url) &&
-    typeof value.request?.method === 'string' &&
-    typeof value.request?.headers?.get === 'function' &&
-    value.params !== null &&
-    typeof value.params === 'object';
+//
+// **The whole probe is inside the `try`, not one member of it.** The rule was
+// written for `url` alone, where a prerendered page's guarded `searchParams`
+// threw — and every other member here is a property read on an object nobody
+// vouched for. A business object with a lazy or guarded `fetch` raised from the
+// recognition itself, before the Python function that only wanted its `payload`
+// ever ran. Asking what something is must not be able to fail: a throw is a
+// **no**, for the same reason as one member down, since refusing a genuine
+// event is loud and admitting a business object is silent.
+const routeEvent = (value) => {
+    try {
+        return (
+            typeof value.fetch === 'function' &&
+            urlish(value.url) &&
+            typeof value.request?.method === 'string' &&
+            typeof value.request?.headers?.get === 'function' &&
+            value.params !== null &&
+            typeof value.params === 'object'
+        );
+    } catch {
+        return false;
+    }
+};
 
 export function pyArg(value) {
     if (value === null || typeof value !== 'object') return pyBind(value);
@@ -2604,6 +2698,9 @@ function declared(value) {
         // — `rows.append` and `other.append` name the same operation, and
         // `rows.clear` a different one, which is exactly the distinction a
         // registry holding two lists needs.
+        if (value.m_self !== null && typeof value.m_self === 'object') {
+            return { fn, where, arity: Infinity, origin: infos, self: value.m_self };
+        }
 
         return { fn, where, arity: Infinity };
     }

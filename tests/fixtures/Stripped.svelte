@@ -10,6 +10,11 @@ samples = [
     "<p>Bonjour</p>  <p>le  monde</p>",
     "<p>a</p><p>b</p>",
     "texte sans balise",
+    # The same script in the two other places it can stand. Opening the
+    # fragment, it lands in `<head>` and was never read; between two words it
+    # lands in `<body>`, and its source was printed into the page.
+    '<p>Bonjour <scr' + 'ipt>alert("x")</scr' + 'ipt> monde</p>',
+    "<p>Bonjour <style>.hidden { color: red }</style> monde</p>",
 ]
 </script>
 
