@@ -42,3 +42,43 @@ describe('date', () => {
         expect(setup()('broken')).toContain('"pas une date" is not a date');
     });
 });
+
+// A Date built by another JavaScript context — an iframe, a worker, a `vm`, an
+// adapter — is a Date by every behaviour, and `instanceof Date` answers false
+// because it asks about *our* constructor. The three sites of `helpers.js` asked
+// it: `date` and `fromnow` refused a perfectly good value, so a component
+// holding one did not mount, and `urlencode` said nothing and wrote the Python
+// spelling of the object into the query string.
+//
+// The same realm mistake the route boundary made with `URL` the day before, and
+// the sweep that should have followed it did not happen. What replaces it is the
+// brand itself: `getTime` called against the value reads an internal slot, which
+// is per-object and not per-realm.
+describe('a Date from another JavaScript context', () => {
+    const foreign = (ms) => {
+        const frame = document.body.appendChild(document.createElement('iframe'));
+
+        return new frame.contentWindow.Date(ms);
+    };
+
+    test('is not ours by identity, which is the whole of the problem', () => {
+        expect(foreign(0) instanceof Date).toBe(false);
+    });
+
+    test.for([
+        ['date', (value) => date(value)],
+        ['fromnow', (value) => fromnow(value)],
+        ['urlencode', (value) => urlencode(value)]
+    ])('%s answers for it what it answers for ours', ([, run]) => {
+        expect(run(foreign(0))).toBe(run(new Date(0)));
+    });
+
+    test('and the refusals it already made still stand', () => {
+        // The brand is a brand: an object that merely claims the tag is not one.
+        const mimic = { getTime: () => 0, [Symbol.toStringTag]: 'Date' };
+
+        expect(() => date(mimic)).toThrow(/is not a date/);
+        expect(() => date(true)).toThrow(/is not a date/);
+        expect(() => date([2026])).toThrow(/is not a date/);
+    });
+});

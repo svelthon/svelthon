@@ -1306,6 +1306,27 @@ function thrown(error) {
 // that asks stays satisfied: it is still an instance of Promise.
 class Waited extends Promise {}
 
+// Awaitable, asked the way `await` itself asks: a `then` that can be called.
+//
+// `instanceof Promise` asks about *our* Promise constructor, and a promise built
+// in another JavaScript context has its own — the same realm mistake as `URL`
+// and `Date`, at the one site where it decides whether a **resolved** value gets
+// converted. A `.py` module handing back `js.fetch_from_frame()` answered its
+// JavaScript caller with a raw Brython dict, symbols and all, where the same
+// function returning a local promise answered `{answer: 42}`.
+//
+// Measured and dismissed a day earlier, on the reasoning that a foreign promise
+// resolves to a JavaScript value with nothing to convert. That is true of a
+// promise a foreign library made *for itself*, and false the moment it was
+// handed a Python value to resolve with — which is exactly what a `__js__`
+// helper does. The measurement was right and the inference from it was not.
+//
+// No Python value answers this by accident: Brython keeps an object's
+// attributes under a symbol, so a plain `.then` read finds nothing on a dict, a
+// list or an instance.
+const thenable = (value) =>
+    value !== null && typeof value === 'object' && typeof value.then === 'function';
+
 // Calling an `async def` from JavaScript returns a coroutine that nobody runs:
 // the handler appears to do nothing at all, silently. Brython has its own event
 // loop, so hand it over.
@@ -2222,8 +2243,13 @@ export function pyCall(fn, where, lineOffset = 0, arity = Infinity, named) {
             // Noted at the twenty-ninth reading as a limit and carried since;
             // what makes it a defect rather than a limit is that the rule
             // already exists, one line away, and every other crossing passes it.
-            return result instanceof Promise
-                ? result.then((one) => plainData(one, undefined, pyHandler))
+            // `Promise.resolve` rather than `result.then`, because a bare
+            // thenable's `then` answers whatever its author wrote — `undefined`
+            // for the three-line shape everyone writes — and what a caller was
+            // handed has to stay awaitable. This normalises all three into one
+            // promise of this realm, which is also what `await` would do.
+            return thenable(result)
+                ? Promise.resolve(result).then((one) => plainData(one, undefined, pyHandler))
                 : plainData(result, undefined, pyHandler);
         } catch (error) {
             throw pyError(error, where, lineOffset);
