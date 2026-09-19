@@ -1344,6 +1344,28 @@ export const pyCoroutine = (value) => {
 export const pyScalar = (value) => {
     if (value === null || typeof value !== 'object' || value.ob_type === undefined) return undefined;
 
+    // **A limit, and it was measured rather than assumed.** `ob_type` is a
+    // public key, so a JavaScript object can carry one: the repair at the
+    // forty-second reading was for a field holding a business *string*, and a
+    // field holding a real Brython class walks straight past it. So
+    // `{ob_type: float, value: 42, label: "kept"}` crosses as the number `42`
+    // and the `label` beside it is gone.
+    //
+    // It cannot be closed by looking, and two attempts proved it. The prototype
+    // looked like the answer — a float from `1 / 4`, from a literal, from a sum
+    // and from `$factory` all carry one of the engine's own, and an object
+    // literal carries `Object.prototype` — and then fifty tests went red,
+    // because a float that has crossed a boundary is a plain object too. Adding
+    // *and it claims the builtin itself* left thirty-six. **A genuine Brython
+    // float and `{ob_type: float, value: 42}` are the same object**, field for
+    // field, on the paths that matter.
+    //
+    // What would close it is provenance — the engine marking what it made — and
+    // that is Brython's to give, not ours to infer. Until then the contract is
+    // the honest one: a value carrying a Brython class under `ob_type` **is**
+    // that value here. `tests/helpers.test.js` pins it so nobody rediscovers it
+    // as a surprise.
+
     const mro = value.ob_type.tp_mro;
 
     if (!Array.isArray(mro)) return value.ob_type === _b_.float ? value.value : undefined;
@@ -1741,13 +1763,23 @@ function branch(value, seen) {
     // have.
     const mapping = globalThis.__BRYTHON__.is_dict(value);
 
-    // A value of a **builtin** class is not an instance of the author's, and the
-    // difference decides which of the two rules below it gets. A `complex` has an
-    // instance dictionary and it is empty, so the fields path wrote `{}` for it:
-    // the same silent loss as a Map, from the arm written to serialise what an
-    // author put on their own object. Asked against Brython's own table rather
-    // than against a list of type names written here.
-    const owned = pyClass(value.ob_type) && _b_[value.ob_type.tp_name] === value.ob_type;
+    // A value that **descends from a builtin** is not an instance of the
+    // author's, and the difference decides which of the two rules below it gets.
+    // A `complex` has an instance dictionary and it is empty, so the fields path
+    // wrote `{}` for it: the same silent loss as a Map, from the arm written to
+    // serialise what an author put on their own object.
+    //
+    // Asked of the **MRO**, not of the class by identity, which is the mistake
+    // this file has now made four times and repaired three: `class Money(complex)`
+    // is not the entry in Brython's table, so it answered no and came out as its
+    // attributes — `{}`, or `{"label":"kept"}` with one field on it, the number
+    // gone. Asked against Brython's own table rather than a list of type names
+    // written here, and `object` is excluded because every class descends from
+    // it.
+    const owned =
+        pyClass(value.ob_type) &&
+        Array.isArray(value.ob_type.tp_mro) &&
+        value.ob_type.tp_mro.some((one) => one !== _b_.object && _b_[one.tp_name] === one);
 
     if (!mapping && !owned && (holder !== undefined || declaresSlots(value))) {
         const fields = shell ?? {};

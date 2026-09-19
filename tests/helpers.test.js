@@ -297,7 +297,15 @@ describe('tojson', () => {
         ['a memoryview', () => shapes('memoryview'), /is a memoryview/, null],
         ['a range', () => shapes('range'), /is a range/, null],
         ['a complex', () => shapes('complex'), /is a complex/, null],
-        ['a symbol', () => Symbol('marker'), /is a symbol/, null]
+        ['a symbol', () => Symbol('marker'), /is a symbol/, null],
+        // Derived from a builtin, which is the row identity missed: the class is
+        // not the entry in Brython's table, so it answered *not a builtin* and
+        // came out as its attributes — `{}`, or `{"label":"kept"}` with one
+        // field on it, the number gone. The MRO is the question, and this file
+        // has now asked it wrongly four times.
+        ['a complex subclass', () => shapes('complex subclass'), /is a Money/, null],
+        ['one carrying a field', () => shapes('complex subclass with a field'), /is a Tagged/, null],
+        ['an exception subclass', () => shapes('exception subclass'), /is a Failure/, null]
     ])('%s', ([, make, named, wayOut]) => {
         test('is refused under its own name', () => {
             expect(() => tojson(make())).toThrow(named);
@@ -314,6 +322,35 @@ describe('tojson', () => {
                 expect(() => tojson(make())).toThrow(wayOut);
             });
         }
+    });
+
+    // The limit, pinned so it is a contract rather than a surprise.
+    //
+    // `ob_type` is Brython's marker and it is an ordinary key, so a JavaScript
+    // object can carry one. Holding a *string* there was the forty-second
+    // reading's defect and is fixed; holding a real Brython **class** cannot be
+    // told from the genuine article, and that was measured twice before being
+    // written down here. A float from `1 / 4`, from a literal and from a sum
+    // carries one of the engine's own prototypes — but a float that has crossed
+    // a boundary is a plain object exactly like the imitation, and asking the
+    // prototype turned fifty tests red, then thirty-six.
+    //
+    // So the contract is: a value carrying a Brython class under `ob_type` *is*
+    // that value here. Closing it would take provenance from the engine — a
+    // mark on what Brython itself made — which is upstream's to give.
+    test('a JavaScript object claiming a Brython class is taken at its word', () => {
+        const float = globalThis.__BRYTHON__.builtins.float;
+
+        // Its own `label` is lost, because what it says it is has no room for
+        // one. The row exists so the next reader meets the limit here and not in
+        // a page.
+        expect(tojson({ ob_type: float, value: 42, label: 'kept' })).toBe('42');
+
+        // And the repair that *is* possible stands: a field of the same name
+        // holding data is data.
+        expect(tojson({ ob_type: 'business', value: 42, label: 'kept' })).toBe(
+            '{"ob_type":"business","value":42,"label":"kept"}'
+        );
     });
 
     // The controls the space needs, or every row above would pass by refusing

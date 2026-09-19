@@ -77,7 +77,7 @@ rest of that configuration and what each line buys.
 npm install
 npm run dev
 
-npm test             # 1 132 tests: semantics, props, reactivity, Svelte surface
+npm test             # 1 188 tests: semantics, props, reactivity, Svelte surface
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
 npm run test:all     # the three above, in order, stopping at the first failure
@@ -1361,7 +1361,9 @@ Python's own modules, `browser`, `javascript` and `sys`, and any `.py` sitting
 beside the component. Everything else a template needs is already a name:
 `tojson`, `batch`, `date`, `fromnow`, `slugify`, `striptags`, `urlencode`.
 
-The whole runtime, gzipped, is **255 KB**.
+The whole runtime, gzipped, is **218 KB**. That is
+`vendor/brython_runtime.js`, the half without the parsing chain, which is what a
+browser gets; the full bundle it is cut from is 270 KB and never ships.
 
 ## Svelte surface covered
 
@@ -1402,7 +1404,7 @@ Validated by `npm test`, 1 188 tests, none expected to fail:
   Every expected value was produced by running the component's Python through
   CPython 3.12 as-is, never written by hand. Brython matches CPython on **39 of
   40 points**;
-- production build: **224 KB gzip**, Brython runtime included.
+- production build: **225 KB gzip**, Brython runtime included.
 
 The grid doubles as an acceptance bench for optimising code generators: one that
 drops call frames breaks `Frames`, one that unboxes integers breaks `Integers`,
@@ -1577,3 +1579,17 @@ That matters for how much you ship. Where a full CPython-in-WebAssembly runtime
 arrives as one large payload, these are per-module `.wasm` files, and Svelthon
 already knows exactly which modules a component imports: `py2js()` exposes them,
 so only the ones actually named need travel.
+
+## Licence
+
+Svelthon is MIT, the licence of Svelte and of the tooling around it. See
+`LICENSE`.
+
+The package also ships Brython, built and minified into
+`vendor/brython_runtime.js` and `vendor/brython_compiler.js`. Brython is not
+covered by that licence and keeps its own, BSD-3-Clause, Copyright (c) 2012
+Pierre Quentel. Its notice travels beside the files it covers, in
+`vendor/LICENSE`, and both are in the published tarball.
+
+What those two files are built from, and the five commits proposed upstream they
+carry ahead of a release, is in `vendor/BRYTHON_FIX.md`.

@@ -75,7 +75,7 @@ reste de cette configuration et ce que chaque ligne apporte.
 npm install
 npm run dev
 
-npm test             # 1 132 tests : sémantique, props, réactivité, surface Svelte
+npm test             # 1 188 tests : sémantique, props, réactivité, surface Svelte
 npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
 npm run test:all     # les trois ci-dessus, dans l'ordre, arrêt au premier échec
@@ -1394,7 +1394,10 @@ quel `.py` posé à côté du composant. Tout ce dont un gabarit a besoin est d�
 un nom : `tojson`, `batch`, `date`, `fromnow`, `slugify`, `striptags`,
 `urlencode`.
 
-Le runtime entier, gzippé, fait **255 Ko**.
+Le runtime entier, gzippé, fait **218 Ko**. C'est
+`vendor/brython_runtime.js`, la moitié sans la chaîne de parsing, celle qu'un
+navigateur reçoit ; le bundle complet dont elle est découpée en fait 270 et ne
+part jamais.
 
 ## État
 
@@ -1518,7 +1521,7 @@ proxifiées. Le choix de conception de la réactivité se rembourse précisémen
 où une vraie application passe son temps.
 
 Le vrai prix est au chargement : **1,2 s jusqu'à l'interactivité** pour la démo de
-production sur ce portable, contre 0,5 s pour la même page sans Brython : 224 Ko
+production sur ce portable, contre 0,5 s pour la même page sans Brython : 225 Ko
 gzip au lieu de 13. Payé une fois par session, pas par page, puisque
 l'application ne recharge jamais.
 
@@ -1615,3 +1618,18 @@ les vrais modules d'extension C de CPython dans le navigateur en WebAssembly, et
 arrive en une seule grosse charge, ce sont ici des `.wasm` par module, et
 Svelthon sait déjà exactement quels modules un composant importe, `py2js()` les
 expose, donc seuls ceux réellement nommés ont à voyager.
+
+## Licence
+
+Svelthon est sous MIT, la licence de Svelte et de l'outillage autour. Voir
+`LICENSE`.
+
+Le paquet embarque aussi Brython, construit et minifié dans
+`vendor/brython_runtime.js` et `vendor/brython_compiler.js`. Brython n'est pas
+couvert par cette licence et garde la sienne, BSD-3-Clause, Copyright (c) 2012
+Pierre Quentel. Son préavis voyage à côté des fichiers qu'il couvre, dans
+`vendor/LICENSE`, et les deux sont dans le tarball publié.
+
+Ce dont ces deux fichiers sont construits, et les cinq commits proposés en amont
+qu'ils portent en avance sur une version publiée, est dans
+`vendor/BRYTHON_FIX.md`.
