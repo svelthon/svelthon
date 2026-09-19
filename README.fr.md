@@ -1283,6 +1283,11 @@ def load(event):
 `event` porte `params`, `query`, `url`, `method`, `route` et `js` : l'événement
 brut. Ce dernier est l'échappatoire, et il se suffit à lui-même :
 
+`query` est un dict, donc une clé écrite deux fois garde la **première** valeur,
+celle que `url.searchParams.get()` répond de la même URL. Toutes les valeurs
+d'une clé répétée sont derrière l'échappatoire :
+`event["js"].url.searchParams.getAll("tag")`.
+
 ```python
 biscuits = event["js"].cookies
 theme = str(biscuits.get("theme") or "clair")

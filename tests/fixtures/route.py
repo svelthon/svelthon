@@ -13,6 +13,7 @@ __all__ = [
     "runs_count",
     "given",
     "given_second",
+    "both_views",
 ]
 
 from browser import aio
@@ -114,3 +115,15 @@ def given_second(first, value):
     # The same question about an argument that is not the first: every argument
     # of every call takes this road, not only the event a route is handed.
     return given(value)
+
+
+def both_views(event):
+    # The two ways of reading one query string, which have to agree: the
+    # snapshot a Python author reads, and the URL the same event carries.
+    raw = event["js"].url.searchParams
+
+    return [
+        event["query"].get("tag"),
+        raw.get("tag"),
+        list(raw.getAll("tag")),
+    ]

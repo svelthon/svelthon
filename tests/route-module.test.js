@@ -20,7 +20,8 @@ import {
     shared,
     separate,
     given,
-    given_second
+    given_second,
+    both_views
 } from './fixtures/route.py';
 import { requestEvent as event, prerenderingEvent, foreignRealmEvent } from './request-event.js';
 
@@ -106,6 +107,7 @@ describe('what a plain module exports', () => {
             'GET',
             'actions',
             'boom',
+            'both_views',
             'config',
             'given',
             'given_second',
@@ -299,6 +301,41 @@ describe('what crosses as a request event', () => {
             kind: 'JSObject',
             payload: 42
         });
+    });
+});
+
+// One query string, read the two ways the same event offers, and they have to
+// agree. `?tag=a&tag=b` is one key twice and a dict holds one value for it;
+// which one was decided by nothing, so the pairs went in in order and the last
+// overwrote the first. `event["query"]["tag"]` answered `b` while
+// `event["js"].url.searchParams.get("tag")` answered `a`, about the same URL.
+//
+// The first wins now, because that is what the object standing beside it
+// answers. Python does not settle it — Django's `QueryDict` says the last and
+// Flask's `MultiDict` the first — so what settles it is not contradicting
+// ourselves.
+//
+// The limit, written rather than discovered later: a dict cannot hold both, and
+// no second view is invented for them. `getAll` is where every value is, and the
+// last row is what says so.
+describe('a query string read twice', () => {
+    const asked = (search) => both_views(event({ url: `https://example.test/a${search}` }));
+
+    test('agrees with the URL beside it when a key repeats', () => {
+        const [snapshot, first, all] = asked('?tag=a&tag=b');
+
+        expect(snapshot).toBe('a');
+        expect(snapshot).toBe(first);
+        // And nothing is lost, only held elsewhere.
+        expect(all).toEqual(['a', 'b']);
+    });
+
+    test('and says the same thing when it does not', () => {
+        const [snapshot, first, all] = asked('?tag=only');
+
+        expect(snapshot).toBe('only');
+        expect(snapshot).toBe(first);
+        expect(all).toEqual(['only']);
     });
 });
 

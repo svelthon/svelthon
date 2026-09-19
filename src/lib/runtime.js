@@ -2064,6 +2064,24 @@ export function pyArg(value) {
         }
     }
 
+    // `?tag=a&tag=b` is one key twice, and a dict holds one value for it. Which
+    // one was decided by nothing: the pairs went in in order and the last
+    // overwrote the first, so `event["query"]["tag"]` answered `b` while
+    // `event["js"].url.searchParams.get("tag")` answered `a` — two views of one
+    // request, disagreeing, inside the same event.
+    //
+    // The first wins, because that is what `searchParams.get` answers about the
+    // very same URL. Django's `QueryDict` would say the last and Flask's
+    // `MultiDict` the first, so Python has no single answer to take; what
+    // removes the contradiction is agreeing with the object standing beside it.
+    //
+    // A dict cannot hold both, and this does not invent a second view for them:
+    // `event["js"].url.searchParams.getAll("tag")` is where every value is, and
+    // it is the escape hatch the snapshot already documents.
+    const seen = new Set();
+
+    query = query.filter(([key]) => !seen.has(key) && seen.add(key));
+
     // Real dicts, not JavaScript objects: Python reaches for `.get()` and
     // `.items()`, and a JSObj has neither.
     return pyDict([

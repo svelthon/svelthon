@@ -1238,6 +1238,11 @@ def load(event):
 `event` carries `params`, `query`, `url`, `method`, `route`, and `js`, the raw
 event. That last one is the escape hatch, and it is enough on its own:
 
+`query` is a dict, so a key written twice keeps the **first** value, which is
+what `url.searchParams.get()` answers about the same URL. Every value of a
+repeated key is behind the escape hatch:
+`event["js"].url.searchParams.getAll("tag")`.
+
 ```python
 biscuits = event["js"].cookies
 theme = str(biscuits.get("theme") or "clair")
