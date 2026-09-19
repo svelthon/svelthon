@@ -786,10 +786,22 @@ export const pyClass = (value) => false \g<0>\g<0> /*W*/
 // `<Javascript object: [object Object]>` into the page, percent-encoded, with no
 // error and no warning. Two of the three crossings already agreed; this is the
 // third asking the same question instead of its own.
+// And a **root** prototype rather than *our* `Object.prototype`, which is the
+// realm mistake of `URL`, `Date` and `Promise` at a fourth family of sites. An
+// object built by another JavaScript context sits on that context's
+// `Object.prototype`, is a bag of keys by every use, and failed this test: it
+// crossed as a `JSObject` where the local twin became a dict, so `.get()` raised
+// in Python; it kept a Brython dict raw inside an exported object; and
+// `urlencode` wrote the engine's spelling of it into the query string.
+//
+// *Root* is what every realm's `Object.prototype` has in common and what no
+// class prototype has: a `Date` sits on `Date.prototype`, which sits on
+// `Object.prototype` in turn, so it is two steps from null and stays excluded —
+// here and in every other realm.
 export const plainObject = (value) => {
     const prototype = Object.getPrototypeOf(value);
 
-    return prototype === Object.prototype || prototype === null;
+    return prototype === null || Object.getPrototypeOf(prototype) === null;
 };
 
 // Where a Brython instance keeps the attributes an author wrote, which is a
@@ -1782,14 +1794,19 @@ export function pyData(value) {
     //
     // Only a plain object. A Date, a Map, a Response, a DOM node and anything
     // Python already owns keep the crossing they had.
-    const prototype = Object.getPrototypeOf(value);
-
+    //
+    // Asked as `plainObject`, which is the predicate written for exactly this
+    // question one page up. The comparison used to be spelled out here as well,
+    // so the outbound walk learned to recognise another context's object and the
+    // inbound one did not: the same value became a dict going one way and a
+    // `JSObject` coming back. One rule, one site.
+    //
     // "Is this already a Python object" was asked as `ob_type === undefined`,
     // which is a *field name* and therefore something data is allowed to carry:
     // `{"ob_type": "business", "value": 42}` is ordinary JSON and took the
     // branch meant for Brython's own objects. A real Python object carries a
     // class there, so the question is asked of the class.
-    if (!pyClass(value.ob_type) && (prototype === Object.prototype || prototype === null)) {
+    if (!pyClass(value.ob_type) && plainObject(value)) {
         made ??= new WeakMap();
 
         const known = made.get(value);
