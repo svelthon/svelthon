@@ -44,6 +44,30 @@ import {
 // a Python scalar comes back untouched, so every refusal already written stands.
 const written = (value) => pyScalar(value) ?? value;
 
+// The instant a Date holds, whichever JavaScript context built it — and
+// `undefined` for anything that is not a Date at all.
+//
+// `instanceof Date` asks about *our* Date constructor, and an iframe, a worker,
+// a `vm` context or a SvelteKit adapter has its own: a Date from one of them is
+// a Date by every behaviour and answers false, so `{date(stamp)}` refused a
+// perfectly good value and the component did not mount. The same realm mistake
+// the route boundary made with `URL`, at the three sites of this file, and it
+// was mine to sweep there and I did not.
+//
+// `getTime` called against the value is the brand itself: the internal slot a
+// Date carries is per-object, not per-realm, so this accepts every context's
+// Date and throws for everything else — including an object that sets
+// `Symbol.toStringTag` to 'Date', which `Object.prototype.toString` would
+// believe. An invalid Date answers NaN, which is a number and therefore an
+// answer; the caller's own domain decides what to do with it.
+const instantOf = (value) => {
+    try {
+        return Date.prototype.getTime.call(value);
+    } catch {
+        return undefined;
+    }
+};
+
 // A helper's refusal, in the dialect the rest of the project speaks.
 //
 // The eighteen refusals in `compile.cjs` and `markup.js` all open with
@@ -144,7 +168,12 @@ const FLOAT = globalThis.__BRYTHON__.builtins.float;
 // big integer still reaches that refusal through `moment`, since every integer
 // large enough to be one is outside the range `Date` spans.
 function instant(value) {
-    if (value instanceof Date) return value;
+    const held = instantOf(value);
+
+    // A Date of any context, rebuilt as one of ours so everything downstream —
+    // `getTime`, `Intl.DateTimeFormat.format` — is handed a value from the realm
+    // that will read it.
+    if (held !== undefined) return new Date(held);
 
     // `written` first, then this helper's own domain: what is shared is the
     // recognition, not the rule about what a date may be.
@@ -453,7 +482,13 @@ export function urlencode(value) {
     // A Date is a value and never a mapping, and the sortable spelling is the
     // one a URL wants. Reading it through Python instead gave
     // `<Javascript object: [object Date]>`, escaped, in the query string.
-    if (value instanceof Date) return encodeURIComponent(value.toISOString());
+    //
+    // The third site that asked `instanceof`, and the third to refuse a Date
+    // built in another JavaScript context: this one said nothing and wrote the
+    // Python spelling of the object into the query string.
+    const held = instantOf(value);
+
+    if (held !== undefined) return encodeURIComponent(new Date(held).toISOString());
 
     if (value !== NONE && value !== null && typeof value === 'object') {
         const pairs = new URLSearchParams();

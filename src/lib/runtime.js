@@ -1811,16 +1811,38 @@ export function pyData(value) {
 // that about `Request`, which made it my own contradiction rather than a
 // surprise.
 //
-// So a behaviour again, and the `try` is what keeps the first failure closed. A
-// member that answers a string is a URL; a member that *throws* is a URL the
-// framework is guarding, which is still a URL; only absence is a no. The path
-// and the scheme rather than the query, because those are the parts a
-// prerendered page necessarily has — it is rendered *for* a path.
+// So a behaviour again, and the `try` is what keeps the first failure closed:
+// whatever a guarded member does, it does not escape from here.
+//
+// A throw answers **no**, and that was the other way round for a day. *A guarded
+// member is still a URL* sounds right and admits every object whose getter
+// throws, which is a recognition widened by an accident rather than by a
+// measurement — and the failure it trades against is the mild one. Refusing a
+// genuine event is loud: the handler raises on `event['method']` and the author
+// reads a Python error. Admitting a business object is silent: its fields
+// disappear and the page is merely wrong. Between a loud wrong answer and a
+// quiet one, take the loud one.
+//
+// The path and the scheme rather than the query, because those are the parts a
+// prerendered page necessarily has — it is rendered *for* a path — so no member
+// SvelteKit is known to guard is read at all.
+//
+// And a URL is **a value of a class**, never a bag of keys, which is the
+// question `plainObject` was written for and which `plainData` already asks to
+// decide what it may flatten. Two strings are cheap to write down, and the
+// fourth reading of this line did exactly that: an ordinary HTTP context whose
+// `url` was `{pathname, protocol, href, searchParams}` — with a real Request, a
+// fetch and params beside it — passed every other test and lost its own fields.
+// Every URL a framework hands over carries its own prototype, our realm's or
+// another's; only an imitation is built out of Object.
 const urlish = (value) => {
     try {
-        return typeof value?.pathname === 'string' && typeof value?.protocol === 'string';
+        return (
+            typeof value?.pathname === 'string' &&
+            typeof value?.protocol === 'string'
+        );
     } catch {
-        return true;
+        return false;
     }
 };
 

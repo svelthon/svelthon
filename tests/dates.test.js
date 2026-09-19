@@ -1,6 +1,7 @@
 import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import Dates from './fixtures/Dates.svelte';
+import { date, fromnow, urlencode } from '../src/lib/helpers.js';
 
 // Django's `|date` keeps its word; what stands behind it is the platform's
 // `Intl`, which answers in the reader's language — something Django's format

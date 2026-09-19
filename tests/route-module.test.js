@@ -213,6 +213,23 @@ describe('what crosses as a request event', () => {
         // What is wrong with it, and the object.
         ['nothing but the names', { ...business, params: {}, url: 'https://e.test/', request: { method: 'GET' } }],
         ['a url that is a string', { ...event(), ...business, url: 'https://e.test/' }],
+        // The fourth reading's object, and the row that says why a URL is asked
+        // to be a value of a class: everything else about this one is genuine —
+        // a real Request, an event `fetch`, business params — and its `url` is
+        // two strings in a bag. It passed, and its `payload` disappeared.
+        [
+            'a url built out of Object',
+            {
+                ...event(),
+                ...business,
+                url: {
+                    pathname: '/api',
+                    protocol: 'https:',
+                    href: 'https://e.test/api?q=one',
+                    searchParams: new URL('https://e.test/api?q=one').searchParams
+                }
+            }
+        ],
         ['a request that only names a method', { ...event(), ...business, request: { method: 'GET' } }],
         ['no fetch of its own', { ...event(), ...business, fetch: undefined }]
     ])('ordinary data with %s crosses untouched', ([, value]) => {
@@ -230,14 +247,18 @@ describe('what crosses as a request event', () => {
         });
     });
 
-    // And a URL that refuses a member the recognition itself reads. No version
-    // of SvelteKit guards `pathname` today; the rule is that a guarded member
-    // must not *veto* an event, whichever member a future one decides to guard,
-    // and a rule nothing can reach is a rule nobody is holding.
-    test('and an event whose URL refuses the member the guard reads', () => {
-        expect(given(prerenderingEvent({ refuses: ['pathname'] }))).toEqual({
-            kind: 'dict',
-            keys: ['js', 'method', 'params', 'query', 'route', 'url']
+    // And a URL that refuses the member the recognition itself reads. No version
+    // of SvelteKit guards `pathname` today, and the rule held here is what the
+    // boundary does when one does: the throw must not **escape** — that was the
+    // prerender defect — and it answers no.
+    //
+    // It answered *yes* for a day, on the reasoning that a guarded member is
+    // still a URL. That widens the recognition by an accident rather than by a
+    // measurement, and it trades the mild failure for the bad one: refusing a
+    // genuine event is loud, and admitting a business object is silent.
+    test('and an event whose URL refuses the member the guard reads is refused', () => {
+        expect(given(prerenderingEvent({ refuses: ['pathname'] }))).toMatchObject({
+            kind: 'JSObject'
         });
     });
 
