@@ -1394,6 +1394,14 @@ quel `.py` posé à côté du composant. Tout ce dont un gabarit a besoin est d�
 un nom : `tojson`, `batch`, `date`, `fromnow`, `slugify`, `striptags`,
 `urlencode`.
 
+`tojson` écrit ce dont JSON a une notation et **refuse le reste en le nommant**
+plutôt que d'écrire `{}` : un set, des bytes, un range, un complex, une
+coroutine, une promesse, une `Map`, un `Set`. Une classe JavaScript dit comment
+elle se sérialise en portant `toJSON` ; celle qui ne le dit pas est refusée
+aussi, puisque rien ne distingue ses champs de ceux d'une `Map`. `striptags`
+montre le document visible, donc le texte d'un `<script>` ou d'un `<style>`
+n'atteint jamais la page.
+
 Le runtime entier, gzippé, fait **218 Ko**. C'est
 `vendor/brython_runtime.js`, la moitié sans la chaîne de parsing, celle qu'un
 navigateur reçoit ; le bundle complet dont elle est découpée en fait 270 et ne

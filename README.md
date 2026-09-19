@@ -1361,6 +1361,13 @@ Python's own modules, `browser`, `javascript` and `sys`, and any `.py` sitting
 beside the component. Everything else a template needs is already a name:
 `tojson`, `batch`, `date`, `fromnow`, `slugify`, `striptags`, `urlencode`.
 
+`tojson` writes what JSON has a notation for and **refuses the rest by name**
+rather than writing `{}`: a set, bytes, a range, a complex, a coroutine, a
+promise, a `Map`, a `Set`. A JavaScript class says how it serialises by carrying
+`toJSON`, and one that does not is refused too, since nothing can tell its fields
+from a `Map`'s. `striptags` shows the visible document, so the text of a
+`<script>` or a `<style>` never reaches the page.
+
 The whole runtime, gzipped, is **218 KB**. That is
 `vendor/brython_runtime.js`, the half without the parsing chain, which is what a
 browser gets; the full bundle it is cut from is 270 KB and never ships.
