@@ -59,6 +59,18 @@ describe('a module export keeps the arguments its signature accepts', () => {
 describe('a name behind a decorator', () => {
     const mod = () => import('./fixtures/signatures_mod.py');
 
+    // What a library reads off the export before calling it. The mutation
+    // harness found this one: flipping the branch that reads it killed nothing,
+    // so nothing was asserting the number a caller can see.
+    test('and reports the signature it will accept', async () => {
+        const m = await mod();
+
+        expect(m.regular.length).toBe(2);
+        expect(m.variadic.length).toBe(0);
+        // Behind a decorator, it is the resulting callable's, not the `def`'s.
+        expect(m.decorated.length).toBe(0);
+    });
+
     test('is called with what Python would give it', async () => {
         const m = await mod();
 

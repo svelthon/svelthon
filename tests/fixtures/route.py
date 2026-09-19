@@ -126,4 +126,7 @@ def both_views(event):
         event["query"].get("tag"),
         raw.get("tag"),
         list(raw.getAll("tag")),
+        # `route.id` is a string or None, and the snapshot reads it through a
+        # guard: what lands here is the id, never the object holding it.
+        event["route"],
     ]

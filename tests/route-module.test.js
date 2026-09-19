@@ -330,6 +330,18 @@ describe('a query string read twice', () => {
         expect(all).toEqual(['a', 'b']);
     });
 
+    // SvelteKit's `route.id` is `string | null` — it is null for a page nothing
+    // matched — and the snapshot reads it through a guard nothing was testing.
+    // The mutation harness found it: flipping that guard killed no test.
+    test('and a route with no id at all still crosses', () => {
+        const asked = (route) =>
+            both_views(event({ url: 'https://example.test/a?tag=a', route }))[3];
+
+        // What lands in the snapshot is the id, never the object holding it.
+        expect(asked({ id: '/a/[slug]' })).toBe('/a/[slug]');
+        expect(asked({ id: null })).toBe(null);
+    });
+
     test('and says the same thing when it does not', () => {
         const [snapshot, first, all] = asked('?tag=only');
 
