@@ -1760,11 +1760,27 @@ function instanceExports(c) {
                   // store answered `ReferenceError: __next is not defined` —
                   // `store.count = 7` did nothing and said that, while
                   // `store.increment()` worked, which is what kept it hidden.
+                  // `__pyArg`, because this setter is a **crossing**, and it was
+                  // the only one in the project that treated its value as
+                  // already Python. `store.amount = 0.25` put a raw JavaScript
+                  // number where Python expected a float: `type(amount)`
+                  // answered `JSObject` and `format(amount, ".2f")` raised
+                  // *non-empty format string passed to object.__format__*, while
+                  // `store.set_amount(0.25)` beside it worked — one value, two
+                  // capabilities, decided by the door it came through. The table
+                  // of crossings in runtime.js names seven and this was an
+                  // eighth, unlisted and untreated.
+                  //
+                  // The same conversion the call boundary owes, and no more: a
+                  // scalar becomes its Python self and an object keeps its
+                  // identity, so a JavaScript array assigned to a store is still
+                  // that array. Converting containers too would be a change of
+                  // contract, not a repair.
                   ...c.state
                       .filter(c.published)
                       .map(
                           (n) =>
-                              `    set ${n}(${NEXT_VALUE}) { ${n} = __track(${NEXT_VALUE}, ${bump(n)}, ${read(n)}); },`
+                              `    set ${n}(${NEXT_VALUE}) { ${n} = __track(__pyArg(${NEXT_VALUE}), ${bump(n)}, ${read(n)}); },`
                       ),
                   ...c.deriveds
                       .filter((d) => c.published(d.name))
