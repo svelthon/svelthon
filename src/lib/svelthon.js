@@ -7,9 +7,10 @@ import {
     pythonScript,
     pythonExpressions,
     collector,
-    moduleImports,
+    moduleScript,
     directiveModules
 } from './markup.js';
+import { parse } from 'svelte/compiler';
 
 const require = createRequire(import.meta.url);
 const { compile, VIRTUAL_PREFIX, virtualId } = require('./compile.cjs');
@@ -134,6 +135,86 @@ function refuseSpacedClose(closing, filename) {
             `missing at run time. Close it with \`</script>\` ` +
             `(${relative(process.cwd(), filename || 'Component')})`
     );
+}
+
+// Names a component imports or declares in its `<script module>`. They live in
+// JavaScript, and Python cannot import them, but they are in scope for the
+// generated code, so publishing them into the namespace makes them readable
+// from Python. That is what lets a Python component reach `page` from
+// `$app/state`, or any npm library at all.
+//
+// **Read from Svelte's parse, not from the text.** This was a pair of regular
+// expressions over the raw block, and a grammar reconstituted that way fails in
+// both directions at once: it invented a binding for `// import Missing from
+// './none.js'` — a commented-out import, or one quoted in a string — so the
+// component died at mount with `Missing is not defined`, about a name present
+// in no running code; and it read one name per declaration, so `const first =
+// 1, second = 2` published `first` alone and Python raised `NameError` on the
+// other, which a line break would have fixed. Destructuring published nothing
+// at all.
+//
+// JavaScript is Svelte's grammar here, not ours, and this runs inside a Svelte
+// build by definition. The block is parsed alone, wrapped in a component with
+// no template, because the real one is still Python at this point and Svelte
+// would refuse it.
+const declaredBy = (pattern) => {
+    if (pattern === null) return [];
+
+    switch (pattern.type) {
+        case 'Identifier':
+            return [pattern.name];
+        case 'ObjectPattern':
+            return pattern.properties.flatMap((one) =>
+                declaredBy(one.type === 'RestElement' ? one.argument : one.value)
+            );
+        case 'ArrayPattern':
+            return pattern.elements.flatMap(declaredBy);
+        case 'AssignmentPattern':
+            return declaredBy(pattern.left);
+        case 'RestElement':
+            return declaredBy(pattern.argument);
+        default:
+            return [];
+    }
+};
+
+const declares = (node) => {
+    switch (node.type) {
+        case 'ImportDeclaration':
+            return node.specifiers.map((one) => one.local.name);
+        case 'VariableDeclaration':
+            return node.declarations.flatMap((one) => declaredBy(one.id));
+        case 'FunctionDeclaration':
+        case 'ClassDeclaration':
+            return declaredBy(node.id);
+        // `export const shared = 1` is a declaration wearing a hat. A bare
+        // `export { a }` re-exports a name already declared above, so it adds
+        // nothing and falls through.
+        case 'ExportNamedDeclaration':
+        case 'ExportDefaultDeclaration':
+            return node.declaration ? declares(node.declaration) : [];
+        default:
+            return [];
+    }
+};
+
+export function moduleImports(content) {
+    const block = moduleScript(content);
+
+    if (block === null) return [];
+
+    let module;
+
+    try {
+        module = parse(`<script module>${block}</script>`, { modern: true }).module;
+    } catch {
+        // A block that does not parse is one Svelte is about to refuse itself,
+        // naming the line. Publishing nothing leaves that message as the only
+        // one the author sees, rather than ours in front of it.
+        return [];
+    }
+
+    return [...new Set((module?.content?.body ?? []).flatMap(declares))];
 }
 
 const perFile = () => {

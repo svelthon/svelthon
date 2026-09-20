@@ -10,9 +10,11 @@ import {
     overMarkup,
     pythonExpressions,
     pythonRanges,
-    moduleImports,
     collector
 } from '../src/lib/markup.js';
+// Moved out of markup.js: what a `<script module>` declares is a JavaScript
+// question, and Svelte's parser is the thing that owns that grammar.
+import { moduleImports } from '../src/lib/svelthon.js';
 
 // `(x := 1)` in a template writes the component's name through the namespace,
 // which is what makes it reach the signal. Python's own grammar forces the
@@ -313,15 +315,54 @@ describe('pythonRanges', () => {
 describe('moduleImports', () => {
     const withModule = (body) => `<script module>\n${body}\n</script>\n<p>x</p>`;
 
+    // The table is the test, because a grammar reconstituted by regular
+    // expressions fails in **both** directions and this one did:
+    //
+    // - it invented a binding for an import that was commented out or quoted in
+    //   a string, and the component died at mount with `Missing is not
+    //   defined`, about a name present in no running code;
+    // - it read one name per declaration, so `const first = 1, second = 2`
+    //   published `first` alone and Python raised `NameError` on the other —
+    //   a line break was the difference. Destructuring published nothing.
+    //
+    // Nine of the nineteen rows below were wrong, and two were reported. What
+    // closed them is not a wider regex: JavaScript is Svelte's grammar, and the
+    // preprocessor asks Svelte's own parser for it.
     test.for([
         ['import Nested from "./Nested.svelte"', ['Nested']],
         ['import { a, b } from "./m.js"', ['a', 'b']],
         ['import { a as b } from "./m.js"', ['b']],
         ['import Default, { a } from "./m.js"', ['Default', 'a']],
         ['import * as all from "./m.js"', ['all']],
-        ['import "./side-effect.js"', []]
+        ['import "./side-effect.js"', []],
+        // What is not code, and must declare nothing.
+        ['// import Missing from "./none.js"\nconst kept = 1', ['kept']],
+        ['/* import Missing from "./none.js" */\nconst kept = 1', ['kept']],
+        ['const s = "import Missing from \'m\'"', ['s']],
+        ['const s = `import Missing from "m"`', ['s']],
+        // One declaration, several names.
+        ['const first = 1, second = 2', ['first', 'second']],
+        ['let first, second', ['first', 'second']],
+        ['const { first, second } = obj', ['first', 'second']],
+        ['const { first: one } = obj', ['one']],
+        ['const [first, second] = arr', ['first', 'second']],
+        ['const [{ deep }, ...rest] = arr', ['deep', 'rest']],
+        // The shapes that already worked, kept so a repair cannot move them.
+        ['function helper() { return 1 }', ['helper']],
+        ['class Thing {}', ['Thing']],
+        ['export const shared = 1', ['shared']],
+        // Only the block's *own* level: a name scoped inside a function is not
+        // in scope for the component, and publishing it gave a ReferenceError
+        // at render for a variable the author had scoped correctly.
+        ['function outer() {\n    const inner = 1\n    return inner\n}', ['outer']]
     ])('%s', ([source, names]) => {
-        expect(moduleImports(withModule(source))).toEqual(names);
+        expect(moduleImports(withModule(source)).sort()).toEqual([...names].sort());
+    });
+
+    // A block Svelte is about to refuse itself: publishing nothing leaves its
+    // message, which names the line, as the only one the author sees.
+    test('a module script that does not parse declares nothing', () => {
+        expect(moduleImports(withModule('const = = 1'))).toEqual([]);
     });
 
     test('a component without a module script declares nothing', () => {

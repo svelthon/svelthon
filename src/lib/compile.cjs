@@ -788,7 +788,7 @@ const runtimeAliases = (names) =>
 // exists to keep a DOM event object out of a handler that never asked for one,
 // and a function that asks for everything has asked for that too.
 const arityOf = (args) =>
-    args && args.vararg
+    args || args.vararg
         ? Infinity
         : ((args && args.posonlyargs) || []).length + ((args && args.args) || []).length;
 
