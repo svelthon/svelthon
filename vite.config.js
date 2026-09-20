@@ -32,7 +32,6 @@ export default defineConfig({
     test: {
         environment: 'jsdom',
 
-
         // The first import of a chain of components compiles their Python,
         // which goes past the 5 s default.
         testTimeout: 30000,
