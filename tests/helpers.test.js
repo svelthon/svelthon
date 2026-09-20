@@ -496,6 +496,53 @@ describe('date', () => {
         expect(date('2026-09-10', 'medium', undefined, 'en-GB')).toBe(expected);
     });
 
+    // **A date with no time is a calendar day, not an instant.** The
+    // specification reads `"2026-09-10"` as midnight *UTC* and `Intl` renders
+    // that instant in the reader's zone, so every reader west of Greenwich was
+    // shown the day before: `date("2026-08-24")` answered 23 August in Los
+    // Angeles, and nothing said so. Python answers it without ambiguity —
+    // `datetime.date` carries no zone and Django's `|date`, which is this
+    // helper's word, renders that day wherever it is read.
+    //
+    // There is no other shape to say *a day* with, either: the standard library
+    // was removed, so a component has a string or a number and nothing else.
+    //
+    // The zone is moved through `process.env.TZ`, which `Intl` reads when a
+    // formatter is constructed, and the **instant beside it is the control**:
+    // without a row that does move, this test would pass on a host that ignores
+    // the variable and prove nothing.
+    describe.for([
+        ['Europe/Paris'],
+        ['UTC'],
+        ['America/Los_Angeles'],
+        ['Pacific/Auckland'],
+        ['Pacific/Kiritimati']
+    ])('read from %s', ([zone]) => {
+        const inZone = (run) => {
+            const before = process.env.TZ;
+            process.env.TZ = zone;
+            try {
+                return run();
+            } finally {
+                process.env.TZ = before;
+            }
+        };
+
+        test('a date with no time is the day it says', () => {
+            expect(inZone(() => date('2026-09-10', 'medium', undefined, 'en-GB'))).toBe(
+                '10 Sept 2026'
+            );
+        });
+
+        test('and an instant is still read where the reader is', () => {
+            const east = zone === 'Pacific/Auckland' || zone === 'Pacific/Kiritimati';
+
+            expect(inZone(() => date('2026-09-10T12:00:00Z', 'medium', undefined, 'en-GB'))).toBe(
+                east ? '11 Sept 2026' : '10 Sept 2026'
+            );
+        });
+    });
+
     test('answers in the language it is given, which is the point of the locale', () => {
         expect(date(AT, 'long', undefined, 'fr-FR')).toMatch(/septembre/);
         expect(date(AT, 'long', undefined, 'en-GB')).toMatch(/September/);

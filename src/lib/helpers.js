@@ -424,6 +424,9 @@ export function batch(xs, size, fill) {
 // `locale` matters most under server rendering: without it the server formats in
 // *its* language and the browser reformats in the visitor's, which Svelte
 // reports as a hydration mismatch.
+// A date and nothing else: the one shape that is a day rather than an instant.
+const DAY_ONLY = (value) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
+
 export function date(value, dateStyle, timeStyle, locale) {
     const at = instant(value);
 
@@ -448,6 +451,24 @@ export function date(value, dateStyle, timeStyle, locale) {
     if (options.dateStyle === undefined && options.timeStyle === undefined) {
         options.dateStyle = 'medium';
     }
+
+    // **A date with no time is a calendar day, not an instant.** The
+    // specification reads `"2026-08-24"` as midnight *UTC*, and `Intl` then
+    // renders that instant in the reader's zone: every reader west of Greenwich
+    // was shown the day before, so `date("2026-08-24")` answered 23 August in
+    // Los Angeles and nothing said so.
+    //
+    // Python answers this without ambiguity — `datetime.date(2026, 8, 24)`
+    // carries no zone, and Django's `|date`, which is this helper's word,
+    // renders that day wherever it is read. The standard library is not
+    // available to a component either, so a string is all an author has to say
+    // *a day* with.
+    //
+    // Rendered in the zone the specification already put it in, which is what
+    // keeps the day the author wrote the day every reader sees. The three
+    // shapes that carry a time are untouched: they are instants, and an instant
+    // belongs in the reader's zone.
+    if (DAY_ONLY(written(value))) options.timeZone = 'UTC';
 
     const language = written(locale);
 
