@@ -11,31 +11,33 @@
 //
 // This file loads the two vendored halves directly rather than through
 // `src/lib/runtime.js`, which pulls the whole engine.
-import { test, expect, describe } from 'vitest';
+import { test, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 
-describe('the parsing chain loads onto a running engine', () => {
-    test('the runtime half has no parser, and gains one', async () => {
-        await import('../src/lib/globals.js');
-        await import('../vendor/brython_runtime.js');
+// One test and not two, because the three claims are three *states of one
+// process* and there is no order between them to choose. Split, the second read
+// `globalThis.__BRYTHON__` and called `py2js` on it, which only existed because
+// the first had loaded the chain: narrowing to it on a green tree gave
+// `Cannot read properties of undefined (reading 'py2js')`, a failure that is
+// not in the code. Narrowing a suite to one test is the first thing anyone does
+// with a failure, so a file must not manufacture one.
+test('the runtime half has no parser, gains one, and compiles Python through it', async () => {
+    await import('../src/lib/globals.js');
+    await import('../vendor/brython_runtime.js');
 
-        const $B = globalThis.__BRYTHON__;
-        expect(typeof $B.Parser).toBe('undefined');
+    const $B = globalThis.__BRYTHON__;
+    expect(typeof $B.Parser).toBe('undefined');
 
-        // Indirect eval: the block is a script, not a module, and this is what
-        // a plugin would do with it.
-        (0, eval)(readFileSync('vendor/brython_compiler.js', 'utf8'));
+    // Indirect eval: the block is a script, not a module, and this is what a
+    // plugin would do with it.
+    (0, eval)(readFileSync('vendor/brython_compiler.js', 'utf8'));
 
-        expect(typeof $B.Parser).toBe('function');
-    });
+    expect(typeof $B.Parser).toBe('function');
 
     // The point of the exercise: not that a name appears, but that the engine
     // compiles Python afterwards.
-    test('and Python compiles through it', () => {
-        const $B = globalThis.__BRYTHON__;
-        const js = $B.py2js('x = 1 + 1\n', 'probe', 'probe').to_js();
+    const js = $B.py2js('x = 1 + 1\n', 'probe', 'probe').to_js();
 
-        expect(js).toContain("$B.namespace(");
-        expect(js.length).toBeGreaterThan(100);
-    });
+    expect(js).toContain('$B.namespace(');
+    expect(js.length).toBeGreaterThan(100);
 });

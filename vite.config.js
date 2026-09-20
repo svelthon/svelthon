@@ -1,14 +1,16 @@
 import { defineConfig } from 'vitest/config';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { fileURLToPath } from 'node:url';
-import { python, svelthon } from './src/lib/svelthon.js';
+import { python, svelthon, compileOptionsFor } from './src/lib/svelthon.js';
 
 export default defineConfig({
     plugins: [svelthon(), svelte({
             preprocess: [python({ path: ['src'] })],
             // vite-plugin-svelte's module filter, widened to Python: a
             // `.svelte.py` compiles as a `.svelte.ts` does, under its own name.
-            experimental: { compileModule: { extensions: ['.js', '.ts', '.py'] } }
+            experimental: { compileModule: { extensions: ['.js', '.ts', '.py'] } },
+            // A component that declares a custom element is compiled as one.
+            dynamicCompileOptions: ({ code }) => compileOptionsFor(code)
         })],
     resolve: {
         alias: {

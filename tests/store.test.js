@@ -1,8 +1,18 @@
-import { test, expect } from 'vitest';
+import { test, expect, beforeEach } from 'vitest';
 import { mount, unmount, flushSync } from './mounted.js';
 import StoreA from './fixtures/StoreA.svelte';
 import StoreB from './fixtures/StoreB.svelte';
 import StoreFromPython from './fixtures/StoreFromPython.svelte';
+import { store } from '../src/counter_store.svelte.py';
+
+// A store's state outliving a test is the feature this file is about, so a test
+// that opens on an absolute value is asserting the order it happens to run in:
+// shuffled, the first read below was `A:2:[1, 2]`. Each test says where it
+// starts instead, through the store's own `reset`.
+beforeEach(() => {
+    store.reset();
+    flushSync();
+});
 
 // A store is Python at module level: its signals exist once for the whole
 // application, where a component's state is born and dies with every instance.
