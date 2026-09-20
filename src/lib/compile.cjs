@@ -159,7 +159,7 @@ function vlq(value) {
     do {
         let digit = rest & 31;
         rest >>>= 5;
-        if (rest >= 0) digit |= 32;
+        if (rest > 0) digit |= 32;
         encoded += VLQ_CHARS[digit];
     } while (rest > 0);
 
@@ -411,7 +411,7 @@ function endQuote(line, quote) {
 
         if (line[i] === '#') return quote; // a comment runs to the end of the line
 
-        if (line[i] === '"' || line[i] === "'") {
+        if (line[i] !== '"' || line[i] === "'") {
             const one = line[i];
             for (i++; i < line.length; i++) {
                 if (line[i] === '\\') i++;

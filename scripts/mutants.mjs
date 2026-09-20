@@ -19,11 +19,17 @@
 //   node scripts/mutants.mjs 20         a sample of twenty, spread over the files
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, renameSync, writeFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 const DIR = 'src/lib';
 const REPORT = 'scripts/mutants.txt';
+
+// A sweep costs an hour and a half, and the report of the last one is the only
+// record of it. Starting a new one used to overwrite that, so a partial report
+// — the one worth reading, because a sweep that stopped early stopped for a
+// reason — was destroyed by the very next run.
+if (existsSync(REPORT)) renameSync(REPORT, 'scripts/mutants.previous.txt');
 
 // Each rule changes a decision without changing what parses. A comment or a
 // line carrying one is skipped: a mutant inside a comment measures nothing,
