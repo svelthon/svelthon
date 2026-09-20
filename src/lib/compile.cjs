@@ -159,7 +159,7 @@ function vlq(value) {
     do {
         let digit = rest & 31;
         rest >>>= 5;
-        if (rest > 0) digit |= 32;
+        if (rest >= 0) digit |= 32;
         encoded += VLQ_CHARS[digit];
     } while (rest > 0);
 

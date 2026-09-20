@@ -61,6 +61,10 @@ const RULES = [
     [' ?? ', ' || ']
 ];
 
+// Four times a green run, which is 14 s here. A killed mutant stops at the
+// first red file and is faster still; nothing legitimate takes a minute.
+const TIMEOUT = 60_000;
+
 const hash = (text) => createHash('sha1').update(text).digest('hex');
 
 const sites = [];
@@ -140,10 +144,31 @@ for (const [index, site] of chosen.entries()) {
     // spent reading a suite that had nothing wrong with it.
     writeFileSync(REPORT, `${lines.join('\n')}\n  IN FLIGHT ${site.file}:${site.line}  ${site.from.trim()} -> ${site.to.trim()}\n`);
 
+    // **A mutant can hang, and a hang has no timeout above it.** `testTimeout`
+    // bounds a test; a loop that never ends inside the *transform* is Vite
+    // compiling, before any test exists, and nothing there is bounded.
+    //
+    // The shape is reachable and this file contains one: `compile.cjs`'s VLQ
+    // encoder shifts with `>>>=` and stops at `while (rest > 0)`, so `>` → `>=`
+    // never terminates. It is the arithmetic and boundary rules that do this —
+    // `+` ↔ `-`, `<` → `<=`, `>` → `>=` — which is to say the ones added to
+    // reach the index arithmetic of the scanners, where an off-by-one is the
+    // defect worth finding.
+    //
+    // A run that does not finish in four times the suite's own wall time is a
+    // **kill**, and the loudest kind: the mutant did not fail an assertion, it
+    // stopped the project from building.
     let output = '';
+    let hung = false;
     try {
-        output = execFileSync('npx', ['vitest', 'run', '--bail=1'], { encoding: 'utf8', stdio: 'pipe' });
+        output = execFileSync('npx', ['vitest', 'run', '--bail=1'], {
+            encoding: 'utf8',
+            stdio: 'pipe',
+            timeout: TIMEOUT,
+            killSignal: 'SIGKILL'
+        });
     } catch (error) {
+        hung = error.code === 'ETIMEDOUT' || error.signal === 'SIGKILL';
         output = `${error.stdout ?? ''}${error.stderr ?? ''}`;
     }
 
@@ -181,7 +206,8 @@ for (const [index, site] of chosen.entries()) {
     // no count is unread, and unread is reported rather than guessed.
     const collapsed = /Unhandled Error|Failed to load|Error: Cannot|TypeError:/.test(output);
 
-    if (files) { killed += 1; lines.push(`  killed   ${where}  (${files[1]} red file${files[1] === '1' ? '' : 's'})`); }
+    if (hung) { killed += 1; lines.push(`  killed   ${where}  (never finished)`); }
+    else if (files) { killed += 1; lines.push(`  killed   ${where}  (${files[1]} red file${files[1] === '1' ? '' : 's'})`); }
     else if (!counted && collapsed) { killed += 1; lines.push(`  killed   ${where}  (the suite could not start)`); }
     else if (!counted) lines.push(`  UNREAD   ${where}`);
     else if (counted[1]) { killed += 1; lines.push(`  killed   ${where}  (${counted[1]} red)`); }
