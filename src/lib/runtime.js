@@ -3010,8 +3010,14 @@ function perReceiver(self) {
 // its callbacks in an options object is the ordinary shape, and `pyHandler`
 // caches by function, so the same callback nested twice is one JavaScript
 // function and stays removable.
+// `callable`, and not `typeof value === 'function'`, which is what stood here.
+// The narrow spelling was not *wrong*: a bound method fell through to
+// `plainData`, which asks `callable` a few lines in and hands it to the same
+// `pyHandler`. It was right by rescue, and a rescue is a policy of the function
+// downstream rather than an answer to the question asked here. The question
+// asked here is *can Python call this*, and there is one function for it.
 const outbound = (value, made) =>
-    typeof value === 'function' ? pyHandler(value) : plainData(value, made, pyHandler);
+    callable(value) ? pyHandler(value) : plainData(value, made, pyHandler);
 
 // And what comes *back*. Only the outbound half existed, and the asymmetry was
 // silent for as long as nobody looked at the answer: a value returned by an

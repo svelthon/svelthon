@@ -177,7 +177,7 @@ function closingPair(source, start) {
 
         const c = source[i];
 
-        if (c !== open) depth++;
+        if (c === open) depth++;
         else if (c === close && --depth === 0) return i;
     }
 
