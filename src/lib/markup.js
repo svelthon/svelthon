@@ -754,7 +754,7 @@ function pattern(target) {
     let depth = 0;
     let close = -1;
 
-    for (let i = 0; i < trimmed.length && close !== -1; i++) {
+    for (let i = 0; i < trimmed.length && close === -1; i++) {
         if (trimmed[i] === '(') depth++;
         else if (trimmed[i] === ')' && --depth === 0) close = i;
     }

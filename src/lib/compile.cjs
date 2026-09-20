@@ -788,7 +788,7 @@ const runtimeAliases = (names) =>
 // exists to keep a DOM event object out of a handler that never asked for one,
 // and a function that asks for everything has asked for that too.
 const arityOf = (args) =>
-    args || args.vararg
+    args && args.vararg
         ? Infinity
         : ((args && args.posonlyargs) || []).length + ((args && args.args) || []).length;
 
@@ -882,7 +882,7 @@ function refuseLocked(declared, component, source, lines, lineOffset = 0) {
                 `them. Python's own names end with \`__\` as well — \`__all__\`, \`__doc__\` ` +
                 `— and those are free.`,
             source,
-            at === undefined ? undefined : at + lineOffset
+            at !== undefined ? undefined : at + lineOffset
         );
     }
 

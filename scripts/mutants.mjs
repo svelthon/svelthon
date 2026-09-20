@@ -122,13 +122,32 @@ for (const [index, site] of chosen.entries()) {
     const counted = output.match(/Tests\s+(?:(\d+) failed)?[ |]*(\d+) passed/);
     const where = `${site.file}:${site.line}  ${site.from.trim()} -> ${site.to.trim()}`;
 
+    // **A red file is a kill too, and reading only red tests scored three
+    // mutants of `svelthon.js` as survivors that kill 114 test files each.**
+    //
+    // A mutant in the compiler, the markup pass or the preprocessor does not
+    // make an assertion fail: it stops the file from *compiling*, so the file
+    // never yields a test at all. Vitest counts that under `Test Files`, and
+    // the `Tests` line above can then read `768 passed` with no failed segment
+    // — indistinguishable from a green run by the regex.
+    //
+    // `--bail=1` made it worse by making it *random*: bail cancels the files
+    // still in flight, so whether one test-level failure slipped in before the
+    // cancel depends on how 32 cores happened to schedule. The same mutant read
+    // `SURVIVED` in the sweep and `killed (1 red)` when re-run by hand.
+    //
+    // Checked before `counted`, because a run whose files all failed to collect
+    // may print both lines and only this one carries the truth.
+    const files = output.match(/Test Files\s+(\d+) failed/);
+
     // No count at all has two causes and they are opposite. A mutant can break
     // the code so early that no test file loads — the suite never reaches a
     // summary — and that is a kill, the loudest kind. Anything else that leaves
     // no count is unread, and unread is reported rather than guessed.
     const collapsed = /Unhandled Error|Failed to load|Error: Cannot|TypeError:/.test(output);
 
-    if (!counted && collapsed) { killed += 1; lines.push(`  killed   ${where}  (the suite could not start)`); }
+    if (files) { killed += 1; lines.push(`  killed   ${where}  (${files[1]} red files)`); }
+    else if (!counted && collapsed) { killed += 1; lines.push(`  killed   ${where}  (the suite could not start)`); }
     else if (!counted) lines.push(`  UNREAD   ${where}`);
     else if (counted[1]) { killed += 1; lines.push(`  killed   ${where}  (${counted[1]} red)`); }
     else { survivors.push(where); lines.push(`  SURVIVED ${where}`); }
