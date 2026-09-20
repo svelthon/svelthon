@@ -28,6 +28,9 @@ const REPORT = 'scripts/mutants.txt';
 // Each rule changes a decision without changing what parses. A comment or a
 // line carrying one is skipped: a mutant inside a comment measures nothing,
 // which is what the first run of this instrument spent itself discovering.
+// Measured on 4 952 lines of `src/lib` before the second half was added: the
+// first seven rules reached 429 lines, and the count beside each new one is how
+// many lines it reaches that **no rule reached at all**.
 const RULES = [
     [' === ', ' !== '],
     [' !== ', ' === '],
@@ -35,7 +38,27 @@ const RULES = [
     [' >= ', ' > '],
     [' <= ', ' < '],
     ['return true;', 'return false;'],
-    ['return false;', 'return true;']
+    ['return false;', 'return true;'],
+
+    // `&&` was inverted and `||` was not, which is half a rule. 51 lines.
+    [' || ', ' && '],
+
+    // The arithmetic of an index, which is where a scanner is wrong by one:
+    // `at + 1` against `at`, `end - 1` against `end`. 102 lines between them,
+    // the largest block the instrument could not see. `+` is concatenation too,
+    // and `'a' - 'b'` is NaN, which is a change a test ought to notice.
+    [' + ', ' - '],
+    [' - ', ' + '],
+
+    // The loosening half of the boundary. `>=` → `>` and `<=` → `<` tighten,
+    // and were already here; nothing widened a bound. 37 lines.
+    [' < ', ' <= '],
+    [' > ', ' >= '],
+
+    // `??` answers only for null and undefined where `||` answers for every
+    // falsy value, so `0`, `''` and `false` are the three the swap exposes.
+    // 20 lines.
+    [' ?? ', ' || ']
 ];
 
 const hash = (text) => createHash('sha1').update(text).digest('hex');
