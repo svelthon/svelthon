@@ -217,6 +217,20 @@ export function moduleImports(content) {
     return [...new Set((module?.content?.body ?? []).flatMap(declares))];
 }
 
+// A component that declares a custom element has to be *compiled* as one.
+// Svelte reads the declaration and compiles an ordinary component anyway unless
+// the option is set, saying so on every build: *the customElement option is
+// used when generating a custom element. Did you forget the customElement: true
+// compile option?*
+//
+// Read off the declaration rather than set globally, because `customElement:
+// true` turns every component into one. Exported because two readers need the
+// same rule: the config hands it to vite-plugin-svelte's
+// `dynamicCompileOptions`, and the guard that compiles every fixture looking
+// for warnings has to compile them the way the build does.
+export const compileOptionsFor = (code) =>
+    /<svelte:options[^>]*\bcustomElement\b/.test(code) ? { customElement: true } : undefined;
+
 const perFile = () => {
     const files = new Map();
 
