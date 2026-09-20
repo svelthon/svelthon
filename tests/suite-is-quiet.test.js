@@ -14,6 +14,14 @@
 //
 // So the suite polices the room, the way it does for `tests/scratch`.
 //
+// **This file counts one cause and cannot see the room.** It reads the test
+// sources, so a line printed by the toolchain rather than by jsdom is invisible
+// to it, and one was for a while. What reads the run's own two channels is
+// `scripts/quiet-check.mjs`, outside `npm test` because it starts a second full
+// run; `tests/emitted-warnings.test.js` covers the compiler's warnings by
+// recompiling every fixture. The three together are what the paragraph above
+// claims, and none of them is it alone.
+//
 // Counted rather than read in place: the call is often in a named handler, a few
 // lines from the `addEventListener` that installs it, so a window after the call
 // site answers false for four files out of five. One `preventDefault` per

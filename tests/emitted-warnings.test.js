@@ -63,18 +63,24 @@ describe('the script the compiler emits', () => {
         expect(warningsFor('InspectWith.svelte')).not.toContain('state_referenced_locally');
     });
 
-    // **The class, not the one warning.** The line above names the code it was
-    // written for, so the next warning of a different code goes unread — and one
-    // did: every green run printed `options_missing_custom_element` about
-    // `Stepper.svelte`, because the component declared a custom element and the
-    // compile that read the declaration did not enable them.
+    // Every code rather than the one above, which names the code it was written
+    // for and so leaves the next one unread. One did go unread: every green run
+    // printed `options_missing_custom_element` about `Stepper.svelte`.
     //
-    // A suite that prints its own noise teaches its reader that its stderr is
-    // noise, which is the one habit the instruments built to read the
-    // toolchain's output cannot survive. `tests/suite-is-quiet.test.js` says so
-    // and counts one cause of it, jsdom reporting a deliberate raise; this is
-    // the other, and the two together are what that file's prose claims.
-    test('and no fixture warns, whatever the code', () => {
+    // **Its reach is the rule, not the wiring, and the name says so.** To
+    // compile a fixture this file has to decide *how*, and it decides by calling
+    // the project's own `compileOptionsFor` — which makes it a good test of that
+    // rule and no test at all of whether the build calls it. Cut
+    // `dynamicCompileOptions` in `vite.config.js` and this stays green while
+    // every run prints the warning; `tests/custom-element.test.js` stays green
+    // too, all eleven. **Nothing inside `npm test` tells the two builds apart.**
+    //
+    // The half that does is `scripts/quiet-check.mjs`, which runs the suite and
+    // reads its output, and it is outside `npm test` for the reason
+    // `browser-check.sh` is: it starts a second full run. So this file is not
+    // sufficient on its own and is not meant to be — deleting that script as
+    // redundant would leave a guard that looks like the class and is the rule.
+    test('and no fixture warns when compiled the way the build compiles it', () => {
         const warned = [];
 
         for (const name of readdirSync(FIXTURES).filter((one) => one.endsWith('.svelte'))) {

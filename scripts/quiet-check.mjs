@@ -15,6 +15,13 @@
 // `bench.sh` and `browser-check.sh` are not: it starts a second full run, and a
 // suite that runs itself does not terminate.
 //
+// **It is the only half that sees the wiring.** The two guards above test rules
+// — one reads the test sources, the other recompiles the fixtures by calling
+// the project's own `compileOptionsFor` — so a build that stops calling that
+// rule leaves both of them green. Measured: with `dynamicCompileOptions` cut,
+// `npm test` is 2 130 of 2 130 and every run prints the warning. Deleting this
+// file as redundant would leave guards that look sufficient and are not.
+//
 //   node scripts/quiet-check.mjs
 import { spawnSync } from 'node:child_process';
 
