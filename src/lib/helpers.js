@@ -636,15 +636,85 @@ export function urlencode(value) {
     return encodeURIComponent(__pybridge.str(value));
 }
 
+// **Called by name as well as by position.** The README writes these signatures
+// the way Python writes them — `tojson(value, indent=None)`, `batch(xs, n)` —
+// and an author writes what the documentation shows. Nothing read the keywords.
+//
+// They do arrive: Brython hands a keyword call a trailing object carrying
+// `$kw`, an array whose first entry holds the literal keywords and whose rest
+// are the dicts a `**` spread contributed. Dropping it was the worst of the
+// three behaviours this project names: `tojson(rows, indent=2)` wrote
+// unindented JSON and said nothing, and `batch(rows, n=2)` refused the author
+// for a size they had just given.
+//
+// The names are ours, which is the whole reason this is fixable here: a
+// JavaScript function carries no parameter names to place them by.
+const KEYWORDS = {
+    tojson: ['value', 'indent'],
+    from_json: ['text'],
+    batch: ['xs', 'n', 'fill'],
+    date: ['value', 'style', 'clock', 'locale'],
+    fromnow: ['value', 'locale'],
+    slugify: ['text'],
+    striptags: ['html'],
+    urlencode: ['value']
+};
+
+const keywordsOf = (args) => {
+    const last = args[args.length - 1];
+
+    return last !== null && typeof last === 'object' && Array.isArray(last.$kw) ? last.$kw : null;
+};
+
+// A name the helper does not take is an error, not something to ignore: the
+// spelling is the only thing the author can have got wrong, and Python says so
+// too.
+const byName = (fn, names) => {
+    const wrapped = (...args) => {
+        const kw = keywordsOf(args);
+
+        if (kw === null) return fn(...args);
+
+        const given = args.slice(0, -1);
+
+        for (const carrier of kw) {
+            for (const [name, value] of pyEntries(carrier)) {
+                const at = names.indexOf(name);
+
+                if (at === -1) {
+                    throw refuse(
+                        `${fn.name}(): no argument named ${name}. It takes ${names.join(', ')}.`
+                    );
+                }
+
+                given[at] = value;
+            }
+        }
+
+        return fn(...given);
+    };
+
+    // The name and the arity stay the helper's own: a refusal quotes the name,
+    // and `length` is what a caller reads to learn what a function takes.
+    Object.defineProperties(wrapped, {
+        name: { value: fn.name, configurable: true },
+        length: { value: fn.length, configurable: true }
+    });
+
+    return wrapped;
+};
+
 // What the generated script binds. One object, one prefixed import, and the keys
 // are the Python spellings so `injected.cjs` names them the way an author does.
-export const helpers = {
-    tojson,
-    from_json,
-    batch,
-    date,
-    fromnow,
-    slugify,
-    striptags,
-    urlencode
-};
+export const helpers = Object.fromEntries(
+    Object.entries({
+        tojson,
+        from_json,
+        batch,
+        date,
+        fromnow,
+        slugify,
+        striptags,
+        urlencode
+    }).map(([name, fn]) => [name, byName(fn, KEYWORDS[name])])
+);

@@ -43,7 +43,16 @@ describe('the set itself', () => {
         const exported = { batch, date, from_json, fromnow, slugify, striptags, tojson, urlencode };
 
         expect(Object.keys(helpers).sort()).toEqual(Object.keys(exported).sort());
-        for (const [name, fn] of Object.entries(exported)) expect(helpers[name]).toBe(fn);
+
+        // Not identity any more, and the reason is the point: what the compiler
+        // binds is the *keyword-aware* helper, since Python calls these by name
+        // as well as by position and JavaScript has no notion of that. The
+        // adapter keeps the name and the arity, so a wiring mistake still shows
+        // — a key pointing at the wrong helper fails both.
+        for (const [name, fn] of Object.entries(exported)) {
+            expect(helpers[name].name).toBe(fn.name);
+            expect(helpers[name].length).toBe(fn.length);
+        }
     });
 });
 
