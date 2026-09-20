@@ -199,20 +199,112 @@ function sourceMap(generated, source, content, lineOffset) {
 // `__all__ = ["load"]`, Python's own way of saying what a module exports, and
 // the closest thing it has to TypeScript's `export` keyword. Read from the AST,
 // so it stays a plain assignment in the source.
-function declaredExports(body) {
+//
+// **Every statement, in order, and the value that counts is the last one.**
+// This read the *first* assignment and stopped, so a module that narrowed its
+// list afterwards — a second `__all__ = [...]`, or the `+=` that a conditional
+// export is written with — exported the list it no longer had. `__all__` is an
+// ordinary Python name and the value it holds when the module has finished
+// running is the one `from m import *` obeys.
+//
+// The literal forms are what a static read can follow. Anything else is
+// refused rather than skipped, and that is the half the silence was hiding:
+// `__all__ = ["a"] + ["b"]` matched no branch, so the whole declaration was
+// dropped and the module fell back to **exporting everything** — a file that
+// states a contract and publishes past it, with nothing said.
+// Two failures, and they are not the same one. **Unreadable** is an element the
+// source does not spell — a name, a call, a sum — and there is nothing a static
+// read can do with it. **Invalid** is an element spelled out that is not a name,
+// which CPython itself raises on at `from m import *`; this file has long
+// treated that as a declaration with a bad entry and kept the good ones, and
+// that decision stands.
+const UNREADABLE = Symbol('unreadable');
+
+const NAMES = (node) =>
+    node instanceof $B.ast.List || node instanceof $B.ast.Tuple
+        ? node.elts.map((one) => (one instanceof $B.ast.Constant ? one.value : UNREADABLE))
+        : null;
+
+const readable = (given) => given !== null && !given.includes(UNREADABLE);
+const strings = (given) => given.filter((one) => typeof one === 'string');
+
+// `__all__.append("x")` and `__all__.extend([...])`, the two mutations a module
+// writes when a name is exported under a condition.
+const mutatesAll = (node) => {
+    const call = node instanceof $B.ast.Expr ? node.value : null;
+    const to = call instanceof $B.ast.Call ? call.func : null;
+
+    return to instanceof $B.ast.Attribute && to.value instanceof $B.ast.Name && to.value.id === '__all__'
+        ? to.attr
+        : null;
+};
+
+function declaredExports(body, source, lineOffset = 0) {
+    let names = null;
+
+    const refuseUnreadable = (node, what) => {
+        throw refuse(
+            `svelthon — \`__all__\` is ${what}, and the export list is read from the source ` +
+                `before the module runs, so it has to be written out: a list or a tuple of ` +
+                `plain strings, assigned, \`+=\`, \`.append()\` or \`.extend()\`. Write the ` +
+                `names, or drop \`__all__\` and let the module export its functions.`,
+            source,
+            node.lineno === undefined ? undefined : node.lineno + lineOffset
+        );
+    };
+
     for (const node of body) {
-        if (!(node instanceof $B.ast.Assign)) continue;
-        if (!node.targets.some((t) => t instanceof $B.ast.Name && t.id === '__all__')) continue;
+        const mutated = mutatesAll(node);
 
-        const items = node.value?.elts;
-        if (!items) continue;
+        if (mutated === 'append' || mutated === 'extend') {
+            const [given] = node.value.args;
+            const added =
+                mutated === 'append'
+                    ? [given instanceof $B.ast.Constant ? given.value : UNREADABLE]
+                    : NAMES(given);
 
-        return items
-            .map((item) => (item instanceof $B.ast.Constant ? item.value : null))
-            .filter((one) => typeof one === 'string');
+            if (!readable(added)) {
+                refuseUnreadable(node, `given a name this file cannot read (\`.${mutated}()\`)`);
+            }
+
+            names = [...(names ?? []), ...strings(added)];
+            continue;
+        }
+
+        const assigns =
+            (node instanceof $B.ast.Assign &&
+                node.targets.some((t) => t instanceof $B.ast.Name && t.id === '__all__')) ||
+            (node instanceof $B.ast.AugAssign &&
+                node.target instanceof $B.ast.Name &&
+                node.target.id === '__all__');
+
+        if (!assigns) continue;
+
+        const given = NAMES(node.value);
+
+        // Not a sequence at all — `__all__ = "load"` — is not an export list,
+        // and this file reads it as a name the module uses for itself. The
+        // fallback is the older decision and it is kept; what is refused below
+        // is the case it was hiding.
+        if (given === null) {
+            if (!(node.value instanceof $B.ast.Constant)) {
+                refuseUnreadable(node, 'built rather than written out');
+            }
+
+            continue;
+        }
+
+        if (!readable(given)) refuseUnreadable(node, 'given a name this file cannot read');
+
+        // `+=` extends what is already there; a plain `=` replaces it, which is
+        // what Python does and what this used to get wrong by keeping the first.
+        names =
+            node instanceof $B.ast.AugAssign
+                ? [...(names ?? []), ...strings(given)]
+                : strings(given);
     }
 
-    return null;
+    return names;
 }
 
 // `__js__ = {"@sveltejs/kit": ["error", "redirect"]}`: the JavaScript a module
@@ -2241,7 +2333,7 @@ function compile(
     // to export values says so with `__all__`, exactly as it would to a Python
     // caller. SvelteKit is strict about it: a `+page.server.py` exporting
     // anything but load/actions/prerender/… is refused, and rightly so.
-    const listed = declaredExports(root._ast.body);
+    const listed = declaredExports(root._ast.body, source, lineOffset);
     const exported = (
         listed ?? [...funcs.map((f) => f.name), ...plainDeriveds.map((d) => d.name)]
     ).filter((n) => PY_NAME.test(n) && !JS_RESERVED.has(n));

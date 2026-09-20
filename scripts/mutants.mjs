@@ -128,6 +128,18 @@ for (const [index, site] of chosen.entries()) {
     source[site.line - 1] = source[site.line - 1].replace(site.from, site.to);
     writeFileSync(path, source.join('\n'));
 
+    // **Say which file is currently cut open, before cutting it.** The handlers
+    // above put the source back for the signals a process can catch, and
+    // `SIGKILL` is not one of them: a sweep stopped that way leaves exactly one
+    // file mutated and no note of which.
+    //
+    // It happened, and the cost was the point of writing this: the report was
+    // flushed every 25 mutants, so the in-flight site was in memory and died
+    // with the process. `closingPair` kept `c !== open`, returned -1 for every
+    // pair, and the walrus rewrite silently stopped rewriting — twenty minutes
+    // spent reading a suite that had nothing wrong with it.
+    writeFileSync(REPORT, `${lines.join('\n')}\n  IN FLIGHT ${site.file}:${site.line}  ${site.from.trim()} -> ${site.to.trim()}\n`);
+
     let output = '';
     try {
         output = execFileSync('npx', ['vitest', 'run', '--bail=1'], { encoding: 'utf8', stdio: 'pipe' });
@@ -169,7 +181,7 @@ for (const [index, site] of chosen.entries()) {
     // no count is unread, and unread is reported rather than guessed.
     const collapsed = /Unhandled Error|Failed to load|Error: Cannot|TypeError:/.test(output);
 
-    if (files) { killed += 1; lines.push(`  killed   ${where}  (${files[1]} red files)`); }
+    if (files) { killed += 1; lines.push(`  killed   ${where}  (${files[1]} red file${files[1] === '1' ? '' : 's'})`); }
     else if (!counted && collapsed) { killed += 1; lines.push(`  killed   ${where}  (the suite could not start)`); }
     else if (!counted) lines.push(`  UNREAD   ${where}`);
     else if (counted[1]) { killed += 1; lines.push(`  killed   ${where}  (${counted[1]} red)`); }

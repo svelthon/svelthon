@@ -207,6 +207,25 @@ function instant(value) {
 // Handing the class over whole is right at the *boundary*, where JavaScript can
 // call it; it is not a thing to write into a page.
 const serialisable = (one) => {
+    // **A number that is not finite.** JSON has no notation for `NaN` or
+    // `±Infinity`, and `JSON.stringify` writes `null` for them: a page said
+    // `null` where the model held a division by zero or an overflow, which is a
+    // different value and nothing said so. It belongs to the same family as
+    // every other refusal here — a shape the serialiser silently replaces — and
+    // it is the one that arrives without an object around it.
+    //
+    // CPython writes `NaN` and `Infinity`, which is not JSON either: the
+    // `JSON.parse` on the other side of a page refuses both. So there is no
+    // answer to hand over quietly, and the author is the one who knows what the
+    // page should say.
+    if (typeof one === 'number' && !Number.isFinite(one)) {
+        throw refuse(
+            `tojson(): ${one} has no JSON — JSON has no notation for it and ` +
+                `JSON.stringify writes \`null\` instead, which is a different value. ` +
+                `Decide what the page should hold — None, 0, or a string — and write that.`
+        );
+    }
+
     if (pyClass(one)) {
         throw refuse(`tojson(): ${shown(one)} is a class, and a class has no JSON`);
     }

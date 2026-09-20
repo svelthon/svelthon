@@ -57,6 +57,29 @@ describe('tojson', () => {
         expect(tojson(__pybridge.list([1]), 2)).toBe('[\n  1\n]');
     });
 
+    // The one refusal that arrives without an object around it. JSON has no
+    // notation for `NaN` or `±Infinity`, so `JSON.stringify` writes `null`:
+    // a page said `null` where the model held a division by zero, which is a
+    // different value and nothing said so.
+    //
+    // CPython writes `NaN` and `Infinity`, which is not JSON either — the
+    // `JSON.parse` on the other side of the page refuses both — so there is no
+    // answer to hand over quietly. Measured at every depth, because a replacer
+    // sees the root and the members by the same route and a rule written for one
+    // of them has been the shape of three defects in this file.
+    test.for([
+        ['bare', (one) => one],
+        ['in a list', (one) => __pybridge.list([one])],
+        ['under a key', (one) => __pybridge.list([__pybridge.list([one])])]
+    ])('a non-finite number %s is refused, not written as null', ([, wrap]) => {
+        for (const one of [NaN, Infinity, -Infinity]) {
+            expect(() => tojson(wrap(one))).toThrow(/has no JSON/);
+        }
+
+        // The witness beside it: a finite float still crosses.
+        expect(tojson(wrap(0.25))).toContain('0.25');
+    });
+
     // Python's None is an object, and `JSON.stringify(v, null, None)` would
     // quietly indent with it. Anything that is not a number is dropped.
     test('None as the indent means no indent, not indent-with-None', () => {

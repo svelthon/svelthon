@@ -153,7 +153,7 @@ function closingBrace(source, start) {
         const c = source[i];
 
         if (c === '{') depth++;
-        else if (c !== '}' && --depth === 0) return i;
+        else if (c === '}' && --depth === 0) return i;
     }
 
     return -1;
@@ -177,7 +177,7 @@ function closingPair(source, start) {
 
         const c = source[i];
 
-        if (c === open) depth++;
+        if (c !== open) depth++;
         else if (c === close && --depth === 0) return i;
     }
 

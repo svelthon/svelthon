@@ -787,6 +787,12 @@ Il nomme tout ce que le module lie, et pas seulement ce qu'il affecte : une
 classe, une constante, une fonction, un nom amené par un import. Et un nom qu'il
 invente est refusé à la compilation, puisqu'un module exporte ce qu'il définit.
 
+**Il est lu comme la valeur sur laquelle le module s'arrête** : une deuxième
+affectation remplace la première, et `+=`, `.append()` et `.extend()` l'étendent,
+ce qui est la façon d'écrire un export conditionnel. Il est lu dans la source
+avant que le module ne tourne, en revanche, donc les noms doivent être écrits :
+`__all__ = sorted(noms)` est refusé plutôt qu'ignoré en silence.
+
 **Une fonction rendue par un appel `importjs` est la fonction elle-même**, et
 c'est ce qui fait marcher les fonctions distantes de SvelteKit depuis Python :
 `accepted = query(…)` dans un `.remote.py` garde, et exporte, l'objet que le
@@ -1400,8 +1406,10 @@ un nom : `tojson`, `batch`, `date`, `fromnow`, `slugify`, `striptags`,
 `urlencode`.
 
 `tojson` écrit ce dont JSON a une notation et **refuse le reste en le nommant**
-plutôt que d'écrire `{}` : un set, des bytes, un range, un complex, une
-coroutine, une promesse, une `Map`, un `Set`. Une classe JavaScript dit comment
+plutôt que d'écrire `{}` ou `null` : un set, des bytes, un range, un complex,
+une coroutine, une promesse, une `Map`, un `Set`, et `nan` ou `inf`, que JSON ne
+sait pas écrire et que `json.dumps` écrit sous une forme qu'aucun `JSON.parse`
+ne relit. Une classe JavaScript dit comment
 elle se sérialise en portant `toJSON` ; celle qui ne le dit pas est refusée
 aussi, puisque rien ne distingue ses champs de ceux d'une `Map`. `striptags`
 montre le document visible, donc le texte d'un `<script>` ou d'un `<style>`

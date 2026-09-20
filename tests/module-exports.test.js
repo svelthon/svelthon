@@ -86,6 +86,56 @@ hidden = 1
     );
 });
 
+// `__all__` is an ordinary Python name, and the value that counts is the one it
+// holds when the module has finished running. The read stopped at the **first**
+// assignment, so a module that narrowed or grew its list afterwards exported the
+// list it no longer had — and a list *built* rather than written out matched no
+// branch at all, so the declaration was dropped and the module fell back to
+// exporting everything: a file that states a contract and publishes past it,
+// with nothing said.
+//
+// The table is the test. Four of the nine rows were wrong and one was reported.
+describe('__all__ is read as the value the module ends with', () => {
+    const BODY = '\n\ndef a():\n    return 1\n\n\ndef b():\n    return 2\n\n\ndef c():\n    return 3\n';
+
+    const exported = (head) => {
+        const line = plain(`${head}${BODY}`)
+            .split('\n')
+            .find((one) => one.startsWith('export {'));
+
+        return line === undefined ? [] : line.replace(/export \{ | \};?/g, '').trim().split(', ');
+    };
+
+    test.for([
+        ['one assignment', '__all__ = ["a"]', ['a']],
+        // The reported defect: the first value won and the second was ignored.
+        ['a second assignment', '__all__ = ["a"]\n__all__ = ["b"]', ['b']],
+        // How a conditional export is written, and the same silence.
+        ['an augmented assignment', '__all__ = ["a"]\n__all__ += ["b"]', ['a', 'b']],
+        ['append', '__all__ = ["a"]\n__all__.append("b")', ['a', 'b']],
+        ['extend', '__all__ = ["a"]\n__all__.extend(["b"])', ['a', 'b']],
+        ['a tuple', '__all__ = ("a", "b")', ['a', 'b']],
+        // No `__all__` at module level: the functions, as before. A name bound
+        // inside a function is not the module's declaration.
+        ['none at all', '', ['a', 'b', 'c']],
+        ['one inside a function', 'def hide():\n    __all__ = ["a"]\n', ['hide', 'a', 'b', 'c']]
+    ])('%s', ([, head, names]) => {
+        expect(exported(head)).toEqual(names);
+    });
+
+    // The export list is read before the module runs, so a value the source does
+    // not spell cannot be followed. Refused rather than dropped: dropping it is
+    // what published everything.
+    test.for([
+        ['built from two lists', '__all__ = ["a"] + ["b"]'],
+        ['computed by a call', '__all__ = sorted(["a"])'],
+        ['taken from a name', 'NAMES = ["a"]\n__all__ = NAMES'],
+        ['appended a computed name', '__all__ = ["a"]\n__all__.append("b" + "c")']
+    ])('%s is refused', ([, head]) => {
+        expect(() => plain(`${head}${BODY}`)).toThrow(/`__all__`/);
+    });
+});
+
 describe('a .svelte.py publishes what __all__ names', () => {
     const MODULE = `__all__ = ["count", "bump"]
 
