@@ -201,6 +201,34 @@ describe('the vendored Brython carries its repairs', () => {
         expect(format('>5', 1)).toBe('    1');
     });
 
+    // An int of 2^53 or more is held as a BigInt, and a float format
+    // specification asked for it went through `fast_float`, which wraps the
+    // value without converting: the arithmetic inside `float.__format__` then
+    // raised `JavascriptError: Cannot convert a BigInt value to a number`. Not a
+    // Python exception, so `except (ValueError, TypeError)` does not catch it,
+    // and the message names `BigInt`, a word absent from the program the author
+    // wrote. `nb_float` is the conversion, and it keeps CPython's own
+    // `OverflowError` for an int too large to be a float.
+    //
+    // The boundary is exactly 2^53: the values below are CPython 3.14.4's.
+    // Found while enumerating what a JavaScript value becomes on each of the two
+    // doors into a store, which is a place no int of this size ever goes — the
+    // refusal is Brython's, with no boundary of ours anywhere near it.
+    test('an int of 2^53 or more takes a float format specification', () => {
+        const _b_ = $B.builtins;
+        const format = (spec, value) =>
+            $B.$call($B.$getattr(_b_.str, 'format'), `{0:${spec}}`, value);
+        const big = $B.fast_int ? $B.fast_int(BigInt('9007199254740992')) : BigInt('9007199254740992');
+
+        expect(format('.2f', big)).toBe('9007199254740992.00');
+        expect(format('.2e', big)).toBe('9.01e+15');
+        expect(format('.2G', big)).toBe('9E+15');
+        // The integer specifications never went through the float path and are
+        // here so a repair on one side cannot quietly move the other.
+        expect(format('d', big)).toBe('9007199254740992');
+        expect(format('.2f', 9007199254740991)).toBe('9007199254740991.00');
+    });
+
     // `"ob_type"` is the mirror of the key below, and the second name the same
     // predicate has to refuse. It *does* become an own property, and shadows the
     // one the engine reads to know what the object is: the dictionary answered a
