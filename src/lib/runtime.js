@@ -3034,6 +3034,36 @@ const outbound = (value, made) =>
 const inbound = (value) =>
     typeof value === 'function' ? value : globalThis.__BRYTHON__.jsobj2pyobj(value);
 
+// **Brython's own refusal, which this proxy was going around.**
+//
+// A keyword call to a JavaScript function is undecidable — `foo(y=1, x=2)` on
+// `function foo(x, y)` cannot be placed, because a JavaScript function carries
+// no parameter names — and Brython raises `TypeError: A Javascript function
+// can't take keyword arguments` for exactly that reason, in `pyargs2jsargs`.
+//
+// A call through this proxy never reaches that path: the keywords arrive as one
+// extra **positional** argument, an object carrying `$kw`, and the function is
+// handed it as if the author had written it. Measured: `seen(1, b=2)` gave the
+// function `1` and an object. So the decision is not ours to take and was never
+// open — it is Brython's, and this restores it.
+//
+// The helpers are the other half of the same question and the opposite answer:
+// their names are ours, so `helpers.js` places them. See `KEYWORDS` there.
+const refuseKeywords = (target, args) => {
+    const last = args[args.length - 1];
+
+    if (last === null || typeof last !== 'object' || !Array.isArray(last.$kw)) return;
+
+    const $B = globalThis.__BRYTHON__;
+
+    if ($B.keyword_is_empty(last.$kw)) return;
+
+    throw pyError(
+        $B.$call($B.builtins.TypeError, `A Javascript function can't take keyword arguments`),
+        `${target.name || 'a JavaScript function'}()`
+    );
+};
+
 export function jsCall(value) {
     // An imported constant crosses here too, and it crosses once: `export const
     // half = 0.5` reached Python as a raw JavaScript number, where `half * 2`
@@ -3048,6 +3078,8 @@ export function jsCall(value) {
         // longer-lived one would hand a later call the snapshot an earlier one
         // took, after Python had moved on.
         apply: (target, self, args) => {
+            refuseKeywords(target, args);
+
             const made = new WeakMap();
 
             return inbound(Reflect.apply(target, self, args.map((one) => outbound(one, made))));
