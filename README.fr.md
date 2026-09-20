@@ -76,9 +76,10 @@ npm install
 npm run dev
 
 npm test             # 1 188 tests : sémantique, props, réactivité, surface Svelte
+npm run test:quiet   # la sortie de la suite : un run vert ne doit rien dire
 npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
-npm run test:all     # les trois ci-dessus, dans l'ordre, arrêt au premier échec
+npm run test:all     # les quatre ci-dessus, dans l'ordre, arrêt au premier échec
 npm run bench        # Python contre JavaScript, même composant, vrai navigateur
 npm run build
 ```

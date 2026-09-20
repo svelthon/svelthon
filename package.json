@@ -50,7 +50,8 @@
     "preview": "vite preview",
     "test:browser": "bash scripts/browser-check.sh",
     "test:hmr": "bash scripts/hmr-check.sh",
-    "test:all": "npm run test && npm run test:browser && npm run test:hmr",
+    "test:quiet": "node scripts/quiet-check.mjs",
+    "test:all": "npm run test && npm run test:quiet && npm run test:browser && npm run test:hmr",
     "bench": "bash scripts/bench.sh"
   },
   "devDependencies": {

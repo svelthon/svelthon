@@ -78,9 +78,10 @@ npm install
 npm run dev
 
 npm test             # 1 188 tests: semantics, props, reactivity, Svelte surface
+npm run test:quiet   # the suite's own output: a green run must say nothing
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
-npm run test:all     # the three above, in order, stopping at the first failure
+npm run test:all     # the four above, in order, stopping at the first failure
 npm run bench        # Python vs JavaScript, same component, real browser
 npm run build
 ```
@@ -1555,9 +1556,10 @@ Brython's master is in `vendor/BRYTHON_FIX.md`.
 ```sh
 npm install
 npm test             # fidelity grid, props, reactivity (jsdom)
+npm run test:quiet   # a green run must say nothing
 npm run test:browser # DOM interop and the demo, in a real Chromium
 npm run test:hmr     # virtual-module invalidation
-npm run test:all     # the three above, stopping at the first failure
+npm run test:all     # the four above, stopping at the first failure
 npm run dev          # demo page
 npm run build
 ```
