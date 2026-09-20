@@ -32,6 +32,19 @@ export default defineConfig({
     test: {
         environment: 'jsdom',
 
+        // **The clock is declared, the way the locale already is at every call.**
+        // Every assertion that depends on a language passes one — `en-GB`,
+        // `fr-FR`, `en-US` — so 2 120 tests do not care what the host speaks.
+        // Nothing said what the host's zone was, and four tests read a different
+        // day west of Greenwich: an environment a suite never declares is a
+        // reading of the machine it happens to run on.
+        //
+        // UTC rather than the author's zone, so that a run here, a run in CI and
+        // a run on a laptop in another country are one measurement. The tests
+        // that are *about* the zone move it themselves, and carry a control that
+        // proves the move took.
+        env: { TZ: 'UTC' },
+
         // The first import of a chain of components compiles their Python,
         // which goes past the 5 s default.
         testTimeout: 30000,

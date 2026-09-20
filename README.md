@@ -1380,6 +1380,13 @@ class says how it serialises by carrying
 from a `Map`'s. `striptags` shows the visible document, so the text of a
 `<script>` or a `<style>` never reaches the page.
 
+`date` reads **a date with no time as a calendar day**, rendered as that day
+wherever it is read. `"2026-08-24"` is 24 August for everyone, which is what
+`datetime.date` means and what Django's `|date` shows; the specification reads
+such a string as midnight UTC, so without the rule every reader west of
+Greenwich saw the day before. A value carrying a time is an instant and is
+rendered in the reader's own zone, which is what an instant is for.
+
 The whole runtime, gzipped, is **218 KB**. That is
 `vendor/brython_runtime.js`, the half without the parsing chain, which is what a
 browser gets; the full bundle it is cut from is 270 KB and never ships.

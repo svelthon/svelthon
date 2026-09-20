@@ -1415,6 +1415,14 @@ aussi, puisque rien ne distingue ses champs de ceux d'une `Map`. `striptags`
 montre le document visible, donc le texte d'un `<script>` ou d'un `<style>`
 n'atteint jamais la page.
 
+`date` lit **une date sans heure comme un jour du calendrier**, rendu tel quel
+où qu'on le lise. `"2026-08-24"` est le 24 août pour tout le monde, ce que
+`datetime.date` veut dire et ce que le `|date` de Django affiche ; la
+spécification lit une telle chaîne comme minuit UTC, donc sans cette règle tout
+lecteur à l'ouest de Greenwich voyait la veille. Une valeur qui porte une heure
+est un instant, et se rend dans le fuseau du lecteur, ce qui est le propre d'un
+instant.
+
 Le runtime entier, gzippé, fait **218 Ko**. C'est
 `vendor/brython_runtime.js`, la moitié sans la chaîne de parsing, celle qu'un
 navigateur reçoit ; le bundle complet dont elle est découpée en fait 270 et ne
