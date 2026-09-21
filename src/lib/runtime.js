@@ -2085,6 +2085,13 @@ export function pyData(value, made) {
     // being told: nothing was converted, so there is nothing to finish.
     if (python === value) return python;
 
+    // **Not reachable from a component, and kept as a belt.** Everything a
+    // component can hand this — `js.JSON.parse(…)`, the answer of a `__js__`
+    // import — has already crossed `inbound`, so `jsobj2pyobj` gives the same
+    // object back and the line above returns first. A mutation sweep says so:
+    // inverting the test below calls `null()` on every conversion and no test
+    // can tell, because no reachable input gets here. `tests/to-py.test.js`
+    // covers what an author can actually write.
     const toDict = $B.$getattr(python, 'to_dict', null);
 
     return toDict === null ? python : toDict();
