@@ -129,6 +129,14 @@ function interpolated(source, at) {
 
 // Find the '}' closing the block that opens at `start`, ignoring braces inside
 // string literals and comments.
+//
+// **The bound of every walk in this file is unfalsifiable, and it is worth
+// saying once here rather than six times.** A mutation sweep turns `i < length`
+// into `i <= length` at six of them and none can be told apart: the extra pass
+// reads `source[i]` as `undefined`, every comparison against it is false, and
+// the walk ends where it would have ended. What *is* separable is what a walk
+// hands back, and that is what `tests/quote-state.test.js` and the scanner rows
+// of `tests/markup.test.js` read.
 function closingBrace(source, start) {
     let depth = 0;
 
