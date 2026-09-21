@@ -906,3 +906,27 @@ describe('an unknown construct is refused, never passed through', () => {
         }
     );
 });
+
+// Unbalanced markup is Svelte's to refuse, and this pass runs **before** Svelte
+// sees it. So a closing tag with nothing open reaches the scope stack, and
+// popping past the bottom loses the base scope — where a snippet's name lives.
+//
+// The name then stops being passed into the expressions that close over it:
+// `{row}` compiles to `__expr(…)` with no argument, and the page reads a module
+// global that does not exist instead of the snippet. Measured either side of
+// the guard, because the two answers differ by one argument and nothing else.
+describe('a closing tag with nothing open', () => {
+    const rewrite = (markup) => pythonExpressions(markup, collector([]));
+
+    const STRAY = '{#snippet row(one)}<b>{one}</b>{/snippet}{/if}<p>{row}</p>';
+
+    test('does not take the snippet names down with it', () => {
+        expect(rewrite(STRAY)).toContain('__follow(row)');
+    });
+
+    // The control: without the stray tag the same markup says the same thing,
+    // so the assertion above is about the pop and not about snippets.
+    test('and the same markup without it reads the same', () => {
+        expect(rewrite(STRAY.replace('{/if}', ''))).toContain('__follow(row)');
+    });
+});

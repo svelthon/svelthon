@@ -1434,6 +1434,12 @@ export const pyScalar = (value) => {
 function thrown(error) {
     if (error instanceof Error || error === null || typeof error !== 'object') return error;
 
+    // `??` and not `||`, and a mutation sweep cannot tell: the difference is an
+    // **empty** message, and the only caller runs `pyError` first, which
+    // describes the exception and hands back an `Error` — so the line above
+    // returns and this one is reached only for what `pyError` chose to leave
+    // alone. Left as it is rather than pinned: a test would fix `''` as the
+    // answer, and `''` is the less useful of the two.
     const out = new Error(error.message ?? 'PythonError');
 
     if (typeof error.stack === 'string') out.stack = error.stack;

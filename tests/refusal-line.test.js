@@ -55,6 +55,43 @@ describe('a compiler refusal names the author’s line', () => {
         expect(error.message).toContain(`${FILE}:7`);
     });
 
+    // A rune written inside a function rather than at the module level. Its
+    // line comes from the AST rather than from the name table, which is the
+    // other of the two routes a position takes through this file.
+    test('a rune below the top level', () => {
+        const error = refuse('def f():\n\n    x = derived(lambda: 1)\n');
+
+        expect(error.message).toContain(`${FILE}:7`);
+        expect(error.start?.line).toBe(7);
+    });
+
+    // `__all__` built rather than written out. Same route, a refusal of its
+    // own, and it is the one written most recently — which is exactly when a
+    // position stops being checked.
+    test('an export list this file cannot read', () => {
+        let error;
+
+        try {
+            compile('a = 1\n\n__all__ = ["a"] + ["b"]\n', 'M', FILE, {
+                plain: true,
+                lineOffset: OFFSET
+            });
+        } catch (thrown) {
+            error = thrown;
+        }
+
+        expect(error.start?.line).toBe(7);
+    });
+
+    // The hint under an `IndentationError`: it names the line that starts at
+    // column zero while the rest of the block is indented, which is what the
+    // project's own four-space convention makes the commonest mistake.
+    test('the line an indentation hint points at', () => {
+        const error = refuse('    a = 1\n    b = 2\nc = 3\n');
+
+        expect(error.message).toContain('line 7 starts at column zero');
+    });
+
     // The half a terminal cannot use and an editor can: the same line, on the
     // error object, which is what puts the squiggle on the right row.
     test.for([
