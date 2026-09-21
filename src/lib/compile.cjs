@@ -411,6 +411,12 @@ function endQuote(line, quote) {
 
         if (line[i] === '#') return quote; // a comment runs to the end of the line
 
+        // Walked rather than matched, and the inner loop's own decisions are
+        // **not** separable by behaviour: the outer loop rescans from wherever
+        // this leaves off, so a mis-read single quote re-enters a quote state
+        // that ends the line at `null` all the same. What is separable is what
+        // the line *leaves open*, and `tests/quote-state.test.js` is ten rows of
+        // exactly that.
         if (line[i] === '"' || line[i] === "'") {
             const one = line[i];
             for (i++; i < line.length; i++) {
