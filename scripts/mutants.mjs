@@ -164,19 +164,38 @@ for (const [index, site] of chosen.entries()) {
     // A run that does not finish in four times the suite's own wall time is a
     // **kill**, and the loudest kind: the mutant did not fail an assertion, it
     // stopped the project from building.
-    let output = '';
     let hung = false;
-    try {
-        output = execFileSync('npx', ['vitest', 'run', '--bail=1'], {
-            encoding: 'utf8',
-            stdio: 'pipe',
-            timeout: TIMEOUT,
-            killSignal: 'SIGKILL'
-        });
-    } catch (error) {
-        hung = error.code === 'ETIMEDOUT' || error.signal === 'SIGKILL';
-        output = `${error.stdout ?? ''}${error.stderr ?? ''}`;
-    }
+
+    const run = (bail) => {
+        try {
+            return execFileSync('npx', ['vitest', 'run', ...(bail ? ['--bail=1'] : [])], {
+                encoding: 'utf8',
+                stdio: 'pipe',
+                timeout: TIMEOUT,
+                killSignal: 'SIGKILL'
+            });
+        } catch (error) {
+            hung = error.code === 'ETIMEDOUT' || error.signal === 'SIGKILL';
+
+            return `${error.stdout ?? ''}${error.stderr ?? ''}`;
+        }
+    };
+
+    // **`--bail=1` is a speed-up, and it makes a *green* answer untrustworthy.**
+    // Bail cancels the files still in flight the moment one fails, so what the
+    // summary counts depends on how 32 cores happened to schedule — and twice
+    // now a mutant has read `SURVIVED` in a sweep and `killed` when the same
+    // command was re-run by hand. `runtime.js:935` is the second: it stops the
+    // mutation walk from ever notifying, and eight tests go red.
+    //
+    // A kill is cheap to believe: something was red, and bail could only have
+    // cut the count short. **A survivor is the expensive claim** — it says *no
+    // test in the project asks this* — so it alone is re-run without bail, and
+    // the second answer is the one recorded. Seventy survivors cost seventy full
+    // runs, which is a fifth of the sweep rather than a doubling of it.
+    let output = run(true);
+
+    if (!hung && !/Test Files\s+\d+ failed/.test(output)) output = run(false);
 
     writeFileSync(path, before);
     if (hash(readFileSync(path, 'utf8')) !== hash(before)) throw new Error(`restore failed: ${path}`);
