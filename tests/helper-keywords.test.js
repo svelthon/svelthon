@@ -49,7 +49,12 @@ describe('an injected helper takes its arguments by name', () => {
         const read = setup();
 
         expect(read('date-keyword')).toBe('20 Sept 2026');
-        expect(read('fromnow-keyword')).toMatch(/ago|in /);
+
+        // The language and not the phrasing: a fixed date reads "10 hours ago"
+        // on the day and "yesterday" the morning after, so asserting the words
+        // is a test that moves with the clock — and this one did, overnight.
+        expect(read('fromnow-english')).not.toBe(read('fromnow-french'));
+        expect(read('fromnow-french')).toMatch(/hier|il y a|dans /);
     });
 
     // The other half of what `$kw` carries.

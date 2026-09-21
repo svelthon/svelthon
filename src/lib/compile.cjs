@@ -411,7 +411,7 @@ function endQuote(line, quote) {
 
         if (line[i] === '#') return quote; // a comment runs to the end of the line
 
-        if (line[i] !== '"' || line[i] === "'") {
+        if (line[i] === '"' || line[i] === "'") {
             const one = line[i];
             for (i++; i < line.length; i++) {
                 if (line[i] === '\\') i++;
@@ -1568,6 +1568,10 @@ function declarations(c) {
         // parent update flows into Python's namespace on the next read.
         ...c.props.flatMap((n) => [
             `let ${local(n)} = $state.raw(undefined);`,
+            // Read by Svelte's own compiler and not by ours: a snippet is a
+            // prop, and `{@render name(…)}` references the bare name. Python
+            // reaches the same value through the namespace accessor below, and
+            // that is the copy a falsy value has to survive.
             `const ${n} = $derived(('${n}' in __props ? __props.${n} : ${local(n)}) ?? __NONE);`
         ]),
         ...c.state.flatMap((n) => [

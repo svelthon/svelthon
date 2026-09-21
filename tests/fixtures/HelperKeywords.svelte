@@ -10,7 +10,12 @@ CALLS = {
     "batch-keyword": lambda: batch(rows, n=2),
     "batch-fill": lambda: batch(rows, n=3, fill=0),
     "date-keyword": lambda: date("2026-09-20", locale="en-GB"),
-    "fromnow-keyword": lambda: fromnow("2026-09-20", locale="en-GB"),
+    # Two languages for one instant. Asserting the *phrasing* would have been a
+    # test that moves with the clock: a fixed date reads "10 hours ago" on the
+    # day and "yesterday" the morning after, which is what this one did. The
+    # language is what the keyword carries, and it does not drift.
+    "fromnow-english": lambda: fromnow("2026-09-20", locale="en-GB"),
+    "fromnow-french": lambda: fromnow("2026-09-20", locale="fr-FR"),
     # A spread, which is the other half of what `$kw` carries.
     "json-spread": lambda: tojson(rows, **{"indent": 2}),
     # A name no helper takes: the one thing the author can have got wrong.
