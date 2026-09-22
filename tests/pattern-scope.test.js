@@ -1,4 +1,10 @@
-// **A default in a destructuring reads the names beside it.**
+// **The expressions a destructuring holds: where they are compiled, and what
+// they read.**
+//
+// A pattern holds two of them — a default, and a computed key — and both are
+// Python like everything else a template holds.
+//
+// **A default reads the names beside it.**
 //
 // Compiling one is half the job; compiling it *in the right scope* is the other
 // half, and the first version had only the outer namespace to offer: the
@@ -66,8 +72,32 @@ describe('what a destructuring default may read', () => {
             index: '7:0',
             'reads-index': '0:0',
             nested: '1:1',
-            snippet: '1:1'
+            snippet: '1:1',
+            key: '42',
+            'snippet-key': '7',
+            literal: 'total:0'
         });
+    });
+
+    // **The other place a pattern holds an expression**, and the one the walk
+    // copied across as written: a computed key. `{[field.upper()]: value}`
+    // reached the browser as a JavaScript method call — *get(...).upper is not
+    // a function* — while the target beside it was compiled. Its names are read
+    // and never bound, so `field` is still the module's.
+    test.for([
+        ['an {#each} target', 'key', '42'],
+        ['and a snippet parameter', 'snippet-key', '7']
+    ])('a computed key is Python, in %s', ([, at, answer]) => {
+        expect(rendered(PatternScope)[at]).toBe(answer);
+    });
+
+    // **A word inside a string is text, not a reference.** The names handed to
+    // `follow` were read off the expression's raw text, so a default that is a
+    // plain string spelling a sibling's name subscribed to that sibling — and
+    // the subscription is prepared before the sibling exists, so the component
+    // could not mount at all. The string is `"total"` and the name is `total`.
+    test('a default that is a string naming a later binding still mounts', () => {
+        expect(rendered(PatternScope).literal).toBe('total:0');
     });
 
     // And the other direction, which declaring every name first is what makes

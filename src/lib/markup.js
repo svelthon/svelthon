@@ -738,6 +738,93 @@ const isComponent = (tag) => tag !== null && COMPONENT.test(tag.name);
 
 const identifiers = (text) => [...text.matchAll(new RegExp(NAME, 'gu'))].map((m) => m[0]);
 
+// The names an expression **reads**, which is not every word in its text.
+//
+// `identifiers` above answers the other question — which names a *declaration*
+// binds — and a pattern holds no strings and no attributes, so one regular
+// expression is the whole of it there. An expression is not that: two kinds of
+// word in one are not a reference, and both were being handed to `follow`.
+//
+//   a **string** or a comment   `greet("count")` does not read `count`
+//   an **attribute**            `row.label` reads `row`; `label` is the object's
+//
+// Subscribing to a name an expression never reads was noise until a name could
+// be in the temporal dead zone of the declaration it sits in. Then it is fatal:
+// `{#each rows as [label="total", total=0]}` cannot mount, because the argument
+// prepared for `total` is evaluated before `total` exists — out of a default
+// that is a plain string.
+//
+// **An f-string is code, in its fields and nowhere else.** `f"{count} left"`
+// reads `count`, so skipping the literal whole would cost the block the very
+// subscription it depends on; reading all of it would count `left`. So the
+// fields are picked out and the text between them is not, and a field is found
+// by the same brace walk the template itself is read with — a format
+// specification is part of the field, which is what `f"{x:>{w}}"` needs.
+const fields = (inside) => {
+    const out = [];
+    let at = 0;
+
+    while (at < inside.length) {
+        // `{{` and `}}` are how an f-string writes a brace, and neither opens
+        // anything.
+        if (inside.startsWith('{{', at) || inside.startsWith('}}', at)) {
+            at += 2;
+            continue;
+        }
+
+        if (inside[at] !== '{') {
+            at += 1;
+            continue;
+        }
+
+        const close = closingBrace(inside, at);
+
+        if (close === -1) break;
+
+        out.push(inside.slice(at + 1, close));
+        at = close + 1;
+    }
+
+    return out;
+};
+
+const referenced = (text) => {
+    const found = new Set();
+    const name = new RegExp(`^${NAME}`, 'u');
+    let at = 0;
+
+    while (at < text.length) {
+        const skip = atomic(text, at);
+
+        if (skip > 0) {
+            if (interpolated(text, at)) {
+                const fence = text.startsWith(text[at].repeat(3), at) ? 3 : 1;
+                const inside = text.slice(at + fence, at + skip - fence);
+
+                for (const field of fields(inside)) {
+                    for (const one of referenced(field)) found.add(one);
+                }
+            }
+
+            at += skip;
+            continue;
+        }
+
+        const word = text.slice(at).match(name);
+
+        if (word === null) {
+            at += 1;
+            continue;
+        }
+
+        if (!/\.\s*$/.test(text.slice(0, at))) found.add(word[0]);
+
+        at += word[0].length;
+    }
+
+    return [...found];
+};
+
 // One entry of a declaration that destructures: a snippet's parameter, and the
 // target of an `{#each}`. Either may be a name, a pattern Svelte takes apart,
 // or either of those carrying a default.
@@ -784,7 +871,12 @@ function parameterPattern(part, call, names, tuple = false) {
     const close = CLOSES[trimmed[0]] === undefined ? -1 : closingPair(trimmed, 0);
 
     // A pattern: the same question, one level down, for each of its elements.
-    if (close !== -1) {
+    //
+    // **And only when the group is the whole entry.** A computed key opens with
+    // a bracket too — `[field.upper()]: value` — so a group with anything after
+    // it is not a pattern, and reading one as a pattern took the key apart as
+    // if its expression were a list of targets.
+    if (close === trimmed.length - 1) {
         const inside = arguments_(trimmed.slice(1, close))
             .map((one) => parameterPattern(one, call, names, tuple))
             .join(',');
@@ -792,17 +884,26 @@ function parameterPattern(part, call, names, tuple = false) {
         const [opened, closed] =
             tuple && trimmed[0] === '(' ? ['[', ']'] : [trimmed[0], trimmed[close]];
 
-        return `${lead}${opened}${inside}${closed}${trimmed.slice(close + 1)}${tail}`;
+        return `${lead}${opened}${inside}${closed}${tail}`;
     }
 
     // `{ key: target }` binds the target and not the key, which is the one
     // place a name inside a pattern is not a name the block declares.
+    //
+    // And a key may be **computed** — `{[field.upper()]: value}` — which is the
+    // other place a pattern holds an expression. It was copied across as
+    // written, so `field.upper()` reached the browser as a JavaScript method
+    // call: *get(...).upper is not a function*. Compiled here, and its names
+    // are read and not bound, which is what the `names` array not growing says.
     const colon = atTopLevel(trimmed, (i) => trimmed[i] === ':');
 
     if (colon !== -1) {
+        const key = trimmed.slice(0, colon).trim();
         const target = parameterPattern(trimmed.slice(colon + 1), call, names, tuple);
+        const computed = key.startsWith('[') && closingPair(key, 0) === key.length - 1;
+        const written = computed ? `[${call(key.slice(1, -1), '')}]` : key;
 
-        return `${lead}${trimmed.slice(0, colon + 1)}${target}${tail}`;
+        return `${lead}${written}:${target}${tail}`;
     }
 
     names.push(...identifiers(trimmed));
@@ -1279,7 +1380,7 @@ function walk(markup, collect, onPython, seed, record, where) {
     // It is the right shape anyway. `follow(x)` subscribes the reader to `x`,
     // and an expression that does not read `x` has no business depending on it.
     const mentioned = (expr) => {
-        const names = new Set(identifiers(expr));
+        const names = new Set(referenced(expr));
 
         return inScope().filter((one) => names.has(one));
     };

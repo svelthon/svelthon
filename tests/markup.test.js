@@ -979,3 +979,43 @@ describe('a closing tag with nothing open', () => {
         expect(rewrite(STRAY.replace('{/if}', ''))).toContain('__follow(row)');
     });
 });
+
+// **Which of the block's names an expression actually reads.**
+//
+// Each one is handed over as `__follow(name)`, which is what subscribes the
+// block to it, and they were found by running a name pattern over the raw text.
+// Two kinds of word in an expression are not a reference — a word inside a
+// **string** or a comment, and the **attribute** after a dot — and both were
+// being followed. A subscription nobody asked for costs a render; inside a
+// destructuring it costs the mount, because the argument is prepared before
+// the name it reads exists.
+//
+// An f-string is the exception that has to keep working: it is code, and
+// skipping the literal whole would lose the very read the block depends on.
+describe('the names handed to follow', () => {
+    const rewrite = (expression, name = 'count') =>
+        pythonExpressions(`{#each rows as ${name}}<p>{${expression}}</p>{/each}`, collector([]));
+
+    test.for([
+        ['a name the expression reads', 'count + 1', true],
+        ['a name inside a string', 'greet("count")', false],
+        ['one inside a comment', 'greet(1)  # count', false],
+        ['an attribute after a dot', 'it.count', false],
+        ['the object in front of one', 'count.bit_length()', true],
+        ['a field of an f-string', 'f"{count} left"', true],
+        ['a name only in its text', 'f"count left"', false],
+        ['one inside a field s own format', 'f"{1:>{count}}"', true],
+        ['and one behind an escaped brace', 'f"{{count}} left"', false]
+    ])('%s', ([, expression, followed]) => {
+        const out = rewrite(expression);
+
+        expect(out.includes('__follow(count)')).toBe(followed);
+    });
+
+    // The witness the rows above need: the name is in scope throughout, so a
+    // row answering `false` is saying *this expression does not read it*, not
+    // *nothing declares it*.
+    test('while the name is a binding of the block in every one of them', () => {
+        expect(rewrite('count')).toContain('__follow(count)');
+    });
+});

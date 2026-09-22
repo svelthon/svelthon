@@ -4,6 +4,7 @@
 # seen to mask it.
 first = 99
 later = 7
+field = "a"
 </script>
 
 {#each [[1]] as [a, b=a]}<i data-k="earlier">{a}:{b}</i>{/each}
@@ -15,3 +16,14 @@ later = 7
 
 {#snippet row(j, k=j)}<i data-k="snippet">{j}:{k}</i>{/snippet}
 {@render row(1)}
+
+<!-- The other place a pattern holds an expression: a computed key. Its names
+     are read, never bound, so `field` stays the module's. -->
+{#each [{"A": 42}] as {[field.upper()]: got}}<i data-k="key">{got}</i>{/each}
+
+{#snippet keyed({[field.upper()]: got})}<i data-k="snippet-key">{got}</i>{/snippet}
+{@render keyed({"A": 7})}
+
+<!-- And a default that is a plain string holding a sibling's name: text, not a
+     reference, and reading it as one made the component unmountable. -->
+{#each [[]] as [label="total", total=0]}<i data-k="literal">{label}:{total}</i>{/each}

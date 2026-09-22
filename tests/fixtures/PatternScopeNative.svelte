@@ -4,6 +4,7 @@
 // ours.
 let first = 99;
 let later = 7;
+let field = 'a';
 </script>
 
 {#each [[1]] as [a, b = a]}<i data-k="earlier">{a}:{b}</i>{/each}
@@ -15,3 +16,10 @@ let later = 7;
 
 {#snippet row(j, k = j)}<i data-k="snippet">{j}:{k}</i>{/snippet}
 {@render row(1)}
+
+{#each [{ A: 42 }] as {[field.toUpperCase()]: got}}<i data-k="key">{got}</i>{/each}
+
+{#snippet keyed({[field.toUpperCase()]: got})}<i data-k="snippet-key">{got}</i>{/snippet}
+{@render keyed({ A: 7 })}
+
+{#each [[]] as [label = 'total', total = 0]}<i data-k="literal">{label}:{total}</i>{/each}
