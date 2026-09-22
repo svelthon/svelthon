@@ -32,6 +32,20 @@ describe('a default reads a name when Python reaches it', () => {
         expect(rendered()[key]).toBe(answer);
     });
 
+    // The reads rewritten follow Python's scopes: what a lambda or a
+    // comprehension binds for itself is its own, and what it reads from outside
+    // is the pattern's name, read when it is reached.
+    test.for([
+        ['a comprehension reads its first iterable outside', 'iterable', '[1, 2]'],
+        ['a lambda reads its defaults outside', 'lambda-default', '8'],
+        ['a keyword-only parameter is the lambda s own', 'keyword-only', '3'],
+        ['and so is a variadic one', 'variadic', '(1, 2)'],
+        ['each target binds for what follows it', 'generators', '[(1, 1), (2, 2)]'],
+        ['and a lambda that shadows nothing reads the name', 'no-collision', '8']
+    ])('%s', ([, key, answer]) => {
+        expect(rendered()[key]).toBe(answer);
+    });
+
     // The value a function hands back is the value itself, whatever it is: read
     // through the default and read directly are the same object.
     test.for([

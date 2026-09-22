@@ -24,3 +24,13 @@ rows = [
 {#each [[]] as [first=1 or second, second=2]}
     <i data-k="short-circuit">{first}:{second}</i>
 {/each}
+
+<!-- Python's scopes: a comprehension's first iterable and a lambda's defaults
+     are read outside it, every parameter binds for the body, and each target
+     of a comprehension for what follows it. -->
+{#each [[[1, 2]]] as [x, r=[x for x in x]]}<i data-k="iterable">{r}</i>{/each}
+{#each [[7]] as [x, r=(lambda x=x: x + 1)()]}<i data-k="lambda-default">{r}</i>{/each}
+{#each [[7]] as [x, r=(lambda *, x: x)(x=3)]}<i data-k="keyword-only">{r}</i>{/each}
+{#each [[7]] as [x, r=(lambda *x: x)(1, 2)]}<i data-k="variadic">{r}</i>{/each}
+{#each [[[1, 2]]] as [x, r=[(x, y) for x in x for y in [x]]]}<i data-k="generators">{r}</i>{/each}
+{#each [[7]] as [x, r=(lambda y: y + 1)(x)]}<i data-k="no-collision">{r}</i>{/each}

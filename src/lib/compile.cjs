@@ -952,8 +952,33 @@ function templateDots(def) {
         ? new Set(def0.args.args.map((one) => one.arg))
         : new Set();
 
-    const bound = (node) => {
-        if (node instanceof $B.ast.Lambda) return node.args.args.map((one) => one.arg);
+    // The names a target binds: `x`, `(k, v)`, `*rest`.
+    const targets = (target, names = []) => {
+        if (target instanceof $B.ast.Name) names.push(target.id);
+        if (target instanceof $B.ast.Starred) targets(target.value, names);
+        for (const one of target.elts || []) targets(one, names);
+        return names;
+    };
+
+    const within = (shadowed, names) => new Set([...shadowed, ...names]);
+
+    const seen = new WeakSet();
+
+    // Python's scopes, not the tree's: every child of a node does not see the
+    // same names. A lambda's defaults are read where the lambda is written and
+    // its body where it runs, with every parameter bound. A comprehension's first
+    // iterable is read outside it, and each target binds for what follows it.
+    const scoped = (node, shadowed) => {
+        if (node instanceof $B.ast.Lambda) {
+            const args = node.args;
+            const params = [...args.posonlyargs, ...args.args, ...args.kwonlyargs]
+                .concat(args.vararg ? [args.vararg] : [], args.kwarg ? [args.kwarg] : [])
+                .map((one) => one.arg);
+
+            for (const one of [...args.defaults, ...args.kw_defaults]) visit(one, shadowed);
+            visit(node.body, within(shadowed, params));
+            return true;
+        }
 
         const comprehension =
             node instanceof $B.ast.ListComp ||
@@ -961,27 +986,25 @@ function templateDots(def) {
             node instanceof $B.ast.DictComp ||
             node instanceof $B.ast.GeneratorExp;
 
-        if (!comprehension) return [];
+        if (!comprehension) return false;
 
-        const names = [];
-        const collect = (target) => {
-            if (target instanceof $B.ast.Name) names.push(target.id);
-            for (const one of target.elts || []) collect(one);
-        };
+        let inner = shadowed;
 
-        for (const one of node.generators) collect(one.target);
+        node.generators.forEach((one, index) => {
+            visit(one.iter, index === 0 ? shadowed : inner);
+            inner = within(inner, targets(one.target));
+            for (const test of one.ifs) visit(test, inner);
+        });
 
-        return names;
+        for (const key of ['elt', 'key', 'value']) if (node[key]) visit(node[key], inner);
+        return true;
     };
-
-    const seen = new WeakSet();
 
     const visit = (node, shadowed = new Set()) => {
         if (!node || typeof node !== 'object' || seen.has(node)) return;
         seen.add(node);
 
-        const inner = bound(node);
-        if (inner.length) shadowed = new Set([...shadowed, ...inner]);
+        if (scoped(node, shadowed)) return;
 
         if (node instanceof $B.ast.Name && node.ctx instanceof $B.ast.Load && lazy.has(node.id) && !shadowed.has(node.id)) {
             insert(end(node), '()', node);
