@@ -46,4 +46,34 @@ describe('a snippet parameter default', () => {
     test('and an argument given wins over the default', () => {
         expect(setup()('donne')).toBe('False');
     });
+
+    // **And a default may sit at any depth.** The split was made at the top
+    // level alone, so `value=True` compiled and `[value=True]` — the same
+    // default, one bracket lower — kept its text: Svelte was handed a
+    // JavaScript `True` and the component died at mount again, out of the very
+    // repair above.
+    //
+    // The rows are the shapes Svelte itself runs, measured on its own compiler
+    // beside these: it takes a pattern in brackets and in braces, refuses a
+    // rest parameter outright, and throws on a parameter destructured twice
+    // into arrays — `[[value]]` — in its own components as much as in ours,
+    // which is why there is no row for one.
+    test.for([
+        ['in an array pattern', 'liste', 'True'],
+        ['beside a name with none', 'melange', 'False:3'],
+        ['in an object pattern', 'nomme', '6'],
+        ['and under a key of one', 'sousnom', 'True']
+    ])('a default %s is Python too', ([, key, answer]) => {
+        expect(setup()(key)).toBe(answer);
+    });
+
+    // The witnesses beside them: the pattern without a default was already
+    // right and must stay right, and a value given still wins.
+    test('while a pattern with no default is unchanged', () => {
+        expect(setup()('motif')).toBe('True');
+    });
+
+    test('and an argument given wins over a nested default', () => {
+        expect(setup()('listedonne')).toBe('False');
+    });
 });

@@ -29,6 +29,23 @@ CALLS = {
     "size by both": lambda: batch(rows, 2, n=3),
     "twice by spread": lambda: tojson(rows, indent=2, **{"indent": 4}),
     "too many": lambda: slugify("first", "second"),
+    "too many of two": lambda: tojson(rows, 2, 4),
+    # An argument the signature requires and the call does not give. Each was
+    # silent: the position reached the helper as `undefined` and was read there
+    # as absence, so a call whose only fault is a missing argument answered.
+    "nothing at all": lambda: slugify(),
+    "only the optional": lambda: tojson(indent=2),
+    "one of two": lambda: batch(rows),
+    "neither of two": lambda: batch(),
+    # And the witnesses: a position that was filled, whatever it was filled
+    # with. `None`, `False`, `0` and the empty string are values an author
+    # writes on purpose, and `tojson(None)` is `null` and means it.
+    "explicit none": lambda: tojson(None, indent=2),
+    "explicit false": lambda: tojson(False),
+    "explicit zero": lambda: tojson(0),
+    "empty text": lambda: slugify(""),
+    # The optional one left out is not a missing argument.
+    "optional left out": lambda: tojson(rows),
 }
 
 

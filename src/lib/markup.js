@@ -169,10 +169,13 @@ function closingBrace(source, start) {
 
 // The bracket closing the one that opens at `start`, whichever it is, ignoring
 // brackets inside string literals. `(` for a group or a call, `[` for the
-// subscript a walrus may aim at.
+// subscript a walrus may aim at, `{` for the object pattern a snippet
+// parameter may destructure.
+const CLOSES = { '(': ')', '[': ']', '{': '}' };
+
 function closingPair(source, start) {
     const open = source[start];
-    const close = open === '(' ? ')' : ']';
+    const close = CLOSES[open];
     let depth = 0;
 
     for (let i = start; i < source.length; i++) {
@@ -735,6 +738,61 @@ const isComponent = (tag) => tag !== null && COMPONENT.test(tag.name);
 
 const identifiers = (text) => [...text.matchAll(new RegExp(NAME, 'gu'))].map((m) => m[0]);
 
+// One entry of a snippet's parameter list: a name, a pattern Svelte
+// destructures, or either of them carrying a default.
+//
+// **A default may sit at any depth.** Measured on Svelte's own compiler, which
+// takes `[value = 1]`, `[[deep = 1]]`, `{ a = 1 }` and `{ a: { b = 1 } }` and
+// refuses only a rest parameter. The split was made at the top level alone, so
+// `value=True` compiled and `[value=True]` — the same default, one bracket
+// lower — crossed as written: Svelte was handed a JavaScript `True` and the
+// component died at mount with `ReferenceError: True is not defined`.
+//
+// And the same miss took the names with it. They were read off the whole entry,
+// so `True` entered the block's scope as if the author had bound it; here a
+// name is collected only where a name is *bound*, which is what a walk that
+// knows a default from a target can say and a regular expression cannot.
+function parameterPattern(part, call, names) {
+    const at = atTopLevel(part, (i) => part[i] === '=');
+
+    // `x=expr`, and `[x]=expr` too: what carries the default may be a pattern
+    // itself, so the left half goes back through this walk rather than to
+    // `identifiers`.
+    if (at !== -1) {
+        return `${parameterPattern(part.slice(0, at), call, names)}= ${call(part.slice(at + 1), '')}`;
+    }
+
+    // The spacing the author wrote is theirs, and only the middle is rebuilt.
+    const trimmed = part.trim();
+    const lead = part.slice(0, part.length - part.trimStart().length);
+    const tail = part.slice(part.trimEnd().length);
+
+    const close = CLOSES[trimmed[0]] === undefined ? -1 : closingPair(trimmed, 0);
+
+    // A pattern: the same question, one level down, for each of its elements.
+    if (close !== -1) {
+        const inside = arguments_(trimmed.slice(1, close))
+            .map((one) => parameterPattern(one, call, names))
+            .join(',');
+
+        return `${lead}${trimmed[0]}${inside}${trimmed[close]}${trimmed.slice(close + 1)}${tail}`;
+    }
+
+    // `{ key: target }` binds the target and not the key, which is the one
+    // place a name inside a pattern is not a name the block declares.
+    const colon = atTopLevel(trimmed, (i) => trimmed[i] === ':');
+
+    if (colon !== -1) {
+        const target = parameterPattern(trimmed.slice(colon + 1), call, names);
+
+        return `${lead}${trimmed.slice(0, colon + 1)}${target}${tail}`;
+    }
+
+    names.push(...identifiers(trimmed));
+
+    return part;
+}
+
 // `{#snippet row(one, value=True)}` read apart: the names it binds, and the
 // declaration rewritten with each default compiled as the Python expression it
 // is. The split is at top level, so a comma or an `=` inside a string or a call
@@ -749,19 +807,9 @@ function snippetParameters(trimmed, call) {
     if (close === -1) return { names: declaredBy(trimmed), written: trimmed.replace(/^#snippet\s*/, '') };
 
     const names = [];
-    const parts = arguments_(trimmed.slice(open + 1, close)).map((part) => {
-        const at = atTopLevel(part, (i) => part[i] === '=');
-
-        if (at === -1) {
-            names.push(...identifiers(part));
-
-            return part;
-        }
-
-        names.push(...identifiers(part.slice(0, at)));
-
-        return `${part.slice(0, at)}= ${call(part.slice(at + 1), '')}`;
-    });
+    const parts = arguments_(trimmed.slice(open + 1, close)).map((part) =>
+        parameterPattern(part, call, names)
+    );
 
     return {
         names,

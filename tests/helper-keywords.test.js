@@ -84,8 +84,44 @@ describe('an injected helper takes its arguments by name', () => {
         ['a parameter given by position and by name', 'by both', /multiple values for argument 'indent'/],
         ['a size given twice', 'size by both', /multiple values for argument 'n'/],
         ['a keyword the spread repeats', 'twice by spread', /multiple values for argument 'indent'/],
-        ['more positions than the signature has', 'too many', /takes at most 1 positional argument but 2/]
+        // CPython says how many a signature takes when every parameter is
+        // required, and says the *range* when one carries a default. Both
+        // wordings, checked against `python3` on the same two shapes.
+        ['more positions than the signature has', 'too many', /takes 1 positional argument but 2 were given/],
+        ['more than a signature that has an optional', 'too many of two', /takes from 1 to 2 positional arguments but 3 were given/]
     ])('%s is refused', ([, what, says]) => {
         expect(setup()(what)).toMatch(says);
+    });
+
+    // **A parameter the signature requires and the call does not give.** The
+    // table named the parameters and not which of them a call has to fill, so
+    // an omission reached the helper as `undefined` and was read there as
+    // absence: `slugify()` answered the empty string and `tojson(indent=2)`
+    // wrote `null`, both without a word. A call whose only fault is a missing
+    // argument is a call the author wants to be told about.
+    //
+    // CPython's wording again, and its way of listing the names: `'a'`, then
+    // `'a' and 'b'`. Checked against `python3`.
+    test.for([
+        ['the only argument', 'nothing at all', /slugify\(\) missing 1 required positional argument: 'text'/],
+        ['the required one, the optional given', 'only the optional', /tojson\(\) missing 1 required positional argument: 'value'/],
+        ['the second of two', 'one of two', /batch\(\) missing 1 required positional argument: 'n'/],
+        ['both of two', 'neither of two', /batch\(\) missing 2 required positional arguments: 'xs' and 'n'/]
+    ])('%s is refused', ([, what, says]) => {
+        expect(setup()(what)).toMatch(says);
+    });
+
+    // The witnesses without which the rows above would be satisfied by a check
+    // that reads the *value*: absence is a position nobody filled, and `None`,
+    // `False`, `0` and the empty string are arguments that were given. Two of
+    // them are what an author writes on purpose.
+    test.for([
+        ['None', 'explicit none', 'null'],
+        ['False', 'explicit false', 'false'],
+        ['zero', 'explicit zero', '0'],
+        ['the empty string', 'empty text', ''],
+        ['and an optional simply left out', 'optional left out', '[1,2,3,4]']
+    ])('%s is an argument, not an omission', ([, what, answer]) => {
+        expect(setup()(what)).toBe(answer);
     });
 });

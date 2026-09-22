@@ -670,15 +670,36 @@ export function urlencode(value) {
 //
 // The names are ours, which is the whole reason this is fixable here: a
 // JavaScript function carries no parameter names to place them by.
+//
+// **Written the way Python writes a signature**, which is also the way the
+// README shows it: a name alone has to be given, a name carrying a default does
+// not. The table used to hold the names and nothing else, so it could say which
+// parameters exist and not which a call must fill — and the refusal below had
+// to hedge with *at most* where CPython says *from 1 to 2*. They are one fact
+// about a signature, and they are written in one place now.
+//
+// `fn.length` cannot stand in for it: these are JavaScript functions whose
+// optional parameters are declared like every other one, so `tojson.length` is
+// 2 and `date.length` is 4.
 const KEYWORDS = {
-    tojson: ['value', 'indent'],
+    tojson: ['value', 'indent=None'],
     from_json: ['text'],
-    batch: ['xs', 'n', 'fill'],
-    date: ['value', 'style', 'clock', 'locale'],
-    fromnow: ['value', 'locale'],
+    batch: ['xs', 'n', 'fill=None'],
+    date: ['value', 'style=None', 'clock=None', 'locale=None'],
+    fromnow: ['value', 'locale=None'],
     slugify: ['text'],
     striptags: ['html'],
     urlencode: ['value']
+};
+
+// CPython's own way of listing them: `'a'`, then `'a' and 'b'`, then
+// `'a', 'b', and 'c'` with the comma before the `and`.
+const listed = (names) => {
+    const quoted = names.map((one) => `'${one}'`);
+
+    if (quoted.length < 3) return quoted.join(' and ');
+
+    return `${quoted.slice(0, -1).join(', ')}, and ${quoted[quoted.length - 1]}`;
 };
 
 const keywordsOf = (args) => {
@@ -690,7 +711,16 @@ const keywordsOf = (args) => {
 // A name the helper does not take is an error, not something to ignore: the
 // spelling is the only thing the author can have got wrong, and Python says so
 // too.
-const byName = (fn, names) => {
+const byName = (fn, signature) => {
+    // The name a caller writes, and where the optional ones start. Python puts
+    // every default after every required parameter, so the boundary is an
+    // index: `findIndex` reads it off the table instead of counting, and cannot
+    // answer two if the table is ever written out of order.
+    const names = signature.map((one) => one.split('=')[0]);
+    const optional = signature.findIndex((one) => one.includes('='));
+    const needed = optional === -1 ? names.length : optional;
+    const takes = `It takes ${signature.join(', ')}.`;
+
     const wrapped = (...args) => {
         const kw = keywordsOf(args);
         const given = kw === null ? [...args] : args.slice(0, -1);
@@ -700,15 +730,14 @@ const byName = (fn, names) => {
         // it has no parameter for and says nothing, so `slugify("a", "b")` read
         // as a correct call and the second word vanished.
         if (given.length > names.length) {
-            // CPython's own wording, with the one hedge the table forces:
-            // `KEYWORDS` says which names there are and not which are required,
-            // so *at most* is what can honestly be said where CPython says
-            // *from 1 to 2*.
-            throw refuse(
-                `${fn.name}() takes at most ${names.length} positional ` +
-                    `argument${names.length === 1 ? '' : 's'} but ${given.length} were given. ` +
-                    `It takes ${names.join(', ')}.`
-            );
+            // CPython's own wording, both of them: a signature with no default
+            // says how many it takes, one with a default says the range.
+            const counted =
+                needed === names.length
+                    ? `${names.length} positional argument${names.length === 1 ? '' : 's'}`
+                    : `from ${needed} to ${names.length} positional arguments`;
+
+            throw refuse(`${fn.name}() takes ${counted} but ${given.length} were given. ${takes}`);
         }
 
         // Which positions the call has already filled. Without this a keyword
@@ -722,9 +751,7 @@ const byName = (fn, names) => {
                 const at = names.indexOf(name);
 
                 if (at === -1) {
-                    throw refuse(
-                        `${fn.name}(): no argument named ${name}. It takes ${names.join(', ')}.`
-                    );
+                    throw refuse(`${fn.name}(): no argument named ${name}. ${takes}`);
                 }
 
                 // The same name twice is the `**` spread's case as much as the
@@ -737,6 +764,25 @@ const byName = (fn, names) => {
                 filled.add(at);
                 given[at] = value;
             }
+        }
+
+        // **What the table could not say before.** It named the parameters and
+        // not which of them a call has to fill, so an omission reached the
+        // helper as `undefined` and was read there as absence: `slugify()`
+        // answered the empty string and `tojson(indent=2)` wrote `null`, both
+        // without a word, out of a call whose missing argument is the only
+        // thing wrong with it.
+        //
+        // The *positions*, never the values: `None`, `False`, `0` and the empty
+        // string are arguments that were given, and two of them are what an
+        // author writes on purpose — `tojson(None)` is `null` and means it.
+        const missing = names.slice(0, needed).filter((_, at) => !filled.has(at));
+
+        if (missing.length) {
+            throw refuse(
+                `${fn.name}() missing ${missing.length} required positional ` +
+                    `argument${missing.length === 1 ? '' : 's'}: ${listed(missing)}`
+            );
         }
 
         return fn(...given);
