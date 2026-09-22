@@ -280,6 +280,18 @@ describe('the vendored Brython carries its repairs', () => {
         expect(Object.hasOwn(plain, 'a')).toBe(true);
     });
 
+    // An `__iter__` that returns something other than an iterator is refused
+    // with a `TypeError`, and nothing else: the two debug prints on that path
+    // dumped the object and its class to the console, once per refusal. The same
+    // shape as the one in `JSClass.tp_getattro`, read the same way.
+    test('no debug print where iter() refuses a non-iterator', () => {
+        const source = String($B.$iter);
+
+        expect(source).toContain('returned non-iterable of type');
+        expect(source).not.toContain("console.log('iter, obj'");
+        expect(source).not.toContain('no tp_iternext in');
+    });
+
     // Under Node the compiler loads the file with `require()` and a
     // server-rendered component imports it again, which are two module
     // instances; the wrapper skips the body on the second. Local, and it would
