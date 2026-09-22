@@ -42,4 +42,23 @@ describe('a JavaScript function called from Python', () => {
     test('and an empty ** spread is not a keyword call', () => {
         expect(setup()('empty spread')).toBe('2x3');
     });
+
+    // **Nothing to refuse is also nothing to pass on.** The carrier stayed in
+    // the argument list, so the function was handed one argument more than the
+    // author wrote: a variadic one counted two, and a parameter with a default
+    // got an internal object instead of its default.
+    //
+    // `measure` could not see it — two parameters, and JavaScript drops a third
+    // by itself — so the row above kept answering `2x3` while the call was
+    // wrong. These two say what they were actually handed, which is the whole
+    // reason they exist.
+    test.for([
+        ['a variadic function counts what it was given', 'counted', '1'],
+        ['with an empty spread written out', 'counted with empty spread', '1'],
+        ['and with an empty mapping behind a name', 'counted with an empty name', '1'],
+        ['a default is kept', 'default kept', 'string'],
+        ['and kept through an empty spread', 'default with empty spread', 'string']
+    ])('%s', ([, what, answer]) => {
+        expect(setup()(what)).toBe(answer);
+    });
 });

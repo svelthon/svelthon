@@ -3062,14 +3062,23 @@ const inbound = (value) =>
 //
 // The helpers are the other half of the same question and the opposite answer:
 // their names are ours, so `helpers.js` places them. See `KEYWORDS` there.
-const refuseKeywords = (target, args) => {
+// **And an empty one is removed, not merely accepted.** `f(1, **{})` is a
+// perfectly ordinary Python call, and Brython still sends the carrier: leaving
+// it in place handed the function an extra **positional** argument, so a
+// variadic one counted two where the author wrote one, and a parameter with a
+// default received an internal object instead of its default.
+//
+// The witness that missed it is worth remembering: the test called
+// `measure(width, height)`, a function that ignores a third argument all by
+// itself, so the answer stayed right while the call was wrong.
+const withoutKeywords = (target, args) => {
     const last = args[args.length - 1];
 
-    if (last === null || typeof last !== 'object' || !Array.isArray(last.$kw)) return;
+    if (last === null || typeof last !== 'object' || !Array.isArray(last.$kw)) return args;
 
     const $B = globalThis.__BRYTHON__;
 
-    if ($B.keyword_is_empty(last.$kw)) return;
+    if ($B.keyword_is_empty(last.$kw)) return args.slice(0, -1);
 
     throw pyError(
         $B.$call($B.builtins.TypeError, `A Javascript function can't take keyword arguments`),
@@ -3105,11 +3114,10 @@ export function jsCall(value) {
         // longer-lived one would hand a later call the snapshot an earlier one
         // took, after Python had moved on.
         apply: (target, self, args) => {
-            refuseKeywords(target, args);
-
+            const given = withoutKeywords(target, args);
             const made = new WeakMap();
 
-            return inbound(Reflect.apply(target, self, args.map((one) => outbound(one, made))));
+            return inbound(Reflect.apply(target, self, given.map((one) => outbound(one, made))));
         }
     });
 
@@ -3842,9 +3850,7 @@ export function group(node, [current, write, chosen, binding, scope]) {
     // return anything, and `return int(self.n == other.n)` gives 1 — true to
     // Python, and not the JavaScript boolean. A choice already present in the
     // state then showed as unselected.
-    const same = (one) => {
-        const mine = value();
-
+    const alike = (one, mine) => {
         try {
             return __pybridge.truthy(globalThis.__BRYTHON__.rich_comp('__eq__', one, mine));
         } catch (error) {
@@ -3860,6 +3866,8 @@ export function group(node, [current, write, chosen, binding, scope]) {
         }
     };
 
+    const same = (one) => alike(one, value());
+
     const show = (held) => {
         node.checked = boxes ? Array.from(held ?? []).some(same) : same(held);
     };
@@ -3867,15 +3875,33 @@ export function group(node, [current, write, chosen, binding, scope]) {
     const changed = () => {
         if (!boxes) return write(value());
 
+        // **Two controls may stand for one choice**, which is what a form does
+        // when it shows the same option in two sections. Collecting each checked
+        // input as an entry of its own put the value in twice, and unticking one
+        // of them left the other checked, so the value came straight back and
+        // the reader could not remove it.
+        //
+        // Svelte's own `get_binding_group_value` is these two lines: a `Set` of
+        // the checked values, then a `delete` of the one whose control just went
+        // off. Read here with Python's `==` rather than a JavaScript `Set`,
+        // because two Brython values that are equal are rarely the same object.
+        const picked = [];
+
+        for (const one of inOrder()) {
+            if (!one.checked) continue;
+
+            const held = one.$svelthonValue();
+
+            if (!picked.some((already) => alike(already, held))) picked.push(held);
+        }
+
+        const mine = value();
+
         // A checkbox group is a list, and it has to arrive as Python's: an array
         // built here reads as a JavascriptArray, which prints `[a, c]` where
         // Python prints `['a', 'c']` and refuses a slice.
         write(
-            __pybridge.list(
-                inOrder()
-                    .filter((one) => one.checked)
-                    .map((one) => one.$svelthonValue())
-            )
+            __pybridge.list(node.checked ? picked : picked.filter((one) => !alike(one, mine)))
         );
     };
 
