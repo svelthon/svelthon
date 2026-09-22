@@ -9144,8 +9144,8 @@ return s+fill.repeat(missing)
 case ">":
 return fill.repeat(missing)+s
 case "=":
-if("+-".indexOf(s.charAt(0))>-1){return s.charAt(0)+fill.repeat(missing)+s.substr(1)}else{
-return fill.repeat(missing)+s}
+/* SVELTHON patch, see BRYTHON_FIX.md */var lead=s.match(fmt.alternate ? /^[+\- ]?(0[xXoObB])?/ : /^[+\- ]?/)[0]
+return lead+fill.repeat(missing)+s.substr(lead.length)
 case "^":
 var left=parseInt(missing/2)
 return fill.repeat(left)+s+fill.repeat(missing-left)}}
@@ -10015,19 +10015,19 @@ case "d":
 res=value.toString()
 break
 case "b":
-res=(fmt.alternate ? "0b" :"")+value.toString(2)
+res=/* SVELTHON patch, see BRYTHON_FIX.md */(value < 0 ? "-" :"")+(fmt.alternate ? "0b" :"")+(value < 0 ? -value :value).toString(2)
 break
 case "c":
 res=_b_.chr(value)
 break
 case "o":
-res=(fmt.alternate ? "0o" :"")+value.toString(8)
+res=(value < 0 ? "-" :"")+(fmt.alternate ? "0o" :"")+(value < 0 ? -value :value).toString(8)
 break
 case "x":
-res=(fmt.alternate ? "0x" :"")+value.toString(16)
+res=(value < 0 ? "-" :"")+(fmt.alternate ? "0x" :"")+(value < 0 ? -value :value).toString(16)
 break
 case "X":
-res=(fmt.alternate ? "0X" :"")+value.toString(16).toUpperCase()
+res=(value < 0 ? "-" :"")+(fmt.alternate ? "0X" :"")+(value < 0 ? -value :value).toString(16).toUpperCase()
 break
 case "n":
 return self }
