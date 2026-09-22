@@ -502,7 +502,7 @@ describe('the blocks that declare names', () => {
 
         // The declaration reads the block's name and not its own; the
         // interpolation after it reads the declaration and not the block's.
-        expect(defs.some((one) => /^def __expr_\d+\(row\):/m.test(one))).toBe(true);
+        expect(defs.some((one) => /^def __expr_py_\d+\(row\):/m.test(one))).toBe(true);
         expect(defs.some((one) => /^def __expr_\d+\(half\):/m.test(one))).toBe(true);
     });
 
@@ -575,13 +575,13 @@ describe('{@render}', () => {
     test('each argument is compiled separately', () => {
         const { out } = rewrite('{@render row(item, index)}');
 
-        expect(out).toMatch(/\{@render row\(__expr_\d+\(\), __expr_\d+\(\)\)\}/);
+        expect(out).toMatch(/\{@render row\(__expr_py_\d+\(\), __expr_py_\d+\(\)\)\}/);
     });
 
     test('a comma inside an argument is not a separator', () => {
         const { out, defs } = rewrite('{@render row(f(a, b))}');
 
-        expect(out).toMatch(/\{@render row\(__expr_\d+\(\)\)\}/);
+        expect(out).toMatch(/\{@render row\(__expr_py_\d+\(\)\)\}/);
         expect(defs.some((one) => one.includes('f(a, b)'))).toBe(true);
     });
 

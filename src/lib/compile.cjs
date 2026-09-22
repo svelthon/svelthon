@@ -899,6 +899,11 @@ const arityOf = (args) =>
 // already Python; everything else here is called by Svelte, with Svelte's values.
 const componentWrapper = (f) => (f.name.startsWith(EXPR_PREFIX) ? '__pyExpression' : '__pyComponent');
 
+// The template functions whose value Python reads again, named so by the markup
+// pass: a declaration of the markup and a `{@render}` argument (`py_`), and a
+// default inside a pattern (`lazy_`). Their value is handed back as it is.
+const KEPT_PYTHON = /^__expr_(?:py|lazy)_/;
+
 // In the markup, and only there, the dot finds a key as well as an attribute:
 // `{pep.title}` reads a dict. The same text in the `<script>` stays plain Python
 // and raises.
@@ -1958,7 +1963,8 @@ function instanceExports(c) {
         ...c.funcs.map((f) =>
             componentWrapper(f) === RUNTIME.pyExpression
                 ? `const ${f.name} = ${RUNTIME.pyExpression}((a) => ${fn(f.name)}(...a), ` +
-                  `${JSON.stringify(`${f.name}() — ${c.source}`)}, __lines, ${f.arity});`
+                  `${JSON.stringify(`${f.name}() — ${c.source}`)}, __lines, ${f.arity}, ` +
+                  `${KEPT_PYTHON.test(f.name)});`
                 : `const ${f.name} = ${RUNTIME.pyComponent}(() => ${fn(f.name)}, ` +
                   `${JSON.stringify(`${f.name}() — ${c.source}`)}, ${c.lineOffset});`
         ),

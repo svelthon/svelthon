@@ -3396,9 +3396,14 @@ export function pyBoundary(fn) {
 // the *framework* is a transition's options or an action's teardown, and a
 // Brython float there is an object `Element.animate` refuses. A coroutine is
 // fired and not awaited, since nobody reads what a handler returns.
-const running = (call, where, lineOffset) => {
+// `kept` is for a value that goes back into Python rather than out to the
+// framework, and is handed back as it is: made a JavaScript number, a float
+// would come back to Python a `JSObject`.
+const running = (call, where, lineOffset, kept = false) => {
     try {
-        return pyNumbers(schedule(call(), where, lineOffset));
+        const value = schedule(call(), where, lineOffset);
+
+        return kept ? value : pyNumbers(value);
     } catch (error) {
         throw pyError(error, where, lineOffset);
     }
@@ -3448,9 +3453,9 @@ export const pyComponent = (read, where, lineOffset) => {
 // Two names rather than a flag, so the compiler *chooses* a wrapper instead of
 // describing one: what it writes is a name, and everything a crossing does is on
 // this side of the line.
-export const pyExpression = (call, where, lineOffset, arity) =>
+export const pyExpression = (call, where, lineOffset, arity, kept = false) =>
     identified(
-        (...args) => running(() => call(args.slice(0, arity)), where, lineOffset),
+        (...args) => running(() => call(args.slice(0, arity)), where, lineOffset, kept),
         nameOf(where),
         arity
     );

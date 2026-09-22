@@ -827,7 +827,7 @@ function parameterPattern(part, call, names, tuple = false) {
     if (at !== -1) {
         const target = parameterPattern(part.slice(0, at), call, names, tuple);
 
-        return `${target}= ${call(part.slice(at + 1), '', undefined, true)}`;
+        return `${target}= ${call(part.slice(at + 1), '', undefined, 'lazy')}`;
     }
 
     // The spacing the author wrote is theirs, and only the middle is rebuilt.
@@ -868,7 +868,7 @@ function parameterPattern(part, call, names, tuple = false) {
         const key = trimmed.slice(0, colon).trim();
         const target = parameterPattern(trimmed.slice(colon + 1), call, names, tuple);
         const computed = key.startsWith('[') && closingPair(key, 0) === key.length - 1;
-        const written = computed ? `[${call(key.slice(1, -1), '', undefined, true)}]` : key;
+        const written = computed ? `[${call(key.slice(1, -1), '', undefined, 'lazy')}]` : key;
 
         return `${lead}${written}:${target}${tail}`;
     }
@@ -1390,18 +1390,25 @@ function walk(markup, collect, onPython, seed, record, where) {
     // gets compiled: a handler goes through walrus() first, and a range has to
     // point at the text on screen rather than at the rewrite.
     //
-    // `lazy` hands each name over as a function that reads it, for an expression
-    // whose names may not exist yet when it is prepared: a default inside a
-    // pattern, where a later name of the same pattern is still in the temporal
-    // dead zone. The compiler makes the function's reads of those names calls,
-    // so a name is read when Python reaches it, and a branch Python does not
-    // take reads nothing, as it does in Python.
-    const call = (expr, wrapper, source = expr, lazy = false) => {
+    // `kind` says where the value goes, when that is not JavaScript:
+    //
+    //   'python'  back into Python, which reads it again: a declaration of the
+    //             markup, `{x = 0.5}`, and an argument of `{@render}`. The value
+    //             stays the Python one, where one bound for the DOM is made a
+    //             JavaScript number, and a float would come back a `JSObject`.
+    //   'lazy'    the same, for an expression whose names may not exist yet
+    //             when it is prepared: a default inside a pattern, where a later
+    //             name of the same pattern is still in the temporal dead zone.
+    //             Each name is handed over as a function that reads it, and the
+    //             compiler makes the reads calls, so a branch Python does not
+    //             take reads nothing, as in Python.
+    const call = (expr, wrapper, source = expr, kind = '') => {
         const trimmed = expr.trim();
         const args = mentioned(trimmed);
+        const lazy = kind === 'lazy';
 
         locate(source.trim());
-        const name = collect(trimmed, wrapper, args, false, position()?.line, lazy);
+        const name = collect(trimmed, wrapper, args, false, position()?.line, kind);
 
         // follow() on the block's own names: a row of an {#each} is a plain
         // JavaScript value, not a signal, so reading `it.label` registers
@@ -1993,7 +2000,7 @@ function walk(markup, collect, onPython, seed, record, where) {
                 out += closes === -1
                     ? markup.slice(index, end + 1)
                     : `{@render ${called.slice(0, opens)}(${arguments_(called.slice(opens + 1, closes))
-                          .map((one) => (one.trim() ? call(one, '') : one))
+                          .map((one) => (one.trim() ? call(one, '', undefined, 'python') : one))
                           .join(', ')})${called.slice(closes + 1)}}`;
             } else if (written !== null && written.name === 'debug') {
                 // `{@debug}` takes names rather than an expression, and the
@@ -2015,7 +2022,7 @@ function walk(markup, collect, onPython, seed, record, where) {
                 // Compiled before the name it declares enters scope: a
                 // declaration may read the block's names and the declarations
                 // before it, never itself.
-                const value = call(declared.expression, '');
+                const value = call(declared.expression, '', undefined, 'python');
 
                 out +=
                     declared.rune === 'state'
@@ -2109,14 +2116,16 @@ export function directiveModules(markup) {
 export function collector(defs, lines) {
     const seen = new Map();
 
-    return (expression, wrapper, args, assign = false, line, lazy = false) => {
-        const key = `${assign ? 'set' : lazy ? 'lazy' : 'get'}|${wrapper}|${args.join(',')}|${expression}`;
+    return (expression, wrapper, args, assign = false, line, kind = '') => {
+        const key = `${assign ? 'set' : kind || 'get'}|${wrapper}|${args.join(',')}|${expression}`;
         if (seen.has(key)) return seen.get(key);
 
         // Every kind keeps the `__expr_` prefix: it is what makes the generated
-        // wrapper evaluate them the way a template expression is evaluated.
-        // `lazy_` is what tells the compiler its parameters are read by a call.
-        const name = `__expr_${assign ? 'set_' : lazy ? 'lazy_' : ''}${defs.length}`;
+        // wrapper evaluate them the way a template expression is evaluated. The
+        // part after it is what the compiler reads the kind from: `lazy_`, whose
+        // parameters are read by a call, and `py_`, whose value stays Python.
+        const infix = assign ? 'set_' : kind === 'lazy' ? 'lazy_' : kind === 'python' ? 'py_' : '';
+        const name = `__expr_${infix}${defs.length}`;
         seen.set(key, name);
         lines?.push(line);
 
