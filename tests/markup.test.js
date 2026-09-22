@@ -915,6 +915,55 @@ describe('an unknown construct is refused, never passed through', () => {
 // `{row}` compiles to `__expr(…)` with no argument, and the page reads a module
 // global that does not exist instead of the snippet. Measured either side of
 // the guard, because the two answers differ by one argument and nothing else.
+// **`as` is a separator at the top level, not the first two letters that spell
+// it.** The split was a non-greedy regex, so `{#each ["a as b"] as item}` cut
+// inside the string: the iterable came out as `["a`, and the compiler answered
+// `'[' was never closed` about a bracket the author had closed. A word of
+// ordinary English in a list made a valid component impossible to compile, and
+// the message accused the wrong character.
+//
+// `atTopLevel` is the mechanism the `await` block already uses for its own
+// `then` and `catch`. Using it here is one rule rather than two lexical ones
+// that disagree.
+describe('an each block finds its separator', () => {
+    const rewrite = (markup) => pythonExpressions(markup, collector([]));
+
+    // The iterable's own text, read out of what the pass collected. Asserting
+    // that nothing *threw* would prove nothing: the markup pass records the
+    // expression and Brython compiles it later, so a half-cut iterable leaves
+    // this pass quietly and dies at build time.
+    const iterable = (markup) => {
+        const defs = [];
+
+        pythonExpressions(markup, collector(defs));
+
+        return defs.join('\n');
+    };
+
+    test.for([
+        ['a string holding it', '{#each ["a as b"] as item}<p>{item}</p>{/each}', '["a as b"]'],
+        [
+            'a call argument holding it',
+            '{#each list("a as b") as item}<p>{item}</p>{/each}',
+            'list("a as b")'
+        ],
+        ['single quotes', "{#each ['x as y'] as item}<p>{item}</p>{/each}", "['x as y']"],
+        [
+            'a dict value holding it',
+            '{#each {"k": "a as b"} as item}<p>{item}</p>{/each}',
+            '{"k": "a as b"}'
+        ],
+        // The separator itself, which must still be found in each of the shapes
+        // an author writes it in.
+        ['a plain name', '{#each rows as row}<p>{row}</p>{/each}', 'rows'],
+        ['an index', '{#each rows as row, at}<p>{row}{at}</p>{/each}', 'rows'],
+        ['a key', '{#each rows as row (row)}<p>{row}</p>{/each}', 'rows'],
+        ['a destructuring', '{#each pairs as (k, v)}<p>{k}{v}</p>{/each}', 'pairs']
+    ])('%s keeps the iterable whole', ([, markup, whole]) => {
+        expect(iterable(markup)).toContain(`return __seq(${whole})`);
+    });
+});
+
 describe('a closing tag with nothing open', () => {
     const rewrite = (markup) => pythonExpressions(markup, collector([]));
 

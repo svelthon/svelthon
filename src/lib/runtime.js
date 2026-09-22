@@ -3819,9 +3819,15 @@ export function group(node, [current, write, chosen, binding, scope]) {
     (token.nodes ??= new Set()).add(node);
     node.$svelthonValue = value;
 
+    // **And the list is the third half of the identity**, which the reset path
+    // has always known and this did not: the token is the instance and the
+    // binding, and inside one `{#each}` every row shares both. Collecting on
+    // the token alone gathered the whole loop, so ticking a box on the second
+    // row wrote the first row's selection into it as well — a form recording
+    // choices the reader never made for that item.
     const inOrder = () =>
         [...token.nodes]
-            .filter((one) => one.isConnected)
+            .filter((one) => one.isConnected && one.$svelthonGroup === node.$svelthonGroup)
             .sort((a, b) =>
                 // DOCUMENT_POSITION_FOLLOWING: `b` comes after `a`.
                 a.compareDocumentPosition(b) & 4 ? -1 : 1

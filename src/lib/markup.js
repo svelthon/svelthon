@@ -735,6 +735,40 @@ const isComponent = (tag) => tag !== null && COMPONENT.test(tag.name);
 
 const identifiers = (text) => [...text.matchAll(new RegExp(NAME, 'gu'))].map((m) => m[0]);
 
+// `{#snippet row(one, value=True)}` read apart: the names it binds, and the
+// declaration rewritten with each default compiled as the Python expression it
+// is. The split is at top level, so a comma or an `=` inside a string or a call
+// belongs to the default and not to the list.
+function snippetParameters(trimmed, call) {
+    const open = trimmed.indexOf('(');
+    const head = open === -1 ? trimmed : trimmed.slice(0, open);
+    const close = open === -1 ? -1 : closingPair(trimmed, open);
+
+    const name = head.replace(/^#snippet\s*/, '').trim();
+
+    if (close === -1) return { names: declaredBy(trimmed), written: trimmed.replace(/^#snippet\s*/, '') };
+
+    const names = [];
+    const parts = arguments_(trimmed.slice(open + 1, close)).map((part) => {
+        const at = atTopLevel(part, (i) => part[i] === '=');
+
+        if (at === -1) {
+            names.push(...identifiers(part));
+
+            return part;
+        }
+
+        names.push(...identifiers(part.slice(0, at)));
+
+        return `${part.slice(0, at)}= ${call(part.slice(at + 1), '')}`;
+    });
+
+    return {
+        names,
+        written: `${name}(${parts.join(',')})${trimmed.slice(close + 1)}`
+    };
+}
+
 function declaredBy(inner) {
     const keyword = inner.trimStart().split(/[\s(]/)[0];
     const pattern = BLOCK_NAMES[keyword];
@@ -825,19 +859,33 @@ function trailingKey(text) {
 }
 
 function eachBlock(trimmed, declare, call) {
-    const split = trimmed.match(/^#each\s+([\s\S]+?)\s+as\s+([\s\S]+)$/);
+    const head = trimmed.match(/^#each\s+([\s\S]+)$/);
+
+    if (!head) return `{${trimmed}}`;
+
+    // **The separator at the top level, not the first one written.** This was a
+    // non-greedy regex, so `{#each ["a as b"] as item}` split inside the string:
+    // the iterable came out as `["a`, and the compiler answered `'[' was never
+    // closed` about a bracket the author had closed. A word of ordinary English
+    // in a list made the component impossible to compile.
+    //
+    // `atTopLevel` is the mechanism the `await` block already uses for its own
+    // `then` and `catch`, three hundred lines down: it skips what `atomic`
+    // calls a token, so a separator inside a string or a call is not one.
+    const body = head[1];
+    const at = atTopLevel(body, (i) => /^\s+as\s+/.test(body.slice(i)));
 
     // No `as`: nothing is declared, and there is no key to find either.
-    if (!split) {
-        const alone = trimmed.match(/^#each\s+([\s\S]+)$/);
+    if (at === -1) {
         declare([]);
-        return alone ? `{#each ${call(alone[1], '__seq')}}` : `{${trimmed}}`;
+        return `{#each ${call(body, '__seq')}}`;
     }
 
-    const keyed = trailingKey(split[2]);
-    const target = pattern(keyed ? keyed[0] : split[2]);
+    const named = body.slice(at).replace(/^\s+as\s+/, '');
+    const keyed = trailingKey(named);
+    const target = pattern(keyed ? keyed[0] : named);
 
-    const iterable = call(split[1], '__seq');
+    const iterable = call(body.slice(0, at), '__seq');
     declare(identifiers(target));
 
     return `{#each ${iterable} as ${target}` + (keyed ? ` (${call(keyed[1], 'repr')})` : '') + '}';
@@ -1676,8 +1724,23 @@ function walk(markup, collect, onPython, seed, record, where) {
                     record.set(holder, [...(record.get(holder) || []), declares[1]]);
                 }
 
-                push(declaredBy(trimmed));
-                out += markup.slice(index, end + 1);
+                // **A parameter may carry a default, and a default is an
+                // expression.** This passed the whole declaration through as
+                // written, so `{#snippet row(value=True)}` handed Svelte a
+                // JavaScript `True` and the component died at mount with
+                // `ReferenceError: True is not defined` — while `{@render
+                // row(False)}` beside it worked, because an argument *given* is
+                // compiled and one *defaulted* took another path.
+                //
+                // Svelte takes a default, and takes a call in one (measured
+                // against its own compiler), so the expression is compiled where
+                // it stands. And only the name is declared: reading identifiers
+                // out of the whole parameter text put `True` in scope as if the
+                // author had bound it.
+                const signature = snippetParameters(trimmed, call);
+
+                push(signature.names);
+                out += `{#snippet ${signature.written}}`;
             } else {
                 throw refuse(unknownTag(trimmed, 'block', BLOCKS, said()));
             }
