@@ -1,8 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 
-import { test, expect, describe } from 'vitest';
+import { test, expect, describe, vi } from 'vitest';
 import '../src/lib/runtime.js';
+import { mount, flushSync, settled } from './mounted.js';
+import CoroutineAwaited from './fixtures/CoroutineAwaited.svelte';
 
 // Behaviours of the vendored Brython that Svelthon rests on, each observable,
 // so a build that loses one turns a test red rather than a page. The first
@@ -290,6 +292,37 @@ describe('the vendored Brython carries its repairs', () => {
         expect(source).toContain('returned non-iterable of type');
         expect(source).not.toContain("console.log('iter, obj'");
         expect(source).not.toContain('no tp_iternext in');
+    });
+
+    // A coroutine that leaves the frame it was created in has not been dropped:
+    // `{#await later()}` hands it to Svelte, which awaits it. Brython warned
+    // `coroutine 'later' was never awaited` as soon as that frame was left,
+    // where CPython says nothing; the question is now asked one turn later.
+    // One created and thrown away is still told, which is the half that keeps
+    // the check honest.
+    test('a coroutine handed on is not reported as never awaited', async () => {
+        const said = [];
+        const spies = ['error', 'warn', 'log'].map((level) =>
+            vi.spyOn(console, level).mockImplementation((...args) => said.push(args.join(' ')))
+        );
+
+        try {
+            const target = document.body.appendChild(document.createElement('div'));
+            mount(CoroutineAwaited, { target });
+
+            await settled(() => expect(target.querySelector('[data-k="shown"]')?.textContent).toBe('done'));
+            await new Promise((resolve) => setTimeout(resolve));
+
+            expect(said.filter((one) => one.includes('never awaited'))).toEqual([]);
+
+            target.querySelector('[data-k="drop"]').click();
+            flushSync();
+            await new Promise((resolve) => setTimeout(resolve));
+
+            expect(said.some((one) => one.includes("coroutine 'later' was never awaited"))).toBe(true);
+        } finally {
+            for (const spy of spies) spy.mockRestore();
+        }
     });
 
     // Under Node the compiler loads the file with `require()` and a
