@@ -228,9 +228,30 @@ export const __pybridge = {
     // JavaScript the problem does not arise: spreading a $state proxy produces a
     // fresh object on every evaluation. So a shallow copy is returned, and a
     // Python spread renders exactly like its JavaScript counterpart.
+    //
+    // **And the values in it cross the boundary the attribute beside them
+    // crosses.** Copying was the whole job while a dict held strings and
+    // numbers, so a None inside one went to the DOM as the Python object it
+    // is: `{**{"title": None}}` wrote the word `None` where `title={None}`
+    // removed the attribute, and `{**{"disabled": None}}` disabled a control
+    // nobody had disabled, which is a form the reader cannot use. Moving an
+    // element's attributes into a dict changed what they meant.
+    //
+    // The rule is `bound`, just above, and this is the second site that hands
+    // an attribute over. It is asked rather than repeated: what "absent" means
+    // at a DOM boundary is one sentence, and it is written there.
+    //
+    // Only the top level, and only None, because that is all the direct path
+    // converts: False, 0, the empty string, a callback and a native object
+    // reach an attribute by the same road whichever way they are written.
     spread(value) {
         if (value === null || value === undefined || typeof value !== 'object') return value;
-        return { ...value };
+
+        const out = { ...value };
+
+        for (const key of Object.keys(out)) out[key] = __pybridge.bound(out[key]);
+
+        return out;
     }
 };
 

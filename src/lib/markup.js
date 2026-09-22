@@ -906,6 +906,33 @@ const CLAUSES = ['else', 'then', 'catch'];
 const TAGS = ['html', 'render', 'debug'];
 const ATTACHMENTS = ['attach'];
 
+// **A keyword and what follows it are parted by whitespace, not by a space.**
+//
+// Measured on Svelte's own compiler over every block, clause and tag it has: a
+// tab and a newline part them exactly as a space does, and only an *absent*
+// separator is refused. A condition wrapped over two lines is ordinary markup,
+// and `prettier-plugin-svelte` writes one for a long `{#if}`.
+//
+// The rule was already written at the four inner sites that needed a regular
+// expression for another reason — the body of an `{#each}`, the `then` of an
+// `{#await}`, `{:else if}`, a snippet's name — and spelled as a literal space
+// at the eight gates standing in front of them. So `{#each\n  rows as row}` was
+// turned away by the gate, by a sentence listing `each` among the blocks it
+// knows, before the body that would have read it correctly. Asked once here.
+//
+// The keyword is a whole word, so `{@debugger}` is not `{@debug}` with a
+// suffix, and the text after it is handed on unread: every branch below trims
+// its own expression, and a leading tab is whitespace to Python too.
+const SEPARATED = /^([A-Za-z]+)(\s[\s\S]*)?$/;
+
+const keyword = (trimmed, sigil) => {
+    if (!trimmed.startsWith(sigil)) return null;
+
+    const found = trimmed.slice(sigil.length).match(SEPARATED);
+
+    return found === null ? null : { name: found[1], rest: found[2] ?? '' };
+};
+
 // `{x = 2}` and `{y => x + 5}`: a name declared in the markup, with the two
 // signs the script already uses and no third one invented.
 //
@@ -1472,6 +1499,7 @@ function walk(markup, collect, onPython, seed, record, where) {
                     const glued = attribute ? null : out.match(UNQUOTED_VALUE);
                     const inner = markup.slice(index + 1, end);
                     const trimmed = inner.trim();
+                    const attached = keyword(trimmed, '@');
 
                     region = { start: index + 1, end };
 
@@ -1553,7 +1581,7 @@ function walk(markup, collect, onPython, seed, record, where) {
                                     `everywhere an expression is read.`
                             )
                         );
-                    } else if (trimmed.startsWith('@attach ')) {
+                    } else if (attached?.name === 'attach' && attached.rest !== '') {
                         // `{@attach fn}` sits inside the tag rather than around
                         // it, so it is read here. What it holds is Python like
                         // every other expression, and what that yields is a
@@ -1561,7 +1589,7 @@ function walk(markup, collect, onPython, seed, record, where) {
                         // through the same wrapper a handler does, which trims
                         // the call to the declared arity, converts the element,
                         // and hands the teardown back.
-                        out += `{@attach ${EVENT_WRAPPER}(${call(trimmed.slice(8), '')})}`;
+                        out += `{@attach ${EVENT_WRAPPER}(${call(attached.rest, '')})}`;
                     } else if (/^[\p{L}_$][\p{L}\p{M}\p{N}_$]*$/u.test(trimmed)) {
                         // {name}, Svelte's shorthand for name={name}. Expanding
                         // it is what routes the read through the namespace, and
@@ -1675,23 +1703,29 @@ function walk(markup, collect, onPython, seed, record, where) {
         region = { start: index + 1, end };
 
         if (trimmed.startsWith('#')) {
-            if (trimmed.startsWith('#if ')) {
+            // Every block holds an expression, so a keyword with nothing after
+            // it is not one: `{#if}` is refused by the sentence below, as it
+            // was when the gate was a literal space.
+            const opened = keyword(trimmed, '#');
+            const opens = (name) => opened !== null && opened.name === name && opened.rest !== '';
+
+            if (opens('if')) {
                 push([]);
-                out += `{#if ${call(trimmed.slice(4), '__truthy')}}`;
-            } else if (trimmed.startsWith('#each ')) {
+                out += `{#if ${call(opened.rest, '__truthy')}}`;
+            } else if (opens('each')) {
                 out += eachBlock(trimmed, push, call);
-            } else if (trimmed.startsWith('#key ')) {
+            } else if (opens('key')) {
                 // Svelte re-creates the block when the value changes, by
                 // identity, which no Python value keeps. repr() gives one.
                 push([]);
-                out += `{#key ${call(trimmed.slice(5), 'repr')}}`;
-            } else if (trimmed.startsWith('#await ')) {
+                out += `{#key ${call(opened.rest, 'repr')}}`;
+            } else if (opens('await')) {
                 // The awaited expression is Python like any other, a coroutine
                 // included, since the wrapper hands one back as a promise. What
                 // follows it is a name the block declares, never an expression:
                 // `{#await f() then row}`. The split is made at depth zero so
                 // that `{#await f("then")}` is not cut inside its own string.
-                const rest = trimmed.slice(7);
+                const rest = opened.rest;
                 const at = atTopLevel(rest, (i) => /^\s(?:then|catch)\s/.test(rest.slice(i)));
                 const awaited = at === -1 ? rest : rest.slice(0, at);
                 const tail = at === -1 ? '' : rest.slice(at);
@@ -1707,7 +1741,7 @@ function walk(markup, collect, onPython, seed, record, where) {
                 // it: `{#await f(value) then value}` must read the outer one.
                 out += `{#await ${call(awaited, '')}${tail}}`;
                 push(identifiers(tail.replace(/^\s*(?:then|catch)\s+/, '')));
-            } else if (trimmed.startsWith('#snippet ')) {
+            } else if (opens('snippet')) {
                 // A snippet declares names and holds no expression of its own:
                 // it is passed through, and its body is walked like any other.
                 //
@@ -1757,9 +1791,11 @@ function walk(markup, collect, onPython, seed, record, where) {
                 scopes[scopes.length - 1] = [...(seed.get(holder) || []), ...declared];
             }
 
+            const clause = keyword(trimmed, ':');
+
             if (/^:else\s+if\s/.test(trimmed)) {
                 out += `{:else if ${call(trimmed.replace(/^:else\s+if\s/, ''), '__truthy')}}`;
-            } else if (CLAUSES.some((one) => trimmed === `:${one}` || trimmed.startsWith(`:${one} `))) {
+            } else if (clause !== null && CLAUSES.includes(clause.name)) {
                 // `:else`, `:then row`, `:catch err`: a name at most, never an
                 // expression, so they cross unchanged.
                 out += markup.slice(index, end + 1);
@@ -1767,13 +1803,16 @@ function walk(markup, collect, onPython, seed, record, where) {
                 throw refuse(unknownTag(trimmed, 'clause', CLAUSES, said()));
             }
         } else if (trimmed.startsWith('@')) {
-            if (trimmed.startsWith('@html ')) {
-                out += `{@html ${call(trimmed.slice(6), '__text')}}`;
-            } else if (trimmed.startsWith('@render ')) {
+            const written = keyword(trimmed, '@');
+            const holds = (name) => written !== null && written.name === name && written.rest !== '';
+
+            if (holds('html')) {
+                out += `{@html ${call(written.rest, '__text')}}`;
+            } else if (holds('render')) {
                 // The snippet itself is a JavaScript function and stays one;
                 // what it is *given* is Python. Arguments are split at depth
                 // zero, so a comma inside a call or a literal stays put.
-                const called = trimmed.slice(8).trim();
+                const called = written.rest.trim();
                 const opens = called.indexOf('(');
                 const closes = opens === -1 ? -1 : closingPair(called, opens);
 
@@ -1782,9 +1821,11 @@ function walk(markup, collect, onPython, seed, record, where) {
                     : `{@render ${called.slice(0, opens)}(${arguments_(called.slice(opens + 1, closes))
                           .map((one) => (one.trim() ? call(one, '') : one))
                           .join(', ')})${called.slice(closes + 1)}}`;
-            } else if (trimmed.startsWith('@debug')) {
+            } else if (written !== null && written.name === 'debug') {
                 // `{@debug}` takes names rather than an expression, and the
                 // names it takes are the JavaScript ones the compiler emits.
+                // The only tag that stands alone, so it is the only one here
+                // that does not ask for something after its keyword.
                 out += markup.slice(index, end + 1);
             } else {
                 throw refuse(unknownTag(trimmed, 'tag', TAGS, said()));

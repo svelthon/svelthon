@@ -30,9 +30,24 @@ const list = (name) => {
     return [...found[1].matchAll(/'([^']+)'/g)].map((one) => one[1]);
 };
 
-// Every `#word` or `@word` the chain tests for, wherever it sits.
-const dispatched = (sigil) =>
-    [...new Set([...source.matchAll(new RegExp(`startsWith\\('\\${sigil}(\\w+)`, 'g'))].map((one) => one[1]))];
+// Every keyword the chain compares against, wherever it sits and whichever
+// sigil opened it. Which *position* a word belongs to is what the behavioural
+// rows below decide; this reading answers one question only, and it is the one
+// no behaviour can answer: was a branch added without its entry.
+//
+// It is written as an equality rather than as a subset on purpose. The chain
+// used to be a row of `startsWith('#if ')`, and a reading that only looked for
+// that spelling would have come back **empty** the day the chain stopped using
+// it, and passed — a guard that names its means goes quiet when the means
+// changes, which is the worst way for one to break. An equality cannot go
+// quiet: a reading that finds nothing fails as loudly as one that finds a word
+// nobody listed.
+const dispatched = [
+    ...new Set([
+        ...[...source.matchAll(/\b(?:opens|holds)\('(\w+)'\)/g)].map((one) => one[1]),
+        ...[...source.matchAll(/\.name === '(\w+)'/g)].map((one) => one[1])
+    ])
+];
 
 const BLOCKS = list('BLOCKS');
 const CLAUSES = list('CLAUSES');
@@ -57,9 +72,14 @@ describe('the dispatch chain and the lists that describe it', () => {
     // Catches the branch added without its entry. It cannot say which of the two
     // tag positions the word belongs to, which is what the two tests below are
     // for, but it does say that nobody forgot the list entirely.
+    //
+    // `CLAUSES` is absent from the right-hand side because the chain names none
+    // of its words: it reads the list itself. Writing them out instead would
+    // put `else`, `then` and `catch` on the left, where no list on the right
+    // names them, and this row would fail — so the duplication is caught here
+    // too, without this file having to name the call the chain makes.
     test('every word the chain dispatches on is named by a list', () => {
-        expect(dispatched('#').filter((one) => !BLOCKS.includes(one))).toEqual([]);
-        expect(dispatched('@').filter((one) => ![...TAGS, ...ATTACHMENTS].includes(one))).toEqual([]);
+        expect([...dispatched].sort()).toEqual([...BLOCKS, ...TAGS, ...ATTACHMENTS].sort());
     });
 
     // And the other direction, which the text cannot answer: an entry with no
@@ -107,13 +127,6 @@ describe('the dispatch chain and the lists that describe it', () => {
             expect(() => rewrite(markup)).not.toThrow(new RegExp(`the tags are[^.]*\\b${name}\\b`));
         }
     );
-
-    // `CLAUSES` is the one list the chain reads at run time rather than
-    // duplicating, so it cannot drift. Checked anyway, because the day it stops
-    // being read is the day it can.
-    test('CLAUSES is consumed by the dispatch itself', () => {
-        expect(source).toMatch(/CLAUSES\.some\(/);
-    });
 
     test.for(CLAUSES)('{:%s} is accepted inside its block', (name) => {
         expect(() => rewrite(`{#await a}x{:${name} b}y{/await}`)).not.toThrow(
