@@ -738,11 +738,12 @@ const isComponent = (tag) => tag !== null && COMPONENT.test(tag.name);
 
 const identifiers = (text) => [...text.matchAll(new RegExp(NAME, 'gu'))].map((m) => m[0]);
 
-// One entry of a snippet's parameter list: a name, a pattern Svelte
-// destructures, or either of them carrying a default.
+// One entry of a declaration that destructures: a snippet's parameter, and the
+// target of an `{#each}`. Either may be a name, a pattern Svelte takes apart,
+// or either of those carrying a default.
 //
 // **A default may sit at any depth.** Measured on Svelte's own compiler, which
-// takes `[value = 1]`, `[[deep = 1]]`, `{ a = 1 }` and `{ a: { b = 1 } }` and
+// takes `[value = 1]`, `{ a = 1 }` and `{ a: { b = 1 } }` in both positions and
 // refuses only a rest parameter. The split was made at the top level alone, so
 // `value=True` compiled and `[value=True]` — the same default, one bracket
 // lower — crossed as written: Svelte was handed a JavaScript `True` and the
@@ -752,14 +753,27 @@ const identifiers = (text) => [...text.matchAll(new RegExp(NAME, 'gu'))].map((m)
 // so `True` entered the block's scope as if the author had bound it; here a
 // name is collected only where a name is *bound*, which is what a walk that
 // knows a default from a target can say and a regular expression cannot.
-function parameterPattern(part, call, names) {
+//
+// `tuple` is the `{#each}` half of the job, and it is done here rather than
+// beside it for the reason the rest of this walk exists. `for k, v in
+// d.items()` is how Python unpacks and `as (k, v)` is how it reads, so a
+// parenthesised group becomes the brackets Svelte destructures with — and the
+// translation used to be a blanket `replace(/[()]/g, …)` over the whole target,
+// which is fine while a target holds nothing but names and mangles the first
+// call written inside one: `as (a, b=len(x))` would have become `b=len[x]`.
+// A walk translates the delimiters it recognised and leaves an expression
+// alone, because an expression leaves through `call` before its parentheses are
+// ever looked at.
+function parameterPattern(part, call, names, tuple = false) {
     const at = atTopLevel(part, (i) => part[i] === '=');
 
     // `x=expr`, and `[x]=expr` too: what carries the default may be a pattern
     // itself, so the left half goes back through this walk rather than to
     // `identifiers`.
     if (at !== -1) {
-        return `${parameterPattern(part.slice(0, at), call, names)}= ${call(part.slice(at + 1), '')}`;
+        const target = parameterPattern(part.slice(0, at), call, names, tuple);
+
+        return `${target}= ${call(part.slice(at + 1), '')}`;
     }
 
     // The spacing the author wrote is theirs, and only the middle is rebuilt.
@@ -772,10 +786,13 @@ function parameterPattern(part, call, names) {
     // A pattern: the same question, one level down, for each of its elements.
     if (close !== -1) {
         const inside = arguments_(trimmed.slice(1, close))
-            .map((one) => parameterPattern(one, call, names))
+            .map((one) => parameterPattern(one, call, names, tuple))
             .join(',');
 
-        return `${lead}${trimmed[0]}${inside}${trimmed[close]}${trimmed.slice(close + 1)}${tail}`;
+        const [opened, closed] =
+            tuple && trimmed[0] === '(' ? ['[', ']'] : [trimmed[0], trimmed[close]];
+
+        return `${lead}${opened}${inside}${closed}${trimmed.slice(close + 1)}${tail}`;
     }
 
     // `{ key: target }` binds the target and not the key, which is the one
@@ -783,7 +800,7 @@ function parameterPattern(part, call, names) {
     const colon = atTopLevel(trimmed, (i) => trimmed[i] === ':');
 
     if (colon !== -1) {
-        const target = parameterPattern(trimmed.slice(colon + 1), call, names);
+        const target = parameterPattern(trimmed.slice(colon + 1), call, names, tuple);
 
         return `${lead}${trimmed.slice(0, colon + 1)}${target}${tail}`;
     }
@@ -824,35 +841,6 @@ function declaredBy(inner) {
 
     const found = inner.trim().match(pattern);
     return found ? identifiers(found[1]) : [];
-}
-
-// `{#each xs as x, i (key)}`. The iterable is evaluated outside the block, so it
-// is compiled before the block's names exist; the key is evaluated inside it.
-// Both matter: a Python iterable that is not a list (a dict, a range, the
-// result of .items()) has to become an array for Svelte to walk it.
-// `for k, v in d.items()` is how Python unpacks, and `as (k, v)` is how it reads
-// in a template. Svelte destructures with brackets, and a Python tuple *is* an
-// array, so the two mean the same thing once the punctuation is translated.
-function pattern(target) {
-    const trimmed = target.trim();
-
-    // Only what is explicitly parenthesised. A bare `x, i` is Svelte's item and
-    // index, not a tuple: turning that into `[x, i]` would silently destructure
-    // every indexed loop in the project.
-    if (!trimmed.startsWith('(')) return trimmed;
-
-    let depth = 0;
-    let close = -1;
-
-    for (let i = 0; i < trimmed.length && close === -1; i++) {
-        if (trimmed[i] === '(') depth++;
-        else if (trimmed[i] === ')' && --depth === 0) close = i;
-    }
-
-    if (close === -1) return trimmed;
-
-    const inner = trimmed.slice(1, close).replace(/[()]/g, (one) => (one === '(' ? '[' : ']'));
-    return `[${inner}]${trimmed.slice(close + 1)}`;
 }
 
 // The key that trails an `{#each}` target: `[target, key]`, or null when the line
@@ -931,10 +919,29 @@ function eachBlock(trimmed, declare, call) {
 
     const named = body.slice(at).replace(/^\s+as\s+/, '');
     const keyed = trailingKey(named);
-    const target = pattern(keyed ? keyed[0] : named);
+
+    // **A target destructures, and a destructuring holds expressions.** The
+    // same sentence as a snippet's parameter list, at the other site that
+    // declares names, and it was written at one of the two: `{#each rows as
+    // [value=True]}` handed Svelte a JavaScript `True` and died at mount, and
+    // its identifiers were read whole, so `True` was declared as a name of the
+    // block. One walk answers for both now.
+    //
+    // Split at the top level first, because the target is a comma list of its
+    // own — `as (a, b), i` is a pattern and then Svelte's index — and each
+    // entry is a pattern in its own right.
+    //
+    // Compiled *before* `declare`, and beside the iterable rather than the key:
+    // a default is evaluated where the loop is written, not inside it, so it
+    // reads what encloses the block. The key is the one that reads the block's
+    // own names, which is why it is compiled last.
+    const names = [];
+    const target = arguments_((keyed ? keyed[0] : named).trim())
+        .map((one) => parameterPattern(one, call, names, true))
+        .join(',');
 
     const iterable = call(body.slice(0, at), '__seq');
-    declare(identifiers(target));
+    declare(names);
 
     return `{#each ${iterable} as ${target}` + (keyed ? ` (${call(keyed[1], 'repr')})` : '') + '}';
 }
