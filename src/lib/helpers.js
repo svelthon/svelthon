@@ -693,12 +693,31 @@ const keywordsOf = (args) => {
 const byName = (fn, names) => {
     const wrapped = (...args) => {
         const kw = keywordsOf(args);
+        const given = kw === null ? [...args] : args.slice(0, -1);
 
-        if (kw === null) return fn(...args);
+        // **A fixed Python signature does not become permissive because what
+        // implements it is a JavaScript function.** JavaScript drops an argument
+        // it has no parameter for and says nothing, so `slugify("a", "b")` read
+        // as a correct call and the second word vanished.
+        if (given.length > names.length) {
+            // CPython's own wording, with the one hedge the table forces:
+            // `KEYWORDS` says which names there are and not which are required,
+            // so *at most* is what can honestly be said where CPython says
+            // *from 1 to 2*.
+            throw refuse(
+                `${fn.name}() takes at most ${names.length} positional ` +
+                    `argument${names.length === 1 ? '' : 's'} but ${given.length} were given. ` +
+                    `It takes ${names.join(', ')}.`
+            );
+        }
 
-        const given = args.slice(0, -1);
+        // Which positions the call has already filled. Without this a keyword
+        // **overwrote** what position had put there — `batch(rows, 2, n=3)`
+        // grouped by three and said nothing, which is a wrong answer out of a
+        // call the author got wrong and was never told about. Python raises.
+        const filled = new Set(given.keys());
 
-        for (const carrier of kw) {
+        for (const carrier of kw ?? []) {
             for (const [name, value] of pyEntries(carrier)) {
                 const at = names.indexOf(name);
 
@@ -708,6 +727,14 @@ const byName = (fn, names) => {
                     );
                 }
 
+                // The same name twice is the `**` spread's case as much as the
+                // plain one: `tojson(rows, indent=2, **{"indent": 4})` is two
+                // values for one parameter, spelled two ways.
+                if (filled.has(at)) {
+                    throw refuse(`${fn.name}() got multiple values for argument '${name}'`);
+                }
+
+                filled.add(at);
                 given[at] = value;
             }
         }

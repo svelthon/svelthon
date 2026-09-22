@@ -397,6 +397,9 @@ action, and the group stops needing an identity: each input computes its own
 on an object's attribute, and once per row of an `{#each}`, none of which
 Svelte's own version manages here.
 
+A checkbox group's list is **the checked inputs in document order**, which is
+what Svelte's own binding collects, not the order they were clicked in.
+
 ### The two things to know
 
 A template reads as Python and means what Python means, with two deliberate

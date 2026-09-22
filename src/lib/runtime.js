@@ -3804,6 +3804,29 @@ export function group(node, [current, write, chosen, binding, scope]) {
 
     const value = () => (picked === undefined ? node.value : pyBind(picked));
 
+    // **A checkbox group is the checked inputs, read in the order they sit in
+    // the document.** Svelte's own binding does exactly that —
+    // `get_binding_group_value` walks the group's inputs — and this built the
+    // list from the click history instead: the value clicked last went to the
+    // end, so ticking `b` then `a` gave `['b', 'a']` where Svelte gives
+    // `['a', 'b']`. The selection was right and its order was ours.
+    //
+    // So each input registers on the token, which is what already says *these
+    // inputs belong together* across instances and `{#each}` rows, and the
+    // collection is sorted by document position rather than by insertion: a
+    // group whose rows are reordered is the case an insertion order would get
+    // wrong in the same way, one level down.
+    (token.nodes ??= new Set()).add(node);
+    node.$svelthonValue = value;
+
+    const inOrder = () =>
+        [...token.nodes]
+            .filter((one) => one.isConnected)
+            .sort((a, b) =>
+                // DOCUMENT_POSITION_FOLLOWING: `b` comes after `a`.
+                a.compareDocumentPosition(b) & 4 ? -1 : 1
+            );
+
     // Python's `==`, not JavaScript's `===`. A Brython float is an object
     // `{ob_type, value}`, so `value={0.5}` evaluated twice is two objects and
     // identity answers false for what the author wrote as one value. `==` and
@@ -3841,9 +3864,13 @@ export function group(node, [current, write, chosen, binding, scope]) {
         // A checkbox group is a list, and it has to arrive as Python's: an array
         // built here reads as a JavascriptArray, which prints `[a, c]` where
         // Python prints `['a', 'c']` and refuses a slice.
-        const kept = Array.from(node.$svelthonGroup ?? []).filter((one) => !same(one));
-
-        write(__pybridge.list(node.checked ? [...kept, value()] : kept));
+        write(
+            __pybridge.list(
+                inOrder()
+                    .filter((one) => one.checked)
+                    .map((one) => one.$svelthonValue())
+            )
+        );
     };
 
     // What the reset writes back, once the control has been put back. A radio
@@ -3888,6 +3915,7 @@ export function group(node, [current, write, chosen, binding, scope]) {
         destroy() {
             node.removeEventListener('change', changed);
             RESETS.delete(node);
+            token.nodes.delete(node);
         }
     };
 }

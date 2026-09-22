@@ -72,4 +72,20 @@ describe('an injected helper takes its arguments by name', () => {
         expect(read('unknown')).toContain('no argument named espace');
         expect(read('unknown')).toContain('value, indent');
     });
+
+    // **A fixed signature does not become permissive because a JavaScript
+    // function implements it.** Each call below is a `TypeError` in CPython —
+    // checked against `python3` on the same four spellings — and each was
+    // silent: the keyword overwrote what position had put there, the spread
+    // overwrote the keyword, and the extra word went to a function with nowhere
+    // to put it. `batch(rows, 2, n=3)` is the one that costs data: it grouped
+    // by three out of a call that asked for two.
+    test.for([
+        ['a parameter given by position and by name', 'by both', /multiple values for argument 'indent'/],
+        ['a size given twice', 'size by both', /multiple values for argument 'n'/],
+        ['a keyword the spread repeats', 'twice by spread', /multiple values for argument 'indent'/],
+        ['more positions than the signature has', 'too many', /takes at most 1 positional argument but 2/]
+    ])('%s is refused', ([, what, says]) => {
+        expect(setup()(what)).toMatch(says);
+    });
 });

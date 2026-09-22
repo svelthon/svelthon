@@ -20,6 +20,15 @@ CALLS = {
     "json-spread": lambda: tojson(rows, **{"indent": 2}),
     # A name no helper takes: the one thing the author can have got wrong.
     "unknown": lambda: tojson(rows, espace=2),
+    # A signature is fixed, and a JavaScript implementation must not make it
+    # permissive. Each of these is a TypeError in CPython, and each was silent
+    # here: the keyword overwrote the position, the spread overwrote the
+    # keyword, and the extra word was dropped by a function that had nowhere to
+    # put it.
+    "by both": lambda: tojson(rows, 2, indent=4),
+    "size by both": lambda: batch(rows, 2, n=3),
+    "twice by spread": lambda: tojson(rows, indent=2, **{"indent": 4}),
+    "too many": lambda: slugify("first", "second"),
 }
 
 

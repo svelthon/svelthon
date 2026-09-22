@@ -405,6 +405,9 @@ fait marcher sur un champ de dict, sur un attribut d'objet, et une fois par lign
 d'un `{#each}`, ce que la version de Svelte ne réussit ici dans aucun des trois
 cas.
 
+La liste d'un groupe de cases est **les cases cochées dans l'ordre du document**,
+ce que la liaison de Svelte collecte elle-même, et non l'ordre des clics.
+
 ### Les deux choses à savoir
 
 Un gabarit se lit comme du Python et veut dire ce que Python veut dire, à deux
