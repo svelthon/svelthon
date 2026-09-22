@@ -1005,7 +1005,11 @@ describe('the names handed to follow', () => {
         ['a field of an f-string', 'f"{count} left"', true],
         ['a name only in its text', 'f"count left"', false],
         ['one inside a field s own format', 'f"{1:>{count}}"', true],
-        ['and one behind an escaped brace', 'f"{{count}} left"', false]
+        ['and one behind an escaped brace', 'f"{{count}} left"', false],
+        // A format specification is its own grammar: `#` is an option there and
+        // `'` a fill character, not a comment and a string.
+        ['a field whose format holds a #', 'f"{count:#x}"', true],
+        ['and one whose fill is a quote', 'f"{count:\'>4}"', true]
     ])('%s', ([, expression, followed]) => {
         const out = rewrite(expression);
 
@@ -1017,5 +1021,12 @@ describe('the names handed to follow', () => {
     // *nothing declares it*.
     test('while the name is a binding of the block in every one of them', () => {
         expect(rewrite('count')).toContain('__follow(count)');
+    });
+
+    // The conversion of a field is not a name either, even when the block
+    // declares one spelled like it.
+    test('a conversion is not a reference', () => {
+        expect(rewrite('f"{x!r}"', 'r')).not.toContain('__follow(r)');
+        expect(rewrite('f"{r!r}"', 'r')).toContain('__follow(r)');
     });
 });

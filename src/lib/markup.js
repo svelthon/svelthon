@@ -16,7 +16,11 @@
 // One function because four of them ask: the brace, the bracket, the top-level
 // walk and the walrus rewrite. `tagValue` is not one of them; it reads markup,
 // where these rules do not hold.
-export function atomic(source, at) {
+//
+// `onField(from, to)`, when given, is told where the expression of each field
+// of an f-string lies, nested fields of a specification included: the one place
+// that knows the three grammars apart is the one that says where the code is.
+export function atomic(source, at, onField) {
     const c = source[at];
 
     if (c === '#') {
@@ -74,12 +78,14 @@ export function atomic(source, at) {
             }
 
             if (source[i] === '{') {
-                frames.push({ field: frames.length === 0 || spec, spec: false, brackets: 0 });
+                frames.push({ field: frames.length === 0 || spec, spec: false, brackets: 0, start: i + 1 });
                 continue;
             }
 
             if (source[i] === '}' && frames.length > 0) {
-                frames.pop();
+                const closed = frames.pop();
+
+                if (closed.field && !closed.spec) onField?.(closed.start, i);
                 continue;
             }
 
@@ -88,6 +94,7 @@ export function atomic(source, at) {
                 else if (')]'.includes(source[i])) here.brackets--;
                 else if (source[i] === ':' && here.field && here.brackets === 0) {
                     here.spec = true;
+                    onField?.(here.start, i);
                     continue;
                 }
 
@@ -745,37 +752,12 @@ const identifiers = (text) => [...text.matchAll(new RegExp(NAME, 'gu'))].map((m)
 //
 // **An f-string is code, in its fields and nowhere else.** `f"{count} left"`
 // reads `count`, so skipping the literal whole would cost the block the very
-// subscription it depends on; reading all of it would count `left`. So the
-// fields are picked out and the text between them is not, and a field is found
-// by the same brace walk the template itself is read with — a format
-// specification is part of the field, which is what `f"{x:>{w}}"` needs.
-const fields = (inside) => {
-    const out = [];
-    let at = 0;
-
-    while (at < inside.length) {
-        // `{{` and `}}` are how an f-string writes a brace, and neither opens
-        // anything.
-        if (inside.startsWith('{{', at) || inside.startsWith('}}', at)) {
-            at += 2;
-            continue;
-        }
-
-        if (inside[at] !== '{') {
-            at += 1;
-            continue;
-        }
-
-        const close = closingBrace(inside, at);
-
-        if (close === -1) break;
-
-        out.push(inside.slice(at + 1, close));
-        at = close + 1;
-    }
-
-    return out;
-};
+// subscription it depends on; reading all of it would count `left`. `atomic`
+// says where each field's expression lies, since it is the scanner that tells a
+// field from a format specification, where `#` is an option and `'` a fill
+// character: `f"{value:#x}"` and `f"{value:'>4}"` read `value` and nothing else.
+// A conversion, `!r`, closes the expression as well.
+const CONVERSION = /![rsa]\s*$/;
 
 const referenced = (text) => {
     const found = new Set();
@@ -783,16 +765,12 @@ const referenced = (text) => {
     let at = 0;
 
     while (at < text.length) {
-        const skip = atomic(text, at);
+        const fields = [];
+        const skip = atomic(text, at, (from, to) => fields.push(text.slice(from, to)));
 
         if (skip > 0) {
-            if (interpolated(text, at)) {
-                const fence = text.startsWith(text[at].repeat(3), at) ? 3 : 1;
-                const inside = text.slice(at + fence, at + skip - fence);
-
-                for (const field of fields(inside)) {
-                    for (const one of referenced(field)) found.add(one);
-                }
+            for (const field of fields) {
+                for (const one of referenced(field.replace(CONVERSION, ''))) found.add(one);
             }
 
             at += skip;
