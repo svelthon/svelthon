@@ -1475,9 +1475,6 @@ function fromImports(ast) {
 // `tests/generated-names.test.js` holds the two files to them.
 const fn = (name) => `__fn_${name}`;
 const local = (name) => `__local_${name}`;
-// An imported JavaScript name, once it has been given a Python-aware
-// boundary, see `jsCall` in the runtime.
-const jsBound = (name) => `__js_${name}`;
 // What `$effect.root` hands back. Python reads the decorated name and gets
 // this, exactly as JavaScript reads `const destroy = $effect.root(…)`, and
 // the name belongs to the destructor on both sides.
@@ -1738,10 +1735,16 @@ function jsNameBindings(c, extra = []) {
         (n) => !c.declared.includes(n)
     );
 
-    return [
-        ...names.map((n) => `const ${jsBound(n)} = __jsCall(${n});`),
-        ...names.map((n) => `__bind(__proto, '${n}', () => ${jsBound(n)});`)
-    ];
+    // **Read at every access, because a name is a binding and not a value.**
+    // This took `__jsCall(n)` once into a `const` and handed that back for ever,
+    // so `let amount = 1` in a `<script module>` reached Python as `1` after the
+    // JavaScript had moved on — and not only where reactivity was in question:
+    // a Python function that *asked again* still read the old number.
+    //
+    // Safe to read afresh because the adaptation is memoised per function
+    // (`ADAPTED` in runtime.js): the same function gives the same proxy, so a
+    // callback registered from Python can still be taken back.
+    return names.map((n) => `__bind(__proto, '${n}', () => __jsCall(${n}));`);
 }
 
 // Everything the compiler adds: the injected helpers, the template bridge's

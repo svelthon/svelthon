@@ -3077,6 +3077,16 @@ const refuseKeywords = (target, args) => {
     );
 };
 
+// One adapter per function, for the life of the function.
+//
+// The binding is read afresh on every access now — a `let` in a `<script
+// module>` is a *binding* and not a value — and without this a name read twice
+// would hand Python two different proxies for one function. A registry given
+// the first cannot remove the second: `off(handler)` after `on(handler)` is the
+// shape that breaks, and it is the same identity rule `pyHandler` keeps on the
+// other side of the boundary.
+const ADAPTED = new WeakMap();
+
 export function jsCall(value) {
     // An imported constant crosses here too, and it crosses once: `export const
     // half = 0.5` reached Python as a raw JavaScript number, where `half * 2`
@@ -3086,7 +3096,11 @@ export function jsCall(value) {
     // capabilities, decided by the way it entered.
     if (typeof value !== 'function') return pyBind(value);
 
-    return new Proxy(value, {
+    const known = ADAPTED.get(value);
+
+    if (known !== undefined) return known;
+
+    const adapted = new Proxy(value, {
         // The memo is made here and not above, so it lasts exactly one call: a
         // longer-lived one would hand a later call the snapshot an earlier one
         // took, after Python had moved on.
@@ -3098,6 +3112,10 @@ export function jsCall(value) {
             return inbound(Reflect.apply(target, self, args.map((one) => outbound(one, made))));
         }
     });
+
+    ADAPTED.set(value, adapted);
+
+    return adapted;
 }
 
 // One value of an exported mapping.
@@ -3233,7 +3251,21 @@ export function pyExport(value, where, lineOffset = 0) {
     // wrapped function became the object's prototype instead. `plainData` had
     // learned that; this branch had not, and being fixed in one converter is not
     // being fixed in the export.
-    if (pairs.some(([, one]) => callable(one))) {
+    // **A mapping, and not anything that happens to hold a function.** The test
+    // was `pairs.some(callable)` alone, so a JavaScript instance carrying a
+    // callback as a field — `this.callback = () => …`, an ordinary shape — was
+    // rebuilt as an object literal and lost its prototype: `service.ping` was
+    // `undefined` for the consumer, while the *same* object returned by a
+    // function came back whole.
+    //
+    // `plainData` has had the rule for as long as it has had the comment above
+    // it — *anything of a class of its own is not ours to flatten* — and this
+    // branch, which is the second site that writes a mapping out, did not ask
+    // it. That pair is named a few lines down for `propertyName`; this is the
+    // other half of the same split.
+    const mapping = globalThis.__BRYTHON__.is_dict(value) || plainObject(value);
+
+    if (mapping && pairs.some(([, one]) => callable(one))) {
         const out = {};
 
         // A WeakMap and not a `new Set()`, which is how the other rule is asked

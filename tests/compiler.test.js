@@ -171,7 +171,17 @@ def increment():
 
     // The boundary towards JavaScript is laid down at compile time; what it
     // then does is checked in boundary.test.js.
-    test('a JavaScript import is wrapped once, not on every read', () => {
+    // This used to read *wrapped once, not on every read*, and asserted the
+    // `const __js_error = __jsCall(error);` that carried it. Wrapping once was
+    // never the goal: the goal was that a function adapted twice not be two
+    // different proxies, and a name is a **binding** — taking its value once
+    // meant a `let` in a `<script module>` reached Python as the number it had
+    // at build time, for ever.
+    //
+    // So the read is fresh and the identity is kept where it belongs, in
+    // `jsCall`'s own memo. `tests/module-binding.test.js` holds both halves as
+    // behaviour; this line only says the binding is read and not captured.
+    test('a JavaScript import is read at every access, not captured', () => {
         const { script } = compile(
             '__js__ = {"@sveltejs/kit": ["error"]}\n__all__ = ["load"]\n\ndef load():\n    return {}\n',
             'M',
@@ -179,8 +189,8 @@ def increment():
             { plain: true }
         );
 
-        expect(script).toContain('const __js_error = __jsCall(error);');
-        expect(script).toContain("bind(__proto, 'error', () => __js_error");
+        expect(script).toContain("bind(__proto, 'error', () => __jsCall(error))");
+        expect(script).not.toContain('const __js_error =');
     });
 
     test('a component imports the pyData that to_py depends on', () => {

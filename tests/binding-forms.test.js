@@ -124,7 +124,7 @@ describe('but none of them becomes a signal', () => {
 describe('a JavaScript name does not take a Python one either', () => {
     const publishes = (src, jsNames) =>
         compile(src, 'P', 'src/P.svelte', { jsNames }).script.includes(
-            "bind(__proto, 'fades', () => __js_fades)"
+            "bind(__proto, 'fades', () => __jsCall(fades))"
         );
 
     test('published when Python has no name of that spelling', () => {
