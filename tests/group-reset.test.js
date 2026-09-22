@@ -3,6 +3,8 @@ import { mount, flushSync } from './mounted.js';
 import GroupReset from './fixtures/GroupReset.svelte';
 import GroupShared from './fixtures/GroupShared.svelte';
 import GroupInstances from './fixtures/GroupInstances.svelte';
+import GroupResetDuplicate from './fixtures/GroupResetDuplicate.svelte';
+import GroupResetDuplicateNative from './fixtures/GroupResetDuplicateNative.svelte';
 
 // A form reset moves the controls without firing `change` on any of them. The
 // group action listened for `change` alone, so after a reset the boxes on screen
@@ -115,5 +117,66 @@ describe('two groups that happen to hold one list', () => {
 
         expect(read('a')).toBe("['a']");
         expect(read('b')).toBe("['b']");
+    });
+});
+
+// **A value goes into a group's list once, on the reset path as much as on the
+// change path.** A form may show one option in two sections, and the reset put
+// both controls back and added each of them: a selection nobody had touched
+// came back as `['a', 'a']`, and what a form submits is the list.
+//
+// The rule is Python equality, so it is not about the *spelling* of a value
+// either: `value={0.5}` written twice is two Brython floats, equal and not the
+// same object, and `{#each}` rows put the same pair on every line.
+//
+// **Svelte is not the oracle for this one, and the row below says why.**
+// Measured on the same form in its own language: Svelte answers a reset by
+// writing the *model* back into the controls, so every box comes back off and
+// the list stays empty — the form's own `checked` attributes lose. This file
+// exists because the project chose the other direction, the one a Reset button
+// means on a plain HTML form: the markup wins and the list is read back off it.
+// So Svelte says what happens when nobody restores, and the shape of the list
+// is ours to get right.
+describe('a reset that brings back two controls for one value', () => {
+    const after = async (Component) => {
+        const target = document.body.appendChild(document.createElement('div'));
+        mount(Component, { target });
+        flushSync();
+
+        target.querySelector('[data-k="form"]').reset();
+        await Promise.resolve();
+        flushSync();
+
+        const read = (k) => target.querySelector(`p[data-k="${k}"]`).textContent;
+
+        return {
+            selected: read('selected'),
+            halves: read('halves'),
+            rows: read('rows'),
+            checked: [...target.querySelectorAll('input')]
+                .filter((one) => one.checked)
+                .map((one) => one.dataset.k)
+                .join(' ')
+        };
+    };
+
+    test('holds each value once, with the form s own controls back on', async () => {
+        expect(await after(GroupResetDuplicate)).toEqual({
+            selected: 'a',
+            halves: '0.5',
+            rows: 'x / x',
+            checked: 'a1 a2 h1 h2 r0-1 r0-2 r1-1 r1-2'
+        });
+    });
+
+    // The measurement that says the row above is a choice and not an accident,
+    // kept here rather than in a note nobody re-runs.
+    test('while Svelte writes the model back instead, and restores nothing', async () => {
+        expect(await after(GroupResetDuplicateNative)).toEqual({
+            selected: '',
+            halves: '',
+            rows: ' / ',
+            checked: ''
+        });
     });
 });

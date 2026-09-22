@@ -1,0 +1,80 @@
+// **A default in a destructuring reads the names beside it.**
+//
+// Compiling one is half the job; compiling it *in the right scope* is the other
+// half, and the first version had only the outer namespace to offer: the
+// expressions were compiled before the declaration opened its scope, so
+// `{#each rows as [first, second=first]}` gave `second` a module's `first`
+// instead of the row's. The component mounted, the shape was right, and the
+// value was someone else's.
+//
+// Measured on Svelte, which is where the rule comes from, since a snippet's
+// parameter list and an `{#each}` target are compiled to JavaScript ones:
+//
+//   `[a, b = a]`     a default reads a name bound earlier in the same pattern
+//   `[c = first]`    an outer name that nothing masks is still read
+//   `[first, …]`     a name the pattern binds masks the module's
+//   `[f = i], i`     the loop index is in scope for a default too
+//   `[[m, n = m]]`   all of it again, one level down
+//   `(j, k = j)`     and the same in a snippet's parameter list
+//   `[g = h, h]`     while reaching *forward* throws, as JavaScript throws
+//
+// The last row is why every name goes into the scope before any expression is
+// compiled, rather than each name as its turn comes: our output reads the
+// binding Svelte emitted, so the temporal dead zone is inherited rather than
+// re-implemented.
+import { test, expect, describe } from 'vitest';
+import { mount, flushSync } from './mounted.js';
+import PatternScope from './fixtures/PatternScope.svelte';
+import PatternScopeNative from './fixtures/PatternScopeNative.svelte';
+import PatternScopeAhead from './fixtures/PatternScopeAhead.svelte';
+import PatternScopeAheadNative from './fixtures/PatternScopeAheadNative.svelte';
+
+const rendered = (Component) => {
+    const target = document.body.appendChild(document.createElement('div'));
+    mount(Component, { target });
+    flushSync();
+
+    return Object.fromEntries(
+        [...target.querySelectorAll('i')].map((one) => [one.dataset.k, one.textContent])
+    );
+};
+
+const raised = (Component) => {
+    try {
+        rendered(Component);
+    } catch (error) {
+        return String(error.message);
+    }
+
+    return null;
+};
+
+describe('what a destructuring default may read', () => {
+    test('is what Svelte lets one read, on the same declarations', () => {
+        expect(rendered(PatternScope)).toEqual(rendered(PatternScopeNative));
+    });
+
+    // The witness the comparison cannot give: that both are the right answer
+    // rather than the same wrong one. `earlier` and `shadow` are the rows the
+    // defect showed in — each answered `99`, the module's value, where the
+    // pattern had just bound `1`.
+    test('and the answers are the ones the declaration was written for', () => {
+        expect(rendered(PatternScope)).toEqual({
+            earlier: '1:1',
+            outer: '99',
+            shadow: '1:1',
+            index: '7:0',
+            'reads-index': '0:0',
+            nested: '1:1',
+            snippet: '1:1'
+        });
+    });
+
+    // And the other direction, which declaring every name first is what makes
+    // possible: a default reaching a name that comes *after* it is an error in
+    // JavaScript, and it has to stay one rather than quietly find a module's.
+    test('while reaching forward raises, as it does in Svelte', () => {
+        expect(raised(PatternScopeAhead)).toMatch(/before initialization/);
+        expect(raised(PatternScopeAheadNative)).toMatch(/before initialization/);
+    });
+});

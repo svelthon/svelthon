@@ -810,28 +810,50 @@ function parameterPattern(part, call, names, tuple = false) {
     return part;
 }
 
-// `{#snippet row(one, value=True)}` read apart: the names it binds, and the
-// declaration rewritten with each default compiled as the Python expression it
-// is. The split is at top level, so a comma or an `=` inside a string or a call
-// belongs to the default and not to the list.
-function snippetParameters(trimmed, call) {
+// The names a declaration binds, read without compiling anything.
+//
+// **Two passes, because a default reads the names beside it.** Measured on
+// Svelte: `(j, k = j)` gives `k` the `j` of the same list, `[a, b = a]` the same
+// in an `{#each}`, and a default that reaches a name declared *after* it throws
+// `Cannot access 'h' before initialization` — which is JavaScript's own rule,
+// and which our own output inherits for free, since a compiled default reads
+// the binding Svelte emitted. So every name goes into the scope first and the
+// expressions are compiled second; one pass could only have offered the outer
+// namespace, and `{#each rows as [first, second=first]}` then read a module's
+// `first` instead of the row's, silently and with the right shape.
+const boundBy = (parts, tuple) => {
+    const names = [];
+
+    for (const part of parts) parameterPattern(part, () => '', names, tuple);
+
+    return names;
+};
+
+// `{#snippet row(one, value=True)}` read apart: the names go to `declare`,
+// which opens the block's scope, and what comes back is the declaration
+// rewritten with each default compiled as the Python expression it is. The
+// split is at top level, so a comma or an `=` inside a string or a call belongs
+// to the default and not to the list.
+function snippetParameters(trimmed, declare, call) {
     const open = trimmed.indexOf('(');
     const head = open === -1 ? trimmed : trimmed.slice(0, open);
     const close = open === -1 ? -1 : closingPair(trimmed, open);
 
     const name = head.replace(/^#snippet\s*/, '').trim();
 
-    if (close === -1) return { names: declaredBy(trimmed), written: trimmed.replace(/^#snippet\s*/, '') };
+    if (close === -1) {
+        declare(declaredBy(trimmed));
 
-    const names = [];
-    const parts = arguments_(trimmed.slice(open + 1, close)).map((part) =>
-        parameterPattern(part, call, names)
-    );
+        return trimmed.replace(/^#snippet\s*/, '');
+    }
 
-    return {
-        names,
-        written: `${name}(${parts.join(',')})${trimmed.slice(close + 1)}`
-    };
+    const parts = arguments_(trimmed.slice(open + 1, close));
+
+    declare(boundBy(parts, false));
+
+    const written = parts.map((part) => parameterPattern(part, call, [], false));
+
+    return `${name}(${written.join(',')})${trimmed.slice(close + 1)}`;
 }
 
 function declaredBy(inner) {
@@ -931,17 +953,20 @@ function eachBlock(trimmed, declare, call) {
     // own — `as (a, b), i` is a pattern and then Svelte's index — and each
     // entry is a pattern in its own right.
     //
-    // Compiled *before* `declare`, and beside the iterable rather than the key:
-    // a default is evaluated where the loop is written, not inside it, so it
-    // reads what encloses the block. The key is the one that reads the block's
-    // own names, which is why it is compiled last.
-    const names = [];
-    const target = arguments_((keyed ? keyed[0] : named).trim())
-        .map((one) => parameterPattern(one, call, names, true))
-        .join(',');
-
+    // **Three scopes, in three steps, and the order is the whole rule.** The
+    // iterable is evaluated where the loop is written, so it is compiled before
+    // the block's names exist: `{#each rows as rows}` reads the outer list. The
+    // target's own names then open the scope — every one of them, the index
+    // included, which is what `[a, b = a]` and `[f = i], i` need and what
+    // `[g = h, h]` needs in order to throw where JavaScript throws. Only then
+    // are the defaults compiled, and the key last, since it is evaluated inside
+    // the block on each row.
+    const parts = arguments_((keyed ? keyed[0] : named).trim());
     const iterable = call(body.slice(0, at), '__seq');
-    declare(names);
+
+    declare(boundBy(parts, true));
+
+    const target = parts.map((one) => parameterPattern(one, call, [], true)).join(',');
 
     return `{#each ${iterable} as ${target}` + (keyed ? ` (${call(keyed[1], 'repr')})` : '') + '}';
 }
@@ -1826,10 +1851,11 @@ function walk(markup, collect, onPython, seed, record, where) {
                 // it stands. And only the name is declared: reading identifiers
                 // out of the whole parameter text put `True` in scope as if the
                 // author had bound it.
-                const signature = snippetParameters(trimmed, call);
-
-                push(signature.names);
-                out += `{#snippet ${signature.written}}`;
+                //
+                // `push` goes *into* the function rather than after it, because
+                // a default reads the parameters beside it — `(j, k = j)` is
+                // ordinary JavaScript and Svelte compiles it as one.
+                out += `{#snippet ${snippetParameters(trimmed, push, call)}}`;
             } else {
                 throw refuse(unknownTag(trimmed, 'block', BLOCKS, said()));
             }

@@ -3889,6 +3889,20 @@ export function group(node, [current, write, chosen, binding, scope]) {
 
     const same = (one) => alike(one, value());
 
+    // **A value goes into a group's list once.** Two controls may stand for one
+    // choice — a form showing the same option in two sections — and Python
+    // equality is what says they are one choice, since two Brython values that
+    // are equal are rarely the same object.
+    //
+    // Written here because the list is built on two paths and they have to
+    // agree: `changed`, when the reader ticks a box, and `restored`, when a
+    // form reset puts the controls back. The reset path added every checked
+    // control without asking, so a reset turned `['a']` into `['a', 'a']` and
+    // changed the contract of a selection nobody had touched.
+    const include = (into, held) => {
+        if (!into.some((already) => alike(already, held))) into.push(held);
+    };
+
     const show = (held) => {
         node.checked = boxes ? Array.from(held ?? []).some(same) : same(held);
     };
@@ -3909,11 +3923,7 @@ export function group(node, [current, write, chosen, binding, scope]) {
         const picked = [];
 
         for (const one of inOrder()) {
-            if (!one.checked) continue;
-
-            const held = one.$svelthonValue();
-
-            if (!picked.some((already) => alike(already, held))) picked.push(held);
+            if (one.checked) include(picked, one.$svelthonValue());
         }
 
         const mine = value();
@@ -3948,7 +3958,13 @@ export function group(node, [current, write, chosen, binding, scope]) {
             kept = [];
             lists.set(held, kept);
         }
-        if (node.checked) kept.push(value());
+
+        // The list is built one control at a time here, and not read off the
+        // group in one go the way `changed` reads it, because the first write
+        // re-renders and hands every other control a *new* list: a second
+        // reader would then find no control left in the group it was asked
+        // about. So each control adds itself, under the rule both paths share.
+        if (node.checked) include(kept, value());
 
         write(__pybridge.list([...kept]));
     };
