@@ -77,7 +77,7 @@ rest of that configuration and what each line buys.
 npm install
 npm run dev
 
-npm test             # 1 224 tests: semantics, props, reactivity, Svelte surface
+npm test             # 1 225 tests: semantics, props, reactivity, Svelte surface
 npm run test:quiet   # the suite's own output: a green run must say nothing
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
@@ -1394,7 +1394,7 @@ such a string as midnight UTC, so without the rule every reader west of
 Greenwich saw the day before. A value carrying a time is an instant and is
 rendered in the reader's own zone, which is what an instant is for.
 
-The whole runtime, gzipped, is **218 KB**. That is
+The whole runtime, gzipped, is **219 KB**. That is
 `vendor/brython_runtime.js`, the half without the parsing chain, which is what a
 browser gets; the full bundle it is cut from is 270 KB and never ships.
 
@@ -1428,7 +1428,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 1 224 tests, none expected to fail:
+Validated by `npm test`, 1 225 tests, none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;
 - props: Python defaults, parent precedence, readability during init, parent

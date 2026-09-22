@@ -939,11 +939,48 @@ function templateDots(def) {
     const insert = (at, text, node) => edits.push({ from: at, to: at, text, size: end(node) - begin(node) });
     const replace = (from, to, text) => edits.push({ from, to, text, size: 0 });
 
+    // A function whose parameters arrive as functions, `lazy` in `markup.js`:
+    // each read of one becomes a call, except where a lambda or a comprehension
+    // binds the same name for itself.
+    const [def0] = tree.body;
+    const lazy = def0 instanceof $B.ast.FunctionDef && def0.name.startsWith('__expr_lazy_')
+        ? new Set(def0.args.args.map((one) => one.arg))
+        : new Set();
+
+    const bound = (node) => {
+        if (node instanceof $B.ast.Lambda) return node.args.args.map((one) => one.arg);
+
+        const comprehension =
+            node instanceof $B.ast.ListComp ||
+            node instanceof $B.ast.SetComp ||
+            node instanceof $B.ast.DictComp ||
+            node instanceof $B.ast.GeneratorExp;
+
+        if (!comprehension) return [];
+
+        const names = [];
+        const collect = (target) => {
+            if (target instanceof $B.ast.Name) names.push(target.id);
+            for (const one of target.elts || []) collect(one);
+        };
+
+        for (const one of node.generators) collect(one.target);
+
+        return names;
+    };
+
     const seen = new WeakSet();
 
-    const visit = (node) => {
+    const visit = (node, shadowed = new Set()) => {
         if (!node || typeof node !== 'object' || seen.has(node)) return;
         seen.add(node);
+
+        const inner = bound(node);
+        if (inner.length) shadowed = new Set([...shadowed, ...inner]);
+
+        if (node instanceof $B.ast.Name && node.ctx instanceof $B.ast.Load && lazy.has(node.id) && !shadowed.has(node.id)) {
+            insert(end(node), '()', node);
+        }
 
         const [target] = node instanceof $B.ast.Assign ? node.targets : [];
 
@@ -951,8 +988,8 @@ function templateDots(def) {
             insert(begin(target), '__setattr(', node);
             replace(dot(target), begin(node.value), `, ${JSON.stringify(target.attr)}, `);
             insert(end(node.value), ')', node.value);
-            visit(target.value);
-            visit(node.value);
+            visit(target.value, shadowed);
+            visit(node.value, shadowed);
             return;
         }
 
@@ -961,7 +998,7 @@ function templateDots(def) {
             replace(dot(node), end(node), `, ${JSON.stringify(node.attr)})`);
         }
 
-        for (const key of Object.keys(node)) if (key !== 'parent') visit(node[key]);
+        for (const key of Object.keys(node)) if (key !== 'parent') visit(node[key], shadowed);
     };
 
     visit(tree);

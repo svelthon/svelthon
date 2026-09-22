@@ -827,7 +827,7 @@ function parameterPattern(part, call, names, tuple = false) {
     if (at !== -1) {
         const target = parameterPattern(part.slice(0, at), call, names, tuple);
 
-        return `${target}= ${call(part.slice(at + 1), '')}`;
+        return `${target}= ${call(part.slice(at + 1), '', undefined, true)}`;
     }
 
     // The spacing the author wrote is theirs, and only the middle is rebuilt.
@@ -868,7 +868,7 @@ function parameterPattern(part, call, names, tuple = false) {
         const key = trimmed.slice(0, colon).trim();
         const target = parameterPattern(trimmed.slice(colon + 1), call, names, tuple);
         const computed = key.startsWith('[') && closingPair(key, 0) === key.length - 1;
-        const written = computed ? `[${call(key.slice(1, -1), '')}]` : key;
+        const written = computed ? `[${call(key.slice(1, -1), '', undefined, true)}]` : key;
 
         return `${lead}${written}:${target}${tail}`;
     }
@@ -1389,17 +1389,26 @@ function walk(markup, collect, onPython, seed, record, where) {
     // `source` is what the author actually typed, when that differs from what
     // gets compiled: a handler goes through walrus() first, and a range has to
     // point at the text on screen rather than at the rewrite.
-    const call = (expr, wrapper, source = expr) => {
+    //
+    // `lazy` hands each name over as a function that reads it, for an expression
+    // whose names may not exist yet when it is prepared: a default inside a
+    // pattern, where a later name of the same pattern is still in the temporal
+    // dead zone. The compiler makes the function's reads of those names calls,
+    // so a name is read when Python reaches it, and a branch Python does not
+    // take reads nothing, as it does in Python.
+    const call = (expr, wrapper, source = expr, lazy = false) => {
         const trimmed = expr.trim();
         const args = mentioned(trimmed);
 
         locate(source.trim());
-        const name = collect(trimmed, wrapper, args, false, position()?.line);
+        const name = collect(trimmed, wrapper, args, false, position()?.line, lazy);
 
         // follow() on the block's own names: a row of an {#each} is a plain
         // JavaScript value, not a signal, so reading `it.label` registers
         // nothing by itself. This is what subscribes the row's block to the row.
-        return `${name}(${args.map((arg) => `${FOLLOW}(${arg})`).join(', ')})`;
+        const handed = (arg) => (lazy ? `() => ${FOLLOW}(${arg})` : `${FOLLOW}(${arg})`);
+
+        return `${name}(${args.map(handed).join(', ')})`;
     };
 
     // The write half of a binding: the same text, compiled as an assignment
@@ -2100,13 +2109,14 @@ export function directiveModules(markup) {
 export function collector(defs, lines) {
     const seen = new Map();
 
-    return (expression, wrapper, args, assign = false, line) => {
-        const key = `${assign ? 'set' : 'get'}|${wrapper}|${args.join(',')}|${expression}`;
+    return (expression, wrapper, args, assign = false, line, lazy = false) => {
+        const key = `${assign ? 'set' : lazy ? 'lazy' : 'get'}|${wrapper}|${args.join(',')}|${expression}`;
         if (seen.has(key)) return seen.get(key);
 
-        // Both kinds keep the `__expr_` prefix: it is what makes the generated
+        // Every kind keeps the `__expr_` prefix: it is what makes the generated
         // wrapper evaluate them the way a template expression is evaluated.
-        const name = `__expr_${assign ? 'set_' : ''}${defs.length}`;
+        // `lazy_` is what tells the compiler its parameters are read by a call.
+        const name = `__expr_${assign ? 'set_' : lazy ? 'lazy_' : ''}${defs.length}`;
         seen.set(key, name);
         lines?.push(line);
 

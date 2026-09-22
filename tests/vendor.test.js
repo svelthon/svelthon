@@ -294,6 +294,24 @@ describe('the vendored Brython carries its repairs', () => {
         expect(source).not.toContain('no tp_iternext in');
     });
 
+    // The sign comes before the base prefix, and a zero fill goes after both:
+    // CPython's answers, checked with `python3`. The prefix was glued in front
+    // of a string that already carried the sign, `0x-f`, and the `=` alignment
+    // of a `0` fill put the zeros in front of the prefix, `00xf`.
+    test.for([
+        [15, '#04x', '0x0f'],
+        [-15, '#x', '-0xf'],
+        [-15, '#07x', '-0x000f'],
+        [15, '#08b', '0b001111'],
+        [8, '#06o', '0o0010'],
+        [255, '#06X', '0X00FF'],
+        [15, '+#06x', '+0x00f'],
+        [-(2n ** 60n), '#x', '-0x1000000000000000'],
+        [-15, '05d', '-0015']
+    ])('format(%s, %j) is %j', ([value, spec, answer]) => {
+        expect($B.$getattr(value, '__format__')(spec)).toBe(answer);
+    });
+
     // A coroutine that leaves the frame it was created in has not been dropped:
     // `{#await later()}` hands it to Svelte, which awaits it. Brython warned
     // `coroutine 'later' was never awaited` as soon as that frame was left,
