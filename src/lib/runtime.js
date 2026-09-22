@@ -3389,9 +3389,8 @@ export function pyBoundary(fn) {
 // stopped at the component, where an action then took a JavaScript number.
 //
 // `call` is handed the arguments rather than the wrapper reading them, because
-// what an expression function does with them differs — it runs inside
-// `inTemplate` and takes its values already Python — and that difference is the
-// compiler's to write.
+// what an expression function does with them differs — it takes its values
+// already Python — and that difference is the compiler's to write.
 //
 // The result goes through `pyNumbers`, not `plainData`: what a component hands
 // the *framework* is a transition's options or an action's teardown, and a
@@ -3442,18 +3441,16 @@ export const pyComponent = (read, where, lineOffset) => {
 // And the other half of the same wrapper: a function the *markup* compiled, one
 // per expression it met.
 //
-// Two things separate it from the one above, and both belong to the template
-// rather than to the boundary. Its arguments are already Python — a block's own
-// name, a snippet's parameter — so converting them would convert twice. And it
-// runs inside `inTemplate`, where a dot finds a key as well as an attribute,
-// which is the seam a template expression is written against.
+// What separates it from the one above belongs to the template rather than to
+// the boundary: its arguments are already Python — a block's own name, a
+// snippet's parameter — so converting them would convert twice.
 //
 // Two names rather than a flag, so the compiler *chooses* a wrapper instead of
 // describing one: what it writes is a name, and everything a crossing does is on
 // this side of the line.
 export const pyExpression = (call, where, lineOffset, arity) =>
     identified(
-        (...args) => running(() => inTemplate(() => call(args.slice(0, arity))), where, lineOffset),
+        (...args) => running(() => call(args.slice(0, arity)), where, lineOffset),
         nameOf(where),
         arity
     );
@@ -3612,54 +3609,27 @@ export function withNamespace(name, namespace, run) {
 // AttributeError it always did. The fallback never turns a typo into silence,
 // which is the one place Jinja is weaker, its `Undefined` rendering nothing.
 //
-// The swap is what keeps this free. Brython's generated code reads
-// `$B.$getattr_pep657` off the object at every call, so replacing it for the
-// length of one expression costs two property writes and leaves every attribute
-// access in the rest of the program untouched. Same technique as
-// `withNamespace` above.
+// It is a rule of the template's **text**: the compiler rewrites every dot
+// written in the markup into a call to this, so a function of the script that a
+// template calls keeps plain Python, and a lambda written in the template keeps
+// the rule when it runs later, on a click.
 const MISSING = Symbol('svelthon.missing');
 
-export function inTemplate(run) {
+export function readAttr(target, name) {
     const $B = globalThis.__BRYTHON__;
-    const original = $B.$getattr_pep657;
-    const originalSet = $B.$setattr1;
 
-    $B.$getattr_pep657 = (obj, attr, inum) => {
-        // With a default, so a miss costs no exception: building one on every
-        // field read of every dict would be the whole cost of this feature.
-        const found = $B.$getattr(obj, attr, MISSING);
-        if (found !== MISSING) return found;
-
-        try {
-            return $B.$getitem(obj, attr);
-        } catch {
-            /* no such key either: let the real lookup raise, with its position */
-        }
-
-        return original(obj, attr, inum);
-    };
-
-    // `bind:value={row.label}` writes where the same dot read from. Without
-    // this the read finds the key and the write sets a JavaScript property on
-    // the dict: no error, no effect, and the field snaps back on the next
-    // render. Only where the read already succeeded: an *existing* key. What a
-    // missing one should do is still open, so it keeps Python's own answer.
-    $B.$setattr1 = (obj, attr, value, inum) => {
-        if ($B.$getattr(obj, attr, MISSING) === MISSING && keyed(obj, attr)) {
-            // Outside the `try`: once the key is found the destination is
-            // decided, and what `__setitem__` raises is the author's own answer.
-            return $B.$setitem(obj, attr, value);
-        }
-
-        return originalSet(obj, attr, value, inum);
-    };
+    // With a default, so a miss costs no exception: building one on every field
+    // read of every dict would be the whole cost of this feature.
+    const found = $B.$getattr(target, name, MISSING);
+    if (found !== MISSING) return found;
 
     try {
-        return run();
-    } finally {
-        $B.$getattr_pep657 = original;
-        $B.$setattr1 = originalSet;
+        return $B.$getitem(target, name);
+    } catch {
+        /* no such key either: the real lookup raises */
     }
+
+    return $B.$getattr(target, name);
 }
 
 // Whether the dot should write a key rather than an attribute: the object has
@@ -3702,16 +3672,13 @@ function keyed(target, name) {
 export const pyBind = (value) =>
     typeof value === 'number' ? globalThis.__BRYTHON__.jsobj2pyobj(value) : value;
 
-// What `(obj.attr := value)` and `(obj[key] := value)` compile to, the two the
-// walrus has that Python's own grammar refuses it.
+// What a write through a dot of the template compiles to: `(obj.attr := value)`,
+// which Python's own grammar refuses the walrus, and the write half of
+// `bind:value={row.label}`. And `(obj[key] := value)` beside it.
 //
-// The dot carries the same rule `inTemplate` installs for a read: an existing
-// key wins over an attribute, so the write lands where the read came from. The
-// rule is repeated here rather than borrowed, because a handler fires on the
-// click, long after the expression that built it has left `inTemplate` and put
-// the original `$setattr1` back. Borrowing it set a JavaScript property on the
-// dict instead: no error, no effect, and the field back to its old value on the
-// next render.
+// The write half of `readAttr`: an existing key wins over an attribute, so the
+// write lands where the read came from. Only an *existing* key: what a missing
+// one should do is still open, so it keeps Python's own answer.
 //
 // They return the value, as an assignment expression must, so that a group can
 // hold several and `{count}` still reads afterwards.

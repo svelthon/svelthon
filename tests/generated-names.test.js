@@ -87,7 +87,17 @@ const published = (compiler) => {
 // Whole names, not substrings. `includes` was the first spelling of this and it
 // answered true for `__spread` in a file that only wrote `__spreadX`, which is
 // exactly the rename this is meant to catch.
-const written = (markup) => new Set([...markup.matchAll(/__[a-z][\w]*/g)].map((one) => one[0]));
+//
+// Plus what the compiler writes into the template's functions itself: every dot
+// of the markup becomes a `__getattr` call there, in `templateDots`, so the
+// markup pass never spells it. Read off that function's own text, so a name it
+// stops writing leaves this list as well.
+const written = (markup, compiler = read('compile.cjs')) => {
+    const at = compiler.indexOf('function templateDots(');
+    const rewrite = compiler.slice(at, compiler.indexOf('\n}', at));
+
+    return new Set([...`${markup}\n${rewrite}`.matchAll(/__[a-z][\w]*/g)].map((one) => one[0]));
+};
 
 test('every name the compiler publishes to the template is one the markup writes', () => {
     const markup = written(read('markup.js'));

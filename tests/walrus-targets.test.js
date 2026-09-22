@@ -88,9 +88,8 @@ describe('a walrus onto something other than a name', () => {
         expect(all()).toBe('5,0,1,0');
     });
 
-    // The one that failed first, and the reason `writeAttr` carries the rule
-    // rather than borrowing it: a handler fires long after the expression that
-    // built it has left `inTemplate` and put Brython's own `$setattr1` back.
+    // A handler fires long after the expression that built it, and the dot it
+    // writes through is still the template's.
     test('writes a key the dot found', () => {
         const { all, click } = setup();
 

@@ -42,7 +42,8 @@ is absent, rather than shipping a component with no reactivity.
 | `$B.brython(options)` | boot |
 | `$B.ast.*` | AST classes, compared with `instanceof` |
 | `$B.tokenizer(src, filename, 'file')` | iterable of tokens, used to highlight Python with Python's own tokenizer |
-| `$B.Parser` | not called: its presence is how `compile.cjs` knows the parsing chain has loaded on top of the runtime. A page that never compiles never defines it |
+| `$B.Parser` | its presence is how `compile.cjs` knows the parsing chain has loaded on top of the runtime, and a page that never compiles never defines it. `new $B.Parser(src, filename, 'file')` is also how `templateDots` parses one template function |
+| `$B._PyPegen.run_parser(parser)` | returns the AST of what `parser` holds, with `lineno`, `col_offset`, `end_lineno` and `end_col_offset` counted in characters; `templateDots` rewrites the dots of the markup at those places |
 | `$B.unindent(src)` | Brython's own, the one it already runs on every `<script type="text/python">`; it hands the source back untouched as soon as one non-blank line starts at column zero |
 | `$B.file_cache[filename]` | where `compiler_error` looks for the source to quote. Filling it is what turns a bare message into a message with the offending line under it |
 

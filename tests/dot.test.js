@@ -47,22 +47,40 @@ describe('the dot in a template expression', () => {
     });
 });
 
-// Where the seam falls, pinned rather than assumed: the fallback lasts for the
-// length of the expression, so a helper called *from* the markup gets it too,
-// and the same helper called from a lifecycle hook does not.
+// Where the seam falls: the rule belongs to the **text** of the markup, not to
+// the time during which an expression runs. A function of the script keeps plain
+// Python wherever it is called from, and a lambda written in the markup keeps
+// the rule wherever it runs, a click's handler included.
 describe('the reach of the fallback', () => {
     const setup = () => {
         const target = document.body.appendChild(document.createElement('div'));
         mount(DotFallback, { target });
         flushSync();
-        return (k) => target.querySelector(`p[data-k="${k}"]`).textContent;
+        return {
+            read: (k) => target.querySelector(`p[data-k="${k}"]`).textContent,
+            click: (k) => {
+                target.querySelector(`button[data-k="${k}"]`).click();
+                flushSync();
+            }
+        };
     };
 
-    test('a helper called from the markup sees it', () => {
-        expect(setup()('through-call')).toBe('Making the GIL Optional');
+    test('a function of the script called from the markup does not get it', () => {
+        expect(setup().read('through-call')).toBe('AttributeError');
     });
 
-    test('the same helper called from on_mount does not', () => {
-        expect(setup()('from-mount')).toBe('AttributeError');
+    test('and answers as it does when the script calls it', () => {
+        expect(setup().read('from-mount')).toBe('AttributeError');
+    });
+
+    test('a lambda written in the markup gets it while the markup runs', () => {
+        expect(setup().read('in-lambda')).toBe('Making the GIL Optional');
+    });
+
+    test('and keeps it when it runs later, as a handler', () => {
+        const { read, click } = setup();
+
+        click('click');
+        expect(read('clicked')).toBe('Making the GIL Optional');
     });
 });

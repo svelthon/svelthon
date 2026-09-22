@@ -418,9 +418,7 @@ export function walrus(expression) {
 
                     // A name goes through the namespace, which is what makes the
                     // signal fire. An attribute or a key is written where it
-                    // lives, by the same two calls Brython itself compiles an
-                    // assignment to, so `inTemplate`, already in place for the
-                    // read, applies its rule to the write for free.
+                    // lives, the attribute under the template's rule for a dot.
                     return found.name
                         ? `__assign("${found.name}", ${value})`
                         : `${found.subscript ? '__setitem' : '__setattr'}(${found.object}, ${found.key}, ${value})`;

@@ -1,7 +1,7 @@
 <script lang="python">
 # The dot in the markup finds a key as well as an attribute, the way Jinja's
-# does. In the script, right here, it does not — `record.title` below would
-# raise, and `describe()` proves where the seam actually falls.
+# does. In the script it does not, and a function of the script stays script
+# wherever it is called from: the rule belongs to the text of the markup.
 record = {"title": "Making the GIL Optional", "year": 2023}
 nested = {"author": {"name": "Sam Gross"}}
 shadowed = {"items": "a key called items"}
@@ -16,19 +16,21 @@ obj = Pep("Style Guide for Python Code")
 
 
 def describe(one):
-    # Called from the markup below, and from on_mount at the same time.
-    return one.title
-
-
-from_mount = "not run"
-
-
-def on_mount():
-    global from_mount
+    # Called from the markup below, and from on_mount.
     try:
-        from_mount = describe(record)
+        return one.title
     except AttributeError:
-        from_mount = "AttributeError"
+        return "AttributeError"
+
+
+from_mount = describe(record)
+
+clicked = "not clicked"
+
+
+def note(value):
+    global clicked
+    clicked = value
 </script>
 
 <p data-k="dict">{record.title}</p>
@@ -39,3 +41,7 @@ def on_mount():
 <p data-k="key-by-subscript">{shadowed["items"]}</p>
 <p data-k="through-call">{describe(record)}</p>
 <p data-k="from-mount">{from_mount}</p>
+<p data-k="in-lambda">{sorted([record], key=lambda one: one.year)[0].title}</p>
+
+<button data-k="click" onclick={lambda: note(record.title)}>click</button>
+<p data-k="clicked">{clicked}</p>

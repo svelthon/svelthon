@@ -77,7 +77,7 @@ rest of that configuration and what each line buys.
 npm install
 npm run dev
 
-npm test             # 1 222 tests: semantics, props, reactivity, Svelte surface
+npm test             # 1 224 tests: semantics, props, reactivity, Svelte surface
 npm run test:quiet   # the suite's own output: a green run must say nothing
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
@@ -421,7 +421,10 @@ markup, and a dict from an API renders like a dataclass:
 
 A real attribute still wins over a key of the same name, and a name that is
 neither raises rather than rendering nothing. In the `<script>` the same text is
-plain Python and raises: this is a template rule, not a language change.
+plain Python and raises: this is a template rule, not a language change. It
+follows the text: a function of the script keeps plain Python when the markup
+calls it, and a lambda written in the markup keeps the rule when it runs later,
+as an event handler.
 
 **The walrus assigns.** `onclick={() => (open = !open)}` is the commonest line in
 a Svelte template, and Python has no short twin: a `lambda` holds an expression,
@@ -1425,7 +1428,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 1 222 tests, none expected to fail:
+Validated by `npm test`, 1 224 tests, none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;
 - props: Python defaults, parent precedence, readability during init, parent

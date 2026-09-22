@@ -845,7 +845,6 @@ const RUNTIME = {
     pyError: '__pyError',
     schedule: '__schedule',
     scheduleAsync: '__scheduleAsync',
-    inTemplate: '__inTemplate',
     pyEvent: '__pyEvent',
     plainData: '__plainData',
     pyArg: '__pyArg',
@@ -869,6 +868,7 @@ const RUNTIME = {
     withNamespace: '__withNamespace',
     __pybridge: '__pybridge',
     group: '__group',
+    readAttr: '__getattr',
     writeAttr: '__setattr',
     writeItem: '__setitem'
 };
@@ -894,20 +894,82 @@ const arityOf = (args) =>
         ? Infinity
         : ((args && args.posonlyargs) || []).length + ((args && args.args) || []).length;
 
-// Inside a template expression, and only there, the dot finds a key as well as
-// an attribute: `{pep.title}` reads a dict. The same text in the `<script>`
-// stays plain Python and raises, which is the seam this marks.
 // Which wrapper a component's function gets: the runtime holds both, and this
 // says which one. An expression function the markup compiled takes its arguments
-// already Python and runs inside `inTemplate`; everything else here is called by
-// Svelte, with Svelte's values.
-//
-// It used to spell the difference out — the slice, the conversion, the
-// `inTemplate` — and the conversion was missing from one of the two for as long
-// as the line existed: `use:mark={0.5}` handed Python a JavaScript number and
-// `format(value, '.2f')` refused it at mount. A name cannot go out of step with
-// what it names.
+// already Python; everything else here is called by Svelte, with Svelte's values.
 const componentWrapper = (f) => (f.name.startsWith(EXPR_PREFIX) ? '__pyExpression' : '__pyComponent');
+
+// In the markup, and only there, the dot finds a key as well as an attribute:
+// `{pep.title}` reads a dict. The same text in the `<script>` stays plain Python
+// and raises.
+//
+// A rule of the template's **text**, so it is applied to the text of the
+// functions the markup pass wrote: every attribute read becomes
+// `__getattr(value, "name")`, and the assignment a `bind:` writes becomes
+// `__setattr(value, "name", new)`. A function of the script that the template
+// calls keeps plain Python, and a lambda written in the template keeps the rule
+// however late it runs. The places come from Brython's own parser, in
+// characters, f-string fields included.
+function templateDots(def) {
+    let tree;
+
+    try {
+        tree = $B._PyPegen.run_parser(new $B.Parser(def, '<template>', 'file'));
+    } catch {
+        // Left as written: the real compile reports it, with the real file name.
+        return def;
+    }
+
+    const starts = [0];
+    for (let i = 0; i < def.length; i++) if (def[i] === '\n') starts.push(i + 1);
+
+    const begin = (node) => starts[node.lineno - 1] + node.col_offset;
+    const end = (node) => starts[node.end_lineno - 1] + node.end_col_offset;
+
+    // The dot of `value.name`: behind the name, across any space between them.
+    const dot = (node) => {
+        let i = end(node) - node.attr.length - 1;
+        while (def[i] !== '.') i -= 1;
+        return i;
+    };
+
+    // `size` orders the insertions made at one place: the widest node's text
+    // has to come first, so it is applied last.
+    const edits = [];
+    const insert = (at, text, node) => edits.push({ from: at, to: at, text, size: end(node) - begin(node) });
+    const replace = (from, to, text) => edits.push({ from, to, text, size: 0 });
+
+    const seen = new WeakSet();
+
+    const visit = (node) => {
+        if (!node || typeof node !== 'object' || seen.has(node)) return;
+        seen.add(node);
+
+        const [target] = node instanceof $B.ast.Assign ? node.targets : [];
+
+        if (node instanceof $B.ast.Assign && node.targets.length === 1 && target instanceof $B.ast.Attribute) {
+            insert(begin(target), '__setattr(', node);
+            replace(dot(target), begin(node.value), `, ${JSON.stringify(target.attr)}, `);
+            insert(end(node.value), ')', node.value);
+            visit(target.value);
+            visit(node.value);
+            return;
+        }
+
+        if (node instanceof $B.ast.Attribute && node.ctx instanceof $B.ast.Load) {
+            insert(begin(node), '__getattr(', node);
+            replace(dot(node), end(node), `, ${JSON.stringify(node.attr)})`);
+        }
+
+        for (const key of Object.keys(node)) if (key !== 'parent') visit(node[key]);
+    };
+
+    visit(tree);
+
+    edits.sort((one, other) => other.from - one.from || one.size - other.size);
+
+    return edits.reduce((text, one) => text.slice(0, one.from) + one.text + text.slice(one.to), def);
+}
 
 // Two of them are bound only where the name is actually read: `props_id`
 // because its value must be computed at the top level rather than lazily, `host`
@@ -1560,8 +1622,9 @@ function preamble(c) {
             // Only an effect hands a value back to be called later, so only a
             // component with one needs the name.
             ...(c.effects.length ? ['pyHandler'] : []),
-            // Three that keep the spelling the markup pass emits.
-            'group', 'writeAttr', 'writeItem'
+            // Three that keep the spelling the markup pass emits, and the read
+            // half of the dot, which `templateDots` writes.
+            'group', 'readAttr', 'writeAttr', 'writeItem'
         ])} } from 'svelthon/runtime';`,
         ...c.jsImports.map(jsImportLine),
         `import { ${['getContext', 'setContext']
@@ -1796,6 +1859,7 @@ function injectedBindings(c) {
                   `__bind(__proto, '__spread', () => __pybridge.spread);`,
                   `__bind(__proto, '__bound', () => __pybridge.bound);`,
                   `__bind(__proto, '__assign', () => __assign);`,
+                  `__bind(__proto, '__getattr', () => __getattr);`,
                   `__bind(__proto, '__setattr', () => __setattr);`,
                   `__bind(__proto, '__setitem', () => __setitem);`
               ]),
@@ -2234,6 +2298,8 @@ function compile(
 
     if (component) {
         const body = $B.unindent(src);
+
+        defs = defs.map(templateDots);
         src = defs.length ? `${body}\n${defs.join('\n\n')}\n` : body;
 
         let from = body.split('\n').length + 1;

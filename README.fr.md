@@ -75,7 +75,7 @@ reste de cette configuration et ce que chaque ligne apporte.
 npm install
 npm run dev
 
-npm test             # 1 222 tests : sémantique, props, réactivité, surface Svelte
+npm test             # 1 224 tests : sémantique, props, réactivité, surface Svelte
 npm run test:quiet   # la sortie de la suite : un run vert ne doit rien dire
 npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
@@ -431,7 +431,9 @@ celle de votre balisage, et un dict venu d'une API se rend comme un dataclass :
 Un vrai attribut l'emporte toujours sur une clé de même nom, et un nom qui n'est
 ni l'un ni l'autre lève au lieu de ne rien rendre. Dans le `<script>`, le même
 texte reste du Python nu et lève : c'est une règle de gabarit, pas un changement
-de langage.
+de langage. Elle suit le texte : une fonction du script reste du Python nu quand
+le balisage l'appelle, et une lambda écrite dans le balisage garde la règle
+quand elle s'exécute plus tard, en gestionnaire d'événement.
 
 **Le morse affecte.** `onclick={() => (open = !open)}` est la ligne la plus
 courante d'un gabarit Svelte, et Python n'en a pas d'équivalent court : un
@@ -1434,7 +1436,7 @@ part jamais.
 
 ## État
 
-Validé par `npm test`, 1 222 tests, aucun échec attendu :
+Validé par `npm test`, 1 224 tests, aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
 - props : défaut Python, priorité du parent, lisibilité pendant l'init,
