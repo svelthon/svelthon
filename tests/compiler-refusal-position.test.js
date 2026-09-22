@@ -56,14 +56,23 @@ describe('a compiler refusal names a position', () => {
     });
 
     // `__all__` names something the module never bound, so there is no binding
-    // to point at: the file alone is what there is to say, and it says that by
-    // carrying no `start` rather than a wrong one.
-    test('`__all__` naming what is not bound names the file and no line', () => {
-        const error = thrown('__all__ = ["nope"]\n', { plain: true });
+    // to point at, and the line is the one `__all__` itself is on. The last one,
+    // since that is the value the module ends up with.
+    test('`__all__` naming what is not bound points at the list', () => {
+        const error = thrown('x = 1\n__all__ = ["x"]\n__all__ = ["nope"]\n', { plain: true });
 
-        expect(error.message).toMatch(/^svelthon — /);
+        expect(error.message).toMatch(/^svelthon — .*:3\)/);
         expect(error.filename).toBe(FILE);
-        expect(error.start).toBeUndefined();
+        expect(error.start).toEqual({ line: 3, column: 0 });
+    });
+
+    // And an `@effect` a module cannot hold points at its function.
+    test('an orphan @effect points at its def', () => {
+        const error = thrown('x = 1\n\n@effect\ndef watch():\n    print(x)\n', { store: true });
+
+        expect(error.message).toMatch(/`@effect` belongs to a component.*:4\)/);
+        expect(error.filename).toBe(FILE);
+        expect(error.start).toEqual({ line: 4, column: 0 });
     });
 
     // And Brython's own errors, which is the refusal an author meets most.

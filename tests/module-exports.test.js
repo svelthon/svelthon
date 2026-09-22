@@ -74,7 +74,7 @@ hidden = 1
     // is quieter than the ReferenceError it replaces. So it is refused instead.
     test('a name __all__ invents is refused, and named', () => {
         expect(() => plain('__all__ = ["Nope"]\n\nx = 1\n')).toThrow(
-            /`__all__` names `Nope`, which this module never binds \(src\/m\.py\)/
+            /`__all__` names `Nope`, which this module never binds \(src\/m\.py:1\)/
         );
     });
 

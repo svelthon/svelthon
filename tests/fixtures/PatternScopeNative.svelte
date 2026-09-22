@@ -5,6 +5,14 @@
 let first = 99;
 let later = 7;
 let field = 'a';
+
+async function ready() {
+    return {};
+}
+
+async function broken() {
+    throw new Error('no');
+}
 </script>
 
 {#each [[1]] as [a, b = a]}<i data-k="earlier">{a}:{b}</i>{/each}
@@ -23,3 +31,7 @@ let field = 'a';
 {@render keyed({ A: 7 })}
 
 {#each [[]] as [label = 'total', total = 0]}<i data-k="literal">{label}:{total}</i>{/each}
+
+{#await ready() then {got = [1, 2].length}}<i data-k="await-short">{got}</i>{/await}
+{#await ready()}{:then {got = [1, 2].length}}<i data-k="await-then">{got}</i>{/await}
+{#await broken()}{:catch {detail = [1, 2].length}}<i data-k="await-catch">{detail}</i>{/await}

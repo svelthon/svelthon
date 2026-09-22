@@ -34,7 +34,7 @@ export default defineConfig({
 
         // **The clock is declared, the way the locale already is at every call.**
         // Every assertion that depends on a language passes one — `en-GB`,
-        // `fr-FR`, `en-US` — so 2 120 tests do not care what the host speaks.
+        // `fr-FR`, `en-US` — so the suite does not care what the host speaks.
         // Nothing said what the host's zone was, and four tests read a different
         // day west of Greenwich: an environment a suite never declares is a
         // reading of the machine it happens to run on.

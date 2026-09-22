@@ -1300,6 +1300,19 @@ export function follow(value) {
 // so devtools and Vite's overlay show nothing at all: the text sits in the
 // Python object, where nothing JS looks. Fill both in, keeping the original
 // object so Python semantics upstream are untouched.
+// A Python line as a line of the file. `lineOffset` is a number, the count of
+// lines before the `<script>` body, or that number with the ranges of Python
+// lines the template's functions occupy, since those are generated after the
+// body: a line in one of them is reported at the markup it stands for, and any
+// other line is the author's own.
+const inFile = (line, lineOffset) => {
+    if (typeof lineOffset === 'number') return line + lineOffset;
+
+    const range = lineOffset.ranges.find(([from, to]) => line >= from && line <= to);
+
+    return range === undefined ? line + lineOffset.offset : range[2];
+};
+
 export function pyError(error, where, lineOffset = 0) {
     const $B = globalThis.__BRYTHON__;
 
@@ -1348,7 +1361,7 @@ export function pyError(error, where, lineOffset = 0) {
         /* no usable traceback */
     }
 
-    const at = line === undefined ? where : `${where}:${line + lineOffset}`;
+    const at = line === undefined ? where : `${where}:${inFile(line, lineOffset)}`;
 
     try {
         error.message = `${described} (${at})`;

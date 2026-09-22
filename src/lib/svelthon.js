@@ -288,9 +288,10 @@ export function python(options = {}) {
             file.pyDirectives = directiveModules(content);
             file.lineOffset = content.slice(0, declaring.index).split('\n').length - 1;
             file.defs = [];
+            file.defLines = [];
 
             // The collector itself is in markup.js, which the browser can load.
-            const collect = collector(file.defs);
+            const collect = collector(file.defs, file.defLines);
 
             return {
                 code: overMarkup(content, (markup, offset) =>

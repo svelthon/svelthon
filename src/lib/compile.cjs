@@ -239,8 +239,11 @@ const mutatesAll = (node) => {
         : null;
 };
 
+// What comes back is the list and the line of the statement that last set it,
+// which is where a refusal about the list points.
 function declaredExports(body, source, lineOffset = 0) {
     let names = null;
+    let line;
 
     const refuseUnreadable = (node, what) => {
         throw refuse(
@@ -268,6 +271,7 @@ function declaredExports(body, source, lineOffset = 0) {
             }
 
             names = [...(names ?? []), ...strings(added)];
+            line = node.lineno + lineOffset;
             continue;
         }
 
@@ -297,57 +301,57 @@ function declaredExports(body, source, lineOffset = 0) {
         if (!readable(given)) refuseUnreadable(node, 'given a name this file cannot read');
 
         // `+=` extends what is already there; a plain `=` replaces it, which is
-        // what Python does and what this used to get wrong by keeping the first.
+        // what Python does.
         names =
             node instanceof $B.ast.AugAssign
                 ? [...(names ?? []), ...strings(given)]
                 : strings(given);
+        line = node.lineno + lineOffset;
     }
 
-    return names;
+    return names === null ? null : { names, line };
 }
 
 // `__js__ = {"@sveltejs/kit": ["error", "redirect"]}`: the JavaScript a module
 // needs. Python has no way to import from npm, and a plain `.py` has no
 // `<script module>` to do it for them; this is its equivalent, written as an
-// ordinary assignment and read from the AST like `__all__`.
-function declaredJsImports(body, source) {
+// ordinary assignment and read from the AST like `__all__`, under the same two
+// rules: the value that counts is the last one assigned, and what a static read
+// cannot follow is refused rather than skipped.
+function declaredJsImports(body, source, lineOffset = 0) {
+    let modules = [];
+
+    const refuseAt = (node, what) => {
+        const line = node.lineno + lineOffset;
+
+        throw refuse(`svelthon — \`__js__\` ${what} (${source}:${line})`, source, line);
+    };
+
     for (const node of body) {
         if (!(node instanceof $B.ast.Assign)) continue;
         if (!node.targets.some((t) => t instanceof $B.ast.Name && t.id === '__js__')) continue;
-        if (!node.value || !node.value.keys) continue;
 
-        const modules = [];
+        if (!(node.value instanceof $B.ast.Dict)) {
+            refuseAt(node, 'has to be written out as a dict of module names to lists of names');
+        }
 
-        node.value.keys.forEach((key, index) => {
-            const names = (node.value.values[index].elts || [])
-                .map((one) => (one instanceof $B.ast.Constant ? one.value : null))
-                .filter((one) => typeof one === 'string');
+        modules = node.value.keys.map((key, index) => {
+            const names = NAMES(node.value.values[index]);
 
-            // The same question `importjs` asks, and now the same answer. It
-            // used to be a filter, so a name JavaScript cannot carry was dropped
-            // and nothing was imported, silently, while the `importjs` spelling
-            // of the same line refused it by name. `__js__` is the form a plain
-            // `.py` uses, so it is the one a SvelteKit route reaches for.
-            for (const one of names) {
-                if (!JS_NAME.test(one)) {
-                    throw refuse(
-                        `svelthon — __js__: \`${one}\` is not a name (${node.lineno})`,
-                        source,
-                        node.lineno
-                    );
-                }
+            if (!(key instanceof $B.ast.Constant) || typeof key.value !== 'string' || !readable(names)) {
+                refuseAt(node, 'has to be written out: each key a module name, each value a list of strings');
             }
 
-            if (key instanceof $B.ast.Constant && names.length) {
-                modules.push({ from: key.value, names });
+            // The same question `importjs` asks, with the same answer.
+            for (const one of strings(names)) {
+                if (!JS_NAME.test(one)) refuseAt(node, `names \`${one}\`, which is not a name`);
             }
+
+            return { from: key.value, names: strings(names) };
         });
-
-        return modules;
     }
 
-    return [];
+    return modules.filter((one) => one.names.length);
 }
 
 // `importjs`: a component's JavaScript imports, written where its Python is.
@@ -1230,6 +1234,24 @@ function surface(body) {
         for (const one of node.elts || []) targets(one);
     };
 
+    // The same walk for an assignment at the top of the module, where every
+    // name it reaches is state, claimed the way a plain `x = …` claims one.
+    const unpacked = (node) => {
+        if (!node) return;
+        if (node instanceof $B.ast.Starred) return unpacked(node.value);
+
+        if (node instanceof $B.ast.Name) {
+            if (take(node.id)) {
+                bind(node.id);
+                state.push(node.id);
+            }
+
+            return;
+        }
+
+        for (const one of node.elts || []) unpacked(one);
+    };
+
     // `(x := 1)` binds wherever an expression may be written, so it is the one
     // form that cannot be found by looking at statements. Walked over every
     // field rather than over `BODIES`, since a walrus lives in an `if` test, a
@@ -1289,11 +1311,15 @@ function surface(body) {
                     // generated machinery for a compiler directive.
                     if (target instanceof $B.ast.Name && DIRECTIVES.has(target.id)) continue;
 
-                    // `a, b = 1, 2` binds two names and is not a declaration the
-                    // buckets below can hold, since neither half is a statement
-                    // of its own to give a signal to.
-                    if (!(target instanceof $B.ast.Name)) targets(target);
-                    if (!(target instanceof $B.ast.Name) || !take(target.id)) continue;
+                    // `a, b = 0, 0` binds two names of the module, and a name of
+                    // the module is state: each one gets its signal, as it would
+                    // written on a line of its own.
+                    if (!(target instanceof $B.ast.Name)) {
+                        unpacked(target);
+                        continue;
+                    }
+
+                    if (!take(target.id)) continue;
 
                     bind(target.id);
 
@@ -1605,6 +1631,9 @@ function declarations(c) {
         // own subscription is the module's, it is made once and it lasts as long
         // as the page does.
         ...(!c.store && SUBSCRIBING(c) ? [`const ${SUBS} = [];`] : []),
+        // How an error's Python line becomes a line of this file; see `inFile`
+        // in the runtime. Only a component has template functions to place.
+        ...(c.store ? [] : [`const __lines = ${JSON.stringify(c.lines)};`]),
         ``
     ];
 }
@@ -1616,7 +1645,7 @@ function templateBridge(c) {
     if (c.store) return [];
 
     return [
-        `const __event = (fn) => __pyEvent(fn, ${c.lineOffset});`,
+        `const __event = (fn) => __pyEvent(fn, __lines);`,
         // What `(name := value)` in a handler compiles to. The write goes
         // through the namespace, so through the accessor, so the signal fires:
         // the whole reason the walrus can mean this here.
@@ -1828,7 +1857,7 @@ function instanceExports(c) {
         ...c.funcs.map((f) =>
             componentWrapper(f) === RUNTIME.pyExpression
                 ? `const ${f.name} = ${RUNTIME.pyExpression}((a) => ${fn(f.name)}(...a), ` +
-                  `${JSON.stringify(`${f.name}() — ${c.source}`)}, ${c.lineOffset}, ${f.arity});`
+                  `${JSON.stringify(`${f.name}() — ${c.source}`)}, __lines, ${f.arity});`
                 : `const ${f.name} = ${RUNTIME.pyComponent}(() => ${fn(f.name)}, ` +
                   `${JSON.stringify(`${f.name}() — ${c.source}`)}, ${c.lineOffset});`
         ),
@@ -1855,8 +1884,8 @@ function instanceExports(c) {
                   // `.py` and nothing at all here: the store published every
                   // name it had, so the same declaration meant "this is the
                   // contract" in one file kind and was ignored in the other.
-                  // `c.listed` is null when the module wrote none, which is
-                  // when everything is published as before.
+                  // `c.published` lets every name through when the module
+                  // wrote no `__all__`.
                   `export const store = {`,
                   ...c.state.filter(c.published).map((n) => `    get ${n}() { return (${rev(n)}, ${n}); },`),
                   // The parameter and the name its body reads are one constant.
@@ -2154,6 +2183,7 @@ function compile(
         store = false,
         plain = false,
         defs = [],
+        defLines = [],
         jsNames = [],
         pyDirectives = [],
         lineOffset = 0,
@@ -2196,9 +2226,25 @@ function compile(
     // A `.py` gets neither half: a file is not an embedded block, so an indented
     // one is a mistake rather than a convenience, and a module has no template
     // to collect from.
+    // Where each template function lands in the Python source, as `[from, to,
+    // line]`, with the file line of the markup it stands for: an error raised
+    // inside one, or inside a lambda it made, is reported there rather than at a
+    // line of the script that happens to share its number.
+    const exprLines = [];
+
     if (component) {
         const body = $B.unindent(src);
         src = defs.length ? `${body}\n${defs.join('\n\n')}\n` : body;
+
+        let from = body.split('\n').length + 1;
+
+        defs.forEach((def, index) => {
+            const to = from + def.split('\n').length - 1;
+
+            if (defLines[index] !== undefined) exprLines.push([from, to, defLines[index]]);
+
+            from = to + 2;
+        });
     }
 
     const lifted = takeImportJs(src, source, lineOffset, component);
@@ -2239,13 +2285,16 @@ function compile(
         const orphan = effects.find((e) => !e.root);
 
         if (orphan) {
+            const at = lines.get(orphan.name);
+            const line = at === undefined ? undefined : at + lineOffset;
+
             throw refuse(
                 `svelthon — \`@effect\` belongs to a component; ` +
                     `a ${plain ? '.py' : '.svelte.py'} module writes an effect with ` +
-                    `\`@effect.root\`, whose name receives the destructor (${source})`,
-                // `surface()` records a decorated name and its arity, not where
-                // it was written, so this one names the file and no line.
-                source
+                    `\`@effect.root\`, whose name receives the destructor ` +
+                    `(${line === undefined ? source : `${source}:${line}`})`,
+                source,
+                line
             );
         }
 
@@ -2308,7 +2357,7 @@ function compile(
     // The two declarations meet here, in one shape: `__js__` is the module's and
     // only ever names, `importjs` is the component's and covers the four forms.
     const jsImports = [
-        ...declaredJsImports(root._ast.body, src).map((one) => ({
+        ...declaredJsImports(root._ast.body, source, lineOffset).map((one) => ({
             from: one.from,
             kind: 'named',
             entries: one.names.map((n) => ({ name: n, local: n }))
@@ -2346,7 +2395,8 @@ function compile(
     // to export values says so with `__all__`, exactly as it would to a Python
     // caller. SvelteKit is strict about it: a `+page.server.py` exporting
     // anything but load/actions/prerender/… is refused, and rightly so.
-    const listed = declaredExports(root._ast.body, source, lineOffset);
+    const declaration = declaredExports(root._ast.body, source, lineOffset);
+    const listed = declaration === null ? null : declaration.names;
     const exported = (
         listed ?? [...funcs.map((f) => f.name), ...plainDeriveds.map((d) => d.name)]
     ).filter((n) => PY_NAME.test(n) && !JS_RESERVED.has(n));
@@ -2360,11 +2410,15 @@ function compile(
     const missing = (listed ?? []).find((n) => !declared.includes(n));
 
     if (missing) {
+        // The name is bound nowhere, so the line is the one `__all__` is on.
+        const { line } = declaration;
+
         throw refuse(
             `svelthon — \`__all__\` names \`${missing}\`, which this module never ` +
-                `binds (${source}). A module exports what it defines: check the ` +
-                `spelling, or remove it from the list.`,
-            source
+                `binds (${line === undefined ? source : `${source}:${line}`}). A module ` +
+                `exports what it defines: check the spelling, or remove it from the list.`,
+            source,
+            line
         );
     }
 
@@ -2378,6 +2432,9 @@ function compile(
         name,
         source,
         lineOffset,
+        // How a Python line becomes a file line, read by `pyError`: the offset
+        // alone, or the offset with the template functions' ranges.
+        lines: exprLines.length ? { offset: lineOffset, ranges: exprLines } : lineOffset,
         store,
         namespace,
         js,

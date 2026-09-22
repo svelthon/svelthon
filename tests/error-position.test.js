@@ -1,6 +1,7 @@
 import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import Thrower from './fixtures/Thrower.svelte';
+import ExpressionRaise from './fixtures/ExpressionRaise.svelte';
 
 // Where an error says it happened, in both languages.
 //
@@ -71,5 +72,39 @@ describe('an error names the language it came from', () => {
 
         expect(frames[0]).toMatch(/\bat inner\b.*thrower\.js:\d+:\d+/);
         expect(frames[1]).toMatch(/\bat explode\b.*thrower\.js:\d+:\d+/);
+    });
+});
+
+// A template expression is compiled into a function appended after the script,
+// so its Python line is nothing the author wrote. The error names the line of
+// markup the expression sits on; and when the expression calls a function of the
+// script that raises, the deepest frame is the script's, and that line is named.
+describe('an error raised by a template expression', () => {
+    const raise = (which) => {
+        const target = document.body.appendChild(document.createElement('div'));
+
+        mount(ExpressionRaise, { target });
+        flushSync();
+
+        let caught;
+        const catcher = (event) => {
+            caught = event.error;
+            event.preventDefault();
+        };
+
+        window.addEventListener('error', catcher);
+        target.querySelector(`button[data-k="${which}"]`).click();
+        flushSync();
+        window.removeEventListener('error', catcher);
+
+        return caught.message;
+    };
+
+    test('names the line of markup it is written on', () => {
+        expect(raise('inline')).toMatch(/^ZeroDivisionError: .*ExpressionRaise\.svelte:12\)$/);
+    });
+
+    test('and a function of the script it calls names its own line', () => {
+        expect(raise('called')).toMatch(/^ZeroDivisionError: .*ExpressionRaise\.svelte:6\)$/);
     });
 });

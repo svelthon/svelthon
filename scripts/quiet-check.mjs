@@ -39,7 +39,15 @@ const ALLOWED = [
     /^\(Use `node --trace-deprecation \.\.\.` to show where the warning was created\)$/
 ];
 
-const run = spawnSync('npx', ['vitest', 'run'], { encoding: 'utf8', stdio: 'pipe' });
+// `dot`, because the default reporter drops what a passing test writes to
+// stderr once it is not attached to a terminal, and a check that reads the run's
+// output needs a reporter that prints all of it. `verbose` prints it too, but a
+// test title that holds a newline then spills onto lines of its own.
+const run = spawnSync('npx', ['vitest', 'run', '--reporter=dot'], {
+    encoding: 'utf8',
+    stdio: 'pipe',
+    maxBuffer: 1 << 28
+});
 const output = `${run.stdout ?? ''}${run.stderr ?? ''}`;
 
 // Vitest's own reporter writes the summary and the progress to the same
@@ -47,8 +55,9 @@ const output = `${run.stdout ?? ''}${run.stderr ?? ''}`;
 // reporter line starts with a marker or is part of the summary block.
 const REPORTER = /^\s*(?:[✓×❯↓]|RUN |DEV |Test Files|Tests|Start at|Duration|stdout \||stderr \||⎯|$)/;
 
-// Colour, which the reporter writes even to a pipe.
-const plain = (line) => line.replace(/\[[0-9;]*m/g, '').trimEnd();
+// Colour, which the reporter writes even to a pipe, and the dots it prints for
+// each test, which run straight into whatever is written after them.
+const plain = (line) => line.replace(/\[[0-9;]*m/g, '').replace(/^[·x*-]+/, '').trimEnd();
 
 const said = output
     .split('\n')

@@ -5,6 +5,14 @@
 first = 99
 later = 7
 field = "a"
+
+
+async def ready():
+    return {}
+
+
+async def broken():
+    raise ValueError("no")
 </script>
 
 {#each [[1]] as [a, b=a]}<i data-k="earlier">{a}:{b}</i>{/each}
@@ -27,3 +35,9 @@ field = "a"
 <!-- And a default that is a plain string holding a sibling's name: text, not a
      reference, and reading it as one made the component unmountable. -->
 {#each [[]] as [label="total", total=0]}<i data-k="literal">{label}:{total}</i>{/each}
+
+<!-- What an {#await} hands to `then` or `catch` is a declaration too, written
+     in the opening tag or as a clause. -->
+{#await ready() then {got=len([1, 2])}}<i data-k="await-short">{got}</i>{/await}
+{#await ready()}{:then {got=len([1, 2])}}<i data-k="await-then">{got}</i>{/await}
+{#await broken()}{:catch {detail=len([1, 2])}}<i data-k="await-catch">{detail}</i>{/await}

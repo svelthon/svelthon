@@ -29,7 +29,7 @@
 // binding Svelte emitted, so the temporal dead zone is inherited rather than
 // re-implemented.
 import { test, expect, describe } from 'vitest';
-import { mount, flushSync } from './mounted.js';
+import { mount, flushSync, settled } from './mounted.js';
 import PatternScope from './fixtures/PatternScope.svelte';
 import PatternScopeNative from './fixtures/PatternScopeNative.svelte';
 import PatternScopeAhead from './fixtures/PatternScopeAhead.svelte';
@@ -43,6 +43,21 @@ const rendered = (Component) => {
     return Object.fromEntries(
         [...target.querySelectorAll('i')].map((one) => [one.dataset.k, one.textContent])
     );
+};
+
+// The same reading once every `{#await}` has settled.
+const awaited = async (Component) => {
+    const target = document.body.appendChild(document.createElement('div'));
+    mount(Component, { target });
+
+    const read = () =>
+        Object.fromEntries(
+            [...target.querySelectorAll('i[data-k^="await"]')].map((one) => [one.dataset.k, one.textContent])
+        );
+
+    await settled(() => expect(Object.keys(read())).toHaveLength(3));
+
+    return read();
 };
 
 const raised = (Component) => {
@@ -98,6 +113,16 @@ describe('what a destructuring default may read', () => {
     // could not mount at all. The string is `"total"` and the name is `total`.
     test('a default that is a string naming a later binding still mounts', () => {
         expect(rendered(PatternScope).literal).toBe('total:0');
+    });
+
+    // What an `{#await}` hands to `then` or `catch` is a declaration like the
+    // others, in the opening tag and as a clause alike. `len` is Python's and
+    // nothing else's, so a default that stayed JavaScript cannot answer.
+    test('what an {#await} hands over is declared the same way', async () => {
+        const ours = await awaited(PatternScope);
+
+        expect(ours).toEqual(await awaited(PatternScopeNative));
+        expect(ours).toEqual({ 'await-short': '2', 'await-then': '2', 'await-catch': '2' });
     });
 
     // And the other direction, which declaring every name first is what makes

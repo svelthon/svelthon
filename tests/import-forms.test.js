@@ -71,10 +71,30 @@ describe('a declaration the compiler cannot read', () => {
         expect(out).toContain('export { load };');
     });
 
-    test('a __js__ that is not a mapping is ignored', () => {
+    // `__js__` is a declaration to the compiler, never data, so a value it cannot
+    // read is refused: ignored, it imported nothing and the name failed at run
+    // time, far from the line that caused it.
+    test('a __js__ that is not a mapping is refused, with its line', () => {
         expect(() =>
             compile('__js__ = ["@sveltejs/kit"]\n\n\nx = 1\n', 'M', 'm.py', { plain: true })
-        ).not.toThrow();
+        ).toThrow(/`__js__` has to be written out as a dict .* \(m\.py:1\)/);
+    });
+
+    // A Python name: the value it holds when the module has run is the last one
+    // assigned, and each entry has to be spelled out.
+    test('the last __js__ assigned is the one that counts', () => {
+        const out = compile('__js__ = {"a": ["one"]}\n__js__ = {"b": ["two"]}\n\nx = 1\n', 'M', 'm.py', {
+            plain: true
+        }).script;
+
+        expect(out).toContain('import { two } from "b";');
+        expect(out).not.toContain('"a"');
+    });
+
+    test('and an entry it cannot read is refused rather than dropped', () => {
+        expect(() =>
+            compile('who = "x"\n__js__ = {"c": [who]}\n', 'M', 'm.py', { plain: true })
+        ).toThrow(/`__js__` has to be written out: .* \(m\.py:2\)/);
     });
 
     test('and one whose values are empty imports nothing', () => {
@@ -93,7 +113,7 @@ describe('a declaration the compiler cannot read', () => {
         expect(() => script('importjs {fadé} from "x"\n')).toThrow(/importjs: `fadé` is not a name/);
         expect(() =>
             compile('__js__ = {"x": ["fadé"]}\n\n\ny = 1\n', 'M', 'm.py', { plain: true })
-        ).toThrow(/__js__: `fadé` is not a name/);
+        ).toThrow(/`__js__` names `fadé`, which is not a name \(m\.py:1\)/);
     });
 
     test('and the ASCII twin of each still imports', () => {

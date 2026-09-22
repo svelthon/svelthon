@@ -706,15 +706,6 @@ function tagValue(markup, from) {
     return null;
 }
 
-// Names a block introduces, which are not module globals and must therefore be
-// passed in as arguments.
-const BLOCK_NAMES = {
-    '#each': /\bas\s+([^()]*?)\s*(?:\(|$)/,
-    '#snippet': new RegExp(`${NAME}\\s*\\(([^)]*)\\)`, 'u'),
-    ':then': /^:then\s+(.+)$/,
-    ':catch': /^:catch\s+(.+)$/
-};
-
 // The elements HTML closes by itself, which therefore open no body and no
 // scope. A component is never one of them.
 const VOID = new Set([
@@ -930,6 +921,19 @@ const boundBy = (parts, tuple) => {
     return names;
 };
 
+// A comma list of patterns that a block declares: its names go to `declare`,
+// which opens the block's scope, and the list comes back with every expression
+// in it compiled inside that scope. Every construct that binds names in the
+// markup goes through here: a snippet's parameters, an `{#each}` target, and
+// the value an `{#await}` hands to `then` or `catch`.
+const destructured = (text, declare, call, tuple) => {
+    const parts = arguments_(text.trim());
+
+    declare(boundBy(parts, tuple));
+
+    return parts.map((part) => parameterPattern(part, call, [], tuple)).join(',');
+};
+
 // `{#snippet row(one, value=True)}` read apart: the names go to `declare`,
 // which opens the block's scope, and what comes back is the declaration
 // rewritten with each default compiled as the Python expression it is. The
@@ -942,28 +946,17 @@ function snippetParameters(trimmed, declare, call) {
 
     const name = head.replace(/^#snippet\s*/, '').trim();
 
+    // No parameter list, or one Svelte will refuse in its own words: nothing is
+    // declared.
     if (close === -1) {
-        declare(declaredBy(trimmed));
+        declare([]);
 
         return trimmed.replace(/^#snippet\s*/, '');
     }
 
-    const parts = arguments_(trimmed.slice(open + 1, close));
+    const written = destructured(trimmed.slice(open + 1, close), declare, call, false);
 
-    declare(boundBy(parts, false));
-
-    const written = parts.map((part) => parameterPattern(part, call, [], false));
-
-    return `${name}(${written.join(',')})${trimmed.slice(close + 1)}`;
-}
-
-function declaredBy(inner) {
-    const keyword = inner.trimStart().split(/[\s(]/)[0];
-    const pattern = BLOCK_NAMES[keyword];
-    if (!pattern) return [];
-
-    const found = inner.trim().match(pattern);
-    return found ? identifiers(found[1]) : [];
+    return `${name}(${written})${trimmed.slice(close + 1)}`;
 }
 
 // The key that trails an `{#each}` target: `[target, key]`, or null when the line
@@ -1062,12 +1055,8 @@ function eachBlock(trimmed, declare, call) {
     // `[g = h, h]` needs in order to throw where JavaScript throws. Only then
     // are the defaults compiled, and the key last, since it is evaluated inside
     // the block on each row.
-    const parts = arguments_((keyed ? keyed[0] : named).trim());
     const iterable = call(body.slice(0, at), '__seq');
-
-    declare(boundBy(parts, true));
-
-    const target = parts.map((one) => parameterPattern(one, call, [], true)).join(',');
+    const target = destructured(keyed ? keyed[0] : named, declare, call, true);
 
     return `{#each ${iterable} as ${target}` + (keyed ? ` (${call(keyed[1], 'repr')})` : '') + '}';
 }
@@ -1286,6 +1275,10 @@ export function pythonExpressions(markup, collect, onPython, where) {
     return walk(markup, collect, onPython, named, null, where);
 }
 
+// A tag's opening, read where the walk stands rather than on a copy of the rest
+// of the markup.
+const TAG_OPEN = /<(\/?)\s*([A-Za-z][\w:.-]*)/y;
+
 function walk(markup, collect, onPython, seed, record, where) {
     let out = '';
     let index = 0;
@@ -1307,6 +1300,17 @@ function walk(markup, collect, onPython, seed, record, where) {
 
     // The tag being read, so that its closing `>` knows what it closed.
     let tag = null;
+
+    // The current tag as written, up to where the walk stands. An attribute name
+    // never reaches back past its own tag and is copied through unchanged, so
+    // the patterns that read "the attribute just before this character" are
+    // matched here: on the input, which is one flat string, and on this tag
+    // alone, which keeps the walk linear in the size of the template.
+    //
+    // Inside a directive whose quotes are dropped, the opening quote is in the
+    // input and not in what is written, and it is the character just behind.
+    let tagIn = 0;
+    const tagText = () => markup.slice(tagIn, unquoted === -1 ? index : index - 1);
 
     // Every name the markup declares goes through here or through the two
     // writes below, which is why the refusal sits on the way in rather than at
@@ -1414,7 +1418,7 @@ function walk(markup, collect, onPython, seed, record, where) {
         const args = mentioned(trimmed);
 
         locate(source.trim());
-        const name = collect(trimmed, wrapper, args);
+        const name = collect(trimmed, wrapper, args, false, position()?.line);
 
         // follow() on the block's own names: a row of an {#each} is a plain
         // JavaScript value, not a signal, so reading `it.label` registers
@@ -1431,7 +1435,7 @@ function walk(markup, collect, onPython, seed, record, where) {
     // binding makes it here rather than each at its own site.
     const assign = (expr) => {
         const args = mentioned(expr.trim());
-        const name = collect(expr.trim(), '', args, true);
+        const name = collect(expr.trim(), '', args, true, position()?.line);
         const rest = args.map((arg) => `${FOLLOW}(${arg})`);
 
         return `${name}(${[`${BIND_VALUE}(${BOUND_VALUE})`, ...rest].join(', ')})`;
@@ -1649,7 +1653,7 @@ function walk(markup, collect, onPython, seed, record, where) {
                 index += 1;
                 continue;
             } else if (char === '"' || char === "'") {
-                const named = (out.match(ATTRIBUTE_NAME) || [])[1] || '';
+                const named = (tagText().match(ATTRIBUTE_NAME) || [])[1] || '';
                 const closing = directive(named) ? loneInterpolation(markup, index, closingBrace) : -1;
 
                 if (closing !== -1) {
@@ -1676,8 +1680,8 @@ function walk(markup, collect, onPython, seed, record, where) {
                         continue;
                     }
 
-                    const attribute = out.match(ATTRIBUTE_NAME);
-                    const glued = attribute ? null : out.match(UNQUOTED_VALUE);
+                    const attribute = tagText().match(ATTRIBUTE_NAME);
+                    const glued = attribute ? null : tagText().match(UNQUOTED_VALUE);
                     const inner = markup.slice(index + 1, end);
                     const trimmed = inner.trim();
                     const attached = keyword(trimmed, '@');
@@ -1807,11 +1811,11 @@ function walk(markup, collect, onPython, seed, record, where) {
             // closing bracket, so this is where the name is complete and the
             // absence of an `=` is certain.
             if (/[\s/>]/.test(char)) {
-                const bare = (out.match(BARE_ATTRIBUTE) || [])[1];
+                const bare = (tagText().match(BARE_ATTRIBUTE) || [])[1];
 
                 if (bare !== undefined && LET_DIRECTIVE.test(bare)) refuseLet(bare);
 
-                const short = out.match(SHORTHAND);
+                const short = tagText().match(SHORTHAND);
                 if (short) {
                     const name = short[2];
 
@@ -1852,7 +1856,8 @@ function walk(markup, collect, onPython, seed, record, where) {
                 continue;
             }
 
-            const named = markup.slice(index).match(/^<(\/?)\s*([A-Za-z][\w:.-]*)/);
+            TAG_OPEN.lastIndex = index;
+            const named = TAG_OPEN.exec(markup);
 
             // `start` is where the group action reads the tag's `value` from,
             // which is the only rule that looks at an attribute other than its
@@ -1860,6 +1865,7 @@ function walk(markup, collect, onPython, seed, record, where) {
             tag = named ? { closing: named[1] === '/', name: named[2], start: index } : null;
 
             inTag = true;
+            tagIn = index;
             out += char;
             index++;
             continue;
@@ -1909,19 +1915,20 @@ function walk(markup, collect, onPython, seed, record, where) {
                 const rest = opened.rest;
                 const at = atTopLevel(rest, (i) => /^\s(?:then|catch)\s/.test(rest.slice(i)));
                 const awaited = at === -1 ? rest : rest.slice(0, at);
-                const tail = at === -1 ? '' : rest.slice(at);
+                const tail = at === -1 ? null : rest.slice(at).match(/^\s*(then|catch)\s+([\s\S]*)$/);
 
-                // The name comes from the tail rather than from `BLOCK_NAMES`,
-                // which knows `:then` and `:catch` as clauses but has no entry
-                // for the shorthand that folds one into the opening tag. Without
-                // it `{#await f() then value}` declared nothing, `value` was
-                // compiled as a free name, and the block rendered empty, while
-                // the same await written the long way worked.
-                // Compiled before the scope is pushed: the promise is evaluated
-                // outside the block, so the name it declares is not in scope for
-                // it: `{#await f(value) then value}` must read the outer one.
-                out += `{#await ${call(awaited, '')}${tail}}`;
-                push(identifiers(tail.replace(/^\s*(?:then|catch)\s+/, '')));
+                // The promise is evaluated outside the block, so it is compiled
+                // before the block's names exist: `{#await f(value) then value}`
+                // reads the outer one. What `then` or `catch` receives is a
+                // declaration like any other, a pattern with its defaults.
+                const promise = call(awaited, '');
+
+                if (tail === null) {
+                    push([]);
+                    out += `{#await ${promise}}`;
+                } else {
+                    out += `{#await ${promise} ${tail[1]} ${destructured(tail[2], push, call, false)}}`;
+                }
             } else if (opens('snippet')) {
                 // A snippet declares names and holds no expression of its own:
                 // it is passed through, and its body is walked like any other.
@@ -1964,22 +1971,22 @@ function walk(markup, collect, onPython, seed, record, where) {
             pop();
             out += markup.slice(index, end + 1);
         } else if (trimmed.startsWith(':')) {
-            // A continuation clause may rebind the block's names. What the
-            // block's scope holds beyond them is kept: a snippet declared in it
-            // is still declared after `{:else}`.
-            const declared = declaredBy(trimmed);
-            if (declared.length) {
-                const holder = ids[ids.length - 1];
-                scopes[scopes.length - 1] = [...(seed.get(holder) || []), ...declared];
-            }
-
             const clause = keyword(trimmed, ':');
+
+            // `{:then value}` and `{:catch error}` rebind the block's names. What
+            // the block's scope holds beyond them is kept: a snippet declared in
+            // it is still declared after the clause.
+            const holder = ids[ids.length - 1];
+            const rebind = (names) => {
+                if (names.length) scopes[scopes.length - 1] = [...(seed.get(holder) || []), ...names];
+            };
 
             if (/^:else\s+if\s/.test(trimmed)) {
                 out += `{:else if ${call(trimmed.replace(/^:else\s+if\s/, ''), '__truthy')}}`;
+            } else if (clause !== null && ['then', 'catch'].includes(clause.name) && clause.rest.trim()) {
+                out += `{:${clause.name} ${destructured(clause.rest, rebind, call, false)}}`;
             } else if (clause !== null && CLAUSES.includes(clause.name)) {
-                // `:else`, `:then row`, `:catch err`: a name at most, never an
-                // expression, so they cross unchanged.
+                // `:else`, and `:then` or `:catch` that name nothing.
                 out += markup.slice(index, end + 1);
             } else {
                 throw refuse(unknownTag(trimmed, 'clause', CLAUSES, said()));
@@ -2107,12 +2114,17 @@ export function directiveModules(markup) {
 
 
 // The hidden Python functions a template needs, one per distinct expression.
-// Appended to the component's own Python, never prepended, so its line numbers
-// stay true, which is what keeps error messages and source maps honest.
-export function collector(defs) {
+// Appended to the component's own Python, never prepended, so the author's line
+// numbers stay true.
+//
+// `lines`, when given, receives the file line each function stands for, in the
+// same order as `defs`: an error raised inside one is reported at the markup
+// that wrote it. An expression written twice is one function, and reports the
+// first place.
+export function collector(defs, lines) {
     const seen = new Map();
 
-    return (expression, wrapper, args, assign = false) => {
+    return (expression, wrapper, args, assign = false, line) => {
         const key = `${assign ? 'set' : 'get'}|${wrapper}|${args.join(',')}|${expression}`;
         if (seen.has(key)) return seen.get(key);
 
@@ -2120,6 +2132,7 @@ export function collector(defs) {
         // wrapper evaluate them the way a template expression is evaluated.
         const name = `__expr_${assign ? 'set_' : ''}${defs.length}`;
         seen.set(key, name);
+        lines?.push(line);
 
         if (assign) {
             // A module name assigned inside a function is local unless declared
