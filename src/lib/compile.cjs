@@ -1449,6 +1449,14 @@ function surface(body) {
             return;
         }
 
+        // A lambda's body is its own scope; its defaults are read where it is
+        // written, in the module's.
+        if (node instanceof $B.ast.Lambda) {
+            walruses(node.args.defaults);
+            walruses(node.args.kw_defaults);
+            return;
+        }
+
         if (node instanceof $B.ast.NamedExpr) {
             statement = node.lineno;
             unpacked(node.target);
@@ -2204,16 +2212,16 @@ function effectBlocks(c) {
                   //
                   // Captured while the component is alive, too: reading a signal
                   // from a teardown, once destroyed, yields no function at all.
-                  ...(c.lifecycle('on_destroy')
-                      ? [`    const __teardown = untrack(() => ${fn('on_destroy')});`]
-                      : []),
-                  ...(c.lifecycle('on_mount') ? [`    untrack(() => on_mount());`] : []),
+                  // Held in the wrapper `on_mount` goes through, which starts
+                  // an `async def` and places an error.
                   ...(c.lifecycle('on_destroy')
                       ? [
-                            `    return () => { try { __teardown(); }` +
-                                ` catch (err) { throw __pyError(err,${JSON.stringify(`on_destroy() — ${c.source}`)}, ${c.lineOffset}); } };`
+                            `    const __teardown = untrack(() => { const held = ${fn('on_destroy')};` +
+                                ` return __pyComponent(() => held, ${JSON.stringify(`on_destroy() — ${c.source}`)}, ${c.lineOffset}); });`
                         ]
                       : []),
+                  ...(c.lifecycle('on_mount') ? [`    untrack(() => on_mount());`] : []),
+                  ...(c.lifecycle('on_destroy') ? [`    return () => { __teardown(); };`] : []),
                   `});`
               ]
             : [])
