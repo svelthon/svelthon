@@ -346,7 +346,7 @@ function declaredJsImports(body, source, lineOffset = 0) {
         for (const key of Object.keys(node)) if (key !== 'parent') writes(node[key]);
     };
 
-    // writes(body);
+    writes(body);
 
     for (const node of body) {
         if (!(node instanceof $B.ast.Assign)) continue;
@@ -624,7 +624,7 @@ function takeArrows(src, where, lineOffset, allowed) {
         // every other line of Python does. See `commentAt`.
         const cut = quote === null ? commentAt(line) : -1;
         const code = cut === -1 ? line : line.slice(0, cut).trimEnd();
-        const statement = quote === null;
+        const statement = quote === null && depth === 0 && !joined;
 
         if (quote === null) {
             depth = Math.max(0, depth + opened(code));
@@ -1451,7 +1451,7 @@ function surface(body) {
 
         if (node instanceof $B.ast.NamedExpr) {
             statement = node.lineno;
-            targets(node.target);
+            unpacked(node.target);
         }
 
         for (const key of Object.keys(node)) walruses(node[key]);
@@ -1610,7 +1610,7 @@ function surface(body) {
 
                 for (const name of node.names || []) {
                     bind(name);
-                    if (false && take(name)) state.push(name);
+                    if (take(name)) state.push(name);
                 }
             }
 

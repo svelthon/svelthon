@@ -6,6 +6,9 @@ a, b = 0, 0
 first, *rest = [0, 1, 2]
 if (walrus := 0) == 0:
     pass
+# A walrus no `global` names: mutated, never rebound.
+if (items := []) == []:
+    pass
 
 
 def reset():
@@ -27,8 +30,9 @@ def bump():
     rest = rest + [3]
     walrus += 1
     message += 1
+    items.append(1)
 </script>
 
 <button data-k="bump" onclick={bump}>bump</button>
 <p data-k="shown">{plain} {a} {b} {c} {d} {e} {first} {len(rest)}</p>
-<p data-k="other">{walrus} {message}</p>
+<p data-k="other">{walrus} {message} {len(items)}</p>

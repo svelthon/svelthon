@@ -1388,7 +1388,7 @@ export function pyError(error, where, lineOffset = 0) {
         /* no usable traceback */
     }
 
-    const home = frames.at(-1)?.file;
+    const home = frames[0]?.file;
     const own = frames.filter((frame) => frame.file === home).at(-1);
     const deepest = frames.at(-1);
 

@@ -15,12 +15,12 @@ test('names bound by unpacking follow their writes, as a plain name does', () =>
     const shown = (k = 'shown') => target.querySelector(`[data-k="${k}"]`).textContent;
 
     expect(shown()).toBe('0 0 0 0 0 0 0 2');
-    expect(shown('other')).toBe('0 0');
+    expect(shown('other')).toBe('0 0 0');
 
     target.querySelector('[data-k="bump"]').click();
     flushSync();
 
     // `c` and `e` are not written, and stay where they were.
     expect(shown()).toBe('1 1 1 0 1 0 1 3');
-    expect(shown('other')).toBe('1 1');
+    expect(shown('other')).toBe('1 1 1');
 });
