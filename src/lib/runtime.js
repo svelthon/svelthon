@@ -3599,6 +3599,13 @@ export function pyModule(name) {
 // template reads. Without it the bridge would only run one way.
 export function registerModule(name, namespace, source) {
     const $B = globalThis.__BRYTHON__;
+    namespace.__name__ = name;
+
+    // A name no `import` can write is never looked up: `+page.server`, the
+    // file name SvelteKit gives every route of that kind. Registered, the second
+    // route of an application collided with the first.
+    if (!IMPORTABLE.test(name)) return;
+
     const first = registered.get(name);
 
     // Python imports a module by its name, and a file's name is its stem, so
@@ -3619,10 +3626,12 @@ export function registerModule(name, namespace, source) {
     }
 
     registered.set(name, source);
-    namespace.__name__ = name;
 
     $B.imported[name] = namespace;
 }
+
+// A Python identifier, the only kind of name an `import` writes.
+const IMPORTABLE = /^[\p{L}_][\p{L}\p{M}\p{N}_]*$/u;
 
 // Hand Brython our namespace instead of the one it would have made for itself.
 //
