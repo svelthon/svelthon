@@ -343,7 +343,7 @@ function installMutationTracking($B) {
             let spent = false;
 
             for (const arg of args) {
-                if (consumed(arg)) spent = true;
+                if (SOURCES.has(attr) && !keeps(arg)) spent = true;
                 else inherit(obj, arg);
             }
 
@@ -758,9 +758,10 @@ function installMutationTracking($B) {
 
         if (result === left && watched) {
             // `rows += [[]]` puts the new rows under watch, and `rows +=
-            // items()` cannot: the generator kept nothing. The same two answers
+            // items()` cannot: the generator kept nothing, and neither does a
+            // class whose `__iter__` makes its rows as it goes. The same two answers
             // as the method paths above, and the same question decides.
-            if (consumed(right)) adopt(left);
+            if (!keeps(right)) adopt(left);
             else inherit(left, right);
 
             MARKS.get(left)();
@@ -788,32 +789,44 @@ function mutable(value) {
     }
 }
 
-// An argument that hands its contents over and keeps none of them: an iterator.
+// The mutators whose arguments are **sources**: what lands is what iterating
+// them yields, not the argument itself.
+const SOURCES = new Set([
+    'extend', 'extendleft', 'update', 'intersection_update',
+    'difference_update', 'symmetric_difference_update'
+]);
+
+// A source that still holds what it yielded: a list, a tuple, a dict, a set or
+// a frozenset, of exactly that class.
 //
 // `rows.append(child)` is given the very thing that lands, so the watch goes to
-// the argument and the link is one assignment. `rows.extend(items())` is given a
-// **source**, and by the time this is asked the generator is empty: the children
-// are inside the container and nothing at all points at them, so the page went
-// on showing `[[]]` while Python held `[[1]]`.
+// the argument and the link is one assignment. `rows.extend(other)` is given a
+// **source**, and the link to it holds only if the children it yielded are
+// still inside it. A generator yields and forgets, and a class whose `__iter__`
+// makes a fresh row on each pass never held one: the children are inside the
+// container and nothing that is watched points at them, so the page goes on
+// showing `[[]]` while Python holds `[[1]]`.
 //
 // Telling the two apart is what decides between the cheap link and the walk, and
 // the walk cannot be the answer for both: a thousand-row list would pay for its
-// whole length on every `append`.
+// whole length on every `extend([row])`.
 //
-// Asked of the class, where Python keeps the answer, and it is the whole
-// definition of an iterator: a value with `__next__`. A list, a tuple, a dict
-// and a set are re-iterable and still hold what they were handed, so they take
-// the link. An array is stepped over before the class is asked, since no Python
-// sequence represented as one is an iterator.
-function consumed(value) {
-    if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+// Only the builtin containers are known to keep what they yield, and a subclass
+// may override `__iter__`, so the class is compared exactly. Everything else
+// makes the container say what it now holds; the source is never iterated
+// again, since a second pass may make other objects or run other effects. A
+// value that is not an object holds no container to watch.
+function keeps(value) {
+    if (value === null || typeof value !== 'object') return true;
 
     const $B = globalThis.__BRYTHON__;
 
     try {
-        return $B.search_slot($B.get_class(value), 'tp_iternext', $B.NULL) !== $B.NULL;
+        const cls = $B.get_class(value);
+        return cls === _b_.list || cls === _b_.tuple || cls === _b_.dict
+            || cls === _b_.set || cls === _b_.frozenset;
     } catch {
-        return false; // a foreign JavaScript value is not ours to ask
+        return false; // a foreign JavaScript value: the container is asked instead
     }
 }
 
