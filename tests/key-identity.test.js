@@ -23,6 +23,11 @@ test('two equal rows keyed by themselves are two rows', () => {
     expect(setup().at('todos').textContent).toBe('todotodo');
 });
 
+// A key made from a repr() is not the string that spells it.
+test('a value keyed by repr() and its spelling are two keys', () => {
+    expect(setup().at('mixed').textContent).toBe('floatstrtuplestrbytesstr');
+});
+
 test('a list mutated keeps its {#key} block', () => {
     const { at, press } = setup();
     const before = at('block');

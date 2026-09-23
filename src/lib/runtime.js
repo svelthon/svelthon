@@ -375,8 +375,9 @@ function installMutationTracking($B) {
             let spent = false;
 
             for (const arg of args) {
-                if (SOURCES.has(attr) && !keeps(arg)) spent = true;
-                else inherit(obj, arg);
+                if (!SOURCES.has(attr)) inherit(obj, arg);
+                else if (keeps(arg)) inheritContents(obj, arg);
+                else spent = true;
             }
 
             if (spent) adopt(obj);
@@ -794,7 +795,7 @@ function installMutationTracking($B) {
             // class whose `__iter__` makes its rows as it goes. The same two answers
             // as the method paths above, and the same question decides.
             if (!keeps(right)) adopt(left);
-            else inherit(left, right);
+            else inheritContents(left, right);
 
             MARKS.get(left)();
         }
@@ -998,16 +999,73 @@ function ownAttributes(value) {
 // walk marks each marker with the number of the walk it is in.
 let walked = 0;
 
+//
+// A link is checked as the walk crosses it. A child taken out of a list, a dict
+// or a set no longer belongs to it, and the link goes: `rows.clear()` then
+// `child.append(1)` would otherwise re-run what reads `rows`. Only those three,
+// whose membership is exact; an instance keeps its links, since what it hands
+// out may live on its class or behind a property.
 const upwards = (marker, stamp, key) => {
     if (marker.seen === stamp) return;
     marker.seen = stamp;
 
     for (const one of marker[key]) one();
 
-    if (marker.parents !== undefined) {
-        for (const parent of marker.parents) upwards(parent, stamp, key);
+    const parents = marker.parents;
+    if (parents === undefined) return;
+
+    const child = marker.target.deref();
+
+    for (let i = parents.length - 1; i >= 0; i--) {
+        const holder = parents[i].target.deref();
+
+        if (child !== undefined && holder !== undefined && !holds(holder, child)) {
+            parents.splice(i, 1);
+        }
     }
+
+    for (const parent of parents) upwards(parent, stamp, key);
 };
+
+// Whether `holder` still holds `child`, asked only where the answer is exact: a
+// list, a dict or a set of exactly that class. A subclass has attributes too.
+function holds(holder, child) {
+    let cls;
+    try {
+        cls = globalThis.__BRYTHON__.get_class(holder);
+    } catch {
+        return true;
+    }
+
+    if (cls === _b_.list) return holder.includes(child);
+
+    if (cls === _b_.dict) {
+        for (const [key, value] of pyEntries(holder)) if (key === child || value === child) return true;
+        return false;
+    }
+
+    if (cls === _b_.set) {
+        for (const bucket of Object.values(holder.$store)) if (bucket.includes(child)) return true;
+        return false;
+    }
+
+    return true;
+}
+
+// What a builtin container yields, handed to `into` one by one: the source of
+// `rows.extend(other)` is not inside `rows`, what it held is.
+function inheritContents(into, source) {
+    if (Array.isArray(source)) {
+        for (const child of source) inherit(into, child);
+    } else if (globalThis.__BRYTHON__.is_dict(source)) {
+        for (const [key, child] of pyEntries(source)) {
+            inherit(into, key);
+            inherit(into, child);
+        }
+    } else if (isSet(source)) {
+        for (const bucket of Object.values(source.$store)) for (const child of bucket) inherit(into, child);
+    }
+}
 
 // Where a watched container's marker lives.
 //
@@ -1134,6 +1192,8 @@ function mark(value) {
     marker.bumps = [];
     marker.reads = [];
     marker.follow = () => upwards(marker, ++walked, 'reads');
+    // Weak, so a child's link does not keep a container it has left alive.
+    marker.target = new WeakRef(value);
 
     MARKS.set(value, marker);
 
