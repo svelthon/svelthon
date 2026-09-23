@@ -896,6 +896,7 @@ const RUNTIME = {
     jsCall: '__jsCall',
     ticking: '__ticking',
     pyBind: '__pyBind',
+    plainScalar: '__plainScalar',
     pyModule: '__pyModule',
     NONE: '__NONE',
     helpers: '__helpers',
@@ -1749,7 +1750,7 @@ function preamble(c) {
             'pyEvent', 'plainData', 'pyArg', 'pyData', 'pyBoundary', 'pyComponent', 'pyExpression',
             'jsCall',
             'ticking', 'pyBind', 'pyModule', 'NONE', 'helpers',
-            ...(c.store ? ['registerModule'] : SUBSCRIBING(c) ? ['unsubscribe'] : []),
+            ...(c.store ? ['registerModule', 'plainScalar'] : SUBSCRIBING(c) ? ['unsubscribe'] : []),
             // Only an effect hands a value back to be called later, so only a
             // component with one needs the name.
             ...(c.effects.length ? ['pyHandler'] : []),
@@ -2086,8 +2087,14 @@ function instanceExports(c) {
                   // contract" in one file kind and was ignored in the other.
                   // `c.published` lets every name through when the module
                   // wrote no `__all__`.
+                  //
+                  // What a getter hands JavaScript is a crossing too, the other
+                  // way: `__plainScalar` makes a float a number and keeps a
+                  // container itself.
                   `export const store = {`,
-                  ...c.state.filter(c.published).map((n) => `    get ${n}() { return (${rev(n)}, ${n}); },`),
+                  ...c.state
+                      .filter(c.published)
+                      .map((n) => `    get ${n}() { return (${rev(n)}, __plainScalar(${n})); },`),
                   // The parameter and the name its body reads are one constant.
                   // They were two: the signature still said `v` while the body
                   // had moved to `__next`, so every published setter of every
@@ -2102,8 +2109,7 @@ function instanceExports(c) {
                   // *non-empty format string passed to object.__format__*, while
                   // `store.set_amount(0.25)` beside it worked — one value, two
                   // capabilities, decided by the door it came through. The table
-                  // of crossings in runtime.js names seven and this was an
-                  // eighth, unlisted and untreated.
+                  // of crossings in runtime.js lists this door and its getter.
                   //
                   // The same conversion the call boundary owes, and no more: a
                   // scalar becomes its Python self and an object keeps its
@@ -2118,7 +2124,7 @@ function instanceExports(c) {
                       ),
                   ...c.deriveds
                       .filter((d) => c.published(d.name))
-                      .map((d) => `    get ${d.name}() { return __follow(${d.name}); },`),
+                      .map((d) => `    get ${d.name}() { return __plainScalar(__follow(${d.name})); },`),
                   ...c.funcs.filter((f) => c.published(f.name)).map((f) => `    ${f.name},`),
                   `};`,
                   ``,

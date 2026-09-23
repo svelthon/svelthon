@@ -58,3 +58,32 @@ describe('a store written from JavaScript', () => {
         expect(read()).toBe('2');
     });
 });
+
+// What a getter hands JavaScript crosses too: a float reads as a number, and a
+// value written through the setter reads back as itself.
+describe('a store read from JavaScript', () => {
+    test('a float is a number', () => {
+        expect(store.price).toBe(0.25);
+    });
+
+    test('and one written reads back as itself', () => {
+        store.price = 0.5;
+
+        expect(store.price).toBe(0.5);
+        expect(JSON.stringify({ price: store.price })).toBe('{"price":0.5}');
+    });
+
+    test('and a derived float is a number too', () => {
+        store.price = 0.5;
+
+        expect(store.doubled).toBe(1);
+    });
+
+    // A container keeps its identity, which is what a mutation is followed by.
+    test('control: a container is itself', () => {
+        const rows = ['a'];
+        store.rows = rows;
+
+        expect(store.rows).toBe(rows);
+    });
+});

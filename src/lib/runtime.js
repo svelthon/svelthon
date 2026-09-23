@@ -1618,6 +1618,14 @@ export const pyScalar = (value) => {
     return undefined;
 };
 
+// A value read by JavaScript off a store: a scalar as JavaScript's own, a float
+// a number, and a container as itself, since its identity is what a mutation
+// is followed by. The read half of the store's setter, which takes `__pyArg`.
+export const plainScalar = (value) => {
+    const scalar = pyScalar(value);
+    return scalar === undefined ? value : scalar;
+};
+
 function thrown(error) {
     if (error instanceof Error || error === null || typeof error !== 'object') return error;
 
@@ -2651,12 +2659,12 @@ export function pyNumbers(value) {
 
 // The crossings, all of them, in one place.
 //
-// Seven functions below carry a value between Python and JavaScript, and each
+// Nine functions below carry a value between Python and JavaScript, and each
 // applies some part of the same five treatments. Every choice is argued beside
 // the function it belongs to, and that is the right place for a *reason*; it is
 // the wrong place for a *comparison*, because the choices are not independent.
 // Whether a `load()` converts its result and a DOM handler does not is one
-// decision taken seven times, and nobody could see it without this table.
+// decision taken nine times, and nobody could see it without this table.
 //
 //                | arity | args in  | coroutine | result out | memoised |
 //   pyCall       |  yes  | pyArg    | awaited   | plainData  |          |
@@ -2666,6 +2674,19 @@ export function pyNumbers(value) {
 //   pyModule     |  yes  |          |           | pyNumbers  |   yes    |
 //   pyExport     |       |          |   (b)     | plainData  |   yes    |
 //   jsCall       |       | outbound |           | inbound    |          |
+//   pyComponent  |  yes  |          | scheduled | pyNumbers  |          |
+//   pyExpression |       | pyBind   | scheduled | pyNumbers  |          |
+//
+// And the values that cross without a call, one row per door. The rule is the
+// same everywhere: a scalar becomes the other language's own, an absence None
+// or null, and a container keeps its identity, since that is what a mutation is
+// followed by.
+//
+//                     | JavaScript to Python | Python to JavaScript |
+//   a prop            | pyBind               |                      |
+//   `bind:`           | pyBind               |                      |
+//   a store property  | pyArg (setter)       | plainScalar (getter) |
+//   a store @derived  |                      | plainScalar (getter) |
 //
 // (a) `pyBoundary` does not trim. It copies `$function_infos` onto its wrapper
 //     so that whoever calls it later still can: losing them would leave every

@@ -6,6 +6,12 @@ half no Python call ever goes through: `bump()` works whatever the setter says.
 
 count = 0
 rows = []
+price = 0.25
+
+
+@derived
+def doubled():
+    return price * 2
 
 
 def bump():

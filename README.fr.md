@@ -75,7 +75,7 @@ reste de cette configuration et ce que chaque ligne apporte.
 npm install
 npm run dev
 
-npm test             # 1 253 tests : sémantique, props, réactivité, surface Svelte
+npm test             # 1 257 tests : sémantique, props, réactivité, surface Svelte
 npm run test:quiet   # la sortie de la suite : un run vert ne doit rien dire
 npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
@@ -833,6 +833,10 @@ def increment():
 <button onclick={store.increment}>+</button>
 ```
 
+Lu depuis JavaScript, un scalaire est celui de JavaScript, donc un prix de
+`0.25` est le nombre `0.25`, et un conteneur est l'objet Python lui-même, dont
+la page suit les mutations.
+
 Ses runes sont compilées par vite-plugin-svelte, dont on élargit le filtre de
 modules à l'extension : un réglage, et c'est la forme que ce filtre avait déjà
 pour `.svelte.ts` :
@@ -1436,7 +1440,7 @@ part jamais.
 
 ## État
 
-Validé par `npm test`, 1 253 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 1 257 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
