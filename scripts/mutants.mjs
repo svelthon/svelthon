@@ -166,16 +166,23 @@ for (const [index, site] of chosen.entries()) {
     // stopped the project from building.
     let hung = false;
 
+    // The time limit is GNU `timeout`'s, not `execFileSync`'s: that one kills
+    // the child it started and nothing below it, so a hung vitest and its
+    // thirty-one workers were left running, one full suite per hung mutant.
+    // `timeout` sends its TERM to its whole process group, and the workers are
+    // in it. Not `-s KILL`: measured, that one reaches the child alone, and the
+    // grandchildren keep the pipe open, so the call never returns either. KILL
+    // comes five seconds later, for a process that ignores TERM.
     const run = (bail) => {
         try {
-            return execFileSync('npx', ['vitest', 'run', ...(bail ? ['--bail=1'] : [])], {
-                encoding: 'utf8',
-                stdio: 'pipe',
-                timeout: TIMEOUT,
-                killSignal: 'SIGKILL'
-            });
+            return execFileSync(
+                'timeout',
+                ['-k', '5s', `${TIMEOUT / 1000}s`, 'npx', 'vitest', 'run', ...(bail ? ['--bail=1'] : [])],
+                { encoding: 'utf8', stdio: 'pipe' }
+            );
         } catch (error) {
-            hung = error.code === 'ETIMEDOUT' || error.signal === 'SIGKILL';
+            // 124 is the time limit, 137 the KILL that follows it.
+            hung = error.status === 124 || error.status === 137;
 
             return `${error.stdout ?? ''}${error.stderr ?? ''}`;
         }
