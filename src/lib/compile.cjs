@@ -1320,11 +1320,10 @@ function surface(body) {
     // Every name the module binds, whatever the spelling, and *only* to be
     // recognised as taken.
     //
-    // The four buckets above answer "what is reactive here", and Python binds a
-    // module-level name in a good many more ways than the four that can be:
-    // `class`, `import`, a `for` target, a `with … as`, an `except … as`, a
-    // tuple unpacking, a walrus, a `global` written in a function. None of those
-    // is state and none of them should get a signal.
+    // The buckets above answer "what is reactive here": an assignment, however
+    // it is written, including a walrus and a `global` in a function. A name a
+    // statement leaves behind while being about something else (`class`,
+    // `import`, a `for` target, a `with … as`, an `except … as`) is not state.
     //
     // But three other rules read the same list, and for them the question is not
     // "is it reactive", it is "did the author take this word":
