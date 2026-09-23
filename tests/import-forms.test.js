@@ -97,6 +97,25 @@ describe('a declaration the compiler cannot read', () => {
         ).toThrow(/`__js__` has to be written out: .* \(m\.py:2\)/);
     });
 
+    // Changed rather than assigned, it is changed after the read: refused, with
+    // the line of the change.
+    test.for([
+        ['an item', '__js__["b"] = ["two"]'],
+        ['an operator', '__js__ |= {"b": ["two"]}'],
+        ['a method', '__js__.update({"b": ["two"]})'],
+        ['a deletion', 'del __js__["a"]']
+    ])('a __js__ changed by %s is refused, with its line', ([, change]) => {
+        expect(() =>
+            compile(`__js__ = {"a": ["one"]}\n${change}\n`, 'M', 'm.py', { plain: true })
+        ).toThrow(/`__js__` is set by assigning it, and changed by nothing else \(m\.py:2\)/);
+    });
+
+    test('control: reading __js__ is not a change', () => {
+        expect(() =>
+            compile('__js__ = {"a": ["one"]}\nx = __js__["a"]\n', 'M', 'm.py', { plain: true })
+        ).not.toThrow();
+    });
+
     test('and one whose values are empty imports nothing', () => {
         const out = compile('__js__ = {"@sveltejs/kit": []}\n\n\nx = 1\n', 'M', 'm.py', {
             plain: true

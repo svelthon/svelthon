@@ -58,5 +58,14 @@ describe('inspect', () => {
         test('and leaves a component that does not use it alone', () => {
             expect(script('count = 0\n')).not.toContain('$inspect');
         });
+
+        // A line at the left margin inside open brackets, or after a backslash,
+        // continues a statement: it is not the rune, whatever it starts with.
+        test.for([
+            ['open brackets', 'total = sum([\ninspect(1)])\n'],
+            ['a backslash', 'total = 1 + \\\ninspect(1)\n']
+        ])('and reads no rune on a line continued by %s', ([, src]) => {
+            expect(script(src)).not.toContain('$inspect');
+        });
     });
 });

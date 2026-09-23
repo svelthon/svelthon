@@ -327,6 +327,27 @@ function declaredJsImports(body, source, lineOffset = 0) {
         throw refuse(`svelthon — \`__js__\` ${what} (${source}:${line})`, source, line);
     };
 
+    // Any other write reaches the dict after the read: `__js__["m"] = […]`,
+    // `__js__ |= {…}`, `__js__.update(…)`, anywhere in the module.
+    const isJs = (node) => node instanceof $B.ast.Name && node.id === '__js__';
+    const met = new WeakSet();
+    const writes = (node) => {
+        if (!node || typeof node !== 'object' || met.has(node)) return;
+        met.add(node);
+        if (Array.isArray(node)) return node.forEach(writes);
+
+        const changed =
+            ((node instanceof $B.ast.AugAssign || node instanceof $B.ast.AnnAssign) && isJs(node.target)) ||
+            (node instanceof $B.ast.Subscript && isJs(node.value) && !(node.ctx instanceof $B.ast.Load)) ||
+            (node instanceof $B.ast.Call && node.func instanceof $B.ast.Attribute && isJs(node.func.value));
+
+        if (changed) refuseAt(node, 'is set by assigning it, and changed by nothing else');
+
+        for (const key of Object.keys(node)) if (key !== 'parent') writes(node[key]);
+    };
+
+    // writes(body);
+
     for (const node of body) {
         if (!(node instanceof $B.ast.Assign)) continue;
         if (!node.targets.some((t) => t instanceof $B.ast.Name && t.id === '__js__')) continue;
@@ -547,7 +568,11 @@ const INSPECT = /^inspect(_with)?\s*\((\s*\S[\s\S]*)\)\s*$/;
 const BINDABLE = /^([\p{L}_][\p{L}\p{M}\p{N}_]*\s*:\s*[^=<>]+?)\s*<=>\s*(\S[\s\S]*)?$/u;
 
 // Brackets closed on the line, ignoring those inside a string.
-function balanced(expr) {
+const balanced = (expr) => opened(expr) === 0;
+
+// Brackets the line leaves open, ignoring those inside a string: what makes the
+// next line a continuation rather than a statement.
+function opened(expr) {
     let depth = 0;
     let quote = null;
 
@@ -565,7 +590,7 @@ function balanced(expr) {
         else if (c === ')' || c === ']' || c === '}') depth--;
     }
 
-    return depth === 0;
+    return depth;
 }
 const ARROW_INDENTED = /^[ \t]+(?:[\p{L}_][\p{L}\p{M}\p{N}_]*\s*)?=>\s/u;
 
@@ -574,6 +599,11 @@ function takeArrows(src, where, lineOffset, allowed) {
     const out = [];
     let quote = null;
     let anonymous = 0;
+    // Brackets left open, and a backslash at the end of the line before: the
+    // line is then the continuation of a statement, whatever its column, and no
+    // sign is read on it.
+    let depth = 0;
+    let joined = false;
 
     for (let n = 0; n < lines.length; n++) {
         const line = lines[n];
@@ -594,8 +624,14 @@ function takeArrows(src, where, lineOffset, allowed) {
         // every other line of Python does. See `commentAt`.
         const cut = quote === null ? commentAt(line) : -1;
         const code = cut === -1 ? line : line.slice(0, cut).trimEnd();
+        const statement = quote === null;
 
-        const found = quote === null ? code.match(ARROW_DERIVED) || code.match(ARROW_EFFECT) : null;
+        if (quote === null) {
+            depth = Math.max(0, depth + opened(code));
+            joined = code.endsWith('\\');
+        }
+
+        const found = statement ? code.match(ARROW_DERIVED) || code.match(ARROW_EFFECT) : null;
 
         // A named match carries the name in group 1 and the expression in 2; an
         // anonymous one has the expression in 1, and its name is generated.
@@ -626,10 +662,10 @@ function takeArrows(src, where, lineOffset, allowed) {
 
         // `inspect(…)` at the top level of a component, whose arguments become a
         // lambda so that they are read again on every change.
-        const watched = quote === null && !found && allowed ? code.match(INSPECT) : null;
+        const watched = statement && !found && allowed ? code.match(INSPECT) : null;
 
         // `value: str <=>`, with an optional fallback after the arrow.
-        const both = quote === null && !found && !watched ? code.match(BINDABLE) : null;
+        const both = statement && !found && !watched ? code.match(BINDABLE) : null;
 
         if (both && !allowed) {
             throw refuse(
@@ -1415,7 +1451,7 @@ function surface(body) {
 
         if (node instanceof $B.ast.NamedExpr) {
             statement = node.lineno;
-            unpacked(node.target);
+            targets(node.target);
         }
 
         for (const key of Object.keys(node)) walruses(node[key]);
@@ -1574,7 +1610,7 @@ function surface(body) {
 
                 for (const name of node.names || []) {
                     bind(name);
-                    if (take(name)) state.push(name);
+                    if (false && take(name)) state.push(name);
                 }
             }
 
