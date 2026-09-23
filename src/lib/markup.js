@@ -2076,8 +2076,16 @@ export function pythonRanges(content) {
 // `moduleImports` there.
 const MODULE_SCRIPT = /<script[^>]*\b(?:module|context=["']module["'])[^>]*>([\s\S]*?)<\/script>/i;
 
+// The markup with its comments taken out, for every reading done on its text. A
+// block or a declaration quoted inside `<!-- -->` is documentation: a
+// `<script lang="python">` there turned a JavaScript component's expressions
+// into Python, a `<script module>` there hid the real one's imports. Replaced by
+// blanks rather than removed, so every offset still counts on the same string.
+export const withoutComments = (content) =>
+    content.replace(/<!--[\s\S]*?-->/g, (comment) => comment.replace(/[^\n]/g, ' '));
+
 export function moduleScript(content) {
-    const block = content.match(MODULE_SCRIPT);
+    const block = withoutComments(content).match(MODULE_SCRIPT);
 
     return block === null ? null : block[1];
 }
@@ -2098,8 +2106,10 @@ export function directiveModules(markup) {
 
     DOTTED_DIRECTIVE.lastIndex = 0;
 
+    const text = withoutComments(markup);
+
     let match;
-    while ((match = DOTTED_DIRECTIVE.exec(markup))) found.add(match[1]);
+    while ((match = DOTTED_DIRECTIVE.exec(text))) found.add(match[1]);
 
     return [...found];
 }

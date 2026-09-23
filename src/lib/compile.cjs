@@ -2062,7 +2062,7 @@ function instanceExports(c) {
         ...(c.store
             ? [
                   ``,
-                  `__registerModule(${JSON.stringify(pythonModuleName(c.source))}, ${NS}, ${JSON.stringify(c.source)});`,
+                  ...registration(c),
                   ``,
                   // Module-scope signals live once for the whole app. Exported
                   // through getters because Svelte forbids exporting a reassigned
@@ -2265,12 +2265,15 @@ function plainBindings(c) {
     ];
 }
 
+// A module published under its Python name.
+const registration = (c) => [`__registerModule(${JSON.stringify(pythonModuleName(c.source))}, ${NS});`];
+
 function plainInit(c) {
     return [
         `const ${NS} = Object.create(__proto);`,
         `${NS}.$proxy = true;`,
         ``,
-        `__registerModule(${JSON.stringify(pythonModuleName(c.source))}, ${NS}, ${JSON.stringify(c.source)});`,
+        ...registration(c),
         `__init(${NS});`,
         ``
     ];
@@ -2670,4 +2673,4 @@ const VIRTUAL_PREFIX = 'virtual:svelthon/';
 
 const virtualId = (name) => VIRTUAL_PREFIX + name;
 
-module.exports = { compile, VIRTUAL_PREFIX, virtualId };
+module.exports = { compile, VIRTUAL_PREFIX, virtualId, pythonModuleName };

@@ -1613,11 +1613,6 @@ export function schedule(result, where, lineOffset = 0) {
     return promise;
 }
 
-// Which file claimed each Python module name. On a global registry for the same
-// reason the plugin's is: the preprocessor and the page are not always the same
-// module instance.
-const registered = (globalThis[Symbol.for('svelthon.modules')] ??= new Map());
-
 // A key written, and not assigned. `out[key] = value` runs the setter that
 // `__proto__` has on `Object.prototype`, so a dict holding that key lost it and
 // handed back an object whose prototype was whatever the key held:
@@ -3597,41 +3592,14 @@ export function pyModule(name) {
 // A store's namespace, published under its Python module name, so a component's
 // own Python can `import counter_store` and reach the very same signals the
 // template reads. Without it the bridge would only run one way.
-export function registerModule(name, namespace, source) {
-    const $B = globalThis.__BRYTHON__;
+//
+// Two files of one Python name are refused by the plugin, which sees the disk
+// and tells a second file from a rename (`claimPython`). Here the last file
+// evaluated holds the name, which is the renamed one under the dev server.
+export function registerModule(name, namespace) {
     namespace.__name__ = name;
-
-    // A name no `import` can write is never looked up: `+page.server`, the
-    // file name SvelteKit gives every route of that kind. Registered, the second
-    // route of an application collided with the first.
-    if (!IMPORTABLE.test(name)) return;
-
-    const first = registered.get(name);
-
-    // Python imports a module by its name, and a file's name is its stem, so
-    // `a/config.py` and `b/config.py` are both `config`. `$B.imported` holds one
-    // entry per name, so the second silently replaced the first and every
-    // `import config` anywhere read whichever loaded last.
-    //
-    // Refused rather than made unique. A directory-aware name would have to be
-    // one Python can write, and `import config` cannot say which directory it
-    // means; a refusal costs a rename and says which two files.
-    if (first !== undefined && first !== source) {
-        throw new SyntaxError(
-            `svelthon — \`${source}\` and \`${first}\` are both imported as \`${name}\`, ` +
-                `so one would silently replace the other. Rename one of them: a module's ` +
-                `Python name is its file name, and \`import ${name}\` cannot say which ` +
-                `directory it means.`
-        );
-    }
-
-    registered.set(name, source);
-
-    $B.imported[name] = namespace;
+    globalThis.__BRYTHON__.imported[name] = namespace;
 }
-
-// A Python identifier, the only kind of name an `import` writes.
-const IMPORTABLE = /^[\p{L}_][\p{L}\p{M}\p{N}_]*$/u;
 
 // Hand Brython our namespace instead of the one it would have made for itself.
 //

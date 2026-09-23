@@ -8,12 +8,13 @@ import {
     pythonExpressions,
     collector,
     moduleScript,
-    directiveModules
+    directiveModules,
+    withoutComments
 } from './markup.js';
 import { parse } from 'svelte/compiler';
 
 const require = createRequire(import.meta.url);
-const { compile, VIRTUAL_PREFIX, virtualId } = require('./compile.cjs');
+const { compile, VIRTUAL_PREFIX, virtualId, pythonModuleName } = require('./compile.cjs');
 
 // Generated modules, keyed by component name. Filled by the preprocessor when
 // Svelte transforms a component, read back when Vite resolves the import that
@@ -75,9 +76,39 @@ export const nameFor = (filename) => {
     }
 
     claimed.set(name, path);
+    if (path.endsWith('.py')) claimPython(path);
 
     return name;
 };
+
+// The name Python imports a `.py` by, claimed under the same rule. Its stem:
+// `a/config.py` and `b/config.py` are both `config`, and `import config` cannot
+// say which directory it means, so the second is refused. Here rather than in
+// the browser, which cannot tell a rename from a second file: the renamed store
+// registers before the old one is gone.
+//
+// A stem no `import` can write, `+page.server` for every route of that kind, is
+// never looked up, and never claimed.
+const pythonClaimed = (globalThis[Symbol.for('svelthon.pythonClaimed')] ??= new Map());
+const IMPORTABLE = /^[\p{L}_][\p{L}\p{M}\p{N}_]*$/u;
+
+function claimPython(path) {
+    const name = pythonModuleName(path);
+    if (!IMPORTABLE.test(name)) return;
+
+    const first = pythonClaimed.get(name);
+
+    if (first !== undefined && first !== path && existsSync(first)) {
+        throw new SyntaxError(
+            `svelthon — \`${path}\` and \`${first}\` are both imported as \`${name}\`, ` +
+                `so one would silently replace the other. Rename one of them: a module's ` +
+                `Python name is its file name, and \`import ${name}\` cannot say which ` +
+                `directory it means.`
+        );
+    }
+
+    pythonClaimed.set(name, path);
+}
 
 // The tag that decides a file is Python is read by `pythonScript`, in markup.js,
 // off the real script blocks and their real attributes — the same grammar that
@@ -85,12 +116,6 @@ export const nameFor = (filename) => {
 // hook below has a reading of its own that it cannot be talked out of
 // (`attributes.lang`), and every file the two disagreed about was broken.
 
-// Read on the markup with its comments taken out. A `<script lang="python">`
-// quoted inside `<!-- -->` is documentation, not a declaration, and it turned a
-// JavaScript component's expressions into Python. Replaced by blanks rather than
-// removed, so every offset below still counts on the same string.
-const withoutComments = (content) =>
-    content.replace(/<!--[\s\S]*?-->/g, (comment) => comment.replace(/[^\n]/g, ' '));
 // What the `markup` hook works out about a file and the `script` hook then needs,
 // one entry per file:
 //
@@ -228,8 +253,11 @@ export function moduleImports(content) {
 // same rule: the config hands it to vite-plugin-svelte's
 // `dynamicCompileOptions`, and the guard that compiles every fixture looking
 // for warnings has to compile them the way the build does.
+//
+// Read with the comments taken out, like every other reading of the markup: a
+// declaration quoted in `<!-- -->` is documentation.
 export const compileOptionsFor = (code) =>
-    /<svelte:options[^>]*\bcustomElement\b/.test(code) ? { customElement: true } : undefined;
+    /<svelte:options[^>]*\bcustomElement\b/.test(withoutComments(code)) ? { customElement: true } : undefined;
 
 const perFile = () => {
     const files = new Map();

@@ -10,11 +10,12 @@ import {
     overMarkup,
     pythonExpressions,
     pythonRanges,
-    collector
+    collector,
+    directiveModules
 } from '../src/lib/markup.js';
 // Moved out of markup.js: what a `<script module>` declares is a JavaScript
 // question, and Svelte's parser is the thing that owns that grammar.
-import { moduleImports } from '../src/lib/svelthon.js';
+import { moduleImports, compileOptionsFor } from '../src/lib/svelthon.js';
 
 // `(x := 1)` in a template writes the component's name through the namespace,
 // which is what makes it reach the signal. Python's own grammar forces the
@@ -371,6 +372,32 @@ describe('moduleImports', () => {
 
     test('an instance script is not a module script', () => {
         expect(moduleImports('<script lang="python">\nx = 1\n</script>')).toEqual([]);
+    });
+
+    // Quoted in a comment, a block is documentation: the one below it is read.
+    test('a module script in a comment is not the module script', () => {
+        const source =
+            "<!-- <script module>import Old from './old.js';</script> -->\n" +
+            "<script module>\n    import { format } from './format.js';\n</script>";
+
+        expect(moduleImports(source)).toEqual(['format']);
+    });
+});
+
+// The other readings of the raw text follow the same rule.
+describe('a declaration in a comment', () => {
+    test('does not make a custom element', () => {
+        expect(compileOptionsFor('<!-- <svelte:options customElement="my-tag" /> -->\n<p>x</p>')).toBeUndefined();
+    });
+
+    test('control: the declaration itself does', () => {
+        expect(compileOptionsFor('<svelte:options customElement="my-tag" />\n<p>x</p>')).toEqual({
+            customElement: true
+        });
+    });
+
+    test('and names no directive module', () => {
+        expect(directiveModules('<!-- <p in:old.fade>a</p> -->\n<p in:fx.fade>a</p>')).toEqual(['fx']);
     });
 });
 
