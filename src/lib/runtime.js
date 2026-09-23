@@ -1228,7 +1228,38 @@ const join = (marker, bump, read, owner) => {
     if (owner !== undefined) owner.push(marker, bump);
 };
 
+// Sign the same subscriber off one marker: a name rebound no longer reads what
+// it held. Other names on that object keep their own subscribers.
+const leave = (marker, bump, owner) => {
+    const at = marker.bumps.indexOf(bump);
+    if (at === -1) return;
+
+    marker.bumps.splice(at, 1);
+    marker.reads.splice(at, 1);
+
+    if (owner === undefined) return;
+
+    for (let i = 0; i < owner.length; i += 2) {
+        if (owner[i] === marker && owner[i + 1] === bump) {
+            owner.splice(i, 2);
+            return;
+        }
+    }
+};
+
+// What the name held before this write loses its subscription, or a mutation of
+// a value the name no longer holds would still notify it. Kept on the name's
+// `bump` rather than read off the name: that is a signal, and reading it inside
+// an effect that writes the name would subscribe the effect to it.
 export function track(value, bump, read, owner) {
+    const previous = bump.held;
+    bump.held = value;
+
+    if (previous !== value && previous !== null && typeof previous === 'object') {
+        const old = MARKS.get(previous);
+        if (old !== undefined) leave(old, bump, owner);
+    }
+
     if (value === null || typeof value !== 'object') return value;
 
     // Cheapest path first: a value already watched is the common case, and it
