@@ -34,3 +34,7 @@ rows = [
 {#each [[7]] as [x, r=(lambda *x: x)(1, 2)]}<i data-k="variadic">{r}</i>{/each}
 {#each [[[1, 2]]] as [x, r=[(x, y) for x in x for y in [x]]]}<i data-k="generators">{r}</i>{/each}
 {#each [[7]] as [x, r=(lambda y: y + 1)(x)]}<i data-k="no-collision">{r}</i>{/each}
+{#each [[7]] as [x, r=(lambda: ((x := 3), x)[1])()]}<i data-k="walrus">{r}</i>{/each}
+{#each [[7]] as [x, r=(lambda: [(x := n) for n in [4]][0] + x)()]}<i data-k="walrus-comprehension">{r}</i>{/each}
+{#snippet walrus(x, r=(lambda: ((x := 3), x)[1])())}<i data-k="walrus-snippet">{r}</i>{/snippet}
+{@render walrus(7)}

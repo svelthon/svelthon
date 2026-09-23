@@ -41,8 +41,11 @@ describe('a default reads a name when Python reaches it', () => {
         ['a keyword-only parameter is the lambda s own', 'keyword-only', '3'],
         ['and so is a variadic one', 'variadic', '(1, 2)'],
         ['each target binds for what follows it', 'generators', '[(1, 1), (2, 2)]'],
-        ['and a lambda that shadows nothing reads the name', 'no-collision', '8']
-    ])('%s', ([, key, answer]) => {
+        ['and a lambda that shadows nothing reads the name', 'no-collision', '8'],
+        ['a walrus in a lambda binds for the whole body', 'walrus', '3'],
+        ['and so does one in a comprehension inside it', 'walrus-comprehension', '8'],
+        ['and in a snippet default', 'walrus-snippet', '3']
+    ])('%s',([, key, answer]) => {
         expect(rendered()[key]).toBe(answer);
     });
 

@@ -263,8 +263,12 @@ export const __pybridge = {
 // An author calling the method by name is ordinary Python and is what a generic
 // helper writes — `rows.__setitem__(0, 1)`, the same method kept as a value, or
 // reached through the type. Those three reach the container and nothing else.
+// The in-place operators and `__init__` are the same case: `rows += [1]` goes
+// through `augm_assign`, and `rows.__iadd__([1])` or `list.__init__(rows, [2])`
+// through nothing else.
 const MUTATORS = new Set([
-    '__setitem__', '__delitem__',
+    '__setitem__', '__delitem__', '__init__',
+    '__iadd__', '__imul__', '__ior__', '__iand__', '__isub__', '__ixor__',
     'append', 'extend', 'insert', 'remove', 'pop', 'clear', 'sort', 'reverse',
     'add', 'discard', 'update', 'setdefault', 'popitem', 'appendleft',
     'extendleft', 'popleft', 'rotate', 'intersection_update',
@@ -792,6 +796,7 @@ function mutable(value) {
 // The mutators whose arguments are **sources**: what lands is what iterating
 // them yields, not the argument itself.
 const SOURCES = new Set([
+    '__init__', '__iadd__', '__ior__', '__iand__', '__isub__', '__ixor__',
     'extend', 'extendleft', 'update', 'intersection_update',
     'difference_update', 'symmetric_difference_update'
 ]);

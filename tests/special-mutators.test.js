@@ -20,7 +20,7 @@ const setup = () => {
     flushSync();
 
     return {
-        read: () => target.querySelector('[data-k="rows"]').textContent,
+        read: (k = 'rows') => target.querySelector(`p[data-k="${k}"]`).textContent,
         click: (key) => {
             target.querySelector(`button[data-k="${key}"]`).click();
             flushSync();
@@ -33,7 +33,14 @@ describe.for([
     ['the method called by name', 'method', '[1]'],
     ['the method taken off the object', 'detached', '[1]'],
     ['the method reached through the type', 'type', '[1]'],
-    ['and the deletion by name', 'delete', '[]']
+    ['and the deletion by name', 'delete', '[]'],
+    // The in-place operators and `__init__` by name: `rows += [1]` goes through
+    // its own entry point, these through nothing else.
+    ['__iadd__ called by name', 'iadd', '[0, 1]'],
+    ['__iadd__ taken off the object', 'iadd-detached', '[0, 1]'],
+    ['__iadd__ reached through the type', 'iadd-type', '[0, 1]'],
+    ['__imul__ called by name', 'imul', '[0, 0]'],
+    ['__init__ reached through the type', 'init', '[2]']
 ])('a list mutated by %s', ([, key, after]) => {
     test('repaints what reads it', () => {
         const { read, click } = setup();
@@ -44,4 +51,26 @@ describe.for([
 
         expect(read()).toBe(after);
     });
+});
+
+test('a dict mutated by __ior__ called by name repaints', () => {
+    const { read, click } = setup();
+    click('ior');
+    expect(read('table')).toBe("{'a': 1}");
+});
+
+test('a set mutated by __ior__ called by name repaints', () => {
+    const { read, click } = setup();
+    click('set-ior');
+    expect(read('marks')).toBe('{1}');
+});
+
+// `__init__` takes a source: what it yielded is inside the list, so the list
+// says what it now holds, and the child grows on the page.
+test('a child put in by __init__ is watched', () => {
+    const { read, click } = setup();
+    click('init-child');
+    expect(read()).toBe('[[]]');
+    click('grow');
+    expect(read()).toBe('[[1]]');
 });

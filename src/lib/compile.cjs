@@ -962,11 +962,22 @@ function templateDots(def) {
 
     const within = (shadowed, names) => new Set([...shadowed, ...names]);
 
+    // The names a walrus binds in the scope of `node`: a comprehension's walrus
+    // binds in the scope around it, a nested lambda's in its own.
+    const walrused = (node, names = [], met = new WeakSet()) => {
+        if (!node || typeof node !== 'object' || met.has(node) || node instanceof $B.ast.Lambda) return names;
+        met.add(node);
+        if (node instanceof $B.ast.NamedExpr) names.push(node.target.id);
+        for (const key of Object.keys(node)) if (key !== 'parent') walrused(node[key], names, met);
+        return names;
+    };
+
     const seen = new WeakSet();
 
     // Python's scopes, not the tree's: every child of a node does not see the
     // same names. A lambda's defaults are read where the lambda is written and
-    // its body where it runs, with every parameter bound. A comprehension's first
+    // its body where it runs, with every parameter bound, and every name a walrus
+    // binds there, which is local to the whole body. A comprehension's first
     // iterable is read outside it, and each target binds for what follows it.
     const scoped = (node, shadowed) => {
         if (node instanceof $B.ast.Lambda) {
@@ -976,7 +987,7 @@ function templateDots(def) {
                 .map((one) => one.arg);
 
             for (const one of [...args.defaults, ...args.kw_defaults]) visit(one, shadowed);
-            visit(node.body, within(shadowed, params));
+            visit(node.body, within(shadowed, [...params, ...walrused(node.body)]));
             return true;
         }
 
