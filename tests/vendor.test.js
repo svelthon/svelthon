@@ -312,6 +312,14 @@ describe('the vendored Brython carries its repairs', () => {
         expect($B.$getattr(value, '__format__')(spec)).toBe(answer);
     });
 
+    // A `__call__` that is not a function is bound through its `__get__`
+    // first, as CPython's `slot_tp_call` does: a `@classmethod def __call__`
+    // gets the class. It raised `object is not callable`. A direct edit of the
+    // built file, which a revendoring erases: this row says so.
+    test('a classmethod __call__ is bound before it is called', () => {
+        expect(String($B.$call)).toContain("search_slot($B.get_class(call_method),'tp_descr_get'");
+    });
+
     // A coroutine that leaves the frame it was created in has not been dropped:
     // `{#await later()}` hands it to Svelte, which awaits it. Brython warned
     // `coroutine 'later' was never awaited` as soon as that frame was left,

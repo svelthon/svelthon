@@ -2773,8 +2773,11 @@ function declared(value) {
     // it is the **arity**: a static call takes no receiver, so `self` is not
     // among the parameters to drop, and dropping one anyway would have traded
     // this defect for an off-by-one in the next.
+    //
+    // `@classmethod def __call__` is the same shape under `cm_callable`, and its
+    // receiver is the class, one parameter to drop like `self`.
     const stat = call !== null && call.sm_callable !== undefined ? call.sm_callable : null;
-    const held = method !== null ? method.im_func : (stat ?? call ?? value);
+    const held = method !== null ? method.im_func : (stat ?? call?.cm_callable ?? call ?? value);
     const fn = typeof held.$js_func === 'function' ? held.$js_func : held;
     const infos = fn.$function_infos;
 
@@ -2911,7 +2914,7 @@ function liveArity(value) {
     if (call === null) return Infinity;
 
     const stat = call.sm_callable !== undefined ? call.sm_callable : null;
-    const held = stat ?? call;
+    const held = stat ?? call.cm_callable ?? call;
     const fn = typeof held.$js_func === 'function' ? held.$js_func : held;
     const infos = fn.$function_infos;
 

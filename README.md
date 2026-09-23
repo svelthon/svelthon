@@ -77,7 +77,7 @@ rest of that configuration and what each line buys.
 npm install
 npm run dev
 
-npm test             # 1 234 tests: semantics, props, reactivity, Svelte surface
+npm test             # 1 236 tests: semantics, props, reactivity, Svelte surface
 npm run test:quiet   # the suite's own output: a green run must say nothing
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
@@ -1289,7 +1289,7 @@ The two exceptions are the two words a JavaScript function already owns. `name`
 takes the author's own when there is one — `on_save` says more in a log than
 `Handler.__call__` — and `length` is what a library reads to learn what a
 callback takes. Both describe the *call*; neither is the field beside it.
-`tests/callable-matrix.test.js` holds every line, across **7 shapes** and **14
+`tests/callable-matrix.test.js` holds every line, across **8 shapes** and **14
 positions**.
 
 ### The one place SvelteKit is hard-coded
@@ -1428,7 +1428,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 1 234 tests, none expected to fail:
+Validated by `npm test`, 1 236 tests, none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;
 - props: Python defaults, parent precedence, readability during init, parent

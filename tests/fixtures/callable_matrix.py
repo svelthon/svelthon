@@ -13,7 +13,9 @@ __all__ = [
     "instance",
     "inherited",
     "fixed",
+    "classcall",
     "doubling",
+    "class_doubling",
     "doublers",
     "mapped",
     "order",
@@ -91,6 +93,20 @@ class Doubling:
         return half * 2
 
 
+class ByClass:
+    # `__call__` written as a class method: the descriptor again, under another
+    # name, and its receiver is the class, taken out like `self`.
+    @classmethod
+    def __call__(cls):
+        return VALUE
+
+
+class ClassDoubling:
+    @classmethod
+    def __call__(cls, half):
+        return half * 2
+
+
 class Derived(Strategy):
     # The same object with its `__call__` one class up. Nothing else about it
     # differs, which is what makes it the witness.
@@ -109,10 +125,12 @@ instance = Strategy()
 inherited = Derived()
 fixed = Fixed()
 doubling = Doubling()
+classcall = ByClass()
+class_doubling = ClassDoubling()
 
 # Its own container, since every value of `mapped` is the trivial callable the
 # matrix loops over and this one takes an argument.
-doublers = {"inner": doubling}
+doublers = {"inner": doubling, "by_class": class_doubling}
 
 mapped = {
     "fn": fn,
@@ -122,13 +140,14 @@ mapped = {
     "instance": instance,
     "inherited": inherited,
     "fixed": fixed,
+    "classcall": classcall,
 }
 
 
 # The same six in the other container a module publishes. The order is exported
 # beside the list so the test reads the index from here rather than from a second
 # copy of the list of shapes.
-order = ["fn", "bound", "classbound", "staticfn", "instance", "inherited", "fixed"]
+order = ["fn", "bound", "classbound", "staticfn", "instance", "inherited", "fixed", "classcall"]
 listed = [mapped[key] for key in order]
 tupled = tuple(listed)
 

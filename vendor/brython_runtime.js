@@ -1969,7 +1969,9 @@ var call_method=klass.tp_call
 if(test){console.log('call_method',call_method)}
 if(call_method===$B.NULL){$B.RAISE(_b_.TypeError,"'"+$B.class_name(callable)+
 "' object is not callable")}
-if(typeof call_method !=='function'){if($B.get_class(call_method).tp_call !==$B.NULL){
+if(typeof call_method !=='function'){/* SVELTHON patch, see BRYTHON_FIX.md */var call_getter=$B.search_slot($B.get_class(call_method),'tp_descr_get',$B.NULL)
+if(call_getter !==$B.NULL){return $B.$call(call_getter(call_method,callable,klass),...args)}
+if($B.get_class(call_method).tp_call !==$B.NULL){
 return $B.$call(call_method,...args)}else{
 $B.RAISE(_b_.TypeError,"'"+$B.class_name(callable)+
 "' object is not callable")}}

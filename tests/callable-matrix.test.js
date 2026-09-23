@@ -61,7 +61,9 @@ const SHAPES = [
     // `@staticmethod`, not a function, and the signature is read off the second
     // one: the instance crossed as an object that JavaScript could not call,
     // while Python called it perfectly well.
-    ['an instance whose __call__ is a staticmethod', 'fixed']
+    ['an instance whose __call__ is a staticmethod', 'fixed'],
+    // The same under `@classmethod`, whose receiver is the class.
+    ['an instance whose __call__ is a classmethod', 'classcall']
 ];
 
 const mounted = () => {
@@ -249,6 +251,13 @@ describe('a static __call__ that takes an argument', () => {
     ])('receives it, %s', ([, reach]) => {
         expect(reach()(0.125)).toBe(0.25);
     });
+});
+
+// A class `__call__` declares the class as its receiver, which is taken out, and
+// nothing else.
+test('a classmethod __call__ that takes an argument receives it', () => {
+    expect(mod.class_doubling(0.125)).toBe(0.25);
+    expect(mod.doublers.by_class(0.125)).toBe(0.25);
 });
 
 // And the name belongs to the callable, not to where it was written.
