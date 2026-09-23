@@ -1414,7 +1414,10 @@ function surface(body) {
             return;
         }
 
-        if (node instanceof $B.ast.NamedExpr) targets(node.target);
+        if (node instanceof $B.ast.NamedExpr) {
+            statement = node.lineno;
+            unpacked(node.target);
+        }
 
         for (const key of Object.keys(node)) walruses(node[key]);
     };
@@ -1562,11 +1565,20 @@ function surface(body) {
     visit(body);
 
     // A `global x` written inside a function creates a module name that no
-    // statement at module level declares. Walked over the whole tree, since the
-    // point of `global` is that it is written where the descent above stops.
+    // statement at module level declares, and a name of the module is state.
+    // Walked over the whole tree, since the point of `global` is that it is
+    // written where the descent above stops.
     const globals = (statements) => {
         for (const node of statements) {
-            if (node instanceof $B.ast.Global) for (const name of node.names || []) bind(name);
+            if (node instanceof $B.ast.Global) {
+                statement = node.lineno;
+
+                for (const name of node.names || []) {
+                    bind(name);
+                    if (take(name)) state.push(name);
+                }
+            }
+
             for (const key of [...BODIES, 'body']) if (node[key]) globals(node[key]);
         }
     };
