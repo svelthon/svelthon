@@ -108,6 +108,15 @@ function iterated(value) {
 // is another object each time and only its repr() stays the same.
 const BY_VALUE = [_b_.tuple, _b_.frozenset, _b_.float, _b_.complex, _b_.bytes];
 
+// One object per repr(), so such a key is stable across renders and never equal
+// to a string the author keys with: `0.5` and `"0.5"` are two keys.
+const KEYS = new Map();
+const keyFor = (repr) => {
+    let key = KEYS.get(repr);
+    if (key === undefined) KEYS.set(repr, (key = Object.freeze({ toString: () => repr })));
+    return key;
+};
+
 export const __pybridge = {
     // A key of `{#key}` and of an `{#each}`, which Svelte compares with `===`.
     // A list, a dict, a set or an instance is the same object while it lives,
@@ -118,7 +127,7 @@ export const __pybridge = {
 
         try {
             const mro = globalThis.__BRYTHON__.get_class(value).tp_mro;
-            return BY_VALUE.some((cls) => mro.includes(cls)) ? _b_.repr(value) : value;
+            return BY_VALUE.some((cls) => mro.includes(cls)) ? keyFor(_b_.repr(value)) : value;
         } catch {
             return value; // a foreign JavaScript value keeps its own identity
         }
