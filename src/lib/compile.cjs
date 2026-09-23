@@ -1869,13 +1869,16 @@ function authorBindings(c) {
         //
         // The accessors read the raw cell, never the tracked binding: Python must
         // not subscribe to Svelte's graph, only feed it.
+        //
+        // What a parent hands over may be JavaScript's: `pyBind` makes a
+        // fractional number a float and an absence None, as at a binding.
         ...c.props.map(
             (n) =>
-                `__bind(__proto, '${n}', () => __follow(('${n}' in __props ? __props.${n} : ${local(n)}) ?? __NONE), (${NEXT_VALUE}) => { ${local(n)} = ${NEXT_VALUE}; });`
+                `__bind(__proto, '${n}', () => __follow(__pyBind('${n}' in __props ? __props.${n} : ${local(n)})), (${NEXT_VALUE}) => { ${local(n)} = ${NEXT_VALUE}; });`
         ),
         ...c.bindables.map(
             (b) =>
-                `__bind(__proto, '${b}', () => (${rev(b)}, __follow(${b} ?? __NONE)),` +
+                `__bind(__proto, '${b}', () => (${rev(b)}, __follow(__pyBind(${b}))),` +
                 ` (${NEXT_VALUE}) => { if (!__initialising || ${b} === undefined) ${b} = __track(${NEXT_VALUE}, ${bump(b)}, ${read(b)}${c.store ? '' : `, ${SUBS}`}); });`
         ),
         // Reading the revision alongside the value is what registers the

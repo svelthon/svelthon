@@ -3485,15 +3485,18 @@ export const pyComponent = (read, where, lineOffset) => {
 // per expression it met.
 //
 // What separates it from the one above belongs to the template rather than to
-// the boundary: its arguments are already Python — a block's own name, a
-// snippet's parameter — so converting them would convert twice.
+// the boundary: its arguments are a block's own name, a snippet's parameter,
+// and no container is converted. A scalar may still be JavaScript's, the value
+// a JavaScript promise resolved to in `{#await}`: `pyBind` makes it Python, a
+// fractional number a float and an absence None, and leaves a Python value as
+// it is.
 //
 // Two names rather than a flag, so the compiler *chooses* a wrapper instead of
 // describing one: what it writes is a name, and everything a crossing does is on
 // this side of the line.
 export const pyExpression = (call, where, lineOffset, arity, kept = false) =>
     identified(
-        (...args) => running(() => call(args.slice(0, arity)), where, lineOffset, kept),
+        (...args) => running(() => call(args.slice(0, arity).map(pyBind)), where, lineOffset, kept),
         nameOf(where),
         arity
     );
