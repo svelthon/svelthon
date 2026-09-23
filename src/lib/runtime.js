@@ -1314,10 +1314,6 @@ export function follow(value) {
     return value;
 }
 
-// A Brython exception reaching JavaScript carries no `message` and no `stack`,
-// so devtools and Vite's overlay show nothing at all: the text sits in the
-// Python object, where nothing JS looks. Fill both in, keeping the original
-// object so Python semantics upstream are untouched.
 // A Python line as a line of the file. `lineOffset` is a number, the count of
 // lines before the `<script>` body, or that number with the ranges of Python
 // lines the template's functions occupy, since those are generated after the
@@ -1331,6 +1327,10 @@ const inFile = (line, lineOffset) => {
     return range === undefined ? line + lineOffset.offset : range[2];
 };
 
+// A Brython exception reaching JavaScript carries no `message` and no `stack`,
+// so devtools and Vite's overlay show nothing at all: the text sits in the
+// Python object, where nothing JS looks. Fill both in, keeping the original
+// object so Python semantics upstream are untouched.
 export function pyError(error, where, lineOffset = 0) {
     const $B = globalThis.__BRYTHON__;
 
@@ -1365,21 +1365,37 @@ export function pyError(error, where, lineOffset = 0) {
         described = 'PythonError';
     }
 
-    // The deepest frame is where it actually broke. Line numbers count from the
-    // start of the Python source, which for a component begins after its opening
-    // <script> tag, hence the offset back to the file's own numbering.
-    let line;
+    // Each frame of the traceback, with its file. The first one is the code
+    // `where` names, and its line is the deepest one still in that file: line
+    // numbers count from the start of the Python source, which for a component
+    // begins after its opening <script> tag, hence `inFile` back to the file's
+    // own numbering. A deeper frame in another file is where it actually broke,
+    // and it is named with its own file and its own line, which `inFile` knows
+    // nothing about.
+    const frames = [];
     try {
         let tb = $B.$getattr(error, '__traceback__');
         while (tb && tb !== NONE) {
-            line = $B.$getattr(tb, 'tb_lineno');
+            const code = $B.$getattr($B.$getattr(tb, 'tb_frame'), 'f_code');
+            frames.push({
+                file: $B.$getattr(code, 'co_filename'),
+                name: $B.$getattr(code, 'co_name'),
+                line: $B.$getattr(tb, 'tb_lineno')
+            });
             tb = $B.$getattr(tb, 'tb_next');
         }
     } catch {
         /* no usable traceback */
     }
 
-    const at = line === undefined ? where : `${where}:${inFile(line, lineOffset)}`;
+    const home = frames[0]?.file;
+    const own = frames.filter((frame) => frame.file === home).at(-1);
+    const deepest = frames.at(-1);
+
+    let at = own === undefined ? where : `${where}:${inFile(own.line, lineOffset)}`;
+    if (deepest !== undefined && deepest.file !== home) {
+        at += `; raised in ${deepest.name}(), ${deepest.file}:${deepest.line}`;
+    }
 
     try {
         error.message = `${described} (${at})`;

@@ -101,10 +101,18 @@ describe('an error raised by a template expression', () => {
     };
 
     test('names the line of markup it is written on', () => {
-        expect(raise('inline')).toMatch(/^ZeroDivisionError: .*ExpressionRaise\.svelte:12\)$/);
+        expect(raise('inline')).toMatch(/^ZeroDivisionError: .*ExpressionRaise\.svelte:13\)$/);
     });
 
     test('and a function of the script it calls names its own line', () => {
-        expect(raise('called')).toMatch(/^ZeroDivisionError: .*ExpressionRaise\.svelte:6\)$/);
+        expect(raise('called')).toMatch(/^ZeroDivisionError: .*ExpressionRaise\.svelte:7\)$/);
+    });
+
+    // Another file's line is not a line of this one: the component keeps the
+    // line of the call, and the file that raised is named with its own.
+    test('and a function of another module names both places', () => {
+        expect(raise('elsewhere')).toMatch(
+            /^ZeroDivisionError: .*ExpressionRaise\.svelte:15; raised in explode\(\), .*raising_mod\.py:4\)$/
+        );
     });
 });

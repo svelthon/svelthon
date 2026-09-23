@@ -1,4 +1,5 @@
 <script lang="python">
+import raising_mod
 zero = 0
 
 
@@ -11,3 +12,4 @@ def divide(n):
 
 <button data-k="inline" onclick={lambda: 1 // zero}>inline</button>
 <button data-k="called" onclick={lambda: divide(zero)}>called</button>
+<button data-k="elsewhere" onclick={lambda: raising_mod.explode()}>elsewhere</button>
