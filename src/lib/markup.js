@@ -1034,7 +1034,7 @@ function eachBlock(trimmed, declare, call) {
     const iterable = call(body.slice(0, at), '__seq');
     const target = destructured(keyed ? keyed[0] : named, declare, call, true);
 
-    return `{#each ${iterable} as ${target}` + (keyed ? ` (${call(keyed[1], 'repr')})` : '') + '}';
+    return `{#each ${iterable} as ${target}` + (keyed ? ` (${call(keyed[1], '__key')})` : '') + '}';
 }
 
 // What Svelte's template language holds, named here so that anything else stops
@@ -1895,9 +1895,10 @@ function walk(markup, collect, onPython, seed, record, where) {
                 out += eachBlock(trimmed, push, call);
             } else if (opens('key')) {
                 // Svelte re-creates the block when the value changes, by
-                // identity, which no Python value keeps. repr() gives one.
+                // identity: `__key` keeps it for a container and an instance,
+                // and gives a value rebuilt each time its repr().
                 push([]);
-                out += `{#key ${call(opened.rest, 'repr')}}`;
+                out += `{#key ${call(opened.rest, '__key')}}`;
             } else if (opens('await')) {
                 // The awaited expression is Python like any other, a coroutine
                 // included, since the wrapper hands one back as a promise. What

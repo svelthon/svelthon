@@ -376,7 +376,7 @@ interpolations :
 {#each scores.items() as [k, v]}   <!-- un dict, un range, un générateur -->
   {half => (v - 7) // 2}           <!-- -4, là où JavaScript dirait -3,5 -->
 {/each}
-{#key point}                       <!-- comparé par repr(), l'égalité de Python -->
+{#key point}                       <!-- un tuple par repr(), une liste ou une ligne par identité -->
 {@html render(row)}
 ```
 

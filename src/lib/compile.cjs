@@ -1982,6 +1982,7 @@ function injectedBindings(c) {
                   `__bind(__proto, '__truthy', () => __pybridge.truthy);`,
                   `__bind(__proto, '__text', () => __pybridge.str);`,
                   `__bind(__proto, '__seq', () => __pybridge.seq);`,
+                  `__bind(__proto, '__key', () => __pybridge.key);`,
                   `__bind(__proto, '__spread', () => __pybridge.spread);`,
                   `__bind(__proto, '__bound', () => __pybridge.bound);`,
                   `__bind(__proto, '__assign', () => __assign);`,
@@ -2268,8 +2269,15 @@ function plainBindings(c) {
     ];
 }
 
-// A module published under its Python name.
-const registration = (c) => [`__registerModule(${JSON.stringify(pythonModuleName(c.source))}, ${NS});`];
+// A module published under its Python name. A name no `import` can write,
+// `+page.server`, is never looked up, and the module only learns its name.
+const registration = (c) => {
+    const name = JSON.stringify(pythonModuleName(c.source));
+
+    return PY_NAME.test(pythonModuleName(c.source))
+        ? [`__registerModule(${name}, ${NS});`]
+        : [`${NS}.__name__ = ${name};`];
+};
 
 function plainInit(c) {
     return [

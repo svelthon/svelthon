@@ -370,7 +370,7 @@ Every site the markup *reads* goes through Python, not only interpolations:
 {#each scores.items() as [k, v]}   <!-- a dict, a range, a generator: not arrays -->
   {half => (v - 7) // 2}           <!-- -4, where JavaScript would say -3.5 -->
 {/each}
-{#key point}                       <!-- compared by repr(), Python's own equality -->
+{#key point}                       <!-- a tuple by repr(), a list or a row by identity -->
 {@html render(row)}
 ```
 

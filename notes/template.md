@@ -40,7 +40,7 @@ template *less* faithful, not more.
 | `__text` | `{x}`, `{@html}`, `class="a {x}"` | `None` renders `[object Object]`, a list `1,2` instead of `[1, 2]` |
 | `__seq` | the `{#each}` iterable | a dict, a `range`, a generator or `.items()` does not iterate at all — a list and a tuple do, being JavaScript arrays |
 | `__spread` | `{...attrs}` | Svelte diffs against the previous render by identity, so a mutated dict looks unchanged |
-| `repr()` | `{#key x}` and an `{#each}` key | keys compare by identity, which no Python value keeps — `(1, 2)` rebuilt is another object |
+| `__key` | `{#key x}` and an `{#each}` key | keys compare by identity: a list, a dict or an instance keeps one, a tuple or a float rebuilt does not, so those key by `repr()` |
 
 They are not Python's own `bool()` and `str()`: a template may hold a foreign
 JavaScript value — a DOM node from `bind:this` — on which Brython's classifier

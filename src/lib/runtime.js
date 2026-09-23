@@ -104,7 +104,26 @@ function iterated(value) {
     return $B.$list(Array.from($B.make_js_iterator(value, $B.NULL)));
 }
 
+// The values a key compares by value: rebuilt on every computation, so `(1, 2)`
+// is another object each time and only its repr() stays the same.
+const BY_VALUE = [_b_.tuple, _b_.frozenset, _b_.float, _b_.complex, _b_.bytes];
+
 export const __pybridge = {
+    // A key of `{#key}` and of an `{#each}`, which Svelte compares with `===`.
+    // A list, a dict, a set or an instance is the same object while it lives,
+    // so it keys by identity: two equal rows are two rows, and a row mutated
+    // keeps its block. A value rebuilt each time keys by its repr().
+    key(value) {
+        if (value === null || typeof value !== 'object') return value;
+
+        try {
+            const mro = globalThis.__BRYTHON__.get_class(value).tp_mro;
+            return BY_VALUE.some((cls) => mro.includes(cls)) ? _b_.repr(value) : value;
+        } catch {
+            return value; // a foreign JavaScript value keeps its own identity
+        }
+    },
+
     // JS calls every object truthy, so `{#if items}` would be true for an empty
     // list, an empty dict, or None. Conditions are rewritten to go through this.
     truthy(value) {

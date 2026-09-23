@@ -468,7 +468,7 @@ describe('the blocks that declare names', () => {
         const { out, defs } = rewrite('{#each rows as row (row.id)}<li>{row}</li>{/each}');
 
         expect(out).toContain('(__expr_');
-        expect(defs.some((one) => one.includes('repr(row.id)'))).toBe(true);
+        expect(defs.some((one) => one.includes('__key(row.id)'))).toBe(true);
     });
 
     test('{#await} splits the promise from the name it declares', () => {
