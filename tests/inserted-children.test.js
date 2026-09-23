@@ -2,24 +2,21 @@
 // always that.
 //
 // A container handed to a mutator comes under the same watch as the container it
-// landed in, and until now that was done by watching the **argument**:
-// `rows.append(child)` is given the very thing that lands, so the link is right.
-// `rows.extend(items())` is given a *source*. By the time the interception runs,
-// the generator is empty and the child is inside the list with nothing pointing
-// at it — so the first event rendered `[[]]` correctly and the second one left
-// the page showing `[[]]` while Python held `[[1]]`.
+// landed in. `rows.append(child)` is given the very thing that lands, so watching
+// the argument is right. `rows.extend(items())` is given a *source*: by the time
+// the interception runs, the generator is empty and the child is inside the list
+// with nothing watched pointing at it, and the page would show `[[]]` while
+// Python holds `[[1]]`.
 //
-// The shape of the answer is the one the augmented operator's *exception* path
-// already had: when what landed came out of an iterator nobody can see, ask the
-// container what it now holds. What was missing is that the successful path
-// needs the same question, and that it is a question about the **argument** —
-// an iterator hands everything over and keeps none of it — rather than a list of
-// the method names that take one.
+// Two questions decide it: whether the method takes a source, which is a list
+// of names, and whether that source still holds what it yielded, which only a
+// builtin container of exactly its class is known to. Any other source makes
+// the container say what it now holds. A class whose `__iter__` makes its rows
+// on each pass is no iterator and keeps nothing, so it is asked about too.
 //
-// So the rows here are the ways a child gets in, the last three being the ones
-// that always worked, and every one of them is measured twice: once at the
-// install, which was never in doubt, and once at a mutation of the child, which
-// is where a missing link shows.
+// So the rows here are the ways a child gets in, and every one of them is
+// measured twice: once at the install, and once at a mutation of the child,
+// which is where a missing link shows.
 import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import InsertedChild from './fixtures/InsertedChild.svelte';
@@ -30,6 +27,10 @@ describe.for([
     ['extend', 'rows.extend(items())', '[[]]', '[[1]]'],
     ['augment', 'rows += items()', '[[]]', '[[1]]'],
     ['update', 'table.update(pairs())', "{'a': []}", "{'a': [1]}"],
+    // A re-iterable class is not an iterator, and keeps nothing either.
+    ['extend-iterable', 'rows.extend(Fresh(items))', '[[]]', '[[1]]'],
+    ['augment-iterable', 'rows += Fresh(items)', '[[]]', '[[1]]'],
+    ['update-iterable', 'table.update(Fresh(pairs))', "{'a': []}", "{'a': [1]}"],
     // The one mutator that hands a child *back* rather than taking one: what the
     // program keeps and mutates is the return value, which is not among the
     // arguments. Named by the mutation harness, which found the line that links

@@ -54,6 +54,29 @@ describe('a float across a binding', () => {
         expect(at('back').textContent).toBe('0.42');
         expect(at('back-type').textContent).toBe('float');
     });
+
+    // A cleared number field hands over `null`, and Python reads None: the
+    // rule `pyArg` and `pyData` keep, at the binding. A name and an item, the
+    // two targets a binding writes through.
+    test('a cleared number field arrives as None', () => {
+        const at = setup();
+        for (const k of ['int', 'item']) {
+            at(k).value = '';
+            at(k).dispatchEvent(new Event('input', { bubbles: true }));
+        }
+        flushSync();
+        expect(at('absent').textContent).toBe('True True');
+    });
+
+    test('control: zero is a value, not an absence', () => {
+        const at = setup();
+        for (const k of ['int', 'item']) {
+            at(k).value = '0';
+            at(k).dispatchEvent(new Event('input', { bubbles: true }));
+        }
+        flushSync();
+        expect(at('absent').textContent).toBe('False False');
+    });
 });
 
 // The other two halves of the same boundary. A transition cannot be mounted

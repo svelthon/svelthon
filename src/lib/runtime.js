@@ -3693,8 +3693,13 @@ function keyed(target, name) {
 // float. Numbers alone: `bind:this` hands over a DOM node and `bind:files` a
 // FileList, and those must cross as they are. Idempotent, so the group may ask
 // for it early, to compare, and the write may ask again.
-export const pyBind = (value) =>
-    typeof value === 'number' ? globalThis.__BRYTHON__.jsobj2pyobj(value) : value;
+//
+// An absence is None, the rule `pyArg` and `pyData` keep: a cleared number
+// field hands over `null`, and `value is None` has to say so.
+export const pyBind = (value) => {
+    if (value === null || value === undefined) return NONE;
+    return typeof value === 'number' ? globalThis.__BRYTHON__.jsobj2pyobj(value) : value;
+};
 
 // What a write through a dot of the template compiles to: `(obj.attr := value)`,
 // which Python's own grammar refuses the walrus, and the write half of

@@ -16,6 +16,15 @@ def make():
     def pairs():
         yield ("a", child)
 
+    class Fresh:
+        # Re-iterable, and not an iterator: it has no `__next__`, and still
+        # keeps nothing of what it yields.
+        def __init__(self, source):
+            self.source = source
+
+        def __iter__(self):
+            return self.source()
+
     def install():
         nonlocal rows
 
@@ -25,6 +34,12 @@ def make():
             rows += items()
         elif how == "update":
             table.update(pairs())
+        elif how == "extend-iterable":
+            rows.extend(Fresh(items))
+        elif how == "augment-iterable":
+            rows += Fresh(items)
+        elif how == "update-iterable":
+            table.update(Fresh(pairs))
         elif how == "setdefault":
             # The one mutator that hands a child back instead of taking one: the
             # value it returns is what the program keeps and mutates, and it is
@@ -35,7 +50,7 @@ def make():
         else:
             rows += [child]
 
-    holder = table if how in ("update", "setdefault") else rows
+    holder = table if how in ("update", "update-iterable", "setdefault") else rows
 
     return [holder, install, lambda: child.append(1)]
 
