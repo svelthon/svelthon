@@ -2011,11 +2011,14 @@ function propertyName(key, out) {
 //
 // Duck-typed, and the identity for anything else: a module called from
 // ordinary JavaScript keeps its arguments untouched.
+// A JavaScript absence, `null` or `undefined`, is Python's `None` in it, as
+// `pyData` says at its root: `event["params"]["slug"] is None` has to answer the
+// way the author wrote it.
 function pyDict(entries) {
     const $B = globalThis.__BRYTHON__;
     const out = _b_.dict.$factory();
 
-    for (const [key, value] of entries) $B.$setitem(out, key, value);
+    for (const [key, value] of entries) $B.$setitem(out, key, value ?? NONE);
     return out;
 }
 
@@ -2223,7 +2226,10 @@ const routeEvent = (value) => {
 };
 
 export function pyArg(value) {
-    if (value === null || typeof value !== 'object') return pyBind(value);
+    // An absence is `None`, the rule `pyData` applies: `value is None` in the
+    // function called has to be true for a `null` or an `undefined`.
+    if (value === null || value === undefined) return NONE;
+    if (typeof value !== 'object') return pyBind(value);
     if (!routeEvent(value)) return value;
 
     // Reading the framework's own searchParams is what registers the dependency,
