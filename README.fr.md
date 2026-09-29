@@ -878,6 +878,13 @@ Un effet rejoue quand un nom qu'il a *lu* change. Rien à déclarer : les global
 passent par les accesseurs du namespace, donc leurs lectures sont des lectures de
 signaux et Svelte en déduit seul les dépendances.
 
+Un effet ne doit donc pas modifier ce qu'il lit. `history.append(count)` lit
+`history` pour trouver la liste, puis la modifie : l'effet rejoue sur sa propre
+écriture, encore et encore, jusqu'à ce que Svelte l'arrête avec
+`effect_update_depth_exceeded`. Svelte a le même piège avec
+`history.push(count)` ; en Python il se voit moins, puisqu'`append` ne ressemble
+pas à une lecture.
+
 C'est la même flèche qu'un dérivé, sans rien à nommer :
 
 ```python

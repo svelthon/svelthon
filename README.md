@@ -843,6 +843,13 @@ An effect re-runs whenever a name it *read* has changed. Nothing to declare:
 globals go through the namespace accessors, so their reads are signal reads and
 Svelte works out the dependencies itself.
 
+So an effect must not change what it reads. `history.append(count)` reads
+`history` to find the list, then changes it: the effect re-runs on its own
+write, again and again, until Svelte stops it with
+`effect_update_depth_exceeded`. Svelte has the same trap with
+`history.push(count)`; in Python it is easier to miss, since `append` does not
+look like a read.
+
 It is the same arrow as a derived, with nothing to name:
 
 ```python
