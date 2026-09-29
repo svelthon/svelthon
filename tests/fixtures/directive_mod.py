@@ -9,6 +9,11 @@ def measured(node, value):
     node.textContent = format(value, ".2f")
 
 
+async def later(node):
+    # An action written as a coroutine: started, as a handler would be.
+    node.textContent = "started"
+
+
 def typewriter(node, params):
     # Two parameters, no more: Svelte calls a transition with three, and the
     # trimming is what lets a Python signature stay its own size.

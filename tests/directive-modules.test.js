@@ -1,5 +1,5 @@
 import { test, expect, describe } from 'vitest';
-import { mount, flushSync } from './mounted.js';
+import { mount, flushSync, settled } from './mounted.js';
 import { directiveModules } from '../src/lib/markup.js';
 import { pyModule } from '../src/lib/runtime.js';
 import DirectiveModule from './fixtures/DirectiveModule.svelte';
@@ -72,6 +72,13 @@ describe('a directive naming a module', () => {
     test('runs the action it names', () => expect(setup()('acted')).toBe('acted'));
 
     test('and runs it with a value too', () => expect(setup()('valued')).toBe('acted'));
+
+    // An `async def` is started, as a handler's is, not flattened into an
+    // empty object Svelte then ignores.
+    test('and runs an action written as a coroutine', async () => {
+        const at = setup();
+        await settled(() => expect(at('async')).toBe('started'));
+    });
 
     // And the value arrives as Python.
     //

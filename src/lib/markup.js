@@ -1828,8 +1828,9 @@ function walk(markup, collect, onPython, seed, record, where) {
 
             // `bind:value` on its own ends here, at a space, a slash or the
             // closing bracket, so this is where the name is complete and the
-            // absence of an `=` is certain.
-            if (/[\s/>]/.test(char)) {
+            // absence of an `=` is certain. Outside a quoted value only: the
+            // words of `value="a bind:foo b"` are text.
+            if (quote === null && /[\s/>]/.test(char)) {
                 const bare = (tagText().match(BARE_ATTRIBUTE) || [])[1];
 
                 if (bare !== undefined && LET_DIRECTIVE.test(bare)) refuseLet(bare);

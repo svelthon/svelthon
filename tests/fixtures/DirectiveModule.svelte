@@ -16,6 +16,7 @@ def local(node, value):
 
 <p data-k="acted" use:directive_mod.mark>not yet</p>
 <p data-k="valued" use:directive_mod.mark={{"speed": 2}}>not yet</p>
+<p data-k="async" use:directive_mod.later>not yet</p>
 
 <!-- A fractional parameter, through both wrappers, with an integer beside it:
      JavaScript hands the same kind of value for 1 and 0.5, and Brython does

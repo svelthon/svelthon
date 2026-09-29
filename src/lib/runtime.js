@@ -3894,22 +3894,16 @@ export function pyModule(name) {
                     // Named like every other wrapper this file builds, and for
                     // the same reason: what a JavaScript caller reads of a
                     // Python function must not depend on the route it took.
+                    //
+                    // Converted on the way in, like every other call boundary:
+                    // Svelte hands an action or a transition its JavaScript
+                    // values, and a fractional one reaching `format(value,
+                    // '.2f')` must be a float. A DOM node is left alone by
+                    // `pyArg`, which is what the first argument always is here.
+                    // Run through `running`, the wrapper of a component's own
+                    // functions: an `async def` is started, and an error placed.
                     wrapped = identified(
-                        (...args) => {
-                            try {
-                                // Converted on the way in, like every other
-                                // call boundary: Svelte hands an action or a
-                                // transition its JavaScript values, and a
-                                // fractional one reaching `format(value, '.2f')`
-                                // answered *non-empty format string passed to
-                                // object.__format__* and took the mount with it.
-                                // A DOM node is left alone by `pyArg`, which is
-                                // what the first argument always is here.
-                                return pyNumbers(called(...taken(args, arity)));
-                            } catch (error) {
-                                throw pyError(error, where);
-                            }
-                        },
+                        (...args) => running(() => called(...taken(args, arity)), where),
                         nameOf(where),
                         arity
                     );
