@@ -3825,35 +3825,58 @@ export function readAttr(target, name) {
     const found = $B.$getattr(target, name, MISSING);
     if (found !== MISSING) return found;
 
+    const item = lookup(target, name);
+    if (item !== MISSING) return item;
+
+    // No such key either: the real lookup raises.
+    return $B.$getattr(target, name);
+}
+
+// Builtin sequences, whose `__getitem__` refuses a string key with a TypeError:
+// for them that says "no such key", as a KeyError says it for a mapping.
+const SEQUENCES = [_b_.list, _b_.tuple, _b_.str, _b_.bytes, _b_.range];
+
+// The key `name` of `target`, or MISSING when there is none. An absence is what
+// the protocol answers when nothing is there: no `__getitem__` at all, a
+// `LookupError`, or a builtin sequence refusing a string. Anything else a
+// `__getitem__` raises is its author's answer and goes on, both to a read and
+// to the choice of where a write lands.
+function lookup(target, name) {
+    const $B = globalThis.__BRYTHON__;
+
+    let cls;
     try {
-        return $B.$getitem(target, name);
+        cls = $B.get_class(target);
+        if ($B.$getattr(cls, '__getitem__', MISSING) === MISSING) return MISSING;
     } catch {
-        /* no such key either: the real lookup raises */
+        return MISSING; // a foreign JavaScript value has no Python protocol to ask
     }
 
-    return $B.$getattr(target, name);
+    try {
+        return $B.$getitem(target, name);
+    } catch (error) {
+        let raised;
+        try {
+            raised = $B.get_class(error).tp_mro;
+        } catch {
+            return MISSING;
+        }
+        if (!Array.isArray(raised)) return MISSING;
+        if (raised.includes(_b_.LookupError)) return MISSING;
+        if (raised.includes(_b_.TypeError) && SEQUENCES.includes(cls)) return MISSING;
+
+        throw error;
+    }
 }
 
 // Whether the dot should write a key rather than an attribute: the object has
 // one of that name.
 //
-// **The probe and the write are two statements, and that is the whole point.**
-// They were one `try`, so an exception raised by the author's own `__setitem__`
-// read as "no such key" and the write moved to an attribute instead: a `Guard`
-// refusing every write with a `ValueError` ended up carrying `obj.name` beside
-// the entry it had protected, the dot reading the new one and the subscript
-// still reading the old. A refusal became two truths and no error.
-//
-// Once the key is found the destination is decided, and what the write raises is
-// the author's answer, not a reason to write somewhere else.
-function keyed(target, name) {
-    try {
-        globalThis.__BRYTHON__.$getitem(target, name);
-        return true;
-    } catch {
-        return false;
-    }
-}
+// **The probe and the write are two statements.** An exception raised by the
+// author's own `__setitem__` is not a reason to write somewhere else, and
+// neither is one raised by their `__getitem__` while the key is looked for:
+// `lookup` lets both go on. Once the key is found the destination is decided.
+const keyed = (target, name) => lookup(target, name) !== MISSING;
 
 // A scalar entering Python, wherever it enters from. One rule for the four
 // doors, because the same value had different capabilities behind each: a
