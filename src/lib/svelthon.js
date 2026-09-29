@@ -393,8 +393,8 @@ export function python(options = {}) {
 // which the generated script does not write, so without this list the element
 // observed no attribute and exposed no property: it read its attributes once,
 // at connection. Each prop carries the type its annotation names, so an
-// attribute arrives as the number or the list it declares. The written-out
-// object form is the author's, and is left as it is.
+// attribute arrives as the number or the list it declares. In the written-out
+// object form, a `props` the author wrote is theirs, and left as it is.
 const ELEMENT_OPTION = /<svelte:options\b[^>]*?\bcustomElement\s*=\s*(["'])([^"']*)\1/;
 
 // The written-out form, `customElement={{ tag: "x", shadow: "none" }}`, which is
