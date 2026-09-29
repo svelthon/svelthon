@@ -130,6 +130,27 @@ const keyFor = (repr) => {
 };
 
 export const __pybridge = {
+    // The value of `class={…}` on an element, which Svelte hands to `clsx`: a
+    // string as it is, a dict as an object whose values are Python's truth, a
+    // list as the names Python finds true. `clsx` would read JavaScript's truth
+    // and walk into any object, `None` included, whose keys are the engine's.
+    klass(value) {
+        if (value === null || value === undefined || value === NONE) return undefined;
+        if (typeof value !== 'object') return value;
+
+        if (globalThis.__BRYTHON__.is_dict(value)) {
+            const out = {};
+            for (const [key, one] of pyEntries(value)) out[__pybridge.str(key)] = __pybridge.truthy(one);
+            return out;
+        }
+
+        if (Array.isArray(value)) {
+            return value.filter((one) => __pybridge.truthy(one)).map((one) => __pybridge.klass(one));
+        }
+
+        return __pybridge.truthy(value) ? __pybridge.str(value) : undefined;
+    },
+
     // A key of `{#key}` and of an `{#each}`, which Svelte compares with `===`.
     // A list, a dict, a set or an instance is the same object while it lives,
     // so it keys by identity: two equal rows are two rows, and a row mutated

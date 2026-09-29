@@ -587,6 +587,15 @@ const EVENT_WRAPPER = '__event';
 // is false here and true in JavaScript, exactly as in `{#if}`.
 const CLASS_DIRECTIVE = /^class:/;
 
+// The boolean attributes of HTML, which the DOM reads for truthiness too: on an
+// element, `hidden={[]}` has to be Python's false, as `{#if []}` is.
+const BOOLEAN_ATTRIBUTE =
+    /^(?:allowfullscreen|async|autofocus|autoplay|checked|controls|default|defer|disabled|formnovalidate|hidden|inert|ismap|itemscope|loop|multiple|muted|nomodule|novalidate|open|playsinline|readonly|required|reversed|selected)$/i;
+
+// On an element, and only there: a component's prop of the same name is the
+// author's own value, handed on as it is.
+const onElement = (tag) => tag !== null && /^[a-z]/.test(tag.name) && !tag.name.includes(':');
+
 // Svelte 4 slot syntax, which `{#snippet}` replaced. Neither spelling is an
 // expression: `let:item={row}` takes a binding pattern the way `bind:` does, and
 // `let:item` on its own declares a name for the slot's body. Compiled as a value
@@ -1717,6 +1726,14 @@ function walk(markup, collect, onPython, seed, record, where) {
                             out += `{${EVENT_WRAPPER}(${call(rewritten, '', inner)})}`;
                         } else if (CLASS_DIRECTIVE.test(attribute[1])) {
                             out += `{${call(inner, '__truthy')}}`;
+                        } else if (onElement(tag) && BOOLEAN_ATTRIBUTE.test(attribute[1])) {
+                            out += `{${call(inner, '__truthy')}}`;
+                        } else if (onElement(tag) && attribute[1] === 'class') {
+                            // Svelte hands an object or an array given to
+                            // `class` to `clsx`, which keeps what JavaScript
+                            // finds true and walks into every object it meets:
+                            // `None` wrote `ob_type __doc__` into the page.
+                            out += `{${call(inner, '__class')}}`;
                         } else {
                             // `href={website}` with nothing to show: None goes
                             // out as undefined so Svelte drops the attribute

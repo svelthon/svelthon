@@ -1,0 +1,40 @@
+// The truth of a value is Python's in a template, the attributes the DOM reads
+// for truth included: a boolean attribute of HTML, and `class`, which Svelte
+// hands to `clsx`. An empty list is false, and so is an object whose
+// `__bool__` says so; `None` in a class list is nothing, not its engine fields.
+import { test, expect } from 'vitest';
+import { mount, flushSync } from './mounted.js';
+import PythonTruthAttributes from './fixtures/PythonTruthAttributes.svelte';
+
+const at = () => {
+    const target = document.body.appendChild(document.createElement('div'));
+    mount(PythonTruthAttributes, { target });
+    flushSync();
+    return (key) => target.querySelector(`[data-k="${key}"]`);
+};
+
+test.for([
+    ['hidden', 'hidden'],
+    ['disabled', 'disabled'],
+    ['checked', 'checked'],
+    ['required', 'required'],
+    ['open', 'open']
+])('a boolean attribute given a false Python value is off: %s', ([key, property]) => {
+    expect(at()(key)[property]).toBe(false);
+});
+
+test('control: a true Python value turns it on', () => {
+    expect(at()('witness').disabled).toBe(true);
+});
+
+test('class from a dict keeps the names whose value Python finds true', () => {
+    expect(at()('dict').className).toBe('shown');
+});
+
+test('class from a list keeps the names Python finds true, and nothing of None', () => {
+    expect(at()('list').className).toBe('base');
+});
+
+test('control: class from a string is the string', () => {
+    expect(at()('text').className).toBe('plain words');
+});
