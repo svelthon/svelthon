@@ -702,10 +702,16 @@ const listed = (names) => {
     return `${quoted.slice(0, -1).join(', ')}, and ${quoted[quoted.length - 1]}`;
 };
 
+// The keywords of a call, which Brython hands over as a trailing plain object
+// carrying `$kw`. A Python dict keeps a string key as an own property, so
+// `{"$kw": [...]}` carries one too: what tells the two apart is that the dict
+// is a Python object, with a class, and the call's bundle is not.
 const keywordsOf = (args) => {
     const last = args[args.length - 1];
 
-    return last !== null && typeof last === 'object' && Array.isArray(last.$kw) ? last.$kw : null;
+    if (last === null || typeof last !== 'object' || !Array.isArray(last.$kw)) return null;
+
+    return last.ob_type === undefined && !globalThis.__BRYTHON__.is_dict(last) ? last.$kw : null;
 };
 
 // A name the helper does not take is an error, not something to ignore: the

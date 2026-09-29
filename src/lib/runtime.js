@@ -1101,28 +1101,29 @@ function holds(holder, child) {
 }
 
 // What a builtin container yields, handed to `into` one by one: the source of
-// `rows.extend(other)` is not inside `rows`, what it held is. A dict fed a list
-// of pairs, `d.update([("k", child)])`, holds each key and each value, not the
-// pair.
+// `rows.extend(other)` is not inside `rows`, what it held is. A dict fed pairs,
+// `d.update([("k", child)])` or `d.update({("k", child)})`, holds each key and
+// each value, not the pair.
 function inheritContents(into, source) {
     const pairs = globalThis.__BRYTHON__.is_dict(into);
+    const take = (child) => {
+        if (pairs && Array.isArray(child) && child.length === 2) {
+            inherit(into, child[0]);
+            inherit(into, child[1]);
+        } else {
+            inherit(into, child);
+        }
+    };
 
     if (Array.isArray(source)) {
-        for (const child of source) {
-            if (pairs && Array.isArray(child) && child.length === 2) {
-                inherit(into, child[0]);
-                inherit(into, child[1]);
-            } else {
-                inherit(into, child);
-            }
-        }
+        for (const child of source) take(child);
     } else if (globalThis.__BRYTHON__.is_dict(source)) {
         for (const [key, child] of pyEntries(source)) {
             inherit(into, key);
             inherit(into, child);
         }
     } else if (isSet(source)) {
-        for (const bucket of Object.values(source.$store)) for (const child of bucket) inherit(into, child);
+        for (const bucket of Object.values(source.$store)) for (const child of bucket) take(child);
     }
 }
 
