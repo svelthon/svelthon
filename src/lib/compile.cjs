@@ -105,7 +105,34 @@ function positioned(error, source, line) {
 const refuse = (message, source, line) =>
     positioned(new SyntaxError(message), source, line);
 
-function pythonError(error, source, lineOffset, block = '') {
+// JavaScript an author coming from Svelte writes in a template that reads
+// Python, and what Python writes instead. Read on the expression with its
+// strings taken out, so a `?` or a `!` inside a string says nothing.
+const HABITS = [
+    [/\?[^:]*:/, '`a ? b : c` is `b if a else c`'],
+    [/&&|\|\|/, '`&&` and `||` are `and` and `or`'],
+    [/[!=]==/, '`===` and `!==` are `==` and `!=`'],
+    [/(^|[^!=<>])!(?!=)/, '`!x` is `not x`'],
+    [/`/, 'a template literal is an f-string, `f"n={x}"`'],
+    [/=>/, 'an arrow function is a `lambda`: `lambda: (count := count + 1)`'],
+    [/\+\+|--/, '`x++` is `(x := x + 1)`'],
+    [/\?\?/, '`a ?? b` is `a if a is not None else b`'],
+    [/\b(?:null|undefined|true|false)\b/, '`null`, `true`, `false` are `None`, `True`, `False`'],
+    [/\.push\(/, '`.push(x)` is `.append(x)`'],
+    [/\.length\b/, '`.length` is `len(…)`']
+];
+
+const habitsIn = (text) => {
+    const code = text.replace(/(["'])(?:\\.|(?!\1).)*\1/g, '""');
+    return HABITS.filter(([pattern]) => pattern.test(code)).map(([, said]) => said);
+};
+
+// `lineOffset` is the count of lines before the script, and `ranges` the Python
+// lines each template function occupies with the markup line it stands for: the
+// table the runtime reads for an error raised later, read here for one raised
+// at compile time. A syntax error in `{ok ? "yes" : "no"}` names the line of
+// markup it is written on, quotes it, and says what Python writes instead.
+function pythonError(error, source, lineOffset, block = '', ranges = [], src = '') {
     // A JavaScript Error is not ours to describe: it already carries a message
     // and a stack, and wrapping it produced the useless
     // `JSObject: <Javascript object: [object Error]>`, which hid what actually
@@ -123,11 +150,31 @@ function pythonError(error, source, lineOffset, block = '') {
         /* not a Brython exception: keep the generic label */
     }
 
+    let quoted = '';
+
     try {
         const line = $B.$getattr(error, 'lineno');
         if (typeof line === 'number') {
-            at = line + lineOffset;
+            const range = ranges.find(([from, to]) => line >= from && line <= to);
+            at = range === undefined ? line + lineOffset : range[2];
             where = `${source}:${at}`;
+
+            if (range !== undefined) {
+                // The author's text, out of the wrapper the markup pass put
+                // around it: `__text(…)`, `__truthy(…)`.
+                const written = src
+                    .split('\n')
+                    .slice(range[0], range[1])
+                    .join(' ')
+                    .trim()
+                    .replace(/^return\s+/, '')
+                    .replace(/^__\w+\(([\s\S]*)\)$/, '$1');
+                const said = habitsIn(written);
+                quoted =
+                    `\n  in the template expression \`${written}\`,` +
+                    ` which is Python` +
+                    (said.length ? `: ${said.join('; ')}.` : '.');
+            }
         }
     } catch {
         /* no position on it */
@@ -137,6 +184,7 @@ function pythonError(error, source, lineOffset, block = '') {
 
     return refuse(
         `svelthon — ${described} (${where})` +
+            quoted +
             (flush
                 ? `\n  line ${flush + lineOffset} starts at column zero while the rest of` +
                   ` the block is indented, so indent it like its neighbours.`
@@ -2512,7 +2560,7 @@ function compile(
     try {
         root = $B.py2js({ src, filename: source }, name, [name]);
     } catch (error) {
-        throw pythonError(error, source, lineOffset, authored);
+        throw pythonError(error, source, lineOffset, authored, exprLines, src);
     }
     let { props, bindables, state, funcs, deriveds, effects, inspects, reserved, bound, lines } =
         surface(root._ast.body);
