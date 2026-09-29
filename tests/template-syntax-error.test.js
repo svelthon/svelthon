@@ -24,14 +24,22 @@ const refused = async (markup) => {
 test('a ternary far below the script names its own line', async () => {
     const error = await refused(`${'<p>x</p>\n'.repeat(40)}{ok ? "yes" : "no"}\n`);
 
-    expect(error.message).toMatch(/\(Component:46\)/);
-    expect(error.start.line).toBe(46);
+    expect(error.message).toMatch(/\(Component:46:2\)/);
+    expect(error.start).toEqual({ line: 46, column: 1 });
 });
 
-test('and so does the third expression of a file', async () => {
-    const error = await refused(`<p>{count}</p>\n<p>{ok}</p>\n{ok ? "yes" : "no"}\n`);
+test('and so does the third expression of a file, at its own column', async () => {
+    const error = await refused(`<p>{count}</p>\n<p>{ok}</p>\n<p>{ok ? "yes" : "no"}</p>\n`);
 
-    expect(error.message).toMatch(/\(Component:8\)/);
+    expect(error.message).toMatch(/\(Component:8:5\)/);
+    expect(error.start).toEqual({ line: 8, column: 4 });
+});
+
+// A conversion is not a negation: `!r` belongs in an f-string field.
+test('a conversion outside an f-string is not called a negation', async () => {
+    const error = await refused('{count!r}\n');
+
+    expect(error.message).not.toContain('`not x`');
 });
 
 test.for([
