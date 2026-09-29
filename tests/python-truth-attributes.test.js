@@ -35,6 +35,25 @@ test('class from a list keeps the names Python finds true, and nothing of None',
     expect(at()('list').className).toBe('base');
 });
 
+// One rule, however the attribute is written: by its shorthand, as a lone
+// interpolation between quotes, on `<svelte:element>`, or through a spread.
+test.for([
+    ['the shorthand', 'shorthand'],
+    ['a quoted interpolation', 'quoted'],
+    ['<svelte:element>', 'element'],
+    ['a spread', 'spread']
+])('a false hidden written through %s is off', ([, key]) => {
+    expect(at()(key).hidden).toBe(false);
+});
+
+test.for([
+    ['a quoted interpolation', 'quoted-class'],
+    ['<svelte:element>', 'element'],
+    ['a spread', 'spread']
+])('a class list written through %s keeps what Python finds true', ([, key]) => {
+    expect(at()(key).className).toBe('a');
+});
+
 test('control: class from a string is the string', () => {
     expect(at()('text').className).toBe('plain words');
 });

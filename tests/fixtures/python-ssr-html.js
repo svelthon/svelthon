@@ -2,7 +2,7 @@
 // asserts it and `python-hydration.test.js` hydrates on it, so the two cannot
 // drift apart in silence.
 export const PythonTruthAttributes =
-    "<!--[--><div data-k=\"hidden\">x</div> <button data-k=\"disabled\">x</button> <input data-k=\"checked\" type=\"checkbox\"/> <input data-k=\"required\"/> <details data-k=\"open\"><summary>x</summary></details> <button data-k=\"witness\" disabled=\"\">x</button> <div data-k=\"dict\" class=\"shown\"></div> <div data-k=\"list\" class=\"base\"></div> <div data-k=\"text\" class=\"plain words\"></div><!--]-->";
+    "<!--[--><div data-k=\"hidden\">x</div> <button data-k=\"disabled\">x</button> <input data-k=\"checked\" type=\"checkbox\"/> <input data-k=\"required\"/> <details data-k=\"open\"><summary>x</summary></details> <button data-k=\"witness\" disabled=\"\">x</button> <div data-k=\"dict\" class=\"shown\"></div> <div data-k=\"list\" class=\"base\"></div> <div data-k=\"text\" class=\"plain words\"></div> <div data-k=\"shorthand\">x</div> <div data-k=\"quoted\">x</div> <div data-k=\"quoted-class\" class=\"a\"></div> <!----><div data-k=\"element\" class=\"a\">x<!----></div><!----> <div data-k=\"spread\" class=\"a\">x</div><!--]-->";
 
 export const KeyIdentity =
     "<!--[--><ul data-k=\"todos\"><!--[--><li>todo</li><li>todo</li><!--]--></ul> <!----><i data-k=\"block\">1</i><!----> <!--[--><input data-k=\"field\" value=\"Ada\"/><!--]--> <ul data-k=\"nans\"><!--[--><li>nan</li><li>nan</li><!--]--></ul> <ul data-k=\"mixed\"><!--[--><li>float</li><li>str</li><li>tuple</li><li>str</li><li>bytes</li><li>str</li><!--]--></ul> <button data-k=\"grow\">grow</button> <button data-k=\"replace\">replace</button><!--]-->";

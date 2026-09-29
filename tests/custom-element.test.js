@@ -4,6 +4,30 @@ import { mount, flushSync } from './mounted.js';
 import './fixtures/Stepper.svelte';
 import WordHost from './fixtures/WordHost.svelte';
 import './fixtures/TypedElement.svelte';
+import './fixtures/ObjectFormElement.svelte';
+
+// The written-out form of the option, `customElement={{ tag, shadow }}`, gets
+// the same props as the short one.
+test('an element declared by the object form observes its props too', async () => {
+    expect(customElements.get('object-form-element').observedAttributes).toEqual(['start']);
+
+    const element = document.createElement('object-form-element');
+    element.setAttribute('start', '5');
+    document.body.appendChild(element);
+    await Promise.resolve();
+    flushSync();
+
+    try {
+        expect(element.querySelector('.object-form').textContent).toBe('6');
+
+        element.setAttribute('start', '9');
+        flushSync();
+
+        expect(element.querySelector('.object-form').textContent).toBe('10');
+    } finally {
+        element.remove();
+    }
+});
 
 // A Python element's props are its annotated names, and Svelte observes each of
 // them as an attribute and exposes it as a property, converted to the type the

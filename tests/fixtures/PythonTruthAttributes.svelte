@@ -11,6 +11,10 @@ nothing = {}
 selection = Selection()
 zero = 0.0
 chosen = ["x"]
+hidden = []
+tag = "div"
+flags = ["a", None]
+spread = {"hidden": [], "class": ["a", None]}
 </script>
 
 <div data-k="hidden" hidden={empty}>x</div>
@@ -22,3 +26,10 @@ chosen = ["x"]
 <div data-k="dict" class={{"on": zero, "full": empty, "shown": True}}></div>
 <div data-k="list" class={["base", None, "on" if zero else "", selection and "sel"]}></div>
 <div data-k="text" class={"plain words"}></div>
+
+<!-- The same attributes written every other way. -->
+<div data-k="shorthand" {hidden}>x</div>
+<div data-k="quoted" hidden="{empty}">x</div>
+<div data-k="quoted-class" class="{flags}"></div>
+<svelte:element this={tag} data-k="element" hidden={empty} class={flags}>x</svelte:element>
+<div data-k="spread" {**spread}>x</div>

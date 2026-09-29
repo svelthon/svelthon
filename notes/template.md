@@ -38,6 +38,12 @@ template *less* faithful, not more.
 |---|---|---|
 | `__truthy` | `{#if}`, `{:else if}`, `class:`, and on an element the boolean attributes of HTML (`hidden`, `disabled`, `checked`…) | `{#if []}` is true, as it is in JavaScript, and `hidden={[]}` hides |
 | `__class` | `class={…}` on an element | Svelte hands an object or an array to `clsx`, which keeps what JavaScript finds true and walks into `None`, writing `ob_type __doc__` as classes |
+| `__spreadElement` | `{**attrs}` on an element | each key is read as the attribute it becomes: `class` by `__class`, a boolean attribute by `__truthy` |
+
+Which wrapper an attribute takes is decided by its name, in one place
+(`src/lib/attributes.js`), and every way of writing it asks there: `name={x}`,
+the shorthand `{name}`, a lone interpolation between quotes, on a tag or on
+`<svelte:element>`, and through a spread.
 | `__text` | `{x}`, `{@html}`, `class="a {x}"` | `None` renders `[object Object]`, a list `1,2` instead of `[1, 2]` |
 | `__seq` | the `{#each}` iterable | a dict, a `range`, a generator or `.items()` does not iterate at all — a list and a tuple do, being JavaScript arrays |
 | `__spread` | `{...attrs}` | Svelte diffs against the previous render by identity, so a mutated dict looks unchanged |
