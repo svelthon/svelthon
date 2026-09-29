@@ -4,6 +4,7 @@
 import './globals.js';
 import './boot.js';
 import { createSubscriber } from 'svelte/reactivity';
+import { attributeWrapper } from './attributes.js';
 
 // Python's None, so a prop the parent never passed reads as None rather than
 // leaking JavaScript's undefined into Python.
@@ -323,6 +324,21 @@ export const __pybridge = {
         const out = { ...value };
 
         for (const key of Object.keys(out)) out[key] = __pybridge.bound(out[key]);
+
+        return out;
+    },
+
+    // A spread on an element: each key is the attribute it becomes, read the
+    // way that attribute is read when written by name.
+    spreadElement(value) {
+        const out = __pybridge.spread(value);
+        if (out === null || typeof out !== 'object') return out;
+
+        for (const key of Object.keys(out)) {
+            const wrapper = attributeWrapper(key);
+            if (wrapper === '__class') out[key] = __pybridge.klass(value[key]);
+            else if (wrapper === '__truthy') out[key] = __pybridge.truthy(value[key]);
+        }
 
         return out;
     }

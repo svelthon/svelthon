@@ -397,19 +397,35 @@ export function python(options = {}) {
 // object form is the author's, and is left as it is.
 const ELEMENT_OPTION = /<svelte:options\b[^>]*?\bcustomElement\s*=\s*(["'])([^"']*)\1/;
 
-function elementOptions(code, python) {
-    const found = ELEMENT_OPTION.exec(withoutComments(code));
-    if (found === null) return code;
+// The written-out form, `customElement={{ tag: "x", shadow: "none" }}`, which is
+// the only way to set `shadow`: the props go into it when it names none.
+const ELEMENT_OBJECT = /<svelte:options\b[^>]*?\bcustomElement\s*=\s*\{\{/;
 
-    const props = elementProps(python)
-        .map(({ name, type }) => `${name}: {${type ? ` type: ${JSON.stringify(type)} ` : ''}}`)
-        .join(', ');
+function elementOptions(code, python) {
+    const props = () =>
+        elementProps(python)
+            .map(({ name, type }) => `${name}: {${type ? ` type: ${JSON.stringify(type)} ` : ''}}`)
+            .join(', ');
+
+    const text = withoutComments(code);
+    const object = ELEMENT_OBJECT.exec(text);
+
+    if (object !== null) {
+        const at = object.index + object[0].length;
+        const close = text.indexOf('}}', at);
+        if (close === -1 || /\bprops\s*:/.test(text.slice(at, close))) return code;
+
+        return `${code.slice(0, at)} props: { ${props()} },${code.slice(at)}`;
+    }
+
+    const found = ELEMENT_OPTION.exec(text);
+    if (found === null) return code;
     const attribute = found[0].slice(found[0].search(/\bcustomElement\s*=/));
     const at = found.index + found[0].length - attribute.length;
 
     return (
         code.slice(0, at) +
-        `customElement={{ tag: ${JSON.stringify(found[2])}, props: { ${props} } }}` +
+        `customElement={{ tag: ${JSON.stringify(found[2])}, props: { ${props()} } }}` +
         code.slice(at + attribute.length)
     );
 }

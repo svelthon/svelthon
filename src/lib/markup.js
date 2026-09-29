@@ -2,6 +2,7 @@
 // into Python. Pure string work, and deliberately free of any Node import: the
 // browser playground compiles components client-side and needs exactly this,
 // while the file next door needs `fs` and `path` and cannot be loaded there.
+import { attributeWrapper } from './attributes.js';
 
 // How far to step over a Python comment or string literal starting at `at`, and
 // 0 when neither starts there.
@@ -587,14 +588,14 @@ const EVENT_WRAPPER = '__event';
 // is false here and true in JavaScript, exactly as in `{#if}`.
 const CLASS_DIRECTIVE = /^class:/;
 
-// The boolean attributes of HTML, which the DOM reads for truthiness too: on an
-// element, `hidden={[]}` has to be Python's false, as `{#if []}` is.
-const BOOLEAN_ATTRIBUTE =
-    /^(?:allowfullscreen|async|autofocus|autoplay|checked|controls|default|defer|disabled|formnovalidate|hidden|inert|ismap|itemscope|loop|multiple|muted|nomodule|novalidate|open|playsinline|readonly|required|reversed|selected)$/i;
-
 // On an element, and only there: a component's prop of the same name is the
-// author's own value, handed on as it is.
-const onElement = (tag) => tag !== null && /^[a-z]/.test(tag.name) && !tag.name.includes(':');
+// author's own value, handed on as it is. `<svelte:element>` makes one.
+const onElement = (tag) =>
+    tag !== null && (tag.name === 'svelte:element' || (/^[a-z]/.test(tag.name) && !tag.name.includes(':')));
+
+// The wrapper an attribute of this name goes through on this tag, or null: the
+// one decision every way of writing an attribute asks for.
+const wrapperFor = (name, tag) => (onElement(tag) ? attributeWrapper(name) : null);
 
 // Svelte 4 slot syntax, which `{#snippet}` replaced. Neither spelling is an
 // expression: `let:item={row}` takes a binding pattern the way `bind:` does, and
@@ -1658,7 +1659,11 @@ function walk(markup, collect, onPython, seed, record, where) {
                 continue;
             } else if (char === '"' || char === "'") {
                 const named = (tagText().match(ATTRIBUTE_NAME) || [])[1] || '';
-                const closing = directive(named) ? loneInterpolation(markup, index, closingBrace) : -1;
+                // A lone interpolation between quotes is the value itself, as
+                // Svelte reads it, for a directive and for an attribute whose
+                // value is read for truth.
+                const closing =
+                    directive(named) || wrapperFor(named, tag) ? loneInterpolation(markup, index, closingBrace) : -1;
 
                 if (closing !== -1) {
                     unquoted = closing;
@@ -1726,14 +1731,11 @@ function walk(markup, collect, onPython, seed, record, where) {
                             out += `{${EVENT_WRAPPER}(${call(rewritten, '', inner)})}`;
                         } else if (CLASS_DIRECTIVE.test(attribute[1])) {
                             out += `{${call(inner, '__truthy')}}`;
-                        } else if (onElement(tag) && BOOLEAN_ATTRIBUTE.test(attribute[1])) {
-                            out += `{${call(inner, '__truthy')}}`;
-                        } else if (onElement(tag) && attribute[1] === 'class') {
-                            // Svelte hands an object or an array given to
-                            // `class` to `clsx`, which keeps what JavaScript
-                            // finds true and walks into every object it meets:
-                            // `None` wrote `ob_type __doc__` into the page.
-                            out += `{${call(inner, '__class')}}`;
+                        } else if (wrapperFor(attribute[1], tag)) {
+                            // `class`, which Svelte hands to `clsx`, and the
+                            // boolean attributes, which the DOM reads for
+                            // truth: both read Python's truth instead.
+                            out += `{${call(inner, wrapperFor(attribute[1], tag))}}`;
                         } else {
                             // `href={website}` with nothing to show: None goes
                             // out as undefined so Svelte drops the attribute
@@ -1768,7 +1770,9 @@ function walk(markup, collect, onPython, seed, record, where) {
                         // A shallow copy, so that Svelte's diff against the
                         // previous render sees a mutation: that is what a
                         // JavaScript spread does by itself.
-                        out += `{...${call(trimmed.slice(2), '__spread')}}`;
+                        // On an element, each key is read by its name as the
+                        // attribute it becomes.
+                        out += `{...${call(trimmed.slice(2), onElement(tag) ? '__spreadElement' : '__spread')}}`;
                     } else if (trimmed.startsWith('...')) {
                         throw refuse(
                             new SyntaxError(
@@ -1791,7 +1795,7 @@ function walk(markup, collect, onPython, seed, record, where) {
                         // {name}, Svelte's shorthand for name={name}. Expanding
                         // it is what routes the read through the namespace, and
                         // therefore through the accessor.
-                        out += `${trimmed}={${call(trimmed, '')}}`;
+                        out += `${trimmed}={${call(trimmed, wrapperFor(trimmed, tag) || '')}}`;
                     } else if (trimmed.startsWith('@')) {
                         throw refuse(unknownTag(trimmed, 'tag', ATTACHMENTS, said()));
                     } else {
