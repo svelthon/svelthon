@@ -374,10 +374,14 @@ function installMutationTracking($B) {
             // the way the augmented operator's exception path already asks.
             let spent = false;
 
-            for (const arg of args) {
-                if (!SOURCES.has(attr)) inherit(obj, arg);
-                else if (keeps(arg)) inheritContents(obj, arg);
-                else spent = true;
+            if (attr === '__setitem__' && args.length === 2) {
+                stored(obj, args[0], args[1]);
+            } else {
+                for (const arg of args) {
+                    if (!SOURCES.has(attr)) inherit(obj, arg);
+                    else if (keeps(arg)) inheritContents(obj, arg);
+                    else spent = true;
+                }
             }
 
             if (spent) adopt(obj);
@@ -637,8 +641,7 @@ function installMutationTracking($B) {
                 // than restate half of it. `d[Box()] = "label"` after the watch
                 // began left the key outside it, and mutating it repainted
                 // nothing.
-                inherit(obj, key);
-                inherit(obj, value);
+                stored(obj, key, value);
                 MARKS.get(obj)();
             }
         }
@@ -1027,6 +1030,26 @@ const upwards = (marker, stamp, key) => {
     for (const parent of parents) upwards(parent, stamp, key);
 };
 
+// An item written, `obj[key] = value`: both halves are inside. Except a slice,
+// `rows[:] = [child]`, whose value is a source: what it yields is inside.
+function stored(obj, key, value) {
+    let slice = false;
+    try {
+        slice = globalThis.__BRYTHON__.get_class(key) === _b_.slice;
+    } catch {
+        /* a foreign key is not a slice */
+    }
+
+    if (!slice) {
+        inherit(obj, key);
+        inherit(obj, value);
+    } else if (keeps(value)) {
+        inheritContents(obj, value);
+    } else {
+        adopt(obj);
+    }
+}
+
 // Whether `holder` still holds `child`, asked only where the answer is exact: a
 // list, a dict or a set of exactly that class. A subclass has attributes too.
 function holds(holder, child) {
@@ -1053,10 +1076,21 @@ function holds(holder, child) {
 }
 
 // What a builtin container yields, handed to `into` one by one: the source of
-// `rows.extend(other)` is not inside `rows`, what it held is.
+// `rows.extend(other)` is not inside `rows`, what it held is. A dict fed a list
+// of pairs, `d.update([("k", child)])`, holds each key and each value, not the
+// pair.
 function inheritContents(into, source) {
+    const pairs = globalThis.__BRYTHON__.is_dict(into);
+
     if (Array.isArray(source)) {
-        for (const child of source) inherit(into, child);
+        for (const child of source) {
+            if (pairs && Array.isArray(child) && child.length === 2) {
+                inherit(into, child[0]);
+                inherit(into, child[1]);
+            } else {
+                inherit(into, child);
+            }
+        }
     } else if (globalThis.__BRYTHON__.is_dict(source)) {
         for (const [key, child] of pyEntries(source)) {
             inherit(into, key);
