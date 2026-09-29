@@ -75,7 +75,7 @@ reste de cette configuration et ce que chaque ligne apporte.
 npm install
 npm run dev
 
-npm test             # 1 277 tests : sémantique, props, réactivité, surface Svelte
+npm test             # 1 280 tests : sémantique, props, réactivité, surface Svelte
 npm run test:quiet   # la sortie de la suite : un run vert ne doit rien dire
 npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
@@ -1014,6 +1014,12 @@ def bump():
 <my-stepper></my-stepper>
 ```
 
+Ses props sont ses noms annotés, observés comme attributs et exposés comme
+propriétés, et chaque attribut arrive dans le type que nomme son annotation :
+`start: int` lit `start="5"` comme `5`, `tags: list` lit un tableau JSON. Un
+`bool` suit HTML, comme en Svelte : un attribut présent est vrai, quelle que
+soit sa valeur.
+
 `host()` est la sortie, et la seule : un élément personnalisé parle à la page par
 des événements DOM et non par des props. Sans lui, un composant pourrait recevoir
 et afficher, jamais répondre.
@@ -1448,7 +1454,7 @@ part jamais.
 
 ## État
 
-Validé par `npm test`, 1 277 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 1 280 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;

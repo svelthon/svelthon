@@ -14,7 +14,7 @@ import {
 import { parse } from 'svelte/compiler';
 
 const require = createRequire(import.meta.url);
-const { compile, VIRTUAL_PREFIX, virtualId, pythonModuleName } = require('./compile.cjs');
+const { compile, VIRTUAL_PREFIX, virtualId, pythonModuleName, elementProps } = require('./compile.cjs');
 
 // Generated modules, keyed by component name. Filled by the preprocessor when
 // Svelte transforms a component, read back when Vite resolves the import that
@@ -321,13 +321,16 @@ export function python(options = {}) {
             // The collector itself is in markup.js, which the browser can load.
             const collect = collector(file.defs, file.defLines);
 
-            return {
-                code: overMarkup(content, (markup, offset) =>
-                    // The chunk, and where it starts, so a refusal can name a
-                    // line and a column in the file the author is looking at.
-                    pythonExpressions(markup, collect, undefined, { filename, content, offset })
-                )
-            };
+            const code = overMarkup(content, (markup, offset) =>
+                // The chunk, and where it starts, so a refusal can name a
+                // line and a column in the file the author is looking at.
+                pythonExpressions(markup, collect, undefined, { filename, content, offset })
+            );
+
+            const open = content.indexOf('>', declaring.index) + 1;
+            const python = content.slice(open, content.indexOf('</script', open));
+
+            return { code: elementOptions(code, python) };
         },
         script({ content, attributes, filename }) {
             if (attributes.lang !== 'python') return;
@@ -383,6 +386,32 @@ export function python(options = {}) {
             return { code: sameLines(script, content), attributes: rest };
         }
     };
+}
+
+// `<svelte:options customElement="my-tag">` on a Python component, given its
+// props. Svelte learns a custom element's props from a destructured `$props()`,
+// which the generated script does not write, so without this list the element
+// observed no attribute and exposed no property: it read its attributes once,
+// at connection. Each prop carries the type its annotation names, so an
+// attribute arrives as the number or the list it declares. The written-out
+// object form is the author's, and is left as it is.
+const ELEMENT_OPTION = /<svelte:options\b[^>]*?\bcustomElement\s*=\s*(["'])([^"']*)\1/;
+
+function elementOptions(code, python) {
+    const found = ELEMENT_OPTION.exec(withoutComments(code));
+    if (found === null) return code;
+
+    const props = elementProps(python)
+        .map(({ name, type }) => `${name}: {${type ? ` type: ${JSON.stringify(type)} ` : ''}}`)
+        .join(', ');
+    const attribute = found[0].slice(found[0].search(/\bcustomElement\s*=/));
+    const at = found.index + found[0].length - attribute.length;
+
+    return (
+        code.slice(0, at) +
+        `customElement={{ tag: ${JSON.stringify(found[2])}, props: { ${props} } }}` +
+        code.slice(at + attribute.length)
+    );
 }
 
 // The generated script on as many lines as the Python it replaces. Svelte

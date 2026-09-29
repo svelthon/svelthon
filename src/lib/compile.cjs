@@ -2775,4 +2775,41 @@ const VIRTUAL_PREFIX = 'virtual:svelthon/';
 
 const virtualId = (name) => VIRTUAL_PREFIX + name;
 
-module.exports = { compile, VIRTUAL_PREFIX, virtualId, pythonModuleName };
+// The type Svelte converts a custom element's attribute to, by the annotation
+// that declares the prop: the annotation is the interface.
+const ELEMENT_TYPES = {
+    int: 'Number',
+    float: 'Number',
+    bool: 'Boolean',
+    list: 'Array',
+    tuple: 'Array',
+    dict: 'Object',
+    str: 'String'
+};
+
+// A component's props and the Svelte type of each, for a custom element: Svelte
+// learns what to observe from a destructured `$props()`, which Svelthon does not
+// write, or from `customElement.props`, which this fills. Read off the script
+// alone, with its signs rewritten as the compile rewrites them. A script that
+// does not parse declares nothing here: the compile says why.
+function elementProps(src) {
+    let tree;
+
+    try {
+        const body = takeArrows(takeImportJs($B.unindent(src), '<props>', 0, true).source, '<props>', 0, true);
+        tree = $B._PyPegen.run_parser(new $B.Parser(body, '<props>', 'file'));
+    } catch {
+        return [];
+    }
+
+    return tree.body
+        .filter((node) => node instanceof $B.ast.AnnAssign && node.target instanceof $B.ast.Name)
+        .map((node) => {
+            const annotation = node.annotation instanceof $B.ast.Subscript ? node.annotation.value : node.annotation;
+            const type = annotation instanceof $B.ast.Name ? ELEMENT_TYPES[annotation.id] : undefined;
+
+            return { name: node.target.id, type };
+        });
+}
+
+module.exports = { compile, VIRTUAL_PREFIX, virtualId, pythonModuleName, elementProps };

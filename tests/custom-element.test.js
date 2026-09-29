@@ -3,6 +3,55 @@ import { createRequire } from 'node:module';
 import { mount, flushSync } from './mounted.js';
 import './fixtures/Stepper.svelte';
 import WordHost from './fixtures/WordHost.svelte';
+import './fixtures/TypedElement.svelte';
+
+// A Python element's props are its annotated names, and Svelte observes each of
+// them as an attribute and exposes it as a property, converted to the type the
+// annotation names. An attribute set or a property assigned after connection
+// reaches Python; a name that is not a prop is not observed.
+describe('a Python custom element with props', () => {
+    const placed = [];
+
+    afterEach(() => {
+        while (placed.length) placed.pop().remove();
+    });
+
+    const place = async (html) => {
+        const holder = document.createElement('div');
+        holder.innerHTML = html;
+        const element = holder.firstElementChild;
+        placed.push(element);
+        document.body.appendChild(element);
+        await Promise.resolve();
+        flushSync();
+        return {
+            element,
+            shown: () => element.shadowRoot.querySelector('p').textContent
+        };
+    };
+
+    test('observes its props and nothing else', () => {
+        expect(customElements.get('typed-element').observedAttributes).toEqual(['start', 'step', 'enabled', 'tags']);
+    });
+
+    test('reads its attributes as the types they declare', async () => {
+        const { shown } = await place('<typed-element start="5" step="0.5" enabled tags="[1, 2]"></typed-element>');
+
+        expect(shown()).toBe('6|1.0|True|2');
+    });
+
+    test('and follows an attribute and a property changed afterwards', async () => {
+        const { element, shown } = await place('<typed-element start="5"></typed-element>');
+
+        element.setAttribute('start', '9');
+        flushSync();
+        expect(shown()).toMatch(/^10\|/);
+
+        element.start = 20;
+        flushSync();
+        expect(shown()).toMatch(/^21\|/);
+    });
+});
 
 // A component compiled as a custom element is usable from any page, with no
 // Svelte around it — `<my-stepper>` in plain HTML, its script in Python.

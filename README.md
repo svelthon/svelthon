@@ -77,7 +77,7 @@ rest of that configuration and what each line buys.
 npm install
 npm run dev
 
-npm test             # 1 277 tests: semantics, props, reactivity, Svelte surface
+npm test             # 1 280 tests: semantics, props, reactivity, Svelte surface
 npm run test:quiet   # the suite's own output: a green run must say nothing
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
@@ -975,6 +975,12 @@ def bump():
 <my-stepper></my-stepper>
 ```
 
+Its props are its annotated names, observed as attributes and exposed as
+properties, and each attribute arrives as the type its annotation names:
+`start: int` reads `start="5"` as `5`, `tags: list` reads a JSON array. A
+`bool` follows HTML, as in Svelte: an attribute that is present is true,
+whatever its value.
+
 `host()` is the way back out, and the only one: a custom element speaks to the
 page through DOM events rather than props. Without it a component could receive
 and render but never answer.
@@ -1440,7 +1446,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 1 277 tests as written (vitest reports more, one per
+Validated by `npm test`, 1 280 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;
