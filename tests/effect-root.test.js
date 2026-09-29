@@ -3,6 +3,36 @@ import { createRequire } from 'node:module';
 import { mount, flushSync } from './mounted.js';
 import EffectRoot from './fixtures/EffectRoot.svelte';
 import RootStore from './fixtures/RootStore.svelte';
+import RootOutlives, { held } from './fixtures/RootOutlives.svelte';
+import { events } from './fixtures/lifecycle_log.js';
+import { unmount } from './mounted.js';
+
+// A root outlives its component, and so do the subscriptions it reads through:
+// a list mutated after the unmount still re-runs it, until its destructor is
+// called.
+test('a root still follows a mutated list after its component is gone', () => {
+    events.length = 0;
+    const target = document.body.appendChild(document.createElement('div'));
+    const instance = mount(RootOutlives, { target });
+    flushSync();
+
+    const { mutate, stop } = held();
+
+    try {
+        unmount(instance);
+        mutate();
+        flushSync();
+
+        expect(events).toEqual([0, 1]);
+    } finally {
+        stop();
+    }
+
+    // Destroyed, it follows nothing.
+    mutate();
+    flushSync();
+    expect(events).toEqual([0, 1]);
+});
 
 // `@effect.root` makes a scope that owns itself: nothing cleans it up, and the
 // destructor is handed back. In JavaScript that destructor is the value of the
