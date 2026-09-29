@@ -1156,7 +1156,7 @@ function holds(holder, child, key) {
     if (cls === _b_.list) return (typeof key === 'number' && holder[key] === child) || holder.includes(child);
 
     if (cls === _b_.dict) {
-        if (typeof key === 'string' || typeof key === 'number') {
+        if (plainKey(key)) {
             try {
                 if (globalThis.__BRYTHON__.$getitem(holder, key) === child) return true;
             } catch {
@@ -1168,13 +1168,25 @@ function holds(holder, child, key) {
         return false;
     }
 
+    // For a set, the bucket it was found in: the hash it is stored under, which
+    // the set keeps as a key of its store.
     if (cls === _b_.set) {
+        if (typeof key === 'string' && holder.$store[key]?.includes(child)) return true;
+
         for (const bucket of Object.values(holder.$store)) if (bucket.includes(child)) return true;
         return false;
     }
 
     return true;
 }
+
+// A key whose hash runs no code of the author's: a string, a number, a bool,
+// or a tuple of them, which is how a grid is keyed, `cells[(row, col)]`.
+const plainKey = (key) =>
+    typeof key === 'string' ||
+    typeof key === 'number' ||
+    typeof key === 'boolean' ||
+    (Array.isArray(key) && globalThis.__BRYTHON__.get_class(key) === _b_.tuple && key.every(plainKey));
 
 // What a builtin container yields, handed to `into` one by one: the source of
 // `rows.extend(other)` is not inside `rows`, what it held is. A dict fed pairs,
@@ -1199,7 +1211,14 @@ function inheritContents(into, source) {
             inherit(into, child, key);
         }
     } else if (isSet(source)) {
-        for (const bucket of Object.values(source.$store)) for (const child of bucket) take(child);
+        // A value hashes the same in every set, so a set fed from a set keeps
+        // each child's bucket.
+        for (const [hash, bucket] of Object.entries(source.$store)) {
+            for (const child of bucket) {
+                if (isSet(into)) inherit(into, child, hash);
+                else take(child);
+            }
+        }
     }
 }
 
@@ -1441,8 +1460,8 @@ function adopt(value) {
         //
         // A frozenset is here too. What it freezes is the membership, not the
         // members, and a `Box()` inside one is as mutable as anywhere else.
-        for (const bucket of Object.values(value.$store)) {
-            for (const child of bucket) inherit(value, child);
+        for (const [hash, bucket] of Object.entries(value.$store)) {
+            for (const child of bucket) inherit(value, child, hash);
         }
     }
 }

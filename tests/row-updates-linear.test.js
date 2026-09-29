@@ -8,6 +8,23 @@
 import { test, expect } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import RowTable from './fixtures/RowTable.svelte';
+import ShapedTable from './fixtures/ShapedTable.svelte';
+
+// The same for a grid keyed by tuples, whose hash runs no code of the author's,
+// and a set, read by the bucket each member was found in.
+test.for(['grid', 'set'])('marking every cell of a %s of 10,000 is linear', (kind) => {
+    const target = document.body.appendChild(document.createElement('div'));
+    mount(ShapedTable, { target, props: { kind } });
+    flushSync();
+
+    const started = performance.now();
+    target.querySelector('button').click();
+    flushSync();
+    const spent = performance.now() - started;
+
+    expect(target.querySelector('p').textContent).toBe('10000');
+    expect(spent).toBeLessThan(1000);
+});
 
 test.for(['dict', 'list'])('marking every row of a %s of 10,000 is linear', (kind) => {
     const target = document.body.appendChild(document.createElement('div'));
