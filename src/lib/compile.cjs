@@ -1750,7 +1750,8 @@ function preamble(c) {
             'pyEvent', 'plainData', 'pyArg', 'pyData', 'pyBoundary', 'pyComponent', 'pyExpression',
             'jsCall',
             'ticking', 'pyBind', 'pyModule', 'NONE', 'helpers',
-            ...(c.store ? ['registerModule', 'plainScalar'] : SUBSCRIBING(c) ? ['unsubscribe'] : []),
+            'plainScalar',
+            ...(c.store ? ['registerModule'] : SUBSCRIBING(c) ? ['unsubscribe'] : []),
             // Only an effect hands a value back to be called later, so only a
             // component with one needs the name.
             ...(c.effects.length ? ['pyHandler'] : []),

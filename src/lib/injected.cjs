@@ -195,9 +195,13 @@ const INJECTED = [
     // per-request-safe place to put state under server rendering. Both must be
     // called while an instance initialises, which is exactly when the Python
     // module body runs.
-    { name: 'set_context', value: '() => setContext', component: true },
-    // A missing key is `undefined` in Svelte; Python expects None.
-    { name: 'get_context', value: '() => (key) => getContext(key) ?? __NONE', component: true },
+    //
+    // Either end may be JavaScript's, so a value crosses as it does at every
+    // other door: set, a scalar becomes JavaScript's own (`__plainScalar`), and
+    // read, a number becomes Python's and an absence None (`__pyBind`). A
+    // container keeps its identity both ways.
+    { name: 'set_context', value: '() => (key, value) => setContext(key, __plainScalar(value))', component: true },
+    { name: 'get_context', value: '() => (key) => __pyBind(getContext(key))', component: true },
 
     // `$props.id()`, whose name follows theirs the way `set_context` follows
     // `setContext`. It is not a prop, the parent never passes it, but a reader
