@@ -860,6 +860,20 @@ describe('an unknown construct is refused, never passed through', () => {
         expect(() => rewrite('{@nope x}')).toThrow(/would\s+cross as JavaScript/);
     });
 
+    // A Python comment runs to the end of its line: on one line with the brace,
+    // it takes the brace. Said in Python's terms, wherever the brace is.
+    test.for([
+        ['in the text', '<p>{name  # the name}</p>'],
+        ['in a tag', '<input bind:value={name  # the name} />'],
+        ['after a tag', '{@render greet(name)  # a word}']
+    ])('a comment that takes the closing brace is refused %s', ([, markup]) => {
+        expect(() => rewrite(markup)).toThrow(/takes the closing `\}` with it.*on the next line/);
+    });
+
+    test('control: a # inside a string takes nothing', () => {
+        expect(() => rewrite('<p>{"#1 of " + name}</p>')).not.toThrow();
+    });
+
     // Svelte 5 takes `{const a = n}` inside a block, its own spelling of
     // `{@const}`, and Svelthon's answer is the template rune `{a = n}`. The
     // keyword fell through to the generic interpolation, so the author read
@@ -1033,7 +1047,7 @@ describe('the names handed to follow', () => {
     test.for([
         ['a name the expression reads', 'count + 1', true],
         ['a name inside a string', 'greet("count")', false],
-        ['one inside a comment', 'greet(1)  # count', false],
+        ['one inside a comment', 'greet(1)  # count\n', false],
         ['an attribute after a dot', 'it.count', false],
         ['the object in front of one', 'count.bit_length()', true],
         ['a field of an f-string', 'f"{count} left"', true],

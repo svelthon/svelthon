@@ -1684,6 +1684,10 @@ function walk(markup, collect, onPython, seed, record, where) {
                 quotedAttribute = named;
             } else if (char === '{') {
                 const end = closingBrace(markup, index);
+                if (end === -1 && swallowed(markup, index)) {
+                    region = { start: index + 1, end: index + 1 };
+                    throw refuse(swallowedBrace(said()));
+                }
                 if (end !== -1) {
                     // `<svelte:options>` is read by Svelte's compiler rather
                     // than rendered, and its values have to be literals in
@@ -1905,6 +1909,11 @@ function walk(markup, collect, onPython, seed, record, where) {
 
         const end = closingBrace(markup, index);
         if (end === -1) {
+            if (swallowed(markup, index)) {
+                region = { start: index + 1, end: index + 1 };
+                throw refuse(swallowedBrace(said()));
+            }
+
             out += char;
             index++;
             continue;
@@ -1912,10 +1921,11 @@ function walk(markup, collect, onPython, seed, record, where) {
 
         const inner = markup.slice(index + 1, end);
         const opened = inner.trim();
-        // A block's head is Python after its sign, comments included, and what
-        // is left of it goes into the markup Svelte reads: a comment there has
-        // to go first. Only after the sign, which is itself a `#`.
-        const trimmed = /^[#:]/.test(opened) ? opened[0] + uncomment(opened.slice(1)).trim() : opened;
+        // A block's head and a tag are Python after their sign, comments
+        // included, and what is left of them goes into the markup Svelte
+        // reads (`{@render f(x)}` keeps its tail): a comment there has to go
+        // first. Only after the sign, which for a block is itself a `#`.
+        const trimmed = /^[#:@]/.test(opened) ? opened[0] + uncomment(opened.slice(1)).trim() : opened;
 
         region = { start: index + 1, end };
 
@@ -2231,6 +2241,29 @@ export function collector(defs, lines, columns) {
         return name;
     };
 }
+
+// Whether the brace at `at` found no end because a Python comment on its line
+// took the closing one with it: `{name  # the name}`. A comment runs to the end
+// of its line.
+function swallowed(markup, at) {
+    const newline = markup.indexOf('\n', at);
+    const line = markup.slice(at + 1, newline === -1 ? markup.length : newline);
+
+    for (let i = 0; i < line.length; i++) {
+        if (line[i] === '#') return line.includes('}', i);
+
+        const step = atomic(line, i);
+        if (step > 0) i += step - 1;
+    }
+
+    return false;
+}
+
+const swallowedBrace = (at) =>
+    new SyntaxError(
+        `svelthon — a Python comment runs to the end of its line, and this one takes ` +
+            `the closing \`}\` with it${at}; put the \`}\` on the next line.`
+    );
 
 // The text without its Python comments, strings left whole.
 function uncomment(text) {

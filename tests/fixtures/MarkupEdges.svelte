@@ -4,6 +4,8 @@
 # directive-looking words inside a quoted value.
 count = 2
 pairs = [[1, 2], [3, 4]]
+name = "start"
+row = {"label": "start"}
 
 
 def f(a, b):
@@ -18,3 +20,11 @@ def f(a, b):
 {#snippet cell(a, b,)}<i data-k="snippet">{f(a, b)}</i>{/snippet}
 {@render cell(1, 2)}
 <input data-k="quoted" value="a bind:foo let:item b" />
+<input data-k="bound-name" bind:value={name  # the visitor's name
+} />
+<input data-k="bound-label" bind:value={row.label  # shown
+} />
+<p data-k="model">{name}|{row["label"]}</p>
+{#snippet word(text)}<em data-k="rendered">{text}</em>{/snippet}
+{@render word(name)  # a friendly word
+}
