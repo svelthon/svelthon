@@ -890,6 +890,7 @@ const RUNTIME = {
     pyCall: '__pyCall',
     pyDef: '__pyDef',
     pyHandler: '__pyHandler',
+    pyTeardown: '__pyTeardown',
     pyComponent: '__pyComponent',
     pyExpression: '__pyExpression',
     pyExport: '__pyExport',
@@ -1756,9 +1757,9 @@ function preamble(c) {
             'ticking', 'pyBind', 'pyModule', 'NONE', 'helpers',
             'plainScalar',
             ...(c.store ? ['registerModule'] : SUBSCRIBING(c) ? ['unsubscribe'] : []),
-            // Only an effect hands a value back to be called later, so only a
-            // component with one needs the name.
-            ...(c.effects.length ? ['pyHandler'] : []),
+            // Only an effect and `on_mount` hand a value back to be called
+            // later, so only a component with one needs the name.
+            ...(c.effects.length || c.lifecycle('on_mount') ? ['pyTeardown'] : []),
             // Three that keep the spelling the markup pass emits, and the read
             // half of the dot, which `templateDots` writes.
             'group', 'readAttr', 'writeAttr', 'writeItem'
@@ -2209,11 +2210,11 @@ function effectBlocks(c) {
             // is a Brython object: `typeof` calls it `object`, the line below
             // dropped it, and the resource was never released — no error, no
             // warning, the effect simply had no cleanup. Same for a callable
-            // instance. `pyHandler` answers the wide question and hands back
-            // something JavaScript can call, receiver included; a value that is
-            // not callable at all comes back unchanged and still fails the test.
-            `    const __cleanup = ${RUNTIME.pyHandler}(teardown);`,
-            `    if (typeof __cleanup === 'function') return () => { __cleanup(); };`,
+            // instance. `pyTeardown` answers the wide question and hands back
+            // something JavaScript can call, receiver included, or nothing. An
+            // `async def` hands back a coroutine, which it starts instead.
+            `    const __cleanup = ${RUNTIME.pyTeardown}(teardown, ${JSON.stringify(`${e.name}() — ${c.source}`)}, ${c.lineOffset});`,
+            `    if (__cleanup) return () => { __cleanup(); };`,
             e.root ? (holders(c) ? `}); return __release; });` : `}); });`) : `});`
         ]),
         // The other end of `track`. Its own effect rather than a line in the one

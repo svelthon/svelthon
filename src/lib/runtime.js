@@ -3195,6 +3195,20 @@ const RECEIVERS = new WeakMap();
 // itself: what it is does not change when the class changes what it does.
 const INSTANCES = new WeakMap();
 
+// What an effect or `on_mount` hands back, made into what Svelte expects of it:
+// a cleanup it can call, or nothing. An `async def` hands back a coroutine,
+// which is started rather than read as a cleanup, the way Svelte runs an
+// `$effect(async () => …)` and does nothing with the promise it returns.
+export function pyTeardown(value, where, lineOffset = 0) {
+    if (pyCoroutine(value)) {
+        schedule(value, where, lineOffset);
+        return undefined;
+    }
+
+    const cleanup = pyHandler(value);
+    return typeof cleanup === 'function' ? cleanup : undefined;
+}
+
 export function pyHandler(value) {
     const found = declared(value);
     if (found === null) return value;
