@@ -140,8 +140,10 @@ export const __pybridge = {
         if (typeof value !== 'object') return value;
 
         if (globalThis.__BRYTHON__.is_dict(value)) {
+            // `define`, because the key is the author's: `"__proto__"` is a
+            // class name here, not the object's prototype.
             const out = {};
-            for (const [key, one] of pyEntries(value)) out[__pybridge.str(key)] = __pybridge.truthy(one);
+            for (const [key, one] of pyEntries(value)) define(out, __pybridge.str(key), __pybridge.truthy(one));
             return out;
         }
 
@@ -4006,15 +4008,15 @@ function lookup(target, name) {
     try {
         return $B.$getitem(target, name);
     } catch (error) {
-        let raised;
+        let mro;
         try {
-            raised = $B.get_class(error).tp_mro;
+            mro = $B.get_class(error).tp_mro;
         } catch {
             return MISSING;
         }
-        if (!Array.isArray(raised)) return MISSING;
-        if (raised.includes(_b_.LookupError)) return MISSING;
-        if (raised.includes(_b_.TypeError) && SEQUENCES.includes(cls)) return MISSING;
+        if (!Array.isArray(mro)) return MISSING;
+        if (mro.includes(_b_.LookupError)) return MISSING;
+        if (mro.includes(_b_.TypeError) && SEQUENCES.includes(cls)) return MISSING;
 
         throw error;
     }
@@ -4161,7 +4163,10 @@ function watchReset() {
 const GROUPS = new WeakMap();
 
 function groupToken(scope, binding) {
-    if (scope === null || typeof scope !== 'object') return binding;
+    // No scope to share a token through: a token of its own, the one shape the
+    // rest of `group` knows. The binding itself is a string, which holds no
+    // property.
+    if (scope === null || typeof scope !== 'object') return { binding };
 
     let bindings = GROUPS.get(scope);
 

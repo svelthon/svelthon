@@ -1036,7 +1036,9 @@ describe('the names handed to follow', () => {
         // A format specification is its own grammar: `#` is an option there and
         // `'` a fill character, not a comment and a string.
         ['a field whose format holds a #', 'f"{count:#x}"', true],
-        ['and one whose fill is a quote', 'f"{count:\'>4}"', true]
+        ['and one whose fill is a quote', 'f"{count:\'>4}"', true],
+        // A t-string has the fields of an f-string.
+        ['a field of a t-string', 't"{count} left"', true]
     ])('%s', ([, expression, followed]) => {
         const out = rewrite(expression);
 

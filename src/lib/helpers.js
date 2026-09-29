@@ -27,7 +27,6 @@ import {
     pyEntries,
     pyName,
     isSet,
-    opaque,
     pyBytes,
     thenable,
     ticking
@@ -155,12 +154,6 @@ const raw = (one) =>
 // already outside it: the value is invalid either way, and this is only
 // about which sentence says so.
 const moment = (value) => (typeof value === 'bigint' ? Number(value) : value);
-
-// A Brython float is an object holding a number, not a number, and it is what
-// ordinary Python produces: `1.5` is one, and so is `3 / 2`, since a division is
-// a float even between integers. It is the fourth shape the two date helpers
-// receive.
-const FLOAT = globalThis.__BRYTHON__.builtins.float;
 
 // What `new Date` accepts is wider than what an author can mean, and it says so
 // in silence: it coerces a value through its *string* form, so `date([2026])`

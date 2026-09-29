@@ -125,14 +125,15 @@ function interpolated(source, at) {
     let i = at - 1;
     let prefix = '';
 
-    while (i >= 0 && prefix.length < 2 && /[fFrRbBuU]/.test(source[i])) {
+    while (i >= 0 && prefix.length < 2 && /[fFtTrRbBuU]/.test(source[i])) {
         prefix = source[i] + prefix;
         i--;
     }
 
     if (i >= 0 && /[A-Za-z0-9_]/.test(source[i])) return false;
 
-    return /[fF]/.test(prefix);
+    // A t-string (PEP 750) has the fields of an f-string.
+    return /[fFtT]/.test(prefix);
 }
 
 // Find the '}' closing the block that opens at `start`, ignoring braces inside
@@ -845,6 +846,10 @@ function parameterPattern(part, call, names, tuple = false) {
     const lead = part.slice(0, part.length - part.trimStart().length);
     const tail = part.slice(part.trimEnd().length);
 
+    // What follows a trailing comma, `[a, b,]`: nothing to bind, and the comma
+    // stays, which JavaScript reads the same way.
+    if (trimmed === '') return part;
+
     const close = CLOSES[trimmed[0]] === undefined ? -1 : closingPair(trimmed, 0);
 
     // A pattern: the same question, one level down, for each of its elements.
@@ -1421,9 +1426,10 @@ function walk(markup, collect, onPython, seed, record, where) {
         const lazy = kind === 'lazy';
 
         locate(source.trim());
-        // The column of the expression, one past its opening brace.
+        // The column of its opening brace, counted from zero: where every
+        // refusal of this pass points.
         const at = position();
-        const name = collect(trimmed, wrapper, args, false, at?.line, kind, at === null ? undefined : at.column + 1);
+        const name = collect(trimmed, wrapper, args, false, at?.line, kind, at?.column);
 
         // follow() on the block's own names: a row of an {#each} is a plain
         // JavaScript value, not a signal, so reading `it.label` registers
@@ -1443,7 +1449,7 @@ function walk(markup, collect, onPython, seed, record, where) {
     const assign = (expr) => {
         const args = mentioned(expr.trim());
         const at = position();
-        const name = collect(expr.trim(), '', args, true, at?.line, '', at === null ? undefined : at.column + 1);
+        const name = collect(expr.trim(), '', args, true, at?.line, '', at?.column);
         const rest = args.map((arg) => `${FOLLOW}(${arg})`);
 
         return `${name}(${[`${BIND_VALUE}(${BOUND_VALUE})`, ...rest].join(', ')})`;
@@ -1905,7 +1911,11 @@ function walk(markup, collect, onPython, seed, record, where) {
         }
 
         const inner = markup.slice(index + 1, end);
-        const trimmed = inner.trim();
+        const opened = inner.trim();
+        // A block's head is Python after its sign, comments included, and what
+        // is left of it goes into the markup Svelte reads: a comment there has
+        // to go first. Only after the sign, which is itself a `#`.
+        const trimmed = /^[#:]/.test(opened) ? opened[0] + uncomment(opened.slice(1)).trim() : opened;
 
         region = { start: index + 1, end };
 
@@ -2103,7 +2113,6 @@ export function pythonRanges(content) {
 // this file is found. What it *declares* is a JavaScript question and is
 // answered in svelthon.js, where Svelte's own parser is at hand: see
 // `moduleImports` there.
-const MODULE_SCRIPT = /<script[^>]*\b(?:module|context=["']module["'])[^>]*>([\s\S]*?)<\/script>/i;
 
 // The markup with its comments taken out, for every reading done on its text. A
 // block or a declaration quoted inside `<!-- -->` is documentation: a
@@ -2113,10 +2122,22 @@ const MODULE_SCRIPT = /<script[^>]*\b(?:module|context=["']module["'])[^>]*>([\s
 export const withoutComments = (content) =>
     content.replace(/<!--[\s\S]*?-->/g, (comment) => comment.replace(/[^\n]/g, ' '));
 
-export function moduleScript(content) {
-    const block = withoutComments(content).match(MODULE_SCRIPT);
+// Found by `blocks()`, as the Python block is, which steps over a `<style>`
+// whole: a `<script module>` quoted in a stylesheet is not the module.
+const MODULE_ATTRIBUTE = /\b(?:module|context=["']module["'])/i;
 
-    return block === null ? null : block[1];
+export function moduleScript(content) {
+    const text = withoutComments(content);
+    let block;
+
+    for (const found = blocks(); (block = found.exec(text)); ) {
+        if (block[1].toLowerCase() === 'script' && MODULE_ATTRIBUTE.test(block[2])) {
+            const whole = block[0];
+            return whole.slice(whole.indexOf('>') + 1, whole.length - block[3].length);
+        }
+    }
+
+    return null;
 }
 
 // The head of every dotted directive: the `x` of `in:x.fade`. Svelte copies that
@@ -2186,12 +2207,49 @@ export function collector(defs, lines, columns) {
                 ].join('\n')
             );
         } else {
-            defs.push(
-                `def ${name}(${args.join(', ')}):\n    return ${wrapper ? `${wrapper}(${expression})` : expression}`
-            );
+            // A comment ends at the end of its line, so one written last in
+            // the expression would take the closing parenthesis with it: the
+            // parenthesis then goes on a line of its own.
+            const close = commented(expression) ? '\n    )' : ')';
+            const returned = wrapper
+                ? `${wrapper}(${expression}${close}`
+                : close === ')'
+                  ? expression
+                  : `(${expression}${close}`;
+
+            defs.push(`def ${name}(${args.join(', ')}):\n    return ${returned}`);
         }
 
         return name;
     };
+}
+
+// The text without its Python comments, strings left whole.
+function uncomment(text) {
+    let out = '';
+
+    for (let i = 0; i < text.length; ) {
+        const step = atomic(text, i);
+
+        if (text[i] === '#') i += step;
+        else if (step > 0) {
+            out += text.slice(i, i + step);
+            i += step;
+        } else out += text[i++];
+    }
+
+    return out;
+}
+
+// Whether the text holds a Python comment, a `#` outside every string.
+function commented(text) {
+    for (let i = 0; i < text.length; i++) {
+        if (text[i] === '#') return true;
+
+        const step = atomic(text, i);
+        if (step > 0) i += step - 1;
+    }
+
+    return false;
 }
 

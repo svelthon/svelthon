@@ -124,7 +124,8 @@ const HABITS = [
 ];
 
 const habitsIn = (text) => {
-    const code = text.replace(/(["'])(?:\\.|(?!\1).)*\1/g, '""');
+    // Across lines too, so a triple-quoted string is text as a whole.
+    const code = text.replace(/(["'])(?:\\[\s\S]|(?!\1)[\s\S])*\1/g, '""');
     return HABITS.filter(([pattern]) => pattern.test(code)).map(([, said]) => said);
 };
 
@@ -907,11 +908,6 @@ yield arguments eval`.split(/\s+/));
 // The name is chosen in `markup.js`; the two have to agree.
 const EXPR_PREFIX = '__expr_';
 
-// The action the markup pass emits for `bind:group`. Named there and imported
-// here under that spelling, so the two agree with one word rather than a line of
-// generated assignment.
-const GROUP_ACTION = '__group';
-
 // Every name the runtime lends the generated code arrives under a `__` spelling.
 //
 // They used to arrive bare, and a component's own declarations sit in the same
@@ -933,17 +929,13 @@ const RUNTIME = {
     track: '__track',
     follow: '__follow',
     pyError: '__pyError',
-    schedule: '__schedule',
-    scheduleAsync: '__scheduleAsync',
     pyEvent: '__pyEvent',
     plainData: '__plainData',
     pyArg: '__pyArg',
     pyData: '__pyData',
     pyBoundary: '__pyBoundary',
-    pyNumbers: '__pyNumbers',
     pyCall: '__pyCall',
     pyDef: '__pyDef',
-    pyHandler: '__pyHandler',
     pyTeardown: '__pyTeardown',
     pyComponent: '__pyComponent',
     pyExpression: '__pyExpression',
@@ -1024,9 +1016,12 @@ function templateDots(def) {
     const end = (node) => starts[node.end_lineno - 1] + node.end_col_offset;
 
     // The dot of `value.name`: behind the name, across any space between them.
+    // Bounded, so a position Brython stopped giving the way this reads it says
+    // so rather than walking off the start of the text for ever.
     const dot = (node) => {
         let i = end(node) - node.attr.length - 1;
-        while (def[i] !== '.') i -= 1;
+        while (i >= 0 && def[i] !== '.') i -= 1;
+        if (i < 0) throw new Error(`svelthon — no dot found before \`${node.attr}\` in a template expression`);
         return i;
     };
 

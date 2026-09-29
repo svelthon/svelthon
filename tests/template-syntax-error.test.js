@@ -24,15 +24,16 @@ const refused = async (markup) => {
 test('a ternary far below the script names its own line', async () => {
     const error = await refused(`${'<p>x</p>\n'.repeat(40)}{ok ? "yes" : "no"}\n`);
 
-    expect(error.message).toMatch(/\(Component:46:2\)/);
-    expect(error.start).toEqual({ line: 46, column: 1 });
+    // The column of the opening brace, as every refusal of the markup gives it.
+    expect(error.message).toMatch(/\(Component:46:1\)/);
+    expect(error.start).toEqual({ line: 46, column: 0 });
 });
 
 test('and so does the third expression of a file, at its own column', async () => {
     const error = await refused(`<p>{count}</p>\n<p>{ok}</p>\n<p>{ok ? "yes" : "no"}</p>\n`);
 
-    expect(error.message).toMatch(/\(Component:8:5\)/);
-    expect(error.start).toEqual({ line: 8, column: 4 });
+    expect(error.message).toMatch(/\(Component:8:4\)/);
+    expect(error.start).toEqual({ line: 8, column: 3 });
 });
 
 // A conversion is not a negation: `!r` belongs in an f-string field.
