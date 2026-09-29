@@ -2206,6 +2206,10 @@ export function collector(defs, lines, columns) {
         // of them. What is left is the code, and a comment has nothing to say
         // to an assignment or to a closing parenthesis.
         const expression = uncomment(written).trim();
+        // In the template the expression sits between braces, where Python
+        // lets it run over several lines. Both functions below hold it between
+        // parentheses, which give that back and change nothing else, a target
+        // included.
         const key = `${assign ? 'set' : kind || 'get'}|${wrapper}|${args.join(',')}|${expression}`;
         if (seen.has(key)) return seen.get(key);
 
@@ -2229,13 +2233,11 @@ export function collector(defs, lines, columns) {
                 [
                     `def ${name}(${[BOUND_VALUE, ...args].join(', ')}):`,
                     ...(bare ? [`    global ${expression}`] : []),
-                    `    ${expression} = ${BOUND_VALUE}`
+                    `    (${expression}) = ${BOUND_VALUE}`
                 ].join('\n')
             );
         } else {
-            defs.push(
-                `def ${name}(${args.join(', ')}):\n    return ${wrapper ? `${wrapper}(${expression})` : expression}`
-            );
+            defs.push(`def ${name}(${args.join(', ')}):\n    return ${wrapper || ''}(${expression})`);
         }
 
         return name;

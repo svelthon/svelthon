@@ -32,7 +32,7 @@ describe('a snippet name in a template expression', () => {
     test('even above its own declaration, which Svelte hoists', () => {
         const { defs } = rewrite('<Card {row} />{#snippet row(x)}<b>{x}</b>{/snippet}');
 
-        expect(defs[0]).toBe('def __expr_0(row):\n    return row');
+        expect(defs[0]).toBe('def __expr_0(row):\n    return (row)');
     });
 
     test('under whichever prop name the child gives it', () => {

@@ -274,7 +274,20 @@ describe('the collector', () => {
         collector(defs)('obj.attr', null, [], true);
 
         expect(defs[0]).not.toContain('global');
-        expect(defs[0]).toContain('obj.attr = ');
+        expect(defs[0]).toContain('(obj.attr) = ');
+    });
+
+    // Between braces an expression may run over several lines; both functions
+    // keep it between parentheses, where Python allows that too.
+    test.for([
+        ['a read without a wrapper', 'lambda:\n    go()', null, false],
+        ['a read with a wrapper', 'count +\n    1', '__text', false],
+        ['a write', 'row\n    .label', null, true]
+    ])('%s keeps its line continuation', ([, written, wrapper, assign]) => {
+        const defs = [];
+        collector(defs)(written, wrapper, [], assign);
+
+        expect(defs[0]).toContain(`(${written})`);
     });
 });
 

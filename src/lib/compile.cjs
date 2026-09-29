@@ -1111,8 +1111,11 @@ function templateDots(def) {
         const [target] = node instanceof $B.ast.Assign ? node.targets : [];
 
         if (node instanceof $B.ast.Assign && node.targets.length === 1 && target instanceof $B.ast.Attribute) {
-            insert(begin(target), '__setattr(', node);
-            replace(dot(target), begin(node.value), `, ${JSON.stringify(target.attr)}, `);
+            // The target may stand between parentheses, `(row.label) = new`:
+            // the call opens before them and they close around the object.
+            const closers = def.slice(end(target), begin(node.value)).replace(/[\s=]/g, '');
+            insert(begin(node), '__setattr(', node);
+            replace(dot(target), begin(node.value), `${closers}, ${JSON.stringify(target.attr)}, `);
             insert(end(node.value), ')', node.value);
             visit(target.value, shadowed);
             visit(node.value, shadowed);

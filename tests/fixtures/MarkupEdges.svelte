@@ -6,10 +6,16 @@ count = 2
 pairs = [[1, 2], [3, 4]]
 name = "start"
 row = {"label": "start"}
+clicks = 0
 
 
 def f(a, b):
     return a + b
+
+
+def add(n):
+    global clicks
+    clicks += n
 </script>
 
 <p data-k="comment">{count  # the number of items
@@ -28,3 +34,13 @@ def f(a, b):
 {#snippet word(text)}<em data-k="rendered">{text}</em>{/snippet}
 {@render word(name)  # a friendly word
 }
+<button data-k="split" onclick={lambda:
+    add(1)}>+1</button>
+<button data-k="split-comment" onclick={lambda:  # on click
+    add(10)}>+10</button>
+<p data-k="clicks">{clicks}</p>
+{#snippet sum(a, b)}<b data-k="split-render">{a + b}</b>{/snippet}
+{@render sum(count +
+    1, 5)}
+<input data-k="split-bound" bind:value={row
+    .label} />

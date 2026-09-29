@@ -50,3 +50,26 @@ test('a comment in a binding leaves the write to the model', () => {
 test('a comment after {@render} stays out of the markup', () => {
     expect(at()('rendered').textContent).toBe('start');
 });
+
+// Between braces an expression may run over several lines, as Python allows
+// inside brackets: a handler, a handler with a comment, a snippet's argument
+// and a binding's target.
+test('a handler written over two lines runs', () => {
+    const q = at();
+    q('split').click();
+    q('split-comment').click();
+    flushSync();
+    expect(q('clicks').textContent).toBe('11');
+});
+
+test('a {@render} argument written over two lines', () => {
+    expect(at()('split-render').textContent).toBe('8');
+});
+
+test('a binding target written over two lines keeps its write', () => {
+    const q = at();
+    q('split-bound').value = 'split';
+    q('split-bound').dispatchEvent(new Event('input', { bubbles: true }));
+    flushSync();
+    expect(q('model').textContent).toBe('start|split');
+});
