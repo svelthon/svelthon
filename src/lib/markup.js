@@ -2047,6 +2047,17 @@ function walk(markup, collect, onPython, seed, record, where) {
                 // The only tag that stands alone, so it is the only one here
                 // that does not ask for something after its keyword.
                 out += markup.slice(index, end + 1);
+            } else if (/^@const\s/.test(trimmed) && DECLARATION_KEYWORD.test(trimmed.slice(1))) {
+                // Svelte 5's own spelling of a declaration in a block, which
+                // the template rune replaces: said, rather than listed as a
+                // tag nobody knows. Not a tag Svelthon takes, so not in `TAGS`.
+                throw refuse(
+                    new SyntaxError(
+                        `svelthon — \`{${trimmed}}\` is Svelte's \`{@const}\`${said()}; ` +
+                            `Svelthon writes it \`{${trimmed.slice(1).replace(DECLARATION_KEYWORD, '$2 = $3')}}\`, ` +
+                            `and \`{name => expression}\` for one that follows what it reads.`
+                    )
+                );
             } else {
                 throw refuse(unknownTag(trimmed, 'tag', TAGS, said()));
             }

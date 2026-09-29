@@ -120,7 +120,10 @@ process.on('SIGINT', () => { restore(); process.exit(130); });
 process.on('SIGTERM', () => { restore(); process.exit(143); });
 process.on('uncaughtException', (error) => { restore(); throw error; });
 
-const lines = [`${chosen.length} mutants of ${sites.length} sites, ${new Date().toISOString()}`, ''];
+// The header says what was planned and that the sweep is not over: a report
+// read after an interruption must not pass for a complete one. The last line,
+// written only at the end, says it is.
+const lines = [`${chosen.length} mutants planned of ${sites.length} sites, ${new Date().toISOString()}, UNFINISHED until the last line says otherwise`, ''];
 let killed = 0;
 const survivors = [];
 
@@ -251,7 +254,7 @@ for (const [index, site] of chosen.entries()) {
     }
 }
 
-lines.push('', `${killed} killed, ${survivors.length} survived, of ${chosen.length}`);
+lines.push('', `COMPLETE: ${killed} killed, ${survivors.length} survived, of ${chosen.length}`);
 if (survivors.length) lines.push('', 'survivors:', ...survivors.map((one) => `  ${one}`));
 writeFileSync(REPORT, `${lines.join('\n')}\n`);
 console.log(lines.slice(-40).join('\n'));

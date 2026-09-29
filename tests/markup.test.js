@@ -864,7 +864,14 @@ describe('an unknown construct is refused, never passed through', () => {
     // `{@const}`, and Svelthon's answer is the template rune `{a = n}`. The
     // keyword fell through to the generic interpolation, so the author read
     // Brython's `invalid syntax` about `__text(const a = n)`, on a line nobody
-    // wrote. The `@`-prefixed form was refused properly all along.
+    // wrote. The `@`-prefixed form, Svelte's `{@const}`, names it too.
+    test('{@const} is refused and names the Svelthon spelling', () => {
+        const markup = '{#each rows as n}{@const a = n * 2}{/each}';
+
+        expect(() => rewrite(markup)).toThrow(/is Svelte's `\{@const\}`/);
+        expect(() => rewrite(markup)).toThrow('{a = n * 2}');
+    });
+
     test.for([
         ['{#each rows as n}{const a = n}{/each}', '{a = n}'],
         ['{#each rows as n}{let total = n * 2}{/each}', '{total = n * 2}'],

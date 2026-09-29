@@ -35,7 +35,8 @@ const refuse = (markup) => {
 
 describe('a markup refusal names a position', () => {
     const CASES = [
-        ['an unknown tag', '<p>{@const y = 2}</p>', 4],
+        ['an unknown tag', '<p>{@nope y}</p>', 4],
+        ['Svelte’s {@const}', '<p>{@const y = 2}</p>', 4],
         ['an unknown block', '{#nope x}y{/nope}', 1],
         ['an unknown clause', '{#if x}a{:nope}b{/if}', 9],
         ['a tag in the wrong position', '<p>{@attach f}</p>', 4],
@@ -63,8 +64,8 @@ describe('a markup refusal names a position', () => {
     });
 
     test('and the character offset points at the brace itself', () => {
-        const content = around('<p>{@const y = 2}</p>');
-        const error = refuse('<p>{@const y = 2}</p>');
+        const content = around('<p>{@nope y}</p>');
+        const error = refuse('<p>{@nope y}</p>');
 
         expect(content[error.start.character]).toBe('{');
     });
@@ -79,7 +80,7 @@ describe('a markup refusal names a position', () => {
             python().markup({
                 content:
                     '<script lang="python">\nx = 1\n</script>\n\n<p>ok</p>\n\n' +
-                    '<style>\n  p { color: red }\n</style>\n\n<p>{@const y = 2}</p>\n',
+                    '<style>\n  p { color: red }\n</style>\n\n<p>{@nope y}</p>\n',
                 filename: FILE
             });
         } catch (thrown) {
@@ -94,14 +95,14 @@ describe('a markup refusal names a position', () => {
 // `pythonRanges`. Nothing forces a caller to know where it is.
 describe('and says nothing when there is nothing to name', () => {
     test('a refusal without a file is still a refusal', () => {
-        expect(() => pythonExpressions('<p>{@const y = 2}</p>', collector([]))).toThrow(
+        expect(() => pythonExpressions('<p>{@nope y}</p>', collector([]))).toThrow(
             /is not a tag Svelthon knows; the tags are/
         );
     });
 
     test('with no position glued to it', () => {
         try {
-            pythonExpressions('<p>{@const y = 2}</p>', collector([]));
+            pythonExpressions('<p>{@nope y}</p>', collector([]));
         } catch (error) {
             expect(error.message).not.toMatch(/\(\S+:\d+:\d+\)/);
             expect(error.filename).toBeUndefined();
