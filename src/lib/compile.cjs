@@ -1623,7 +1623,7 @@ function surface(body) {
                 }
             }
 
-            for (const key of [...BODIES, 'body']) if (node[key]) globals(node[key]);
+            for (const key of BODIES) if (node[key]) globals(node[key]);
         }
     };
 
