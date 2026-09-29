@@ -8,7 +8,9 @@ import { test, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { preprocess, compile as compileSvelte } from 'svelte/compiler';
+import { preprocess, parse, compile as compileSvelte } from 'svelte/compiler';
+// `parse` wraps the script in a tag of its own, which is the only way Svelte's
+// parser reads JavaScript; runes and all, it is what the build reads.
 import { python } from '../src/lib/svelthon.js';
 
 test('a Svelte warning on the markup names the line written', async () => {
@@ -24,6 +26,34 @@ test('a Svelte warning on the markup names the line written', async () => {
 
     expect(image.start.line).toBe(written);
     expect(processed.code.split('\n')).toHaveLength(source.split('\n').length);
+});
+
+// The fold itself, proven rather than argued: on every fixture, the generated
+// script and the same script with every line joined parse to one tree,
+// positions aside. No line break in it means anything, so no partial fold can.
+test('joining the generated lines changes nothing Svelte parses', () => {
+    const { compile } = createRequire(import.meta.url)('../src/lib/compile.cjs');
+    const tree = (code) =>
+        JSON.stringify(parse(`<script>${code}</script>`, { modern: true }).instance.content, (key, value) =>
+            key === 'start' || key === 'end' || key === 'loc' ? undefined : value
+        );
+    const differ = [];
+
+    for (const name of readdirSync('tests/fixtures').filter((one) => one.endsWith('.svelte'))) {
+        const found = readFileSync(`tests/fixtures/${name}`, 'utf8').match(/<script lang="python">([\s\S]*?)<\/script>/);
+        if (!found) continue;
+
+        let script;
+        try {
+            ({ script } = compile(found[1], 'P', `tests/fixtures/${name}`, {}));
+        } catch {
+            continue; // a fixture written to be refused
+        }
+
+        if (tree(script.split('\n').join(' ')) !== tree(script)) differ.push(name);
+    }
+
+    expect(differ).toEqual([]);
 });
 
 // What lets the script share lines: no line comment, and every line ends a

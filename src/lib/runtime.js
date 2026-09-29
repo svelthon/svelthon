@@ -1031,15 +1031,29 @@ const upwards = (marker, stamp, key) => {
     const child = marker.target.deref();
 
     for (let i = parents.length - 1; i >= 0; i--) {
-        const holder = parents[i].target.deref();
+        const parent = parents[i];
+        const holder = parent.target.deref();
 
-        if (child !== undefined && holder !== undefined && !holds(holder, child)) {
+        if (holder === undefined || (child !== undefined && !holds(holder, child))) {
             parents.splice(i, 1);
+            continue;
         }
-    }
 
-    for (const parent of parents) upwards(parent, stamp, key);
+        upwards(parent, stamp, key);
+
+        // A parent nobody listens to and that leads nowhere is a dead end: the
+        // container of a component that is gone. Its link goes, or every
+        // mutation of shared data would visit one per mount the session has
+        // seen. `track` links a container's children again if it is ever
+        // subscribed to anew.
+        if (dead(parent)) parents.splice(i, 1);
+    }
 };
+
+const dead = (marker) =>
+    marker.bumps.length === 0 &&
+    marker.reads.length === 0 &&
+    (marker.parents === undefined || marker.parents.length === 0);
 
 // An item written, `obj[key] = value`: both halves are inside. Except a slice,
 // `rows[:] = [child]`, whose value is a source: what it yields is inside.
@@ -1399,7 +1413,11 @@ export function track(value, bump, read, owner) {
     // must not pay a type classification on every write.
     const own = MARKS.get(value);
     if (own !== undefined) {
+        // A container with nobody listening may have lost the links from its
+        // children, pruned as a dead end: listened to again, it takes them back.
+        const revived = dead(own);
         join(own, bump, read, owner);
+        if (revived) adopt(value);
         return value;
     }
 
@@ -1441,6 +1459,7 @@ function inherit(parent, child) {
     if (child === null || typeof child !== 'object') return child;
 
     let own = MARKS.get(child);
+    let revived = false;
 
     if (own === undefined) {
         if (!mutable(child)) return child;
@@ -1449,6 +1468,10 @@ function inherit(parent, child) {
         // A frozen object refuses the marker, and `mark` says so by giving the
         // value back unchanged.
         if (own === undefined) return child;
+    } else {
+        // A dead end, pruned by `upwards`, whose own children may have lost
+        // their link to it the same way: linked again, it takes them back.
+        revived = dead(own);
     }
 
     // One line up, not a copy of everyone above. A child under two parents keeps
@@ -1457,6 +1480,8 @@ function inherit(parent, child) {
 
     if (own.parents === undefined) own.parents = [marker];
     else if (!own.parents.includes(marker)) own.parents.push(marker);
+
+    if (revived) adopt(child);
 
     return child;
 }
