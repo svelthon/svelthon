@@ -1421,7 +1421,9 @@ function walk(markup, collect, onPython, seed, record, where) {
         const lazy = kind === 'lazy';
 
         locate(source.trim());
-        const name = collect(trimmed, wrapper, args, false, position()?.line, kind);
+        // The column of the expression, one past its opening brace.
+        const at = position();
+        const name = collect(trimmed, wrapper, args, false, at?.line, kind, at === null ? undefined : at.column + 1);
 
         // follow() on the block's own names: a row of an {#each} is a plain
         // JavaScript value, not a signal, so reading `it.label` registers
@@ -1440,7 +1442,8 @@ function walk(markup, collect, onPython, seed, record, where) {
     // binding makes it here rather than each at its own site.
     const assign = (expr) => {
         const args = mentioned(expr.trim());
-        const name = collect(expr.trim(), '', args, true, position()?.line);
+        const at = position();
+        const name = collect(expr.trim(), '', args, true, at?.line, '', at === null ? undefined : at.column + 1);
         const rest = args.map((arg) => `${FOLLOW}(${arg})`);
 
         return `${name}(${[`${BIND_VALUE}(${BOUND_VALUE})`, ...rest].join(', ')})`;
@@ -2148,10 +2151,13 @@ export function directiveModules(markup) {
 // same order as `defs`: an error raised inside one is reported at the markup
 // that wrote it. An expression written twice is one function, and reports the
 // first place.
-export function collector(defs, lines) {
+// `lines` and `columns` receive, per function, where its expression is written
+// in the file: the table an error is placed with, at compile time and at run
+// time.
+export function collector(defs, lines, columns) {
     const seen = new Map();
 
-    return (expression, wrapper, args, assign = false, line, kind = '') => {
+    return (expression, wrapper, args, assign = false, line, kind = '', column) => {
         const key = `${assign ? 'set' : kind || 'get'}|${wrapper}|${args.join(',')}|${expression}`;
         if (seen.has(key)) return seen.get(key);
 
@@ -2163,6 +2169,7 @@ export function collector(defs, lines) {
         const name = `__expr_${infix}${defs.length}`;
         seen.set(key, name);
         lines?.push(line);
+        columns?.push(column);
 
         if (assign) {
             // A module name assigned inside a function is local unless declared

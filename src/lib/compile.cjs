@@ -91,19 +91,19 @@ function flushLine(src) {
 //
 // There is no column. These refusals know which line they were reading and not
 // where in it; `markup.js` has one because it scans character by character.
-function positioned(error, source, line) {
+function positioned(error, source, line, column = 0) {
     error.filename = source;
 
     if (typeof line === 'number') {
-        error.start = { line, column: 0 };
-        error.end = { line, column: 0 };
+        error.start = { line, column };
+        error.end = { line, column };
     }
 
     return error;
 }
 
-const refuse = (message, source, line) =>
-    positioned(new SyntaxError(message), source, line);
+const refuse = (message, source, line, column) =>
+    positioned(new SyntaxError(message), source, line, column);
 
 // JavaScript an author coming from Svelte writes in a template that reads
 // Python, and what Python writes instead. Read on the expression with its
@@ -112,7 +112,8 @@ const HABITS = [
     [/\?[^:]*:/, '`a ? b : c` is `b if a else c`'],
     [/&&|\|\|/, '`&&` and `||` are `and` and `or`'],
     [/[!=]==/, '`===` and `!==` are `==` and `!=`'],
-    [/(^|[^!=<>])!(?!=)/, '`!x` is `not x`'],
+    // Not `!r`, `!s`, `!a`: a conversion, which belongs in an f-string field.
+    [/(^|[^!=<>])!(?![=rsa]\b)/, '`!x` is `not x`'],
     [/`/, 'a template literal is an f-string, `f"n={x}"`'],
     [/=>/, 'an arrow function is a `lambda`: `lambda: (count := count + 1)`'],
     [/\+\+|--/, '`x++` is `(x := x + 1)`'],
@@ -142,6 +143,7 @@ function pythonError(error, source, lineOffset, block = '', ranges = [], src = '
     let described = 'PythonError';
     let where = source;
     let at;
+    let column;
 
     try {
         const name = $B.$getattr($B.get_class(error), '__name__');
@@ -157,7 +159,10 @@ function pythonError(error, source, lineOffset, block = '', ranges = [], src = '
         if (typeof line === 'number') {
             const range = ranges.find(([from, to]) => line >= from && line <= to);
             at = range === undefined ? line + lineOffset : range[2];
-            where = `${source}:${at}`;
+            // The column of the expression itself when it is one of the
+            // template's, in the `file:line:column` its refusals use.
+            column = range === undefined ? undefined : range[3];
+            where = column === undefined ? `${source}:${at}` : `${source}:${at}:${column + 1}`;
 
             if (range !== undefined) {
                 // The author's text, out of the wrapper the markup pass put
@@ -190,7 +195,8 @@ function pythonError(error, source, lineOffset, block = '', ranges = [], src = '
                   ` the block is indented, so indent it like its neighbours.`
                 : ''),
         source,
-        at
+        at,
+        column
     );
 }
 
@@ -2479,6 +2485,7 @@ function compile(
         plain = false,
         defs = [],
         defLines = [],
+        defColumns = [],
         jsNames = [],
         pyDirectives = [],
         lineOffset = 0,
@@ -2538,7 +2545,7 @@ function compile(
         defs.forEach((def, index) => {
             const to = from + def.split('\n').length - 1;
 
-            if (defLines[index] !== undefined) exprLines.push([from, to, defLines[index]]);
+            if (defLines[index] !== undefined) exprLines.push([from, to, defLines[index], defColumns[index]]);
 
             from = to + 2;
         });
@@ -2804,14 +2811,30 @@ function elementProps(src) {
         return [];
     }
 
-    return tree.body
-        .filter((node) => node instanceof $B.ast.AnnAssign && node.target instanceof $B.ast.Name)
-        .map((node) => {
-            const annotation = node.annotation instanceof $B.ast.Subscript ? node.annotation.value : node.annotation;
-            const type = annotation instanceof $B.ast.Name ? ELEMENT_TYPES[annotation.id] : undefined;
+    // Which names are props is `surface`'s answer, the one the compile acts on;
+    // what is read here is only the type each annotation names, anywhere a
+    // prop can be declared.
+    const types = new Map();
+    const annotations = (statements) => {
+        for (const node of statements) {
+            if (node instanceof $B.ast.AnnAssign && node.target instanceof $B.ast.Name) {
+                const annotation = node.annotation instanceof $B.ast.Subscript ? node.annotation.value : node.annotation;
+                if (annotation instanceof $B.ast.Name) types.set(node.target.id, ELEMENT_TYPES[annotation.id]);
+            }
 
-            return { name: node.target.id, type };
-        });
+            if (node instanceof $B.ast.FunctionDef || node instanceof $B.ast.AsyncFunctionDef || node instanceof $B.ast.ClassDef) {
+                continue;
+            }
+
+            for (const key of BODIES) if (node[key]) annotations(node[key]);
+        }
+    };
+
+    annotations(tree.body);
+
+    const { props, bindables } = surface(tree.body);
+
+    return [...props, ...bindables].map((name) => ({ name, type: types.get(name) }));
 }
 
 module.exports = { compile, VIRTUAL_PREFIX, virtualId, pythonModuleName, elementProps };

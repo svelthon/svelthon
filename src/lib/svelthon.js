@@ -317,9 +317,10 @@ export function python(options = {}) {
             file.lineOffset = content.slice(0, declaring.index).split('\n').length - 1;
             file.defs = [];
             file.defLines = [];
+            file.defColumns = [];
 
             // The collector itself is in markup.js, which the browser can load.
-            const collect = collector(file.defs, file.defLines);
+            const collect = collector(file.defs, file.defLines, file.defColumns);
 
             const code = overMarkup(content, (markup, offset) =>
                 // The chunk, and where it starts, so a refusal can name a

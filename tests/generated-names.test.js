@@ -99,8 +99,12 @@ const written = (markup, compiler = read('compile.cjs')) => {
     return new Set([...`${markup}\n${rewrite}`.matchAll(/__[a-z][\w]*/g)].map((one) => one[0]));
 };
 
+// The markup pass, with the table of attribute wrappers it reads: `__class`
+// and `__truthy` are chosen there, by an attribute's name.
+const markupSource = () => `${read('markup.js')}\n${read('attributes.js')}`;
+
 test('every name the compiler publishes to the template is one the markup writes', () => {
-    const markup = written(read('markup.js'));
+    const markup = written(markupSource());
     const names = published(read('compile.cjs'));
 
     expect(names.length).toBeGreaterThan(8);
@@ -111,7 +115,7 @@ test('every name the compiler publishes to the template is one the markup writes
 test('and one the markup stopped writing turns this red', () => {
     // The failure this guards against, and the reason it needed guarding: it
     // costs a dead `bind()` in every compiled component and says nothing.
-    const markup = written(read('markup.js').replace(/__spread/g, '__spreadX'));
+    const markup = written(markupSource().replace(/__spread\b/g, '__spreadX'));
     const names = published(read('compile.cjs'));
 
     expect(names.filter((one) => !markup.has(one))).toEqual(['__spread']);
