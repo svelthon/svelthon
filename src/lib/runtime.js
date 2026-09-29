@@ -454,7 +454,7 @@ function installMutationTracking($B) {
             // not to those of `{1: []}`.
             for (const [key, child] of pyEntries(obj)) {
                 inherit(obj, key);
-                inherit(obj, child);
+                inherit(obj, child, key);
             }
         } else {
             inherit(obj, result); // `get`
@@ -1047,6 +1047,10 @@ function ownAttributes(value) {
 // walk marks each marker with the number of the walk it is in.
 let walked = 0;
 
+// How many times a watched container has changed, program-wide: the value a
+// marker's `stamp` takes when its own container does.
+let changes = 0;
+
 //
 // A link is checked as the walk crosses it. A child taken out of a list, a dict
 // or a set no longer belongs to it, and the link goes: `rows.clear()` then
@@ -1064,14 +1068,22 @@ const upwards = (marker, stamp, key) => {
 
     const child = marker.target.deref();
 
+    // A link found to hold stays found until its parent changes: a dict of rows
+    // whose rows are each updated would otherwise read every entry of the dict
+    // once per row.
+    const verified = (marker.verified ??= new WeakMap());
+
     for (let i = parents.length - 1; i >= 0; i--) {
         const parent = parents[i];
         const holder = parent.target.deref();
+        const known = verified.get(parent) === parent.stamp;
 
-        if (holder === undefined || (child !== undefined && !holds(holder, child))) {
+        if (holder === undefined || (child !== undefined && !known && !holds(holder, child, marker.keys?.get(parent)))) {
             parents.splice(i, 1);
             continue;
         }
+
+        verified.set(parent, parent.stamp);
 
         upwards(parent, stamp, key);
 
@@ -1101,7 +1113,7 @@ function stored(obj, key, value) {
 
     if (!slice) {
         inherit(obj, key);
-        inherit(obj, value);
+        inherit(obj, value, key);
     } else if (keeps(value)) {
         inheritContents(obj, value);
     } else {
@@ -1111,7 +1123,11 @@ function stored(obj, key, value) {
 
 // Whether `holder` still holds `child`, asked only where the answer is exact: a
 // list, a dict or a set of exactly that class. A subclass has attributes too.
-function holds(holder, child) {
+//
+// For a dict, the key the child entered under is read first when there is one
+// and it is a string or a number, whose hash runs no code of the author's: one
+// entry read, where every entry was, once per mutation of every row.
+function holds(holder, child, key) {
     let cls;
     try {
         cls = globalThis.__BRYTHON__.get_class(holder);
@@ -1119,10 +1135,20 @@ function holds(holder, child) {
         return true;
     }
 
-    if (cls === _b_.list) return holder.includes(child);
+    // For a list, the index it entered at, which holds until something is
+    // inserted or removed before it.
+    if (cls === _b_.list) return (typeof key === 'number' && holder[key] === child) || holder.includes(child);
 
     if (cls === _b_.dict) {
-        for (const [key, value] of pyEntries(holder)) if (key === child || value === child) return true;
+        if (typeof key === 'string' || typeof key === 'number') {
+            try {
+                if (globalThis.__BRYTHON__.$getitem(holder, key) === child) return true;
+            } catch {
+                /* no such key any more: the full read below says where it went */
+            }
+        }
+
+        for (const [one, value] of pyEntries(holder)) if (one === child || value === child) return true;
         return false;
     }
 
@@ -1143,7 +1169,7 @@ function inheritContents(into, source) {
     const take = (child) => {
         if (pairs && Array.isArray(child) && child.length === 2) {
             inherit(into, child[0]);
-            inherit(into, child[1]);
+            inherit(into, child[1], child[0]);
         } else {
             inherit(into, child);
         }
@@ -1154,7 +1180,7 @@ function inheritContents(into, source) {
     } else if (globalThis.__BRYTHON__.is_dict(source)) {
         for (const [key, child] of pyEntries(source)) {
             inherit(into, key);
-            inherit(into, child);
+            inherit(into, child, key);
         }
     } else if (isSet(source)) {
         for (const bucket of Object.values(source.$store)) for (const child of bucket) take(child);
@@ -1281,7 +1307,14 @@ export const isSet = (value) => {
 };
 
 function mark(value) {
-    const marker = () => upwards(marker, ++walked, 'bumps');
+    // `stamp` moves each time the container itself changes, which is what
+    // `upwards` needs to know whether a link it checked is still to check.
+    const marker = () => {
+        marker.stamp = ++changes;
+        upwards(marker, ++walked, 'bumps');
+    };
+
+    marker.stamp = 0;
 
     marker.bumps = [];
     marker.reads = [];
@@ -1362,7 +1395,7 @@ function adopt(value) {
     // `item.value += 1` changed the Python value and left the paragraph showing
     // the old one, where the same component holding `[Box()]` repainted.
     if (Array.isArray(value)) {
-        for (const child of value) inherit(value, child);
+        for (let i = 0; i < value.length; i++) inherit(value, value[i], i);
     } else if (globalThis.__BRYTHON__.is_dict(value)) {
         // Asked of Python, not of the properties. A dict keeps its string keys
         // as ordinary properties and everything else in a hash table, so a walk
@@ -1382,7 +1415,7 @@ function adopt(value) {
         // nothing on the dicts that have ordinary keys.
         for (const [key, child] of pyEntries(value)) {
             inherit(value, key);
-            inherit(value, child);
+            inherit(value, child, key);
         }
     } else if (isSet(value)) {
         // `$store` maps a hash to the bucket of members that share it, which is
@@ -1490,7 +1523,9 @@ export function unsubscribe(owner) {
 // what deep proxying buys Svelte, done lazily and without a single proxy: the
 // child is marked the first time Python reaches for it, which is necessarily
 // just before it could be mutated.
-function inherit(parent, child) {
+// `key` is the key a dict holds `child` under, when the caller knows it: the
+// link is then checked by reading that one entry rather than every entry.
+function inherit(parent, child, key) {
     if (child === null || typeof child !== 'object') return child;
 
     let own = MARKS.get(child);
@@ -1515,6 +1550,8 @@ function inherit(parent, child) {
 
     if (own.parents === undefined) own.parents = [marker];
     else if (!own.parents.includes(marker)) own.parents.push(marker);
+
+    if (key !== undefined) (own.keys ??= new WeakMap()).set(marker, key);
 
     if (revived) adopt(child);
 
