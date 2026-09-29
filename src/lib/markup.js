@@ -2190,7 +2190,12 @@ export function directiveModules(markup) {
 export function collector(defs, lines, columns) {
     const seen = new Map();
 
-    return (expression, wrapper, args, assign = false, line, kind = '', column) => {
+    return (written, wrapper, args, assign = false, line, kind = '', column) => {
+        // Every expression the template holds comes through here, read or
+        // written, so this is where a Python comment leaves it: once, for all
+        // of them. What is left is the code, and a comment has nothing to say
+        // to an assignment or to a closing parenthesis.
+        const expression = uncomment(written).trim();
         const key = `${assign ? 'set' : kind || 'get'}|${wrapper}|${args.join(',')}|${expression}`;
         if (seen.has(key)) return seen.get(key);
 
@@ -2218,17 +2223,9 @@ export function collector(defs, lines, columns) {
                 ].join('\n')
             );
         } else {
-            // A comment ends at the end of its line, so one written last in
-            // the expression would take the closing parenthesis with it: the
-            // parenthesis then goes on a line of its own.
-            const close = commented(expression) ? '\n    )' : ')';
-            const returned = wrapper
-                ? `${wrapper}(${expression}${close}`
-                : close === ')'
-                  ? expression
-                  : `(${expression}${close}`;
-
-            defs.push(`def ${name}(${args.join(', ')}):\n    return ${returned}`);
+            defs.push(
+                `def ${name}(${args.join(', ')}):\n    return ${wrapper ? `${wrapper}(${expression})` : expression}`
+            );
         }
 
         return name;
@@ -2252,15 +2249,4 @@ function uncomment(text) {
     return out;
 }
 
-// Whether the text holds a Python comment, a `#` outside every string.
-function commented(text) {
-    for (let i = 0; i < text.length; i++) {
-        if (text[i] === '#') return true;
-
-        const step = atomic(text, i);
-        if (step > 0) i += step - 1;
-    }
-
-    return false;
-}
 
