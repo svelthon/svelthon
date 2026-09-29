@@ -40,6 +40,16 @@ def make():
             rows += Fresh(items)
         elif how == "update-iterable":
             table.update(Fresh(pairs))
+        elif how == "slice":
+            rows[:] = [child]
+        elif how == "slice-method":
+            rows.__setitem__(slice(None), [child])
+        elif how == "update-pairs":
+            table.update([("a", child)])
+        elif how == "ior-pairs":
+            table.__ior__([("a", child)])
+        elif how == "init-pairs":
+            table.__init__([("a", child)])
         elif how == "setdefault":
             # The one mutator that hands a child back instead of taking one: the
             # value it returns is what the program keeps and mutates, and it is
@@ -50,7 +60,7 @@ def make():
         else:
             rows += [child]
 
-    holder = table if how in ("update", "update-iterable", "setdefault") else rows
+    holder = table if how in ("update", "update-iterable", "setdefault", "update-pairs", "ior-pairs", "init-pairs") else rows
 
     return [holder, install, lambda: child.append(1)]
 

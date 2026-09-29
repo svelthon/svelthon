@@ -31,6 +31,13 @@ describe.for([
     ['extend-iterable', 'rows.extend(Fresh(items))', '[[]]', '[[1]]'],
     ['augment-iterable', 'rows += Fresh(items)', '[[]]', '[[1]]'],
     ['update-iterable', 'table.update(Fresh(pairs))', "{'a': []}", "{'a': [1]}"],
+    // A slice's value and a list of pairs are sources too: what they hold is
+    // inside, not they themselves.
+    ['slice', 'rows[:] = [child]', '[[]]', '[[1]]'],
+    ['slice-method', 'rows.__setitem__(slice(None), [child])', '[[]]', '[[1]]'],
+    ['update-pairs', 'table.update([("a", child)])', "{'a': []}", "{'a': [1]}"],
+    ['ior-pairs', 'table.__ior__([("a", child)])', "{'a': []}", "{'a': [1]}"],
+    ['init-pairs', 'table.__init__([("a", child)])', "{'a': []}", "{'a': [1]}"],
     // The one mutator that hands a child *back* rather than taking one: what the
     // program keeps and mutates is the return value, which is not among the
     // arguments. Named by the mutation harness, which found the line that links
