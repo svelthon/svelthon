@@ -2245,8 +2245,18 @@ function effectBlocks(c) {
                                 ` return __pyComponent(() => held, ${JSON.stringify(`on_destroy() — ${c.source}`)}, ${c.lineOffset}); });`
                         ]
                       : []),
-                  ...(c.lifecycle('on_mount') ? [`    untrack(() => on_mount());`] : []),
-                  ...(c.lifecycle('on_destroy') ? [`    return () => { __teardown(); };`] : []),
+                  // What `on_mount` hands back is its cleanup, as with Svelte's
+                  // `onMount`, and it runs before `on_destroy`.
+                  ...(c.lifecycle('on_mount')
+                      ? [
+                            `    const __unmounted = ${RUNTIME.pyTeardown}(untrack(() => on_mount()),` +
+                                ` ${JSON.stringify(`on_mount() — ${c.source}`)}, ${c.lineOffset});`
+                        ]
+                      : []),
+                  `    return () => {`,
+
+                  ...(c.lifecycle('on_destroy') ? [`        __teardown();`] : []),
+                  `    };`,
                   `});`
               ]
             : [])

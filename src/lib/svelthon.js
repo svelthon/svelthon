@@ -380,9 +380,24 @@ export function python(options = {}) {
             // dozens of parse errors per component until this line existed.
             const { lang, ...rest } = attributes;
 
-            return { code: script, attributes: rest };
+            return { code: sameLines(script, content), attributes: rest };
         }
     };
+}
+
+// The generated script on as many lines as the Python it replaces. Svelte
+// compiles the preprocessed text and places its warnings on it, and neither
+// vite-plugin-svelte nor svelte-check maps them back: a longer script moved every
+// warning about the markup below it, `<img>` on line 12 reported on line 78.
+// The generated code has no comment and no multiline literal, and every line
+// ends a statement or opens one, so its tail can share a line.
+function sameLines(code, content) {
+    const lines = code.split('\n');
+    const count = content.split('\n').length;
+
+    if (lines.length <= count) return code + '\n'.repeat(count - lines.length);
+
+    return [...lines.slice(0, count - 1), lines.slice(count - 1).join(' ')].join('\n');
 }
 
 // The demo shows how many tests back the project. Hard-coding it means letting

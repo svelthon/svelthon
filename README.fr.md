@@ -75,7 +75,7 @@ reste de cette configuration et ce que chaque ligne apporte.
 npm install
 npm run dev
 
-npm test             # 1 265 tests : sémantique, props, réactivité, surface Svelte
+npm test             # 1 268 tests : sémantique, props, réactivité, surface Svelte
 npm run test:quiet   # la sortie de la suite : un run vert ne doit rien dire
 npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
@@ -1077,6 +1077,10 @@ def on_destroy():
     ...   # au démontage, l'état final encore lisible
 ```
 
+Ce que rend `on_mount` est son nettoyage, comme avec `onMount` de Svelte : une
+fonction rendue là s'exécute au démontage, avant `on_destroy`. L'un comme
+l'autre peut être un `async def`, qui est démarré.
+
 Les deux restent des fonctions ordinaires, Python peut les appeler aussi. Elles
 s'exécutent **hors suivi** (`untrack`) : un hook lit les noms du composant à
 travers les accesseurs du namespace, et ces lectures *sont* des lectures de
@@ -1110,6 +1114,10 @@ async def load():
 Une exception levée *dans* une coroutine remonte par la boucle de Brython, pas
 par l'enveloppe : elle ne porte donc pas le fichier et la ligne que le chemin
 synchrone ajoute.
+
+`@effect` sur un `async def` s'exécute aussi, comme Svelte exécute
+`$effect(async () => …)` : ce qu'il lit **avant son premier `await`** est ce qu'il
+suit, et rien de ce qu'il rend n'est pris pour un nettoyage.
 
 ## Contexte
 
@@ -1440,7 +1448,7 @@ part jamais.
 
 ## État
 
-Validé par `npm test`, 1 265 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 1 268 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;

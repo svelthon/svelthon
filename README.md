@@ -77,7 +77,7 @@ rest of that configuration and what each line buys.
 npm install
 npm run dev
 
-npm test             # 1 265 tests: semantics, props, reactivity, Svelte surface
+npm test             # 1 268 tests: semantics, props, reactivity, Svelte surface
 npm run test:quiet   # the suite's own output: a green run must say nothing
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
@@ -1037,6 +1037,10 @@ def on_destroy():
     ...   # on teardown, final state still readable
 ```
 
+What `on_mount` returns is its cleanup, as with Svelte's `onMount`: a function
+returned there runs on teardown, before `on_destroy`. Either may be an
+`async def`, which is started.
+
 Both stay ordinary functions, and Python may call them too. They run **untracked**:
 a hook reads the component's names through the namespace accessors, and those
 reads *are* signal reads. Without `untrack`, a `mounts += 1` inside `on_mount`
@@ -1069,6 +1073,10 @@ async def load():
 An exception raised *inside* a coroutine surfaces through Brython's loop, not
 through the wrapper, so it does not carry the file and line the synchronous path
 adds.
+
+`@effect` on an `async def` runs too, as Svelte runs `$effect(async () => …)`:
+what it reads **before its first `await`** is what it follows, and nothing it
+returns is taken for a cleanup.
 
 ## Context
 
@@ -1432,7 +1440,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 1 265 tests as written (vitest reports more, one per
+Validated by `npm test`, 1 268 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;
