@@ -20,6 +20,25 @@
 import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import InsertedChild from './fixtures/InsertedChild.svelte';
+import PairsFromSet from './fixtures/PairsFromSet.svelte';
+
+// Pairs from a set or a frozenset: the dict holds the key and the value, and the
+// value is what repaints when it changes.
+test.for(['set', 'frozenset'])('a value put in a dict from a %s of pairs is watched', (kind) => {
+    const target = document.body.appendChild(document.createElement('div'));
+    mount(PairsFromSet, { target, props: { kind } });
+    flushSync();
+
+    const press = (key) => {
+        target.querySelector(`button[data-k="${key}"]`).click();
+        flushSync();
+    };
+
+    press('install');
+    press('grow');
+
+    expect(target.querySelector('p').textContent).toBe("{'k': Box(1)}");
+});
 
 describe.for([
     // How the child gets in, what the container is, and what it reads once the

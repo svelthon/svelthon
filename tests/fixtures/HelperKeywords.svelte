@@ -15,6 +15,8 @@ CALLS = {
     "fromnow-french": lambda: fromnow("2026-09-20", locale="fr-FR"),
     # A spread, which is the other half of what `$kw` carries.
     "json-spread": lambda: tojson(rows, **{"indent": 2}),
+    # Data whose key is spelled like Brython's keyword bundle is still data.
+    "kw data": lambda: tojson({"$kw": ["ordinary", "data"]}),
     # A name no helper takes: the one thing the author can have got wrong.
     "unknown": lambda: tojson(rows, espace=2),
     # A signature is fixed, and a JavaScript implementation must not make it

@@ -1006,7 +1006,7 @@ function eachBlock(trimmed, declare, call) {
     // No `as`: nothing is declared, and there is no key to find either.
     if (at === -1) {
         declare([]);
-        return `{#each ${call(body, '__seq')}}`;
+        return `{#each ${call(body, '__seq', undefined, 'python')}}`;
     }
 
     const named = body.slice(at).replace(/^\s+as\s+/, '');
@@ -1031,7 +1031,10 @@ function eachBlock(trimmed, declare, call) {
     // `[g = h, h]` needs in order to throw where JavaScript throws. Only then
     // are the defaults compiled, and the key last, since it is evaluated inside
     // the block on each row.
-    const iterable = call(body.slice(0, at), '__seq');
+    // Kept Python: Svelte only walks it, and every row goes back to Python
+    // expressions. Converted, its floats became numbers, a fresh list each render,
+    // so a row had no identity left to key by.
+    const iterable = call(body.slice(0, at), '__seq', undefined, 'python');
     const target = destructured(keyed ? keyed[0] : named, declare, call, true);
 
     return `{#each ${iterable} as ${target}` + (keyed ? ` (${call(keyed[1], '__key')})` : '') + '}';

@@ -15,7 +15,7 @@ describe('an {#each} the walker still has to place', () => {
     test('without a name', () => {
         const { out, defs } = rewrite('{#each items}<li>x</li>{/each}');
 
-        expect(out).toContain('{#each __expr_0()}');
+        expect(out).toContain('{#each __expr_py_0()}');
         expect(defs[0]).toContain('__seq(items)');
     });
 

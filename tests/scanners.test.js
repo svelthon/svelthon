@@ -98,18 +98,18 @@ describe('trailingKey reads through a string', () => {
     // found the *whole* group is that the target ends where it should: one
     // expression for the rows, one for the key, and nothing left over.
     test('a key holding a parenthesis inside a string is one key', () => {
-        expect(each('rows as row ("a)b")')).toBe('{#each __expr_0() as row (__expr_1())}x{/each}');
+        expect(each('rows as row ("a)b")')).toBe('{#each __expr_py_0() as row (__expr_1())}x{/each}');
     });
 
     test('and one behind an escaped quote too', () => {
         expect(each('rows as row ("a\\")b")')).toBe(
-            '{#each __expr_0() as row (__expr_1())}x{/each}'
+            '{#each __expr_py_0() as row (__expr_1())}x{/each}'
         );
     });
 
     // The three shapes that are *not* a key, each for its own reason.
     test('a tuple target is a target, not a key with nothing before it', () => {
-        expect(each('pairs as (name, count)')).toBe('{#each __expr_0() as [name, count]}x{/each}');
+        expect(each('pairs as (name, count)')).toBe('{#each __expr_py_0() as [name, count]}x{/each}');
     });
 
     // A tuple target *followed by an index*: the parentheses are the target's,
@@ -118,11 +118,11 @@ describe('trailingKey reads through a string', () => {
     // that belonged to the target. Here `(key)` is followed by an index, so it
     // is not the key and the whole tail crosses untouched.
     test('a group with something after it belonged to the target', () => {
-        expect(each('rows as row (key), i')).toBe('{#each __expr_0() as row (key), i}x{/each}');
+        expect(each('rows as row (key), i')).toBe('{#each __expr_py_0() as row (key), i}x{/each}');
     });
 
     test('and an unbalanced line is left for Svelte to report', () => {
-        expect(each('rows as row)')).toBe('{#each __expr_0() as row)}x{/each}');
+        expect(each('rows as row)')).toBe('{#each __expr_py_0() as row)}x{/each}');
     });
 });
 

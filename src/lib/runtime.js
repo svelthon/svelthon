@@ -115,6 +115,7 @@ const BY_VALUE = [_b_.tuple, _b_.frozenset, _b_.float, _b_.complex, _b_.bytes];
 // it, Svelte's block for one. Once it is collected, its entry goes too, so the
 // cache holds what is rendered and not every key ever computed.
 const KEYS = new Map();
+const OWN_KEYS = new WeakMap();
 const released = new FinalizationRegistry((repr) => {
     if (KEYS.get(repr)?.deref() === undefined) KEYS.delete(repr);
 });
@@ -138,7 +139,19 @@ export const __pybridge = {
 
         try {
             const mro = globalThis.__BRYTHON__.get_class(value).tp_mro;
-            return BY_VALUE.some((cls) => mro.includes(cls)) ? keyFor(_b_.repr(value)) : value;
+            if (!BY_VALUE.some((cls) => mro.includes(cls))) return value;
+
+            // A NaN is not equal to itself, so two of them are two keys: its
+            // repr() says `nan` for both, and only its identity tells them apart.
+            // Its own key object, since the float itself would reach Svelte as
+            // the number NaN, which no comparison finds again.
+            if (mro.includes(_b_.float) && Number.isNaN(value.value)) {
+                let key = OWN_KEYS.get(value);
+                if (key === undefined) OWN_KEYS.set(value, (key = Object.freeze({ toString: () => 'nan' })));
+                return key;
+            }
+
+            return keyFor(_b_.repr(value));
         } catch {
             return value; // a foreign JavaScript value keeps its own identity
         }

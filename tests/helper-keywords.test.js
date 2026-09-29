@@ -66,6 +66,12 @@ describe('an injected helper takes its arguments by name', () => {
         }
     });
 
+    // A dict is data even when one of its keys is `$kw`: the keyword bundle a
+    // call carries is not a Python object.
+    test('a dict with a $kw key is an argument, not keywords', () => {
+        expect(setup()('kw data')).toBe('{"$kw":["ordinary","data"]}');
+    });
+
     // The other half of what `$kw` carries.
     test('a ** spread carries its names too', () => {
         const read = setup();

@@ -28,6 +28,10 @@ test('a value keyed by repr() and its spelling are two keys', () => {
     expect(setup().at('mixed').textContent).toBe('floatstrtuplestrbytesstr');
 });
 
+test('two NaN are two keys', () => {
+    expect(setup().at('nans').textContent).toBe('nannan');
+});
+
 test('a list mutated keeps its {#key} block', () => {
     const { at, press } = setup();
     const before = at('block');
