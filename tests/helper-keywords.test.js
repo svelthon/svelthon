@@ -13,7 +13,7 @@
 // Measured through a mounted component rather than by handing the adapter a
 // `$kw` object: the shape is Brython's, and a test that builds it itself would
 // go on passing the day Brython changes it.
-import { test, expect, describe } from 'vitest';
+import { test, expect, describe, vi } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import HelperKeywords from './fixtures/HelperKeywords.svelte';
 
@@ -49,12 +49,21 @@ describe('an injected helper takes its arguments by name', () => {
         const read = setup();
 
         expect(read('date-keyword')).toBe('20 Sept 2026');
+    });
 
-        // The language and not the phrasing: a fixed date reads "10 hours ago"
-        // on the day and "yesterday" the morning after, so asserting the words
-        // is a test that moves with the clock — and this one did, overnight.
-        expect(read('fromnow-english')).not.toBe(read('fromnow-french'));
-        expect(read('fromnow-french')).toMatch(/hier|il y a|dans /);
+    // `fromnow` reads the clock, so the clock is fixed: three days after the
+    // date, each language has one phrasing.
+    test('and the locale reaches a helper that reads the clock', () => {
+        vi.useFakeTimers({ now: new Date('2026-09-23T12:00:00Z'), toFake: ['Date'] });
+
+        try {
+            const read = setup();
+
+            expect(read('fromnow-english')).toBe('3 days ago');
+            expect(read('fromnow-french')).toBe('il y a 3 jours');
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     // The other half of what `$kw` carries.
