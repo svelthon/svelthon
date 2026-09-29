@@ -110,10 +110,21 @@ const BY_VALUE = [_b_.tuple, _b_.frozenset, _b_.float, _b_.complex, _b_.bytes];
 
 // One object per repr(), so such a key is stable across renders and never equal
 // to a string the author keys with: `0.5` and `"0.5"` are two keys.
+//
+// Held weakly: a key needs to stay the same object only while something holds
+// it, Svelte's block for one. Once it is collected, its entry goes too, so the
+// cache holds what is rendered and not every key ever computed.
 const KEYS = new Map();
+const released = new FinalizationRegistry((repr) => {
+    if (KEYS.get(repr)?.deref() === undefined) KEYS.delete(repr);
+});
 const keyFor = (repr) => {
-    let key = KEYS.get(repr);
-    if (key === undefined) KEYS.set(repr, (key = Object.freeze({ toString: () => repr })));
+    let key = KEYS.get(repr)?.deref();
+    if (key === undefined) {
+        key = Object.freeze({ toString: () => repr });
+        KEYS.set(repr, new WeakRef(key));
+        released.register(key, repr);
+    }
     return key;
 };
 

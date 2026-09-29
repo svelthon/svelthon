@@ -1699,6 +1699,10 @@ const local = (name) => `__local_${name}`;
 // this, exactly as JavaScript reads `const destroy = $effect.root(…)`, and
 // the name belongs to the destructor on both sides.
 const destroyer = (name) => `__root_${name}`;
+
+// Whether the component's subscriptions have holders besides the component:
+// a root effect, which lives until its destructor is called.
+const holders = (c) => !c.store && SUBSCRIBING(c) && c.effects.some((e) => e.root);
 // Second signal per name: a mutation bumps it without touching the value,
 // so nothing is copied and the object keeps its identity.
 // The instance's list of subscriptions, and whether it has any to make. A
@@ -2174,6 +2178,17 @@ function effectBlocks(c) {
                 ? `$inspect(...${fn(i.name)}().slice(1)).with((...a) => __event(${fn(i.name)}()[0])(...a));`
                 : `$inspect(...${fn(i.name)}());`
         ),
+        // A root outlives the component and reads the same names, so the
+        // subscriptions go when the last of them lets go: the component
+        // unmounted and every root destroyed. Declared before the roots, which
+        // run as soon as they are created.
+        ...(holders(c)
+            ? [
+                  ``,
+                  `let __holders = ${1 + c.effects.filter((e) => e.root).length};`,
+                  `const __release = () => { if (--__holders === 0) __unsubscribe(${SUBS}); };`
+              ]
+            : []),
         // A root owns its own scope: it is not cleaned up when the component is,
         // which is the point: the destructor is handed to Python under the
         // decorated name, and calling it is what ends the effect.
@@ -2199,14 +2214,16 @@ function effectBlocks(c) {
             // not callable at all comes back unchanged and still fails the test.
             `    const __cleanup = ${RUNTIME.pyHandler}(teardown);`,
             `    if (typeof __cleanup === 'function') return () => { __cleanup(); };`,
-            e.root ? `}); });` : `});`
+            e.root ? (holders(c) ? `}); return __release; });` : `}); });`) : `});`
         ]),
         // The other end of `track`. Its own effect rather than a line in the one
         // below, because that one exists only when the author wrote a lifecycle
         // hook, and every instance that holds state has signed onto something.
-        ...(!c.store && SUBSCRIBING(c)
-            ? [``, `$effect(() => () => __unsubscribe(${SUBS}));`]
-            : []),
+        ...(holders(c)
+            ? [``, `$effect(() => () => __release());`]
+            : !c.store && SUBSCRIBING(c)
+              ? [``, `$effect(() => () => __unsubscribe(${SUBS}));`]
+              : []),
         ...(c.lifecycle('on_mount') || c.lifecycle('on_destroy')
             ? [
                   ``,
