@@ -110,12 +110,19 @@ describe('a component compiled as a custom element', () => {
         await Promise.resolve();
 
         const seen = [];
-        element.addEventListener('stepped', (event) => seen.push(event.type));
+        element.addEventListener('stepped', (event) => seen.push([event.type, event.detail]));
 
-        element.shadowRoot.querySelector('button[data-k="bump"]').click();
+        const button = element.shadowRoot.querySelector('button[data-k="bump"]');
+        button.click();
+        button.click();
         await Promise.resolve();
 
-        expect(seen).toEqual(['stepped']);
+        // The value leaves Python through `to_js` and arrives a JavaScript
+        // number, as the page reads it.
+        expect(seen).toEqual([
+            ['stepped', 1],
+            ['stepped', 2]
+        ]);
     });
 
     // Svelte refuses `$host()` at compile time outside a custom element, so the
