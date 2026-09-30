@@ -687,17 +687,27 @@ function installMutationTracking($B) {
 
             if (typeof result === 'function') return notifying(obj, attr, result);
 
+            // A method-wrapper stays one, `type()`, `__self__` and `repr()`
+            // included, and so does what the export boundary sees of it: only
+            // the function it calls is wrapped, and Brython's own call,
+            // `wrapped(self, ...args)`, is what reaches it.
             if (call !== null) {
-                return (...args) => {
+                const wrapped = (target, ...args) => {
                     let out;
 
                     try {
-                        out = call(...args);
+                        out = result.wrapped(target, ...args);
                         return out;
                     } finally {
                         afterCall(obj, attr, out, args);
                     }
                 };
+
+                // The operation it stands for, shared by every receiver: what
+                // an adapter is keyed by, so two reads are one callback.
+                wrapped.original = result.wrapped;
+
+                return { ...result, wrapped };
             }
         }
 
@@ -3127,7 +3137,47 @@ const callDescriptor = (value) => {
 // and a second predicate written in `helpers.js` would answer differently the
 // day this one learns another shape — which it has done twice.
 export const callable = (value) =>
-    typeof value === 'function' || boundMethod(value) || callDescriptor(value) !== null;
+    typeof value === 'function' ||
+    boundMethod(value) ||
+    wrapperMethod(value) ||
+    callDescriptor(value) !== null ||
+    slotCallable(value);
+
+// Any other value Python calls: `list.index`, `list.__setitem__`, the
+// descriptors a builtin type hands out, which Brython calls through a `tp_call`
+// slot. Python's own `callable()` answers, a class excluded, since a class
+// crossing is the class.
+const slotCallable = (value) =>
+    value !== null &&
+    typeof value === 'object' &&
+    pyClass(value.ob_type) &&
+    !pyClass(value) &&
+    _b_.callable(value) === true;
+
+// One JavaScript function per such value, so it is one callback however often
+// it crosses.
+const SLOT_CALLS = new WeakMap();
+
+// Its contract: Python on both sides, no signature to trim to, and Python's
+// own call protocol.
+const slotDeclared = (value) => {
+    if (!slotCallable(value)) return null;
+
+    const $B = globalThis.__BRYTHON__;
+    let fn = SLOT_CALLS.get(value);
+    if (fn === undefined) SLOT_CALLS.set(value, (fn = (...args) => $B.$call(value, ...args)));
+
+    return { fn, where: `${value.d_name ?? $B.class_name(value)}() — builtins`, arity: Infinity };
+};
+
+// A special method read off a builtin, `rows.__setitem__`: `{ob_type:
+// method_wrapper, self, wrapped, d_name}`, which Brython calls through its
+// `tp_call` slot rather than a `__call__`, so the class answers what it is.
+const wrapperMethod = (value) =>
+    value !== null &&
+    typeof value === 'object' &&
+    value.ob_type === globalThis.__BRYTHON__.method_wrapper &&
+    typeof value.wrapped === 'function';
 
 // A method read off an instance: `{ob_type: method, im_func, im_self}`, which
 // `typeof` calls an object. Recognised by its class the way everything else
@@ -3140,10 +3190,25 @@ const boundMethod = (value) =>
     typeof value.im_func === 'function';
 
 function declared(value) {
+    // The fourth representation of a bound method, and a builtin's: no
+    // signature to read, Python on both sides, called through Python's own
+    // protocol, and one callback per receiver and operation.
+    if (wrapperMethod(value)) {
+        const $B = globalThis.__BRYTHON__;
+
+        return {
+            fn: (...args) => $B.$call(value, ...args),
+            where: `${value.d_name}() — ${$B.class_name(value.self)}`,
+            arity: Infinity,
+            origin: value.wrapped.original ?? value.wrapped,
+            self: value.self
+        };
+    }
+
     const method = boundMethod(value) ? value : null;
     const call = method === null ? callDescriptor(value) : null;
 
-    if (method === null && call === null && typeof value !== 'function') return null;
+    if (method === null && call === null && typeof value !== 'function') return slotDeclared(value);
 
     // `@staticmethod def __call__` is kept in the class dictionary as the
     // descriptor Brython builds for it — `{ob_type, sm_callable}`, the function
@@ -3164,8 +3229,9 @@ function declared(value) {
     const infos = fn.$function_infos;
 
     // Nothing of Python's at all: a function JavaScript built, which crosses as
-    // the object its library made.
-    if (!Array.isArray(infos)) return null;
+    // the object its library made. Unless the value is Python's and its call is
+    // native, the `__call__` a `method_descriptor` inherits: `list.index`.
+    if (!Array.isArray(infos)) return method === null ? slotDeclared(value) : null;
 
     // Python's, but with no signature to read: a **builtin**. `round` carries
     // `["builtins", "round", "round"]` and no arity, because it is written in

@@ -75,7 +75,7 @@ reste de cette configuration et ce que chaque ligne apporte.
 npm install
 npm run dev
 
-npm test             # 1 340 tests : sémantique, props, réactivité, surface Svelte
+npm test             # 1 347 tests : sémantique, props, réactivité, surface Svelte
 npm run test:quiet   # la sortie de la suite : un run vert ne doit rien dire
 npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
@@ -794,10 +794,12 @@ classe, une constante, une fonction, un nom amené par un import. Et un nom qu'i
 invente est refusé à la compilation, puisqu'un module exporte ce qu'il définit.
 
 **Il est lu comme la valeur sur laquelle le module s'arrête** : une deuxième
-affectation remplace la première, et `+=`, `.append()` et `.extend()` l'étendent,
-ce qui est la façon d'écrire un export conditionnel. Il est lu dans la source
-avant que le module ne tourne, en revanche, donc les noms doivent être écrits :
-`__all__ = sorted(noms)` est refusé plutôt qu'ignoré en silence.
+affectation remplace la première, `+=`, `.append()`, `.extend()` et `.insert()`
+l'étendent, `.remove()`, `.pop()` et `.clear()` le réduisent. Il est lu dans la
+source avant que le module ne tourne, en revanche, donc les noms doivent être
+écrits au niveau du module : `__all__ = sorted(noms)`, une modification sous un
+`if` ou dans une fonction, ou `del __all__[0]` est refusé plutôt qu'ignoré en
+silence.
 
 **Une fonction rendue par un appel `importjs` est la fonction elle-même**, et
 c'est ce qui fait marcher les fonctions distantes de SvelteKit depuis Python :
@@ -1468,7 +1470,7 @@ part jamais.
 
 ## État
 
-Validé par `npm test`, 1 340 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 1 347 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;

@@ -283,15 +283,68 @@ const NAMES = (node) =>
 const readable = (given) => given !== null && !given.includes(UNREADABLE);
 const strings = (given) => given.filter((one) => typeof one === 'string');
 
-// `__all__.append("x")` and `__all__.extend([...])`, the two mutations a module
-// writes when a name is exported under a condition.
+const isAll = (node) => node instanceof $B.ast.Name && node.id === '__all__';
+
+// The method a statement calls on `__all__`, `__all__.append("x")`, or null.
 const mutatesAll = (node) => {
     const call = node instanceof $B.ast.Expr ? node.value : null;
     const to = call instanceof $B.ast.Call ? call.func : null;
 
-    return to instanceof $B.ast.Attribute && to.value instanceof $B.ast.Name && to.value.id === '__all__'
-        ? to.attr
-        : null;
+    return to instanceof $B.ast.Attribute && isAll(to.value) ? to.attr : null;
+};
+
+// Methods of a list that read it and change nothing.
+const READS_LIST = new Set(['copy', 'count', 'index', '__len__', '__contains__', '__iter__', '__getitem__']);
+
+// Whether a statement, of any shape, writes `__all__`: a method that changes
+// it, an item or a slice stored or deleted, the name assigned or deleted. A
+// read, `return __all__`, is not a write.
+const writesAll = (node) => {
+    const method = mutatesAll(node);
+    if (method !== null) return !READS_LIST.has(method);
+
+    const targets =
+        node instanceof $B.ast.Assign ? node.targets
+        : node instanceof $B.ast.AugAssign || node instanceof $B.ast.AnnAssign ? [node.target]
+        : node instanceof $B.ast.Delete ? node.targets
+        : [];
+
+    return targets.some((one) => isAll(one) || (one instanceof $B.ast.Subscript && isAll(one.value)));
+};
+
+const isScope = (node) =>
+    node instanceof $B.ast.FunctionDef ||
+    node instanceof $B.ast.AsyncFunctionDef ||
+    node instanceof $B.ast.ClassDef;
+
+// Every statement below the top level, in a block or in a `def` or a `class`,
+// with the innermost of those it sits in. A write there runs under a
+// condition, in a loop, or when something calls it, and a static read can
+// follow none of them.
+function* nestedStatements(body, scope = null) {
+    for (const node of body) {
+        const inner = isScope(node) ? node : scope;
+        for (const key of BODIES) {
+            for (const one of node[key] ?? []) {
+                yield [one, inner];
+                yield* nestedStatements([one], inner);
+            }
+        }
+    }
+}
+
+// Whether `__all__` in a `def` or a `class` is its own name: assigned there,
+// and not declared `global`. Python's rule, so a local list of that name is
+// the author's business.
+const ownAll = (scope) => {
+    const own = [...nestedStatements([scope])].filter(([, inner]) => inner === scope).map(([one]) => one);
+    const global = own.some((one) => one instanceof $B.ast.Global && one.names.includes('__all__'));
+    const assigned = own.some(
+        (one) =>
+            (one instanceof $B.ast.Assign && one.targets.some(isAll)) ||
+            ((one instanceof $B.ast.AugAssign || one instanceof $B.ast.AnnAssign) && isAll(one.target))
+    );
+    return assigned && !global;
 };
 
 // What comes back is the list and the line of the statement that last set it,
@@ -303,41 +356,86 @@ function declaredExports(body, source, lineOffset = 0) {
     const refuseUnreadable = (node, what) => {
         throw refuse(
             `svelthon — \`__all__\` is ${what}, and the export list is read from the source ` +
-                `before the module runs, so it has to be written out: a list or a tuple of ` +
-                `plain strings, assigned, \`+=\`, \`.append()\` or \`.extend()\`. Write the ` +
-                `names, or drop \`__all__\` and let the module export its functions.`,
+                `before the module runs, so it has to be written out at the top level of the ` +
+                `module: a list or a tuple of plain strings, assigned or \`+=\`, and changed by ` +
+                `\`.append()\`, \`.extend()\`, \`.insert()\`, \`.remove()\`, \`.pop()\` or ` +
+                `\`.clear()\`. Write the names, or drop \`__all__\` and let the module export ` +
+                `its functions.`,
             source,
             node.lineno === undefined ? undefined : node.lineno + lineOffset
         );
     };
 
+    // A write below the top level: under a condition, in a loop, or in a
+    // function. Asked first, so the list read below is the whole story.
+    for (const [node, scope] of nestedStatements(body)) {
+        if (writesAll(node) && (scope === null || !ownAll(scope))) {
+            refuseUnreadable(node, 'changed under a condition, in a loop or in a function');
+        }
+    }
+
+    // A string argument, or UNREADABLE; an integer one, `2` or `-1`, or null.
+    const spelled = (arg) => (arg instanceof $B.ast.Constant && typeof arg.value === 'string' ? arg.value : UNREADABLE);
+    const integer = (arg) => {
+        const negative = arg instanceof $B.ast.UnaryOp && arg.op instanceof $B.ast.USub;
+        const literal = negative ? arg.operand : arg;
+        if (!(literal instanceof $B.ast.Constant) || !Number.isInteger(literal.value)) return null;
+        return negative ? -literal.value : literal.value;
+    };
+
     for (const node of body) {
         const mutated = mutatesAll(node);
 
-        if (mutated === 'append' || mutated === 'extend') {
-            const [given] = node.value.args;
-            const added =
-                mutated === 'append'
-                    ? [given instanceof $B.ast.Constant ? given.value : UNREADABLE]
-                    : NAMES(given);
+        if (mutated !== null && !READS_LIST.has(mutated)) {
+            const args = node.value.args;
+            const current = [...(names ?? [])];
+            let next;
 
-            if (!readable(added)) {
-                refuseUnreadable(node, `given a name this file cannot read (\`.${mutated}()\`)`);
+            if (mutated === 'append' || mutated === 'extend') {
+                const added = mutated === 'append' ? [spelled(args[0])] : NAMES(args[0]);
+                if (!readable(added)) {
+                    refuseUnreadable(node, `given a name this file cannot read (\`.${mutated}()\`)`);
+                }
+                next = [...current, ...strings(added)];
+            } else if (mutated === 'insert' && args.length === 2 && readable([spelled(args[1])])) {
+                // Where it goes does not change what is exported.
+                next = [...current, args[1].value];
+            } else if (mutated === 'remove' && args.length === 1 && readable([spelled(args[0])])) {
+                const at = current.indexOf(args[0].value);
+                next = at === -1 ? current : current.filter((_, index) => index !== at);
+            } else if (mutated === 'pop' && (args.length === 0 || integer(args[0]) !== null)) {
+                const at = args.length === 0 ? current.length - 1 : integer(args[0]);
+                next = current.filter((_, index) => index !== (at < 0 ? current.length + at : at));
+            } else if (mutated === 'clear' && args.length === 0) {
+                next = [];
+            } else if ((mutated === 'sort' || mutated === 'reverse') && args.length === 0) {
+                // The order is not what is exported.
+                next = current;
+            } else {
+                refuseUnreadable(node, `changed by \`.${mutated}()\` in a form this file cannot follow`);
             }
 
-            names = [...(names ?? []), ...strings(added)];
+            names = next;
             line = node.lineno + lineOffset;
             continue;
         }
 
         const assigns =
-            (node instanceof $B.ast.Assign &&
-                node.targets.some((t) => t instanceof $B.ast.Name && t.id === '__all__')) ||
-            (node instanceof $B.ast.AugAssign &&
-                node.target instanceof $B.ast.Name &&
-                node.target.id === '__all__');
+            (node instanceof $B.ast.Assign && node.targets.some(isAll)) ||
+            ((node instanceof $B.ast.AugAssign || node instanceof $B.ast.AnnAssign) && isAll(node.target));
 
-        if (!assigns) continue;
+        if (!assigns) {
+            // An item or a slice stored or deleted, or the name deleted.
+            if (writesAll(node)) refuseUnreadable(node, 'changed item by item or deleted');
+            continue;
+        }
+
+        if (node instanceof $B.ast.AugAssign && !(node.op instanceof $B.ast.Add)) {
+            refuseUnreadable(node, 'changed by an operator other than `+=`');
+        }
+
+        // `__all__: list[str]` alone annotates and binds nothing.
+        if (node instanceof $B.ast.AnnAssign && !node.value) continue;
 
         const given = NAMES(node.value);
 
@@ -364,7 +462,9 @@ function declaredExports(body, source, lineOffset = 0) {
         line = node.lineno + lineOffset;
     }
 
-    return names === null ? null : { names, line };
+    // A name listed twice is exported once: Python allows the repetition, and
+    // JavaScript refuses a duplicate export.
+    return names === null ? null : { names: [...new Set(names)], line };
 }
 
 // `__js__ = {"@sveltejs/kit": ["error", "redirect"]}`: the JavaScript a module

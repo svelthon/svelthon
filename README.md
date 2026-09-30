@@ -77,7 +77,7 @@ rest of that configuration and what each line buys.
 npm install
 npm run dev
 
-npm test             # 1 340 tests: semantics, props, reactivity, Svelte surface
+npm test             # 1 347 tests: semantics, props, reactivity, Svelte surface
 npm run test:quiet   # the suite's own output: a green run must say nothing
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
@@ -761,10 +761,11 @@ constant, a function, a name brought in by an import. And a name it invents is
 refused at compile time, since a module exports what it defines.
 
 **It is read as the value the module ends with**, so a second assignment
-replaces the first and `+=`, `.append()` and `.extend()` grow it, which is how a
-conditional export is written. It is read from the source before the module
-runs, though, so the names have to be spelled out: `__all__ = sorted(names)` is
-refused rather than quietly ignored.
+replaces the first, `+=`, `.append()`, `.extend()` and `.insert()` grow it, and
+`.remove()`, `.pop()` and `.clear()` shrink it. It is read from the source before
+the module runs, though, so the names have to be spelled out at the top level of
+the module: `__all__ = sorted(names)`, a change under an `if` or in a function,
+or `del __all__[0]` is refused rather than quietly ignored.
 
 **A function an `importjs` call hands back is the function itself**, which is
 what makes SvelteKit's remote functions work from Python: `accepted = query(…)`
@@ -1459,7 +1460,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 1 340 tests as written (vitest reports more, one per
+Validated by `npm test`, 1 347 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;

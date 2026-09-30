@@ -134,9 +134,49 @@ describe('__all__ is read as the value the module ends with', () => {
         // No `__all__` at module level: the functions, as before. A name bound
         // inside a function is not the module's declaration.
         ['none at all', '', ['a', 'b', 'c']],
-        ['one inside a function', 'def hide():\n    __all__ = ["a"]\n', ['hide', 'a', 'b', 'c']]
+        ['one inside a function', 'def hide():\n    __all__ = ["a"]\n', ['hide', 'a', 'b', 'c']],
+        // Every mutation whose result the source spells, followed to the end.
+        ['clear', '__all__ = ["a"]\n__all__.clear()', []],
+        ['pop', '__all__ = ["a", "b"]\n__all__.pop()', ['a']],
+        ['pop at an index', '__all__ = ["a", "b"]\n__all__.pop(0)', ['b']],
+        ['pop from the end', '__all__ = ["a", "b"]\n__all__.pop(-1)', ['a']],
+        ['remove', '__all__ = ["a", "b"]\n__all__.remove("a")', ['b']],
+        ['insert', '__all__ = ["b"]\n__all__.insert(0, "a")', ['b', 'a']],
+        ['sort, which changes no name', '__all__ = ["b", "a"]\n__all__.sort()', ['b', 'a']],
+        // Python allows a name twice; JavaScript refuses a duplicate export.
+        ['a name listed twice', '__all__ = ["a", "a"]', ['a']],
+        ['annotated', '__all__: list[str] = ["a"]', ['a']],
+        // Reading the list, or a list of that name in a scope of its own, is
+        // not a write.
+        ['read', '__all__ = ["a"]\nn = __all__.count("a")', ['a']],
+        ['a class attribute', 'class C:\n    __all__ = ["x"]\n\n__all__ = ["a"]', ['a']]
     ])('%s', ([, head, names]) => {
         expect(exported(head)).toEqual(names);
+    });
+
+    // A write the static read cannot follow: under a condition, in a loop, in
+    // a function that declares the name global, item by item, or through a
+    // method or an operator whose result the source does not spell.
+    test.for([
+        ['appended under a condition', '__all__ = ["a"]\nif True:\n    __all__.append("b")', 3],
+        ['removed in a try', '__all__ = ["a"]\ntry:\n    __all__.remove("a")\nexcept ValueError:\n    pass', 3],
+        ['cleared by a function', '__all__ = ["a"]\ndef reset():\n    __all__.clear()', 3],
+        ['assigned by a global function', '__all__ = ["a"]\ndef reset():\n    global __all__\n    __all__ = []', 4],
+        ['an item stored', '__all__ = ["a"]\n__all__[0] = "b"', 2],
+        ['an item deleted', '__all__ = ["a", "b"]\ndel __all__[0]', 2],
+        ['the name deleted', '__all__ = ["a"]\ndel __all__', 2],
+        ['popped at a computed index', '__all__ = ["a"]\ni = 0\n__all__.pop(i)', 3],
+        ['multiplied', '__all__ = ["a"]\n__all__ *= 2', 2]
+    ])('%s is refused, at its line', ([, head, line]) => {
+        let error;
+        try {
+            plain(`${head}${BODY}`);
+        } catch (thrown) {
+            error = thrown;
+        }
+
+        expect(error?.message).toMatch(/`__all__` is /);
+        expect(error?.start?.line).toBe(line);
     });
 
     // The export list is read before the module runs, so a value the source does
@@ -174,6 +214,11 @@ def unlisted():
 
     test('and the unlisted state is not', () => {
         expect(store(MODULE)).not.toContain('get hidden()');
+    });
+
+    // The same read as a `.py`: a name taken back out is not published.
+    test('nor state the module removed from the list', () => {
+        expect(store('__all__ = ["count"]\ncount = 0\n__all__.clear()\n')).not.toContain('get count()');
     });
 
     test('the listed function is on it, and exported by name', () => {
