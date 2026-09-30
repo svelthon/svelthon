@@ -3489,7 +3489,8 @@ const inbound = (value) =>
 // can't take keyword arguments` for exactly that reason, in `pyargs2jsargs`.
 //
 // A call through this proxy never reaches that path: the keywords arrive as one
-// extra **positional** argument, an object carrying `$kw`, and the function is
+// extra **positional** argument, an object carrying them under Brython's symbol
+// `$B.KW`, and the function is
 // handed it as if the author had written it. Measured: `seen(1, b=2)` gave the
 // function `1` and an object. So the decision is not ours to take and was never
 // open — it is Brython's, and this restores it.
@@ -3506,13 +3507,12 @@ const inbound = (value) =>
 // `measure(width, height)`, a function that ignores a third argument all by
 // itself, so the answer stayed right while the call was wrong.
 const withoutKeywords = (target, args) => {
-    const last = args[args.length - 1];
-
-    if (last === null || typeof last !== 'object' || !Array.isArray(last.$kw)) return args;
-
     const $B = globalThis.__BRYTHON__;
+    const keywords = args[args.length - 1]?.[$B.KW];
 
-    if ($B.keyword_is_empty(last.$kw)) return args.slice(0, -1);
+    if (keywords === undefined) return args;
+
+    if ($B.keyword_is_empty(keywords)) return args.slice(0, -1);
 
     throw pyError(
         $B.$call($B.builtins.TypeError, `A Javascript function can't take keyword arguments`),

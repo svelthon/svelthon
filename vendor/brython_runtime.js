@@ -11634,9 +11634,9 @@ ob_type:$B.dict_keyiterator,it:_b_.dict.$iter_items(self),dict_obj:self}}
 _b_.dict.tp_init=function(self,first,second){if(first===undefined){self[SIZE]=0
 return _b_.None}
 if(second===undefined){
-if((! first.$kw)&& $B.$isinstance(first,$B.JSObj)){for(let key in first){dict.$setitem(self,key,first[key])}
-return _b_.None}else if(first.$kw){var keys=new Set()
-for(let item of first.$kw){if($B.$isinstance(item,dict)){for(let subitem of dict.$iter_items(item)){dict.$set_string_no_duplicate(self,keys,subitem.key,subitem.value)}}else{
+if((! first[$B.KW])&& $B.$isinstance(first,$B.JSObj)){for(let key in first){dict.$setitem(self,key,first[key])}
+return _b_.None}else if(first[$B.KW]){var keys=new Set()
+for(let item of first[$B.KW]){if($B.$isinstance(item,dict)){for(let subitem of dict.$iter_items(item)){dict.$set_string_no_duplicate(self,keys,subitem.key,subitem.value)}}else{
 for(let key in item){dict.$set_string_no_duplicate(self,keys,key,item[key])}}}
 return _b_.None}else if(first[Symbol.iterator]){init_from_list(self,first)
 return _b_.None}else if($B.exact_type(first,$B.generator)){init_from_list(self,first.js_gen)

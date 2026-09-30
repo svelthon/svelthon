@@ -13,10 +13,12 @@ CALLS = {
     # Two languages for one instant, read with the test's clock fixed.
     "fromnow-english": lambda: fromnow("2026-09-20", locale="en-GB"),
     "fromnow-french": lambda: fromnow("2026-09-20", locale="fr-FR"),
-    # A spread, which is the other half of what `$kw` carries.
+    # A spread, which is the other half of what a keyword call carries.
     "json-spread": lambda: tojson(rows, **{"indent": 2}),
-    # Data whose key is spelled like Brython's keyword bundle is still data.
+    # Data whose key is spelled `$kw` is still data, a Python dict as a
+    # JavaScript object.
     "kw data": lambda: tojson({"$kw": ["ordinary", "data"]}),
+    "kw js data": lambda: tojson(to_js({"$kw": ["ordinary", "data"]})),
     # A name no helper takes: the one thing the author can have got wrong.
     "unknown": lambda: tojson(rows, espace=2),
     # A signature is fixed, and a JavaScript implementation must not make it

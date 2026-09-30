@@ -9,9 +9,8 @@ import CoroutineAwaited from './fixtures/CoroutineAwaited.svelte';
 // Behaviours of the vendored Brython that Svelthon rests on, each observable,
 // so a build that loses one turns a test red rather than a page. The first
 // group is upstream; then come the commits still waiting there, which a
-// re-vendoring from plain master drops; the integer format, the `__call__`
-// binding and the id counter are edits made in the built file, which every
-// re-vendoring drops.
+// re-vendoring from plain master drops; the integer format and the `__call__`
+// binding are edits made in the built file, which every re-vendoring drops.
 describe('the vendored Brython carries its repairs', () => {
     const $B = globalThis.__BRYTHON__;
 
@@ -324,7 +323,6 @@ describe('the vendored Brython carries its repairs', () => {
     // The counter the code generator numbers functions with starts at random
     // and is private upstream; `$B.id_counter(n)` sets it and gives back the
     // value it replaces, which is what makes one source compile to one text.
-    // A direct edit of the built file, which a revendoring erases.
     test('the id counter can be set, and gives back what it held', () => {
         const was = $B.id_counter(1000);
 
@@ -334,6 +332,17 @@ describe('the vendored Brython carries its repairs', () => {
         } finally {
             $B.id_counter(was);
         }
+    });
+
+    // A call's keyword arguments travel under a symbol, `$B.KW`, and not under
+    // a `$kw` key: a JavaScript object with that key is an argument like any
+    // other. `dict(obj)` read it as keywords and answered `{'0': 'a'}`.
+    test('a JavaScript object with a $kw key is data', () => {
+        expect(typeof $B.KW).toBe('symbol');
+
+        const made = $B.$call($B.builtins.dict, { $kw: ['a'] });
+
+        expect($B.pyobj2jsobj(made)).toEqual({ $kw: ['a'] });
     });
 
     // A coroutine that leaves the frame it was created in has not been dropped:

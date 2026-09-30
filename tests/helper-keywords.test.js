@@ -66,13 +66,17 @@ describe('an injected helper takes its arguments by name', () => {
         }
     });
 
-    // A dict is data even when one of its keys is `$kw`: the keyword bundle a
-    // call carries is not a Python object.
+    // Data is data even when one of its keys is `$kw`: a call's keywords travel
+    // under Brython's own symbol, which no argument can carry.
     test('a dict with a $kw key is an argument, not keywords', () => {
         expect(setup()('kw data')).toBe('{"$kw":["ordinary","data"]}');
     });
 
-    // The other half of what `$kw` carries.
+    test('and so is a JavaScript object with one', () => {
+        expect(setup()('kw js data')).toBe('{"$kw":["ordinary","data"]}');
+    });
+
+    // The other half of what a keyword call carries.
     test('a ** spread carries its names too', () => {
         const read = setup();
 

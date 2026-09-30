@@ -654,9 +654,9 @@ export function urlencode(value) {
 // the way Python writes them — `tojson(value, indent=None)`, `batch(xs, n)` —
 // and an author writes what the documentation shows. Nothing read the keywords.
 //
-// They do arrive: Brython hands a keyword call a trailing object carrying
-// `$kw`, an array whose first entry holds the literal keywords and whose rest
-// are the dicts a `**` spread contributed. Dropping it was the worst of the
+// They do arrive: Brython hands a keyword call a trailing object carrying,
+// under its symbol `$B.KW`, an array whose first entry holds the literal
+// keywords and whose rest are the dicts a `**` spread contributed. Dropping it was the worst of the
 // three behaviours this project names: `tojson(rows, indent=2)` wrote
 // unindented JSON and said nothing, and `batch(rows, n=2)` refused the author
 // for a size they had just given.
@@ -695,17 +695,10 @@ const listed = (names) => {
     return `${quoted.slice(0, -1).join(', ')}, and ${quoted[quoted.length - 1]}`;
 };
 
-// The keywords of a call, which Brython hands over as a trailing plain object
-// carrying `$kw`. A Python dict keeps a string key as an own property, so
-// `{"$kw": [...]}` carries one too: what tells the two apart is that the dict
-// is a Python object, with a class, and the call's bundle is not.
-const keywordsOf = (args) => {
-    const last = args[args.length - 1];
-
-    if (last === null || typeof last !== 'object' || !Array.isArray(last.$kw)) return null;
-
-    return last.ob_type === undefined && !globalThis.__BRYTHON__.is_dict(last) ? last.$kw : null;
-};
+// The keywords of a call, which Brython hands over as a trailing object
+// carrying them under its own symbol, `$B.KW`: no argument an author passes, a
+// Python dict or a JavaScript object, can carry that key.
+const keywordsOf = (args) => args[args.length - 1]?.[globalThis.__BRYTHON__.KW] ?? null;
 
 // A name the helper does not take is an error, not something to ignore: the
 // spelling is the only thing the author can have got wrong, and Python says so
