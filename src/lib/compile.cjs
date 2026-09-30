@@ -2306,14 +2306,15 @@ function authorBindings(c) {
         ...c.props.map(
             (n) =>
                 `__bind(__proto, '${n}', () => ('${n}' in __props ? __follow(__pyBind(__props.${n})) : (${rev(n)}, __follow(__pyBind(${local(n)})))),` +
-                ` (${NEXT_VALUE}) => { ${local(n)} = __track(${NEXT_VALUE}, ${bump(n)}, ${read(n)}, ${SUBS}); });`
+                ` (${NEXT_VALUE}) => { ${local(n)} = __track(${NEXT_VALUE}, ${bump(n)}, ${read(n)}, ${SUBS}); },` +
+                ` () => ('${n}' in __props ? __props.${n} : ${local(n)}));`
         ),
         // What Svelte hands back for a write it kept for itself may be its own
         // proxy of it: `kept` and `unproxied` give Python its object again.
         ...c.bindables.map(
             (b) =>
                 `__bind(__proto, '${b}', () => (${rev(b)}, __follow(__pyBind(__unproxied(${b})))),` +
-                ` (${NEXT_VALUE}) => { if (!__initialising || ${b} === undefined) { const __written = __track(${NEXT_VALUE}, ${bump(b)}, ${read(b)}${c.store ? '' : `, ${SUBS}`}); ${b} = __written; __kept(${b}, __written); } });`
+                ` (${NEXT_VALUE}) => { if (!__initialising || ${b} === undefined) { const __written = __track(${NEXT_VALUE}, ${bump(b)}, ${read(b)}${c.store ? '' : `, ${SUBS}`}); ${b} = __written; __kept(${b}, __written); } }, () => ${b});`
         ),
         // Reading the revision alongside the value is what registers the
         // dependency: an in-place mutation then invalidates every reader,
@@ -2329,7 +2330,7 @@ function authorBindings(c) {
             (f) =>
                 `__bind(__proto, '${f.name}', () => ` +
                 `${c.store ? `__pyBoundary(${fn(f.name)})` : fn(f.name)}, ` +
-                `(${NEXT_VALUE}) => { ${fn(f.name)} = ${NEXT_VALUE}; });`
+                `(${NEXT_VALUE}) => { ${fn(f.name)} = ${NEXT_VALUE}; }, () => ${fn(f.name)});`
         ),
         ...c.inspects.map(
             (i) => `__bind(__proto, '${i.name}', () => ${fn(i.name)}, (${NEXT_VALUE}) => { ${fn(i.name)} = ${NEXT_VALUE}; });`
@@ -2338,14 +2339,15 @@ function authorBindings(c) {
         // function, since that is what Brython writes when the `def` runs.
         ...c.effects.map((e) =>
             e.root
-                ? `__bind(__proto, '${e.name}', () => ${destroyer(e.name)}, (${NEXT_VALUE}) => { ${fn(e.name)} = ${NEXT_VALUE}; });`
+                ? `__bind(__proto, '${e.name}', () => ${destroyer(e.name)}, (${NEXT_VALUE}) => { ${fn(e.name)} = ${NEXT_VALUE}; }, () => ${fn(e.name)});`
                 : `__bind(__proto, '${e.name}', () => ${fn(e.name)}, (${NEXT_VALUE}) => { ${fn(e.name)} = ${NEXT_VALUE}; });`
         ),
         // __follow(): a @derived that hands back a container it was given is the one
         // place the revision cannot travel by itself: Svelte memoises the
         // derived on `===`, so the reader subscribes to the object instead.
         ...c.deriveds.map(
-            (d) => `__bind(__proto, '${d.name}', () => __follow(${d.name}), (${NEXT_VALUE}) => { ${fn(d.name)} = ${NEXT_VALUE}; });`
+            (d) =>
+                `__bind(__proto, '${d.name}', () => __follow(${d.name}), (${NEXT_VALUE}) => { ${fn(d.name)} = ${NEXT_VALUE}; }, () => ${fn(d.name)});`
         )
     ];
 }
@@ -2721,10 +2723,12 @@ function plainBindings(c) {
         `const __proto = {};`,
         ...c.state.map((n) => `__bind(__proto, '${n}', () => ${n}, (${NEXT_VALUE}) => { ${n} = ${NEXT_VALUE}; });`),
         ...c.funcs.map(
-            (f) => `__bind(__proto, '${f.name}', () => __pyBoundary(${fn(f.name)}), (${NEXT_VALUE}) => { ${fn(f.name)} = ${NEXT_VALUE}; });`
+            (f) =>
+                `__bind(__proto, '${f.name}', () => __pyBoundary(${fn(f.name)}), (${NEXT_VALUE}) => { ${fn(f.name)} = ${NEXT_VALUE}; }, () => ${fn(f.name)});`
         ),
         ...c.plainDeriveds.map(
-            (d) => `__bind(__proto, '${d.name}', () => ${fn(d.name)}(), (${NEXT_VALUE}) => { ${fn(d.name)} = ${NEXT_VALUE}; });`
+            (d) =>
+                `__bind(__proto, '${d.name}', () => ${fn(d.name)}(), (${NEXT_VALUE}) => { ${fn(d.name)} = ${NEXT_VALUE}; }, () => ${fn(d.name)});`
         ),
         ...injections(c.declared, false, c.names),
 

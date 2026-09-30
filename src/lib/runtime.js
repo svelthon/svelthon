@@ -4616,7 +4616,19 @@ export function ticking(after) {
 // `count = count + 1` stopped propagating while `count += 1` still worked.
 // `delete` ignores inherited properties; assignment still runs the inherited
 // setter.
-export function bind(proto, key, get, set) {
+//
+// `source` reads what the name holds as stored, with no conversion and no
+// computation, where `get` does either: a prop's number made a float, a
+// derived's body run. It is what `del` watches; without one, `get` is it.
+const STORED = new WeakMap();
+
+export function bind(proto, key, get, set, source) {
+    if (source !== undefined) {
+        let sources = STORED.get(proto);
+        if (sources === undefined) STORED.set(proto, (sources = new Map()));
+        sources.set(key, source);
+    }
+
     Object.defineProperty(proto, key, {
         get,
         // No setter means the name is a *default*: an injected helper, or a
@@ -4691,27 +4703,27 @@ export const unproxied = (value) =>
 
         accessor.set?.call(namespace, undefined);
 
-        // What the name still answers once deleted: `undefined`, or the value
-        // a parent passes a prop, which the child does not own.
-        const left = accessor.get.call(namespace);
+        // What the name still holds once deleted, read at its source: nothing,
+        // or the value a parent passes a prop, which the child does not own.
+        const source = STORED.get(proto)?.get(name) ?? accessor.get;
+        const left = source.call(namespace);
         const restore = (target) => {
             Object.defineProperty(proto, name, accessor);
             DELETED.get(target)?.delete(name);
         };
 
-        // Absent to Python, still read by the page: the getter goes through
-        // the published one, whose signal keeps the page subscribed, and hands
-        // back `undefined`, which a `$proxy` namespace reads as no name at all.
-        // Any write puts the published accessor back: through the namespace,
-        // by `=`, a loop, an import or a store's setter; or from outside it,
-        // a parent passing a prop a new value, which the getter sees.
+        // Absent to Python, still read by the page: the source is a signal,
+        // which keeps the page subscribed, and the getter hands back
+        // `undefined`, which a `$proxy` namespace reads as no name at all. Any
+        // write puts the published accessor back: through the namespace, by
+        // `=`, a loop, an import or a store's setter; or from outside it, a
+        // parent passing a prop a new value, which the source shows.
         Object.defineProperty(proto, name, {
             get() {
-                const now = accessor.get.call(this);
-                if (Object.is(now, left)) return undefined;
+                if (Object.is(source.call(this), left)) return undefined;
 
                 restore(this);
-                return now;
+                return accessor.get.call(this);
             },
             set(value) {
                 restore(this);
