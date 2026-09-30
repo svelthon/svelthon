@@ -2152,10 +2152,9 @@ export function moduleScript(content) {
     let block;
 
     for (const found = blocks(); (block = found.exec(text)); ) {
-        if (block[1].toLowerCase() === 'script' && MODULE_ATTRIBUTE.test(block[2])) {
-            const whole = block[0];
-            return whole.slice(whole.indexOf('>') + 1, whole.length - block[3].length);
-        }
+        // The whole element, attributes included: `lang="ts"` says how its
+        // content parses.
+        if (block[1].toLowerCase() === 'script' && MODULE_ATTRIBUTE.test(block[2])) return block[0];
     }
 
     return null;

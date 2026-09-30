@@ -110,11 +110,10 @@ function iterated(value) {
 const BY_VALUE = [_b_.tuple, _b_.frozenset, _b_.float, _b_.complex, _b_.bytes];
 
 // The text two such values share exactly when Python finds them equal. A
-// scalar's repr() says it; a tuple or a frozenset is equal when its members
-// are, so its text is built from theirs; anything else, an instance or a list,
-// is equal to itself alone, as it is when it keys a row on its own, and so is a
-// NaN. A repr() the author wrote says nothing about equality: two instances
-// may print alike.
+// tuple or a frozenset is equal when its members are, so its text is built
+// from theirs; anything else, an instance or a list, is equal to itself alone,
+// as it is when it keys a row on its own, and so is a NaN. A repr() the author
+// wrote says nothing about equality: two instances may print alike.
 const IDENTITIES = new WeakMap();
 let identities = 0;
 const identityOf = (value, name) => {
@@ -122,8 +121,41 @@ const identityOf = (value, name) => {
     if (id === undefined) IDENTITIES.set(value, (id = `<${name} #${++identities}>`));
     return id;
 };
+
+// A number as Python compares it: `1 == 1.0 == True`, `0.0 == -0.0`,
+// `complex(2, 0) == 2`, and a subclass of int, float or str equal to its value.
+// So a value equal to a number is that number, as JavaScript holds it: an
+// integral one exact, a BigInt past 2 ** 53, and any other the double it is.
+// Null for a value that is not one, and for a NaN, which equals nothing.
+function numeric(value) {
+    if (typeof value === 'boolean') return Number(value);
+    if (typeof value === 'bigint') return value;
+    if (typeof value === 'number') {
+        if (Number.isNaN(value)) return null;
+        return Number.isInteger(value) && !Number.isSafeInteger(value) ? BigInt(value) : value + 0;
+    }
+
+    const scalar = pyScalar(value);
+    if (typeof scalar === 'number' || typeof scalar === 'bigint') return numeric(scalar);
+
+    // A complex with no imaginary part is its real one.
+    const mro = value?.ob_type?.tp_mro;
+    if (Array.isArray(mro) && mro.includes(_b_.complex) && value.imag?.value === 0) return numeric(value.real.value);
+
+    return null;
+}
+
 function keyText(value) {
-    if (value === null || typeof value !== 'object') return _b_.repr(value);
+    if (value === null || value === undefined || value === NONE) return 'None';
+
+    const number = numeric(value);
+    if (number !== null) return String(number);
+
+    if (typeof value === 'string') return _b_.repr(value);
+    if (typeof value !== 'object') return String(value);
+
+    const scalar = pyScalar(value);
+    if (typeof scalar === 'string') return _b_.repr(scalar);
 
     const cls = globalThis.__BRYTHON__.get_class(value);
     const mro = cls.tp_mro;
@@ -208,7 +240,16 @@ export const __pybridge = {
     // own, since the float itself would reach Svelte as the number NaN, which
     // no comparison finds again.
     key(value) {
+        // Equal to a number, it is that number, which is what an `int` key
+        // already is: `1`, `1.0`, `True` and `Score(1.0)` are one key, as they
+        // are one key of a dict. Equal to a string, it is that string.
+        const number = numeric(value);
+        if (number !== null) return number;
+
         if (value === null || typeof value !== 'object') return value;
+
+        const text = pyScalar(value);
+        if (typeof text === 'string') return text;
 
         try {
             const mro = globalThis.__BRYTHON__.get_class(value).tp_mro;

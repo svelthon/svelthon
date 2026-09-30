@@ -203,10 +203,15 @@ const declaredBy = (pattern) => {
     }
 };
 
+// The names a statement at the top of the module binds there, at run time. A
+// TypeScript `import type`, `export type` or `declare` names a type or an
+// ambient value, which no code at run time holds, so it binds nothing.
 const declares = (node) => {
+    if (node.declare || node.importKind === 'type' || node.exportKind === 'type') return [];
+
     switch (node.type) {
         case 'ImportDeclaration':
-            return node.specifiers.map((one) => one.local.name);
+            return node.specifiers.filter((one) => one.importKind !== 'type').map((one) => one.local.name);
         case 'VariableDeclaration':
             return node.declarations.flatMap((one) => declaredBy(one.id));
         case 'FunctionDeclaration':
@@ -223,6 +228,32 @@ const declares = (node) => {
     }
 };
 
+// What JavaScript scopes to the module from below the top: a `var`, in a block,
+// a loop or a `try`. `let`, `const`, a class, and in a module a function declared
+// in a block, belong to the block; a function's body is a scope of its own.
+const SCOPES = new Set([
+    'FunctionDeclaration',
+    'FunctionExpression',
+    'ArrowFunctionExpression',
+    'ClassDeclaration',
+    'ClassExpression'
+]);
+const POSITIONS = new Set(['type', 'start', 'end', 'loc', 'range', 'metadata']);
+
+const hoisted = (node, found = []) => {
+    if (node === null || typeof node !== 'object') return found;
+    if (Array.isArray(node)) {
+        for (const one of node) hoisted(one, found);
+        return found;
+    }
+    if (SCOPES.has(node.type)) return found;
+    if (node.type === 'VariableDeclaration' && node.kind === 'var' && !node.declare) {
+        found.push(...node.declarations.flatMap((one) => declaredBy(one.id)));
+    }
+    for (const [key, value] of Object.entries(node)) if (!POSITIONS.has(key)) hoisted(value, found);
+    return found;
+};
+
 export function moduleImports(content) {
     const block = moduleScript(content);
 
@@ -231,7 +262,8 @@ export function moduleImports(content) {
     let module;
 
     try {
-        module = parse(`<script module>${block}</script>`, { modern: true }).module;
+        // The element as written, so `lang="ts"` parses its annotations.
+        module = parse(block, { modern: true }).module;
     } catch {
         // A block that does not parse is one Svelte is about to refuse itself,
         // naming the line. Publishing nothing leaves that message as the only
@@ -239,7 +271,9 @@ export function moduleImports(content) {
         return [];
     }
 
-    return [...new Set((module?.content?.body ?? []).flatMap(declares))];
+    const body = module?.content?.body ?? [];
+
+    return [...new Set([...body.flatMap(declares), ...hoisted(body)])];
 }
 
 // A component that declares a custom element has to be *compiled* as one.

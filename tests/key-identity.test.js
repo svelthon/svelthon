@@ -2,9 +2,10 @@
 // same object while it lives, so it keys by identity, as it does in JavaScript;
 // only a value rebuilt on every computation (a tuple, a float) keys by value,
 // which `tests/keys.test.js` holds.
-import { test, expect } from 'vitest';
+import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import KeyIdentity from './fixtures/KeyIdentity.svelte';
+import NumericKey from './fixtures/NumericKey.svelte';
 
 const setup = () => {
     const target = document.body.appendChild(document.createElement('div'));
@@ -72,4 +73,47 @@ test('a field in a row keyed by itself survives a keystroke', () => {
     field.dispatchEvent(new Event('input', { bubbles: true }));
     flushSync();
     expect(at('field')).toBe(field);
+});
+
+// Keys are equal as Python finds numbers equal: `1 == 1.0 == True`, `0 ==
+// -0.0`, alone or in a tuple. A key replaced by an equal one keeps its block,
+// and the field in it keeps what was typed; a different one makes a new block.
+describe('a numeric key follows Python equality', () => {
+    const setup = () => {
+        const target = document.body.appendChild(document.createElement('div'));
+        mount(NumericKey, { target });
+        flushSync();
+        const at = (key) => target.querySelector(`[data-k="${key}"]`);
+        const typed = () => {
+            for (const key of ['tuple', 'number']) at(key).value = 'unsaved';
+            return [at('tuple'), at('number')];
+        };
+        const press = (key) => {
+            at(key).click();
+            flushSync();
+        };
+        return { at, typed, press };
+    };
+
+    test.for([['float'], ['bool'], ['zero', 'at-zero']])('%s: an equal key keeps the field', ([button, start]) => {
+        const { at, typed, press } = setup();
+        if (start) press(start);
+        const [tuple, number] = typed();
+
+        press(button);
+
+        expect(at('tuple')).toBe(tuple);
+        expect(at('number')).toBe(number);
+        expect(at('tuple').value).toBe('unsaved');
+    });
+
+    test('and a different one makes a new field', () => {
+        const { at, typed, press } = setup();
+        const [tuple, number] = typed();
+
+        press('other');
+
+        expect(at('tuple')).not.toBe(tuple);
+        expect(at('number')).not.toBe(number);
+    });
 });

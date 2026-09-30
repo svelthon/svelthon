@@ -368,9 +368,32 @@ describe('moduleImports', () => {
         // Only the block's *own* level: a name scoped inside a function is not
         // in scope for the component, and publishing it gave a ReferenceError
         // at render for a variable the author had scoped correctly.
-        ['function outer() {\n    const inner = 1\n    return inner\n}', ['outer']]
+        ['function outer() {\n    const inner = 1\n    return inner\n}', ['outer']],
+        // A `var` is the module's wherever it is written; what a block scopes
+        // stays in the block, and a function body keeps its own.
+        ['if (true) { var twice = (v) => v * 2 }', ['twice']],
+        ['for (var i = 0; i < 1; i++) {}', ['i']],
+        ['try { var t = 1 } catch (e) { var c = 2 }', ['t', 'c']],
+        ['if (true) { var { a: aa, ...rest } = {} }', ['aa', 'rest']],
+        ['if (true) { let a = 1; function inner() {} }', []],
+        ['const f = () => { var z = 1 }', ['f']]
     ])('%s', ([source, names]) => {
         expect(moduleImports(withModule(source)).sort()).toEqual([...names].sort());
+    });
+
+    // A TypeScript block parses as TypeScript, and what exists only as a type
+    // publishes no name.
+    test.for([
+        ['function twice(v: number): number { return v * 2 }', ['twice']],
+        ['import type { A } from "./a"', []],
+        ['import { type A, b } from "./a"', ['b']],
+        ['export type T = number', []],
+        ['interface I { x: number }', []],
+        ['declare const x: number', []]
+    ])('in TypeScript, %s', ([source, names]) => {
+        const typed = `<script module lang="ts">\n${source}\n</script>\n<p>x</p>`;
+
+        expect(moduleImports(typed).sort()).toEqual([...names].sort());
     });
 
     // A block Svelte is about to refuse itself: publishing nothing leaves its
