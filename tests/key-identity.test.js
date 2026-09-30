@@ -6,6 +6,7 @@ import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import KeyIdentity from './fixtures/KeyIdentity.svelte';
 import NumericKey from './fixtures/NumericKey.svelte';
+import NanKey from './fixtures/NanKey.svelte';
 
 const setup = () => {
     const target = document.body.appendChild(document.createElement('div'));
@@ -115,5 +116,46 @@ describe('a numeric key follows Python equality', () => {
 
         expect(at('tuple')).not.toBe(tuple);
         expect(at('number')).not.toBe(number);
+    });
+});
+
+// A NaN equals nothing, and neither does a complex with a NaN part, alone or in
+// a tuple or a frozenset: a new one is a new key, and the same object put back
+// is its own key still.
+describe('a key holding a NaN', () => {
+    const setup = (kind) => {
+        const target = document.body.appendChild(document.createElement('div'));
+        const instance = mount(NanKey, { target, props: { kind } });
+        flushSync();
+        const field = target.querySelector('input');
+        field.value = 'unsaved';
+        return { instance, field, now: () => target.querySelector('input') };
+    };
+
+    test.for([['float'], ['complex_real'], ['complex_imag'], ['complex_zero'], ['subclass'], ['tuple'], ['frozenset']])(
+        '%s: replaced by a new one, makes a new block; put back, keeps its own',
+        ([kind]) => {
+            const { instance, field, now } = setup(kind);
+            expect(instance.same_as_fresh()).toBe(false);
+
+            instance.put_back();
+            flushSync();
+            expect(now()).toBe(field);
+
+            instance.replace();
+            flushSync();
+            expect(now()).not.toBe(field);
+            expect(now().value).toBe('draft');
+        }
+    );
+
+    test('a finite complex replaced by an equal one keeps its block', () => {
+        const { instance, field, now } = setup('finite');
+        expect(instance.same_as_fresh()).toBe(true);
+
+        instance.replace();
+        flushSync();
+        expect(now()).toBe(field);
+        expect(now().value).toBe('unsaved');
     });
 });

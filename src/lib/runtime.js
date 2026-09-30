@@ -112,7 +112,8 @@ const BY_VALUE = [_b_.tuple, _b_.frozenset, _b_.float, _b_.complex, _b_.bytes];
 // The text two such values share exactly when Python finds them equal. A
 // tuple or a frozenset is equal when its members are, so its text is built
 // from theirs; anything else, an instance or a list, is equal to itself alone,
-// as it is when it keys a row on its own, and so is a NaN. A repr() the author
+// as it is when it keys a row on its own, and so is a NaN, or a complex with a
+// NaN part. A repr() the author
 // wrote says nothing about equality: two instances may print alike.
 const IDENTITIES = new WeakMap();
 let identities = 0;
@@ -171,6 +172,11 @@ function keyText(value) {
         return `frozenset({${Object.values(value.$store).flat().map(keyText).sort().join(', ')}})`;
     }
     if (mro.includes(_b_.float) && Number.isNaN(value.value)) return identityOf(value, 'nan');
+    // A complex compares its two parts, so a NaN in either makes it equal to
+    // nothing but itself.
+    if (mro.includes(_b_.complex) && (Number.isNaN(value.real.value) || Number.isNaN(value.imag.value))) {
+        return identityOf(value, 'nan');
+    }
 
     // The builtin's repr(), which spells the value; a subclass's own `__repr__`
     // spells whatever its author chose, two values alike included.
