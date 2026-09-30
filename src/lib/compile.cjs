@@ -2543,12 +2543,13 @@ function instanceExports(c) {
                   // identity, so a JavaScript array assigned to a store is still
                   // that array. Converting containers too would be a change of
                   // contract, not a repair.
+                  //
+                  // Written through the namespace, as a Python assignment is:
+                  // its accessor is the one door that tracks the value and puts
+                  // back a name `del` removed.
                   ...c.state
                       .filter(c.published)
-                      .map(
-                          (n) =>
-                              `    set ${n}(${NEXT_VALUE}) { ${n} = __track(__pyArg(${NEXT_VALUE}), ${bump(n)}, ${read(n)}); },`
-                      ),
+                      .map((n) => `    set ${n}(${NEXT_VALUE}) { ${NS}.${n} = __pyArg(${NEXT_VALUE}); },`),
                   ...c.deriveds
                       .filter((d) => c.published(d.name))
                       .map((d) => `    get ${d.name}() { return __plainScalar(__follow(${d.name})); },`),

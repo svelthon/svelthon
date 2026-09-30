@@ -11,6 +11,8 @@ import { mount, flushSync } from './mounted.js';
 import PropDefaults from './fixtures/PropDefaults.svelte';
 import PropDefaultsHost from './fixtures/PropDefaultsHost.svelte';
 import { drop, read, restore } from './fixtures/deleted_globals.py';
+import deletedStore from './fixtures/deleted_store.svelte.py';
+import DeletedPropHost from './fixtures/DeletedPropHost.svelte';
 
 const setup = (Component) => {
     const target = document.body.appendChild(document.createElement('div'));
@@ -95,6 +97,28 @@ test('a loop rebinds a deleted name, and the page follows it and what comes afte
 
 test('+= on a deleted name raises NameError', () => {
     expect(setup(PropDefaults).instance.delete_then_augment()).toBe('NameError');
+});
+
+// Written again from JavaScript, the name is back, by either door: a store's
+// setter, or a parent passing its prop a new value.
+test("a store's setter brings back a name Python deleted", () => {
+    deletedStore.drop_count();
+    expect([deletedStore.read_count(), deletedStore.has_count()]).toEqual(['missing', false]);
+
+    deletedStore.count = 9;
+    expect([deletedStore.read_count(), deletedStore.has_count()]).toEqual(['9', true]);
+});
+
+test('a parent passing a deleted prop a new value brings it back', () => {
+    const { instance } = setup(DeletedPropHost);
+
+    instance.drop();
+    flushSync();
+    expect(instance.seen()).toBe('missing missing False False');
+
+    instance.pass();
+    flushSync();
+    expect(instance.seen()).toBe('b 2 True True');
 });
 
 test('in a plain module too', () => {

@@ -4691,19 +4691,30 @@ export const unproxied = (value) =>
 
         accessor.set?.call(namespace, undefined);
 
+        // What the name still answers once deleted: `undefined`, or the value
+        // a parent passes a prop, which the child does not own.
+        const left = accessor.get.call(namespace);
+        const restore = (target) => {
+            Object.defineProperty(proto, name, accessor);
+            DELETED.get(target)?.delete(name);
+        };
+
         // Absent to Python, still read by the page: the getter goes through
         // the published one, whose signal keeps the page subscribed, and hands
         // back `undefined`, which a `$proxy` namespace reads as no name at all.
-        // Any write, by `=`, a loop or an import, puts the published accessor
-        // back and goes through it.
+        // Any write puts the published accessor back: through the namespace,
+        // by `=`, a loop, an import or a store's setter; or from outside it,
+        // a parent passing a prop a new value, which the getter sees.
         Object.defineProperty(proto, name, {
             get() {
-                accessor.get.call(this);
-                return undefined;
+                const now = accessor.get.call(this);
+                if (Object.is(now, left)) return undefined;
+
+                restore(this);
+                return now;
             },
             set(value) {
-                Object.defineProperty(proto, name, accessor);
-                DELETED.get(this)?.delete(name);
+                restore(this);
                 accessor.set?.call(this, value);
             },
             enumerable: false,
@@ -4716,9 +4727,11 @@ export const unproxied = (value) =>
     };
 
     // `name in globals()`: the namespace is the globals, and a deleted name is
-    // not in it.
+    // not in it, unless reading it finds a new value.
     $B.$is_member = function (item, container) {
-        if (typeof item === 'string' && DELETED.get(container)?.has(item)) return false;
+        if (typeof item === 'string' && DELETED.get(container)?.has(item) && container[item] === undefined) {
+            return false;
+        }
         return isMember.call(this, item, container);
     };
 })(globalThis.__BRYTHON__);

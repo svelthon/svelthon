@@ -2140,8 +2140,12 @@ export function pythonRanges(content) {
 // `<script lang="python">` there turned a JavaScript component's expressions
 // into Python, a `<script module>` there hid the real one's imports. Replaced by
 // blanks rather than removed, so every offset still counts on the same string.
+// A comment is one only in the markup: inside a `<script>` or a `<style>`,
+// `'<!--'` is the author's text, and is left as written.
 export const withoutComments = (content) =>
-    content.replace(/<!--[\s\S]*?-->/g, (comment) => comment.replace(/[^\n]/g, ' '));
+    content.replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>|<!--[\s\S]*?-->/gi, (found, element) =>
+        element === undefined ? found.replace(/[^\n]/g, ' ') : found
+    );
 
 // Found by `blocks()`, as the Python block is, which steps over a `<style>`
 // whole: a `<script module>` quoted in a stylesheet is not the module.

@@ -418,6 +418,15 @@ describe('moduleImports', () => {
 
         expect(moduleImports(source)).toEqual(['format']);
     });
+
+    // A comment is one only in the markup: inside the block, the delimiters are
+    // the author's strings.
+    test.for([
+        ["const opening = '<!--';\nconst answer = 42;\nconst closing = '-->';", ['opening', 'answer', 'closing']],
+        ["const opening = '<!--';\nconst answer = 42;", ['opening', 'answer']]
+    ])('comment delimiters in a string of the block: %s', ([body, names]) => {
+        expect(moduleImports(withModule(body)).sort()).toEqual([...names].sort());
+    });
 });
 
 // The other readings of the raw text follow the same rule.

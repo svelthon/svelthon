@@ -5,6 +5,16 @@
 import { test, expect } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import MarkupEdges from './fixtures/MarkupEdges.svelte';
+import CommentDelimiters from './fixtures/CommentDelimiters.svelte';
+
+test('comment delimiters inside a script are the author text', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+    mount(CommentDelimiters, { target });
+    flushSync();
+    const text = (key) => target.querySelector(`[data-k="${key}"]`).textContent;
+
+    expect([text('wrapped'), text('opened'), text('reached')]).toEqual(['<!-- kept -->', '<!--', '42']);
+});
 
 const at = () => {
     const target = document.body.appendChild(document.createElement('div'));

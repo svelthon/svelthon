@@ -3,6 +3,7 @@ import { mount, flushSync } from './mounted.js';
 import CtxHost from './fixtures/CtxHost.svelte';
 import ContextFromJs from './fixtures/ContextFromJs.svelte';
 import ContextFromPy from './fixtures/ContextFromPy.svelte';
+import ContextKeys from './fixtures/ContextKeys.svelte';
 
 // A context value crosses languages like any other value: a scalar becomes the
 // reader's own. JavaScript's 0.42 is a Python float, and Python's 0.42 is a
@@ -21,6 +22,19 @@ describe('a context number across languages', () => {
 
     test('set in Python, read in JavaScript', () => {
         expect(read(ContextFromPy, 'javascript-reads')).toBe('number:0.84');
+    });
+
+    // And a key: a Python float is an object, and Svelte's context is a Map.
+    test('a float key set in JavaScript is found from Python', () => {
+        expect(read(ContextFromJs, 'python-reads-key')).toBe('half');
+    });
+
+    test('a float key set in Python is found from JavaScript', () => {
+        expect(read(ContextFromPy, 'javascript-reads-key')).toBe('half');
+    });
+
+    test('a key is equal as a dict key is', () => {
+        expect(read(ContextKeys, 'found')).toBe("['half', 'one', 'one', 'pair', 'own nan', None]");
     });
 });
 
