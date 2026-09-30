@@ -2689,8 +2689,8 @@ function compile(
     // Brython numbers the functions and lambdas it generates from a counter and
     // a tag it draws at random, so that modules compiled apart are unlikely to
     // share a name. Drawn from the file's path instead, they keep that and give
-    // one file the same code in every build. Both are given back afterwards:
-    // in a page that compiles, the counter also numbers live objects.
+    // one file the same code in every build. Both are given back afterwards,
+    // so a page that compiles leaves Brython's own sequence where it was.
     const counter = $B.id_counter(counterStart(source));
     const tag = $B.lambda_magic;
     $B.lambda_magic = counterStart(`${source}#lambda`).toString(36).slice(0, 8);
