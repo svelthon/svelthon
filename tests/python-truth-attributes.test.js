@@ -27,6 +27,18 @@ test('control: a true Python value turns it on', () => {
     expect(at()('witness').disabled).toBe(true);
 });
 
+// `hidden` keeps its third state, `until-found`, written directly or spread,
+// and from a subclass of str; any other value is Python's truth.
+test.for([
+    ['until-found', 'until-found'],
+    ['until-found-spread', 'until-found'],
+    ['until-found-subclass', 'until-found'],
+    ['hidden-true', ''],
+    ['hidden-other-text', '']
+])('hidden: %s', ([key, attribute]) => {
+    expect(at()(key).getAttribute('hidden')).toBe(attribute);
+});
+
 test('class from a dict keeps the names whose value Python finds true', () => {
     expect(at()('dict').className).toBe('shown');
 });

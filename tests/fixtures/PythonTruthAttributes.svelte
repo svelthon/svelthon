@@ -15,6 +15,16 @@ hidden = []
 tag = "div"
 flags = ["a", None]
 spread = {"hidden": [], "class": ["a", None]}
+
+
+class Mode(str):
+    pass
+
+
+# `hidden` has a third state, `until-found`, which stays a string.
+mode = "until-found"
+found_spread = {"hidden": "until-found"}
+subclassed = Mode("until-found")
 </script>
 
 <div data-k="hidden" hidden={empty}>x</div>
@@ -33,3 +43,10 @@ spread = {"hidden": [], "class": ["a", None]}
 <div data-k="quoted-class" class="{flags}"></div>
 <svelte:element this={tag} data-k="element" hidden={empty} class={flags}>x</svelte:element>
 <div data-k="spread" {**spread}>x</div>
+
+<!-- `hidden` and its third state. -->
+<div data-k="until-found" hidden={mode}>x</div>
+<div data-k="until-found-spread" {**found_spread}>x</div>
+<div data-k="until-found-subclass" hidden={subclassed}>x</div>
+<div data-k="hidden-true" hidden={True}>x</div>
+<div data-k="hidden-other-text" hidden={"yes"}>x</div>

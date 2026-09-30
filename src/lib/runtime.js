@@ -282,6 +282,15 @@ export const __pybridge = {
         }
     },
 
+    // `hidden`, a boolean attribute with a third state: `until-found` is kept
+    // as the string, the one value Svelte renders as it is. Any other value is
+    // Python's truth, as for the other boolean attributes.
+    hidden(value) {
+        const text = typeof value === 'string' ? value : pyScalar(value);
+        if (text === 'until-found') return text;
+        return __pybridge.truthy(value);
+    },
+
     // Python's str(), for interpolation: `['a', 'b']` rather than `a,b`.
     //
     // None renders as nothing, like null and undefined beside it. In a template
@@ -426,6 +435,7 @@ export const __pybridge = {
             const wrapper = attributeWrapper(key);
             if (wrapper === '__class') out[key] = __pybridge.klass(value[key]);
             else if (wrapper === '__truthy') out[key] = __pybridge.truthy(value[key]);
+            else if (wrapper === '__hidden') out[key] = __pybridge.hidden(value[key]);
         }
 
         return out;
