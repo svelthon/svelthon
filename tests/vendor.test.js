@@ -334,6 +334,18 @@ describe('the vendored Brython carries its repairs', () => {
         }
     });
 
+    // A NaN equals nothing, so `is` holds only for the same object, and a
+    // container comparing members by identity-or-equality finds two NaNs
+    // different: `(nan,) == (float("nan"),)` is False in CPython.
+    test('two NaN objects are not one', () => {
+        const one = $B.builtins.float.$factory('nan');
+        const other = $B.builtins.float.$factory('nan');
+
+        expect($B.$is(one, one)).toBe(true);
+        expect($B.$is(one, other)).toBe(false);
+        expect($B.is_or_equals(one, other)).toBe(false);
+    });
+
     // A call's keyword arguments travel under a symbol, `$B.KW`, and not under
     // a `$kw` key: a JavaScript object with that key is an argument like any
     // other. `dict(obj)` read it as keywords and answered `{'0': 'a'}`.
