@@ -160,6 +160,19 @@ describe('a component compiled as a custom element', () => {
             expect(out).not.toContain("bind(__proto, 'props_id'");
         });
 
+        // Nor a name of a function's own, which reads its binding and not the
+        // module's: the read that counts is one Python resolves as a global.
+        test.for([
+            ['a parameter', 'def label(host):\n    return host\n', false],
+            ['a local', 'def label():\n    host = "x"\n    return host\n', false],
+            ['a parameter a nested function reads', 'def outer(host):\n    return lambda: host\n', false],
+            ['a comprehension variable', 'xs = [host for host in range(3)]\n', false],
+            ['a default value, read by the module', 'def f(x=host):\n    return x\n', true],
+            ['a read inside a function', 'def go():\n    return host()\n', true]
+        ])('%s decides the binding by its scope', ([, src, bound]) => {
+            expect(script(src).includes("bind(__proto, 'host'")).toBe(bound);
+        });
+
         // And the whole way: a component holding the word in four ordinary
         // places renders. Compiled, it did not — Svelte answered that `$host()`
         // can only be used inside custom element component instances, about a

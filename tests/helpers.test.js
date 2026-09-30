@@ -290,6 +290,16 @@ describe('tojson', () => {
         }
 
         expect(tojson(new Money())).toBe('{"amount":3}');
+
+        // A literal carrying it too, whether the method is enumerable or not,
+        // and nested, where `JSON.stringify` hands it its key.
+        const literal = { toJSON: () => ({ answer: 42 }) };
+        const hidden = Object.defineProperty({}, 'toJSON', { value: () => ({ answer: 42 }) });
+        const keyed = { toJSON: (key) => `at ${key}` };
+
+        expect(tojson(literal)).toBe('{"answer":42}');
+        expect(tojson(hidden)).toBe('{"answer":42}');
+        expect(tojson([keyed])).toBe('["at 0"]');
     });
 
     test('and a class that does not is refused rather than guessed at', () => {

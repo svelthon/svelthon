@@ -78,12 +78,28 @@ hidden = 1
         );
     });
 
-    test.for([['class Nope:\n    pass'], ['import Nope'], ['for Nope in [1]:\n    pass']])(
+    test.for([
+        ['class Nope:\n    pass'],
+        ['import Nope'],
+        ['for Nope in [1]:\n    pass'],
+        // The captures of a `match` pattern bind in the module too.
+        ['match {"a": 7}:\n    case {"a": Nope}:\n        pass'],
+        ['match [1, 2]:\n    case [1, *Nope]:\n        pass'],
+        ['match {"a": 7}:\n    case {**Nope}:\n        pass'],
+        ['match 7:\n    case int() as Nope:\n        pass']
+    ])(
         'while %s satisfies it',
         ([form]) => {
             expect(() => plain(`__all__ = ["Nope"]\n\n${form}\n`)).not.toThrow();
         }
     );
+
+    // A value pattern refers to a name and binds none.
+    test('but a value pattern does not', () => {
+        expect(() => plain('__all__ = ["Nope"]\n\nclass C:\n    X = 1\n\nmatch 1:\n    case C.X:\n        pass\n')).toThrow(
+            /`__all__` names `Nope`, which this module never binds/
+        );
+    });
 });
 
 // `__all__` is an ordinary Python name, and the value that counts is the one it

@@ -1150,20 +1150,25 @@ function templateDots(def) {
 // that word in a string did not render at all. Every position reached it — a
 // dict key, a comparison, an f-string — since the word alone was the test.
 //
-// A `Name` node is exactly the question; a `Constant` whose value happens to
-// read the same is not. The line below this one already said so about function
-// names, one rule away.
-function namesRead(node, found = new Set(), seen = new Set()) {
-    if (node === null || typeof node !== 'object' || seen.has(node)) return found;
-    seen.add(node);
+// A `Name` node is the question, and a `Constant` whose value happens to read
+// the same is not. Nor is every `Name`: a parameter or a local called `host`
+// reads the function's own binding, not the one injected into the module. So
+// the answer is Python's own, its symbol table: a name the module reads is one
+// some block uses with a global scope, explicit or implicit.
+function globalReads(ast, source) {
+    const flags = $B.SYMBOL_FLAGS;
+    const found = new Set();
 
-    if (node instanceof $B.ast.Name) found.add(node.id);
+    const visit = (block) => {
+        for (const { key, value } of $B.builtins.dict.$iter_items(block.symbols)) {
+            const scope = (value >> flags.SCOPE_OFFSET) & flags.SCOPE_MASK;
+            const global = scope === flags.GLOBAL_IMPLICIT || scope === flags.GLOBAL_EXPLICIT;
+            if (value & flags.USE && global) found.add(key);
+        }
+        block.children.forEach(visit);
+    };
 
-    for (const value of Object.values(node)) {
-        if (Array.isArray(value)) for (const one of value) namesRead(one, found, seen);
-        else namesRead(value, found, seen);
-    }
-
+    visit($B._PySymtable_Build(ast, source, $B.future_features(ast, source)));
     return found;
 }
 
@@ -1489,6 +1494,17 @@ function surface(body) {
         for (const one of node.elts || []) targets(one);
     };
 
+    // The names a `match` pattern captures: `MatchAs` and `MatchStar` bind
+    // their `name`, `MatchMapping` its `**rest`, and the others hold patterns.
+    const captures = (pattern) => {
+        if (!pattern || typeof pattern !== 'object') return;
+        if (pattern instanceof $B.ast.MatchAs || pattern instanceof $B.ast.MatchStar) bind(pattern.name);
+        if (pattern instanceof $B.ast.MatchMapping) bind(pattern.rest);
+
+        captures(pattern.pattern);
+        for (const one of [...(pattern.patterns || []), ...(pattern.kwd_patterns || [])]) captures(one);
+    };
+
     // The same walk for an assignment at the top of the module, where every
     // name it reaches is state, claimed the way a plain `x = …` claims one.
     const unpacked = (node) => {
@@ -1681,6 +1697,11 @@ function surface(body) {
                 for (const alias of node.names || []) {
                     bind(typeof alias === 'string' ? alias : alias.asname || alias.name?.split('.')[0]);
                 }
+
+                // `case {"amount": amount}:`, `case [x, *rest]:`, `case P(x=y)
+                // as p:` bind their captures in the module too. A value
+                // pattern, `case Colour.RED:`, refers to a name and binds none.
+                captures(node.pattern);
 
                 for (const key of BODIES) if (node[key]) visit(node[key]);
             }
@@ -2907,9 +2928,9 @@ function compile(
         store,
         namespace,
         js,
-        // Every name the module reads, off the AST. What decides whether `host`
-        // and `props_id` are bound at all — see `namesRead`.
-        names: namesRead(root._ast),
+        // Every name the module reads as a global. What decides whether `host`
+        // and `props_id` are bound at all — see `globalReads`.
+        names: globalReads(root._ast, source),
         declared,
         emitted,
         // Whether a name belongs to the module's public surface. `__all__` when
