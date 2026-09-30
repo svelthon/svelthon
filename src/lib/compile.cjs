@@ -296,60 +296,145 @@ const mutatesAll = (node) => {
 // Methods of a list that read it and change nothing.
 const READS_LIST = new Set(['copy', 'count', 'index', '__len__', '__contains__', '__iter__', '__getitem__']);
 
-// Whether a statement, of any shape, writes `__all__`: a method that changes
-// it, an item or a slice stored or deleted, the name assigned or deleted. A
-// read, `return __all__`, is not a write.
+// Whether a target writes `__all__`: the name, an item or a slice of it, or
+// either inside a tuple or a starred target.
+const targetsAll = (target) =>
+    isAll(target) ||
+    (target instanceof $B.ast.Subscript && isAll(target.value)) ||
+    (target instanceof $B.ast.Starred && targetsAll(target.value)) ||
+    ((target instanceof $B.ast.Tuple || target instanceof $B.ast.List) && target.elts.some(targetsAll));
+
+// Whether a node, of any shape, writes `__all__`: a method that changes it,
+// an assignment, a deletion, a loop or `with` target, a walrus, an import alias,
+// an `except … as` or a `match` capture. A read, `return __all__`, is not one.
 const writesAll = (node) => {
-    const method = mutatesAll(node);
-    if (method !== null) return !READS_LIST.has(method);
-
-    const targets =
-        node instanceof $B.ast.Assign ? node.targets
-        : node instanceof $B.ast.AugAssign || node instanceof $B.ast.AnnAssign ? [node.target]
-        : node instanceof $B.ast.Delete ? node.targets
-        : [];
-
-    return targets.some((one) => isAll(one) || (one instanceof $B.ast.Subscript && isAll(one.value)));
+    if (node instanceof $B.ast.Call) {
+        const to = node.func;
+        return to instanceof $B.ast.Attribute && isAll(to.value) && !READS_LIST.has(to.attr);
+    }
+    if (node instanceof $B.ast.Assign || node instanceof $B.ast.Delete) return node.targets.some(targetsAll);
+    if (node instanceof $B.ast.AugAssign) return targetsAll(node.target);
+    if (node instanceof $B.ast.AnnAssign) return Boolean(node.value) && targetsAll(node.target);
+    if (node instanceof $B.ast.For || node instanceof $B.ast.AsyncFor) return targetsAll(node.target);
+    if (node instanceof $B.ast.withitem) return Boolean(node.optional_vars) && targetsAll(node.optional_vars);
+    if (node instanceof $B.ast.NamedExpr) return isAll(node.target);
+    if (node instanceof $B.ast.alias) return (node.asname ?? node.name) === '__all__';
+    if (node instanceof $B.ast.ExceptHandler) return node.name === '__all__';
+    if (node instanceof $B.ast.MatchAs || node instanceof $B.ast.MatchStar) return node.name === '__all__';
+    if (node instanceof $B.ast.MatchMapping) return node.rest === '__all__';
+    return false;
 };
 
-const isScope = (node) =>
-    node instanceof $B.ast.FunctionDef ||
-    node instanceof $B.ast.AsyncFunctionDef ||
-    node instanceof $B.ast.ClassDef;
+const COMPREHENSIONS = ['ListComp', 'SetComp', 'DictComp', 'GeneratorExp'];
 
-// Every statement below the top level, in a block or in a `def` or a `class`,
-// with the innermost of those it sits in. A write there runs under a
-// condition, in a loop, or when something calls it, and a static read can
-// follow none of them.
-function* nestedStatements(body, scope = null) {
-    for (const node of body) {
-        const inner = isScope(node) ? node : scope;
-        for (const key of BODIES) {
-            for (const one of node[key] ?? []) {
-                yield [one, inner];
-                yield* nestedStatements([one], inner);
-            }
+// Every place the source writes `__all__`, with the line of the statement it
+// is in and the scope its value is evaluated in: a `def`, a `class`, a lambda
+// or a comprehension, or null for the module. What Python evaluates where the
+// definition stands, a default, a decorator, an annotation, a base, a
+// comprehension's first iterable, belongs to the enclosing scope, as it does
+// in Python.
+function allWrites(ast) {
+    const found = [];
+    const seen = new Set();
+    const is = (node, ...names) => names.some((one) => node instanceof $B.ast[one]);
+
+    const visit = (node, scope, line) => {
+        if (node === null || typeof node !== 'object' || seen.has(node)) return;
+        if (Array.isArray(node)) {
+            for (const one of node) visit(one, scope, line);
+            return;
         }
-    }
+        seen.add(node);
+
+        const at = typeof node.lineno === 'number' ? node.lineno : line;
+        if (writesAll(node)) found.push({ node, scope, line: at });
+
+        if (is(node, 'FunctionDef', 'AsyncFunctionDef', 'Lambda')) {
+            const args = node.args ?? {};
+            const params = [...(args.posonlyargs ?? []), ...(args.args ?? []), ...(args.kwonlyargs ?? [])];
+            visit(node.decorator_list, scope, at);
+            visit(args.defaults, scope, at);
+            visit(args.kw_defaults, scope, at);
+            visit(node.returns, scope, at);
+            for (const one of [...params, args.vararg, args.kwarg]) visit(one?.annotation, scope, at);
+            visit(node.body, node, at);
+            return;
+        }
+
+        if (is(node, 'ClassDef')) {
+            visit(node.decorator_list, scope, at);
+            visit(node.bases, scope, at);
+            visit(node.keywords, scope, at);
+            visit(node.body, node, at);
+            return;
+        }
+
+        if (is(node, ...COMPREHENSIONS)) {
+            const [first, ...rest] = node.generators;
+            visit(first.iter, scope, at);
+            visit([first.target, first.ifs, rest, node.elt, node.key, node.value], node, at);
+            return;
+        }
+
+        for (const [key, value] of Object.entries(node)) if (key !== 'parent') visit(value, scope, at);
+    };
+
+    visit(ast.body, null, undefined);
+    return found;
 }
 
-// Whether `__all__` in a `def` or a `class` is its own name: assigned there,
-// and not declared `global`. Python's rule, so a local list of that name is
-// the author's business.
-const ownAll = (scope) => {
-    const own = [...nestedStatements([scope])].filter(([, inner]) => inner === scope).map(([one]) => one);
-    const global = own.some((one) => one instanceof $B.ast.Global && one.names.includes('__all__'));
-    const assigned = own.some(
-        (one) =>
-            (one instanceof $B.ast.Assign && one.targets.some(isAll)) ||
-            ((one instanceof $B.ast.AugAssign || one instanceof $B.ast.AnnAssign) && isAll(one.target))
-    );
-    return assigned && !global;
+// Python's symbol table for a module, built once per compile: the module's
+// block, and every block by the AST node it stands for, which Brython marks
+// with `$B.ID` as it builds the table.
+function symbolTable(ast, source) {
+    const top = $B._PySymtable_Build(ast, source, $B.future_features(ast, source));
+    const byNode = new Map();
+
+    const index = (block) => {
+        byNode.set(block.id, block);
+        block.children.forEach(index);
+    };
+    index(top);
+
+    return { top, blockOf: (node) => byNode.get(node[$B.ID]) };
+}
+
+// Where a name resolves in a block: its scope, `GLOBAL_EXPLICIT` and
+// `GLOBAL_IMPLICIT` meaning the module's.
+const scopeIn = (block, name) =>
+    ($B.str_dict_get(block.symbols, name, 0) >> $B.SYMBOL_FLAGS.SCOPE_OFFSET) & $B.SYMBOL_FLAGS.SCOPE_MASK;
+
+const isGlobalScope = (scope) =>
+    scope === $B.SYMBOL_FLAGS.GLOBAL_EXPLICIT || scope === $B.SYMBOL_FLAGS.GLOBAL_IMPLICIT;
+
+// The names the module itself binds, whatever binds them: an assignment, an
+// import, a `def`, a walrus in a default, a `match` capture. Python's answer,
+// read off the module's block.
+const moduleBinds = (table) => {
+    const bound = new Set();
+    for (const { key, value } of $B.builtins.dict.$iter_items(table.top.symbols)) {
+        if (value & $B.SYMBOL_FLAGS.DEF_BOUND) bound.add(key);
+    }
+    return bound;
+};
+
+// Python orders strings by code point; JavaScript's `<` by UTF-16 unit.
+const byCodePoint = (one, other) => {
+    const a = Array.from(one, (c) => c.codePointAt(0));
+    const b = Array.from(other, (c) => c.codePointAt(0));
+    for (let i = 0; i < Math.min(a.length, b.length); i++) if (a[i] !== b[i]) return a[i] - b[i];
+    return a.length - b.length;
 };
 
 // What comes back is the list and the line of the statement that last set it,
 // which is where a refusal about the list points.
-function declaredExports(body, source, lineOffset = 0) {
+//
+// The list is followed with Python's own semantics, order included, since a
+// `pop()` after a `sort()` removes what the sort put last. A write this cannot
+// follow, anywhere it resolves to the module's `__all__`, is refused.
+function declaredExports(ast, table, source, lineOffset = 0) {
+    const body = ast.body;
+    const handled = new Set();
     let names = null;
     let line;
 
@@ -366,13 +451,15 @@ function declaredExports(body, source, lineOffset = 0) {
         );
     };
 
-    // A write below the top level: under a condition, in a loop, or in a
-    // function. Asked first, so the list read below is the whole story.
-    for (const [node, scope] of nestedStatements(body)) {
-        if (writesAll(node) && (scope === null || !ownAll(scope))) {
-            refuseUnreadable(node, 'changed under a condition, in a loop or in a function');
-        }
-    }
+    // Python raises there, at import: the module never runs past it.
+    const refuseRaising = (node, what) => {
+        throw refuse(
+            `svelthon — \`__all__\` ${what}, which Python raises on when the module is ` +
+                `imported (${source}:${node.lineno + lineOffset})`,
+            source,
+            node.lineno + lineOffset
+        );
+    };
 
     // A string argument, or UNREADABLE; an integer one, `2` or `-1`, or null.
     const spelled = (arg) => (arg instanceof $B.ast.Constant && typeof arg.value === 'string' ? arg.value : UNREADABLE);
@@ -387,34 +474,44 @@ function declaredExports(body, source, lineOffset = 0) {
         const mutated = mutatesAll(node);
 
         if (mutated !== null && !READS_LIST.has(mutated)) {
-            const args = node.value.args;
+            const { args, keywords } = node.value;
             const current = [...(names ?? [])];
             let next;
 
-            if (mutated === 'append' || mutated === 'extend') {
+            if (keywords.length > 0) {
+                refuseUnreadable(node, `changed by \`.${mutated}()\` with keywords, which this file cannot follow`);
+            } else if (mutated === 'append' || mutated === 'extend') {
                 const added = mutated === 'append' ? [spelled(args[0])] : NAMES(args[0]);
                 if (!readable(added)) {
                     refuseUnreadable(node, `given a name this file cannot read (\`.${mutated}()\`)`);
                 }
                 next = [...current, ...strings(added)];
-            } else if (mutated === 'insert' && args.length === 2 && readable([spelled(args[1])])) {
-                // Where it goes does not change what is exported.
-                next = [...current, args[1].value];
+            } else if (mutated === 'insert' && args.length === 2 && integer(args[0]) !== null && readable([spelled(args[1])])) {
+                // `list.insert`: a negative index counts from the end, and
+                // either is clamped to the list.
+                const index = integer(args[0]);
+                const at = Math.min(Math.max(index < 0 ? index + current.length : index, 0), current.length);
+                next = [...current.slice(0, at), args[1].value, ...current.slice(at)];
             } else if (mutated === 'remove' && args.length === 1 && readable([spelled(args[0])])) {
                 const at = current.indexOf(args[0].value);
-                next = at === -1 ? current : current.filter((_, index) => index !== at);
+                if (at === -1) refuseRaising(node, `has no \`${args[0].value}\` to \`.remove()\``);
+                next = current.filter((_, index) => index !== at);
             } else if (mutated === 'pop' && (args.length === 0 || integer(args[0]) !== null)) {
-                const at = args.length === 0 ? current.length - 1 : integer(args[0]);
-                next = current.filter((_, index) => index !== (at < 0 ? current.length + at : at));
+                const index = args.length === 0 ? -1 : integer(args[0]);
+                const at = index < 0 ? current.length + index : index;
+                if (at < 0 || at >= current.length) refuseRaising(node, 'has no item to `.pop()` there');
+                next = current.filter((_, i) => i !== at);
             } else if (mutated === 'clear' && args.length === 0) {
                 next = [];
-            } else if ((mutated === 'sort' || mutated === 'reverse') && args.length === 0) {
-                // The order is not what is exported.
-                next = current;
+            } else if (mutated === 'sort' && args.length === 0) {
+                next = [...current].sort(byCodePoint);
+            } else if (mutated === 'reverse' && args.length === 0) {
+                next = [...current].reverse();
             } else {
                 refuseUnreadable(node, `changed by \`.${mutated}()\` in a form this file cannot follow`);
             }
 
+            handled.add(node.value);
             names = next;
             line = node.lineno + lineOffset;
             continue;
@@ -424,11 +521,9 @@ function declaredExports(body, source, lineOffset = 0) {
             (node instanceof $B.ast.Assign && node.targets.some(isAll)) ||
             ((node instanceof $B.ast.AugAssign || node instanceof $B.ast.AnnAssign) && isAll(node.target));
 
-        if (!assigns) {
-            // An item or a slice stored or deleted, or the name deleted.
-            if (writesAll(node)) refuseUnreadable(node, 'changed item by item or deleted');
-            continue;
-        }
+        if (!assigns) continue;
+
+        handled.add(node);
 
         if (node instanceof $B.ast.AugAssign && !(node.op instanceof $B.ast.Add)) {
             refuseUnreadable(node, 'changed by an operator other than `+=`');
@@ -460,6 +555,18 @@ function declaredExports(body, source, lineOffset = 0) {
                 ? [...(names ?? []), ...strings(given)]
                 : strings(given);
         line = node.lineno + lineOffset;
+    }
+
+    // Every other write that reaches the module's `__all__`: under a condition,
+    // in a loop, in a function or a class that does not make the name its own,
+    // item by item, deleted, or rebound by a loop, an import or a walrus.
+    for (const { node, scope, line: at } of allWrites(ast)) {
+        if (handled.has(node)) continue;
+
+        const block = scope === null ? null : table.blockOf(scope);
+        if (block !== null && block !== undefined && !isGlobalScope(scopeIn(block, '__all__'))) continue;
+
+        refuseUnreadable({ lineno: at }, 'changed where this file cannot follow it');
     }
 
     // A name listed twice is exported once: Python allows the repetition, and
@@ -1255,20 +1362,19 @@ function templateDots(def) {
 // reads the function's own binding, not the one injected into the module. So
 // the answer is Python's own, its symbol table: a name the module reads is one
 // some block uses with a global scope, explicit or implicit.
-function globalReads(ast, source) {
+function globalReads(table) {
     const flags = $B.SYMBOL_FLAGS;
     const found = new Set();
 
     const visit = (block) => {
         for (const { key, value } of $B.builtins.dict.$iter_items(block.symbols)) {
             const scope = (value >> flags.SCOPE_OFFSET) & flags.SCOPE_MASK;
-            const global = scope === flags.GLOBAL_IMPLICIT || scope === flags.GLOBAL_EXPLICIT;
-            if (value & flags.USE && global) found.add(key);
+            if (value & flags.USE && isGlobalScope(scope)) found.add(key);
         }
         block.children.forEach(visit);
     };
 
-    visit($B._PySymtable_Build(ast, source, $B.future_features(ast, source)));
+    visit(table.top);
     return found;
 }
 
@@ -2985,7 +3091,8 @@ function compile(
     // to export values says so with `__all__`, exactly as it would to a Python
     // caller. SvelteKit is strict about it: a `+page.server.py` exporting
     // anything but load/actions/prerender/… is refused, and rightly so.
-    const declaration = declaredExports(root._ast.body, source, lineOffset);
+    const table = symbolTable(root._ast, source);
+    const declaration = declaredExports(root._ast, table, source, lineOffset);
     const listed = declaration === null ? null : declaration.names;
     const exported = (
         listed ?? [...funcs.map((f) => f.name), ...plainDeriveds.map((d) => d.name)]
@@ -2997,7 +3104,8 @@ function compile(
     // with `ReferenceError: Widget is not defined` and took everything it
     // exported down with it. Reading the value off the namespace fixed the
     // class and the import, and would have made this one quietly `undefined`.
-    const missing = (listed ?? []).find((n) => !declared.includes(n));
+    const binds = moduleBinds(table);
+    const missing = (listed ?? []).find((n) => !declared.includes(n) && !binds.has(n));
 
     if (missing) {
         // The name is bound nowhere, so the line is the one `__all__` is on.
@@ -3030,7 +3138,7 @@ function compile(
         js,
         // Every name the module reads as a global. What decides whether `host`
         // and `props_id` are bound at all — see `globalReads`.
-        names: globalReads(root._ast, source),
+        names: globalReads(table),
         declared,
         emitted,
         // Whether a name belongs to the module's public surface. `__all__` when

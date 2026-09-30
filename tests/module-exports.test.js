@@ -141,8 +141,20 @@ describe('__all__ is read as the value the module ends with', () => {
         ['pop at an index', '__all__ = ["a", "b"]\n__all__.pop(0)', ['b']],
         ['pop from the end', '__all__ = ["a", "b"]\n__all__.pop(-1)', ['a']],
         ['remove', '__all__ = ["a", "b"]\n__all__.remove("a")', ['b']],
-        ['insert', '__all__ = ["b"]\n__all__.insert(0, "a")', ['b', 'a']],
-        ['sort, which changes no name', '__all__ = ["b", "a"]\n__all__.sort()', ['b', 'a']],
+        ['insert', '__all__ = ["b"]\n__all__.insert(0, "a")', ['a', 'b']],
+        ['sort', '__all__ = ["b", "a"]\n__all__.sort()', ['a', 'b']],
+        // The order is Python's all the way, since a later `pop()` reads it.
+        ['reverse, then pop', '__all__ = ["a", "b"]\n__all__.reverse()\n__all__.pop()', ['b']],
+        ['sort, then pop', '__all__ = ["b", "a"]\n__all__.sort()\n__all__.pop()', ['a']],
+        ['insert, then pop', '__all__ = ["a"]\n__all__.insert(0, "b")\n__all__.pop()', ['b']],
+        ['insert from the end', '__all__ = ["a", "b"]\n__all__.insert(-1, "c")\n__all__.pop()', ['a', 'c']],
+        // A name the module binds where a definition stands: a walrus in a
+        // default, a base or a decorator is evaluated in the module.
+        ['a walrus in a default', '__all__ = ["answer"]\ndef take(value=(answer := 7)):\n    return value', ['__export_answer as answer']],
+        ['a walrus in a class base', '__all__ = ["answer"]\nclass Alias((answer := object)):\n    pass', ['__export_answer as answer']],
+        // A parameter, a closure or a lambda's own `__all__` is not the module's.
+        ['a parameter of that name', 'def shrink(__all__):\n    __all__.clear()\n', ['shrink', 'a', 'b', 'c']],
+        ['a closure over one', 'def outer():\n    __all__ = []\n    def shrink():\n        __all__.clear()\n    return shrink\n', ['outer', 'a', 'b', 'c']],
         // Python allows a name twice; JavaScript refuses a duplicate export.
         ['a name listed twice', '__all__ = ["a", "a"]', ['a']],
         ['annotated', '__all__: list[str] = ["a"]', ['a']],
@@ -166,7 +178,15 @@ describe('__all__ is read as the value the module ends with', () => {
         ['an item deleted', '__all__ = ["a", "b"]\ndel __all__[0]', 2],
         ['the name deleted', '__all__ = ["a"]\ndel __all__', 2],
         ['popped at a computed index', '__all__ = ["a"]\ni = 0\n__all__.pop(i)', 3],
-        ['multiplied', '__all__ = ["a"]\n__all__ *= 2', 2]
+        ['multiplied', '__all__ = ["a"]\n__all__ *= 2', 2],
+        ['sorted by a key', '__all__ = ["a"]\n__all__.sort(key=len)', 2],
+        ['changed in a class body', '__all__ = ["a"]\nclass C:\n    __all__.append("b")', 3],
+        ['changed in a default', '__all__ = ["a"]\ndef f(x=__all__.clear()):\n    pass', 2],
+        ['popped into a name', '__all__ = ["a", "b"]\nx = __all__.pop()', 2],
+        ['rebound by a loop', '__all__ = ["a"]\nfor __all__ in [["b"]]:\n    pass', 2],
+        // Python raises at import on these: the module never runs past them.
+        ['a name removed that is not there', '__all__ = ["a"]\n__all__.remove("z")', 2],
+        ['an empty list popped', '__all__ = []\n__all__.pop()', 2]
     ])('%s is refused, at its line', ([, head, line]) => {
         let error;
         try {
@@ -175,7 +195,7 @@ describe('__all__ is read as the value the module ends with', () => {
             error = thrown;
         }
 
-        expect(error?.message).toMatch(/`__all__` is /);
+        expect(error?.message).toMatch(/`__all__` (is|has) /);
         expect(error?.start?.line).toBe(line);
     });
 
