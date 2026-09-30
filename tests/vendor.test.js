@@ -9,8 +9,9 @@ import CoroutineAwaited from './fixtures/CoroutineAwaited.svelte';
 // Behaviours of the vendored Brython that Svelthon rests on, each observable,
 // so a build that loses one turns a test red rather than a page. The first
 // group is upstream; then come the commits still waiting there, which a
-// re-vendoring from plain master drops; the last two are the edits made in the
-// built file, which every re-vendoring drops.
+// re-vendoring from plain master drops; the integer format, the `__call__`
+// binding and the id counter are edits made in the built file, which every
+// re-vendoring drops.
 describe('the vendored Brython carries its repairs', () => {
     const $B = globalThis.__BRYTHON__;
 
@@ -318,6 +319,21 @@ describe('the vendored Brython carries its repairs', () => {
     // built file, which a revendoring erases: this row says so.
     test('a classmethod __call__ is bound before it is called', () => {
         expect(String($B.$call)).toContain("search_slot($B.get_class(call_method),'tp_descr_get'");
+    });
+
+    // The counter the code generator numbers functions with starts at random
+    // and is private upstream; `$B.id_counter(n)` sets it and gives back the
+    // value it replaces, which is what makes one source compile to one text.
+    // A direct edit of the built file, which a revendoring erases.
+    test('the id counter can be set, and gives back what it held', () => {
+        const was = $B.id_counter(1000);
+
+        try {
+            expect($B.id_counter(2000)).toBe(1000);
+            expect($B.id_counter()).toBe(2000);
+        } finally {
+            $B.id_counter(was);
+        }
     });
 
     // A coroutine that leaves the frame it was created in has not been dropped:
