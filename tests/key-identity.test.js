@@ -38,6 +38,10 @@ test('two tuples whose members print alike are two keys', () => {
     expect(setup().at('boxes').textContent).toBe('12');
 });
 
+test('and a tuple keys by its members, not by an __iter__ it redefines', () => {
+    expect(setup().at('masked').textContent).toBe('12');
+});
+
 test('and tuples of values still key by value', () => {
     expect(setup().at('spelled').textContent).toBe('ab');
 });

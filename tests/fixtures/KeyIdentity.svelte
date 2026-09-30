@@ -21,6 +21,16 @@ class Box:
 
 
 boxes = [(Box(1),), (Box(2),)]
+
+
+# Two tuples whose iteration says the same thing and whose members differ:
+# equality reads the members.
+class Masked(tuple):
+    def __iter__(self):
+        return iter([0])
+
+
+masked = [Masked([1]), Masked([2])]
 spelled = [("a", frozenset({1, 2})), ("b", frozenset({2, 3}))]
 
 
@@ -38,6 +48,7 @@ def replace():
 {#each people as person (person)}<input data-k="field" bind:value={person["name"]} />{/each}
 <ul data-k="nans">{#each nans as value (value)}<li>{value}</li>{/each}</ul>
 <ul data-k="boxes">{#each boxes as box (box)}<li>{box[0].ident}</li>{/each}</ul>
+<ul data-k="masked">{#each masked as key (key)}<li>{key[0]}</li>{/each}</ul>
 <ul data-k="spelled">{#each spelled as pair (pair)}<li>{pair[0]}</li>{/each}</ul>
 <ul data-k="mixed">{#each mixed as item (item)}<li>{type(item).__name__}</li>{/each}</ul>
 <button data-k="grow"onclick={grow}>grow</button>

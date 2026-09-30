@@ -403,6 +403,21 @@ const ELEMENT_OPTION = /<svelte:options\b[^>]*?\bcustomElement\s*=\s*(["'])([^"'
 // the only way to set `shadow`: the props go into it when it names none.
 const ELEMENT_OBJECT = /<svelte:options\b[^>]*?\bcustomElement\s*=\s*\{\{/;
 
+// The written-out object itself, as Svelte's own parser reads it: its keys are
+// its top-level properties, not a `props:` spelled inside a string or in the
+// body of `extend`. The scripts and styles are blanked first, lines and
+// offsets kept, since the Python one is not JavaScript and a style may not be
+// CSS yet.
+const BLOCK = /(<(script|style)\b[^>]*>)([\s\S]*?)(<\/\2\s*>)/g;
+
+function elementObject(code) {
+    const blanked = code.replace(BLOCK, (_, open, name, body, close) => open + body.replace(/[^\n]/g, ' ') + close);
+    const expression = parse(blanked, { modern: true })
+        .options?.attributes.find((one) => one.name === 'customElement')?.value?.expression;
+
+    return expression?.type === 'ObjectExpression' ? expression : null;
+}
+
 function elementOptions(code, python) {
     const props = () =>
         elementProps(python)
@@ -410,13 +425,13 @@ function elementOptions(code, python) {
             .join(', ');
 
     const text = withoutComments(code);
-    const object = ELEMENT_OBJECT.exec(text);
 
-    if (object !== null) {
-        const at = object.index + object[0].length;
-        const close = text.indexOf('}}', at);
-        if (close === -1 || /\bprops\s*:/.test(text.slice(at, close))) return code;
+    if (ELEMENT_OBJECT.test(text)) {
+        const object = elementObject(code);
+        const named = (one) => one.type === 'Property' && (one.key.name ?? one.key.value) === 'props';
+        if (object === null || object.properties.some(named)) return code;
 
+        const at = object.start + 1;
         return `${code.slice(0, at)} props: { ${props()} },${code.slice(at)}`;
     }
 

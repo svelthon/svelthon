@@ -128,12 +128,15 @@ function keyText(value) {
     const cls = globalThis.__BRYTHON__.get_class(value);
     const mro = cls.tp_mro;
 
+    // The members equality compares are the stored ones, read here without an
+    // `__iter__` a subclass redefines: that says what iterating yields, not
+    // what the value is.
     if (mro.includes(_b_.tuple)) {
-        const members = iterated(value).map(keyText);
+        const members = Array.prototype.slice.call(value).map(keyText);
         return `(${members.join(', ')}${members.length === 1 ? ',' : ''})`;
     }
     if (mro.includes(_b_.frozenset)) {
-        return `frozenset({${Array.from(_b_.list.$factory(value), keyText).sort().join(', ')}})`;
+        return `frozenset({${Object.values(value.$store).flat().map(keyText).sort().join(', ')}})`;
     }
     if (mro.includes(_b_.float) && Number.isNaN(value.value)) return identityOf(value, 'nan');
     if (BY_VALUE.some((one) => mro.includes(one))) return _b_.repr(value);
@@ -471,8 +474,7 @@ function installMutationTracking($B) {
             } else {
                 for (const arg of args) {
                     if (!SOURCES.has(attr)) inherit(obj, arg);
-                    else if (keeps(arg)) inheritContents(obj, arg);
-                    else spent = true;
+                    else if (!keeps(arg) || !inheritContents(obj, arg)) spent = true;
                 }
             }
 
@@ -889,8 +891,7 @@ function installMutationTracking($B) {
             // items()` cannot: the generator kept nothing, and neither does a
             // class whose `__iter__` makes its rows as it goes. The same two answers
             // as the method paths above, and the same question decides.
-            if (!keeps(right)) adopt(left);
-            else inheritContents(left, right);
+            if (!keeps(right) || !inheritContents(left, right)) adopt(left);
 
             MARKS.get(left)();
         }
@@ -1161,9 +1162,7 @@ function stored(obj, key, value) {
     if (!slice) {
         inherit(obj, key);
         inherit(obj, value, key);
-    } else if (keeps(value)) {
-        inheritContents(obj, value);
-    } else {
+    } else if (!keeps(value) || !inheritContents(obj, value)) {
         adopt(obj);
     }
 }
@@ -1223,14 +1222,23 @@ const plainKey = (key) =>
 // `rows.extend(other)` is not inside `rows`, what it held is. A dict fed pairs,
 // `d.update([("k", child)])` or `d.update({("k", child)})`, holds each key and
 // each value, not the pair.
+//
+// A pair is split by its storage only when it is exactly a tuple or a list,
+// whose storage is what Python consumed. Any other pair said through its own
+// `__iter__` what it gave, which running again could change; the answer is
+// false then, and the caller asks the container what it now holds.
 function inheritContents(into, source) {
-    const pairs = globalThis.__BRYTHON__.is_dict(into);
+    const $B = globalThis.__BRYTHON__;
+    const pairs = $B.is_dict(into);
+    let whole = true;
     const take = (child) => {
-        if (pairs && Array.isArray(child) && child.length === 2) {
+        if (!pairs) {
+            inherit(into, child);
+        } else if (Array.isArray(child) && child.length === 2 && [_b_.tuple, _b_.list].includes($B.get_class(child))) {
             inherit(into, child[0]);
             inherit(into, child[1], child[0]);
         } else {
-            inherit(into, child);
+            whole = false;
         }
     };
 
@@ -1251,6 +1259,8 @@ function inheritContents(into, source) {
             }
         }
     }
+
+    return whole;
 }
 
 // Where a watched container's marker lives.

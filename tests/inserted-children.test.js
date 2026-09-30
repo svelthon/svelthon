@@ -22,9 +22,9 @@ import { mount, flushSync } from './mounted.js';
 import InsertedChild from './fixtures/InsertedChild.svelte';
 import PairsFromSet from './fixtures/PairsFromSet.svelte';
 
-// Pairs from a set or a frozenset: the dict holds the key and the value, and the
-// value is what repaints when it changes.
-test.for(['set', 'frozenset'])('a value put in a dict from a %s of pairs is watched', (kind) => {
+// Pairs from a set or a frozenset, or pairs of the author's own class: the dict
+// holds the key and the value, and the value is what repaints when it changes.
+test.for(['set', 'frozenset', 'custom', 'custom-or'])('a value put in a dict from %s pairs is watched', (kind) => {
     const target = document.body.appendChild(document.createElement('div'));
     mount(PairsFromSet, { target, props: { kind } });
     flushSync();
