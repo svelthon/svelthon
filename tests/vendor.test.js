@@ -358,6 +358,12 @@ describe('the vendored Brython carries its repairs', () => {
         expect(deleteOrder.read_count()).toBe('5');
     });
 
+    test('and when the global is bound in a block of the module', () => {
+        expect(deleteOrder.read_level()).toBe('1');
+        deleteOrder.drop_level();
+        expect(deleteOrder.read_level()).toBe('missing');
+    });
+
     // `index` and `remove` find an item by identity before equality, as `in`
     // and `count` do: `x = float("nan"); [x].index(x)` is 0.
     test('index and remove find the very object, even a NaN', () => {
