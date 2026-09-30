@@ -300,6 +300,35 @@ describe('tojson', () => {
         expect(tojson(literal)).toBe('{"answer":42}');
         expect(tojson(hidden)).toBe('{"answer":42}');
         expect(tojson([keyed])).toBe('["at 0"]');
+
+        // An array too, its own method or its class's.
+        const values = Object.assign([1, 2], { toJSON: () => ({ answer: 42 }) });
+        class Counted extends Array {
+            toJSON() {
+                return { count: this.length };
+            }
+        }
+
+        expect(tojson(values)).toBe('{"answer":42}');
+        expect(tojson(Counted.from([1, 2]))).toBe('{"count":2}');
+    });
+
+    // What a hook answers is held to the same refusals as what the author
+    // passed, from a literal as from a class instance, at any depth.
+    test.for([
+        ['a Map', () => new Map([['answer', 42]]), /a Map has no JSON of its own/],
+        ['a promise', () => Promise.resolve(1), /is a promise/],
+        ['a function', () => () => 1, /is callable/],
+        ['a symbol', () => Symbol('marker'), /is a symbol/]
+    ])('%s a toJSON hands back is refused', ([, make, message]) => {
+        class Holder {
+            toJSON() {
+                return { inner: make() };
+            }
+        }
+
+        expect(() => tojson({ toJSON: () => ({ inner: make() }) })).toThrow(message);
+        expect(() => tojson(new Holder())).toThrow(message);
     });
 
     test('and a class that does not is refused rather than guessed at', () => {

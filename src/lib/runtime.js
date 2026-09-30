@@ -2201,6 +2201,12 @@ export function plainData(value, seen, adapt) {
 // found on the way down meets the same one. The JSON rule has none and builds as
 // it goes, which is why every `fill` below takes what it was given or makes one.
 function branch(value, seen, shell, adapt) {
+    // A native object that says how it serialises keeps it, an array, a literal
+    // and a class instance alike: `JSON.stringify` calls its `toJSON`,
+    // enumerable or not, own or inherited, with the receiver and the key. A
+    // Python object with a `toJSON` key or attribute has a class, and is data.
+    if (typeof value.toJSON === 'function' && !pyClass(value.ob_type)) return value;
+
     if (Array.isArray(value)) {
         // list, tuple, and a subclass through whatever it says iterating it
         // means: `json.dumps` of a list subclass in CPython is its `__iter__`
@@ -2222,12 +2228,6 @@ function branch(value, seen, shell, adapt) {
     // a Date, a Map, a Promise: a Python `load()` may hand any of those straight
     // back to the framework, and copying their keys would destroy them.
     if (!plainObject(value)) return value;
-
-    // A native object that says how it serialises keeps it, a literal as much as
-    // a class instance above: `JSON.stringify` calls its `toJSON`, enumerable or
-    // not, with the receiver and the key. A Python object with a `toJSON` key or
-    // attribute has a class, and is data.
-    if (typeof value.toJSON === 'function' && !pyClass(value.ob_type)) return value;
 
     // A class instance keeps its attributes under a private symbol rather than as
     // JavaScript properties, so walking its own keys finds almost nothing and

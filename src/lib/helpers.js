@@ -27,6 +27,7 @@ import {
     pyEntries,
     pyName,
     isSet,
+    opaque,
     pyBytes,
     thenable,
     ticking
@@ -222,6 +223,19 @@ const serialisable = (one) => {
     if (pyClass(one)) {
         throw refuse(`tojson(): ${shown(one)} is a class, and a class has no JSON`);
     }
+
+    // What a `toJSON` hands back arrives here without the walk, since
+    // `JSON.stringify` calls the hook itself, with its receiver and its key. So
+    // the walk's refusals are asked of it again, at any depth; on the walk's own
+    // output none of these can arrive.
+    const walkRefuses =
+        typeof one === 'symbol' ||
+        callable(one) ||
+        (one !== null &&
+            typeof one === 'object' &&
+            (thenable(one) || pyCoroutine(one) || isSet(one) || pyBytes(one) || opaque(one)));
+
+    if (walkRefuses) noCall(one);
 
     return raw(one);
 };
