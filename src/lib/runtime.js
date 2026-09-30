@@ -109,14 +109,45 @@ function iterated(value) {
 // is another object each time and only its repr() stays the same.
 const BY_VALUE = [_b_.tuple, _b_.frozenset, _b_.float, _b_.complex, _b_.bytes];
 
-// One object per repr(), so such a key is stable across renders and never equal
+// The text two such values share exactly when Python finds them equal. A
+// scalar's repr() says it; a tuple or a frozenset is equal when its members
+// are, so its text is built from theirs; anything else, an instance or a list,
+// is equal to itself alone, as it is when it keys a row on its own, and so is a
+// NaN. A repr() the author wrote says nothing about equality: two instances
+// may print alike.
+const IDENTITIES = new WeakMap();
+let identities = 0;
+const identityOf = (value, name) => {
+    let id = IDENTITIES.get(value);
+    if (id === undefined) IDENTITIES.set(value, (id = `<${name} #${++identities}>`));
+    return id;
+};
+function keyText(value) {
+    if (value === null || typeof value !== 'object') return _b_.repr(value);
+
+    const cls = globalThis.__BRYTHON__.get_class(value);
+    const mro = cls.tp_mro;
+
+    if (mro.includes(_b_.tuple)) {
+        const members = iterated(value).map(keyText);
+        return `(${members.join(', ')}${members.length === 1 ? ',' : ''})`;
+    }
+    if (mro.includes(_b_.frozenset)) {
+        return `frozenset({${Array.from(_b_.list.$factory(value), keyText).sort().join(', ')}})`;
+    }
+    if (mro.includes(_b_.float) && Number.isNaN(value.value)) return identityOf(value, 'nan');
+    if (BY_VALUE.some((one) => mro.includes(one))) return _b_.repr(value);
+
+    return identityOf(value, cls.__name__);
+}
+
+// One object per text, so such a key is stable across renders and never equal
 // to a string the author keys with: `0.5` and `"0.5"` are two keys.
 //
 // Held weakly: a key needs to stay the same object only while something holds
 // it, Svelte's block for one. Once it is collected, its entry goes too, so the
 // cache holds what is rendered and not every key ever computed.
 const KEYS = new Map();
-const OWN_KEYS = new WeakMap();
 const released = new FinalizationRegistry((repr) => {
     if (KEYS.get(repr)?.deref() === undefined) KEYS.delete(repr);
 });
@@ -147,8 +178,13 @@ export const __pybridge = {
             return out;
         }
 
+        // The names the list yields, which for a subclass with its own
+        // `__iter__` are not the ones it stores: the loop beside it reads the
+        // same ones.
         if (Array.isArray(value)) {
-            return value.filter((one) => __pybridge.truthy(one)).map((one) => __pybridge.klass(one));
+            return iterated(value)
+                .filter((one) => __pybridge.truthy(one))
+                .map((one) => __pybridge.klass(one));
         }
 
         return __pybridge.truthy(value) ? __pybridge.str(value) : undefined;
@@ -157,7 +193,10 @@ export const __pybridge = {
     // A key of `{#key}` and of an `{#each}`, which Svelte compares with `===`.
     // A list, a dict, a set or an instance is the same object while it lives,
     // so it keys by identity: two equal rows are two rows, and a row mutated
-    // keeps its block. A value rebuilt each time keys by its repr().
+    // keeps its block. A value rebuilt each time keys by `keyText`, the text
+    // equal values share. A NaN, equal to nothing, gets a key object of its
+    // own, since the float itself would reach Svelte as the number NaN, which
+    // no comparison finds again.
     key(value) {
         if (value === null || typeof value !== 'object') return value;
 
@@ -165,17 +204,7 @@ export const __pybridge = {
             const mro = globalThis.__BRYTHON__.get_class(value).tp_mro;
             if (!BY_VALUE.some((cls) => mro.includes(cls))) return value;
 
-            // A NaN is not equal to itself, so two of them are two keys: its
-            // repr() says `nan` for both, and only its identity tells them apart.
-            // Its own key object, since the float itself would reach Svelte as
-            // the number NaN, which no comparison finds again.
-            if (mro.includes(_b_.float) && Number.isNaN(value.value)) {
-                let key = OWN_KEYS.get(value);
-                if (key === undefined) OWN_KEYS.set(value, (key = Object.freeze({ toString: () => 'nan' })));
-                return key;
-            }
-
-            return keyFor(_b_.repr(value));
+            return keyFor(keyText(value));
         } catch {
             return value; // a foreign JavaScript value keeps its own identity
         }

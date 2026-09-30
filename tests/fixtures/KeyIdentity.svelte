@@ -10,6 +10,20 @@ mixed = [0.5, "0.5", (1, 2), "(1, 2)", b"x", "b'x'"]
 nans = [float("nan"), float("nan")]
 
 
+# Two tuples whose members print alike but are not equal, beside two that are
+# built apart and equal.
+class Box:
+    def __init__(self, ident):
+        self.ident = ident
+
+    def __repr__(self):
+        return "Box"
+
+
+boxes = [(Box(1),), (Box(2),)]
+spelled = [("a", frozenset({1, 2})), ("b", frozenset({2, 3}))]
+
+
 def grow():
     rows.append(2)
 
@@ -23,6 +37,8 @@ def replace():
 {#key rows}<i data-k="block">{len(rows)}</i>{/key}
 {#each people as person (person)}<input data-k="field" bind:value={person["name"]} />{/each}
 <ul data-k="nans">{#each nans as value (value)}<li>{value}</li>{/each}</ul>
+<ul data-k="boxes">{#each boxes as box (box)}<li>{box[0].ident}</li>{/each}</ul>
+<ul data-k="spelled">{#each spelled as pair (pair)}<li>{pair[0]}</li>{/each}</ul>
 <ul data-k="mixed">{#each mixed as item (item)}<li>{type(item).__name__}</li>{/each}</ul>
 <button data-k="grow"onclick={grow}>grow</button>
 <button data-k="replace" onclick={replace}>replace</button>

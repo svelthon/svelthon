@@ -5,3 +5,4 @@ import iterating_subclass as cases
 <p data-k="custom">{#each cases.rows as row}{row}{/each}</p>
 <p data-k="plain">{#each cases.plain as row}{row}{/each}</p>
 <p data-k="python">{cases.python_order()}</p>
+<p data-k="classes" class={cases.rows}>classes</p>

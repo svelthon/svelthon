@@ -47,7 +47,7 @@ the shorthand `{name}`, a lone interpolation between quotes, on a tag or on
 | `__text` | `{x}`, `{@html}`, `class="a {x}"` | `None` renders `[object Object]`, a list `1,2` instead of `[1, 2]` |
 | `__seq` | the `{#each}` iterable | a dict, a `range`, a generator or `.items()` does not iterate at all — a list and a tuple do, being JavaScript arrays |
 | `__spread` | `{...attrs}` | Svelte diffs against the previous render by identity, so a mutated dict looks unchanged |
-| `__key` | `{#key x}` and an `{#each}` key | keys compare by identity: a list, a dict or an instance keeps one, a tuple or a float rebuilt does not, so those key by `repr()` |
+| `__key` | `{#key x}` and an `{#each}` key | keys compare by identity: a list, a dict or an instance keeps one, a tuple or a float rebuilt does not, so those key by value, as Python compares them: a tuple by its members, an instance inside it by identity |
 
 They are not Python's own `bool()` and `str()`: a template may hold a foreign
 JavaScript value — a DOM node from `bind:this` — on which Brython's classifier

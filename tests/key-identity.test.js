@@ -1,6 +1,6 @@
 // Svelte compares a key with `===`. A list, a dict, a set or an instance is the
 // same object while it lives, so it keys by identity, as it does in JavaScript;
-// only a value rebuilt on every computation (a tuple, a float) keys by repr(),
+// only a value rebuilt on every computation (a tuple, a float) keys by value,
 // which `tests/keys.test.js` holds.
 import { test, expect } from 'vitest';
 import { mount, flushSync } from './mounted.js';
@@ -30,6 +30,16 @@ test('a value keyed by repr() and its spelling are two keys', () => {
 
 test('two NaN are two keys', () => {
     expect(setup().at('nans').textContent).toBe('nannan');
+});
+
+// A tuple keys by what makes it equal, its members: an instance in it by
+// identity, however it prints, and scalars and frozensets by value.
+test('two tuples whose members print alike are two keys', () => {
+    expect(setup().at('boxes').textContent).toBe('12');
+});
+
+test('and tuples of values still key by value', () => {
+    expect(setup().at('spelled').textContent).toBe('ab');
 });
 
 test('a list mutated keeps its {#key} block', () => {

@@ -38,6 +38,16 @@ describe('a list subclass with its own __iter__', () => {
         expect(read('python')).toBe('[3, 2, 1]');
     });
 
+    // `class={…}` reads the names the list yields, as the loop does.
+    test('and class={…} takes the names it yields', () => {
+        const target = document.body.appendChild(document.createElement('div'));
+
+        mount(IteratingSubclass, { target });
+        flushSync();
+
+        expect(target.querySelector('[data-k="classes"]').className).toBe('3 2 1');
+    });
+
     test('and a helper that walks it sees the same order', () => {
         const [custom, plain] = batched();
 
