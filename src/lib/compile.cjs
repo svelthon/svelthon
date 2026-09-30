@@ -1155,6 +1155,8 @@ const RUNTIME = {
     NONE: '__NONE',
     helpers: '__helpers',
     unsubscribe: '__unsubscribe',
+    kept: '__kept',
+    unproxied: '__unproxied',
     registerModule: '__registerModule',
     withNamespace: '__withNamespace',
     __pybridge: '__pybridge',
@@ -2143,7 +2145,7 @@ const SUBS = '__subs';
 // vocabulary. This is a third category, a name the generated code uses for
 // itself, and the answer to that category is a prefix rather than a list.
 const NEXT_VALUE = '__next';
-const SUBSCRIBING = (c) => c.state.length > 0 || c.bindables.length > 0;
+const SUBSCRIBING = (c) => c.state.length > 0 || c.bindables.length > 0 || c.props.length > 0;
 
 const rev = (name) => `__rev_${name}`;
 const bump = (name) => `__bump_${name}`;
@@ -2170,6 +2172,7 @@ function preamble(c) {
             'ticking', 'pyBind', 'pyModule', 'NONE', 'helpers',
             'plainScalar',
             ...(c.store ? ['registerModule'] : SUBSCRIBING(c) ? ['unsubscribe'] : []),
+            ...(c.bindables.length ? ['kept', 'unproxied'] : []),
             // Only an effect and `on_mount` hand a value back to be called
             // later, so only a component with one needs the name.
             ...(c.effects.length || c.lifecycle('on_mount') ? ['pyTeardown'] : []),
@@ -2211,6 +2214,9 @@ function declarations(c) {
         // parent update flows into Python's namespace on the next read.
         ...c.props.flatMap((n) => [
             `let ${local(n)} = $state.raw(undefined);`,
+            `let ${rev(n)} = $state.raw(0);`,
+            `const ${bump(n)} = () => { ${rev(n)} += 1; };`,
+            `const ${read(n)} = () => { ${rev(n)}; };`,
             // Read by Svelte's own compiler and not by ours: a snippet is a
             // prop, and `{@render name(…)}` references the bare name. Python
             // reaches the same value through the namespace accessor below, and
@@ -2278,16 +2284,10 @@ function templateBridge(c) {
 // The namespace must NOT be a $state proxy: Svelte would deep-proxy every
 // Python value stored in it, and a proxied Brython object fails its own type
 // checks (`repr((1, 2))` raises "descriptor '__repr__' requires a 'tuple'
-// object but received a 'tuple'"). $state.raw keeps values opaque, so
-// reactivity tracks *rebinding a name*, which is what `count = …` and
-// `global count; count += 1` both do.
-//
-// Making `items.append(x)` reactive too was tried and abandoned: bumping a
-// revision signal that the bindings also read does invalidate them, but a
-// mutated list is still the *same object*, and both $derived and $state.raw
-// drop a write whose value is unchanged by ===. Propagating it would mean
-// handing the template a fresh copy on every render, at the cost of object
-// identity, too high a price for a rule that is easy to state instead.
+// object but received a 'tuple'"). $state.raw keeps values opaque, so the cell
+// follows *rebinding a name*, and a revision signal beside it follows a
+// mutation in place: `__track` marks the container, and `items.append(x)` bumps
+// the revision every reader also reads, the object keeping its identity.
 function authorBindings(c) {
     return [
         `const __proto = {};`,
@@ -2300,14 +2300,20 @@ function authorBindings(c) {
         //
         // What a parent hands over may be JavaScript's: `pyBind` makes a
         // fractional number a float and an absence None, as at a binding.
+        //
+        // The fallback is the component's own, so a container in it is watched
+        // like any state's: `rows.append(1)` on a default repaints its readers.
         ...c.props.map(
             (n) =>
-                `__bind(__proto, '${n}', () => __follow(__pyBind('${n}' in __props ? __props.${n} : ${local(n)})), (${NEXT_VALUE}) => { ${local(n)} = ${NEXT_VALUE}; });`
+                `__bind(__proto, '${n}', () => ('${n}' in __props ? __follow(__pyBind(__props.${n})) : (${rev(n)}, __follow(__pyBind(${local(n)})))),` +
+                ` (${NEXT_VALUE}) => { ${local(n)} = __track(${NEXT_VALUE}, ${bump(n)}, ${read(n)}, ${SUBS}); });`
         ),
+        // What Svelte hands back for a write it kept for itself may be its own
+        // proxy of it: `kept` and `unproxied` give Python its object again.
         ...c.bindables.map(
             (b) =>
-                `__bind(__proto, '${b}', () => (${rev(b)}, __follow(__pyBind(${b}))),` +
-                ` (${NEXT_VALUE}) => { if (!__initialising || ${b} === undefined) ${b} = __track(${NEXT_VALUE}, ${bump(b)}, ${read(b)}${c.store ? '' : `, ${SUBS}`}); });`
+                `__bind(__proto, '${b}', () => (${rev(b)}, __follow(__pyBind(__unproxied(${b})))),` +
+                ` (${NEXT_VALUE}) => { if (!__initialising || ${b} === undefined) { const __written = __track(${NEXT_VALUE}, ${bump(b)}, ${read(b)}${c.store ? '' : `, ${SUBS}`}); ${b} = __written; __kept(${b}, __written); } });`
         ),
         // Reading the revision alongside the value is what registers the
         // dependency: an in-place mutation then invalidates every reader,

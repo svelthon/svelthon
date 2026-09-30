@@ -4625,3 +4625,59 @@ export function bind(proto, key, get, set) {
     });
 }
 
+// What Svelte makes of a value Python writes into a `bindable` prop the parent
+// did not bind: it keeps its own copy, and wraps an array or a plain object in
+// a state proxy, which a Brython list is. A proxy around a Brython object fails
+// its type checks, `descriptor '__repr__' requires a 'list' object but received
+// a 'list'`. So the write remembers what it wrote under what Svelte hands back,
+// and the read gives Python its own object again. A bound parent's setter
+// stores the value itself, and then the two are the same.
+const WRITTEN = new WeakMap();
+
+export const kept = (seen, written) => {
+    if (seen !== written && seen !== null && typeof seen === 'object') WRITTEN.set(seen, written);
+    return written;
+};
+
+export const unproxied = (value) =>
+    (value !== null && typeof value === 'object' && WRITTEN.get(value)) || value;
+
+// `del name` on a name `bind` publishes. Brython deletes an own property: from
+// a function, `global count; del count` found none and raised `NameError` on
+// the `del` itself; at the top of the module the delete was a no-op, and the
+// inherited accessor kept answering with the old value.
+//
+// A real `del` is `$B.$delete`, not the `delete_for_reassign` that precedes a
+// rebinding, so it can be told apart. Its readers are told first, through the
+// name's own setter, and then an own accessor hides the published one: read,
+// it raises `NameError`, the shape Brython itself expects of a deleted name;
+// written, it removes itself and hands the value to the published accessor,
+// which answers again from then on.
+(function installDeletion($B) {
+    const deleteName = $B.$delete;
+
+    $B.$delete = function (name, locals, inum) {
+        const namespace = locals === 'global' ? $B.frame_obj?.frame?.[3] : locals;
+        const published =
+            namespace !== null &&
+            typeof namespace === 'object' &&
+            namespace.$proxy === true &&
+            !Object.hasOwn(namespace, name) &&
+            Object.getOwnPropertyDescriptor(Object.getPrototypeOf(namespace), name)?.get !== undefined;
+
+        if (!published || namespace[name] === undefined) return deleteName.call(this, name, locals, inum);
+
+        Object.getOwnPropertyDescriptor(Object.getPrototypeOf(namespace), name).set?.call(namespace, undefined);
+        Object.defineProperty(namespace, name, {
+            get() {
+                throw $B.name_error(name);
+            },
+            set(value) {
+                delete this[name];
+                this[name] = value;
+            },
+            configurable: true
+        });
+    };
+})(globalThis.__BRYTHON__);
+
