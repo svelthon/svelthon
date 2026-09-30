@@ -42,6 +42,10 @@ test('and a tuple keys by its members, not by an __iter__ it redefines', () => {
     expect(setup().at('masked').textContent).toBe('12');
 });
 
+test('and a float keys by its value, not by a __repr__ its class redefines', () => {
+    expect(setup().at('scores').textContent).toBe('1.52.5');
+});
+
 test('and tuples of values still key by value', () => {
     expect(setup().at('spelled').textContent).toBe('ab');
 });

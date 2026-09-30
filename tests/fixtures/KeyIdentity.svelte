@@ -31,6 +31,15 @@ class Masked(tuple):
 
 
 masked = [Masked([1]), Masked([2])]
+
+
+# Two floats whose class prints them alike: the value is what keys them.
+class Score(float):
+    def __repr__(self):
+        return "same"
+
+
+scores = [Score(1.5), Score(2.5)]
 spelled = [("a", frozenset({1, 2})), ("b", frozenset({2, 3}))]
 
 
@@ -49,6 +58,7 @@ def replace():
 <ul data-k="nans">{#each nans as value (value)}<li>{value}</li>{/each}</ul>
 <ul data-k="boxes">{#each boxes as box (box)}<li>{box[0].ident}</li>{/each}</ul>
 <ul data-k="masked">{#each masked as key (key)}<li>{key[0]}</li>{/each}</ul>
+<ul data-k="scores">{#each scores as score (score)}<li>{float(score)}</li>{/each}</ul>
 <ul data-k="spelled">{#each spelled as pair (pair)}<li>{pair[0]}</li>{/each}</ul>
 <ul data-k="mixed">{#each mixed as item (item)}<li>{type(item).__name__}</li>{/each}</ul>
 <button data-k="grow"onclick={grow}>grow</button>

@@ -39,4 +39,20 @@ describe('the compiler’s own prefix', () => {
     test('and an ordinary name is not a dunder at all', () => {
         expect(() => script('compteur = 0\n')).not.toThrow();
     });
+
+    // The names the compiler itself writes into the source pass the rule by
+    // their shape; written by the author, one would be replaced by the
+    // compiler's own function of that name.
+    test.for([
+        ['a template expression', 'def __expr_0():\n    return 7\n'],
+        ['an effect', '__effect_1 = 1\n'],
+        ['an inspection', 'x = __inspect_0\n']
+    ])('%s the compiler names is refused when the author writes it', ([, src]) => {
+        expect(() => script(src)).toThrow(/is a name the compiler writes itself.*\(src\/Probe\.svelte:1\)/);
+    });
+
+    // A string or a comment holds no name, and an arrow is the compiler's own.
+    test('and not in a string, a comment or an arrow', () => {
+        expect(() => script('x = "__expr_0"  # __effect_1\n=> print(x)\n')).not.toThrow();
+    });
 });

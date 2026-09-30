@@ -139,7 +139,14 @@ function keyText(value) {
         return `frozenset({${Object.values(value.$store).flat().map(keyText).sort().join(', ')}})`;
     }
     if (mro.includes(_b_.float) && Number.isNaN(value.value)) return identityOf(value, 'nan');
-    if (BY_VALUE.some((one) => mro.includes(one))) return _b_.repr(value);
+
+    // The builtin's repr(), which spells the value; a subclass's own `__repr__`
+    // spells whatever its author chose, two values alike included.
+    const builtin = BY_VALUE.find((one) => mro.includes(one));
+    if (builtin !== undefined) {
+        const $B = globalThis.__BRYTHON__;
+        return $B.$call($B.$getattr(builtin, '__repr__'), value);
+    }
 
     return identityOf(value, cls.__name__);
 }

@@ -400,8 +400,10 @@ export function python(options = {}) {
 const ELEMENT_OPTION = /<svelte:options\b[^>]*?\bcustomElement\s*=\s*(["'])([^"']*)\1/;
 
 // The written-out form, `customElement={{ tag: "x", shadow: "none" }}`, which is
-// the only way to set `shadow`: the props go into it when it names none.
-const ELEMENT_OBJECT = /<svelte:options\b[^>]*?\bcustomElement\s*=\s*\{\{/;
+// the only way to set `shadow`: the props go into it when it names none. Any
+// expression is a candidate, however it is laid out; Svelte's parser says
+// whether it is an object.
+const ELEMENT_OBJECT = /<svelte:options\b[^>]*?\bcustomElement\s*=\s*\{/;
 
 // The written-out object itself, as Svelte's own parser reads it: its keys are
 // its top-level properties, not a `props:` spelled inside a string or in the

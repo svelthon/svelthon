@@ -1192,6 +1192,34 @@ const COMPILER_PREFIX = /^__(?!.*__$)/;
 
 const GENERATED = new RegExp(`^(?:${EXPR_PREFIX}|__inspect_|__effect_)`);
 
+// `refuseLocked` lets those shapes through because the compiler writes them;
+// the author's own text must not hold one, or a function the compiler writes
+// under that name replaces theirs without a word. Asked of the source as
+// written, before anything is added to it, by Python's own tokenizer, so a
+// name in a string or a comment is not one.
+const NAME_TOKEN = 1;
+
+function refuseGeneratedSpelling(src, source, lineOffset) {
+    let tokens;
+    try {
+        tokens = [...$B.tokenizer(`${$B.unindent(src)}\n`, source, 'file')];
+    } catch {
+        return; // the compile that follows reports what the tokenizer could not read
+    }
+
+    const token = tokens.find((one) => one.type === NAME_TOKEN && GENERATED.test(one.string));
+    if (token === undefined) return;
+
+    const line = token.lineno + lineOffset;
+    throw refuse(
+        `svelthon — \`${token.string}\` is a name the compiler writes itself, for a ` +
+            `template expression or an arrow, and one it writes would replace yours; ` +
+            `choose another (${source}:${line})`,
+        source,
+        line
+    );
+}
+
 function refuseLocked(declared, component, source, lines, lineOffset = 0) {
     // Three shapes the compiler writes into the author's source before it is
     // parsed — the markup pass's expressions, and the two the arrow rewrites
@@ -2621,6 +2649,8 @@ function compile(
     // Kept for the error path: the block as the author typed it, before the
     // generated defs join it at column zero.
     const authored = component ? src : '';
+
+    refuseGeneratedSpelling(src, source, lineOffset);
 
     // `src` is what the author wrote; `defs` are the hidden functions the markup
     // pass produced, one per template expression. They are joined here rather
