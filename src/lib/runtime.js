@@ -4646,10 +4646,8 @@ export const kept = (seen, written) => {
 export const unproxied = (value) =>
     (value !== null && typeof value === 'object' && WRITTEN.get(value)) || value;
 
-// `del name` on a name `bind` publishes. Brython deletes an own property: from
-// a function, `global count; del count` found none and raised `NameError` on
-// the `del` itself; at the top of the module the delete was a no-op, and the
-// inherited accessor kept answering with the old value.
+// `del name` on a name `bind` publishes. Brython's `del` deletes an own
+// property, and the name is an accessor the namespace inherits.
 //
 // A real `del` is `$B.$delete`, not the `delete_for_reassign` that precedes a
 // rebinding, so the two can be told apart. A deleted name has to be *absent*,

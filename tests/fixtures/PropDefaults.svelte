@@ -18,6 +18,16 @@ def present():
 
 
 @export
+def delete_and_ask():
+    global count
+    del count
+    try:
+        return "count" in globals()
+    finally:
+        count = 3
+
+
+@export
 def delete_shadow():
     global len
     del len

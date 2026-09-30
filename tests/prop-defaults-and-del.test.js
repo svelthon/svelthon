@@ -74,6 +74,8 @@ test('a deleted name is absent: not in globals(), and a builtin it shadowed answ
     const { instance } = setup(PropDefaults);
 
     expect(instance.present()).toBe(true);
+    expect(instance.delete_and_ask()).toBe(false);
+    expect(instance.present()).toBe(true);
     expect(instance.delete_then_rebind()).toBe('missing');
     expect(instance.present()).toBe(true);
     expect(instance.delete_shadow()).toBe('2');
