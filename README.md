@@ -77,7 +77,7 @@ rest of that configuration and what each line buys.
 npm install
 npm run dev
 
-npm test             # 1 325 tests: semantics, props, reactivity, Svelte surface
+npm test             # 1 327 tests: semantics, props, reactivity, Svelte surface
 npm run test:quiet   # the suite's own output: a green run must say nothing
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
@@ -1403,7 +1403,11 @@ invalidated too, or its `load()` never re-runs and the cache keeps the old body.
 sitting beside the component or on the configured `path`. Python's standard
 library does not ship: `import json`, `import math` or `from browser import
 timer` is refused on its line when the component compiles, with what stands in
-for it where there is something. Everything else a template needs is already a
+for it where there is something. A module is found by its file name alone: a
+subdirectory is not a package, so `from lib import models` is refused too, and
+`models.py` is imported as `import models` once `lib` is on `path`. A relative
+import, `from . import helper`, has no package to be relative to and is
+refused with its absolute spelling, `import helper`. Everything else a template needs is already a
 name: `tojson`, `from_json`, `batch`, `date`, `fromnow`, `slugify`, `striptags`,
 `urlencode`, and `js` for the platform's own, `js.Math` and `js.Date`.
 
@@ -1457,7 +1461,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 1 325 tests as written (vitest reports more, one per
+Validated by `npm test`, 1 327 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;

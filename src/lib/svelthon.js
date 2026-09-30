@@ -365,7 +365,7 @@ export function python(options = {}) {
                     ...about(filename),
                     // The whole file, so a debugger opens the .svelte itself.
                     sourceContent: filename ? readFileSync(filename, 'utf8') : content,
-                    resolves: (mod) => Boolean(moduleFile(mod, dirname(filename || '.'), searchPath))
+                    resolves: (mod) => moduleKind(mod, dirname(filename || '.'), searchPath)
                 }
             );
 
@@ -459,20 +459,25 @@ const compiledStores = new Map();
 // created once for the whole application rather than per component instance,
 // and is served under a `.svelte.js` identity, which is what makes
 // vite-plugin-svelte compile the runes inside it.
+//
+// The compile checks every import against the files it finds, so the files its
+// imports resolve to are part of the key: a module deleted or renamed beside it
+// compiles, and checks, this one again.
 function compilePython(file, path) {
     const stamp = statSync(file).mtimeMs;
     const cached = compiledStores.get(file);
-    if (cached && cached.stamp === stamp) return cached.result;
+    const found = (imports) => imports.map((mod) => moduleFile(mod, dirname(file), path) ?? '').join('\n');
+    if (cached && cached.stamp === stamp && cached.found === found(cached.result.imports)) return cached.result;
 
     const source = readFileSync(file, 'utf8');
     const mode = isReactive(file) ? { store: true } : { plain: true };
     const result = compile(source, nameFor(file), relative(process.cwd(), file), {
         ...mode,
         sourceContent: source,
-        resolves: (mod) => Boolean(moduleFile(mod, dirname(file), path))
+        resolves: (mod) => moduleKind(mod, dirname(file), path)
     });
 
-    compiledStores.set(file, { stamp, result });
+    compiledStores.set(file, { stamp, result, found: found(result.imports) });
     return result;
 }
 
@@ -525,23 +530,37 @@ function pythonImports(names, fromDirectory, path) {
         .join('\n');
 }
 
-// The file a module name stands for, or nothing. What `compile()` asks through
-// `resolves`, so an import that names no file is refused on its line.
-function moduleFile(mod, fromDirectory, path) {
-    // Given by the caller that knows which configuration it belongs to, and read
-    // off the shared value only by the one that cannot know.
-    //
-    // It used to read the global unconditionally, and `python(options)` writes
-    // that global as it is constructed. So creating a second preprocessor with a
-    // different path silently changed what the first one resolved: an `import`
-    // that had produced a dependency stopped producing one, without the second
-    // ever compiling anything. Two configurations in one process gave different
-    // import graphs depending on the order they were built in.
-    const searchPath = path || globalThis[Symbol.for('svelthon.path')] || [];
+// What `compile()` asks through `resolves`: `'file'` when the name stands for
+// one, `'package'` when its first segment is a directory where a file would
+// be looked for, which the refusal then names, and nothing otherwise.
+function moduleKind(mod, fromDirectory, path) {
+    if (moduleFile(mod, fromDirectory, path)) return 'file';
 
-    return [fromDirectory, ...searchPath]
+    const [first] = mod.split('.');
+    const directory = searchedFrom(fromDirectory, path).some((one) =>
+        statSync(resolve(one, first), { throwIfNoEntry: false })?.isDirectory()
+    );
+
+    return directory ? 'package' : undefined;
+}
+
+// The file a module name stands for, or nothing.
+function moduleFile(mod, fromDirectory, path) {
+    return searchedFrom(fromDirectory, path)
         .flatMap((directory) => [resolve(directory, `${mod}.svelte.py`), resolve(directory, `${mod}.py`)])
         .find((candidate) => existsSync(candidate));
+}
+
+// Where a module name is looked for: the importer's own directory, then the
+// configured path.
+//
+// The path is given by the caller that knows which configuration it belongs
+// to, and read off the shared value only by the one that cannot know.
+// `python(options)` writes that global as it is constructed, so reading it
+// unconditionally let a second preprocessor with a different path change what
+// the first one resolved.
+function searchedFrom(fromDirectory, path) {
+    return [fromDirectory, ...(path || globalThis[Symbol.for('svelthon.path')] || [])];
 }
 
 // Python follows TypeScript's own convention, the one Svelte already defines:

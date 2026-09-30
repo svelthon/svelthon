@@ -75,7 +75,7 @@ reste de cette configuration et ce que chaque ligne apporte.
 npm install
 npm run dev
 
-npm test             # 1 325 tests : sémantique, props, réactivité, surface Svelte
+npm test             # 1 327 tests : sémantique, props, réactivité, surface Svelte
 npm run test:quiet   # la sortie de la suite : un run vert ne doit rien dire
 npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
@@ -1435,7 +1435,12 @@ qu'à ce qui remonte jusqu'à JavaScript.
 quel `.py` posé à côté du composant ou sur le `path` configuré. La
 bibliothèque standard de Python n'est pas livrée : `import json`, `import math`
 ou `from browser import timer` est refusé sur sa ligne à la compilation, avec
-ce qui le remplace quand il existe. Tout ce dont un gabarit a besoin est déjà
+ce qui le remplace quand il existe. Un module se trouve par son seul nom de
+fichier : un sous-dossier n'est pas un paquet, donc `from lib import models`
+est refusé aussi, et `models.py` s'importe par `import models` une fois `lib`
+sur le `path`. Un import relatif, `from . import helper`, n'a pas de paquet
+auquel se rapporter et il est refusé avec son écriture absolue,
+`import helper`. Tout ce dont un gabarit a besoin est déjà
 un nom : `js` pour la plateforme, `js.Math` et `js.Date`, et `tojson`,
 `from_json`, `batch`, `date`, `fromnow`, `slugify`, `striptags`,
 `urlencode`.
@@ -1465,7 +1470,7 @@ part jamais.
 
 ## État
 
-Validé par `npm test`, 1 325 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 1 327 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;

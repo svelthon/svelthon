@@ -5,7 +5,13 @@
 // is refused on its line when the component compiles, rather than failing at
 // mount with a `JavascriptError` that `except ImportError` does not catch.
 import { test, expect } from 'vitest';
+import { mkdtempSync, writeFileSync, unlinkSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { createRequire } from 'node:module';
 import { python, svelthon } from '../src/lib/svelthon.js';
+
+const { compile } = createRequire(import.meta.url)('../src/lib/compile.cjs');
 
 // Through the real preprocessor, which is what knows the file system. The file
 // has to exist, because the hook reads the source back to map its lines.
@@ -35,6 +41,35 @@ test.for([
     expect(compiled(written)).toThrow(message);
 });
 
+// A module is found by its file name, beside the component or on `path`. A
+// directory of the project, `src/lib` here, is not a package, and the refusal
+// says so rather than blaming the standard library.
+test.for([
+    ['from lib import models', /`lib` is not a module.*`lib` is a directory.*add `lib` to `path`.*\(src\/App\.svelte:3\)/],
+    ['import lib.models', /`lib\.models` is not a module.*`lib` is a directory/],
+    ['from lib.models import greet', /`lib\.models` is not a module.*`lib` is a directory/]
+])('`%s` is refused as a package', ([written, message]) => {
+    expect(compiled(written)).toThrow(message);
+    expect(compiled(written)).not.toThrow(/standard library/);
+});
+
+// A relative import has no package to be relative to, whether its target exists
+// or not, and the refusal writes the import that works.
+test.for([
+    ['from . import counter_store', /relative import.*`import counter_store`.*\(src\/App\.svelte:3\)/],
+    ['from .counter_store import count as n', /relative import.*`from counter_store import count as n`/],
+    ['from ..elsewhere import thing', /relative import.*`from elsewhere import thing`/]
+])('`%s` is refused with its absolute spelling', ([written, message]) => {
+    expect(compiled(written)).toThrow(message);
+});
+
+// Refused without the file system too, since no file makes it work.
+test('a relative import is refused by the compiler alone', () => {
+    expect(() => compile('from . import helper\n', 'C', 'src/C.svelte', { plain: true })).toThrow(
+        /relative import.*`import helper`.*\(src\/C\.svelte:1\)/
+    );
+});
+
 test('an import the runtime holds compiles', () => {
     expect(compiled('import browser.html\nfrom browser import document, html, aio\nfrom javascript import JSON')).not.toThrow();
 });
@@ -46,4 +81,25 @@ test('a module importing the standard library is refused too', () => {
     expect(() => plugin.load('tests/fixtures/stdlib_import.py')).toThrow(
         /`random` is not a module.*`js\.Math\.random\(\)`.*stdlib_import\.py:3\)/
     );
+});
+
+// A compiled `.py` is kept while it is unchanged, and what its imports resolve
+// to is part of that: a module it imports removed, it is checked again.
+test('a module whose import disappears is checked again', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'svelthon-imports-'));
+    const importer = join(directory, 'importer.py');
+    const imported = join(directory, 'imported.py');
+    writeFileSync(importer, 'import imported\n\nvalue = imported.VALUE\n');
+    writeFileSync(imported, 'VALUE = 1\n');
+
+    try {
+        const plugin = svelthon({ path: [] });
+        const load = () => plugin.load.call({ addWatchFile() {} }, importer);
+
+        expect(load).not.toThrow();
+        unlinkSync(imported);
+        expect(load).toThrow(/`imported` is not a module.*importer\.py:1\)/);
+    } finally {
+        rmSync(directory, { recursive: true, force: true });
+    }
 });
