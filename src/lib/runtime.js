@@ -2868,6 +2868,14 @@ function converting(wrapped) {
     return known;
 }
 
+// A callback handed to JavaScript, a member of what an export returns or the
+// whole of it: a Python one adapted, a JavaScript one as it is.
+function callback(one) {
+    const wrapped = pyHandler(one);
+
+    return wrapped === one ? one : converting(wrapped);
+}
+
 export function pyNumbers(value) {
     if (value === null || typeof value !== 'object') return value;
 
@@ -2920,11 +2928,9 @@ export function pyNumbers(value) {
             // Told apart by the answer `pyHandler` already gave, rather than by
             // a second predicate: it returns the value itself when there was
             // nothing to adapt.
-            const wrapped = pyHandler(one);
+            replacement = callback(one);
 
-            if (wrapped === one) continue;
-
-            replacement = converting(wrapped);
+            if (replacement === one) continue;
         } else continue;
 
         if (out === value) out = shallow(value);
@@ -3933,17 +3939,17 @@ export function pyBoundary(fn) {
 // the *framework* is a transition's options or an action's teardown, and a
 // Brython float there is an object `Element.animate` refuses. A coroutine is
 // fired and not awaited, since nobody reads what a handler returns.
-// `kept` is for a value that goes back into Python rather than out to the
-// framework, and is handed back as it is: made a JavaScript number, a float
+// `convert` null is for a value that goes back into Python rather than out to
+// the framework, and is handed back as it is: made a JavaScript number, a float
 // would come back to Python a `JSObject`.
-const running = (call, where, lineOffset, kept = false) => {
+const running = (call, where, lineOffset, convert = pyNumbers) => {
     try {
         const result = call();
-        const value = schedule(result, where, lineOffset, kept ? undefined : pyNumbers);
+        const value = schedule(result, where, lineOffset, convert ?? undefined);
 
         // A coroutine's promise converts what it resolves to, above; the
         // promise itself is handed back as it is.
-        return kept || value !== result ? value : pyNumbers(value);
+        return convert === null || value !== result ? value : convert(value);
     } catch (error) {
         throw pyError(error, where, lineOffset);
     }
@@ -3962,7 +3968,10 @@ const running = (call, where, lineOffset, kept = false) => {
 //
 // What stays different from `pyDef` is the result: a component hands the
 // *framework* a transition's options or an action's teardown, so `pyNumbers`
-// and not `plainData`. That difference is why this wrapper exists at all.
+// and not `plainData`. That difference is why this wrapper exists at all. A
+// callable returned whole is a callback like one returned inside a config.
+const returned = (value) => (callable(value) ? callback(value) : pyNumbers(value));
+
 export const pyComponent = (read, where, lineOffset) => {
     const first = declared(read());
 
@@ -3975,7 +3984,8 @@ export const pyComponent = (read, where, lineOffset) => {
             return running(
                 () => (found === null ? value(...given) : found.fn(...given)),
                 where,
-                lineOffset
+                lineOffset,
+                returned
             );
         },
         nameOf(where),
@@ -3998,7 +4008,8 @@ export const pyComponent = (read, where, lineOffset) => {
 // this side of the line.
 export const pyExpression = (call, where, lineOffset, arity, kept = false) =>
     identified(
-        (...args) => running(() => call(args.slice(0, arity).map(pyBind)), where, lineOffset, kept),
+        (...args) =>
+            running(() => call(args.slice(0, arity).map(pyBind)), where, lineOffset, kept ? null : pyNumbers),
         nameOf(where),
         arity
     );

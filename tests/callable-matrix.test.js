@@ -119,6 +119,7 @@ const POSITIONS = [
     ['in a mapping a mapping holds', (key) => mod.nested.inner[key]],
     ['two containers down from a mapping', (key) => mod.nested.deep[0][mod.order.indexOf(key)]],
     ['in a configuration a component hands back', (key) => mounted().config(key).hook],
+    ['returned whole by a component', (key) => mounted().returned(key)],
     // What the compiler emits for `use:mod.member` and `in:mod.member`: the
     // directive names a module, and Svelte reads the member off this proxy.
     ['as the member a directive names', (key) => pyModule('callable_matrix')[key]],
@@ -202,6 +203,28 @@ describe.for([
         expect(a).toBe(b);
         expect(a()).toBe(0.25);
     });
+
+    test('and one function from a component, whoever asks twice', () => {
+        const component = mounted();
+
+        expect(component.returned(key)).toBe(component.returned(key));
+    });
+
+    test('and the same once an async export resolves', async () => {
+        const component = mounted();
+        const later = await component.returned_later(key);
+
+        expect(later).toBe(component.returned(key));
+        expect(later('event')).toBe(0.25);
+    });
+});
+
+// And a function JavaScript built, handed back by a component, keeps its own
+// contract: it is not wrapped, and what it is called with is not converted.
+test('a JavaScript function a component returns is returned as it is', () => {
+    const own = (value) => value.toFixed(2);
+
+    expect(mounted().returned_native(own)).toBe(own);
 });
 
 // The control: the same sharing in data, which held throughout and is what the

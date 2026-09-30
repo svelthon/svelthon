@@ -75,7 +75,7 @@ reste de cette configuration et ce que chaque ligne apporte.
 npm install
 npm run dev
 
-npm test             # 1 361 tests : sémantique, props, réactivité, surface Svelte
+npm test             # 1 365 tests : sémantique, props, réactivité, surface Svelte
 npm run test:quiet   # la sortie de la suite : un run vert ne doit rien dire
 npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
@@ -1362,7 +1362,7 @@ Les deux exceptions sont les deux mots qu'une fonction JavaScript possède déj�
 `name` prend celui de l'auteur quand il y en a un — `on_save` dit plus dans un
 log que `Handler.__call__` — et `length` est ce qu'une bibliothèque lit pour
 savoir ce qu'un callback prend. Les deux décrivent l'**appel**, aucun n'est le
-champ d'à côté. `tests/callable-matrix.test.js` tient chaque ligne, sur **8 formes** et **14
+champ d'à côté. `tests/callable-matrix.test.js` tient chaque ligne, sur **8 formes** et **15
 positions**.
 
 ### Le seul endroit où SvelteKit code en dur
@@ -1470,7 +1470,7 @@ part jamais.
 
 ## État
 
-Validé par `npm test`, 1 361 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 1 365 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
