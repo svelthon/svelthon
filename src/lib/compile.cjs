@@ -2111,6 +2111,9 @@ function refuseMissingModules(importedAt, resolves, source, lineOffset) {
 // `tests/generated-names.test.js` holds the two files to them.
 const fn = (name) => `__fn_${name}`;
 const local = (name) => `__local_${name}`;
+// A prop's override by the child, and the choice between it and the parent's.
+const over = (name) => `__over_${name}`;
+const pick = (name) => `__pick_${name}`;
 // What `$effect.root` hands back. Python reads the decorated name and gets
 // this, exactly as JavaScript reads `const destroy = $effect.root(…)`, and
 // the name belongs to the destructor on both sides.
@@ -2206,22 +2209,32 @@ function declarations(c) {
                   ``
               ]
             : c.props.length
-              ? [`const __props = $props();`, ``]
+              ? [`const __props = $props();`, `let __initialising = true;`, ``]
               : []),
         // A prop's value comes from the parent when it was passed, and from the
         // annotation's default otherwise, the default being whatever the Python
         // body assigned during init(). Reading __props keeps it reactive, so a
         // parent update flows into Python's namespace on the next read.
+        //
+        // A write of the child's own overrides a value the parent passed, as
+        // reassigning a prop does in Svelte, until the parent passes a new one.
+        // The default init() writes is not an override.
         ...c.props.flatMap((n) => [
             `let ${local(n)} = $state.raw(undefined);`,
             `let ${rev(n)} = $state.raw(0);`,
+            `let ${over(n)};`,
             `const ${bump(n)} = () => { ${rev(n)} += 1; };`,
             `const ${read(n)} = () => { ${rev(n)}; };`,
+            `const ${pick(n)} = () => {` +
+                ` if (!('${n}' in __props)) return ${local(n)};` +
+                ` const __passed = __props.${n};` +
+                ` if (${over(n)} !== undefined) { if (Object.is(__passed, ${over(n)}.at)) return ${local(n)}; ${over(n)} = undefined; }` +
+                ` return __passed; };`,
             // Read by Svelte's own compiler and not by ours: a snippet is a
             // prop, and `{@render name(…)}` references the bare name. Python
             // reaches the same value through the namespace accessor below, and
             // that is the copy a falsy value has to survive.
-            `const ${n} = $derived(('${n}' in __props ? __props.${n} : ${local(n)}) ?? __NONE);`
+            `const ${n} = $derived((${rev(n)}, ${pick(n)}()) ?? __NONE);`
         ]),
         ...c.state.flatMap((n) => [
             `let ${n} = $state.raw(undefined);`,
@@ -2305,9 +2318,10 @@ function authorBindings(c) {
         // like any state's: `rows.append(1)` on a default repaints its readers.
         ...c.props.map(
             (n) =>
-                `__bind(__proto, '${n}', () => ('${n}' in __props ? __follow(__pyBind(__props.${n})) : (${rev(n)}, __follow(__pyBind(${local(n)})))),` +
-                ` (${NEXT_VALUE}) => { ${local(n)} = __track(${NEXT_VALUE}, ${bump(n)}, ${read(n)}, ${SUBS}); },` +
-                ` () => ('${n}' in __props ? __props.${n} : ${local(n)}));`
+                `__bind(__proto, '${n}', () => (${rev(n)}, __follow(__pyBind(${pick(n)}()))),` +
+                ` (${NEXT_VALUE}) => { if (!__initialising && '${n}' in __props) ${over(n)} = { at: __props.${n} };` +
+                ` ${local(n)} = __track(${NEXT_VALUE}, ${bump(n)}, ${read(n)}, ${SUBS}); },` +
+                ` () => ${pick(n)}());`
         ),
         // What Svelte hands back for a write it kept for itself may be its own
         // proxy of it: `kept` and `unproxied` give Python its object again.
@@ -2462,7 +2476,7 @@ function initCall(c) {
     return [
         ``,
         `__init(${NS});`,
-        ...(c.bindables.length ? [`__initialising = false;`] : []),
+        ...(c.bindables.length || c.props.length ? [`__initialising = false;`] : []),
         ``
     ];
 }
