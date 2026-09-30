@@ -346,6 +346,19 @@ describe('the vendored Brython carries its repairs', () => {
         expect($B.is_or_equals(one, other)).toBe(false);
     });
 
+    // `index` and `remove` find an item by identity before equality, as `in`
+    // and `count` do: `x = float("nan"); [x].index(x)` is 0.
+    test('index and remove find the very object, even a NaN', () => {
+        const x = $B.builtins.float.$factory('nan');
+        const method = (self, name) => $B.$getattr(self, name);
+        const items = $B.$list([x]);
+
+        expect(method(items, 'index')(x)).toBe(0);
+        expect(method($B.fast_tuple([x]), 'index')(x)).toBe(0);
+        method(items, 'remove')(x);
+        expect(items.length).toBe(0);
+    });
+
     // A call's keyword arguments travel under a symbol, `$B.KW`, and not under
     // a `$kw` key: a JavaScript object with that key is an argument like any
     // other. `dict(obj)` read it as keywords and answered `{'0': 'a'}`.
