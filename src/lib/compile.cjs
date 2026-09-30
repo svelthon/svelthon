@@ -1716,8 +1716,12 @@ function surface(body) {
 //
 // `import x` is read by the same walk, so every module the source names comes
 // with the line that names it first: what a refusal of that import points at.
+//
+// A relative import, `from . import x` or `from .x import y`, is kept apart: it
+// names no module, only a place in a package, and a component is in none.
 function moduleImports(ast) {
     const found = new Map();
+    const relative = [];
     const add = (module, node) => {
         if (!found.has(module)) found.set(module, node.lineno);
     };
@@ -1745,9 +1749,12 @@ function moduleImports(ast) {
         const importNode =
             Array.isArray(node.names) && typeof node.level !== 'number' && typeof node.names[0]?.name === 'string';
 
+        const dotted = Array.isArray(node.names) && node.level > 0;
+
         // `from browser import timer` imports the submodule `browser.timer`
         // when Brython's catalogue names one, rather than an attribute.
-        if (importFrom) {
+        if (dotted) relative.push(node);
+        else if (importFrom) {
             add(node.module, node);
             for (const one of node.names) {
                 const submodule = `${node.module}.${one.name}`;
@@ -1760,7 +1767,27 @@ function moduleImports(ast) {
     };
 
     walk(ast.body);
-    return found;
+    return { found, relative };
+}
+
+// A relative import has no package to be relative to, and fails at mount with
+// `ImportError`. A neighbouring module is named by its own name, which is what
+// the refusal writes out.
+function refuseRelativeImports(relative, source, lineOffset) {
+    const [node] = relative;
+    if (!node) return;
+
+    const aliases = node.names.map((one) => (one.asname ? `${one.name} as ${one.asname}` : one.name)).join(', ');
+    const absolute = node.module ? `from ${node.module} import ${aliases}` : `import ${aliases}`;
+    const line = node.lineno + lineOffset;
+
+    throw refuse(
+        `svelthon — a relative import has no package to be relative to: a module ` +
+            `beside the component, or on \`path\`, is imported by its own name, ` +
+            `\`${absolute}\` (${source}:${line})`,
+        source,
+        line
+    );
 }
 
 // The modules the runtime holds, the ones `brython_runtime.js` registers as it
@@ -1791,18 +1818,31 @@ const MODULE_INSTEAD = {
 
 // An `import` of a module that is neither the runtime's nor a file of the
 // project, refused on its line: in the browser it would fail at mount.
+// `resolves` answers `'file'`, `'package'` when the name's first segment is a
+// directory of the project, or nothing.
 function refuseMissingModules(importedAt, resolves, source, lineOffset) {
     for (const [module, line] of importedAt) {
-        if (PROVIDED_MODULES.has(module) || resolves(module)) continue;
+        const found = PROVIDED_MODULES.has(module) ? 'file' : resolves(module);
+        if (found === 'file') continue;
 
+        const [first] = module.split('.');
         const instead = MODULE_INSTEAD[module];
+
+        // A module resolves by its file name alone, beside the component or on
+        // `path`: a directory is not a package.
+        const reason =
+            found === 'package'
+                ? `\`${first}\` is a directory, and a module is found by its file ` +
+                  `name alone, beside the component or on \`path\`, not through a ` +
+                  `package; put the module beside the component, or add \`${first}\` ` +
+                  `to \`path\` and import the module by its own name`
+                : `Python's standard library does not ship, only \`browser\`, ` +
+                  `\`javascript\` and the project's own \`.py\` files do` +
+                  (instead ? `; ${instead}` : '');
 
         throw refuse(
             `svelthon — \`${module}\` is not a module a component can import: ` +
-                `Python's standard library does not ship, only \`browser\`, ` +
-                `\`javascript\` and the project's own \`.py\` files do` +
-                (instead ? `; ${instead}` : '') +
-                ` (${source}:${line + lineOffset})`,
+                `${reason} (${source}:${line + lineOffset})`,
             source,
             line + lineOffset
         );
@@ -2555,8 +2595,9 @@ function compile(
         lineOffset = 0,
         sourceContent = null,
         // Whether an imported name is one of the project's own `.py` files,
-        // asked by whoever can read the file system. Without it the imports
-        // are not checked.
+        // `'file'`, or names a directory of the project, `'package'`, asked by
+        // whoever can read the file system. Without it the imports are not
+        // checked.
         resolves = null
     } = {}
 ) {
@@ -2711,9 +2752,10 @@ function compile(
     // Svelte reserves the '$' prefix for *every* scope inside a component, and
     // Brython's codegen opens with `var $B = __BRYTHON__`. So the generated
     // code lives in its own module, which Svelte never parses.
-    const importedAt = moduleImports(root._ast);
+    const { found: importedAt, relative } = moduleImports(root._ast);
     const imported = [...importedAt.keys()];
 
+    refuseRelativeImports(relative, source, lineOffset);
     if (resolves) refuseMissingModules(importedAt, resolves, source, lineOffset);
     const module = [
         `import { ${runtimeAliases(['withNamespace', 'pyError'])} } from 'svelthon/runtime';`,
