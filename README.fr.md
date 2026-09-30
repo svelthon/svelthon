@@ -1438,9 +1438,7 @@ ou `from browser import timer` est refusé sur sa ligne à la compilation, avec
 ce qui le remplace quand il existe. Un module se trouve par son seul nom de
 fichier : un sous-dossier n'est pas un paquet, donc `from lib import models`
 est refusé aussi, et `models.py` s'importe par `import models` une fois `lib`
-sur le `path`. Un import relatif, `from . import helper`, n'a pas de paquet
-auquel se rapporter et il est refusé avec son écriture absolue,
-`import helper`. Tout ce dont un gabarit a besoin est déjà
+sur le `path`. Tout ce dont un gabarit a besoin est déjà
 un nom : `js` pour la plateforme, `js.Math` et `js.Date`, et `tojson`,
 `from_json`, `batch`, `date`, `fromnow`, `slugify`, `striptags`,
 `urlencode`.

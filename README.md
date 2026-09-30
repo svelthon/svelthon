@@ -1405,9 +1405,7 @@ library does not ship: `import json`, `import math` or `from browser import
 timer` is refused on its line when the component compiles, with what stands in
 for it where there is something. A module is found by its file name alone: a
 subdirectory is not a package, so `from lib import models` is refused too, and
-`models.py` is imported as `import models` once `lib` is on `path`. A relative
-import, `from . import helper`, has no package to be relative to and is
-refused with its absolute spelling, `import helper`. Everything else a template needs is already a
+`models.py` is imported as `import models` once `lib` is on `path`. Everything else a template needs is already a
 name: `tojson`, `from_json`, `batch`, `date`, `fromnow`, `slugify`, `striptags`,
 `urlencode`, and `js` for the platform's own, `js.Math` and `js.Date`.
 
