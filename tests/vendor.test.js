@@ -5,6 +5,7 @@ import { test, expect, describe, vi } from 'vitest';
 import '../src/lib/runtime.js';
 import { mount, flushSync, settled } from './mounted.js';
 import CoroutineAwaited from './fixtures/CoroutineAwaited.svelte';
+import * as deleteOrder from './fixtures/delete_order.py';
 
 // Behaviours of the vendored Brython that Svelthon rests on, each observable,
 // so a build that loses one turns a test red rather than a page. The first
@@ -344,6 +345,17 @@ describe('the vendored Brython carries its repairs', () => {
         expect($B.$is(one, one)).toBe(true);
         expect($B.$is(one, other)).toBe(false);
         expect($B.is_or_equals(one, other)).toBe(false);
+    });
+
+    // A global deleted anywhere in the module is read through the lookup that
+    // raises NameError, whether its reader is written before or after the
+    // function that deletes it.
+    test('a deleted global raises NameError in a function written before the del', () => {
+        expect(deleteOrder.read_count()).toBe('3');
+        deleteOrder.drop_count();
+        expect(deleteOrder.read_count()).toBe('missing');
+        deleteOrder.restore_count();
+        expect(deleteOrder.read_count()).toBe('5');
     });
 
     // `index` and `remove` find an item by identity before equality, as `in`
