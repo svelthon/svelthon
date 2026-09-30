@@ -71,13 +71,14 @@ describe('a second configuration leaves the first alone', () => {
     });
 
     // The other order, which the audit asked for and which the old code passed
-    // by luck: B first, then A, then B again.
+    // by luck: B first, then A, then B again. B's path finds no `shapes`, so B
+    // refuses the import.
     test('in either order', () => {
         const b = python({ path: [] });
         const a = python({ path: ['tests/fixtures'] });
 
         expect(compile(a)).toContain('shapes.py');
-        expect(compile(b)).not.toContain('shapes.py');
+        expect(() => compile(b)).toThrow(/`shapes` is not a module a component can import/);
     });
 
     // The plugin is the half that cannot tell configurations apart, so it takes

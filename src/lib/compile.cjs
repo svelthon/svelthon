@@ -1686,7 +1686,7 @@ function surface(body) {
     return { props, bindables, state, funcs, deriveds, effects, inspects, reserved, bound, lines };
 }
 
-// The modules a `from x import y` names.
+// The modules the source imports, `import x` and `from x import y` alike.
 //
 // Brython's own bookkeeping, `root.imports`, records `import x` and nothing
 // else, so `from counter_store import count` was invisible to the prelude that
@@ -1713,8 +1713,14 @@ function surface(body) {
 // `instanceof` answers false for a node that is plainly an ImportFrom. The walk
 // below no longer asks `instanceof` — it recognises the node by shape, for that
 // exact reason — so the belt guarded nothing the walk had not already covered.
-function fromImports(ast) {
-    const found = new Set();
+//
+// `import x` is read by the same walk, so every module the source names comes
+// with the line that names it first: what a refusal of that import points at.
+function moduleImports(ast) {
+    const found = new Map();
+    const add = (module, node) => {
+        if (!found.has(module)) found.set(module, node.lineno);
+    };
 
     const walk = (node) => {
         if (!node || typeof node !== 'object') return;
@@ -1734,13 +1740,73 @@ function fromImports(ast) {
         const importFrom =
             typeof node.module === 'string' && Array.isArray(node.names) && typeof node.level === 'number';
 
-        if (importFrom) found.add(node.module);
+        // An Import carries aliases and no level; a `global` carries names that
+        // are plain strings.
+        const importNode =
+            Array.isArray(node.names) && typeof node.level !== 'number' && typeof node.names[0]?.name === 'string';
+
+        // `from browser import timer` imports the submodule `browser.timer`
+        // when Brython's catalogue names one, rather than an attribute.
+        if (importFrom) {
+            add(node.module, node);
+            for (const one of node.names) {
+                const submodule = `${node.module}.${one.name}`;
+                if ($B.stdlib[submodule]) add(submodule, node);
+            }
+        }
+        if (importNode) for (const one of node.names) add(one.name, node);
 
         for (const key of BODIES) if (node[key]) walk(node[key]);
     };
 
     walk(ast.body);
-    return [...found];
+    return found;
+}
+
+// The modules the runtime holds, the ones `brython_runtime.js` registers as it
+// loads. Python's standard library does not ship: anything else an `import`
+// names is one of the project's own files or nothing, and Brython, looking for
+// nothing, raises `JavascriptError` rather than `ImportError`.
+// `tests/provided-modules.test.js` holds this list to the runtime's.
+const PROVIDED_MODULES = new Set([
+    'browser',
+    'browser.aio',
+    'browser.html',
+    'javascript',
+    'builtins',
+    '_sys',
+    '_warnings',
+    '_importlib',
+    '_suggestions'
+]);
+
+// What stands in for the standard modules an author reaches for first.
+const MODULE_INSTEAD = {
+    json: '`from_json(text)` reads JSON and `tojson(value)` writes it',
+    math: '`abs`, `round`, `min`, `max` and `pow` are builtins, and `js.Math` holds the rest',
+    random: '`js.Math.random()` draws a number',
+    datetime: '`date` and `fromnow` show a date, and `js.Date` reads the clock',
+    time: '`js.Date.now()` reads the clock'
+};
+
+// An `import` of a module that is neither the runtime's nor a file of the
+// project, refused on its line: in the browser it would fail at mount.
+function refuseMissingModules(importedAt, resolves, source, lineOffset) {
+    for (const [module, line] of importedAt) {
+        if (PROVIDED_MODULES.has(module) || resolves(module)) continue;
+
+        const instead = MODULE_INSTEAD[module];
+
+        throw refuse(
+            `svelthon — \`${module}\` is not a module a component can import: ` +
+                `Python's standard library does not ship, only \`browser\`, ` +
+                `\`javascript\` and the project's own \`.py\` files do` +
+                (instead ? `; ${instead}` : '') +
+                ` (${source}:${line + lineOffset})`,
+            source,
+            line + lineOffset
+        );
+    }
 }
 
 // The names the emitted script gives to what it generates. Pure functions of the
@@ -2487,7 +2553,11 @@ function compile(
         jsNames = [],
         pyDirectives = [],
         lineOffset = 0,
-        sourceContent = null
+        sourceContent = null,
+        // Whether an imported name is one of the project's own `.py` files,
+        // asked by whoever can read the file system. Without it the imports
+        // are not checked.
+        resolves = null
     } = {}
 ) {
     // A component has markup, so it has the dialect; a module is a module and
@@ -2641,9 +2711,10 @@ function compile(
     // Svelte reserves the '$' prefix for *every* scope inside a component, and
     // Brython's codegen opens with `var $B = __BRYTHON__`. So the generated
     // code lives in its own module, which Svelte never parses.
-    const imported = [
-        ...new Set([...Object.keys(root.imports), ...fromImports(root._ast)])
-    ];
+    const importedAt = moduleImports(root._ast);
+    const imported = [...importedAt.keys()];
+
+    if (resolves) refuseMissingModules(importedAt, resolves, source, lineOffset);
     const module = [
         `import { ${runtimeAliases(['withNamespace', 'pyError'])} } from 'svelthon/runtime';`,
         ``,

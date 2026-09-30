@@ -364,7 +364,8 @@ export function python(options = {}) {
                 {
                     ...about(filename),
                     // The whole file, so a debugger opens the .svelte itself.
-                    sourceContent: filename ? readFileSync(filename, 'utf8') : content
+                    sourceContent: filename ? readFileSync(filename, 'utf8') : content,
+                    resolves: (mod) => Boolean(moduleFile(mod, dirname(filename || '.'), searchPath))
                 }
             );
 
@@ -458,7 +459,7 @@ const compiledStores = new Map();
 // created once for the whole application rather than per component instance,
 // and is served under a `.svelte.js` identity, which is what makes
 // vite-plugin-svelte compile the runes inside it.
-function compilePython(file) {
+function compilePython(file, path) {
     const stamp = statSync(file).mtimeMs;
     const cached = compiledStores.get(file);
     if (cached && cached.stamp === stamp) return cached.result;
@@ -467,7 +468,8 @@ function compilePython(file) {
     const mode = isReactive(file) ? { store: true } : { plain: true };
     const result = compile(source, nameFor(file), relative(process.cwd(), file), {
         ...mode,
-        sourceContent: source
+        sourceContent: source,
+        resolves: (mod) => Boolean(moduleFile(mod, dirname(file), path))
     });
 
     compiledStores.set(file, { stamp, result });
@@ -517,6 +519,15 @@ export function withPrelude(module, map, prelude) {
 // then along the configured path. Both spellings are tried, since the statement
 // says nothing about whether the module it names is reactive.
 function pythonImports(names, fromDirectory, path) {
+    return names
+        .flatMap((mod) => moduleFile(mod, fromDirectory, path) || [])
+        .map((path) => `import ${JSON.stringify(path)};`)
+        .join('\n');
+}
+
+// The file a module name stands for, or nothing. What `compile()` asks through
+// `resolves`, so an import that names no file is refused on its line.
+function moduleFile(mod, fromDirectory, path) {
     // Given by the caller that knows which configuration it belongs to, and read
     // off the shared value only by the one that cannot know.
     //
@@ -528,17 +539,9 @@ function pythonImports(names, fromDirectory, path) {
     // import graphs depending on the order they were built in.
     const searchPath = path || globalThis[Symbol.for('svelthon.path')] || [];
 
-    return names
-        .flatMap((mod) =>
-            [fromDirectory, ...searchPath]
-                .flatMap((directory) => [
-                    resolve(directory, `${mod}.svelte.py`),
-                    resolve(directory, `${mod}.py`)
-                ])
-                .find((candidate) => existsSync(candidate)) || []
-        )
-        .map((path) => `import ${JSON.stringify(path)};`)
-        .join('\n');
+    return [fromDirectory, ...searchPath]
+        .flatMap((directory) => [resolve(directory, `${mod}.svelte.py`), resolve(directory, `${mod}.py`)])
+        .find((candidate) => existsSync(candidate));
 }
 
 // Python follows TypeScript's own convention, the one Svelte already defines:
@@ -612,7 +615,7 @@ export function svelthon(options = {}) {
 
             const file = id;
             const name = nameFor(file);
-            const { script, module, map, imports } = compilePython(file);
+            const { script, module, map, imports } = compilePython(file, searchPath);
 
             // A `.py` may import another one, a route module reaching for its
             // data layer. Same prelude a component gets.
