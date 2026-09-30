@@ -15889,6 +15889,9 @@ throw exc}
 var uuid=Math.floor(Math.random()*1000000)
 function make_id(){uuid+=1
 return uuid}
+/* SVELTHON patch, see BRYTHON_FIX.md */$B.id_counter=function(n){var was=uuid
+if(n!==undefined){uuid=n}
+return was}
 function fast_id(obj){
 if(obj[$B.ID]!==undefined){return obj[$B.ID]}
 return obj[$B.ID]=make_id()}

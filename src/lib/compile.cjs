@@ -2549,6 +2549,18 @@ function plainExports(c) {
     ];
 }
 
+// A number below 2 ** 50, the range of Brython's own random start, drawn from a
+// text: two FNV-1a hashes of it, 18 bits of one above 32 of the other.
+function counterStart(text) {
+    const fnv = (basis) => {
+        let hash = basis;
+        for (let i = 0; i < text.length; i++) hash = Math.imul(hash ^ text.charCodeAt(i), 0x01000193) >>> 0;
+        return hash;
+    };
+
+    return (fnv(0x811c9dc5) & 0x3ffff) * 2 ** 32 + fnv(0x050c5d1f);
+}
+
 // The order, which is the one thing about this file that cannot be read off any
 // single section. Four constraints hold it, and `tests/sections.test.js` asserts
 // all four on the emitted script rather than on this list, since a list can only
@@ -2674,11 +2686,23 @@ function compile(
     // Brython's own message, which is CPython's.
     $B.file_cache[source] = src;
 
+    // Brython numbers the functions and lambdas it generates from a counter and
+    // a tag it draws at random, so that modules compiled apart are unlikely to
+    // share a name. Drawn from the file's path instead, they keep that and give
+    // one file the same code in every build. Both are given back afterwards:
+    // in a page that compiles, the counter also numbers live objects.
+    const counter = $B.id_counter(counterStart(source));
+    const tag = $B.lambda_magic;
+    $B.lambda_magic = counterStart(`${source}#lambda`).toString(36).slice(0, 8);
+
     let root;
     try {
         root = $B.py2js({ src, filename: source }, name, [name]);
     } catch (error) {
         throw pythonError(error, source, lineOffset, authored, exprLines, src);
+    } finally {
+        $B.id_counter(counter);
+        $B.lambda_magic = tag;
     }
     let { props, bindables, state, funcs, deriveds, effects, inspects, reserved, bound, lines } =
         surface(root._ast.body);
