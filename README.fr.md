@@ -75,7 +75,7 @@ reste de cette configuration et ce que chaque ligne apporte.
 npm install
 npm run dev
 
-npm test             # 1 322 tests : sémantique, props, réactivité, surface Svelte
+npm test             # 1 325 tests : sémantique, props, réactivité, surface Svelte
 npm run test:quiet   # la sortie de la suite : un run vert ne doit rien dire
 npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
@@ -1431,9 +1431,13 @@ qu'à ce qui remonte jusqu'à JavaScript.
 
 ## Ce qu'un composant peut importer
 
-Les modules de Python lui-même, `browser`, `javascript` et `sys`, et n'importe
-quel `.py` posé à côté du composant. Tout ce dont un gabarit a besoin est déjà
-un nom : `tojson`, `batch`, `date`, `fromnow`, `slugify`, `striptags`,
+`browser` (avec `browser.html` et `browser.aio`), `javascript`, et n'importe
+quel `.py` posé à côté du composant ou sur le `path` configuré. La
+bibliothèque standard de Python n'est pas livrée : `import json`, `import math`
+ou `from browser import timer` est refusé sur sa ligne à la compilation, avec
+ce qui le remplace quand il existe. Tout ce dont un gabarit a besoin est déjà
+un nom : `js` pour la plateforme, `js.Math` et `js.Date`, et `tojson`,
+`from_json`, `batch`, `date`, `fromnow`, `slugify`, `striptags`,
 `urlencode`.
 
 `tojson` écrit ce dont JSON a une notation et **refuse le reste en le nommant**
@@ -1461,7 +1465,7 @@ part jamais.
 
 ## État
 
-Validé par `npm test`, 1 322 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 1 325 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
