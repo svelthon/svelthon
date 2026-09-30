@@ -4,7 +4,8 @@
 // into a bindable prop the parent did not bind, and wraps an array or a plain
 // object it keeps in a state proxy, which a Brython list is; Python is handed
 // its object back. And `del` removes a name the component or the module
-// publishes, as it removes any global.
+// publishes, as it removes any global: absent from `globals()`, a builtin it
+// shadowed found again, and any later binding publishing it anew.
 import { test, expect } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import PropDefaults from './fixtures/PropDefaults.svelte';
@@ -67,6 +68,31 @@ test('del twice raises NameError, and a function can be deleted too', () => {
 
     expect(instance.delete_twice()).toBe('NameError');
     expect(instance.delete_function()).toBe('missing');
+});
+
+test('a deleted name is absent: not in globals(), and a builtin it shadowed answers', () => {
+    const { instance } = setup(PropDefaults);
+
+    expect(instance.present()).toBe(true);
+    expect(instance.delete_then_rebind()).toBe('missing');
+    expect(instance.present()).toBe(true);
+    expect(instance.delete_shadow()).toBe('2');
+});
+
+test('a loop rebinds a deleted name, and the page follows it and what comes after', () => {
+    const { instance, text } = setup(PropDefaults);
+
+    expect(instance.delete_then_loop()).toBe(true);
+    flushSync();
+    expect(text('count')).toBe('9');
+
+    instance.set_count(11);
+    flushSync();
+    expect(text('count')).toBe('11');
+});
+
+test('+= on a deleted name raises NameError', () => {
+    expect(setup(PropDefaults).instance.delete_then_augment()).toBe('NameError');
 });
 
 test('in a plain module too', () => {

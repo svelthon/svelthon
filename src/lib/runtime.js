@@ -1957,8 +1957,9 @@ export const thenable = (value) =>
 
 // Calling an `async def` from JavaScript returns a coroutine that nobody runs:
 // the handler appears to do nothing at all, silently. Brython has its own event
-// loop, so hand it over.
-export function schedule(result, where, lineOffset = 0) {
+// loop, so hand it over. `convert`, when given, is applied to the value the
+// coroutine returns, the conversion a synchronous result gets at the same site.
+export function schedule(result, where, lineOffset = 0, convert = undefined) {
     const $B = globalThis.__BRYTHON__;
     const aio = $B.imported['browser.aio'];
 
@@ -1983,7 +1984,7 @@ export function schedule(result, where, lineOffset = 0) {
     // other. What stays local is everything below — the promise that knows
     // whether anybody awaited it, and the rethrow for a failure nobody caught.
     const promise = new Waited((resolve, reject) => {
-        started(result).then(
+        (convert === undefined ? started(result) : started(result).then(convert)).then(
             resolve,
             (error) => {
                 const failure = pyError(error, where, lineOffset);
@@ -3931,9 +3932,12 @@ export function pyBoundary(fn) {
 // would come back to Python a `JSObject`.
 const running = (call, where, lineOffset, kept = false) => {
     try {
-        const value = schedule(call(), where, lineOffset);
+        const result = call();
+        const value = schedule(result, where, lineOffset, kept ? undefined : pyNumbers);
 
-        return kept ? value : pyNumbers(value);
+        // A coroutine's promise converts what it resolves to, above; the
+        // promise itself is handed back as it is.
+        return kept || value !== result ? value : pyNumbers(value);
     } catch (error) {
         throw pyError(error, where, lineOffset);
     }
@@ -4648,36 +4652,59 @@ export const unproxied = (value) =>
 // inherited accessor kept answering with the old value.
 //
 // A real `del` is `$B.$delete`, not the `delete_for_reassign` that precedes a
-// rebinding, so it can be told apart. Its readers are told first, through the
-// name's own setter, and then an own accessor hides the published one: read,
-// it raises `NameError`, the shape Brython itself expects of a deleted name;
-// written, it removes itself and hands the value to the published accessor,
-// which answers again from then on.
+// rebinding, so the two can be told apart. A deleted name has to be *absent*,
+// the way it is in any namespace: a read raises `NameError` or goes on to the
+// builtins, `len` found again once `len` is deleted, and `"count" in
+// globals()` is false. And the page that read it has to stay subscribed, so
+// that rebinding it, by `=`, a loop or an import, repaints.
 (function installDeletion($B) {
     const deleteName = $B.$delete;
+    const isMember = $B.$is_member;
+    const DELETED = new WeakMap();
 
     $B.$delete = function (name, locals, inum) {
         const namespace = locals === 'global' ? $B.frame_obj?.frame?.[3] : locals;
-        const published =
-            namespace !== null &&
-            typeof namespace === 'object' &&
-            namespace.$proxy === true &&
-            !Object.hasOwn(namespace, name) &&
-            Object.getOwnPropertyDescriptor(Object.getPrototypeOf(namespace), name)?.get !== undefined;
+        const proto = namespace !== null && typeof namespace === 'object' ? Object.getPrototypeOf(namespace) : null;
+        const accessor =
+            namespace?.$proxy === true && !Object.hasOwn(namespace, name)
+                ? Object.getOwnPropertyDescriptor(proto, name)
+                : undefined;
 
-        if (!published || namespace[name] === undefined) return deleteName.call(this, name, locals, inum);
+        if (accessor?.get === undefined || namespace[name] === undefined) {
+            return deleteName.call(this, name, locals, inum);
+        }
 
-        Object.getOwnPropertyDescriptor(Object.getPrototypeOf(namespace), name).set?.call(namespace, undefined);
-        Object.defineProperty(namespace, name, {
+        accessor.set?.call(namespace, undefined);
+
+        // Absent to Python, still read by the page: the getter goes through
+        // the published one, whose signal keeps the page subscribed, and hands
+        // back `undefined`, which a `$proxy` namespace reads as no name at all.
+        // Any write, by `=`, a loop or an import, puts the published accessor
+        // back and goes through it.
+        Object.defineProperty(proto, name, {
             get() {
-                throw $B.name_error(name);
+                accessor.get.call(this);
+                return undefined;
             },
             set(value) {
-                delete this[name];
-                this[name] = value;
+                Object.defineProperty(proto, name, accessor);
+                DELETED.get(this)?.delete(name);
+                accessor.set?.call(this, value);
             },
+            enumerable: false,
             configurable: true
         });
+
+        let deleted = DELETED.get(namespace);
+        if (deleted === undefined) DELETED.set(namespace, (deleted = new Set()));
+        deleted.add(name);
+    };
+
+    // `name in globals()`: the namespace is the globals, and a deleted name is
+    // not in it.
+    $B.$is_member = function (item, container) {
+        if (typeof item === 'string' && DELETED.get(container)?.has(item)) return false;
+        return isMember.call(this, item, container);
     };
 })(globalThis.__BRYTHON__);
 

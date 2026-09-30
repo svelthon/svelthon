@@ -5,10 +5,51 @@ rows: list = bindable([])
 table: dict = bindable({})
 nested: dict = {"a": []}
 count = 3
+len = 42
 
 
 def label():
     return 1
+
+
+@export
+def present():
+    return "count" in globals()
+
+
+@export
+def delete_shadow():
+    global len
+    del len
+    return str(len([1, 2]))
+
+
+@export
+def delete_then_loop():
+    global count
+    del count
+    for count in [9]:
+        pass
+    return "count" in globals()
+
+
+@export
+def set_count(value):
+    global count
+    count = value
+
+
+@export
+def delete_then_augment():
+    global count
+    del count
+    try:
+        count += 1
+        return "no error"
+    except NameError:
+        return "NameError"
+    finally:
+        count = 3
 
 
 @export
