@@ -1971,9 +1971,10 @@ class Waited extends Promise {}
 // handed a Python value to resolve with — which is exactly what a `__js__`
 // helper does. The measurement was right and the inference from it was not.
 //
-// No Python value answers this by accident: Brython keeps an object's
-// attributes under a symbol, so a plain `.then` read finds nothing on a dict, a
-// list or an instance.
+// A Python value is never one: Brython keeps an instance's attributes under a
+// symbol, so a plain `.then` read finds nothing on it, and a dict, which keeps
+// its string keys as its own properties, is asked by name, since `{"then": f}`
+// is a dict of callbacks and not a promise.
 // A **function** is one too, and that is the language's rule rather than a
 // courtesy: `await fn` and `Promise.resolve(fn)` call `fn.then` like anyone
 // else's. Asking `typeof === 'object'` left the one awaitable shape that is also
@@ -1982,7 +1983,8 @@ class Waited extends Promise {}
 export const thenable = (value) =>
     value !== null &&
     (typeof value === 'object' || typeof value === 'function') &&
-    typeof value.then === 'function';
+    typeof value.then === 'function' &&
+    !globalThis.__BRYTHON__.is_dict(value);
 
 // Calling an `async def` from JavaScript returns a coroutine that nobody runs:
 // the handler appears to do nothing at all, silently. Brython has its own event
@@ -2024,9 +2026,11 @@ export function schedule(result, where, lineOffset = 0, convert = undefined) {
                 // turns it into a genuine uncaught error, the way the
                 // synchronous path already behaves, but only when the caller
                 // really did ignore the promise, or a template that awaits and
-                // renders `{:catch}` would report the failure twice.
+                // renders `{:catch}` would report the failure twice. Thrown to
+                // the host as the synchronous path throws it, an ordinary
+                // `Error`; the promise keeps the Python exception.
                 setTimeout(() => {
-                    if (!watched) throw failure;
+                    if (!watched) throw thrown(failure);
                 });
             }
         );

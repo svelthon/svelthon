@@ -11,7 +11,9 @@ import {
     from_custom,
     from_callable,
     from_function,
-    from_rejected
+    from_rejected,
+    callbacks,
+    then_calls
 } from './fixtures/promises.py';
 
 // Calling an `async def` from JavaScript returns a coroutine nobody runs — the

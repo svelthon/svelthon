@@ -4,7 +4,28 @@
 # reason written there: a Python argument is converted on its way into a `__js__`
 # helper, so a dict handed in would already be plain data and no row could fail.
 __js__ = {"./foreign_promise.js": ["foreign", "local", "custom", "awaitable", "plainFunction", "rejecting"]}
-__all__ = ["from_foreign", "from_local", "from_custom", "from_callable", "from_function", "from_rejected"]
+__all__ = [
+    "from_foreign", "from_local", "from_custom", "from_callable", "from_function", "from_rejected",
+    "callbacks", "then_calls",
+]
+
+# A dict whose key is `then` is a dict of callbacks, not a promise: handed back,
+# it is data, and nothing calls its callback.
+calls = 0
+
+
+def after(resolve, reject):
+    global calls
+    calls += 1
+    resolve(42)
+
+
+def callbacks():
+    return {"then": after, "answer": 7}
+
+
+def then_calls():
+    return calls
 
 
 def from_foreign():

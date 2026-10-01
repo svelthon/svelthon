@@ -1,4 +1,4 @@
-import { test, expect, describe } from 'vitest';
+import { test, expect, describe, vi } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import Raiser from './fixtures/Raiser.svelte';
 
@@ -51,6 +51,37 @@ describe('an uncaught exception in a handler', () => {
         const [error] = clicking();
 
         expect(Object.getOwnPropertyNames(error).sort()).toEqual(['message', 'stack']);
+        expect(error.ob_type).toBeUndefined();
+    });
+
+    // And from an `async def`, whose failure nobody awaited: the timer that
+    // throws it to the host throws the same ordinary Error.
+    test('from an async def, reaches the host as an ordinary Error too', async () => {
+        const target = document.body.appendChild(document.createElement('div'));
+        mount(Raiser, { target });
+        flushSync();
+
+        const original = globalThis.setTimeout;
+        const pending = [];
+        globalThis.setTimeout = (fn, ...rest) =>
+            typeof fn === 'function' && rest.length === 0 ? pending.push(fn) : original(fn, ...rest);
+
+        try {
+            target.querySelector('button[data-k="later"]').click();
+            await vi.waitFor(() => expect(pending).toHaveLength(1));
+        } finally {
+            globalThis.setTimeout = original;
+        }
+
+        let error;
+        try {
+            pending[0]();
+        } catch (caught) {
+            error = caught;
+        }
+
+        expect(error).toBeInstanceOf(Error);
+        expect(error.message).toMatch(/ValueError: LATER/);
         expect(error.ob_type).toBeUndefined();
     });
 });
