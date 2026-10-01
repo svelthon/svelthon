@@ -9,6 +9,24 @@ import NumericKey from './fixtures/NumericKey.svelte';
 import NanKey from './fixtures/NanKey.svelte';
 import SignedZeroKey from './fixtures/SignedZeroKey.svelte';
 import FunctionKey from './fixtures/FunctionKey.svelte';
+import BoundMethodKey from './fixtures/BoundMethodKey.svelte';
+
+test.for([['alone'], ['tuple'], ['builtin']])('%s: an equal bound method keeps the block, another makes one', ([kind]) => {
+    const target = document.body.appendChild(document.createElement('div'));
+    const instance = mount(BoundMethodKey, { target, props: { kind } });
+    flushSync();
+    expect(instance.equal_again()).toBe(true);
+    const field = target.querySelector('input');
+    field.value = 'unsaved';
+
+    instance.reread();
+    flushSync();
+    expect(target.querySelector('input')).toBe(field);
+
+    instance.change();
+    flushSync();
+    expect(target.querySelector('input')).not.toBe(field);
+});
 
 // A function in a tuple or a frozenset key is equal to itself alone: two built
 // by one factory print alike and are two keys.

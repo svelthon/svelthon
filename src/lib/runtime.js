@@ -146,6 +146,11 @@ function numeric(value) {
     return null;
 }
 
+const boundText = (self, operation) => {
+    const object = self !== null && (typeof self === 'object' || typeof self === 'function');
+    return `method(${object ? identityOf(self, 'self') : keyText(self)}, ${operation})`;
+};
+
 function keyText(value) {
     if (value === null || value === undefined || value === NONE) return 'None';
 
@@ -155,6 +160,14 @@ function keyText(value) {
     if (typeof value === 'string') return _b_.repr(value);
     // A function is equal to itself alone, as an instance is: two built by one
     // factory print alike and are two keys.
+    // A bound method is read anew each time, and two are equal when they bind
+    // the same object to the same function: a method of the author's class,
+    // `{ob_type: method, im_self, im_func}`, or a builtin's, a function carrying
+    // `m_self` and `ml`.
+    if (boundMethod(value)) return boundText(value.im_self, identityOf(value.im_func, 'function'));
+    if (typeof value === 'function' && value.m_self !== undefined && value.ml?.ml_name !== undefined) {
+        return boundText(value.m_self, value.ml.ml_name);
+    }
     if (typeof value === 'function') return identityOf(value, 'function');
     if (typeof value !== 'object') return String(value);
 
@@ -256,6 +269,11 @@ export const __pybridge = {
         // are one key of a dict. Equal to a string, it is that string.
         const number = numeric(value);
         if (number !== null) return number;
+
+        // A bound method is rebuilt on every read, and equal by what it binds.
+        if (boundMethod(value) || (typeof value === 'function' && value.m_self !== undefined && value.ml?.ml_name !== undefined)) {
+            return keyFor(keyText(value));
+        }
 
         if (value === null || typeof value !== 'object') return value;
 
