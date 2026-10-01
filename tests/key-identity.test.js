@@ -7,6 +7,7 @@ import { mount, flushSync } from './mounted.js';
 import KeyIdentity from './fixtures/KeyIdentity.svelte';
 import NumericKey from './fixtures/NumericKey.svelte';
 import NanKey from './fixtures/NanKey.svelte';
+import SignedZeroKey from './fixtures/SignedZeroKey.svelte';
 
 const setup = () => {
     const target = document.body.appendChild(document.createElement('div'));
@@ -117,6 +118,22 @@ describe('a numeric key follows Python equality', () => {
         expect(at('tuple')).not.toBe(tuple);
         expect(at('number')).not.toBe(number);
     });
+});
+
+// A complex is equal to another when both parts are, as numbers: the sign of a
+// zero part does not make another key, alone, in a tuple, in a frozenset, or
+// as a context key.
+test.for([['complex'], ['tuple'], ['frozenset']])('%s: a signed zero part keeps the block and finds the context', ([kind]) => {
+    const target = document.body.appendChild(document.createElement('div'));
+    const instance = mount(SignedZeroKey, { target, props: { kind } });
+    flushSync();
+    const field = target.querySelector('input');
+    field.value = 'unsaved';
+
+    instance.flip();
+    flushSync();
+    expect(target.querySelector('input')).toBe(field);
+    expect(target.querySelector('[data-k="found"]').textContent).toBe('retained');
 });
 
 // A NaN equals nothing, and neither does a complex with a NaN part, alone or in

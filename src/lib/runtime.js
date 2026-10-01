@@ -177,6 +177,8 @@ function keyText(value) {
     if (mro.includes(_b_.complex) && (Number.isNaN(value.real.value) || Number.isNaN(value.imag.value))) {
         return identityOf(value, 'nan');
     }
+    // And is equal to another when both parts are, as numbers: `-0.0` is `0.0`.
+    if (mro.includes(_b_.complex)) return `complex(${numeric(value.real.value)}, ${numeric(value.imag.value)})`;
 
     // The builtin's repr(), which spells the value; a subclass's own `__repr__`
     // spells whatever its author chose, two values alike included.
