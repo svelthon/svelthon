@@ -824,7 +824,7 @@ describe('the attribute pass', () => {
         // The fourth member is the binding as the author wrote it, which the
         // bare spelling gives as `group` — its own name.
         const action =
-            /use:__group=\{\[__expr_\d+\(\), \(__value\) => __expr_set_\d+\(__pyBind\(__value\)\), undefined, "(choix|group)", __py\]\}/;
+            /use:__group=\{\[__expr_py_\d+\(\), \(__value\) => __expr_set_\d+\(__pyBind\(__value\)\), undefined, "(choix|group)", __py\]\}/;
 
         expect(rewrite('<input bind:group={choix}>').out).toMatch(action);
         expect(rewrite('<input bind:group>').out).toMatch(action);

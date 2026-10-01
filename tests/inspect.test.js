@@ -52,7 +52,7 @@ describe('inspect', () => {
         // The call, not its result: Svelte wraps what it is given in a thunk of
         // its own, so the lambda is what gets re-run.
         test('hands Svelte the call', () => {
-            expect(script('count = 0\n\ninspect(count)\n')).toContain('$inspect(...__fn___inspect_0());');
+            expect(script('count = 0\n\ninspect(count)\n')).toContain('$inspect(...__invoke(__fn___inspect_0));');
         });
 
         test('and leaves a component that does not use it alone', () => {

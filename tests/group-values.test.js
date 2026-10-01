@@ -1,6 +1,31 @@
 import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import GroupTypes from './fixtures/GroupTypes.svelte';
+import FloatForm from './fixtures/FloatForm.svelte';
+
+// A binding compares a container by identity: a dict holding a float keeps its
+// option selected, and a group of floats keeps the box already ticked.
+describe('a form over floats', () => {
+    const setup = () => {
+        const target = document.body.appendChild(document.createElement('div'));
+        mount(FloatForm, { target });
+        flushSync();
+        return (key) => target.querySelector(`[data-k="${key}"]`);
+    };
+
+    test('a select keeps the dict it is bound to selected', () => {
+        expect(setup()('select').selectedIndex).toBe(0);
+    });
+
+    test('a second box ticked keeps the first', () => {
+        const at = setup();
+        expect(at('a').checked).toBe(true);
+
+        at('b').click();
+        flushSync();
+        expect(at('picked').textContent).toBe('[0.5, 1.5]');
+    });
+});
 
 // What a group binds is the author's value, not the DOM's spelling of it.
 //

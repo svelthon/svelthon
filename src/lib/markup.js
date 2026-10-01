@@ -1434,6 +1434,10 @@ function walk(markup, collect, onPython, seed, record, where) {
     //             Each name is handed over as a function that reads it, and the
     //             compiler makes the reads calls, so a branch Python does not
     //             take reads nothing, as in Python.
+    //   'scalar'  a value a binding compares by identity, a `value` or a
+    //             `bind:` read: a scalar is made JavaScript's, so `0.5` twice
+    //             is one value, and a container is handed over as the object it
+    //             is, so an option finds its select and a group its list.
     const call = (expr, wrapper, source = expr, kind = '') => {
         const trimmed = expr.trim();
         const args = mentioned(trimmed);
@@ -1526,7 +1530,9 @@ function walk(markup, collect, onPython, seed, record, where) {
     };
 
     const groupAction = (expr) => {
-        const read = call(expr, '');
+        // The Python list itself: the group compares with Python's `==`, and
+        // its inputs know each other by the list they share.
+        const read = call(expr, '', undefined, 'python');
         const write = assign(expr);
         const found = tag === null ? null : tagValue(markup, tag.start);
         const outer = region;
@@ -1746,7 +1752,7 @@ function walk(markup, collect, onPython, seed, record, where) {
                         } else if (DIRECTIVE.test(attribute[1])) {
                             out += declaredHere(inner)
                                 ? `{${inner.trim()}}`
-                                : `{() => ${call(inner, '__bound')}, (${BOUND_VALUE}) => ${assign(inner)}}`;
+                                : `{() => ${call(inner, '__bound', undefined, 'scalar')}, (${BOUND_VALUE}) => ${assign(inner)}}`;
                         } else if (HANDLER.test(attribute[1])) {
                             // A handler is the one place a template expression
                             // is allowed to write: it runs on an event, not
@@ -1771,7 +1777,12 @@ function walk(markup, collect, onPython, seed, record, where) {
                             // wrapper the bindings use: the boundary is the
                             // same one, and a prop passed to a child is read
                             // back as None on the other side regardless.
-                            out += `{${call(inner, '__bound')}}`;
+                            //
+                            // A `value` is what a binding compares by identity —
+                            // an `<option>` against its `<select>` — so a
+                            // container keeps its own, and a scalar is still
+                            // compared by value.
+                            out += `{${call(inner, '__bound', undefined, attribute[1] === 'value' ? 'scalar' : '')}}`;
                         }
                     } else if (glued) {
                         // `style:color=red{variable}`: an unquoted value with an
@@ -2258,7 +2269,15 @@ export function collector(defs, lines, columns) {
         // wrapper evaluate them the way a template expression is evaluated. The
         // part after it is what the compiler reads the kind from: `lazy_`, whose
         // parameters are read by a call, and `py_`, whose value stays Python.
-        const infix = assign ? 'set_' : kind === 'lazy' ? 'lazy_' : kind === 'python' ? 'py_' : '';
+        const infix = assign
+            ? 'set_'
+            : kind === 'lazy'
+              ? 'lazy_'
+              : kind === 'python'
+                ? 'py_'
+                : kind === 'scalar'
+                  ? 'scalar_'
+                  : '';
         const name = `__expr_${infix}${defs.length}`;
         seen.set(key, name);
         lines?.push(line);

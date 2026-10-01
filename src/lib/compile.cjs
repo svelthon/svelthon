@@ -1266,6 +1266,9 @@ const componentWrapper = (f) => (f.name.startsWith(EXPR_PREFIX) ? '__pyExpressio
 // pass: a declaration of the markup and a `{@render}` argument (`py_`), and a
 // default inside a pattern (`lazy_`). Their value is handed back as it is.
 const KEPT_PYTHON = /^__expr_(?:py|lazy)_/;
+// An expression whose container keeps its identity and whose scalar is made
+// JavaScript's: what a binding compares.
+const SCALAR_ONLY = /^__expr_scalar_/;
 
 // In the markup, and only there, the dot finds a key as well as an attribute:
 // `{pep.title}` reads a dict. The same text in the `<script>` stays plain Python
@@ -2579,7 +2582,7 @@ function instanceExports(c) {
             componentWrapper(f) === RUNTIME.pyExpression
                 ? `const ${f.name} = ${RUNTIME.pyExpression}((a) => ${fn(f.name)}(...a), ` +
                   `${JSON.stringify(`${f.name}() — ${c.source}`)}, __lines, ${f.arity}, ` +
-                  `${KEPT_PYTHON.test(f.name)});`
+                  `${KEPT_PYTHON.test(f.name) ? 'true' : SCALAR_ONLY.test(f.name) ? "'scalar'" : 'false'});`
                 : `const ${f.name} = ${RUNTIME.pyComponent}(() => ${fn(f.name)}, ` +
                   `${JSON.stringify(`${f.name}() — ${c.source}`)}, ${c.lineOffset});`
         ),

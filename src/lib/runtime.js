@@ -4080,10 +4080,25 @@ export const pyComponent = (read, where, lineOffset) => {
 // Two names rather than a flag, so the compiler *chooses* a wrapper instead of
 // describing one: what it writes is a name, and everything a crossing does is on
 // this side of the line.
+//
+// `kept` is true for a value that stays Python, and `'scalar'` for one a
+// binding compares: a scalar made JavaScript's, a container handed over as the
+// object it is, since a copy is another object to `===`.
+const scalarOnly = (value) => {
+    if (value === null || typeof value !== 'object') return value;
+    const alone = pyScalar(value);
+    return alone === undefined ? value : alone;
+};
+
 export const pyExpression = (call, where, lineOffset, arity, kept = false) =>
     identified(
         (...args) =>
-            running(() => call(args.slice(0, arity).map(pyBind)), where, lineOffset, kept ? null : pyNumbers),
+            running(
+                () => call(args.slice(0, arity).map(pyBind)),
+                where,
+                lineOffset,
+                kept === true ? null : kept === 'scalar' ? scalarOnly : pyNumbers
+            ),
         nameOf(where),
         arity
     );
