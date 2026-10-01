@@ -1215,6 +1215,7 @@ const RUNTIME = {
     pyTeardown: '__pyTeardown',
     pyComponent: '__pyComponent',
     pyExpression: '__pyExpression',
+    invoke: '__invoke',
     pyExport: '__pyExport',
     jsCall: '__jsCall',
     ticking: '__ticking',
@@ -2248,7 +2249,7 @@ function preamble(c) {
             'pyEvent', 'plainData', 'pyArg', 'pyData', 'pyBoundary', 'pyComponent', 'pyExpression',
             'jsCall',
             'ticking', 'pyBind', 'pyModule', 'NONE', 'helpers',
-            'plainScalar',
+            'plainScalar', 'invoke',
             ...(c.store ? ['registerModule'] : SUBSCRIBING(c) ? ['unsubscribe'] : []),
             ...(c.bindables.length ? ['kept', 'unproxied'] : []),
             // Only an effect and `on_mount` hand a value back to be called
@@ -2330,7 +2331,7 @@ function declarations(c) {
         // namespace accessor, so Svelte discovers the dependencies by itself.
         ...c.deriveds.flatMap((d) => [
             `let ${fn(d.name)} = $state.raw(undefined);`,
-            `const ${d.name} = $derived.by(() => ${fn(d.name)}());`
+            `const ${d.name} = $derived.by(() => __invoke(${fn(d.name)}));`
         ]),
         // Which containers this instance signed onto, so it can sign off when
         // it goes. A container reached through a store outlives the components
@@ -2691,8 +2692,8 @@ function effectBlocks(c) {
         // value read late is the value read early.
         ...c.inspects.map((i) =>
             i.logger
-                ? `$inspect(...${fn(i.name)}().slice(1)).with((...a) => __event(${fn(i.name)}()[0])(...a));`
-                : `$inspect(...${fn(i.name)}());`
+                ? `$inspect(...__invoke(${fn(i.name)}).slice(1)).with((...a) => __event(__invoke(${fn(i.name)})[0])(...a));`
+                : `$inspect(...__invoke(${fn(i.name)}));`
         ),
         // A root outlives the component and reads the same names, so the
         // subscriptions go when the last of them lets go: the component
@@ -2717,7 +2718,7 @@ function effectBlocks(c) {
                 ? `${destroyer(e.name)} = $effect.root(() => { $effect${e.pre ? '.pre' : ''}(() => {`
                 : `$effect${e.pre ? '.pre' : ''}(() => {`,
             `    let teardown;`,
-            `    try { teardown = ${fn(e.name)}(); }` +
+            `    try { teardown = __invoke(${fn(e.name)}); }` +
                 ` catch (err) { throw __pyError(err,${JSON.stringify(`${e.name}() — ${c.source}`)}, ${c.lineOffset}); }`,
             // What an effect hands back is a *Python* value, so the question is
             // whether Python can call it, not whether JavaScript can. A bound
@@ -2791,7 +2792,7 @@ function plainPreamble(c) {
         `import { ${runtimeAliases([
             'bind', '__pybridge', 'pyCall', 'pyDef', 'pyError', 'plainData', 'pyArg',
             'pyData', 'pyExport', 'pyBoundary', 'jsCall', 'ticking', 'pyBind', 'NONE', 'helpers',
-            'registerModule', 'group'
+            'registerModule', 'group', 'invoke'
         ])} } from 'svelthon/runtime';`,
         ...c.jsImports.map(jsImportLine),
         ``
@@ -2819,7 +2820,7 @@ function plainBindings(c) {
         ),
         ...c.plainDeriveds.map(
             (d) =>
-                `__bind(__proto, '${d.name}', () => ${fn(d.name)}(), (${NEXT_VALUE}) => { ${fn(d.name)} = ${NEXT_VALUE}; }, () => ${fn(d.name)});`
+                `__bind(__proto, '${d.name}', () => __invoke(${fn(d.name)}), (${NEXT_VALUE}) => { ${fn(d.name)} = ${NEXT_VALUE}; }, () => ${fn(d.name)});`
         ),
         ...injections(c.declared, false, c.names),
 

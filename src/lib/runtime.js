@@ -3557,6 +3557,12 @@ const RECEIVERS = new WeakMap();
 // itself: what it is does not change when the class changes what it does.
 const INSTANCES = new WeakMap();
 
+// The body of a derived, an effect or an `inspect`, called the way Python calls
+// it: a decorator may have made it a callable instance or a bound method, which
+// are Brython objects and not JavaScript functions. A function is called as it
+// is, which is the path every undecorated body takes.
+export const invoke = (fn) => (typeof fn === 'function' ? fn() : globalThis.__BRYTHON__.$call(fn));
+
 // What an effect or `on_mount` hands back, made into what Svelte expects of it:
 // a cleanup it can call, or nothing. An `async def` hands back a coroutine,
 // which is started rather than read as a cleanup, the way Svelte runs an
