@@ -122,7 +122,10 @@ const POSITIONS = [
     ['returned whole by a component', (key) => mounted().returned(key)],
     // What the compiler emits for `use:mod.member` and `in:mod.member`: the
     // directive names a module, and Svelte reads the member off this proxy.
-    ['as the member a directive names', (key) => pyModule('callable_matrix')[key]],
+    [
+        'as the member a directive names',
+        (key) => pyModule(() => globalThis.__BRYTHON__.imported.callable_matrix, 'callable_matrix')[key]
+    ],
     // The route an export does not take: what an exported function *returns*.
     // It crossed with no callback rule at all, so the same value was adapted
     // when published and raw when handed back — a bound method arrived as an

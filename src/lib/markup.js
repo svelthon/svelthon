@@ -2292,14 +2292,15 @@ export function moduleScript(content) {
     return null;
 }
 
-// The head of every dotted directive: the `x` of `in:x.fade`. Svelte copies that
-// text into a `() => …`, so `x` has to be a JavaScript binding, and when the
-// author meant a Python module, none exists.
+// The head of every directive that names a function: the `x` of `in:x.fade`,
+// and of `use:x` alone. Svelte copies that text into a `() => …`, so `x` has to
+// be a JavaScript binding, and when the author meant a name a Python import
+// bound, none exists. The compiler keeps only those.
 //
 // Only the five that name a function. `class:` and `style:` name a property, and
 // `bind:` names a target; a dot in those means something else entirely.
 const DOTTED_DIRECTIVE = new RegExp(
-    `(?:^|[\\s"'])(?:use|transition|in|out|animate):(${NAME})\\.`,
+    `(?:^|[\\s"'])(?:use|transition|in|out|animate):(${NAME})(?![${NAME_CHAR}])`,
     'gu'
 );
 

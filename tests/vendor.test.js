@@ -7,6 +7,7 @@ import { mount, flushSync, settled } from './mounted.js';
 import CoroutineAwaited from './fixtures/CoroutineAwaited.svelte';
 import * as deleteOrder from './fixtures/delete_order.py';
 import * as strKeywords from './fixtures/str_keywords.py';
+import * as jsonText from './fixtures/json_text.py';
 
 // Behaviours of the vendored Brython that Svelthon rests on, each observable,
 // so a build that loses one turns a test red rather than a page. The first
@@ -370,6 +371,13 @@ describe('the vendored Brython carries its repairs', () => {
     test('a str subclass is a keyword name', () => {
         expect(strKeywords.by_subclass()).toBe('Café');
         expect(Array.from(strKeywords.kept_types())).toEqual(['Name', 'Name']);
+    });
+
+    // `javascript.JSON.parse` reads a subclass of str by its value, not by the
+    // object Brython keeps it in, and `from_json` is that parse.
+    test('a str subclass holding JSON is parsed', () => {
+        expect(Array.from(jsonText.engine())).toEqual([42, 42]);
+        expect(Array.from(jsonText.helper())).toEqual([42, 42]);
     });
 
     // `index` and `remove` find an item by identity before equality, as `in`

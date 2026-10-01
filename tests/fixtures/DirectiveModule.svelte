@@ -2,6 +2,9 @@
 # A directive naming a module: the value beside it is Python, but the name
 # itself is read as JavaScript, where `import` binds nothing.
 import directive_mod
+import directive_mod as actions
+from directive_mod import measured
+from directive_mod import measured as action
 
 flag = True
 half: float = 0.5
@@ -25,3 +28,10 @@ def local(node, value):
 <p data-k="module-whole" use:directive_mod.measured={whole}>not yet</p>
 <p data-k="local-half" use:local={half}>not yet</p>
 <p data-k="local-whole" use:local={whole}>not yet</p>
+
+<!-- The name an import binds, and a path through an object of the module. -->
+<p data-k="alias" use:actions.measured={half}>not yet</p>
+<p data-k="member" use:measured={half}>not yet</p>
+<p data-k="member-alias" use:action={half}>not yet</p>
+<p data-k="instance" use:directive_mod.configured.measured={half}>not yet</p>
+<p data-k="registry" use:directive_mod.registry.measured={half}>not yet</p>

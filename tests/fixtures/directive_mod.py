@@ -9,6 +9,18 @@ def measured(node, value):
     node.textContent = format(value, ".2f")
 
 
+class Actions:
+    # An object configured once, its method named by the directive.
+    def measured(self, node, value):
+        node.textContent = format(value, ".2f")
+
+
+configured = Actions()
+
+# A registry, reached by the template's dot like any dict.
+registry = {"measured": measured}
+
+
 async def later(node):
     # An action written as a coroutine: started, as a handler would be.
     node.textContent = "started"

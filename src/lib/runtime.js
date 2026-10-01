@@ -4225,71 +4225,89 @@ export const pyExpression = (call, where, lineOffset, arity, kept = false) =>
 // object: Svelte keeps what a directive gave it.
 const directives = new WeakMap();
 
-export function pyModule(name) {
-    return new Proxy(
-        {},
-        {
-            get(_, key) {
-                const namespace = globalThis.__BRYTHON__.imported[name];
-                const member = namespace === undefined ? undefined : namespace[key];
+// **The whole path, by the template's rules, and from the name the component
+// binds.** The head is read in the component's namespace, so `import m as
+// actions` and `from m import measured as action` reach what they bound, where
+// the module's own name in `$B.imported` was asked before and an alias found
+// nothing. Each segment is the template's dot, `readAttr`, so an instance's
+// method and a dict's entry are reached as `{actions.registry.measured}` would
+// reach them; JavaScript's own member access found no method on an instance,
+// and handed a dict's function over unadapted.
+//
+// What a segment gives is adapted when it is callable, walked further when it
+// is a Python object, and handed over as it is otherwise. The head itself is
+// also called directly, for `use:measured`.
+// A dict keeps its class under a symbol rather than `ob_type`, so it is asked
+// the way the converter asks it.
+const pythonObject = (value) =>
+    value !== null &&
+    typeof value === 'object' &&
+    (value.ob_type !== undefined || globalThis.__BRYTHON__.is_dict(value));
 
-                // Callable in Python, which is the question every boundary that
-                // promises to adapt a callback asks, and the one this site was
-                // still answering with `typeof`. A module publishing
-                // `fade = Fades(0.3).run` — an object configured once, its
-                // method named by the directive — handed Svelte a value it
-                // cannot call, and so did a callable instance and a
-                // classmethod, for a body that worked the moment it was
-                // written as a `def`. Four shapes out of six, at the one
-                // crossing the other passes never visited.
-                const found = declared(member);
+const directiveValue = (member, where) => {
+    if (callable(member)) return directiveCallable(member, where);
+    if (pythonObject(member)) return directivePath(() => member, where);
 
-                if (found === null && typeof member !== 'function') return member;
+    return member;
+};
 
-                let wrapped = directives.get(member);
+function directivePath(read, where) {
+    return new Proxy(function () {}, {
+        get(_, key) {
+            if (typeof key === 'symbol') return undefined;
 
-                if (wrapped === undefined) {
-                    // Trimmed to the arity Python declared, exactly as a
-                    // handler is: Svelte calls a transition `fn(node, params,
-                    // options)`, and `def typewriter(node, params)` refuses the
-                    // third. A `def` written in the component is trimmed by its
-                    // own wrapper, which is why it worked and this did not.
-                    //
-                    // `declared` reads the same three things this site used to
-                    // read by hand, for every shape rather than for one: the
-                    // receiver is bound, the signature is read through
-                    // `$js_func`, and `self` is not counted among the
-                    // arguments. It answers null for a function JavaScript
-                    // built, which then keeps the reading it always had — no
-                    // signature, so no trim.
-                    const called = found === null ? member : found.fn;
-                    const arity = found === null ? Infinity : found.arity;
-                    const where = found === null ? `${name}.${key}()` : found.where;
-
-                    // Named like every other wrapper this file builds, and for
-                    // the same reason: what a JavaScript caller reads of a
-                    // Python function must not depend on the route it took.
-                    //
-                    // Converted on the way in, like every other call boundary:
-                    // Svelte hands an action or a transition its JavaScript
-                    // values, and a fractional one reaching `format(value,
-                    // '.2f')` must be a float. A DOM node is left alone by
-                    // `pyArg`, which is what the first argument always is here.
-                    // Run through `running`, the wrapper of a component's own
-                    // functions: an `async def` is started, and an error placed.
-                    wrapped = identified(
-                        (...args) => running(() => called(...taken(args, arity)), where),
-                        nameOf(where),
-                        arity
-                    );
-
-                    directives.set(member, wrapped);
-                }
-
-                return wrapped;
-            }
+            return directiveValue(readAttr(read(), key), `${where}.${key}`);
+        },
+        apply(_, self, args) {
+            return directiveCallable(read(), where)(...args);
         }
-    );
+    });
+}
+
+export const pyModule = (read, name) => directivePath(read, name);
+
+// Callable in Python, which is the question every boundary that promises to
+// adapt a callback asks, and the one this site was still answering with
+// `typeof`. A module publishing `fade = Fades(0.3).run` — an object configured
+// once, its method named by the directive — handed Svelte a value it cannot
+// call, and so did a callable instance and a classmethod, for a body that
+// worked the moment it was written as a `def`.
+function directiveCallable(member, path) {
+    const found = declared(member);
+
+    if (found === null && typeof member !== 'function') return member;
+
+    let wrapped = directives.get(member);
+
+    if (wrapped === undefined) {
+        // Trimmed to the arity Python declared, exactly as a handler is: Svelte
+        // calls a transition `fn(node, params, options)`, and `def
+        // typewriter(node, params)` refuses the third.
+        //
+        // `declared` reads the receiver, the signature through `$js_func`, and
+        // leaves `self` out of the arguments, for every shape. It answers null
+        // for a function JavaScript built, which keeps the reading it always
+        // had: no signature, so no trim.
+        const called = found === null ? member : found.fn;
+        const arity = found === null ? Infinity : found.arity;
+        const where = found === null ? `${path}()` : found.where;
+
+        // Converted on the way in, like every other call boundary: Svelte hands
+        // an action or a transition its JavaScript values, and a fractional one
+        // reaching `format(value, '.2f')` must be a float. A DOM node is left
+        // alone by `pyArg`, which is what the first argument always is here.
+        // Run through `running`, the wrapper of a component's own functions: an
+        // `async def` is started, and an error placed.
+        wrapped = identified(
+            (...args) => running(() => called(...taken(args, arity)), where),
+            nameOf(where),
+            arity
+        );
+
+        directives.set(member, wrapped);
+    }
+
+    return wrapped;
 }
 
 // A store's namespace, published under its Python module name, so a component's

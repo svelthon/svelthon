@@ -31,8 +31,11 @@ describe('the head of a dotted directive', () => {
         expect(directiveModules('<p class:a.b style:c.d bind:e.f>x</p>')).toEqual([]);
     });
 
-    test('nor of an undotted one, which resolves on its own', () => {
-        expect(directiveModules('<p transition:fly use:mark>x</p>')).toEqual([]);
+    // An undotted head is found too: `from m import mark` binds `mark` in
+    // Python alone. The compiler keeps it only when an import binds it, so a
+    // JavaScript `fly` still resolves on its own.
+    test('and of an undotted one', () => {
+        expect(directiveModules('<p transition:fly use:mark>x</p>')).toEqual(['fly', 'mark']);
     });
 
     test('and each head once, however many directives name it', () => {
@@ -44,8 +47,26 @@ describe('the binding it needs', () => {
     const script = (src, pyDirectives) =>
         compile(src, 'Probe', 'src/Probe.svelte', { pyDirectives }).script;
 
+    const emitted = (name) => `const ${name} = __pyModule(() => __py["${name}"], "${name}");`;
+
     test('is emitted for a module the file imports and a directive names', () => {
-        expect(script('import fades\n', ['fades'])).toContain('const fades = __pyModule("fades");');
+        expect(script('import fades\n', ['fades'])).toContain(emitted('fades'));
+    });
+
+    // The name the import binds, which is not the module's own: the module was
+    // looked up by the directive's head, and an alias found nothing.
+    test.for([
+        ['import fades as motion\n', 'motion'],
+        ['from fades import typewriter\n', 'typewriter'],
+        ['from fades import typewriter as typing\n', 'typing'],
+        ['import fades.extra\n', 'fades']
+    ])('and for the name %s binds', ([src, name]) => {
+        expect(script(src, [name])).toContain(emitted(name));
+    });
+
+    // An import inside a `def` binds a local name, not one the directive reads.
+    test('but not for an import inside a function', () => {
+        expect(script('def load():\n    import fades\n', ['fades'])).not.toContain(emitted('fades'));
     });
 
     // Only what is actually broken. A name that resolves in JavaScript already
@@ -100,6 +121,18 @@ describe('a directive naming a module', () => {
         expect(read(`${which}-half`)).toBe('0.50');
         expect(read(`${which}-whole`)).toBe('1.00');
     });
+
+    // Reached through the name an import binds, or through an object of the
+    // module. An alias and an imported member had no JavaScript binding and
+    // the component died at mount; an instance's method was not a JavaScript
+    // property, so the action never ran; a dict's function was handed over
+    // unadapted, and `0.5` reached `format` as a JavaScript number.
+    test.for(['alias', 'member', 'member-alias', 'instance', 'registry'])(
+        'and through %s',
+        (key) => {
+            expect(setup()(key)).toBe('0.50');
+        }
+    );
 });
 
 // The boundary itself, called the way Svelte calls it rather than through a
@@ -108,7 +141,7 @@ describe('what a module member becomes for Svelte', () => {
     const ready = () => {
         mount(DirectiveModule, { target: document.body.appendChild(document.createElement('div')) });
         flushSync();
-        return pyModule('directive_mod');
+        return pyModule(() => globalThis.__BRYTHON__.imported.directive_mod, 'directive_mod');
     };
 
     // Svelte hands a transition three arguments; the Python signature declares

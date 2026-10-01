@@ -2130,18 +2130,25 @@ function surface(body) {
 //
 // A relative import, `from . import x` or `from .x import y`, is kept apart: it
 // names no module, only a place in a package, and a component is in none.
+//
+// `bound` is the other half, and not the same list: the names those imports
+// bind in the module's namespace. `import m as actions` loads `m` and binds
+// `actions`; `from m import measured` loads `m` and binds `measured`. Only at
+// module level, outside any `def` or `class`, since that is the namespace a
+// directive reads.
 function moduleImports(ast) {
     const found = new Map();
     const relative = [];
+    const bound = new Set();
     const add = (module, node) => {
         if (!found.has(module)) found.set(module, node.lineno);
     };
 
-    const walk = (node) => {
+    const walk = (node, top = true) => {
         if (!node || typeof node !== 'object') return;
 
         if (Array.isArray(node)) {
-            node.forEach(walk);
+            node.forEach((one) => walk(one, top));
             return;
         }
 
@@ -2174,11 +2181,18 @@ function moduleImports(ast) {
         }
         if (importNode) for (const one of node.names) add(one.name, node);
 
-        for (const key of BODIES) if (node[key]) walk(node[key]);
+        if (top && importFrom) for (const one of node.names) bound.add(one.asname ?? one.name);
+        if (top && importNode) for (const one of node.names) bound.add(one.asname ?? one.name.split('.')[0]);
+
+        // A `def` carries `args` and a `class` carries `bases`: below either,
+        // an import binds a local name.
+        const scoped = node.args !== undefined || Array.isArray(node.bases);
+
+        for (const key of BODIES) if (node[key]) walk(node[key], top && !scoped);
     };
 
     walk(ast.body);
-    return { found, relative };
+    return { found, relative, bound };
 }
 
 // A relative import has no package to be relative to, and fails at mount with
@@ -2601,15 +2615,16 @@ function injectedBindings(c) {
         // The second argument is what the component imported in its
         // `<script module>`, published so Python can read it.
         ...jsNameBindings(c, c.jsNames),
-        // A Python module named by a directive, `in:fades.typewriter`. Svelte
-        // copies that text into a `() => …` of its own, so it looks for a
-        // JavaScript `fades`, and `import fades` never made one: the name binds
-        // in Python's namespace. Only what a directive actually names, and only
-        // when it is a module this file imports: a JavaScript name resolves on
+        // A name an import binds, named by a directive: `in:fades.typewriter`,
+        // `use:actions.measured` after `import m as actions`, `use:measured`
+        // after `from m import measured`. Svelte copies that text into a
+        // `() => …` of its own, so it looks for a JavaScript name, and an import
+        // binds only in Python's namespace. Only what a directive actually
+        // names, and only a name an import binds: a JavaScript name resolves on
         // its own and must keep doing so.
         //
-        // Read lazily by pyModule, so the position in the emitted script does
-        // not matter: the module is registered by the time a directive runs.
+        // The value is read from the namespace when the directive runs, so the
+        // position in the emitted script does not matter.
         ...c.pyDirectives
             // `c.emitted` and not `c.declared`: the filter is here to avoid a
             // second JavaScript declaration of the same name, and `import fades`
@@ -2617,12 +2632,12 @@ function injectedBindings(c) {
             // the wider list turned the import into a reason to skip it.
             .filter(
                 (n) =>
-                    c.imported.includes(n) &&
+                    c.importBound.has(n) &&
                     !c.emitted.includes(n) &&
                     !c.jsImported.includes(n) &&
                     !c.jsNames.includes(n)
             )
-            .map((n) => `const ${n} = __pyModule(${JSON.stringify(n)});`)
+            .map((n) => `const ${n} = __pyModule(() => ${NS}[${JSON.stringify(n)}], ${JSON.stringify(n)});`)
     ];
 }
 
@@ -3214,7 +3229,7 @@ function compile(
     // Svelte reserves the '$' prefix for *every* scope inside a component, and
     // Brython's codegen opens with `var $B = __BRYTHON__`. So the generated
     // code lives in its own module, which Svelte never parses.
-    const { found: importedAt, relative } = moduleImports(root._ast);
+    const { found: importedAt, relative, bound: importBound } = moduleImports(root._ast);
     const imported = [...importedAt.keys()];
 
     refuseRelativeImports(relative, source, lineOffset);
@@ -3327,6 +3342,7 @@ function compile(
         // the module wrote one, everything when it did not.
         published: (name) => listed === null || listed.includes(name),
         imported,
+        importBound,
         props,
         bindables,
         state,
