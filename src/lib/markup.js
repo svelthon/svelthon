@@ -1346,6 +1346,17 @@ function walk(markup, collect, onPython, seed, record, where) {
         scopes.push([...(seed.get(opened) || []), ...refuseCompilerName(names)]);
     };
 
+    // A clause of the open block: a new branch, numbered like a block so the
+    // snippets the first walk recorded in it come back, and holding nothing of
+    // the branch before it. Never the base scope, for the reason below.
+    const branch = () => {
+        if (scopes.length > 1) {
+            opened += 1;
+            ids[ids.length - 1] = opened;
+            scopes[scopes.length - 1] = [...(seed.get(opened) || [])];
+        }
+    };
+
     // Never below the base scope: unbalanced markup is Svelte's to refuse, and
     // popping past the bottom here would lose the snippet names it holds.
     const pop = () => {
@@ -2040,12 +2051,21 @@ function walk(markup, collect, onPython, seed, record, where) {
         } else if (trimmed.startsWith(':')) {
             const clause = keyword(trimmed, ':');
 
-            // `{:then value}` and `{:catch error}` rebind the block's names. What
-            // the block's scope holds beyond them is kept: a snippet declared in
-            // it is still declared after the clause.
-            const holder = ids[ids.length - 1];
+            // **A clause opens a branch, and a branch sees nothing of its
+            // sibling.** The `row` of `{#each rows as row}` does not exist in
+            // its `{:else}`, nor a declaration or a snippet written in the
+            // `{#if}` branch in the `{:else}` one, so a script name of the same
+            // spelling is the one read there. Keeping the block's scope across
+            // the clause handed the expression a JavaScript argument that did
+            // not exist, and the component died at mount.
+            //
+            // So the branch gets an id of its own, which is what the snippets
+            // of the first pass are recorded under, and a scope holding those
+            // and the names its clause binds.
+            branch();
+
             const rebind = (names) => {
-                if (names.length) scopes[scopes.length - 1] = [...(seed.get(holder) || []), ...names];
+                scopes[scopes.length - 1]?.push(...refuseCompilerName(names));
             };
 
             if (/^:else\s+if\s/.test(trimmed)) {

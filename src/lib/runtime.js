@@ -3671,20 +3671,55 @@ export function pyHandler(value) {
 // A receiver Brython keeps as a JavaScript primitive — a `str`, a small `int`,
 // a `bool` — cannot key a WeakMap, and `"hello".upper` read twice is two method
 // objects over one value. Two equal primitives are one receiver, so they are
-// keyed by value, in a map that holds them strongly: a primitive has no
-// lifetime to outlive, and what is retained is one wrapper per value and
-// operation actually handed to JavaScript, the same bound as a callback list
-// that never removes anything.
+// keyed by value.
+//
+// The wrapper is the one thing held weakly. The operation outlives everything
+// (it is the native method's own record), so a WeakMap keyed on it kept every
+// wrapper ever made, and the map keyed on the value kept every string. A
+// wrapper lives as long as a consumer holds it; once it is collected, its entry
+// is removed, and the value's map with its last entry.
 const VALUE_RECEIVERS = new Map();
 
+const COLLECTED = new FinalizationRegistry(({ self, origin, ref }) => {
+    const byOrigin = VALUE_RECEIVERS.get(self);
+
+    // Only the entry this wrapper made: a later read may have put a new one
+    // under the same pair before the old wrapper was collected.
+    if (byOrigin === undefined || byOrigin.get(origin) !== ref) return;
+
+    byOrigin.delete(origin);
+    if (byOrigin.size === 0) VALUE_RECEIVERS.delete(self);
+});
+
+const valueReceiver = (self) => ({
+    get(origin) {
+        return VALUE_RECEIVERS.get(self)?.get(origin)?.deref();
+    },
+    set(origin, wrapped) {
+        let byOrigin = VALUE_RECEIVERS.get(self);
+
+        if (byOrigin === undefined) {
+            byOrigin = new Map();
+            VALUE_RECEIVERS.set(self, byOrigin);
+        }
+
+        const ref = new WeakRef(wrapped);
+
+        byOrigin.set(origin, ref);
+        COLLECTED.register(wrapped, { self, origin, ref });
+    }
+});
+
 function perReceiver(self) {
-    const weak = self !== null && (typeof self === 'object' || typeof self === 'function');
-    const receivers = weak ? RECEIVERS : VALUE_RECEIVERS;
-    let cache = receivers.get(self);
+    if (self === null || (typeof self !== 'object' && typeof self !== 'function')) {
+        return valueReceiver(self);
+    }
+
+    let cache = RECEIVERS.get(self);
 
     if (cache === undefined) {
         cache = new WeakMap();
-        receivers.set(self, cache);
+        RECEIVERS.set(self, cache);
     }
 
     return cache;
