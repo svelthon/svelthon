@@ -1033,9 +1033,12 @@ function eachBlock(trimmed, declare, call) {
     const at = atTopLevel(body, (i) => /^\s+as\s+/.test(body.slice(i)));
 
     // No `as`: nothing is declared, and there is no key to find either.
+    // Compiled before the scope opens, like the iterable below.
     if (at === -1) {
+        const iterable = call(body, '__seq', undefined, 'python');
+
         declare([]);
-        return `{#each ${call(body, '__seq', undefined, 'python')}}`;
+        return `{#each ${iterable}}`;
     }
 
     const named = body.slice(at).replace(/^\s+as\s+/, '');
@@ -1349,12 +1352,20 @@ function walk(markup, collect, onPython, seed, record, where) {
     // A clause of the open block: a new branch, numbered like a block so the
     // snippets the first walk recorded in it come back, and holding nothing of
     // the branch before it. Never the base scope, for the reason below.
+    //
+    // Two steps, because `{:else if}` reads its condition between them: where
+    // the branch stands, after the previous branch has closed and before its
+    // own snippets exist.
     const branch = () => {
         if (scopes.length > 1) {
             opened += 1;
             ids[ids.length - 1] = opened;
-            scopes[scopes.length - 1] = [...(seed.get(opened) || [])];
+            scopes[scopes.length - 1] = [];
         }
+    };
+
+    const seeded = () => {
+        if (scopes.length > 1) scopes[scopes.length - 1].push(...(seed.get(ids[ids.length - 1]) || []));
     };
 
     // Never below the base scope: unbalanced markup is Svelte's to refuse, and
@@ -1973,17 +1984,24 @@ function walk(markup, collect, onPython, seed, record, where) {
             const opened = keyword(trimmed, '#');
             const opens = (name) => opened !== null && opened.name === name && opened.rest !== '';
 
+            // The expression that opens a block is read where the block stands,
+            // so it is compiled before the block's scope opens: a snippet of
+            // the body, preloaded into that scope, is not a name the head sees.
             if (opens('if')) {
+                const condition = call(opened.rest, '__truthy');
+
                 push([]);
-                out += `{#if ${call(opened.rest, '__truthy')}}`;
+                out += `{#if ${condition}}`;
             } else if (opens('each')) {
                 out += eachBlock(trimmed, push, call);
             } else if (opens('key')) {
                 // Svelte re-creates the block when the value changes, by
                 // identity: `__key` keeps it for a container and an instance,
                 // and gives a value rebuilt each time its repr().
+                const keyed = call(opened.rest, '__key');
+
                 push([]);
-                out += `{#key ${call(opened.rest, '__key')}}`;
+                out += `{#key ${keyed}}`;
             } else if (opens('await')) {
                 // The awaited expression is Python like any other, a coroutine
                 // included, since the wrapper hands one back as a promise. What
@@ -2068,8 +2086,13 @@ function walk(markup, collect, onPython, seed, record, where) {
                 scopes[scopes.length - 1]?.push(...refuseCompilerName(names));
             };
 
-            if (/^:else\s+if\s/.test(trimmed)) {
-                out += `{:else if ${call(trimmed.replace(/^:else\s+if\s/, ''), '__truthy')}}`;
+            const elseIf = /^:else\s+if\s/.test(trimmed);
+            const condition = elseIf ? call(trimmed.replace(/^:else\s+if\s/, ''), '__truthy') : null;
+
+            seeded();
+
+            if (elseIf) {
+                out += `{:else if ${condition}}`;
             } else if (clause !== null && ['then', 'catch'].includes(clause.name) && clause.rest.trim()) {
                 out += `{:${clause.name} ${destructured(clause.rest, rebind, call, false)}}`;
             } else if (clause !== null && CLAUSES.includes(clause.name)) {

@@ -23,6 +23,14 @@ class flag:
     label = "fallback"
 
 
+# Read by the expression that opens a block whose body declares a snippet of
+# the same name: the head is read where the block stands.
+class head:
+    active = True
+    rows = [1]
+    key = 1
+
+
 rows = []
 outer = ["outer"]
 </script>
@@ -58,6 +66,28 @@ outer = ["outer"]
 {:else if flag.label}
     <p data-k="else-if">{flag.label}</p>
 {/if}
+
+{#if head.active}
+    {#snippet head()}<span>unused</span>{/snippet}
+    <p data-k="head-if">fallback</p>
+{/if}
+
+{#if False}
+    <span>no</span>
+{:else if head.active}
+    {#snippet head()}<span>unused</span>{/snippet}
+    <p data-k="head-else-if">fallback</p>
+{/if}
+
+{#key head.key}
+    {#snippet head()}<span>unused</span>{/snippet}
+    <p data-k="head-key">fallback</p>
+{/key}
+
+{#each head.rows}
+    {#snippet head()}<span>unused</span>{/snippet}
+    <p data-k="head-each">fallback</p>
+{/each}
 
 <!-- What a branch does bind is still seen: a clause parameter, a name from
      an enclosing block, a snippet declared later in the same branch. -->
