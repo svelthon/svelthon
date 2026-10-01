@@ -6,6 +6,7 @@ import '../src/lib/runtime.js';
 import { mount, flushSync, settled } from './mounted.js';
 import CoroutineAwaited from './fixtures/CoroutineAwaited.svelte';
 import * as deleteOrder from './fixtures/delete_order.py';
+import * as strKeywords from './fixtures/str_keywords.py';
 
 // Behaviours of the vendored Brython that Svelthon rests on, each observable,
 // so a build that loses one turns a test red rather than a page. The first
@@ -362,6 +363,13 @@ describe('the vendored Brython carries its repairs', () => {
         expect(deleteOrder.read_level()).toBe('1');
         deleteOrder.drop_level();
         expect(deleteOrder.read_level()).toBe('missing');
+    });
+
+    // A key that is a subclass of str names a keyword argument by its value,
+    // and stays itself in **kwargs and in dict().
+    test('a str subclass is a keyword name', () => {
+        expect(strKeywords.by_subclass()).toBe('Café');
+        expect(Array.from(strKeywords.kept_types())).toEqual(['Name', 'Name']);
     });
 
     // `index` and `remove` find an item by identity before equality, as `in`

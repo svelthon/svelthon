@@ -3,6 +3,11 @@
 # writes `tojson(value, indent=None)`, so an author writes `indent=2`.
 rows = [1, 2, 3, 4]
 
+
+class Name(str):
+    pass
+
+
 CALLS = {
     "json-positional": lambda: tojson(rows, 2),
     "json-keyword": lambda: tojson(rows, indent=2),
@@ -15,6 +20,8 @@ CALLS = {
     "fromnow-french": lambda: fromnow("2026-09-20", locale="fr-FR"),
     # A spread, which is the other half of what a keyword call carries.
     "json-spread": lambda: tojson(rows, **{"indent": 2}),
+    # A key that is a subclass of str names the argument by its value.
+    "str subclass key": lambda: slugify(**{Name("text"): "Café"}),
     # Data whose key is spelled `$kw` is still data, a Python dict as a
     # JavaScript object.
     "kw data": lambda: tojson({"$kw": ["ordinary", "data"]}),

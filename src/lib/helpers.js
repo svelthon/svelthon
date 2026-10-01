@@ -753,7 +753,9 @@ const byName = (fn, signature) => {
         const filled = new Set(given.keys());
 
         for (const carrier of kw ?? []) {
-            for (const [name, value] of pyEntries(carrier)) {
+            for (const [key, value] of pyEntries(carrier)) {
+                // A subclass of str names the argument by the value it holds.
+                const name = written(key);
                 const at = names.indexOf(name);
 
                 if (at === -1) {

@@ -43,6 +43,10 @@ describe('an injected helper takes its arguments by name', () => {
         expect(read('batch-fill')).toBe('[[1, 2, 3], [4, 0, 0]]');
     });
 
+    test('a key that is a subclass of str names the argument by its value', () => {
+        expect(setup()('str subclass key')).toBe('café');
+    });
+
     // A keyword after another, and a keyword nobody would reach positionally:
     // `locale` is the fourth parameter of `date`.
     test('a later parameter is reachable by name alone', () => {
