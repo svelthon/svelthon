@@ -11,9 +11,25 @@ import {
     pythonExpressions,
     pythonRanges,
     collector,
-    directiveModules,
     pythonScript
 } from '../src/lib/markup.js';
+
+// The directive heads the markup pass renames, through the chunks the
+// preprocessor hands it: a script and a comment are not markup.
+const directiveHeads = (content) => {
+    const directives = [];
+
+    overMarkup(content, (markup, offset) =>
+        pythonExpressions(markup, collector([]), undefined, {
+            filename: 'Probe.svelte',
+            content,
+            offset,
+            directives
+        })
+    );
+
+    return directives.map((one) => one.head);
+};
 // Moved out of markup.js: what a `<script module>` declares is a JavaScript
 // question, and Svelte's parser is the thing that owns that grammar.
 import { moduleImports, compileOptionsFor } from '../src/lib/svelthon.js';
@@ -443,7 +459,7 @@ describe('a declaration in a comment', () => {
     });
 
     test('and names no directive module', () => {
-        expect(directiveModules('<!-- <p in:old.fade>a</p> -->\n<p in:fx.fade>a</p>')).toEqual(['fx']);
+        expect(directiveHeads('<!-- <p in:old.fade>a</p> -->\n<p in:fx.fade>a</p>')).toEqual(['fx']);
     });
 });
 
@@ -456,7 +472,7 @@ describe('a declaration in a string of a script', () => {
     });
 
     test('and names no directive module', () => {
-        expect(directiveModules(quoted('<p in:old.fade>a</p>') + '<p in:fx.fade>a</p>')).toEqual(['fx']);
+        expect(directiveHeads(quoted('<p in:old.fade>a</p>') + '<p in:fx.fade>a</p>')).toEqual(['fx']);
     });
 
     test('nor does one quoted in an attribute or an expression', () => {

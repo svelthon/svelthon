@@ -15,6 +15,26 @@ def local(node, value):
     # The same action written in the component, which is the other wrapper and
     # had the same hole.
     node.textContent = format(value, ".2f")
+
+
+# The same function under the names a component gives it: each cell holds the
+# Python value, which Svelte would have called raw.
+chosen = local
+registry = {"measured": local}
+
+
+class Actions:
+    def measured(self, node, value):
+        node.textContent = format(value, ".2f")
+
+
+class Action:
+    def __call__(self, node, value):
+        node.textContent = format(value, ".2f")
+
+
+configured = Actions()
+callable_one = Action()
 </script>
 
 <p data-k="acted" use:directive_mod.mark>not yet</p>
@@ -35,3 +55,9 @@ def local(node, value):
 <p data-k="member-alias" use:action={half}>not yet</p>
 <p data-k="instance" use:directive_mod.configured.measured={half}>not yet</p>
 <p data-k="registry" use:directive_mod.registry.measured={half}>not yet</p>
+
+<!-- And through names of the component's own. -->
+<p data-k="local-alias" use:chosen={half}>not yet</p>
+<p data-k="local-registry" use:registry.measured={half}>not yet</p>
+<p data-k="local-instance" use:configured.measured={half}>not yet</p>
+<p data-k="local-callable" use:callable_one={half}>not yet</p>

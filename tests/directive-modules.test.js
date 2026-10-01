@@ -1,8 +1,9 @@
 import { test, expect, describe } from 'vitest';
-import { mount, flushSync, settled } from './mounted.js';
-import { directiveModules } from '../src/lib/markup.js';
+import { mount, unmount, flushSync, settled } from './mounted.js';
+import { pythonExpressions, collector } from '../src/lib/markup.js';
 import { pyModule } from '../src/lib/runtime.js';
 import DirectiveModule from './fixtures/DirectiveModule.svelte';
+import DirectiveLife from './fixtures/DirectiveLife.svelte';
 
 const { compile } = await import('../src/lib/compile.cjs').then((m) => m.default ?? m);
 
@@ -11,74 +12,102 @@ const { compile } = await import('../src/lib/compile.cjs').then((m) => m.default
 // looks for a JavaScript `fades`, and `import fades` binds in Python's namespace
 // instead. Nothing said so — an intro transition is skipped on first render, so
 // the element mounted, the text appeared whole, and the lesson never ran.
-describe('the head of a dotted directive', () => {
-    test('is found for each directive that names a function', () => {
-        expect(directiveModules('<p use:a.act in:b.fade out:c.fade transition:d.fade>x</p>')).toEqual(
-            ['a', 'b', 'c', 'd']
+// The markup pass renames each head it does not declare itself, and hands the
+// compiler the pairs.
+const rename = (markup) => {
+    const directives = [];
+    const out = pythonExpressions(markup, collector([]), undefined, {
+        filename: 'Probe.svelte',
+        content: markup,
+        offset: 0,
+        directives
+    });
+
+    return { out, heads: directives.map((one) => one.head) };
+};
+
+describe('the head of a directive', () => {
+    test('is renamed for each directive that names a function', () => {
+        const { out, heads } = rename('<p use:a.act in:b.fade out:c.fade transition:d.fade>x</p>');
+
+        expect(heads).toEqual(['a', 'b', 'c', 'd']);
+        expect(out).toBe(
+            '<p use:__dir_a.act in:__dir_b.fade out:__dir_c.fade transition:__dir_d.fade>x</p>'
         );
     });
 
     test('and inside a keyed block, where animate: belongs', () => {
-        expect(directiveModules('{#each xs as x (x)}<p animate:moves.flip>x</p>{/each}')).toEqual([
-            'moves'
-        ]);
+        expect(rename('{#each xs as x (x)}<p animate:moves.flip>x</p>{/each}').heads).toEqual(['moves']);
     });
 
     // `class:` names a class, `style:` a property, `bind:` a target. A dot means
-    // something else in all three, and seeding a binding for it would be noise
-    // at best.
+    // something else in all three.
     test('but not of the directives that name something else', () => {
-        expect(directiveModules('<p class:a.b style:c.d bind:e.f>x</p>')).toEqual([]);
+        expect(rename('<p class:a.b style:c.d bind:e.f>x</p>').heads).toEqual([]);
     });
 
-    // An undotted head is found too: `from m import mark` binds `mark` in
-    // Python alone. The compiler keeps it only when an import binds it, so a
-    // JavaScript `fly` still resolves on its own.
+    // `from m import mark` binds `mark` in Python alone, and `chosen =
+    // measured` holds a Python value in its cell.
     test('and of an undotted one', () => {
-        expect(directiveModules('<p transition:fly use:mark>x</p>')).toEqual(['fly', 'mark']);
+        expect(rename('<p transition:fly use:mark>x</p>').heads).toEqual(['fly', 'mark']);
     });
 
     test('and each head once, however many directives name it', () => {
-        expect(directiveModules('<p in:a.one out:a.two use:a.three>x</p>')).toEqual(['a']);
+        expect(rename('<p in:a.one out:a.two use:a.three>x</p>').heads).toEqual(['a']);
+    });
+
+    // A name the markup declared is Svelte's own, and stays as it is.
+    test('but not a name the markup declared', () => {
+        const { out, heads } = rename('{#each xs as act}<p use:act>x</p>{/each}');
+
+        expect(heads).toEqual([]);
+        expect(out).toContain('use:act>');
     });
 });
 
 describe('the binding it needs', () => {
-    const script = (src, pyDirectives) =>
-        compile(src, 'Probe', 'src/Probe.svelte', { pyDirectives }).script;
+    const script = (src, heads) =>
+        compile(src, 'Probe', 'src/Probe.svelte', {
+            pyDirectives: heads.map((head) => ({ head, renamed: `__dir_${head}` }))
+        }).script;
 
-    const emitted = (name) => `const ${name} = __pyModule(() => __py["${name}"], "${name}");`;
+    const python = (name) => `const __dir_${name} = __pyModule(() => __py["${name}"], "${name}");`;
+    const javascript = (name) => `const __dir_${name} = ${name};`;
 
-    test('is emitted for a module the file imports and a directive names', () => {
-        expect(script('import fades\n', ['fades'])).toContain(emitted('fades'));
+    test('reads the namespace for a module the file imports', () => {
+        expect(script('import fades\n', ['fades'])).toContain(python('fades'));
     });
 
-    // The name the import binds, which is not the module's own: the module was
-    // looked up by the directive's head, and an alias found nothing.
+    // The name the import binds, which is not the module's own, and any name
+    // the module binds: the cell of `chosen = measured` holds the raw Python
+    // function.
     test.for([
         ['import fades as motion\n', 'motion'],
         ['from fades import typewriter\n', 'typewriter'],
         ['from fades import typewriter as typing\n', 'typing'],
-        ['import fades.extra\n', 'fades']
+        ['import fades.extra\n', 'fades'],
+        ['def measured(node):\n    pass\n', 'measured'],
+        ['def measured(node):\n    pass\nchosen = measured\n', 'chosen'],
+        ['from fades import *\n', 'typewriter']
     ])('and for the name %s binds', ([src, name]) => {
-        expect(script(src, [name])).toContain(emitted(name));
+        expect(script(src, [name])).toContain(python(name));
+    });
+
+    // A JavaScript name is that name, and one nothing binds is left to
+    // JavaScript, as it was before the rename.
+    test('but a JavaScript import is the JavaScript name', () => {
+        const src = 'importjs {fades} from "./fades.js"\n\nx = 1\n';
+
+        expect(script(src, ['fades'])).toContain(javascript('fades'));
+    });
+
+    test('and so is a name nothing binds', () => {
+        expect(script('x = 1\n', ['fades'])).toContain(javascript('fades'));
     });
 
     // An import inside a `def` binds a local name, not one the directive reads.
-    test('but not for an import inside a function', () => {
-        expect(script('def load():\n    import fades\n', ['fades'])).not.toContain(emitted('fades'));
-    });
-
-    // Only what is actually broken. A name that resolves in JavaScript already
-    // does so, and shadowing it would be a regression dressed as a fix.
-    test('but not for a name no import declares', () => {
-        expect(script('x = 1\n', ['fades'])).not.toContain('const fades = pyModule');
-    });
-
-    test('nor for one a JavaScript import already binds', () => {
-        const src = 'importjs {fades} from "./fades.js"\n\nx = 1\n';
-
-        expect(script(src, ['fades'])).not.toContain('const fades = pyModule');
+    test('as is one imported inside a function', () => {
+        expect(script('def load():\n    import fades\n', ['fades'])).toContain(javascript('fades'));
     });
 });
 
@@ -127,12 +156,67 @@ describe('a directive naming a module', () => {
     // the component died at mount; an instance's method was not a JavaScript
     // property, so the action never ran; a dict's function was handed over
     // unadapted, and `0.5` reached `format` as a JavaScript number.
-    test.for(['alias', 'member', 'member-alias', 'instance', 'registry'])(
+    test.for([
+        'alias',
+        'member',
+        'member-alias',
+        'instance',
+        'registry',
+        'local-alias',
+        'local-registry',
+        'local-instance',
+        'local-callable'
+    ])(
         'and through %s',
         (key) => {
             expect(setup()(key)).toBe('0.50');
         }
     );
+});
+
+describe('a directive reaching further', () => {
+    const setup = () => {
+        const target = document.body.appendChild(document.createElement('div'));
+        const instance = mount(DirectiveLife, { target });
+        flushSync();
+
+        return { instance, at: (k) => target.querySelector(`[data-k="${k}"]`) };
+    };
+
+    // `import *` binds names the compiler cannot list: the directive had no
+    // JavaScript name and the component died at mount.
+    test('finds a name an import * bound', () => {
+        expect(setup().at('star').textContent).toBe('0.50');
+    });
+
+    // A JavaScript record with an `ob_type` field is data. It was taken for a
+    // Python object, the engine read the string as a class, and the mount
+    // failed; its method keeps JavaScript's own number.
+    test('and leaves a JavaScript record its own', () => {
+        expect(setup().at('record').textContent).toBe('0.50');
+    });
+
+    // An action may hand back an instance whose methods Svelte calls. They live
+    // on its class, which a walk of its own properties never finds: the
+    // parameter changed and the element did not, and nothing was cleaned up.
+    test('and calls update on an instance an action returned', () => {
+        const { at } = setup();
+
+        at('bump').click();
+        flushSync();
+
+        expect(at('lease').textContent).toBe('0.75');
+    });
+
+    test('and destroy, when the component goes', () => {
+        const { instance, at } = setup();
+        const lease = at('lease');
+
+        unmount(instance);
+        flushSync();
+
+        expect(lease.dataset.cleanup).toBe('done');
+    });
 });
 
 // The boundary itself, called the way Svelte calls it rather than through a

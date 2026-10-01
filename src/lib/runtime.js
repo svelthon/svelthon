@@ -4237,12 +4237,14 @@ const directives = new WeakMap();
 // What a segment gives is adapted when it is callable, walked further when it
 // is a Python object, and handed over as it is otherwise. The head itself is
 // also called directly, for `use:measured`.
-// A dict keeps its class under a symbol rather than `ob_type`, so it is asked
-// the way the converter asks it.
+// Asked as every other boundary of this file asks it: an `ob_type` that is a
+// Python class, so a JavaScript record with a field of that name is data and
+// keeps its own property access. A dict keeps its class under a symbol rather
+// than `ob_type`, so it is asked the way the converter asks it.
 const pythonObject = (value) =>
     value !== null &&
     typeof value === 'object' &&
-    (value.ob_type !== undefined || globalThis.__BRYTHON__.is_dict(value));
+    (pyClass(value.ob_type) || globalThis.__BRYTHON__.is_dict(value));
 
 const directiveValue = (member, where) => {
     if (callable(member)) return directiveCallable(member, where);
@@ -4251,12 +4253,23 @@ const directiveValue = (member, where) => {
     return member;
 };
 
+// A JavaScript object reached on the path keeps JavaScript's own member access
+// and hands its members over as they are: its methods take JavaScript's values.
+// A module's namespace is not one, though it carries no Python class: it is
+// marked `$proxy` by the compiler.
+const foreign = (value) =>
+    value !== null && typeof value === 'object' && !pythonObject(value) && value.$proxy !== true;
+
 function directivePath(read, where) {
     return new Proxy(function () {}, {
         get(_, key) {
             if (typeof key === 'symbol') return undefined;
 
-            return directiveValue(readAttr(read(), key), `${where}.${key}`);
+            const target = read();
+
+            if (foreign(target)) return target[key];
+
+            return directiveValue(readAttr(target, key), `${where}.${key}`);
         },
         apply(_, self, args) {
             return directiveCallable(read(), where)(...args);
@@ -4265,6 +4278,36 @@ function directivePath(read, where) {
 }
 
 export const pyModule = (read, name) => directivePath(read, name);
+
+// What a directive hands back, read by Svelte: an action's `update` and
+// `destroy`, a transition's `duration` and `tick`. A dict holds them as entries
+// and `pyNumbers` adapts those. An **instance** holds them as methods of its
+// class, which no walk of its own properties finds, so `return Lease(node,
+// value)` mounted and then never updated nor cleaned up. Its view reads each
+// name through the attribute protocol when Svelte asks, and answers `undefined`
+// for one it does not have, which is how Svelte asks whether there is one.
+const directiveResult = (value) =>
+    value !== null &&
+    typeof value === 'object' &&
+    !Array.isArray(value) &&
+    pyClass(value.ob_type) &&
+    pyScalar(value) === undefined &&
+    !globalThis.__BRYTHON__.is_dict(value)
+        ? new Proxy(
+              {},
+              {
+                  get(_, key) {
+                      if (typeof key === 'symbol') return undefined;
+
+                      const found = globalThis.__BRYTHON__.$getattr(value, key, MISSING);
+
+                      if (found === MISSING) return undefined;
+
+                      return callable(found) ? pyHandler(found) : pyNumbers(found);
+                  }
+              }
+          )
+        : pyNumbers(value);
 
 // Callable in Python, which is the question every boundary that promises to
 // adapt a callback asks, and the one this site was still answering with
@@ -4299,7 +4342,7 @@ function directiveCallable(member, path) {
         // Run through `running`, the wrapper of a component's own functions: an
         // `async def` is started, and an error placed.
         wrapped = identified(
-            (...args) => running(() => called(...taken(args, arity)), where),
+            (...args) => running(() => called(...taken(args, arity)), where, undefined, directiveResult),
             nameOf(where),
             arity
         );
