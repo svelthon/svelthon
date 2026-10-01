@@ -8,6 +8,26 @@ import KeyIdentity from './fixtures/KeyIdentity.svelte';
 import NumericKey from './fixtures/NumericKey.svelte';
 import NanKey from './fixtures/NanKey.svelte';
 import SignedZeroKey from './fixtures/SignedZeroKey.svelte';
+import FunctionKey from './fixtures/FunctionKey.svelte';
+
+// A function in a tuple or a frozenset key is equal to itself alone: two built
+// by one factory print alike and are two keys.
+test.for([['tuple'], ['frozenset']])('%s: a new function makes a new block, the same one keeps it', ([kind]) => {
+    const target = document.body.appendChild(document.createElement('div'));
+    const instance = mount(FunctionKey, { target, props: { kind } });
+    flushSync();
+    const field = target.querySelector('input');
+    field.value = 'unsaved';
+
+    instance.rewrap();
+    flushSync();
+    expect(target.querySelector('input')).toBe(field);
+
+    instance.renew();
+    flushSync();
+    expect(target.querySelector('input')).not.toBe(field);
+    expect(target.querySelector('input').value).toBe('draft');
+});
 
 const setup = () => {
     const target = document.body.appendChild(document.createElement('div'));

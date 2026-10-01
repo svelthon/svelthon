@@ -153,6 +153,9 @@ function keyText(value) {
     if (number !== null) return String(number);
 
     if (typeof value === 'string') return _b_.repr(value);
+    // A function is equal to itself alone, as an instance is: two built by one
+    // factory print alike and are two keys.
+    if (typeof value === 'function') return identityOf(value, 'function');
     if (typeof value !== 'object') return String(value);
 
     const scalar = pyScalar(value);

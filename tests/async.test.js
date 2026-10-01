@@ -134,3 +134,87 @@ describe('a coroutine whose caller waits for it', () => {
         expect(pending[0]).not.toThrow();
     });
 });
+
+// What an exported function hands back *behind* something awaitable.
+//
+// A returned value crosses under the export's rule — a callable becomes a
+// JavaScript function, a dict becomes an object — and a promise's resolved value
+// is that value one step later. The site that decided whether to wait asked
+// `result instanceof Promise`, which asks about **our** Promise constructor: a
+// promise built in another JavaScript context answers false, so the same
+// function handing back the same dict answered `{answer: 42}` or a raw Brython
+// dict, symbols and all, according to which context made the promise.
+//
+// It is the realm mistake of `URL` and `Date` at a third site, and it was
+// measured a day before and dismissed — on the reasoning that a foreign promise
+// resolves to a JavaScript value with nothing left to convert. True of a promise
+// a library makes for itself; false the moment it is handed a Python value to
+// resolve with, which is what a `__js__` helper does. The measurement was right
+// and what I inferred from it was not.
+describe('a value handed back behind a promise', () => {
+    const expected = { answer: 42, rows: [1, 2] };
+
+    test.for([
+        ['built here', () => from_local()],
+        // The row that was wrong, and the one that says what the question is.
+        ['built in another context', () => from_foreign()],
+        // And a bare thenable, which `await` accepts and no constructor claims:
+        // asking the way `await` asks is what covers all three at once.
+        ['a plain object with a then', () => from_custom()],
+        // And the shape a `typeof === 'object'` predicate cannot see: a function
+        // carrying a `then`. `await` and `Promise.resolve` call it like anyone
+        // else's, so the row belongs beside the others rather than in a case of
+        // its own — the matrix was three rows and the missing one was a *type*.
+        ['a function with a then', () => from_callable()]
+    ])('%s crosses as data', async ([, run]) => {
+        await expect(run()).resolves.toEqual(expected);
+    });
+
+    test('and a rejection passes through untouched', async () => {
+        await expect(from_rejected()).rejects.toThrow(/gone/);
+    });
+
+    // A Python dict whose key is `then` is data: no promise, no call.
+    test('while a dict with a then key comes back as data, its callback uncalled', async () => {
+        const value = callbacks();
+        await Promise.resolve();
+
+        expect(value).not.toBeInstanceOf(Promise);
+        expect(value.answer).toBe(7);
+        expect(then_calls()).toBe(0);
+    });
+
+    // The control the row above needs: an ordinary function is not awaitable and
+    // has to come back as something a caller can call, not as what it returns.
+    test('while an ordinary function comes back callable', () => {
+        expect(from_function()()).toBe('called');
+    });
+});
+
+// A component's export hands the framework JavaScript numbers, a transition's
+// `duration` above all, and an `async def` export hands them over once
+// resolved: a Brython float is an object.
+describe("what a component's async export resolves to", () => {
+    const setup = () => {
+        const target = document.body.appendChild(document.createElement('div'));
+        return { target, instance: mount(AsyncExports, { target }) };
+    };
+
+    test.for([
+        ['a value', 'value', (x) => x],
+        ['a config', 'config', (x) => x.duration]
+    ])('%s is converted as the synchronous export converts it', async ([, kind, scalar]) => {
+        const { instance } = setup();
+        expect(scalar(instance[`sync_${kind}`]())).toBe(0.5);
+        expect(scalar(await instance[`async_${kind}`]())).toBe(0.5);
+    });
+
+    test('a failure still rejects with the Python error', async () => {
+        await expect(setup().instance.async_failing()).rejects.toThrow(/boom/);
+    });
+
+    test('and an awaited float in the markup prints as Python prints it', async () => {
+        const { target } = setup();
+        await settled(() => expect(target.querySelector('[data-k="await"]')?.textContent).toBe('0.5'));
+    });
+});
