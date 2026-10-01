@@ -953,6 +953,36 @@ function installMutationTracking($B) {
         };
     }
 
+    // A slot written or deleted through its descriptor: `Box.rows.__set__(box,
+    // [1])` and `Box.rows.__delete__(box)` reach the member descriptor without
+    // `$setattr` or `$delattr`, and the descriptor writes the instance's storage
+    // itself. The instance is the descriptor's first argument, not the object
+    // the method is read from.
+    //
+    // Brython builds the two methods once, from `tp_descr_set` as it was then
+    // (`make_set_del`), so they are rebuilt here the same way around a setter
+    // that notifies. `tp_descr_set` itself is left alone: an ordinary
+    // `box.rows = [1]` reaches it from `$setattr`, which already answers.
+    const member = $B.member_descriptor;
+    const describe = member.tp_descr_set;
+    const described = (self, obj, value) => {
+        try {
+            return describe(self, obj, value);
+        } finally {
+            if (obj !== null && typeof obj === 'object' && MARKS.has(obj)) {
+                if (value !== $B.NULL) rewalk(obj, value);
+                MARKS.get(obj)();
+            }
+        }
+    };
+
+    $B.set_to_dict(member, '__set__', $B.wrapper_descriptor.$factory(member, '__set__', described));
+    $B.set_to_dict(
+        member,
+        '__delete__',
+        $B.wrapper_descriptor.$factory(member, '__delete__', (self, obj) => described(self, obj, $B.NULL))
+    );
+
     const delattr = $B.$delattr;
     $B.$delattr = function (obj, ...rest) {
         // In a `finally`, like the write beside it: a `__delattr__` of the
@@ -3159,8 +3189,18 @@ export function pyCall(fn, where, lineOffset = 0, arity = Infinity, named) {
             // for the three-line shape everyone writes — and what a caller was
             // handed has to stay awaitable. This normalises all three into one
             // promise of this realm, which is also what `await` would do.
+            //
+            // The conversion of a resolved value runs after this `try` has
+            // returned, so it carries its own: a refusal there names the call
+            // the way the same refusal does for a value returned directly.
             return thenable(result)
-                ? Promise.resolve(result).then((one) => plainData(one, undefined, pyHandler))
+                ? Promise.resolve(result).then((one) => {
+                      try {
+                          return plainData(one, undefined, pyHandler);
+                      } catch (error) {
+                          throw pyError(error, where, lineOffset);
+                      }
+                  })
                 : plainData(result, undefined, pyHandler);
         } catch (error) {
             throw pyError(error, where, lineOffset);
@@ -3379,7 +3419,9 @@ function declared(value) {
         // — `rows.append` and `other.append` name the same operation, and
         // `rows.clear` a different one, which is exactly the distinction a
         // registry holding two lists needs.
-        if (value.m_self !== null && typeof value.m_self === 'object') {
+        // Whatever the receiver's representation: `"hello".upper` is bound to
+        // a JavaScript string, and `perReceiver` keys it by value.
+        if (value.m_self !== null && value.m_self !== undefined) {
             return { fn, where, arity: Infinity, origin: infos, self: value.m_self };
         }
 
@@ -3626,12 +3668,23 @@ export function pyHandler(value) {
     return wrapped;
 }
 
+// A receiver Brython keeps as a JavaScript primitive — a `str`, a small `int`,
+// a `bool` — cannot key a WeakMap, and `"hello".upper` read twice is two method
+// objects over one value. Two equal primitives are one receiver, so they are
+// keyed by value, in a map that holds them strongly: a primitive has no
+// lifetime to outlive, and what is retained is one wrapper per value and
+// operation actually handed to JavaScript, the same bound as a callback list
+// that never removes anything.
+const VALUE_RECEIVERS = new Map();
+
 function perReceiver(self) {
-    let cache = RECEIVERS.get(self);
+    const weak = self !== null && (typeof self === 'object' || typeof self === 'function');
+    const receivers = weak ? RECEIVERS : VALUE_RECEIVERS;
+    let cache = receivers.get(self);
 
     if (cache === undefined) {
         cache = new WeakMap();
-        RECEIVERS.set(self, cache);
+        receivers.set(self, cache);
     }
 
     return cache;

@@ -20,6 +20,7 @@ import { plainData } from '../src/lib/runtime.js';
 import SlotBox from './fixtures/SlotBox.svelte';
 import AttrBox from './fixtures/AttrBox.svelte';
 import ListSlotBox from './fixtures/ListSlotBox.svelte';
+import SlotDescriptor from './fixtures/SlotDescriptor.svelte';
 
 const setup = (Component) => {
     const target = document.body.appendChild(document.createElement('div'));
@@ -74,6 +75,48 @@ test('a slot of a list subclass repaints what reads it', () => {
     bump();
 
     expect(read('rows')).toBe('1');
+});
+
+// A slot written or deleted through its descriptor. `Box.rows.__set__(box, v)`
+// reaches the member descriptor without `$setattr`, so the model changed and the
+// page kept the old count. The first two routes are the witnesses.
+describe.for(['assignment', 'builtin', 'descriptor', 'detached'])('a slot written by %s', (path) => {
+    const mounted = () => {
+        const target = document.body.appendChild(document.createElement('div'));
+
+        mount(SlotDescriptor, { target, props: { path } });
+        flushSync();
+
+        return {
+            read: () => target.querySelector('[data-k="rows"]').textContent,
+            press: (key) => {
+                target.querySelector(`button[data-k="${key}"]`).click();
+                flushSync();
+            }
+        };
+    };
+
+    test('repaints what reads it', () => {
+        const { read, press } = mounted();
+
+        press('replace');
+        expect(read()).toBe('1');
+    });
+
+    test('and hands the new list the watch', () => {
+        const { read, press } = mounted();
+
+        press('replace');
+        press('grow');
+        expect(read()).toBe('2');
+    });
+
+    test('and repaints when deleted', () => {
+        const { read, press } = mounted();
+
+        press('erase');
+        expect(read()).toBe('-1');
+    });
 });
 
 // The other half, and it did not follow from the first: repairing the watch left

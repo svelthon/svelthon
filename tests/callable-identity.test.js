@@ -30,7 +30,10 @@ import {
     native_kept,
     two_receivers,
     two_operations,
-    python_method
+    python_method,
+    primitive_removed,
+    primitive_receivers,
+    primitive_wrapper
 } from './fixtures/callable_identity.py';
 
 describe('a callable instance handed to a registry', () => {

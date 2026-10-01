@@ -13,6 +13,9 @@ __all__ = [
     "two_receivers",
     "two_operations",
     "python_method",
+    "primitive_removed",
+    "primitive_receivers",
+    "primitive_wrapper",
 ]
 
 
@@ -160,3 +163,36 @@ def python_method():
     emit(9)
 
     return [gone, size(), list(box.seen)]
+
+
+# A receiver Brython keeps as a JavaScript primitive: a `str`, a small `int`.
+
+
+def primitive_removed():
+    label = "hello"
+
+    clear()
+    on(label.upper)
+    gone = off(label.upper)
+
+    return [gone, size()]
+
+
+def primitive_receivers():
+    # Two strings, one operation: two callbacks, each answering its own.
+    clear()
+    on("one".upper)
+    on("two".upper)
+
+    return [size(), sorted(answers())]
+
+
+def primitive_wrapper():
+    # A special method of an int is a method-wrapper, the other representation.
+    value = 7
+
+    clear()
+    on(value.__str__)
+    on(value.__str__)
+
+    return [size(), answers()]
