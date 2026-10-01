@@ -70,3 +70,56 @@ describe.for([
         expect(answers).toEqual([1, 2]);
     });
 });
+
+// The third representation, and the one an author reaches for without thinking
+// about it: a builtin bound to a receiver. Brython builds `rows.append` fresh on
+// every read, and it took the plain-function road, where the key is the function
+// handed over — so two reads were two JavaScript functions, `off(rows.append)`
+// found nothing, and the next event appended a second time to a list the author
+// believed had stopped listening.
+//
+// Its identity is the pair, like an ordinary bound method: the receiver, and the
+// operation, which is the signature record the native function carries.
+describe('a native bound method handed to a registry', () => {
+    test('is removed by a second read of the same method', () => {
+        expect(native_removed()).toEqual([true, 0, []]);
+    });
+
+    // The witness, which always worked: the method read once and held in a name.
+    test('as it is when the method was held in a name', () => {
+        expect(native_kept()).toEqual([true, 0, []]);
+    });
+
+    // And the two halves of the pair, each on its own: one operation on two
+    // receivers, and two operations on one receiver.
+    test('and two lists keep two callbacks', () => {
+        expect(two_receivers()).toEqual([2, [9], [9]]);
+    });
+
+    test('and two operations on one list keep two callbacks', () => {
+        expect(two_operations()).toBe(2);
+    });
+
+    // The control: the shape that was already keyed this way.
+    test('beside an ordinary bound method, which always was', () => {
+        expect(python_method()).toEqual([true, 0, []]);
+    });
+});
+
+// The same pair when the receiver is a JavaScript primitive, which no WeakMap
+// accepts: `"hello".upper` was a new callback at each read, and `(7).__str__`,
+// a method-wrapper, failed to cross at all with *Invalid value used as weak map
+// key*.
+describe('a method bound to a primitive', () => {
+    test('is removed by a second read of the same method', () => {
+        expect(primitive_removed()).toEqual([true, 0]);
+    });
+
+    test('and two strings keep two callbacks', () => {
+        expect(primitive_receivers()).toEqual([2, ['ONE', 'TWO']]);
+    });
+
+    test('and an int’s special method crosses, once', () => {
+        expect(primitive_wrapper()).toEqual([1, ['7']]);
+    });
+});
