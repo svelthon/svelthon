@@ -2,6 +2,7 @@
 // into Python. Pure string work, and deliberately free of any Node import: the
 // browser playground compiles components client-side and needs exactly this,
 // while the file next door needs `fs` and `path` and cannot be loaded there.
+import { parse } from 'svelte/compiler';
 import { attributeWrapper } from './attributes.js';
 
 // How far to step over a Python comment or string literal starting at `at`, and
@@ -705,6 +706,17 @@ function loneInterpolation(markup, at, closing) {
 //
 // Returns the range rather than the text, so the caller can compile it as the
 // expression it is, at the position it sits at.
+// The text a literal part of an attribute value stands for, its character
+// references decoded. Asked of Svelte's parser rather than of a table written
+// here, so the answer is the one the node's attribute gets. The part holds
+// neither its own quote, which would have closed the attribute, nor a brace,
+// which would have opened an interpolation.
+function attributeText(literal, quote) {
+    const [element] = parse(`<a b=${quote}${literal}${quote}></a>`, { modern: true }).fragment.nodes;
+
+    return element.attributes[0].value.map((one) => one.data).join('');
+}
+
 function tagValue(markup, from) {
     let at = from;
 
@@ -713,9 +725,23 @@ function tagValue(markup, from) {
         const named = () => (markup.slice(from, at).match(ATTRIBUTE_NAME) || [])[1] === 'value';
 
         if (char === '"' || char === "'") {
-            const end = markup.indexOf(char, at + 1);
+            // The quote that closes the attribute, not the first one written:
+            // `value="{data["id"]}"` holds two inside an interpolation, which
+            // is skipped whole, as the main pass skips it.
+            let end = at + 1;
 
-            if (end === -1) return null;
+            while (end < markup.length && markup[end] !== char) {
+                if (markup[end] === '{') {
+                    const closed = closingBrace(markup, end);
+
+                    if (closed === -1) return null;
+                    end = closed;
+                }
+
+                end += 1;
+            }
+
+            if (end >= markup.length) return null;
             if (named()) return { start: at + 1, end, braced: false };
 
             at = end + 1;
@@ -1513,17 +1539,21 @@ function walk(markup, collect, onPython, seed, record, where) {
     //   Reading it off the node meant reading it whenever the action happened to
     //   run, which is not ordered against Svelte writing the attribute.
     //
-    // So the parts are compiled here and joined here. `String()` on the first,
-    // because Svelte builds a template literal and `{n}{m}` on two numbers is
-    // `"12"`, not `3`.
+    // So the parts are compiled here and joined here, under the rules the
+    // attribute itself is built by, since the two have to give one string:
     //
-    // A value with no interpolation is left to the node: it is static text and
-    // nothing can move it.
-    const quotedValue = (text) => {
-        const parts = [];
+    // - each interpolation through `__text`, as the main pass compiles an
+    //   attribute's: `None` is empty and `False` is `False`, where `String()`
+    //   gave `None` and `false`;
+    // - each literal decoded as Svelte decodes it, asked of Svelte's own parser:
+    //   `a&amp;{n}` is `a&1` on the node, and was `a&amp;1` in the model.
+    //
+    // A lone interpolation keeps its typed value. A value with no interpolation
+    // is left to the node: it is static text and nothing can move it.
+    const quotedValue = (text, quote) => {
+        const pieces = [];
         let at = 0;
         let literal = 0;
-        let expressions = 0;
 
         while (at < text.length) {
             if (text[at] !== '{') {
@@ -1535,20 +1565,25 @@ function walk(markup, collect, onPython, seed, record, where) {
 
             if (end === -1) break;
 
-            if (at > literal) parts.push(JSON.stringify(text.slice(literal, at)));
+            if (at > literal) pieces.push({ literal: text.slice(literal, at) });
 
-            parts.push(call(text.slice(at + 1, end), ''));
-            expressions += 1;
+            pieces.push({ expression: text.slice(at + 1, end) });
             at = end + 1;
             literal = at;
         }
 
-        if (literal < text.length) parts.push(JSON.stringify(text.slice(literal)));
+        if (literal < text.length) pieces.push({ literal: text.slice(literal) });
 
-        if (expressions === 0) return 'undefined';
-        if (parts.length === 1) return parts[0];
+        if (!pieces.some((one) => one.expression !== undefined)) return 'undefined';
+        if (pieces.length === 1) return call(pieces[0].expression, '');
 
-        return `String(${parts[0]})${parts.slice(1).map((one) => ` + ${one}`).join('')}`;
+        return pieces
+            .map((one) =>
+                one.expression !== undefined
+                    ? call(one.expression, '__text')
+                    : JSON.stringify(attributeText(one.literal, quote))
+            )
+            .join(' + ');
     };
 
     const groupAction = (expr) => {
@@ -1569,7 +1604,7 @@ function walk(markup, collect, onPython, seed, record, where) {
                 ? 'undefined'
                 : found.braced
                   ? call(markup.slice(found.start, found.end), '')
-                  : quotedValue(markup.slice(found.start, found.end));
+                  : quotedValue(markup.slice(found.start, found.end), markup[found.start - 1]);
 
         region = outer;
 
