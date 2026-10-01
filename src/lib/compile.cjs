@@ -1253,7 +1253,9 @@ const RUNTIME = {
     ticking: '__ticking',
     pyBind: '__pyBind',
     plainScalar: '__plainScalar',
-    pyModule: '__pyModule',
+    directiveAction: '__directiveAction',
+    directiveTransition: '__directiveTransition',
+    directiveAnimate: '__directiveAnimate',
     NONE: '__NONE',
     helpers: '__helpers',
     unsubscribe: '__unsubscribe',
@@ -2130,25 +2132,18 @@ function surface(body) {
 //
 // A relative import, `from . import x` or `from .x import y`, is kept apart: it
 // names no module, only a place in a package, and a component is in none.
-//
-// `bound` is the other half, and not the same list: the names those imports
-// bind in the module's namespace. `import m as actions` loads `m` and binds
-// `actions`; `from m import measured` loads `m` and binds `measured`. Only at
-// module level, outside any `def` or `class`, since that is the namespace a
-// directive reads.
 function moduleImports(ast) {
     const found = new Map();
     const relative = [];
-    const bound = new Set();
     const add = (module, node) => {
         if (!found.has(module)) found.set(module, node.lineno);
     };
 
-    const walk = (node, top = true) => {
+    const walk = (node) => {
         if (!node || typeof node !== 'object') return;
 
         if (Array.isArray(node)) {
-            node.forEach((one) => walk(one, top));
+            node.forEach(walk);
             return;
         }
 
@@ -2181,18 +2176,11 @@ function moduleImports(ast) {
         }
         if (importNode) for (const one of node.names) add(one.name, node);
 
-        if (top && importFrom) for (const one of node.names) bound.add(one.asname ?? one.name);
-        if (top && importNode) for (const one of node.names) bound.add(one.asname ?? one.name.split('.')[0]);
-
-        // A `def` carries `args` and a `class` carries `bases`: below either,
-        // an import binds a local name.
-        const scoped = node.args !== undefined || Array.isArray(node.bases);
-
-        for (const key of BODIES) if (node[key]) walk(node[key], top && !scoped);
+        for (const key of BODIES) if (node[key]) walk(node[key]);
     };
 
     walk(ast.body);
-    return { found, relative, bound };
+    return { found, relative };
 }
 
 // A relative import has no package to be relative to, and fails at mount with
@@ -2340,7 +2328,8 @@ function preamble(c) {
             'bind', '__pybridge', 'track', 'follow', 'pyError',
             'pyEvent', 'plainData', 'pyArg', 'pyData', 'pyBoundary', 'pyComponent', 'pyExpression',
             'jsCall',
-            'ticking', 'pyBind', 'pyModule', 'NONE', 'helpers',
+            'ticking', 'pyBind', 'NONE', 'helpers',
+            'directiveAction', 'directiveTransition', 'directiveAnimate',
             'plainScalar', 'invoke',
             ...(c.store ? ['registerModule'] : SUBSCRIBING(c) ? ['unsubscribe'] : []),
             ...(c.bindables.length ? ['kept', 'unproxied'] : []),
@@ -2614,26 +2603,7 @@ function injectedBindings(c) {
               ]),
         // The second argument is what the component imported in its
         // `<script module>`, published so Python can read it.
-        ...jsNameBindings(c, c.jsNames),
-        // A directive's head, renamed by the markup pass: `use:chosen` reads
-        // `__dir_chosen`. Svelte copies that text into a `() => …` of its own,
-        // so it reads a JavaScript name, and a Python name has none, or one
-        // holding the raw value: an import binds only in Python's namespace, and
-        // the cell of `chosen = measured` holds the Python function.
-        //
-        // A JavaScript name is that name. A name the module binds, by any
-        // statement, is read from the namespace when the directive runs and
-        // goes through the directive's path and call; so is any name under an
-        // `import *`, which binds names nothing here can list. Anything else is
-        // left to JavaScript, as it was before the rename.
-        ...c.pyDirectives.map(({ head: n, renamed }) => {
-            const javascript = c.jsImported.includes(n) || c.jsNames.includes(n);
-            const python = !javascript && (c.declared.includes(n) || c.importBound.has('*'));
-
-            return python
-                ? `const ${renamed} = __pyModule(() => ${NS}[${JSON.stringify(n)}], ${JSON.stringify(n)});`
-                : `const ${renamed} = ${n};`;
-        })
+        ...jsNameBindings(c, c.jsNames)
     ];
 }
 
@@ -3050,7 +3020,6 @@ function compile(
         defLines = [],
         defColumns = [],
         jsNames = [],
-        pyDirectives = [],
         lineOffset = 0,
         sourceContent = null,
         // Whether an imported name is one of the project's own `.py` files,
@@ -3225,7 +3194,7 @@ function compile(
     // Svelte reserves the '$' prefix for *every* scope inside a component, and
     // Brython's codegen opens with `var $B = __BRYTHON__`. So the generated
     // code lives in its own module, which Svelte never parses.
-    const { found: importedAt, relative, bound: importBound } = moduleImports(root._ast);
+    const { found: importedAt, relative } = moduleImports(root._ast);
     const imported = [...importedAt.keys()];
 
     refuseRelativeImports(relative, source, lineOffset);
@@ -3338,7 +3307,6 @@ function compile(
         // the module wrote one, everything when it did not.
         published: (name) => listed === null || listed.includes(name),
         imported,
-        importBound,
         props,
         bindables,
         state,
@@ -3350,7 +3318,6 @@ function compile(
         jsImports,
         jsImported,
         jsNames,
-        pyDirectives,
         exported,
         isFunction,
         lifecycle

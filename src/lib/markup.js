@@ -717,17 +717,27 @@ function attributeText(literal, quote) {
     return element.attributes[0].value.map((one) => one.data).join('');
 }
 
-// The head of a directive that names a function: the `x` of `in:x.fade`, and of
-// `use:x` alone. Only the five that name one: `class:` and `style:` name a
-// property, and `bind:` names a target.
+// A directive that names a function, its head a name or a dotted path, and a
+// transition's modifiers after it: `in:fades.typewriter|global`. Only the five
+// that name one: `class:` and `style:` name a property, and `bind:` a target.
 const DIRECTIVE_HEAD = new RegExp(
-    `(use|transition|in|out|animate):(${NAME})(?![${NAME_CHAR}])`,
+    `(use|transition|in|out|animate):(${NAME}(?:\\.${NAME})*)((?:\\|[\\w-]+)*)(?![${NAME_CHAR}.])`,
     'uy'
 );
 
-// What a renamed head becomes. The compiler is handed each name it made, so
-// the spelling lives here alone.
-const DIRECTIVE_PREFIX = '__dir_';
+// Where an attribute can begin: after a space, or straight after the quote or
+// brace that closed the one before it, as Svelte reads `title="a"use:x`.
+const ATTRIBUTE_START = /[\s"'}]/;
+
+// The runtime function each kind is handed to, under the name the component
+// imports it by: the three differ in where Svelte puts the payload.
+const DIRECTIVE_ADAPTER = {
+    use: '__directiveAction',
+    transition: '__directiveTransition',
+    in: '__directiveTransition',
+    out: '__directiveTransition',
+    animate: '__directiveAnimate'
+};
 
 function tagValue(markup, from) {
     let at = from;
@@ -1332,10 +1342,6 @@ function walk(markup, collect, onPython, seed, record, where) {
     let out = '';
     let index = 0;
 
-    // The directive heads this walk renamed, for the compiler to bind. Only on
-    // the walk that writes, and only for a caller that will bind them.
-    const directives = record === null ? where?.directives : undefined;
-
     const headAt = (at) => {
         DIRECTIVE_HEAD.lastIndex = at;
         return DIRECTIVE_HEAD.test(markup);
@@ -1758,26 +1764,45 @@ function walk(markup, collect, onPython, seed, record, where) {
                 }
 
                 if (char === quote) quote = null;
-            } else if (directives !== undefined && /\s/.test(markup[index - 1]) && headAt(index)) {
-                // The head of a directive that names a function, `use:chosen`
-                // or `in:fades.typewriter`, unless the markup declared it:
-                // Svelte reads that text as JavaScript, and a Python name has
-                // no JavaScript binding of its own, or one holding the raw
-                // Python value. It is renamed, and the compiler binds the new
-                // name to the right thing, which only it can tell.
+            } else if (ATTRIBUTE_START.test(markup[index - 1]) && headAt(index)) {
+                // A directive that names a function: `use:`, a transition or
+                // `animate:`. Its head is a Python expression like any other
+                // and so is its value, so both are compiled where they are
+                // written and handed to the runtime's adapter, which Svelte
+                // calls by a name that always exists. See `directiveAction`.
                 DIRECTIVE_HEAD.lastIndex = index;
-                const [whole, kind, head] = DIRECTIVE_HEAD.exec(markup);
+                const [whole, kind, head, modifiers] = DIRECTIVE_HEAD.exec(markup);
+                const after = index + whole.length;
 
-                if (inScope().includes(head)) {
-                    out += whole;
-                } else {
-                    const renamed = `${DIRECTIVE_PREFIX}${head}`;
+                // The value: braced, or one interpolation between quotes.
+                let value = null;
+                let next = after;
 
-                    out += `${kind}:${renamed}`;
-                    if (!directives.some((one) => one.head === head)) directives.push({ head, renamed });
+                if (markup[after] === '=' && markup[after + 1] === '{') {
+                    const end = closingBrace(markup, after + 1);
+
+                    if (end !== -1) {
+                        value = { start: after + 2, end };
+                        next = end + 1;
+                    }
+                } else if (markup[after] === '=' && (markup[after + 1] === '"' || markup[after + 1] === "'")) {
+                    const end = loneInterpolation(markup, after + 1, closingBrace);
+
+                    if (end !== -1) {
+                        value = { start: after + 3, end: end - 1 };
+                        next = end + 1;
+                    }
                 }
 
-                index += whole.length;
+                region = { start: index + kind.length + 1, end: index + kind.length + 1 + head.length };
+                const callee = call(head, '', undefined, 'python');
+
+                region = value;
+                const argument = value === null ? '' : `, ${call(markup.slice(value.start, value.end), '', undefined, 'python')}`;
+
+                region = null;
+                out += `${kind}:${DIRECTIVE_ADAPTER[kind]}${modifiers}={[${JSON.stringify(head)}, ${callee}${argument}]}`;
+                index = next;
                 continue;
             } else if (index === unquoted) {
                 // The closing quote of a directive whose opening one was

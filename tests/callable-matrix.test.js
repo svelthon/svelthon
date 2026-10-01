@@ -43,7 +43,7 @@
 // that boundary's own contract.
 import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
-import { pyModule } from '../src/lib/runtime.js';
+import { directiveAction } from '../src/lib/runtime.js';
 import * as mod from './fixtures/callable_matrix.py';
 import { taken } from './fixtures/matrix_library.js';
 import CallableMatrix from './fixtures/CallableMatrix.svelte';
@@ -120,12 +120,6 @@ const POSITIONS = [
     ['two containers down from a mapping', (key) => mod.nested.deep[0][mod.order.indexOf(key)]],
     ['in a configuration a component hands back', (key) => mounted().config(key).hook],
     ['returned whole by a component', (key) => mounted().returned(key)],
-    // What the compiler emits for `use:mod.member` and `in:mod.member`: the
-    // directive names a module, and Svelte reads the member off this proxy.
-    [
-        'as the member a directive names',
-        (key) => pyModule(() => globalThis.__BRYTHON__.imported.callable_matrix, 'callable_matrix')[key]
-    ],
     // The route an export does not take: what an exported function *returns*.
     // It crossed with no callback rule at all, so the same value was adapted
     // when published and raw when handed back — a bound method arrived as an
@@ -141,6 +135,17 @@ describe.for(SHAPES)('%s', ([, key]) => {
 
         expect(typeof got).toBe('function');
         expect(got('event')).toBe(0.25);
+    });
+});
+
+// What a directive names is not handed to Svelte: Svelte calls the runtime's
+// adapter with the Python value, and the adapter calls it. Every shape is called
+// the same way from there.
+describe.for(SHAPES)('%s', ([, key]) => {
+    test('is called by the directive that names it', () => {
+        const value = globalThis.__BRYTHON__.imported.callable_matrix[key];
+
+        expect(directiveAction('event', [key, value])).toBe(0.25);
     });
 });
 

@@ -125,18 +125,10 @@ const SITES = [
         'a snippet is a name in the scope around it',
         (n) => markup(`{#snippet ${n}(p)}{p}{/snippet}<Card {${n}} />`)
     ],
-    // The markup pass renames a directive's head for the compiler to bind, so
-    // `in:fondés.tw` resolves. A head whose name is not ASCII was never found,
-    // so nothing was bound and the directive reached a name that did not exist.
-    [
-        'a dotted directive finds its module',
-        (n) => {
-            const directives = [];
-            const out = pythonExpressions(`<p in:${n}.tw>a</p>`, collector([]), undefined, { directives });
-
-            return out + JSON.stringify(directives);
-        }
-    ],
+    // A directive's head is a Python expression the markup pass compiles, so
+    // `in:fondés.tw` reaches the module. A head whose name is not ASCII was
+    // never found, and the directive reached a name that did not exist.
+    ['a dotted directive finds its module', (n) => markup(`<p in:${n}.tw>a</p>`)],
     // `compile.cjs` asked the same question in seven places with one pattern,
     // and six of them read a *JavaScript* name, where ASCII is a defensible
     // line. The seventh read a Python one: what a `.py` exports. So

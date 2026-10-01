@@ -4207,77 +4207,82 @@ export const pyExpression = (call, where, lineOffset, arity, kept = false) =>
         arity
     );
 
-// A Python module under a JavaScript name, for the one place that needs one:
-// what a directive *names*. Svelte copies that text into a `() => …` of its own,
-// so `in:fades.typewriter` compiles to `() => fades.typewriter` and looks for a
-// JavaScript `fades`, which an `import fades` never made, since it binds in
-// Python's namespace.
+// **A directive is a call whose callee is a Python expression.** The markup pass
+// writes `use:act.measured={v}` as `use:__directiveAction={["act.measured",
+// act.measured, v]}`: Svelte calls one function of this file, by a name that is
+// always there, and the head and the value are compiled like any template
+// expression, by the template's rules, in the scope they are written in. So a
+// name of the script, an import under any spelling, a name the markup declared,
+// a snippet's parameter and a dotted path through an instance or a dict all
+// reach the same place, and a JavaScript name is read when the directive runs.
 //
-// Members are wrapped the way a component's own functions are, not the way the
-// module's exports are: measured, the export path runs `plainData` over the
-// result, and a transition's `tick(0.5, 0.5)` then raises `0.5 cannot be
-// converted to a BigInt` on the first fractional frame. `pyNumbers` is what
-// repairs exactly that, and it is what a `def` written in the component already
-// goes through.
+// What is called decides the conversion, since the value is Python:
 //
-// Read lazily, so the module only has to exist by the time the directive runs,
-// and memoised per function, so two reads of the same name answer the same
-// object: Svelte keeps what a directive gave it.
+//   a Python callable   the value as it is, through the wrapper of the
+//                       component's own functions: the receiver bound, the
+//                       arity trimmed, an `async def` started, an error placed
+//   anything else       a JavaScript function, reached through a wrapper that
+//                       converts the value at every depth, as `importjs` does
+//
+// What a JavaScript action hands back is not wrapped: its `update` is a bare
+// function, and Svelte gives it the value again, so it is converted there.
+//
+// Memoised per function, so two directives naming one callable share one
+// wrapper.
 const directives = new WeakMap();
 
-// **The whole path, by the template's rules, and from the name the component
-// binds.** The head is read in the component's namespace, so `import m as
-// actions` and `from m import measured as action` reach what they bound, where
-// the module's own name in `$B.imported` was asked before and an alias found
-// nothing. Each segment is the template's dot, `readAttr`, so an instance's
-// method and a dict's entry are reached as `{actions.registry.measured}` would
-// reach them; JavaScript's own member access found no method on an instance,
-// and handed a dict's function over unadapted.
-//
-// What a segment gives is adapted when it is callable, walked further when it
-// is a Python object, and handed over as it is otherwise. The head itself is
-// also called directly, for `use:measured`.
-// Asked as every other boundary of this file asks it: an `ob_type` that is a
-// Python class, so a JavaScript record with a field of that name is data and
-// keeps its own property access. A dict keeps its class under a symbol rather
-// than `ob_type`, so it is asked the way the converter asks it.
-const pythonObject = (value) =>
-    value !== null &&
-    typeof value === 'object' &&
-    (pyClass(value.ob_type) || globalThis.__BRYTHON__.is_dict(value));
+const directiveCall = (where, fn, args) => {
+    if (declared(fn) !== null) return { python: true, result: directiveCallable(fn, where)(...args) };
 
-const directiveValue = (member, where) => {
-    if (callable(member)) return directiveCallable(member, where);
-    if (pythonObject(member)) return directivePath(() => member, where);
+    if (typeof fn !== 'function') {
+        throw new TypeError(`svelthon — the directive \`${where}\` names ${String(fn)}, which is not callable`);
+    }
 
-    return member;
+    // Not converted here: a JavaScript function reaches Python only through
+    // the engine's own wrapper or the proxy `importjs` publishes, and both
+    // convert what Python hands them.
+    return { python: false, result: fn(...args) };
 };
 
-// A JavaScript object reached on the path keeps JavaScript's own member access
-// and hands its members over as they are: its methods take JavaScript's values.
-// A module's namespace is not one, though it carries no Python class: it is
-// marked `$proxy` by the compiler.
-const foreign = (value) =>
-    value !== null && typeof value === 'object' && !pythonObject(value) && value.$proxy !== true;
+// A Python value, as opposed to a node or an object of Svelte's.
+const pythonValue = (value) =>
+    value !== null &&
+    typeof value === 'object' &&
+    (pyClass(value.ob_type) || Array.isArray(value) || globalThis.__BRYTHON__.is_dict(value));
 
-function directivePath(read, where) {
-    return new Proxy(function () {}, {
-        get(_, key) {
-            if (typeof key === 'symbol') return undefined;
+// What an action hands back keeps the shape Svelte reads, and its `update` is
+// given the value alone: Svelte passes the whole payload again.
+const actionPayload = (python, result) => {
+    if (result === null || typeof result !== 'object') return result;
 
-            const target = read();
+    const update = result.update;
+    const destroy = result.destroy;
 
-            if (foreign(target)) return target[key];
+    return {
+        update:
+            typeof update === 'function'
+                ? ([, , value]) => update(python || !pythonValue(value) ? value : outbound(value))
+                : undefined,
+        destroy: typeof destroy === 'function' ? () => destroy() : undefined
+    };
+};
 
-            return directiveValue(readAttr(target, key), `${where}.${key}`);
-        },
-        apply(_, self, args) {
-            return directiveCallable(read(), where)(...args);
-        }
-    });
+// `use:`, called `(node, payload)`.
+export function directiveAction(node, [where, fn, ...value]) {
+    const { python, result } = directiveCall(where, fn, [node, ...value]);
+
+    return actionPayload(python, result);
 }
 
-export const pyModule = (read, name) => directivePath(read, name);
+// `transition:`, `in:` and `out:`, called `(node, payload, options)`.
+export function directiveTransition(node, [where, fn, ...value], options) {
+    return directiveCall(where, fn, [node, value.length ? value[0] : undefined, options]).result;
+}
+
+// `animate:`, called `(node, { from, to }, payload)`.
+export function directiveAnimate(node, rects, [where, fn, ...value]) {
+    return directiveCall(where, fn, [node, rects, ...value]).result;
+}
 
 // What a directive hands back, read by Svelte: an action's `update` and
 // `destroy`, a transition's `duration` and `tick`. A dict holds them as entries
@@ -4406,6 +4411,23 @@ const MISSING = Symbol('svelthon.missing');
 
 export function readAttr(target, name) {
     const $B = globalThis.__BRYTHON__;
+
+    // A JavaScript record whose own data has a field called `ob_type`: the
+    // engine reads that field to know what an object is, takes `"business"` for
+    // a class, and fails inside its attribute lookup. It is data, the rule every
+    // other boundary of this file applies, so its member is read as JavaScript
+    // and handed over the way the engine hands over any JavaScript member.
+    if (
+        target !== null &&
+        typeof target === 'object' &&
+        Object.hasOwn(target, 'ob_type') &&
+        !pyClass(target.ob_type) &&
+        !$B.is_dict(target)
+    ) {
+        if (name in target) return $B.jsobj2pyobj(target[name], target);
+
+        $B.RAISE(_b_.AttributeError, `'${name}'`);
+    }
 
     // With a default, so a miss costs no exception: building one on every field
     // read of every dict would be the whole cost of this feature.

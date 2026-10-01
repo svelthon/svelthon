@@ -84,6 +84,7 @@ Token type codes read off the tokenizer: `NAME 1`, `NUMBER 2`, `STRING 3`,
 | `$B.builtins` | `str.$factory`, `bool.$factory`, `dict.$factory`, `set.$factory`, `list.$factory`, `repr`, `None`, `type` |
 | `$B.coroutine` | compared against `get_class` to spot a coroutine without calling `aio.iscoroutine` |
 | `$B.$call(callable, ...args)` | calls anything Python calls, a class object included, which is how a class handed to JavaScript is constructed |
+| `$B.RAISE(cls, message)` | raises a Python exception of that class, with that message: the template's dot raises Python's `AttributeError` for a member a JavaScript record lacks, as it does for any other object |
 | `$B.jsobj2pyobj(value)` | every value coming back from a JavaScript call, so the most-used inbound function there is and the one whose shape changing upstream would be felt first |
 | `$B.PYOBJ_MAP` | the WeakMap holding a converted container's back-reference to the Python object it came from, so the original is handed back rather than a copy. Read with `?.`, which is why a rename upstream would be silent and why a test names it |
 | `$B.is_dict(obj)` | whether a value is a Python dict, answered from a flag on the object rather than by probing its symbols, which is what `get_class` would do. `urlencode` asks it to tell a mapping from every other Python object, all of which are objects here too |

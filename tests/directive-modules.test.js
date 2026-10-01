@@ -1,113 +1,54 @@
 import { test, expect, describe } from 'vitest';
 import { mount, unmount, flushSync, settled } from './mounted.js';
 import { pythonExpressions, collector } from '../src/lib/markup.js';
-import { pyModule } from '../src/lib/runtime.js';
+import { directiveTransition } from '../src/lib/runtime.js';
 import DirectiveModule from './fixtures/DirectiveModule.svelte';
 import DirectiveLife from './fixtures/DirectiveLife.svelte';
-
-const { compile } = await import('../src/lib/compile.cjs').then((m) => m.default ?? m);
+import DirectiveScope from './fixtures/DirectiveScope.svelte';
 
 // A directive's *value* has been Python for a long time. Its *name* had not:
 // Svelte copies that text into a `() => …` of its own, so `in:fades.typewriter`
 // looks for a JavaScript `fades`, and `import fades` binds in Python's namespace
 // instead. Nothing said so — an intro transition is skipped on first render, so
 // the element mounted, the text appeared whole, and the lesson never ran.
-// The markup pass renames each head it does not declare itself, and hands the
-// compiler the pairs.
-const rename = (markup) => {
-    const directives = [];
-    const out = pythonExpressions(markup, collector([]), undefined, {
+//
+// Three passes renamed or bound the head by where its name came from, and each
+// left a place out: an alias, a local cell, a name the markup declared, an
+// export that changes. The head is a Python expression now, compiled where it is
+// written, and Svelte calls the runtime's adapter with it and the value.
+const rewrite = (markup) =>
+    pythonExpressions(markup, collector([]), undefined, {
         filename: 'Probe.svelte',
         content: markup,
-        offset: 0,
-        directives
+        offset: 0
     });
 
-    return { out, heads: directives.map((one) => one.head) };
-};
-
-describe('the head of a directive', () => {
-    test('is renamed for each directive that names a function', () => {
-        const { out, heads } = rename('<p use:a.act in:b.fade out:c.fade transition:d.fade>x</p>');
-
-        expect(heads).toEqual(['a', 'b', 'c', 'd']);
-        expect(out).toBe(
-            '<p use:__dir_a.act in:__dir_b.fade out:__dir_c.fade transition:__dir_d.fade>x</p>'
+describe('a directive that names a function', () => {
+    test('hands its head and value to the adapter of its kind', () => {
+        expect(rewrite('<p use:a.act={v} in:b.fade out:c.fade transition:d.fade|global>x</p>')).toMatch(
+            /^<p use:__directiveAction=\{\["a\.act", __expr_py_\d+\(\), __expr_py_\d+\(\)\]\} in:__directiveTransition=\{\["b\.fade", __expr_py_\d+\(\)\]\} out:__directiveTransition=\{\["c\.fade", __expr_py_\d+\(\)\]\} transition:__directiveTransition\|global=\{\["d\.fade", __expr_py_\d+\(\)\]\}>x<\/p>$/
         );
     });
 
     test('and inside a keyed block, where animate: belongs', () => {
-        expect(rename('{#each xs as x (x)}<p animate:moves.flip>x</p>{/each}').heads).toEqual(['moves']);
+        expect(rewrite('{#each xs as x (x)}<p animate:moves.flip>x</p>{/each}')).toContain(
+            'animate:__directiveAnimate={["moves.flip", '
+        );
     });
 
-    // `class:` names a class, `style:` a property, `bind:` a target. A dot means
-    // something else in all three.
-    test('but not of the directives that name something else', () => {
-        expect(rename('<p class:a.b style:c.d bind:e.f>x</p>').heads).toEqual([]);
+    // One interpolation between quotes is the value, as Svelte reads it.
+    test('with its value braced or quoted', () => {
+        expect(rewrite('<p use:act="{v}">x</p>')).toMatch(/use:__directiveAction=\{\["act", __expr_py_\d+\(\), __expr_py_\d+\(\)\]\}>/);
     });
 
-    // `from m import mark` binds `mark` in Python alone, and `chosen =
-    // measured` holds a Python value in its cell.
-    test('and of an undotted one', () => {
-        expect(rename('<p transition:fly use:mark>x</p>').heads).toEqual(['fly', 'mark']);
+    // An attribute may follow a quote with no space, and Svelte reads it.
+    test('straight after a quoted attribute', () => {
+        expect(rewrite('<p title="note"use:act>x</p>')).toContain('"note"use:__directiveAction=');
     });
 
-    test('and each head once, however many directives name it', () => {
-        expect(rename('<p in:a.one out:a.two use:a.three>x</p>').heads).toEqual(['a']);
-    });
-
-    // A name the markup declared is Svelte's own, and stays as it is.
-    test('but not a name the markup declared', () => {
-        const { out, heads } = rename('{#each xs as act}<p use:act>x</p>{/each}');
-
-        expect(heads).toEqual([]);
-        expect(out).toContain('use:act>');
-    });
-});
-
-describe('the binding it needs', () => {
-    const script = (src, heads) =>
-        compile(src, 'Probe', 'src/Probe.svelte', {
-            pyDirectives: heads.map((head) => ({ head, renamed: `__dir_${head}` }))
-        }).script;
-
-    const python = (name) => `const __dir_${name} = __pyModule(() => __py["${name}"], "${name}");`;
-    const javascript = (name) => `const __dir_${name} = ${name};`;
-
-    test('reads the namespace for a module the file imports', () => {
-        expect(script('import fades\n', ['fades'])).toContain(python('fades'));
-    });
-
-    // The name the import binds, which is not the module's own, and any name
-    // the module binds: the cell of `chosen = measured` holds the raw Python
-    // function.
-    test.for([
-        ['import fades as motion\n', 'motion'],
-        ['from fades import typewriter\n', 'typewriter'],
-        ['from fades import typewriter as typing\n', 'typing'],
-        ['import fades.extra\n', 'fades'],
-        ['def measured(node):\n    pass\n', 'measured'],
-        ['def measured(node):\n    pass\nchosen = measured\n', 'chosen'],
-        ['from fades import *\n', 'typewriter']
-    ])('and for the name %s binds', ([src, name]) => {
-        expect(script(src, [name])).toContain(python(name));
-    });
-
-    // A JavaScript name is that name, and one nothing binds is left to
-    // JavaScript, as it was before the rename.
-    test('but a JavaScript import is the JavaScript name', () => {
-        const src = 'importjs {fades} from "./fades.js"\n\nx = 1\n';
-
-        expect(script(src, ['fades'])).toContain(javascript('fades'));
-    });
-
-    test('and so is a name nothing binds', () => {
-        expect(script('x = 1\n', ['fades'])).toContain(javascript('fades'));
-    });
-
-    // An import inside a `def` binds a local name, not one the directive reads.
-    test('as is one imported inside a function', () => {
-        expect(script('def load():\n    import fades\n', ['fades'])).toContain(javascript('fades'));
+    // `class:` names a class, `style:` a property, `bind:` a target.
+    test('but not the directives that name something else', () => {
+        expect(rewrite('<p class:a={b} style:c="d">x</p>')).not.toContain('__directive');
     });
 });
 
@@ -221,11 +162,75 @@ describe('a directive reaching further', () => {
 
 // The boundary itself, called the way Svelte calls it rather than through a
 // transition: both halves of what broke are here, and each failed on its own.
+describe('a directive whose callee is', () => {
+    const setup = () => {
+        const target = document.body.appendChild(document.createElement('div'));
+        mount(DirectiveScope, { target });
+        flushSync();
+
+        return (k) => target.querySelector(`[data-k="${k}"]`);
+    };
+
+    // A name the markup declared holds a Python value, and Svelte called it
+    // raw: a fractional value reached `format` as a JavaScript number, and a
+    // bound method was not a function at all.
+    test.for([
+        ['a loop variable', 'each'],
+        ['a loop variable holding a bound method', 'method'],
+        ['a template declaration', 'declared'],
+        ['a snippet parameter', 'snippet']
+    ])('%s is called with Python values', ([, key]) => {
+        expect(setup()(key).textContent).toBe('0.50');
+    });
+
+    // The value keeps its Python shape for a Python callee, and is converted at
+    // every depth for a JavaScript one: one copy converted on its first level
+    // served neither.
+    test('a Python function given a dict of floats', () => {
+        expect(setup()('python-options').textContent).toBe('0.50/0.25');
+    });
+
+    test('a JavaScript function given nested options', () => {
+        expect(setup()('js-options').textContent).toBe('0.50/0.25');
+    });
+
+    // What the JavaScript action handed back is its own bare function, which
+    // Svelte calls with the value again: converted there too.
+    test('and its update, given the next options', () => {
+        const at = setup();
+
+        at('grow').click();
+        flushSync();
+
+        expect(at('js-options').textContent).toBe('0.75/0.13');
+    });
+
+    // A JavaScript export is read when the directive runs: one captured at
+    // initialisation kept the function the module had since replaced.
+    test('a JavaScript export the module replaced', () => {
+        const at = setup();
+
+        expect(at('live').textContent).toBe('first');
+
+        at('swap').click();
+        flushSync();
+        at('show').click();
+        flushSync();
+
+        expect(at('live').textContent).toBe('second');
+    });
+});
+
 describe('what a module member becomes for Svelte', () => {
-    const ready = () => {
+    // Called the way Svelte calls `in:directive_mod.typewriter`: the adapter,
+    // with the payload the markup pass wrote.
+    const transition = (node, options) => {
         mount(DirectiveModule, { target: document.body.appendChild(document.createElement('div')) });
         flushSync();
-        return pyModule(() => globalThis.__BRYTHON__.imported.directive_mod, 'directive_mod');
+
+        const typewriter = globalThis.__BRYTHON__.imported.directive_mod.typewriter;
+
+        return directiveTransition(node, ['directive_mod.typewriter', typewriter], options);
     };
 
     // Svelte hands a transition three arguments; the Python signature declares
@@ -234,9 +239,7 @@ describe('what a module member becomes for Svelte', () => {
         const node = document.createElement('p');
         node.textContent = 'abcd';
 
-        const config = ready().typewriter(node, {}, { direction: 'in' });
-
-        expect(config.duration).toBe(4);
+        expect(transition(node, { direction: 'in' }).duration).toBe(4);
     });
 
     // And the config comes back readable from JavaScript: Svelte reads
@@ -245,19 +248,11 @@ describe('what a module member becomes for Svelte', () => {
         const node = document.createElement('p');
         node.textContent = 'abcd';
 
-        const config = ready().typewriter(node, {}, {});
+        const config = transition(node, {});
 
         expect(typeof config.tick).toBe('function');
 
         config.tick(0.5, 0.5);
         expect(node.textContent).toBe('ab');
-    });
-
-    // Svelte keeps what a directive gave it, so two reads of the same name have
-    // to answer the same object.
-    test('and answers the same function twice', () => {
-        const module = ready();
-
-        expect(module.typewriter).toBe(module.typewriter);
     });
 });

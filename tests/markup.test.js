@@ -14,21 +14,17 @@ import {
     pythonScript
 } from '../src/lib/markup.js';
 
-// The directive heads the markup pass renames, through the chunks the
-// preprocessor hands it: a script and a comment are not markup.
+// The directive heads the markup pass compiles, read off the functions it
+// generates, through the chunks the preprocessor hands it: a script and a
+// comment are not markup.
 const directiveHeads = (content) => {
-    const directives = [];
+    const defs = [];
 
     overMarkup(content, (markup, offset) =>
-        pythonExpressions(markup, collector([]), undefined, {
-            filename: 'Probe.svelte',
-            content,
-            offset,
-            directives
-        })
+        pythonExpressions(markup, collector(defs), undefined, { filename: 'Probe.svelte', content, offset })
     );
 
-    return directives.map((one) => one.head);
+    return ['old', 'fx'].filter((head) => defs.some((def) => def.includes(`${head}.fade`)));
 };
 // Moved out of markup.js: what a `<script module>` declares is a JavaScript
 // question, and Svelte's parser is the thing that owns that grammar.
