@@ -12,6 +12,27 @@ import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import TypeMutator from './fixtures/TypeMutator.svelte';
 import SuperMutator from './fixtures/SuperMutator.svelte';
+import AttributeWrites from './fixtures/AttributeWrites.svelte';
+
+// An attribute written or deleted through `object.__setattr__` and
+// `object.__delattr__`, in place or kept as a value, beside the two spellings
+// that always worked.
+test('an attribute written through the type repaints what reads it', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+    mount(AttributeWrites, { target });
+    flushSync();
+    const press = (key) => {
+        target.querySelector(`button[data-k="${key}"]`).click();
+        flushSync();
+        return target.querySelector('[data-k="value"]').textContent;
+    };
+
+    expect(press('assignment')).toBe('1');
+    expect(press('builtin')).toBe('2');
+    expect(press('object')).toBe('3');
+    expect(press('kept')).toBe('4');
+    expect(press('delete')).toBe('absent');
+});
 
 // The same rule through `super()`: what changes is the instance, not the
 // super object the method was found on. Called in place, kept as a value, or

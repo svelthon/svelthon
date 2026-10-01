@@ -458,8 +458,11 @@ export const __pybridge = {
 // The in-place operators and `__init__` are the same case: `rows += [1]` goes
 // through `augm_assign`, and `rows.__iadd__([1])` or `list.__init__(rows, [2])`
 // through nothing else.
+//
+// And an attribute written or deleted by name, `object.__setattr__(box, "value",
+// 1)`: the same write `box.value = 1` makes, reached through the type.
 const MUTATORS = new Set([
-    '__setitem__', '__delitem__', '__init__',
+    '__setitem__', '__delitem__', '__init__', '__setattr__', '__delattr__',
     '__iadd__', '__imul__', '__ior__', '__iand__', '__isub__', '__ixor__',
     'append', 'extend', 'insert', 'remove', 'pop', 'clear', 'sort', 'reverse',
     'add', 'discard', 'update', 'setdefault', 'popitem', 'appendleft',
@@ -540,6 +543,9 @@ function installMutationTracking($B) {
 
             if (attr === '__setitem__' && args.length === 2) {
                 stored(obj, args[0], args[1]);
+            } else if (attr === '__setattr__' || attr === '__delattr__') {
+                // What the object holds now, as after `box.value = 1`.
+                rewalk(obj, args[1]);
             } else {
                 for (const arg of args) {
                     if (!SOURCES.has(attr)) inherit(obj, arg);
@@ -733,18 +739,20 @@ function installMutationTracking($B) {
             // `__self__` of a `super` it was read through.
             const owner = obj.ob_type === _b_.super ? obj.obj : obj;
 
-            // Three shapes reach here and only the first is a function. A
+            // Four shapes reach here and only the first is a function. A
             // special method read off a builtin is a `method-wrapper`
             // (`rows.__setitem__`), one read off a type is a
-            // `method_descriptor` (`list.append`); both are objects, and both
-            // are called through Python's own protocol.
+            // `method_descriptor` (`list.append`) or, for a slot, a
+            // `wrapper_descriptor` (`object.__setattr__`); all are objects, and
+            // all are called through Python's own protocol.
             const call =
                 typeof result === 'function'
                     ? result
                     : result !== null &&
                         typeof result === 'object' &&
                         (result.ob_type === $B.method_wrapper ||
-                            result.ob_type === $B.method_descriptor)
+                            result.ob_type === $B.method_descriptor ||
+                            result.ob_type === $B.wrapper_descriptor)
                       ? (...args) => $B.$call(result, ...args)
                       : null;
 
