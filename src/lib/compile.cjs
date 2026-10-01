@@ -337,7 +337,9 @@ const READS_ONLY = new Set([
 // Whether a read of `__all__` keeps the list where the compiler sees it. Handed
 // on, `names = __all__` or `list.clear(__all__)`, it can be changed by what no
 // static reading follows.
-const keepsAll = (parent, grand, node) =>
+// `builtin(name)` says whether the name is the builtin there, and not a
+// function of the author's that took its name.
+const keepsAll = (parent, grand, node, builtin) =>
     (parent instanceof $B.ast.Attribute && grand instanceof $B.ast.Call && grand.func === parent) ||
     (parent instanceof $B.ast.Subscript && parent.value === node) ||
     parent instanceof $B.ast.Compare ||
@@ -351,6 +353,7 @@ const keepsAll = (parent, grand, node) =>
     (parent instanceof $B.ast.Call &&
         parent.func instanceof $B.ast.Name &&
         READS_ONLY.has(parent.func.id) &&
+        builtin(parent.func.id) &&
         parent.args.includes(node));
 
 // Every place the source writes `__all__`, with the line of the statement it
@@ -362,7 +365,7 @@ const keepsAll = (parent, grand, node) =>
 //
 // And every read that hands the list on, `escapes`, where what is done to it
 // next is out of sight.
-function allWrites(ast) {
+function allWrites(ast, builtin = () => false) {
     const found = [];
     const seen = new Set();
     const is = (node, ...names) => names.some((one) => node instanceof $B.ast[one]);
@@ -380,7 +383,11 @@ function allWrites(ast) {
 
         const at = typeof node.lineno === 'number' ? node.lineno : line;
         if (writesAll(node)) found.push({ node, scope, line: at });
-        if (isAll(node) && node.ctx instanceof $B.ast.Load && !keepsAll(parent, grand, node)) {
+        if (
+            isAll(node) &&
+            node.ctx instanceof $B.ast.Load &&
+            !keepsAll(parent, grand, node, (name) => builtin(name, scope))
+        ) {
             found.push({ node, scope, line: at, escapes: true });
         }
 
@@ -605,7 +612,16 @@ function declaredExports(ast, table, source, lineOffset = 0) {
     // Every other write that reaches the module's `__all__`: under a condition,
     // in a loop, in a function or a class that does not make the name its own,
     // item by item, deleted, or rebound by a loop, an import or a walrus.
-    for (const { node, scope, line: at, escapes } of allWrites(ast)) {
+    // A name is the builtin where no scope binds it: not the function's own, not
+    // the module's.
+    const bound = moduleBinds(table);
+    const builtin = (name, scope) => {
+        const block = scope === null ? null : table.blockOf(scope);
+        if (block !== null && block !== undefined && !isGlobalScope(scopeIn(block, name))) return false;
+        return !bound.has(name);
+    };
+
+    for (const { node, scope, line: at, escapes } of allWrites(ast, builtin)) {
         if (handled.has(node)) continue;
 
         const block = scope === null ? null : table.blockOf(scope);

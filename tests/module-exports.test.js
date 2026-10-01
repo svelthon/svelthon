@@ -196,6 +196,9 @@ describe('__all__ is read as the value the module ends with', () => {
         ['handed to a name', '__all__ = ["a"]\nnames = __all__\nnames.clear()', 2],
         ['handed to a function', '__all__ = ["a"]\nlist.clear(__all__)', 2],
         ['returned', '__all__ = ["a"]\ndef exports():\n    return __all__', 3],
+        // A builtin's name is the builtin only where nothing else binds it.
+        ['handed to a function named list', 'def list(values):\n    values.clear()\n\n__all__ = ["a"]\nlist(__all__)', 5],
+        ['handed to a parameter named len', '__all__ = ["a"]\ndef count(len):\n    return len(__all__)', 3],
         // Python raises at import on these: the module never runs past them.
         ['a name removed that is not there', '__all__ = ["a"]\n__all__.remove("z")', 2],
         ['an empty list popped', '__all__ = []\n__all__.pop()', 2]
