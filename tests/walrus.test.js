@@ -1,6 +1,19 @@
 import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import Walrus from './fixtures/Walrus.svelte';
+import DefinitionWalrus from './fixtures/DefinitionWalrus.svelte';
+
+// A walrus in what a definition evaluates in the module, a default or a
+// decorator, makes module state like any other: the page follows it.
+test('a walrus in a default or a decorator makes state the page follows', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+    mount(DefinitionWalrus, { target });
+    flushSync();
+
+    target.querySelector('button[data-k="add"]').click();
+    flushSync();
+    expect(target.querySelector('[data-k="seen"]').textContent).toBe('[1] [2] [3]');
+});
 
 // `onclick={() => (open = !open)}` is the commonest line in a Svelte template
 // and has no short Python twin: a `lambda` holds an expression, and `open = not

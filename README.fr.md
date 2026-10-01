@@ -75,7 +75,7 @@ reste de cette configuration et ce que chaque ligne apporte.
 npm install
 npm run dev
 
-npm test             # 1 395 tests : sémantique, props, réactivité, surface Svelte
+npm test             # 1 396 tests : sémantique, props, réactivité, surface Svelte
 npm run test:quiet   # la sortie de la suite : un run vert ne doit rien dire
 npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
@@ -177,8 +177,9 @@ compilateur la lit dans l'AST.
 **Et c'est toute la règle : une rune vit au niveau module du script, et dans le
 gabarit. Ce sont les deux endroits où le compilateur lit une déclaration.** Dans
 le script il lit l'AST et ne descend jamais dans un `def` ni dans une `class`,
-donc une rune écrite plus bas serait fabriquée et câblée à rien. Elle est
-refusée, avec sa ligne :
+donc une rune écrite plus bas serait fabriquée et câblée à rien ; et une rune
+sous un `if`, une boucle, un `try` ou un `with` serait câblée que le bloc ait
+tourné ou non. Les deux sont refusées, avec leur ligne :
 
 ```
 svelthon — a rune belongs at the top level of the module,
@@ -1472,7 +1473,7 @@ part jamais.
 
 ## État
 
-Validé par `npm test`, 1 395 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 1 396 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;

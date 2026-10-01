@@ -77,7 +77,7 @@ rest of that configuration and what each line buys.
 npm install
 npm run dev
 
-npm test             # 1 395 tests: semantics, props, reactivity, Svelte surface
+npm test             # 1 396 tests: semantics, props, reactivity, Svelte surface
 npm run test:quiet   # the suite's own output: a green run must say nothing
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
@@ -176,8 +176,9 @@ from the AST.
 **And that is the whole rule: a rune lives at the top level of the script, and in
 the markup. Those are the two places the compiler reads a declaration.** In the
 script it reads the AST and never descends into a `def` or a `class`, so a rune
-written deeper would be built and wired to nothing. It is refused instead, naming
-the line:
+written deeper would be built and wired to nothing; and a rune under an `if`, a
+loop, a `try` or a `with` would be wired whether the block ran or not. Both are
+refused instead, naming the line:
 
 ```
 svelthon — a rune belongs at the top level of the module,
@@ -1462,7 +1463,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 1 395 tests as written (vitest reports more, one per
+Validated by `npm test`, 1 396 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;
