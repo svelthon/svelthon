@@ -2218,7 +2218,8 @@ function declarations(c) {
         //
         // A write of the child's own overrides a value the parent passed, as
         // reassigning a prop does in Svelte, until the parent passes a new one.
-        // The default init() writes is not an override.
+        // The default init() writes is not an override. A prop passed as
+        // `undefined` takes the default, as in Svelte; `null` is a value.
         ...c.props.flatMap((n) => [
             `let ${local(n)} = $state.raw(undefined);`,
             `let ${rev(n)} = $state.raw(0);`,
@@ -2226,8 +2227,8 @@ function declarations(c) {
             `const ${bump(n)} = () => { ${rev(n)} += 1; };`,
             `const ${read(n)} = () => { ${rev(n)}; };`,
             `const ${pick(n)} = () => {` +
-                ` if (!('${n}' in __props)) return ${local(n)};` +
                 ` const __passed = __props.${n};` +
+                ` if (__passed === undefined) return ${local(n)};` +
                 ` if (${over(n)} !== undefined) { if (Object.is(__passed, ${over(n)}.at)) return ${local(n)}; ${over(n)} = undefined; }` +
                 ` return __passed; };`,
             // Read by Svelte's own compiler and not by ours: a snippet is a

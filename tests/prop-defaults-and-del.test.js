@@ -13,6 +13,7 @@ import PropDefaultsHost from './fixtures/PropDefaultsHost.svelte';
 import { drop, read, restore } from './fixtures/deleted_globals.py';
 import deletedStore from './fixtures/deleted_store.svelte.py';
 import DeletedPropHost from './fixtures/DeletedPropHost.svelte';
+import UndefinedProps from './fixtures/UndefinedProps.svelte';
 
 const setup = (Component) => {
     const target = document.body.appendChild(document.createElement('div'));
@@ -119,6 +120,18 @@ test('a parent passing a deleted prop a new value brings it back', () => {
     instance.pass();
     flushSync();
     expect(instance.seen()).toBe('b 2 True True');
+});
+
+test.for([
+    ['absent', {}, '4|8'],
+    ['undefined', { value: undefined, other: undefined }, '4|8'],
+    // None, which the markup renders as nothing.
+    ['null', { value: null, other: null }, '|']
+])('a prop passed %s', ([, props, seen]) => {
+    const target = document.body.appendChild(document.createElement('div'));
+    mount(UndefinedProps, { target, props });
+    flushSync();
+    expect(target.querySelector('[data-k="seen"]').textContent).toBe(seen);
 });
 
 test('in a plain module too', () => {
