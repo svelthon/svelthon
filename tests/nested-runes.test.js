@@ -50,6 +50,17 @@ describe('a rune written below the top level', () => {
         ).toThrow(/`@derived`/);
     });
 
+    // Nor is a block of the module: an `if`, a loop, a `try` may not run, and
+    // a rune is wired whether it ran or not.
+    test.for([
+        ['under an if', 'if enabled:\n    @effect\n    def watch():\n        pass\n', '`@effect`'],
+        ['called under an if', 'if enabled:\n    watch = effect(lambda: None)\n', '`effect()`'],
+        ['in a loop', 'for one in []:\n    @derived\n    def total():\n        return 1\n', '`@derived`'],
+        ['in a try', 'try:\n    @effect\n    def watch():\n        pass\nexcept Exception:\n    pass\n', '`@effect`']
+    ])('and is refused %s', ([, body, spelling]) => {
+        expect(script(`enabled = False\n${body}`)).toThrow(new RegExp(`${spelling.replace(/[()]/g, '\\$&')} is only read there`));
+    });
+
     test('but the top level itself is untouched', () => {
         expect(script('@effect\ndef top():\n    pass\n')).not.toThrow();
         expect(script('n = 0\n\n\ndoubled => n * 2\n')).not.toThrow();

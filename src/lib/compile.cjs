@@ -1678,24 +1678,22 @@ function refuseNestedRunes(body, source, lineOffset) {
         }
     };
 
-    // Only what a `def` or a `class` holds: at the top level these are the
-    // mechanism itself, since `x => expr` compiles to `x = derived(lambda: …)`.
-    const descend = (statements) => {
-        for (const node of statements) {
-            if (
-                node instanceof $B.ast.FunctionDef ||
-                node instanceof $B.ast.AsyncFunctionDef ||
-                node instanceof $B.ast.ClassDef
-            ) {
-                scoped(node.body || []);
-                continue;
-            }
-
-            for (const key of BODIES) if (node[key]) descend(node[key]);
+    // What a `def` or a `class` holds, and what a block of the module holds: an
+    // `if`, a loop, a `try`, a `with` or a `match` runs or not, and a rune is
+    // wired whether it ran or not. At the top level these are the mechanism
+    // itself, since `x => expr` compiles to `x = derived(lambda: …)`.
+    for (const node of body) {
+        if (
+            node instanceof $B.ast.FunctionDef ||
+            node instanceof $B.ast.AsyncFunctionDef ||
+            node instanceof $B.ast.ClassDef
+        ) {
+            scoped(node.body || []);
+            continue;
         }
-    };
 
-    descend(body);
+        for (const key of BODIES) if (node[key]) scoped(node[key]);
+    }
 }
 
 // The two assignments that are declarations to the compiler rather than data to
@@ -1816,11 +1814,19 @@ function surface(body) {
 
         if (Array.isArray(node)) return node.forEach(walruses);
 
-        if (
-            node instanceof $B.ast.FunctionDef ||
-            node instanceof $B.ast.AsyncFunctionDef ||
-            node instanceof $B.ast.ClassDef
-        ) {
+        // A `def`'s body and a `class`'s are scopes of their own; what they
+        // evaluate where they are written, in the module's, is not: the
+        // decorators, a `def`'s defaults, a class's bases and keywords.
+        if (node instanceof $B.ast.FunctionDef || node instanceof $B.ast.AsyncFunctionDef) {
+            walruses(node.decorator_list);
+            walruses(node.args.defaults);
+            walruses(node.args.kw_defaults);
+            return;
+        }
+        if (node instanceof $B.ast.ClassDef) {
+            walruses(node.decorator_list);
+            walruses(node.bases);
+            walruses(node.keywords);
             return;
         }
 
