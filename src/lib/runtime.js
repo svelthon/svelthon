@@ -57,7 +57,7 @@ const _b_ = globalThis.__BRYTHON__.builtins;
 const raised = (error) =>
     error !== null &&
     typeof error === 'object' &&
-    error.ob_type !== undefined &&
+    pyClass(error.ob_type) &&
     error.__traceback__ !== undefined;
 
 // An array-shaped Python value, as *its class* says it iterates.
@@ -1416,7 +1416,7 @@ const declares = (cls, name) => {
 const declaresSlots = (value) => {
     const $B = globalThis.__BRYTHON__;
 
-    if (value.ob_type === undefined) return false;
+    if (!pyClass(value.ob_type)) return false;
 
     return declares(value.ob_type, '__slots__') !== $B.NULL;
 };
@@ -1433,7 +1433,7 @@ const declaresSlots = (value) => {
 // too: the lesson of `pyScalar` and `isSet`, which both learned it the hard way.
 export const pyBytes = (value) => {
     const cls = value.ob_type;
-    const mro = cls === undefined ? undefined : cls.tp_mro;
+    const mro = pyClass(cls) ? cls.tp_mro : undefined;
 
     if (!Array.isArray(mro)) return false;
 
@@ -1879,7 +1879,7 @@ export const pyCoroutine = (value) => {
 // crosses as its number, and its fields stay in Python, which is the same
 // sentence as the one a callable gets.
 export const pyScalar = (value) => {
-    if (value === null || typeof value !== 'object' || value.ob_type === undefined) return undefined;
+    if (value === null || typeof value !== 'object' || !pyClass(value.ob_type)) return undefined;
 
     // **A limit, and it was measured rather than assumed.** `ob_type` is a
     // public key, so a JavaScript object can carry one: the repair at the
@@ -3187,7 +3187,7 @@ export function pyCall(fn, where, lineOffset = 0, arity = Infinity, named) {
 const callDescriptor = (value) => {
     const $B = globalThis.__BRYTHON__;
 
-    if (value === null || typeof value !== 'object' || value.ob_type === undefined) return null;
+    if (value === null || typeof value !== 'object' || !pyClass(value.ob_type)) return null;
     if (pyClass(value) || boundMethod(value)) return null;
 
     const found = declares(value.ob_type, '__call__');

@@ -1,6 +1,6 @@
 # What `to_py` does with values that are already Python, and with data whose
 # field names look like the engine's.
-__all__ = ["already", "with_helper", "helper_is_untouched", "field_named_type"]
+__all__ = ["already", "with_helper", "helper_is_untouched", "field_named_type", "python_mapping_json"]
 
 
 class Plain:
@@ -42,3 +42,8 @@ def field_named_type(value):
     # object. What comes back must be a dict Python can read.
     converted = to_py(value)
     return [converted["ob_type"], converted["value"]]
+
+
+def python_mapping_json():
+    # The same shape written in Python, through the JSON helper.
+    return tojson({"ob_type": None, "value": 42})

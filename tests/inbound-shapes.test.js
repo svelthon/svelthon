@@ -18,8 +18,11 @@ import {
     already,
     with_helper,
     helper_is_untouched,
-    field_named_type
+    field_named_type,
+    python_mapping_json
 } from './fixtures/inbound_shapes.py';
+import { plainData } from '../src/lib/runtime.js';
+import { tojson } from '../src/lib/helpers.js';
 
 describe('to_py on a value that is already Python', () => {
     test('hands back the same object', () => {
@@ -50,5 +53,16 @@ describe('to_py on data whose field is called ob_type', () => {
     // the bundle still does.
     test('is data, not a Python object', () => {
         expect(field_named_type({ ob_type: 'business', value: 42 })).toEqual(['business', 42]);
+    });
+
+    // And when the field holds null: the class is what answers, at every site
+    // that reads one, and null is no class.
+    test('holding null, it crosses in, out, and through tojson', () => {
+        const data = { ob_type: null, value: 42 };
+
+        expect(Array.from(field_named_type(data))).toEqual([null, 42]);
+        expect(plainData(data)).toEqual(data);
+        expect(JSON.parse(tojson(data))).toEqual(data);
+        expect(JSON.parse(python_mapping_json())).toEqual(data);
     });
 });
