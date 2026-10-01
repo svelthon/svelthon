@@ -8,7 +8,6 @@ import {
     pythonExpressions,
     collector,
     moduleScript,
-    directiveModules,
     withoutComments,
     markupOnly
 } from './markup.js';
@@ -125,8 +124,9 @@ function claimPython(path) {
 //   before the opening tag.
 // - `defs`: the hidden functions the markup needs, appended to its Python.
 // - `jsNames`: what the file imports from JavaScript.
-// - `pyDirectives`: the Python modules it names in a directive, which is the one
-//   place a module needs a JavaScript binding of its own.
+// - `pyDirectives`: the directive heads the markup pass renamed, `{head,
+//   renamed}`, for the compiler to bind: a directive's name is the one place a
+//   Python name needs a JavaScript binding of its own.
 //
 // Held inside `python()` and not at module scope, which is where they were. Both
 // hooks live on the object it returns, so they have no reason to be shared by
@@ -349,7 +349,7 @@ export function python(options = {}) {
             const file = about(filename);
 
             file.jsNames = moduleImports(content);
-            file.pyDirectives = directiveModules(content);
+            file.pyDirectives = [];
             file.lineOffset = content.slice(0, declaring.index).split('\n').length - 1;
             file.defs = [];
             file.defLines = [];
@@ -361,7 +361,12 @@ export function python(options = {}) {
             const code = overMarkup(content, (markup, offset) =>
                 // The chunk, and where it starts, so a refusal can name a
                 // line and a column in the file the author is looking at.
-                pythonExpressions(markup, collect, undefined, { filename, content, offset })
+                pythonExpressions(markup, collect, undefined, {
+                    filename,
+                    content,
+                    offset,
+                    directives: file.pyDirectives
+                })
             );
 
             const open = content.indexOf('>', declaring.index) + 1;

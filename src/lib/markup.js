@@ -717,6 +717,18 @@ function attributeText(literal, quote) {
     return element.attributes[0].value.map((one) => one.data).join('');
 }
 
+// The head of a directive that names a function: the `x` of `in:x.fade`, and of
+// `use:x` alone. Only the five that name one: `class:` and `style:` name a
+// property, and `bind:` names a target.
+const DIRECTIVE_HEAD = new RegExp(
+    `(use|transition|in|out|animate):(${NAME})(?![${NAME_CHAR}])`,
+    'uy'
+);
+
+// What a renamed head becomes. The compiler is handed each name it made, so
+// the spelling lives here alone.
+const DIRECTIVE_PREFIX = '__dir_';
+
 function tagValue(markup, from) {
     let at = from;
 
@@ -1319,6 +1331,15 @@ const TAG_OPEN = /<(\/?)\s*([A-Za-z][\w:.-]*)/y;
 function walk(markup, collect, onPython, seed, record, where) {
     let out = '';
     let index = 0;
+
+    // The directive heads this walk renamed, for the compiler to bind. Only on
+    // the walk that writes, and only for a caller that will bind them.
+    const directives = record === null ? where?.directives : undefined;
+
+    const headAt = (at) => {
+        DIRECTIVE_HEAD.lastIndex = at;
+        return DIRECTIVE_HEAD.test(markup);
+    };
     let inTag = false;
     let quote = null;
     let quotedAttribute = null;
@@ -1737,6 +1758,27 @@ function walk(markup, collect, onPython, seed, record, where) {
                 }
 
                 if (char === quote) quote = null;
+            } else if (directives !== undefined && /\s/.test(markup[index - 1]) && headAt(index)) {
+                // The head of a directive that names a function, `use:chosen`
+                // or `in:fades.typewriter`, unless the markup declared it:
+                // Svelte reads that text as JavaScript, and a Python name has
+                // no JavaScript binding of its own, or one holding the raw
+                // Python value. It is renamed, and the compiler binds the new
+                // name to the right thing, which only it can tell.
+                DIRECTIVE_HEAD.lastIndex = index;
+                const [whole, kind, head] = DIRECTIVE_HEAD.exec(markup);
+
+                if (inScope().includes(head)) {
+                    out += whole;
+                } else {
+                    const renamed = `${DIRECTIVE_PREFIX}${head}`;
+
+                    out += `${kind}:${renamed}`;
+                    if (!directives.some((one) => one.head === head)) directives.push({ head, renamed });
+                }
+
+                index += whole.length;
+                continue;
             } else if (index === unquoted) {
                 // The closing quote of a directive whose opening one was
                 // dropped: the value between them has already been written in
@@ -2292,30 +2334,6 @@ export function moduleScript(content) {
     return null;
 }
 
-// The head of every directive that names a function: the `x` of `in:x.fade`,
-// and of `use:x` alone. Svelte copies that text into a `() => …`, so `x` has to
-// be a JavaScript binding, and when the author meant a name a Python import
-// bound, none exists. The compiler keeps only those.
-//
-// Only the five that name a function. `class:` and `style:` name a property, and
-// `bind:` names a target; a dot in those means something else entirely.
-const DOTTED_DIRECTIVE = new RegExp(
-    `(?:^|[\\s"'])(?:use|transition|in|out|animate):(${NAME})(?![${NAME_CHAR}])`,
-    'gu'
-);
-
-export function directiveModules(markup) {
-    const found = new Set();
-
-    DOTTED_DIRECTIVE.lastIndex = 0;
-
-    const text = markupOnly(markup);
-
-    let match;
-    while ((match = DOTTED_DIRECTIVE.exec(text))) found.add(match[1]);
-
-    return [...found];
-}
 
 
 // The hidden Python functions a template needs, one per distinct expression.

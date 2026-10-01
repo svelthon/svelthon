@@ -2615,29 +2615,25 @@ function injectedBindings(c) {
         // The second argument is what the component imported in its
         // `<script module>`, published so Python can read it.
         ...jsNameBindings(c, c.jsNames),
-        // A name an import binds, named by a directive: `in:fades.typewriter`,
-        // `use:actions.measured` after `import m as actions`, `use:measured`
-        // after `from m import measured`. Svelte copies that text into a
-        // `() => …` of its own, so it looks for a JavaScript name, and an import
-        // binds only in Python's namespace. Only what a directive actually
-        // names, and only a name an import binds: a JavaScript name resolves on
-        // its own and must keep doing so.
+        // A directive's head, renamed by the markup pass: `use:chosen` reads
+        // `__dir_chosen`. Svelte copies that text into a `() => …` of its own,
+        // so it reads a JavaScript name, and a Python name has none, or one
+        // holding the raw value: an import binds only in Python's namespace, and
+        // the cell of `chosen = measured` holds the Python function.
         //
-        // The value is read from the namespace when the directive runs, so the
-        // position in the emitted script does not matter.
-        ...c.pyDirectives
-            // `c.emitted` and not `c.declared`: the filter is here to avoid a
-            // second JavaScript declaration of the same name, and `import fades`
-            // is the very thing that makes the directive need this line. Reading
-            // the wider list turned the import into a reason to skip it.
-            .filter(
-                (n) =>
-                    c.importBound.has(n) &&
-                    !c.emitted.includes(n) &&
-                    !c.jsImported.includes(n) &&
-                    !c.jsNames.includes(n)
-            )
-            .map((n) => `const ${n} = __pyModule(() => ${NS}[${JSON.stringify(n)}], ${JSON.stringify(n)});`)
+        // A JavaScript name is that name. A name the module binds, by any
+        // statement, is read from the namespace when the directive runs and
+        // goes through the directive's path and call; so is any name under an
+        // `import *`, which binds names nothing here can list. Anything else is
+        // left to JavaScript, as it was before the rename.
+        ...c.pyDirectives.map(({ head: n, renamed }) => {
+            const javascript = c.jsImported.includes(n) || c.jsNames.includes(n);
+            const python = !javascript && (c.declared.includes(n) || c.importBound.has('*'));
+
+            return python
+                ? `const ${renamed} = __pyModule(() => ${NS}[${JSON.stringify(n)}], ${JSON.stringify(n)});`
+                : `const ${renamed} = ${n};`;
+        })
     ];
 }
 
