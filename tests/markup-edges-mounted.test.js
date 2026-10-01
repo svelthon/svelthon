@@ -6,6 +6,17 @@ import { test, expect } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import MarkupEdges from './fixtures/MarkupEdges.svelte';
 import CommentDelimiters from './fixtures/CommentDelimiters.svelte';
+import QuotedOptions from './fixtures/QuotedOptions.svelte';
+
+test('an option written in a string of a script is left as the author wrote it', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+    mount(QuotedOptions, { target });
+    flushSync();
+
+    expect(target.querySelector('[data-k="example"]').textContent).toBe(
+        '<svelte:options customElement="quoted-example" />'
+    );
+});
 
 test('comment delimiters inside a script are the author text', () => {
     const target = document.body.appendChild(document.createElement('div'));

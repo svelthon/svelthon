@@ -2147,6 +2147,15 @@ export const withoutComments = (content) =>
         element === undefined ? found.replace(/[^\n]/g, ' ') : found
     );
 
+// The markup alone, for a reading of what only the markup holds: an option, a
+// directive. The comments go, and so do the bodies of scripts and styles, whose
+// `'<svelte:options …>'` is a string, blanked like the rest so offsets hold.
+export const markupOnly = (content) =>
+    withoutComments(content).replace(
+        /(<(script|style)\b[^>]*>)([\s\S]*?)(<\/\2\s*>)/gi,
+        (_, open, name, body, close) => open + body.replace(/[^\n]/g, ' ') + close
+    );
+
 // Found by `blocks()`, as the Python block is, which steps over a `<style>`
 // whole: a `<script module>` quoted in a stylesheet is not the module.
 const MODULE_ATTRIBUTE = /\b(?:module|context=["']module["'])/i;
@@ -2180,7 +2189,7 @@ export function directiveModules(markup) {
 
     DOTTED_DIRECTIVE.lastIndex = 0;
 
-    const text = withoutComments(markup);
+    const text = markupOnly(markup);
 
     let match;
     while ((match = DOTTED_DIRECTIVE.exec(text))) found.add(match[1]);

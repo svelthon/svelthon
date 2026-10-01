@@ -9,7 +9,8 @@ import {
     collector,
     moduleScript,
     directiveModules,
-    withoutComments
+    withoutComments,
+    markupOnly
 } from './markup.js';
 import { parse } from 'svelte/compiler';
 
@@ -288,10 +289,11 @@ export function moduleImports(content) {
 // `dynamicCompileOptions`, and the guard that compiles every fixture looking
 // for warnings has to compile them the way the build does.
 //
-// Read with the comments taken out, like every other reading of the markup: a
-// declaration quoted in `<!-- -->` is documentation.
+// Read on the markup alone, like every other reading of an option: a
+// declaration quoted in `<!-- -->` is documentation, and one in a script's
+// string is the author's text.
 export const compileOptionsFor = (code) =>
-    /<svelte:options[^>]*\bcustomElement\b/.test(withoutComments(code)) ? { customElement: true } : undefined;
+    /<svelte:options[^>]*\bcustomElement\b/.test(markupOnly(code)) ? { customElement: true } : undefined;
 
 const perFile = () => {
     const files = new Map();
@@ -460,7 +462,7 @@ function elementOptions(code, python) {
             .map(({ name, type }) => `${name}: {${type ? ` type: ${JSON.stringify(type)} ` : ''}}`)
             .join(', ');
 
-    const text = withoutComments(code);
+    const text = markupOnly(code);
 
     if (ELEMENT_OBJECT.test(text)) {
         const object = elementObject(code);

@@ -446,6 +446,19 @@ describe('a declaration in a comment', () => {
     });
 });
 
+// Nor does one in a script's string: an option and a directive are the markup's.
+describe('a declaration in a string of a script', () => {
+    const quoted = (text) => `<script module>\n    const example = '${text}';\n</script>\n`;
+
+    test('does not make a custom element', () => {
+        expect(compileOptionsFor(quoted('<svelte:options customElement="my-tag" />') + '<p>x</p>')).toBeUndefined();
+    });
+
+    test('and names no directive module', () => {
+        expect(directiveModules(quoted('<p in:old.fade>a</p>') + '<p in:fx.fade>a</p>')).toEqual(['fx']);
+    });
+});
+
 // The pass itself: every expression the markup reads becomes a call to a hidden
 // function, and the block syntax around it survives untouched.
 describe('pythonExpressions', () => {
