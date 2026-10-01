@@ -1272,7 +1272,7 @@ const upwards = (marker, stamp, key) => {
         const holder = parent.target.deref();
         const known = verified.get(parent) === parent.stamp;
 
-        if (holder === undefined || (child !== undefined && !known && !holds(holder, child, marker.keys?.get(parent)))) {
+        if (holder === undefined || (child !== undefined && !known && !holds(holder, child, marker.keys?.get(holder)))) {
             parents.splice(i, 1);
             continue;
         }
@@ -1773,9 +1773,23 @@ function inherit(parent, child, key) {
     const marker = MARKS.get(parent);
 
     if (own.parents === undefined) own.parents = [marker];
-    else if (!own.parents.includes(marker)) own.parents.push(marker);
+    else if (!own.parents.includes(marker)) {
+        // The list grows here and only here, so it is swept here: a parent
+        // whose container is gone leaves. `upwards` does the same when the
+        // child changes, but a shared child may never change, and each mount
+        // that wrapped it in a container of its own left one link behind.
+        for (let i = own.parents.length - 1; i >= 0; i--) {
+            if (own.parents[i].target.deref() === undefined) own.parents.splice(i, 1);
+        }
 
-    if (key !== undefined) (own.keys ??= new WeakMap()).set(marker, key);
+        own.parents.push(marker);
+    }
+
+    // Keyed on the container, not on its marker: the child holds the marker
+    // for as long as the link lasts, and through it the key, an object of the
+    // author's that the dict itself had let go. The container already holds
+    // its key, so this holds it no longer than the container lives.
+    if (key !== undefined) (own.keys ??= new WeakMap()).set(parent, key);
 
     if (revived) adopt(child);
 
