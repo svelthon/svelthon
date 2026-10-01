@@ -1774,23 +1774,40 @@ function walk(markup, collect, onPython, seed, record, where) {
                 const [whole, kind, head, modifiers] = DIRECTIVE_HEAD.exec(markup);
                 const after = index + whole.length;
 
-                // The value: braced, or one interpolation between quotes.
+                // The value: braced, or one interpolation between quotes, with
+                // any whitespace around the `=`, as HTML allows and Svelte reads
+                // it. A value in no form Svelte takes for a directive is left as
+                // written, for Svelte to refuse.
                 let value = null;
                 let next = after;
+                let at = after;
 
-                if (markup[after] === '=' && markup[after + 1] === '{') {
-                    const end = closingBrace(markup, after + 1);
+                while (/\s/.test(markup[at] ?? '')) at += 1;
 
-                    if (end !== -1) {
-                        value = { start: after + 2, end };
-                        next = end + 1;
+                if (markup[at] === '=') {
+                    at += 1;
+                    while (/\s/.test(markup[at] ?? '')) at += 1;
+
+                    if (markup[at] === '{') {
+                        const end = closingBrace(markup, at);
+
+                        if (end !== -1) {
+                            value = { start: at + 1, end };
+                            next = end + 1;
+                        }
+                    } else if (markup[at] === '"' || markup[at] === "'") {
+                        const end = loneInterpolation(markup, at, closingBrace);
+
+                        if (end !== -1) {
+                            value = { start: at + 2, end: end - 1 };
+                            next = end + 1;
+                        }
                     }
-                } else if (markup[after] === '=' && (markup[after + 1] === '"' || markup[after + 1] === "'")) {
-                    const end = loneInterpolation(markup, after + 1, closingBrace);
 
-                    if (end !== -1) {
-                        value = { start: after + 3, end: end - 1 };
-                        next = end + 1;
+                    if (value === null) {
+                        out += whole;
+                        index = after;
+                        continue;
                     }
                 }
 

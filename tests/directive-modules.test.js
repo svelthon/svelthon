@@ -46,6 +46,17 @@ describe('a directive that names a function', () => {
         expect(rewrite('<p title="note"use:act>x</p>')).toContain('"note"use:__directiveAction=');
     });
 
+    // Whitespace around `=`, which HTML allows and Svelte reads: the value was
+    // left behind and assigned a second time.
+    test.for(['use:act ={v}', 'use:act= {v}', 'use:act = {v}', 'use:act\n=\n{v}', 'use:act = "{v}"'])(
+        'with whitespace around the equals sign: %s',
+        (attribute) => {
+            expect(rewrite(`<p ${attribute}>x</p>`)).toMatch(
+                /^<p use:__directiveAction=\{\["act", __expr_py_\d+\(\), __expr_py_\d+\(\)\]\}>x<\/p>$/
+            );
+        }
+    );
+
     // `class:` names a class, `style:` a property, `bind:` a target.
     test('but not the directives that name something else', () => {
         expect(rewrite('<p class:a={b} style:c="d">x</p>')).not.toContain('__directive');
@@ -205,6 +216,25 @@ describe('a directive whose callee is', () => {
         expect(at('js-options').textContent).toBe('0.75/0.13');
     });
 
+    // A JavaScript action may hand back an instance whose methods read `this`:
+    // Svelte calls them on it, and so must the adapter.
+    test('a JavaScript action handing back an instance', () => {
+        const target = document.body.appendChild(document.createElement('div'));
+        const instance = mount(DirectiveScope, { target });
+        flushSync();
+
+        const lease = target.querySelector('[data-k="lease"]');
+        expect(lease.textContent).toBe('0.50');
+
+        target.querySelector('[data-k="renew"]').click();
+        flushSync();
+        expect(lease.textContent).toBe('0.75');
+
+        unmount(instance);
+        flushSync();
+        expect(lease.dataset.cleanup).toBe('done');
+    });
+
     // A JavaScript export is read when the directive runs: one captured at
     // initialisation kept the function the module had since replaced.
     test('a JavaScript export the module replaced', () => {
@@ -218,6 +248,51 @@ describe('a directive whose callee is', () => {
         flushSync();
 
         expect(at('live').textContent).toBe('second');
+    });
+});
+
+// Svelte's protocol around the payload, one row per case, called the way Svelte
+// calls the adapter. The payload is never absent, so Svelte's own defaults and
+// conventions apply to nothing unless the adapter applies them.
+describe("Svelte's protocol, kept around the payload", () => {
+    const python = () => globalThis.__BRYTHON__.imported.directive_mod;
+    const node = () => document.createElement('p');
+
+    // `transition:` is called with `params ?? {}`.
+    test.for([
+        ['absent', []],
+        ['None', [globalThis.__BRYTHON__?.builtins.None]]
+    ])('a transition given a value %s gets an empty one', async ([, value]) => {
+        const { defaults } = await import('./fixtures/directive_live.js');
+        mount(DirectiveModule, { target: document.body.appendChild(document.createElement('div')) });
+
+        const js = node();
+        directiveTransition(js, ['defaults', defaults, ...value], { direction: 'in' });
+        expect(js.textContent).toBe('0.50');
+
+        const py = node();
+        directiveTransition(py, ['with_params', python().with_params, ...value], { direction: 'in' });
+        expect(py.textContent).toBe('0.50');
+    });
+
+    // A transition may hand back a function Svelte calls later for the
+    // config: a Python one, or a callable instance, is a callable like any
+    // other, and its config is converted like an immediate one.
+    test.for(['deferred', 'deferred_instance'])('a deferred transition, %s', (key) => {
+        mount(DirectiveModule, { target: document.body.appendChild(document.createElement('div')) });
+
+        const at = node();
+        const later = directiveTransition(at, [key, python()[key]], { direction: 'in' });
+
+        expect(typeof later).toBe('function');
+
+        const config = later({ direction: 'in' });
+
+        expect(config.duration).toBe(0.5);
+        expect(config.easing(0.5)).toBe(0.25);
+
+        config.tick(0.25, 0.75);
+        expect(at.textContent).toBe('0.25/0.75');
     });
 });
 

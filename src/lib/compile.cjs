@@ -2829,7 +2829,7 @@ function effectBlocks(c) {
                         ]
                       : []),
                   `    return () => {`,
-
+                  ...(c.lifecycle('on_mount') ? [`        __unmounted?.();`] : []),
                   ...(c.lifecycle('on_destroy') ? [`        __teardown();`] : []),
                   `    };`,
                   `});`

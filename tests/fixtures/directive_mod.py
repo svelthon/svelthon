@@ -21,6 +21,42 @@ configured = Actions()
 registry = {"measured": measured}
 
 
+def with_params(node, params):
+    # A transition given no value: Svelte's rule gives it an empty one.
+    node.textContent = format(params.get("amount", 0.5), ".2f")
+    return {"duration": 0}
+
+
+def configuration(node):
+    def tick(t, u):
+        node.textContent = format(t, ".2f") + "/" + format(u, ".2f")
+
+    def easing(t):
+        return t / 2
+
+    return {"duration": 0.5, "tick": tick, "easing": easing}
+
+
+def deferred(node, params):
+    # A deferred transition: Svelte calls what this returns, later.
+    def configure(options):
+        return configuration(node)
+
+    return configure
+
+
+class Deferred:
+    def __init__(self, node):
+        self.node = node
+
+    def __call__(self, options):
+        return configuration(self.node)
+
+
+def deferred_instance(node, params):
+    return Deferred(node)
+
+
 async def later(node):
     # An action written as a coroutine: started, as a handler would be.
     node.textContent = "started"

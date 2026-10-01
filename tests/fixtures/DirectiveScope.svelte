@@ -1,7 +1,7 @@
 <script lang="python">
 # Directives whose callee or whose options no earlier test reached: a name the
 # markup declared, options in a container, an export the module replaces.
-importjs { mark, replace, native_options } from './directive_live.js'
+importjs { mark, replace, native_options, leased } from './directive_live.js'
 
 
 def measured(node, value):
@@ -23,6 +23,12 @@ methods = [configured.measured]
 options = {"amount": 0.5, "nested": {"amount": 0.25}}
 js_options = {"nested": {"amount": 0.5}, "values": [0.25]}
 shown = True
+lease = 0.5
+
+
+def renew():
+    global lease
+    lease = 0.75
 
 
 def grow():
@@ -52,6 +58,9 @@ def show():
 
 <p data-k="python-options" use:options_action={options}>not yet</p>
 <p data-k="js-options" use:native_options={js_options}>not yet</p>
+
+<p data-k="lease" use:leased={lease}>not yet</p>
+<button data-k="renew" onclick={renew}>renew</button>
 
 <button data-k="grow" onclick={grow}>grow</button>
 <button data-k="swap" onclick={swap}>swap</button>

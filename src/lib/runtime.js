@@ -4227,6 +4227,18 @@ export const pyExpression = (call, where, lineOffset, arity, kept = false) =>
 // What a JavaScript action hands back is not wrapped: its `update` is a bare
 // function, and Svelte gives it the value again, so it is converted there.
 //
+// And Svelte's own protocol, read in its sources, is kept whole around the
+// payload, since the payload is what Svelte now sees:
+//
+//   use:          fn(node, value)                 value as given; the result's
+//                                                 `update` and `destroy` are
+//                                                 called as its methods
+//   transition:   fn(node, params ?? {}, opts)    an absent or None value is
+//                                                 an empty one; the result is a
+//                                                 config, or a function Svelte
+//                                                 calls later for the config
+//   animate:      fn(node, {from, to}, params)    value as given; same results
+//
 // Memoised per function, so two directives naming one callable share one
 // wrapper.
 const directives = new WeakMap();
@@ -4251,19 +4263,17 @@ const pythonValue = (value) =>
     (pyClass(value.ob_type) || Array.isArray(value) || globalThis.__BRYTHON__.is_dict(value));
 
 // What an action hands back keeps the shape Svelte reads, and its `update` is
-// given the value alone: Svelte passes the whole payload again.
+// given the value alone: Svelte passes the whole payload again. Both are called
+// on the result, as Svelte calls them, so a method reading `this` finds it.
 const actionPayload = (python, result) => {
     if (result === null || typeof result !== 'object') return result;
 
-    const update = result.update;
-    const destroy = result.destroy;
-
     return {
         update:
-            typeof update === 'function'
-                ? ([, , value]) => update(python || !pythonValue(value) ? value : outbound(value))
+            typeof result.update === 'function'
+                ? ([, , value]) => result.update(python || !pythonValue(value) ? value : outbound(value))
                 : undefined,
-        destroy: typeof destroy === 'function' ? () => destroy() : undefined
+        destroy: typeof result.destroy === 'function' ? () => result.destroy() : undefined
     };
 };
 
@@ -4274,9 +4284,20 @@ export function directiveAction(node, [where, fn, ...value]) {
     return actionPayload(python, result);
 }
 
-// `transition:`, `in:` and `out:`, called `(node, payload, options)`.
+// `transition:`, `in:` and `out:`, called `(node, payload, options)`. Svelte
+// gives `params ?? {}`, and the payload is never absent, so the empty value is
+// supplied here: a dict for Python, an object for JavaScript, whose own
+// transitions destructure it.
 export function directiveTransition(node, [where, fn, ...value], options) {
-    return directiveCall(where, fn, [node, value.length ? value[0] : undefined, options]).result;
+    const given = value.length ? value[0] : undefined;
+    const params =
+        given !== undefined && given !== null && given !== NONE
+            ? given
+            : declared(fn) !== null
+              ? globalThis.__BRYTHON__.empty_dict()
+              : {};
+
+    return directiveCall(where, fn, [node, params, options]).result;
 }
 
 // `animate:`, called `(node, { from, to }, payload)`.
@@ -4291,28 +4312,39 @@ export function directiveAnimate(node, rects, [where, fn, ...value]) {
 // value)` mounted and then never updated nor cleaned up. Its view reads each
 // name through the attribute protocol when Svelte asks, and answers `undefined`
 // for one it does not have, which is how Svelte asks whether there is one.
-const directiveResult = (value) =>
-    value !== null &&
-    typeof value === 'object' &&
-    !Array.isArray(value) &&
-    pyClass(value.ob_type) &&
-    pyScalar(value) === undefined &&
-    !globalThis.__BRYTHON__.is_dict(value)
-        ? new Proxy(
-              {},
-              {
-                  get(_, key) {
-                      if (typeof key === 'symbol') return undefined;
+//
+// A **Python callable** handed back is a deferred transition: Svelte calls it
+// later for the config. It is wrapped like the directive's own callee, so its
+// arguments are converted and its config comes back through this same rule. A
+// callable instance is asked first, before it is taken for a config object.
+function directiveResult(value, where) {
+    if (declared(value) !== null) return directiveCallable(value, `${where} result`);
 
-                      const found = globalThis.__BRYTHON__.$getattr(value, key, MISSING);
+    const instance =
+        value !== null &&
+        typeof value === 'object' &&
+        !Array.isArray(value) &&
+        pyClass(value.ob_type) &&
+        pyScalar(value) === undefined &&
+        !globalThis.__BRYTHON__.is_dict(value);
 
-                      if (found === MISSING) return undefined;
+    if (!instance) return pyNumbers(value);
 
-                      return callable(found) ? pyHandler(found) : pyNumbers(found);
-                  }
-              }
-          )
-        : pyNumbers(value);
+    return new Proxy(
+        {},
+        {
+            get(_, key) {
+                if (typeof key === 'symbol') return undefined;
+
+                const found = globalThis.__BRYTHON__.$getattr(value, key, MISSING);
+
+                if (found === MISSING) return undefined;
+
+                return callable(found) ? pyHandler(found) : pyNumbers(found);
+            }
+        }
+    );
+}
 
 // Callable in Python, which is the question every boundary that promises to
 // adapt a callback asks, and the one this site was still answering with
@@ -4347,7 +4379,8 @@ function directiveCallable(member, path) {
         // Run through `running`, the wrapper of a component's own functions: an
         // `async def` is started, and an error placed.
         wrapped = identified(
-            (...args) => running(() => called(...taken(args, arity)), where, undefined, directiveResult),
+            (...args) =>
+                running(() => called(...taken(args, arity)), where, undefined, (value) => directiveResult(value, where)),
             nameOf(where),
             arity
         );
