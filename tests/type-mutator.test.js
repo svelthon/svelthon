@@ -11,6 +11,30 @@
 import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import TypeMutator from './fixtures/TypeMutator.svelte';
+import SuperMutator from './fixtures/SuperMutator.svelte';
+
+// The same rule through `super()`: what changes is the instance, not the
+// super object the method was found on. Called in place, kept as a value, or
+// as a special method, on a list and on a dict.
+test('a container changed through super() repaints what reads it', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+    mount(SuperMutator, { target });
+    flushSync();
+    const press = (key) => {
+        target.querySelector(`button[data-k="${key}"]`).click();
+        flushSync();
+    };
+    const read = (key) => target.querySelector(`[data-k="${key}"]`).textContent;
+
+    press('push');
+    expect(read('rows')).toBe('[1]');
+    press('push-later');
+    expect(read('rows')).toBe('[1, 2]');
+    press('set-first');
+    expect(read('rows')).toBe('[9, 2]');
+    press('merge');
+    expect(read('table')).toBe("{'answer': 42}");
+});
 
 describe.for([
     ['kept as a value', 'kept'],

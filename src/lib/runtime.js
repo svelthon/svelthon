@@ -629,8 +629,15 @@ function installMutationTracking($B) {
         // The marker is checked first on purpose: this runs on every method
         // call in the program, and an unwatched object must pay one property
         // miss, not a set lookup.
-        const followed =
-            obj !== null && typeof obj === 'object' && MARKS.has(obj) && FOLLOWED.has(attr);
+        let followed = obj !== null && typeof obj === 'object' && MARKS.has(obj) && FOLLOWED.has(attr);
+        let target = obj;
+
+        // `super().append(value)`: the method is looked up on a `super`
+        // object, and the container it changes is that object's `__self__`.
+        if (!followed && obj !== null && typeof obj === 'object' && obj.ob_type === _b_.super && FOLLOWED.has(attr)) {
+            target = obj.obj;
+            followed = target !== null && typeof target === 'object' && MARKS.has(target);
+        }
 
         // `list.append(xs, 2)`, the same mutation as `xs.append(2)` written
         // through the type. The receiver is a class, which carries no marker, so
@@ -671,7 +678,7 @@ function installMutationTracking($B) {
             result = callAttr(obj, attr, ...rest);
             return result;
         } finally {
-            afterCall(obj, attr, result, rest.slice(1));
+            afterCall(target, attr, result, rest.slice(1));
         }
     };
 
@@ -719,6 +726,10 @@ function installMutationTracking($B) {
         // list became reactive afterwards and `add(1)` told nobody, for ever.
         // `afterCall` asks at the call instead, which is the moment that knows.
         if (FOLLOWED.has(attr)) {
+            // The container a method changes: the object itself, or the
+            // `__self__` of a `super` it was read through.
+            const owner = obj.ob_type === _b_.super ? obj.obj : obj;
+
             // Three shapes reach here and only the first is a function. A
             // special method read off a builtin is a `method-wrapper`
             // (`rows.__setitem__`), one read off a type is a
@@ -744,7 +755,7 @@ function installMutationTracking($B) {
                 return onType(attr, call, typeof result === 'function' ? undefined : result);
             }
 
-            if (typeof result === 'function') return notifying(obj, attr, result);
+            if (typeof result === 'function') return notifying(owner, attr, result);
 
             // A method-wrapper stays one, `type()`, `__self__` and `repr()`
             // included, and so does what the export boundary sees of it: only
@@ -758,7 +769,7 @@ function installMutationTracking($B) {
                         out = result.wrapped(target, ...args);
                         return out;
                     } finally {
-                        afterCall(obj, attr, out, args);
+                        afterCall(owner, attr, out, args);
                     }
                 };
 
