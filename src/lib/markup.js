@@ -489,7 +489,21 @@ const blocks = () => /<(script|style)\b([^>]*)>[\s\S]*?(<\/\1\s*>)/gi;
 // never runs: Svelte's parser refuses `<script lang = "python">` with `Expected
 // token >`. Reading wide costs nothing and keeps this from being a second,
 // narrower grammar.
-const PYTHON_LANG = /\slang\s*=\s*(?:"python"|'python'|python(?=[\s/]|$))/;
+//
+// Read as attributes, name and value apart, and not as text: a value is not a
+// name, so `generics="T extends { module: string }"` declares no module and a
+// `lang=python` inside another attribute's value declares no Python.
+const ATTRIBUTE = /([^\s=/>"']+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>"']+)))?/g;
+
+export const attributesOf = (text) => {
+    const found = new Map();
+    for (const [, name, double, single, bare] of text.matchAll(ATTRIBUTE)) {
+        found.set(name.toLowerCase(), double ?? single ?? bare ?? true);
+    }
+    return found;
+};
+
+const declaresPython = (text) => attributesOf(text).get('lang') === 'python';
 
 // Where a file's Python script block begins and how it is closed, or `null` for
 // a file that declares none.
@@ -505,7 +519,7 @@ export function pythonScript(content) {
     let block;
 
     for (const found = blocks(); (block = found.exec(content)); ) {
-        if (block[1].toLowerCase() === 'script' && PYTHON_LANG.test(block[2])) {
+        if (block[1].toLowerCase() === 'script' && declaresPython(block[2])) {
             return { index: block.index, closing: block[3] };
         }
     }
@@ -2150,15 +2164,30 @@ export const withoutComments = (content) =>
 // The markup alone, for a reading of what only the markup holds: an option, a
 // directive. The comments go, and so do the bodies of scripts and styles, whose
 // `'<svelte:options …>'` is a string, blanked like the rest so offsets hold.
+//
+// And a tag quoted in an attribute or an expression, `title='<svelte:options …>'`,
+// is text: a quoted string holding a `<`, inside a tag or a `{…}`, is blanked.
+// A real option's value never holds one.
+const blank = (text) => text.replace(/[^\n]/g, ' ');
+const QUOTED_TAG = /"[^"]*<[^"]*"|'[^']*<[^']*'/g;
+
 export const markupOnly = (content) =>
-    withoutComments(content).replace(
-        /(<(script|style)\b[^>]*>)([\s\S]*?)(<\/\2\s*>)/gi,
-        (_, open, name, body, close) => open + body.replace(/[^\n]/g, ' ') + close
-    );
+    withoutComments(content)
+        .replace(
+            /(<(script|style)\b[^>]*>)([\s\S]*?)(<\/\2\s*>)/gi,
+            (_, open, name, body, close) => open + blank(body) + close
+        )
+        .replace(
+            /<[a-zA-Z][^\s/>]*(?:\s+[^\s=/>"']+(?:\s*=\s*(?:"[^"]*"|'[^']*'|\{[^{}]*\}|[^\s>"']+))?)*\s*\/?>|\{[^{}]*\}/g,
+            (found) => found.replace(QUOTED_TAG, blank)
+        );
 
 // Found by `blocks()`, as the Python block is, which steps over a `<style>`
 // whole: a `<script module>` quoted in a stylesheet is not the module.
-const MODULE_ATTRIBUTE = /\b(?:module|context=["']module["'])/i;
+const declaresModule = (text) => {
+    const attributes = attributesOf(text);
+    return attributes.has('module') || attributes.get('context') === 'module';
+};
 
 export function moduleScript(content) {
     const text = withoutComments(content);
@@ -2167,7 +2196,7 @@ export function moduleScript(content) {
     for (const found = blocks(); (block = found.exec(text)); ) {
         // The whole element, attributes included: `lang="ts"` says how its
         // content parses.
-        if (block[1].toLowerCase() === 'script' && MODULE_ATTRIBUTE.test(block[2])) return block[0];
+        if (block[1].toLowerCase() === 'script' && declaresModule(block[2])) return block[0];
     }
 
     return null;

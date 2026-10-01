@@ -3834,8 +3834,6 @@ export function pyExport(value, where, lineOffset = 0) {
     // `ob_type`, which no instance and no dict does.
     if (pyClass(value)) return value;
 
-    const pairs = pyEntries(value);
-
     // Each value for what it is, rather than the whole dict for what its
     // neighbours are. The adaptation used to be all-or-nothing — every key a
     // function, or none of them wrapped — so writing `"version": 1` beside a
@@ -3860,9 +3858,23 @@ export function pyExport(value, where, lineOffset = 0) {
     // branch, which is the second site that writes a mapping out, did not ask
     // it. That pair is named a few lines down for `propertyName`; this is the
     // other half of the same split.
-    const mapping = globalThis.__BRYTHON__.is_dict(value) || plainObject(value);
+    //
+    // Decided before anything is read: an object of a class of its own is
+    // handed over as it is, its accessors untouched, and a JavaScript literal
+    // shows whether it holds a callable in its descriptors, so its getters run
+    // once, in the walk that keeps what they give.
+    const isDict = globalThis.__BRYTHON__.is_dict(value);
 
-    if (mapping && pairs.some(([, one]) => callable(one))) {
+    if (!isDict && !plainObject(value)) return plainData(value, undefined, pyHandler);
+
+    const holdsCallable = isDict
+        ? pyEntries(value).some(([, one]) => callable(one))
+        : Object.values(Object.getOwnPropertyDescriptors(value)).some(
+              (one) => one.enumerable && 'value' in one && callable(one.value)
+          );
+
+    if (holdsCallable) {
+        const pairs = pyEntries(value);
         const out = {};
 
         // A WeakMap and not a `new Set()`, which is how the other rule is asked
