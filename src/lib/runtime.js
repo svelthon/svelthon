@@ -1567,9 +1567,11 @@ function adopt(value) {
     // three neighbouring cases at once: an uninitialised slot has no property
     // and is skipped, an inherited slot is stored here like any other, and
     // nothing goes through `$getattr`, so no property getter of the author's is
-    // run by the act of watching. Arrays are stepped over because their keys are
-    // their indices, and a long list would pay for a scan that cannot match.
-    if (!Array.isArray(value)) {
+    // run by the act of watching. An array is scanned only when its class
+    // declares slots: a plain list's keys are its indices, and a long one would
+    // pay for a scan that cannot match, but `class Rows(list)` with `__slots__`
+    // keeps its slots on the array beside the elements.
+    if (!Array.isArray(value) || declaresSlots(value)) {
         for (const key of Object.keys(value)) {
             if (key.startsWith(SLOT)) inherit(value, value[key]);
         }
@@ -4402,8 +4404,8 @@ function watchReset() {
                 const inputs = [...form.elements].filter((one) => RESETS.has(one));
 
                 // The group each input belongs to, read *before* any of them
-                // writes: the first write re-renders, which hands the others a
-                // new list, and the rebuild below needs one key per group.
+                // writes: the first write re-renders, and the rebuild below
+                // needs the groups as they were when the form was reset.
                 const groups = new Map(inputs.map((one) => [one, one.$svelthonGroup]));
                 const rebuilt = new Map();
 
@@ -4418,18 +4420,45 @@ function watchReset() {
     );
 }
 
-// Which group an input belongs to, in a design that gives the group no identity
-// of its own. Three things, and each one alone is wrong:
+// Which group an input belongs to: the target its binding writes. Three things,
+// and each one alone is wrong:
 //
 //   the instance   two instances of one component share the binding text, and
 //                  may share the list they were handed
 //   the binding    `left = shared` and `right = shared` are two bindings on one
 //                  list, in one instance
-//   the list       the rows of an `{#each}` are one binding and one group each
+//   the row        the rows of an `{#each}` are one binding and one target
+//                  each, told apart by the template names the binding mentions
+//
+// The list a target currently holds is not one of them: two rows handed one
+// default list are still two targets, and keying on the list merged them.
 //
 // The first two are stable for the life of the component, so they are folded
-// into a token here and the list is the key the rebuild uses.
+// into a token here; `targetOf` adds the row.
 const GROUPS = new WeakMap();
+
+// One object per distinct tuple of mentioned values, so the same row answers the
+// same target on every render. Objects are held weakly: a row removed from the
+// list is not kept alive by the inputs it used to have.
+function targetOf(token, where) {
+    let level = (token.targets ??= { weak: new WeakMap(), strong: new Map() });
+
+    for (const one of where) {
+        const table = one !== null && (typeof one === 'object' || typeof one === 'function')
+            ? level.weak
+            : level.strong;
+        let next = table.get(one);
+
+        if (next === undefined) {
+            next = { weak: new WeakMap(), strong: new Map() };
+            table.set(one, next);
+        }
+
+        level = next;
+    }
+
+    return level;
+}
 
 function groupToken(scope, binding) {
     // No scope to share a token through: a token of its own, the one shape the
@@ -4454,9 +4483,11 @@ function groupToken(scope, binding) {
     return token;
 }
 
-export function group(node, [current, write, chosen, binding, scope]) {
+export function group(node, [current, write, chosen, binding, scope, where = []]) {
     const boxes = node.type === 'checkbox';
     const token = groupToken(scope, binding);
+
+    node.$svelthonGroup = targetOf(token, where);
 
     // `undefined` now means one thing only: the tag's value is static text, so
     // the node holds it and nothing can move it. Everything an author wrote as
@@ -4483,12 +4514,11 @@ export function group(node, [current, write, chosen, binding, scope]) {
     (token.nodes ??= new Set()).add(node);
     node.$svelthonValue = value;
 
-    // **And the list is the third half of the identity**, which the reset path
-    // has always known and this did not: the token is the instance and the
-    // binding, and inside one `{#each}` every row shares both. Collecting on
-    // the token alone gathered the whole loop, so ticking a box on the second
-    // row wrote the first row's selection into it as well — a form recording
-    // choices the reader never made for that item.
+    // **And the row is the third half of the identity**: the token is the
+    // instance and the binding, and inside one `{#each}` every row shares both.
+    // Collecting on the token alone gathered the whole loop, so ticking a box
+    // on the second row wrote the first row's selection into it as well — a
+    // form recording choices the reader never made for that item.
     const inOrder = () =>
         [...token.nodes]
             .filter((one) => one.isConnected && one.$svelthonGroup === node.$svelthonGroup)
@@ -4575,23 +4605,15 @@ export function group(node, [current, write, chosen, binding, scope]) {
     // that came back empty writes absence rather than nothing at all, so a group
     // whose inputs carry no `checked` reaches Python as None instead of keeping
     // the answer the reset just threw away.
-    const restored = (rebuilt, held) => {
+    const restored = (rebuilt, target) => {
         if (!boxes) return write(node.checked ? value() : NONE);
 
-        // Which inputs belong together: the token is the instance and the
-        // binding, the list is the third half — see `groupToken`.
-        let lists = rebuilt.get(token);
-
-        if (lists === undefined) {
-            lists = new Map();
-            rebuilt.set(token, lists);
-        }
-
-        let kept = lists.get(held);
+        // Which inputs belong together: the target, see `groupToken`.
+        let kept = rebuilt.get(target);
 
         if (kept === undefined) {
             kept = [];
-            lists.set(held, kept);
+            rebuilt.set(target, kept);
         }
 
         // The list is built one control at a time here, and not read off the
@@ -4604,15 +4626,14 @@ export function group(node, [current, write, chosen, binding, scope]) {
         write(__pybridge.list([...kept]));
     };
 
-    node.$svelthonGroup = current;
     node.addEventListener('change', changed);
     RESETS.set(node, restored);
     watchReset();
     show(current);
 
     return {
-        update([next, , given]) {
-            node.$svelthonGroup = next;
+        update([next, , given, , , moved = []]) {
+            node.$svelthonGroup = targetOf(token, moved);
             picked = given;
             show(next);
         },

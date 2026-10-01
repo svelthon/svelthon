@@ -1552,25 +1552,26 @@ function walk(markup, collect, onPython, seed, record, where) {
         region = outer;
 
         // And the binding itself, as the author wrote it. The action needs to
-        // know which inputs belong together when a form reset rebuilds a group,
-        // and this design deliberately gives the group no identity of its own:
-        // the first answer was the Python list they all hold, which is the one
-        // thing they share. Two bindings may hold one list — `left = shared`,
-        // `right = shared` — and sharing a value is not sharing a binding, so a
-        // reset moved a value from one group into the other.
+        // know which inputs belong together. Two bindings may hold one list —
+        // `left = shared`, `right = shared` — and sharing a value is not sharing
+        // a binding, so the list they hold is not what identifies a group.
         //
-        // The text alone would merge the rows of an `{#each}`, which are one
-        // binding and many groups; the list alone merges two bindings over one
-        // list. The pair separates both.
         // And the instance, as its namespace. Two *instances* of one component
         // have the same binding text and may have been handed the same list —
         // `selected = initial`, with one empty list passed to both — so neither
         // of the two halves above tells them apart, and a reset merged their
         // groups. The namespace is the thing every element of one instance
         // shares and no other instance has.
+        //
+        // And the template names the binding mentions, which are what tell the
+        // rows of an `{#each}` apart: `row.picked` is one target per `row`.
+        // The list the row holds cannot stand in for them, since two rows may
+        // be handed one default list and are still two targets.
+        const where = mentioned(expr.trim());
+
         return (
             `use:${GROUP_ACTION}={[${read}, (${BOUND_VALUE}) => ${write}, ${value}, ` +
-            `${JSON.stringify(expr.trim())}, ${NAMESPACE}]}`
+            `${JSON.stringify(expr.trim())}, ${NAMESPACE}, [${where.join(', ')}]]}`
         );
     };
 

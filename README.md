@@ -77,7 +77,7 @@ rest of that configuration and what each line buys.
 npm install
 npm run dev
 
-npm test             # 1 401 tests: semantics, props, reactivity, Svelte surface
+npm test             # 1 406 tests: semantics, props, reactivity, Svelte surface
 npm run test:quiet   # the suite's own output: a green run must say nothing
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
@@ -1463,7 +1463,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 1 401 tests as written (vitest reports more, one per
+Validated by `npm test`, 1 406 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;

@@ -1,16 +1,11 @@
 // **Two rows of one form are two groups.**
 //
 // A group is identified by three things and not two: the component instance,
-// the text of the binding, and **the list itself**. Inside an `{#each}` every
-// row shares the first two, so a registry keyed on those alone gathers the
-// whole loop: ticking a box on the second row wrote the first row's selection
-// into it as well, and a form recorded choices the reader never made for that
-// item.
-//
-// The reset path has known the third half for as long as it has had its comment
-// — *the token is the instance and the binding, the list is the third half* —
-// and the change path, rebuilt the day before to fix the ordering, did not ask
-// it. One rule, two sites, and only one of them learned.
+// the text of the binding, and **the row**. Inside an `{#each}` every row
+// shares the first two, so a registry keyed on those alone gathers the whole
+// loop: ticking a box on the second row wrote the first row's selection into it
+// as well, and a form recorded choices the reader never made for that item.
+// `group-shared-default.test.js` covers rows that hold one list.
 import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import GroupRows from './fixtures/GroupRows.svelte';

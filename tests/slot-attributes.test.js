@@ -19,6 +19,7 @@ import { mount, flushSync } from './mounted.js';
 import { plainData } from '../src/lib/runtime.js';
 import SlotBox from './fixtures/SlotBox.svelte';
 import AttrBox from './fixtures/AttrBox.svelte';
+import ListSlotBox from './fixtures/ListSlotBox.svelte';
 
 const setup = (Component) => {
     const target = document.body.appendChild(document.createElement('div'));
@@ -60,6 +61,19 @@ describe.for([
 
         expect(read('index')).toBe('1');
     });
+});
+
+// A list subclass is an array, and the walk stepped over arrays when it looked
+// for slots, since a plain list's keys are its indices. The slot sits on the
+// array beside them, so the list it held changed and the page kept `0`.
+test('a slot of a list subclass repaints what reads it', () => {
+    const { read, bump } = setup(ListSlotBox);
+
+    expect(read('rows')).toBe('0');
+
+    bump();
+
+    expect(read('rows')).toBe('1');
 });
 
 // The other half, and it did not follow from the first: repairing the watch left
