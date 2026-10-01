@@ -61,6 +61,30 @@ describe('a rune written below the top level', () => {
         expect(script(`enabled = False\n${body}`)).toThrow(new RegExp(`${spelling.replace(/[()]/g, '\\$&')} is only read there`));
     });
 
+    // A rune or `@export` on a name already declared would be dropped: the
+    // first declaration decides what a name is. Refused, at the marker's line.
+    test.for([
+        ['@derived after an assignment', 'total = 0\n\n@derived\ndef total():\n    return 1\n', '`@derived`', 3],
+        ['@effect after a def', 'def watch():\n    pass\n\n@effect\ndef watch():\n    pass\n', '`@effect`', 4],
+        ['@export after an assignment', 'answer = None\n\n@export\ndef answer():\n    return 42\n', '`@export`', 3],
+        ['the arrow after an assignment', 'n = 1\ntotal = 0\ntotal => n * 2\n', '`derived()`', 3],
+        ['export() after an assignment', 'answer = None\nanswer = export(lambda: 42)\n', '`export()`', 2]
+    ])('and is refused on a name already declared: %s', ([, body, spelling, line]) => {
+        let error;
+        try {
+            script(body)();
+        } catch (thrown) {
+            error = thrown;
+        }
+
+        expect(error?.message).toContain(`${spelling} would be read on a name the first declaration has decided`);
+        expect(error?.message).toContain(`src/Probe.svelte:${line})`);
+    });
+
+    test('while a plain reassignment of a declared name is untouched', () => {
+        expect(script('n = 1\n\n@derived\ndef total():\n    return n\n\nn = 2\n')).not.toThrow();
+    });
+
     test('but the top level itself is untouched', () => {
         expect(script('@effect\ndef top():\n    pass\n')).not.toThrow();
         expect(script('n = 0\n\n\ndoubled => n * 2\n')).not.toThrow();

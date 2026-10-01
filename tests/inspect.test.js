@@ -2,6 +2,33 @@ import { test, expect, describe, vi, afterEach } from 'vitest';
 import { createRequire } from 'node:module';
 import { mount, flushSync } from './mounted.js';
 import Inspect from './fixtures/Inspect.svelte';
+import InspectWithCounts from './fixtures/InspectWithCounts.svelte';
+
+// The values and the logger are two roles Svelte evaluates apart:
+// `$inspect(read_value()).with(make_logger())` reads the value twice on mount
+// and makes the logger once, then as many again after a change. The same here,
+// and the same records.
+test('inspect_with evaluates its values and its logger as Svelte does', () => {
+    globalThis.__inspectRecords = [];
+    globalThis.__inspectReads = [];
+    globalThis.__inspectLoggers = [];
+    const target = document.body.appendChild(document.createElement('div'));
+    mount(InspectWithCounts, { target });
+    flushSync();
+
+    expect(Array.from(globalThis.__inspectReads)).toEqual([0, 0]);
+    expect(Array.from(globalThis.__inspectLoggers)).toEqual(['made']);
+
+    target.querySelector('button[data-k="bump"]').click();
+    flushSync();
+
+    expect(Array.from(globalThis.__inspectReads)).toEqual([0, 0, 1, 1]);
+    expect(Array.from(globalThis.__inspectLoggers)).toEqual(['made', 'made']);
+    expect(globalThis.__inspectRecords.map((row) => Array.from(row))).toEqual([
+        ['init', 0],
+        ['update', 1]
+    ]);
+});
 
 // `inspect(count, message)` is a console.log that reruns on its own — Svelte's
 // `$inspect`, whose production build drops it entirely.

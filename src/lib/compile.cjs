@@ -877,6 +877,32 @@ const ARROW_EFFECT = /^=>\s*(\S[\s\S]*)$/;
 // the same rule and told apart by the name alone.
 const INSPECT = /^inspect(_with)?\s*\((\s*\S[\s\S]*)\)\s*$/;
 
+// The first argument of a call's text and the rest, split at the first comma
+// outside brackets and strings.
+function firstArgument(text) {
+    let depth = 0;
+    let quote = null;
+
+    for (let i = 0; i < text.length; i++) {
+        const char = text[i];
+
+        if (quote !== null) {
+            if (char === '\\') i++;
+            else if (text.startsWith(quote, i)) {
+                i += quote.length - 1;
+                quote = null;
+            }
+        } else if (char === '"' || char === "'") {
+            quote = text.startsWith(char.repeat(3), i) ? char.repeat(3) : char;
+            i += quote.length - 1;
+        } else if ('([{'.includes(char)) depth++;
+        else if (')]}'.includes(char)) depth--;
+        else if (char === ',' && depth === 0) return [text.slice(0, i).trim(), text.slice(i + 1).trim()];
+    }
+
+    return [text.trim(), ''];
+}
+
 // `value: str <=>`, a prop that also travels back up, and the fourth of the
 // dialect's bindings. They are one system, built around the same sign, and what
 // surrounds it says which:
@@ -1008,10 +1034,16 @@ function takeArrows(src, where, lineOffset, allowed) {
         }
 
         if (!found && !watched && !both) out.push(line);
-        else if (watched)
+        else if (watched && watched[1]) {
+            // `inspect_with(logger, *values)`: two roles Svelte evaluates apart,
+            // the values when it inspects and the logger when it logs. So two
+            // lambdas, handed over as a pair that costs nothing to build.
+            const [logger, values] = firstArgument(watched[2]);
             out.push(
-                `__inspect_${anonymous++} = inspect${watched[1] || ''}(lambda: [${watched[2]}])`
+                `__inspect_${anonymous++} = inspect_with(lambda: (lambda: [${values}], lambda: ${logger}))`
             );
+        } else if (watched)
+            out.push(`__inspect_${anonymous++} = inspect(lambda: [${watched[2]}])`);
         else if (both) out.push(`${both[1]} = bindable(${both[2] || ''})`);
         else if (named) out.push(`${found[1]} = derived(lambda: ${expression})`);
         // The generated name is bound like any other effect's, so it stays out
@@ -1589,6 +1621,28 @@ function refuseReserved(reserved, source, lines, lineOffset = 0) {
     );
 }
 
+// A rune or `@export` on a name already declared: the first declaration decides
+// what the name is, so the marker would be dropped. Said at its line, with the
+// line that took the name.
+function refuseRemarked(remarked, source, lines, lineOffset = 0) {
+    const [found] = remarked;
+
+    if (found === undefined) return;
+
+    const first = lines?.get(found.name);
+    const line = found.line + lineOffset;
+
+    throw refuse(
+        `svelthon — \`${found.name}\` is already declared` +
+            (first === undefined ? '' : ` at line ${first + lineOffset}`) +
+            `, and \`${found.spelling}\` would be read on a name the first declaration ` +
+            `has decided (${source}:${line}). A name carrying a rune or \`@export\` is ` +
+            `declared once: drop the earlier one, or rename one of the two.`,
+        source,
+        line
+    );
+}
+
 const injections = (declared, component, names) =>
     INJECTED.filter((one) => injectable(one, declared, component, names)).map(
         (one) => `__bind(__proto, '${one.name}', ${one.value});`
@@ -1704,6 +1758,9 @@ function refuseNestedRunes(body, source, lineOffset) {
 // the module. Both are read off the AST, and neither is state.
 const DIRECTIVES = new Set(['__all__', '__js__']);
 
+// The calls that declare what a name is, in their call spelling.
+const MARKERS = ['derived', 'effect', 'inspect', 'inspect_with', 'export'];
+
 function surface(body) {
     const props = [];
     const bindables = [];
@@ -1718,6 +1775,11 @@ function surface(body) {
     // still *declared*, and the locked-name check has to see them, otherwise
     // redefining `export` would be the one silent case left.
     const reserved = [];
+
+    // A rune or `@export` on a name the module already declared, with the line
+    // it is written on. The first declaration decides what a name is, so the
+    // marker would be read and dropped; it is refused instead.
+    const remarked = [];
 
     // Every name the module binds, whatever the spelling, and *only* to be
     // recognised as taken.
@@ -1888,6 +1950,11 @@ function surface(body) {
                         continue;
                     }
 
+                    const called = MARKERS.find((one) => isCallTo(node, one));
+                    if (called !== undefined && seen.has(target.id)) {
+                        remarked.push({ name: target.id, spelling: `${called}()`, line: node.lineno });
+                    }
+
                     if (!take(target.id)) continue;
 
                     bind(target.id);
@@ -1934,6 +2001,14 @@ function surface(body) {
                 node instanceof $B.ast.AsyncFunctionDef
             ) {
                 bind(node.name);
+
+                const decorated = decoratorSpelling(node) ?? (hasDecorator(node, 'export') ? '@export' : null);
+                if (decorated !== null && seen.has(node.name)) {
+                    // The decorator's own line: it is the marker being refused.
+                    const line = Math.min(node.lineno, ...node.decorator_list.map((one) => one.lineno));
+                    remarked.push({ name: node.name, spelling: decorated, line });
+                }
+
                 if (!take(node.name)) continue;
 
                 // @derived turns a function into a value: Python reads the name and
@@ -2019,7 +2094,7 @@ function surface(body) {
     globals(body);
     walruses(body);
 
-    return { props, bindables, state, funcs, deriveds, effects, inspects, reserved, bound, lines };
+    return { props, bindables, state, funcs, deriveds, effects, inspects, reserved, bound, lines, remarked };
 }
 
 // The modules the source imports, `import x` and `from x import y` alike.
@@ -2695,7 +2770,7 @@ function effectBlocks(c) {
         // value read late is the value read early.
         ...c.inspects.map((i) =>
             i.logger
-                ? `$inspect(...__invoke(${fn(i.name)}).slice(1)).with((...a) => __event(__invoke(${fn(i.name)})[0])(...a));`
+                ? `$inspect(...__invoke(__invoke(${fn(i.name)})[0])).with((...a) => __event(__invoke(__invoke(${fn(i.name)})[1]))(...a));`
                 : `$inspect(...__invoke(${fn(i.name)}));`
         ),
         // A root outlives the component and reads the same names, so the
@@ -3067,7 +3142,7 @@ function compile(
         $B.id_counter(counter);
         $B.lambda_magic = tag;
     }
-    let { props, bindables, state, funcs, deriveds, effects, inspects, reserved, bound, lines } =
+    let { props, bindables, state, funcs, deriveds, effects, inspects, reserved, bound, lines, remarked } =
         surface(root._ast.body);
 
     // Neither a store nor a plain module has a parent, so an annotation there
@@ -3191,6 +3266,7 @@ function compile(
 
     refuseLocked([...declared, ...reserved], !plain && !store, source, lines, lineOffset);
     refuseReserved(reserved, source, lines, lineOffset);
+    refuseRemarked(remarked, source, lines, lineOffset);
     refuseNestedRunes(root._ast.body, source, lineOffset);
 
     // Functions by default, what a framework calls by name. A module that wants
