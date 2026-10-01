@@ -327,16 +327,48 @@ const writesAll = (node) => {
 
 const COMPREHENSIONS = ['ListComp', 'SetComp', 'DictComp', 'GeneratorExp'];
 
+// The builtins that read a list and keep nothing of it: given `__all__`, they
+// cannot change it behind the compiler's back.
+const READS_ONLY = new Set([
+    'len', 'list', 'tuple', 'sorted', 'set', 'frozenset', 'iter', 'enumerate', 'reversed',
+    'str', 'repr', 'print', 'any', 'all', 'min', 'max', 'sum', 'zip'
+]);
+
+// Whether a read of `__all__` keeps the list where the compiler sees it. Handed
+// on, `names = __all__` or `list.clear(__all__)`, it can be changed by what no
+// static reading follows.
+const keepsAll = (parent, grand, node) =>
+    (parent instanceof $B.ast.Attribute && grand instanceof $B.ast.Call && grand.func === parent) ||
+    (parent instanceof $B.ast.Subscript && parent.value === node) ||
+    parent instanceof $B.ast.Compare ||
+    parent instanceof $B.ast.BinOp ||
+    parent instanceof $B.ast.Starred ||
+    parent instanceof $B.ast.FormattedValue ||
+    parent instanceof $B.ast.Expr ||
+    ((parent instanceof $B.ast.For || parent instanceof $B.ast.AsyncFor || parent instanceof $B.ast.comprehension) &&
+        parent.iter === node) ||
+    (COMPREHENSIONS.some((one) => parent instanceof $B.ast[one]) && parent.generators[0].iter === node) ||
+    (parent instanceof $B.ast.Call &&
+        parent.func instanceof $B.ast.Name &&
+        READS_ONLY.has(parent.func.id) &&
+        parent.args.includes(node));
+
 // Every place the source writes `__all__`, with the line of the statement it
 // is in and the scope its value is evaluated in: a `def`, a `class`, a lambda
 // or a comprehension, or null for the module. What Python evaluates where the
 // definition stands, a default, a decorator, an annotation, a base, a
 // comprehension's first iterable, belongs to the enclosing scope, as it does
 // in Python.
+//
+// And every read that hands the list on, `escapes`, where what is done to it
+// next is out of sight.
 function allWrites(ast) {
     const found = [];
     const seen = new Set();
     const is = (node, ...names) => names.some((one) => node instanceof $B.ast[one]);
+    // The node being visited and its parent, so a read knows where it stands.
+    let parent = null;
+    let grand = null;
 
     const visit = (node, scope, line) => {
         if (node === null || typeof node !== 'object' || seen.has(node)) return;
@@ -348,7 +380,20 @@ function allWrites(ast) {
 
         const at = typeof node.lineno === 'number' ? node.lineno : line;
         if (writesAll(node)) found.push({ node, scope, line: at });
+        if (isAll(node) && node.ctx instanceof $B.ast.Load && !keepsAll(parent, grand, node)) {
+            found.push({ node, scope, line: at, escapes: true });
+        }
 
+        const [outer, outerGrand] = [parent, grand];
+        [parent, grand] = [node, parent];
+        try {
+            visitInside(node, scope, at);
+        } finally {
+            [parent, grand] = [outer, outerGrand];
+        }
+    };
+
+    const visitInside = (node, scope, at) => {
         if (is(node, 'FunctionDef', 'AsyncFunctionDef', 'Lambda')) {
             const args = node.args ?? {};
             const params = [...(args.posonlyargs ?? []), ...(args.args ?? []), ...(args.kwonlyargs ?? [])];
@@ -560,13 +605,21 @@ function declaredExports(ast, table, source, lineOffset = 0) {
     // Every other write that reaches the module's `__all__`: under a condition,
     // in a loop, in a function or a class that does not make the name its own,
     // item by item, deleted, or rebound by a loop, an import or a walrus.
-    for (const { node, scope, line: at } of allWrites(ast)) {
+    for (const { node, scope, line: at, escapes } of allWrites(ast)) {
         if (handled.has(node)) continue;
 
         const block = scope === null ? null : table.blockOf(scope);
         if (block !== null && block !== undefined && !isGlobalScope(scopeIn(block, '__all__'))) continue;
 
-        refuseUnreadable({ lineno: at }, 'changed where this file cannot follow it');
+        // A read that hands the list on matters only for a module that has one.
+        if (escapes && names === null) continue;
+
+        refuseUnreadable(
+            { lineno: at },
+            escapes
+                ? 'handed on where this file cannot follow what is done to it; `list(__all__)` is a copy'
+                : 'changed where this file cannot follow it'
+        );
     }
 
     // A name listed twice is exported once: Python allows the repetition, and

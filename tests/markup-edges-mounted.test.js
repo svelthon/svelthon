@@ -16,6 +16,9 @@ test('an option written in a string of a script is left as the author wrote it',
     expect(target.querySelector('[data-k="example"]').textContent).toBe(
         '<svelte:options customElement="quoted-example" />'
     );
+    expect(target.querySelector('[data-k="attribute"]').title).toBe(
+        '<svelte:options customElement="quoted-attribute" />'
+    );
 });
 
 test('comment delimiters inside a script are the author text', () => {

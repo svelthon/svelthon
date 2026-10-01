@@ -8,3 +8,4 @@ level: int = 1
 </script>
 
 <p data-k="example">{example}</p>
+<div data-k="attribute" title='<svelte:options customElement="quoted-attribute" />'>x</div>

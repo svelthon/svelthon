@@ -161,6 +161,14 @@ describe('__all__ is read as the value the module ends with', () => {
         // Reading the list, or a list of that name in a scope of its own, is
         // not a write.
         ['read', '__all__ = ["a"]\nn = __all__.count("a")', ['a']],
+        // A read that keeps the list where the compiler sees it: a copy, a
+        // length, a membership, a loop, a comprehension, a format.
+        [
+            'read without handing it on',
+            '__all__ = ["a"]\ncopy = list(__all__)\ncopy.clear()\nn = len(__all__)\nok = "a" in __all__\n' +
+                'for one in __all__:\n    pass\nnames = [one for one in __all__]\ntext = f"{__all__}"',
+            ['a']
+        ],
         ['a class attribute', 'class C:\n    __all__ = ["x"]\n\n__all__ = ["a"]', ['a']]
     ])('%s', ([, head, names]) => {
         expect(exported(head)).toEqual(names);
@@ -184,6 +192,10 @@ describe('__all__ is read as the value the module ends with', () => {
         ['changed in a default', '__all__ = ["a"]\ndef f(x=__all__.clear()):\n    pass', 2],
         ['popped into a name', '__all__ = ["a", "b"]\nx = __all__.pop()', 2],
         ['rebound by a loop', '__all__ = ["a"]\nfor __all__ in [["b"]]:\n    pass', 2],
+        // Handed on, the list can be changed where no static reading follows.
+        ['handed to a name', '__all__ = ["a"]\nnames = __all__\nnames.clear()', 2],
+        ['handed to a function', '__all__ = ["a"]\nlist.clear(__all__)', 2],
+        ['returned', '__all__ = ["a"]\ndef exports():\n    return __all__', 3],
         // Python raises at import on these: the module never runs past them.
         ['a name removed that is not there', '__all__ = ["a"]\n__all__.remove("z")', 2],
         ['an empty list popped', '__all__ = []\n__all__.pop()', 2]

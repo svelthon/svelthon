@@ -11,7 +11,8 @@ import {
     pythonExpressions,
     pythonRanges,
     collector,
-    directiveModules
+    directiveModules,
+    pythonScript
 } from '../src/lib/markup.js';
 // Moved out of markup.js: what a `<script module>` declares is a JavaScript
 // question, and Svelte's parser is the thing that owns that grammar.
@@ -456,6 +457,31 @@ describe('a declaration in a string of a script', () => {
 
     test('and names no directive module', () => {
         expect(directiveModules(quoted('<p in:old.fade>a</p>') + '<p in:fx.fade>a</p>')).toEqual(['fx']);
+    });
+
+    test('nor does one quoted in an attribute or an expression', () => {
+        const option = '<svelte:options customElement="my-tag" />';
+        expect(compileOptionsFor(`<div title='${option}'>x</div>`)).toBeUndefined();
+        expect(compileOptionsFor(`<p>{'${option}'}</p>`)).toBeUndefined();
+    });
+});
+
+// A script's attributes are read as names and values: a value is not a name.
+describe('the attributes that select a script', () => {
+    test('a word module inside another attribute does not make the module script', () => {
+        const source =
+            '<script lang="python" generics="T extends { module: string }">\nx = 1\n</script>\n' +
+            "<script module>\n    const shared = 'ok';\n</script>";
+
+        expect(moduleImports(source)).toEqual(['shared']);
+    });
+
+    test('lang=python inside another attribute does not make a Python script', () => {
+        expect(pythonScript('<script title="lang=python">\nconst x = 1;\n</script>')).toBeNull();
+    });
+
+    test('control: context="module" still does', () => {
+        expect(moduleImports("<script context=\"module\">\n    const shared = 'ok';\n</script>")).toEqual(['shared']);
     });
 });
 
