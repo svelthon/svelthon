@@ -2951,41 +2951,6 @@ function shallow(value) {
 // went on rendering correctly while `round(x, 1)` raised. The copy is built on
 // the first replacement and not before, so the common case, a transition dict of
 // plain numbers, allocates nothing.
-// The outer half of a configuration's callback: the adapter, plus the arguments
-// converted on the way in, which is what a framework calling with raw numbers
-// needs and what `pyHandler` alone does not do.
-//
-// Memoised on the adapter it wraps, because **the function a consumer sees is
-// this one**. `pyHandler` hands back a stable wrapper and this layer built a
-// fresh one at every conversion, so a component read twice gave two JavaScript
-// functions for one Python callback and a registry could not remove what it had
-// been given. The cache inside does not settle identity if the value published
-// is a new object wrapped around it.
-//
-// A WeakMap, so nothing here keeps a component's callbacks alive.
-const CONVERTED = new WeakMap();
-
-function converting(wrapped) {
-    let known = CONVERTED.get(wrapped);
-
-    if (known === undefined) {
-        // Named after what it wraps, like the other wrappers in this file: a
-        // callback a framework keeps is exactly the one somebody logs.
-        known = identified((...args) => wrapped(...args.map(inbound)), wrapped.name, wrapped.length);
-
-        CONVERTED.set(wrapped, known);
-    }
-
-    return known;
-}
-
-// A callback handed to JavaScript, a member of what an export returns or the
-// whole of it: a Python one adapted, a JavaScript one as it is.
-function callback(one) {
-    const wrapped = pyHandler(one);
-
-    return wrapped === one ? one : converting(wrapped);
-}
 
 export function pyNumbers(value) {
     // `None` itself is a singleton and not a container: walking its own
@@ -3047,7 +3012,7 @@ export function pyNumbers(value) {
             // Told apart by the answer `pyHandler` already gave, rather than by
             // a second predicate: it returns the value itself when there was
             // nothing to adapt.
-            replacement = callback(one);
+            replacement = pyHandler(one);
 
             if (replacement === one) continue;
         } else if (one === NONE) {
@@ -3653,20 +3618,42 @@ export const invoke = (fn) => (typeof fn === 'function' ? fn() : globalThis.__BR
 // Svelte runs when the element goes. Svelte keeps it only when `typeof` says
 // function, so a bound method or a callable instance handed back was dropped and
 // never ran. It goes through `pyTeardown`, the rule an effect's return follows.
+//
+// One function per callable, because Svelte compares the attachment's identity
+// each time the expression runs and tears down and reinstalls on a new one: a
+// fresh wrapper at every evaluation reinstalled an attachment whose function had
+// not changed. The identity is the one `pyHandler` settles — a function, a
+// receiver and its method, an instance — so the two cannot disagree, and it is
+// held weakly.
+const ATTACHED = new WeakMap();
+
 export function pyAttach(value, lineOffset = 0) {
     const found = declared(value);
 
     if (found === null) return __pybridge.bound(value);
 
-    const { fn: called, where, arity } = found;
+    const identity = pyHandler(value);
+    let byOffset = ATTACHED.get(identity);
 
-    return (...args) => {
-        try {
-            return pyTeardown(called(...taken(args, arity)), where, lineOffset);
-        } catch (error) {
-            throw thrown(pyError(error, where, lineOffset));
-        }
-    };
+    if (byOffset === undefined) ATTACHED.set(identity, (byOffset = new Map()));
+
+    let attach = byOffset.get(lineOffset);
+
+    if (attach === undefined) {
+        const { fn: called, where, arity } = found;
+
+        attach = (...args) => {
+            try {
+                return pyTeardown(called(...taken(args, arity)), where, lineOffset);
+            } catch (error) {
+                throw thrown(pyError(error, where, lineOffset));
+            }
+        };
+
+        byOffset.set(lineOffset, attach);
+    }
+
+    return attach;
 }
 
 export function pyTeardown(value, where, lineOffset = 0) {
@@ -3721,9 +3708,19 @@ export function pyHandler(value) {
     // JavaScript function's `length` is anyway.
     if (found.instance) identified(wrapped, wrapped.name, liveArity(value));
 
-    cache.set(key, wrapped);
+    // **The one function published for this callable, at every crossing.** A
+    // JavaScript caller hands raw values, and a framework calling with raw
+    // numbers needs them converted on the way in, beyond the scalars `pyCall`
+    // converts. That conversion used to be a second layer, added by one family
+    // of sites and not the other, so one Python callback was two JavaScript
+    // functions — handed as a prop and inside a config, or to a library and to a
+    // child — and a registry could not remove one through the other. It is part
+    // of the cached wrapper now, so identity is settled here and only here.
+    const published = identified((...args) => wrapped(...args.map(inbound)), wrapped.name, wrapped.length);
 
-    return wrapped;
+    cache.set(key, published);
+
+    return published;
 }
 
 // A receiver Brython keeps as a JavaScript primitive — a `str`, a small `int`,
@@ -4192,7 +4189,7 @@ const running = (call, where, lineOffset, convert = pyNumbers) => {
 // *framework* a transition's options or an action's teardown, so `pyNumbers`
 // and not `plainData`. That difference is why this wrapper exists at all. A
 // callable returned whole is a callback like one returned inside a config.
-const returned = (value) => (callable(value) ? callback(value) : pyNumbers(value));
+const returned = (value) => (callable(value) ? pyHandler(value) : pyNumbers(value));
 
 export const pyComponent = (read, where, lineOffset) => {
     const first = declared(read());

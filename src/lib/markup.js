@@ -1909,7 +1909,17 @@ function walk(markup, collect, onPython, seed, record, where) {
                             const rewritten = walrus(inner);
 
                             refuseMarkupWalrus(rewritten, inner);
-                            out += `{${EVENT_WRAPPER}(${call(rewritten, '', inner)})}`;
+
+                            // On an element it is a DOM handler, whose return
+                            // nobody reads. On a component it is a prop like
+                            // any other, a callback the child may well read the
+                            // answer of, so it crosses as every prop does: one
+                            // published function, its result converted, sync
+                            // or awaited. It still writes, since the child
+                            // calls it on an event.
+                            out += isComponent(tag)
+                                ? `{${call(rewritten, '__bound', inner)}}`
+                                : `{${EVENT_WRAPPER}(${call(rewritten, '', inner)})}`;
                         } else if (CLASS_DIRECTIVE.test(attribute[1])) {
                             out += `{${call(inner, '__truthy')}}`;
                         } else if (wrapperFor(attribute[1], tag)) {
