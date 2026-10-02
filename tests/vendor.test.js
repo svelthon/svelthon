@@ -323,9 +323,6 @@ describe('the vendored Brython carries its repairs', () => {
         expect(String($B.$call)).toContain("search_slot($B.get_class(call_method),'tp_descr_get'");
     });
 
-    // The engine's conversion of a Python value for JavaScript asks Svelthon's
-    // hook first, so a Python callable crosses as `pyHandler` publishes it. A
-    // direct edit: a re-vendoring drops it, and this goes red.
     // The engine's own conversion of a Python callable, behind the hook: a
     // callable instance becomes a function, and a bound method keeps one
     // function per instance and method. The hook answers first in Svelthon, so
@@ -337,9 +334,11 @@ describe('the vendored Brython carries its repairs', () => {
         expect(source).toContain('bound_methods(pyobj.im_self)');
     });
 
-    test('a Python callable handed to JavaScript asks the callback hook', () => {
-        expect(String($B.pyobj2jsobj)).toContain('$B.$python_callback');
-        expect(typeof $B.$python_callback).toBe('function');
+    // The engine's conversion asks a hook first, `pyobj2jsobj-hook`, and
+    // Svelthon sets it so a Python callable crosses as `pyHandler` publishes it.
+    test('a Python callable handed to JavaScript asks the conversion hook', () => {
+        expect(String($B.pyobj2jsobj)).toContain('$B.pyobj2jsobj_hook');
+        expect(typeof $B.pyobj2jsobj_hook).toBe('function');
     });
 
     // The counter the code generator numbers functions with starts at random

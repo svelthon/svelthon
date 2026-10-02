@@ -3677,14 +3677,16 @@ export function pyTeardown(value, where, lineOffset = 0) {
 // `pyHandler`.** Brython converts the arguments of any JavaScript call it makes
 // — a method of a namespace or of an object a library returned or resolved, a
 // constructor through `.new`, a property written, a global like
-// `setTimeout` — with its own `pyobj2jsobj`, whose callback trims nothing,
-// cannot call an instance and is a second identity. Marking the objects that
-// lead there covered one path at a time, and each path left out was the next
-// defect. The vendored engine asks this hook first instead (see BRYTHON_FIX.md),
-// so the conversion has one site and one contract.
+// `setTimeout` — with its own `pyobj2jsobj`, whose callback trims nothing, so
+// a callback that takes no argument raised on the one a library hands it, and
+// which is not the function `pyHandler` publishes for the same callable.
+// Marking the objects that lead there covered one path at a time, and each path
+// left out was the next defect. The engine asks `$B.pyobj2jsobj_hook` first
+// instead, an extension point proposed upstream and vendored (see
+// BRYTHON_FIX.md), so the conversion has one site and one contract.
 //
 // Only a Python callable is answered; anything else goes on to the engine.
-globalThis.__BRYTHON__.$python_callback = (value) => {
+globalThis.__BRYTHON__.pyobj2jsobj_hook = (value) => {
     if (typeof value !== 'function' && (value === null || typeof value !== 'object' || Array.isArray(value))) {
         return undefined;
     }
@@ -3927,7 +3929,7 @@ export function jsCall(value) {
     // capabilities, decided by the way it entered.
     // A namespace, a default export or an object crosses as it is: the
     // functions reached through it are the engine's to call, and the engine
-    // hands Python callables over through `$python_callback`, above `pyHandler`.
+    // hands Python callables over through `pyobj2jsobj_hook`, above `pyHandler`.
     if (typeof value !== 'function') return pyBind(value);
 
     const known = ADAPTED.get(value);

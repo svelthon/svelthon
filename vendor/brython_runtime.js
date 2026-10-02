@@ -12593,11 +12593,14 @@ if(klass===$B.function ||klass===$B.method){if(typeof pyobj=='function' && pyobj
 pyobj.prototype.constructor===pyobj &&
 ! pyobj.$function_infos){
 return pyobj}
+let methods=klass===$B.method ? bound_methods(pyobj.im_self):undefined
+if(methods !==undefined && methods.has(pyobj.im_func)){return methods.get(pyobj.im_func)}
 if(pyobj.$is_async){
 let jsobj=function(){var res=pyobj.apply(null,arguments)
 return $B.coroutine.tp_funcs.send(res)}
 pyobj[JSOBJ]=jsobj
 PYOBJ_MAP.set(jsobj,pyobj)
+methods?.set(pyobj.im_func,jsobj)
 return jsobj}
 let jsobj=function(){try{
 var args=new Array(arguments.length)
@@ -12610,8 +12613,24 @@ res=pyobj.im_func.call(this,pyobj.im_self,...args)}}
 return pyobj2jsobj(res)}catch(err){$B.handle_error(err)}}
 pyobj[JSOBJ]=jsobj
 PYOBJ_MAP.set(jsobj,pyobj)
+methods?.set(pyobj.im_func,jsobj)
+return jsobj}
+if(klass !==$B.JSObj && ! $B.$isinstance(pyobj,_b_.type)&&
+_b_.callable(pyobj)){
+let jsobj=function(){try{
+var args=new Array(arguments.length)
+for(var i=0;i < arguments.length;++i){args[i]=jsobj2pyobj(arguments[i])}
+return pyobj2jsobj($B.$call(pyobj,...args))}catch(err){$B.handle_error(err)}}
+pyobj[JSOBJ]=jsobj
+PYOBJ_MAP.set(jsobj,pyobj)
 return jsobj}
 return pyobj}
+const BOUND_METHODS=new WeakMap()
+function bound_methods(self){if(self===null ||typeof self !=='object'){return undefined}
+let methods=BOUND_METHODS.get(self)
+if(methods===undefined){methods=new WeakMap()
+BOUND_METHODS.set(self,methods)}
+return methods}
 function convert_to_python(obj){
 if(obj===null ||obj===undefined){return $B.jsobj2pyobj(obj)}
 if(obj.ob_type){

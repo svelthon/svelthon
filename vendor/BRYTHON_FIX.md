@@ -1,16 +1,16 @@
 # Patches applied to the vendored Brython
 
 `brython_runtime.js` and `brython_compiler.js` are cut from one bundle, built
-from Brython's master plus twenty-two proposed commits, with **five** edits made
-in the file itself afterwards. The wrapper, the integer format, the `__call__`
-binding and the callback hook carry a `/* SVELTHON patch, see BRYTHON_FIX.md
-*/` comment, the only way to find them again in 1.4 MB; the other edit *is* a
-comment, so `@vite-ignore` finds itself.
+from Brython's master plus twenty-three proposed commits, with **four** edits
+made in the file itself afterwards. The wrapper, the integer format and the
+`__call__` binding carry a `/* SVELTHON patch, see BRYTHON_FIX.md */` comment,
+the only way to find them again in 1.4 MB; the other edit *is* a comment, so
+`@vite-ignore` finds itself.
 
-**The integer format, the `__call__` binding and the callback hook are edited
-in the built file only**, not in `vendor-base`, so `scripts/vendor-brython.py`
-drops them: re-apply them by hand after a re-vendoring. `tests/vendor.test.js`
-turns red until they are.
+**The integer format and the `__call__` binding are edited in the built file
+only**, not in `vendor-base`, so `scripts/vendor-brython.py` drops them:
+re-apply them by hand after a re-vendoring. `tests/vendor.test.js` turns red
+until they are.
 
 The commits are Brython's own, proposed upstream and carried here while they
 wait, which is what this project has always done rather than hold a fix back:
@@ -36,6 +36,7 @@ wait, which is what this project has always done rather than hold a fix back:
 | `identity-before-equality` | `list.index`, `tuple.index` and `list.remove` compared by equality alone, where `in` and `count` test identity first: `x = float("nan"); [x].index(x)` raised `ValueError`, and so did an object whose `__eq__` answers False. They test identity first now |
 | `nan-is-identity` | `$B.$is` answered True for any two NaN floats, so a container comparing its members by identity-or-equality found two distinct NaNs equal: `(float("nan"),) == (float("nan"),)` and `float("nan") in [float("nan")]` were True where CPython says False. Only the same NaN object is itself now |
 | `kw-bundle-symbol` | a call's keyword arguments travel under a symbol, `$B.KW`, and no longer under a `$kw` key. A JavaScript object passed as an argument and carrying `$kw` was taken for them: `f(obj)` raised `unexpected keyword argument '0'`, `dict(obj)` answered `{'0': 'a'}`, and `tojson(to_js({"$kw": …}))` refused its own argument. No argument can carry a symbol key |
+| `pyobj2jsobj-hook` | an extension point: `pyobj2jsobj` asks `$B.pyobj2jsobj_hook` first, and a result other than `undefined` is the conversion. The engine converts the arguments of every JavaScript call it makes with `pyobj2jsobj`, a local nothing outside can replace, so an application embedding Brython had no way to convert a value itself. Svelthon sets it so a Python callable crosses as `pyHandler` publishes it: trimmed to its arity before anything is read, one identity at every crossing |
 | `callable-instance-to-js` | `pyobj2jsobj` converts an instance of a class defining `__call__` into a JavaScript function, as it does a function and a method. It handed the object over, so `window.call(C())` raised `f is not a function` |
 | `bound-method-js-identity` | `pyobj2jsobj` keeps one JavaScript function per bound method, keyed on its instance and function. A bound method is a new object at each read, and the cache was on that object, so `same(h.run, h.run)` was false and `removeEventListener(h.run)` never removed what `addEventListener(h.run)` added |
 | `json-parse-str-subclass` | `javascript.JSON.parse` reads a subclass of str by its value. It was handed to `JSON.parse` as the object Brython keeps it in, so `JSON.parse(Text('{"answer": 42}'))` raised `"[object Object]" is not valid JSON`. `from_json` is this `parse` |
@@ -69,7 +70,6 @@ endpoint that builds its own `Response`, then returned 500 with
 | the whole file wrapped in `if (!(globalThis.__BRYTHON__ && globalThis.__BRYTHON__.ast))` | a second execution in one process rebuilds `$B.ast`, and the classes the compiler holds lose the `to_js()` the code generator attached |
 | `/* @vite-ignore */` on the two dynamic imports | Brython loads JS modules named from Python with `import(variable)`, which Vite cannot analyse and warns about twice on every dev-server start |
 | the integer format: `preformat` in `int_funcs`, and the `=` branch of `$B.format_width` | CPython's order for an int with a base prefix. The sign comes first, `-0xf` where Brython wrote `0x-f`, and a `0` fill goes after sign and prefix, `0x0f` where Brython wrote `00xf`. Right upstream too, and not yet sent there |
-| `pyobj2jsobj` asks `$B.$python_callback` first | Svelthon's contract for a Python callable handed to JavaScript, `pyHandler`: trimmed to its arity before anything is read, a bound method or callable instance made callable, one identity at every crossing. The engine converts the arguments of every JavaScript call it makes with its own `pyobj2jsobj`, a local the runtime cannot replace from outside, so a namespace member, a constructor through `.new`, an object a promise resolved to, a property written each crossed without the contract. Not upstream: it is Svelthon's rule, not a defect of the engine |
 | `$B.$call`: a `__call__` that is not a function goes through its `__get__` first | CPython's `slot_tp_call`, which binds before it calls. `@classmethod def __call__` gets its class, where Brython raised `object is not callable`; a `@staticmethod` one keeps its answer. Right upstream too, and not yet sent there |
 
 Wrapping the file works because `var` keeps its module scope inside a block, so
@@ -103,7 +103,7 @@ than by a build-time check, and going upstream retires none of them:
 | Behaviour | Turns red |
 |---|---|
 | `qualified_scope_name`, `make_comp`, the tokenizer | `tests/compiler.test.js`, `tests/fidelity.test.js` |
-| the two debug prints, the `PYOBJ` back-reference, `str.find`, the integer format, the `__call__` binding, the callback hook | `tests/vendor.test.js`, and `tests/import-members.test.js` for the hook's behaviour |
+| the two debug prints, the `PYOBJ` back-reference, `str.find`, the integer format, the `__call__` binding, the conversion hook | `tests/vendor.test.js`, and `tests/import-members.test.js` for the hook's behaviour |
 | `convert_to_python` | `tests/from-json.test.js`, where an array that stayed one fails `isinstance(x, list)` |
 | the file wrapper, the two `@vite-ignore` | `tests/vendor.test.js`, the last two tests |
 | the id counter, `$B.id_counter` | `tests/vendor.test.js`, and `tests/compile-determinism.test.js` if it stops holding the output |
