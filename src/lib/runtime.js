@@ -3104,7 +3104,18 @@ const nameOf = (where) => where.split(' — ')[0].replace(/\(\)$/, '');
 // every call boundary owes. The three wrappers below wrote both out, and two of
 // them were missing the second half until an action took a JavaScript number and
 // `format(value, ".2f")` refused it at mount.
-const taken = (args, arity) => args.slice(0, arity).map(pyArg);
+//
+// **Trimmed first, then converted, and only what is passed.** An argument the
+// callable does not take is never read: converting it means asking whether it is
+// awaitable, which reads its `then`, and a payload the callback discards must
+// not be able to fail the call or be observed by it.
+//
+// `arity` is a number, or a function answering it at the call: a callable
+// instance trims against whatever its class holds now, so its arity is a
+// question asked each time, not a number fixed once.
+const arityNow = (arity) => (typeof arity === 'function' ? arity() : arity);
+
+const taken = (args, arity, convert = pyArg) => args.slice(0, arityNow(arity)).map(convert);
 
 // The two own properties every JavaScript function has, told the truth about the
 // Python one behind them.
@@ -3162,14 +3173,14 @@ export function pyDef(read, where, lineOffset = 0) {
     return identified(
         (...args) => pyHandler(read())(...args),
         nameOf(where),
-        first === null ? 0 : first.arity
+        first === null ? 0 : arityNow(first.arity)
     );
 }
 
-export function pyCall(fn, where, lineOffset = 0, arity = Infinity, named) {
+export function pyCall(fn, where, lineOffset = 0, arity = Infinity, named, convert = pyArg) {
     const wrapper = (...args) => {
         try {
-            const given = taken(args, arity);
+            const given = taken(args, arity, convert);
             const result = scheduleAsync(fn(...given), where, lineOffset);
 
             // The result crosses under the same rule as an export, callbacks
@@ -3233,7 +3244,7 @@ export function pyCall(fn, where, lineOffset = 0, arity = Infinity, named) {
     //
     const infos = fn.$function_infos;
 
-    return identified(wrapper, named ?? ((Array.isArray(infos) && infos[2]) || nameOf(where)), arity);
+    return identified(wrapper, named ?? ((Array.isArray(infos) && infos[2]) || nameOf(where)), arityNow(arity));
 }
 
 // What Python really handed over, and what it declares. The layout is Brython's
@@ -3468,18 +3479,14 @@ function declared(value) {
     // already been sliced off. Python answered 5 and the same callback from
     // JavaScript raised about a missing parameter.
     //
-    // So the two halves move together. `Infinity` goes upward, since the wrapper
-    // that would trim is built once, and the trim happens here instead, against
-    // whatever the class holds now. The wrapper's identity is untouched, which is
-    // what a registry that holds a callback needs.
+    // So the two halves move together: the arity goes upward as a question,
+    // asked at each call against whatever the class holds now, and the wrapper
+    // that trims asks it before converting anything. The wrapper's identity is
+    // untouched, which is what a registry that holds a callback needs.
     return {
-        fn: (...args) => {
-            const now = liveArity(value);
-
-            return globalThis.__BRYTHON__.$call(value, ...args.slice(0, now));
-        },
+        fn: (...args) => globalThis.__BRYTHON__.$call(value, ...args),
         where,
-        arity: Infinity,
+        arity: () => liveArity(value),
         origin: fn,
         self,
         // What the author called it, when they called it anything.
@@ -3700,7 +3707,12 @@ export function pyHandler(value) {
 
     if (known !== undefined) return known;
 
-    const wrapped = pyCall(found.fn, found.where, 0, found.arity, found.named ?? undefined);
+    // The arguments a JavaScript caller hands are converted the whole way, which
+    // a framework calling with raw numbers needs beyond the scalars `pyArg`
+    // converts, and only once trimmed to what the callable takes.
+    const wrapped = pyCall(found.fn, found.where, 0, found.arity, found.named ?? undefined, (one) =>
+        pyArg(inbound(one))
+    );
 
     // An instance trims at the call, against whatever its class holds now, so its
     // wrapper announces `Infinity` and would report an arity of 0. What a library
@@ -3708,19 +3720,16 @@ export function pyHandler(value) {
     // JavaScript function's `length` is anyway.
     if (found.instance) identified(wrapped, wrapped.name, liveArity(value));
 
-    // **The one function published for this callable, at every crossing.** A
-    // JavaScript caller hands raw values, and a framework calling with raw
-    // numbers needs them converted on the way in, beyond the scalars `pyCall`
-    // converts. That conversion used to be a second layer, added by one family
-    // of sites and not the other, so one Python callback was two JavaScript
-    // functions — handed as a prop and inside a config, or to a library and to a
-    // child — and a registry could not remove one through the other. It is part
-    // of the cached wrapper now, so identity is settled here and only here.
-    const published = identified((...args) => wrapped(...args.map(inbound)), wrapped.name, wrapped.length);
+    // **The one function published for this callable, at every crossing.** The
+    // conversion of what a JavaScript caller hands used to be a second layer,
+    // added by one family of sites and not the other, so one Python callback was
+    // two JavaScript functions — handed as a prop and inside a config, or to a
+    // library and to a child — and a registry could not remove one through the
+    // other. It is the conversion `pyCall` applies now, after trimming, so
+    // identity is settled here and only here.
+    cache.set(key, wrapped);
 
-    cache.set(key, published);
-
-    return published;
+    return wrapped;
 }
 
 // A receiver Brython keeps as a JavaScript primitive — a `str`, a small `int`,
@@ -4208,7 +4217,7 @@ export const pyComponent = (read, where, lineOffset) => {
             );
         },
         nameOf(where),
-        first === null ? 0 : first.arity
+        first === null ? 0 : arityNow(first.arity)
     );
 };
 
@@ -4452,7 +4461,7 @@ function directiveCallable(member, path) {
             (...args) =>
                 running(() => called(...taken(args, arity)), where, undefined, (value) => directiveResult(value, where)),
             nameOf(where),
-            arity
+            arityNow(arity)
         );
 
         directives.set(member, wrapped);
