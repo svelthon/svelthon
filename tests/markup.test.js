@@ -821,8 +821,19 @@ describe('the attribute pass', () => {
     });
 
     test('a shorthand attribute keeps its name and gains a value', () => {
-        expect(rewrite('<input {value} />').out).toMatch(/value=\{__expr_\d+\(\)\}/);
+        expect(rewrite('<input {value} />').out).toMatch(/value=\{__expr_scalar_\d+\(\)\}/);
     });
+
+    // And it compiles to exactly what the long spelling does.
+    test.for(['<input {value} />', '<a {href}>x</a>', '<button {onclick}>x</button>', '<Child {oncalculate} />', '<Child {cb} />'])(
+        'the shorthand %s compiles as its long spelling',
+        (short) => {
+            const name = short.match(/\{(\w+)\}/)[1];
+            const long = short.replace(`{${name}}`, `${name}={${name}}`);
+
+            expect(rewrite(short).out).toBe(rewrite(long).out);
+        }
+    );
 
     // Three attribute kinds that are not expressions. Two of them were compiled
     // as if they were, and each failure lands in someone else's compiler with a

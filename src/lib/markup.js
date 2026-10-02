@@ -1729,6 +1729,48 @@ function walk(markup, collect, onPython, seed, record, where) {
         }
     };
 
+    // What an attribute's value compiles to, by its name and the tag it is on.
+    // One place, for both spellings: `onclick={onclick}` and `{onclick}` are
+    // one attribute, and the shorthand had a decision of its own that knew only
+    // the truth-read wrappers, so a handler, a callback prop and a None crossed
+    // raw when written the short way.
+    const attributeValue = (name, inner) => {
+        if (HANDLER.test(name)) {
+            // A handler is the one place a template expression is allowed to
+            // write: it runs on an event, not during a render, where Svelte
+            // rejects a write to state, and rightly so.
+            const rewritten = walrus(inner);
+
+            refuseMarkupWalrus(rewritten, inner);
+
+            // On an element it is a DOM handler, whose return nobody reads. On
+            // a component it is a prop like any other, a callback the child may
+            // well read the answer of, so it crosses as every prop does: one
+            // published function, its result converted, sync or awaited. It
+            // still writes, since the child calls it on an event.
+            return isComponent(tag)
+                ? `{${call(rewritten, '__bound', inner)}}`
+                : `{${EVENT_WRAPPER}(${call(rewritten, '', inner)})}`;
+        }
+
+        if (CLASS_DIRECTIVE.test(name)) return `{${call(inner, '__truthy')}}`;
+
+        // `class`, which Svelte hands to `clsx`, and the boolean attributes,
+        // which the DOM reads for truth: both read Python's truth instead.
+        if (wrapperFor(name, tag)) return `{${call(inner, wrapperFor(name, tag))}}`;
+
+        // `href={website}` with nothing to show: None goes out as undefined so
+        // Svelte drops the attribute rather than writing the word "None" into
+        // it. In a template the default failure is absence. The same wrapper
+        // the bindings use: the boundary is the same one, and a prop passed to a
+        // child is read back as None on the other side regardless.
+        //
+        // A `value` is what a binding compares by identity — an `<option>`
+        // against its `<select>` — so a container keeps its own, and a scalar
+        // is still compared by value.
+        return `{${call(inner, '__bound', undefined, name === 'value' ? 'scalar' : '')}}`;
+    };
+
     const refuseLet = (name) => {
         throw refuse(
             new SyntaxError(
@@ -1901,46 +1943,8 @@ function walk(markup, collect, onPython, seed, record, where) {
                             out += declaredHere(inner)
                                 ? `{${inner.trim()}}`
                                 : `{() => ${call(inner, '__bound', undefined, 'scalar')}, (${BOUND_VALUE}) => ${assign(inner)}}`;
-                        } else if (HANDLER.test(attribute[1])) {
-                            // A handler is the one place a template expression
-                            // is allowed to write: it runs on an event, not
-                            // during a render, where Svelte rejects a write to
-                            // state, and rightly so.
-                            const rewritten = walrus(inner);
-
-                            refuseMarkupWalrus(rewritten, inner);
-
-                            // On an element it is a DOM handler, whose return
-                            // nobody reads. On a component it is a prop like
-                            // any other, a callback the child may well read the
-                            // answer of, so it crosses as every prop does: one
-                            // published function, its result converted, sync
-                            // or awaited. It still writes, since the child
-                            // calls it on an event.
-                            out += isComponent(tag)
-                                ? `{${call(rewritten, '__bound', inner)}}`
-                                : `{${EVENT_WRAPPER}(${call(rewritten, '', inner)})}`;
-                        } else if (CLASS_DIRECTIVE.test(attribute[1])) {
-                            out += `{${call(inner, '__truthy')}}`;
-                        } else if (wrapperFor(attribute[1], tag)) {
-                            // `class`, which Svelte hands to `clsx`, and the
-                            // boolean attributes, which the DOM reads for
-                            // truth: both read Python's truth instead.
-                            out += `{${call(inner, wrapperFor(attribute[1], tag))}}`;
                         } else {
-                            // `href={website}` with nothing to show: None goes
-                            // out as undefined so Svelte drops the attribute
-                            // rather than writing the word "None" into it. In a
-                            // template the default failure is absence. The same
-                            // wrapper the bindings use: the boundary is the
-                            // same one, and a prop passed to a child is read
-                            // back as None on the other side regardless.
-                            //
-                            // A `value` is what a binding compares by identity —
-                            // an `<option>` against its `<select>` — so a
-                            // container keeps its own, and a scalar is still
-                            // compared by value.
-                            out += `{${call(inner, '__bound', undefined, attribute[1] === 'value' ? 'scalar' : '')}}`;
+                            out += attributeValue(attribute[1], inner);
                         }
                     } else if (glued) {
                         // `style:color=red{variable}`: an unquoted value with an
@@ -1990,8 +1994,11 @@ function walk(markup, collect, onPython, seed, record, where) {
                     } else if (/^[\p{L}_$][\p{L}\p{M}\p{N}_$]*$/u.test(trimmed)) {
                         // {name}, Svelte's shorthand for name={name}. Expanding
                         // it is what routes the read through the namespace, and
-                        // therefore through the accessor.
-                        out += `${trimmed}={${call(trimmed, wrapperFor(trimmed, tag) || '')}}`;
+                        // therefore through the accessor; and it is expanded
+                        // into exactly what the long spelling compiles to, so
+                        // the two cannot route a handler, a callback prop or a
+                        // None differently.
+                        out += `${trimmed}=${attributeValue(trimmed, trimmed)}`;
                     } else if (trimmed.startsWith('@')) {
                         throw refuse(unknownTag(trimmed, 'tag', ATTACHMENTS, said()));
                     } else {
