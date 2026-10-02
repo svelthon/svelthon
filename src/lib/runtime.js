@@ -751,6 +751,14 @@ function installMutationTracking($B) {
 
     const getattr = $B.$getattr;
     $B.$getattr = function (obj, attr, ...rest) {
+        // A function of an imported object: see `importedMember`. Read here
+        // and only here, since a method call goes through this read too.
+        if (imported(obj)) {
+            const member = importedMember(obj, attr);
+
+            if (member !== undefined) return member;
+        }
+
         const result = getattr(obj, attr, ...rest);
 
         if (obj === null || typeof obj !== 'object') return result;
@@ -3889,6 +3897,32 @@ const withoutKeywords = (target, args) => {
 // other side of the boundary.
 const ADAPTED = new WeakMap();
 
+// The call itself, Python's arguments out and JavaScript's answer back. The
+// memo is made here, so it lasts exactly one call: a longer-lived one would hand
+// a later call the snapshot an earlier one took, after Python had moved on.
+const crossing = (target, self, args) => {
+    const given = withoutKeywords(target, args);
+    const made = new WeakMap();
+
+    return inbound(marked(Reflect.apply(target, self, given.map((one) => outbound(one, made)))));
+};
+
+// What an imported function builds or answers is the library's too, and its
+// methods take callbacks the same way: `Tools.Counter.new().add(done)` and
+// `Lib.make().add(done)`. Not a list, whose methods are Python's to answer —
+// `sort` is not JavaScript's `sort` — and not a Python value.
+const marked = (value) => {
+    if (value !== null && typeof value === 'object' && !Array.isArray(value) && !pythonValue(value)) {
+        IMPORTED.add(value);
+    }
+
+    return value;
+};
+
+// A class among them is constructed by the engine, which converts the
+// arguments itself; only the instance is marked.
+const construct = (target, args, newTarget) => marked(Reflect.construct(target, args, newTarget));
+
 export function jsCall(value) {
     // An imported constant crosses here too, and it crosses once: `export const
     // half = 0.5` reached Python as a raw JavaScript number, where `half * 2`
@@ -3896,28 +3930,64 @@ export function jsCall(value) {
     // to object.__format__*. The same 0.5 returned by an imported *function*
     // came back a float, because the call goes through `inbound`. One value, two
     // capabilities, decided by the way it entered.
-    if (typeof value !== 'function') return pyBind(value);
+    if (typeof value !== 'function') {
+        const bound = pyBind(value);
+
+        // A namespace, a default export, an object: its methods are imported
+        // functions too, and are adapted when read. See `importedMember`.
+        return marked(bound);
+    }
 
     const known = ADAPTED.get(value);
 
     if (known !== undefined) return known;
 
-    const adapted = new Proxy(value, {
-        // The memo is made here and not above, so it lasts exactly one call: a
-        // longer-lived one would hand a later call the snapshot an earlier one
-        // took, after Python had moved on.
-        apply: (target, self, args) => {
-            const given = withoutKeywords(target, args);
-            const made = new WeakMap();
-
-            return inbound(Reflect.apply(target, self, given.map((one) => outbound(one, made))));
-        }
-    });
+    const adapted = new Proxy(value, { apply: crossing, construct });
 
     ADAPTED.set(value, adapted);
 
     return adapted;
 }
+
+// **A function reached through an imported object is an imported function.**
+// `invoke(done)` went through the adapter above and `Tools.invoke(done)` did
+// not: the namespace crossed as an object and its member was called by the
+// engine's own interop, which trims nothing and cannot call an instance, so the
+// same callback raised under one spelling of the same import.
+//
+// So the member is adapted when it is read, by the same call, on its object as
+// the receiver, and read afresh each time, since a module's binding is live.
+// One adapter per object and function, held weakly. A member that is itself an
+// object is marked in turn, so the rule reaches `Tools.sub.fn`.
+const IMPORTED = new WeakSet();
+const MEMBERS = new WeakMap();
+
+function importedMember(obj, attr) {
+    const member = obj[attr];
+
+    marked(member);
+
+    if (typeof member !== 'function') return undefined;
+
+    let adapters = MEMBERS.get(obj);
+
+    if (adapters === undefined) MEMBERS.set(obj, (adapters = new WeakMap()));
+
+    let adapted = adapters.get(member);
+
+    if (adapted === undefined) {
+        adapted = new Proxy(member, { apply: (target, self, args) => crossing(target, obj, args), construct });
+        adapters.set(member, adapted);
+    }
+
+    return adapted;
+}
+
+// Whether `obj` is one whose members are read this way. Asked on the hottest
+// path there is, so the WeakSet is reached only for an object that is not a
+// Python instance.
+const imported = (obj) =>
+    obj !== null && typeof obj === 'object' && obj.ob_type === undefined && !Array.isArray(obj) && IMPORTED.has(obj);
 
 // One value of an exported mapping.
 //
