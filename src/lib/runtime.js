@@ -4741,6 +4741,29 @@ export const pyBind = (value) => {
     return typeof value === 'number' ? globalThis.__BRYTHON__.jsobj2pyobj(value) : value;
 };
 
+// Whether a read through the dot would find an attribute, answered without
+// reading it: a write that asked `$getattr` ran the getter of the property it was
+// about to set, so a getter that counts or refuses saw a read the assignment
+// never makes, and the setter was not reached when the getter raised. The class
+// dictionaries and the instance's own say where an attribute lives; only a
+// foreign object and a class with its own `__getattr__` or `__getattribute__`
+// leave the question to the protocol, which is the one that can answer it.
+function attributed(target, name) {
+    const $B = globalThis.__BRYTHON__;
+    const type = pyType(target);
+    const base = $B.search_in_dict(_b_.object, '__getattribute__', $B.NULL);
+
+    if (type === undefined || declares(type, '__getattr__') !== $B.NULL || declares(type, '__getattribute__') !== base) {
+        return $B.$getattr(target, name, MISSING) !== MISSING;
+    }
+
+    if (declares(type, name) !== $B.NULL) return true;
+
+    const own = ownAttributes(target);
+
+    return own !== undefined && $B.is_dict(own) && Boolean(_b_.dict.$contains(own, name));
+}
+
 // What a write through a dot of the template compiles to: `(obj.attr := value)`,
 // which Python's own grammar refuses the walrus, and the write half of
 // `bind:value={row.label}`. And `(obj[key] := value)` beside it.
@@ -4754,7 +4777,7 @@ export const pyBind = (value) => {
 export function writeAttr(target, name, value) {
     const $B = globalThis.__BRYTHON__;
 
-    if ($B.$getattr(target, name, MISSING) === MISSING && keyed(target, name)) {
+    if (!attributed(target, name) && keyed(target, name)) {
         // Outside the `try`, for the reason written above `keyed`.
         $B.$setitem(target, name, value);
 
