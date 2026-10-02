@@ -15,6 +15,7 @@ __js__ = {
         "delayed",
         "onOptions",
         "offOptions",
+        "back",
     ]
 }
 
@@ -39,6 +40,7 @@ __all__ = [
     "async_twice",
     "async_both",
     "async_runs",
+    "handed_back",
 ]
 
 events = []
@@ -161,3 +163,11 @@ def async_both():
 
 def async_runs():
     return len(runs)
+
+
+async def handed_back():
+    # Handed to a library and handed back by it: what returns is the promise of
+    # the one run, not the coroutine, which awaiting would run again.
+    got = back(options_later())
+    await got
+    return type(got).__name__ != "coroutine"

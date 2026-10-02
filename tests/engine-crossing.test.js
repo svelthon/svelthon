@@ -6,8 +6,10 @@
 // containers to `outbound` with the memo the engine keeps for the call, so the
 // six routes below answer alike: a list passed twice is one array, a cycle
 // ends, a dict mutated between two calls is read afresh, and a list, tuple or
-// dict subclass defining `__call__` is a callback. A method of a frozen
-// object is one function across reads, so a registry can remove it.
+// dict subclass defining `__call__` is a callback, and an object whose
+// `__getattr__` answers every name is not: `callable()` asks the type. A
+// method of a frozen object is one function across reads, so a registry can
+// remove it.
 import { test, expect } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import EngineCrossing from './fixtures/EngineCrossing.svelte';
@@ -22,6 +24,7 @@ const wanted = {
     append: 'A;A|B',
     clear: 'rows;',
     callables: 'list,tuple,dict',
+    getattr: 'object,object;[False, False]',
     none: 'undefined,null'
 };
 

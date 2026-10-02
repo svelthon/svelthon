@@ -3875,18 +3875,21 @@ function perReceiver(self) {
 // with a default takes it whichever way the function was imported; inside a
 // container it is `null`, which is what JSON writes for it.
 //
-// A Python value converted is recorded in `$B.PYOBJ_MAP`, as the engine records
-// its own, so a library handing it back hands back the Python value: `back(rows)
-// is rows`, and `restored` below reads the same map.
+// A list, a tuple or a dict converted is recorded in `$B.PYOBJ_MAP`, the three
+// the engine records, so a library handing it back hands back the Python
+// value: `back(rows) is rows`, and `restored` below reads the same map. Those
+// three and nothing else: a coroutine crosses as the promise of its one run,
+// and recorded, the promise handed back was the coroutine, awaited a second
+// time.
 const outbound = (value, made) => {
+    const $B = globalThis.__BRYTHON__;
+
     if (value === NONE) return undefined;
     if (callable(value)) return pyHandler(value);
 
     const converted = plainData(value, made, pyHandler);
 
-    if (converted !== value && pyType(value) !== undefined && converted !== null && typeof converted === 'object') {
-        globalThis.__BRYTHON__.PYOBJ_MAP.set(converted, value);
-    }
+    if ($B.is_list(value) || $B.is_tuple(value) || $B.is_dict(value)) $B.PYOBJ_MAP.set(converted, value);
 
     return converted;
 };

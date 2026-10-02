@@ -1,7 +1,7 @@
 # Patches applied to the vendored Brython
 
 `brython_runtime.js` and `brython_compiler.js` are cut from one bundle, built
-from Brython's master plus twenty-five proposed commits, with **four** edits
+from Brython's master plus twenty-six proposed commits, with **four** edits
 made in the file itself afterwards. The wrapper, the integer format and the
 `__call__` binding carry a `/* SVELTHON patch, see BRYTHON_FIX.md */` comment,
 the only way to find them again in 1.4 MB; the other edit *is* a comment, so
@@ -41,6 +41,7 @@ wait, which is what this project has always done rather than hold a fix back:
 | `bound-method-js-identity` | `pyobj2jsobj` keeps one JavaScript function per bound method, keyed on its instance and function. A bound method is a new object at each read, and the cache was on that object, so `same(h.run, h.run)` was false and `removeEventListener(h.run)` never removed what `addEventListener(h.run)` added |
 | `js-method-receiver-cache` | the Python function made for a JavaScript method is kept in a WeakMap keyed on its receiver rather than in a property written on it. A frozen, sealed or non-extensible receiver refused the property, so every read of `box.run` made a new function and a registry could not remove what it had been given |
 | `pyobj2jsobj-graph` | the arguments of one JavaScript call are converted with one memo, and a list or dict is registered in it before its items are walked. `same(rows, rows)` handed over two arrays, and `rows.append(rows)` overflowed the stack. The memo is handed to the hook as its second argument, which is how Svelthon's conversion keeps the same graph |
+| `callable-type-slot` | `callable()` asks the type's `tp_call`, the slot `$B.$call` uses, instead of `hasattr(obj, "__call__")`. An object whose `__getattr__` answers every name, or one given a `__call__` attribute of its own, was callable, so a configuration object crossed to JavaScript as a function and `tojson` refused it as a call |
 | `json-parse-str-subclass` | `javascript.JSON.parse` reads a subclass of str by its value. It was handed to `JSON.parse` as the object Brython keeps it in, so `JSON.parse(Text('{"answer": 42}'))` raised `"[object Object]" is not valid JSON`. `from_json` is this `parse` |
 
 The first one reaches Svelthon at `importjs`: a value handed to a JavaScript

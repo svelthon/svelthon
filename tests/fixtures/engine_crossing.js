@@ -9,6 +9,7 @@ export const inspect = (kind, a, b) => {
     if (kind === 'keys') return Object.keys(a).sort().join('|');
     if (kind === 'rows') return a.rows.join('|');
     if (kind === 'call') return String(a('an argument the callback does not take'));
+    if (kind === 'types') return [typeof a, typeof b].join(',');
     if (kind === 'none') return [a === undefined ? 'undefined' : String(a), b[0] === null ? 'null' : String(b[0])].join(',');
     return 'unknown';
 };

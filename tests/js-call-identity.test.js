@@ -29,7 +29,8 @@ import {
     async_probe,
     async_twice,
     async_both,
-    async_runs
+    async_runs,
+    handed_back
 } from './fixtures/js_calls.py';
 
 describe('a Python callback handed to JavaScript', () => {
@@ -165,6 +166,16 @@ describe('a callback behind an await', () => {
 
         expect(await called).toBe(42);
         expect(typeof (await plain).done).toBe('function');
+        expect(async_runs() - before).toBe(1);
+    });
+
+    // A container handed back by a library is the Python one again, through
+    // `$B.PYOBJ_MAP`. A coroutine is not recorded there: it crosses as the
+    // promise of its run, and handed back as the coroutine it ran twice.
+    test('and once when a library hands it back', async () => {
+        const before = async_runs();
+
+        expect(await handed_back()).toBe(true);
         expect(async_runs() - before).toBe(1);
     });
 });

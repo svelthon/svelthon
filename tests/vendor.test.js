@@ -356,6 +356,16 @@ describe('the vendored Brython carries its repairs', () => {
     // `js-method-receiver-cache`: the Python function made for a method is
     // kept beside the receiver rather than on it, so a frozen object's method
     // read twice is one function, and `off(box.run)` finds `on(box.run)`.
+    // `callable-type-slot`: `callable()` asks the slot `$B.$call` uses, on the
+    // type. It asked `hasattr`, so an object whose `__getattr__` answers every
+    // name was callable, and crossed to JavaScript as a function.
+    test('callable() asks the type', () => {
+        const source = String($B.builtins.callable);
+
+        expect(source).toContain('.tp_call');
+        expect(source).not.toContain('hasattr');
+    });
+
     test('a method of a frozen object is one function across reads', () => {
         const frozen = Object.freeze({ run() {} });
 

@@ -4658,7 +4658,9 @@ var missing={},hook=$B.$getattr($B.imported.sys,'breakpointhook',missing)
 if(hook===missing){$B.RAISE(_b_.RuntimeError,'lost sys.breakpointhook')}
 return $B.$call(hook,...arguments)}
 _b_.callable=function(obj){check_nb_args_no_kw('callable',1,arguments)
-return _b_.hasattr(obj,'__call__')}
+if(typeof obj=='function'){return true}
+var call=$B.get_class(obj).tp_call
+return call !==undefined && call !==$B.NULL}
 _b_.chr=function(i){check_nb_args_no_kw('chr',1,arguments)
 i=$B.PyNumber_Index(i)
 if(i < 0 ||i > 1114111){$B.RAISE(_b_.ValueError,'Outside valid range')}else if(i >=0x10000 && i <=0x10FFFF){var code=(i-0x10000),s=String.fromCodePoint(0xD800 |(code >> 10))+

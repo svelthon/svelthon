@@ -17,6 +17,14 @@ class Bag(dict):
     def __call__(self):
         return 'dict'
 
+class Config:
+    def __getattr__(self, name):
+        return None
+
+class Settings(dict):
+    def __getattr__(self, name):
+        return None
+
 def call(kind, a, b=None):
     if route == 'named':
         return inspect(kind, a, b)
@@ -57,6 +65,9 @@ def answer():
         return before + ';' + call('keys', box)
     elif kind == 'callables':
         return ','.join(call('call', one) for one in [Rows([1]), Pair((1,)), Bag()])
+    elif kind == 'getattr':
+        found = [Config(), Settings(a=1)]
+        return call('types', found[0], found[1]) + ';' + str([callable(one) for one in found])
     elif kind == 'none':
         return call('none', None, [None])
     elif kind == 'returned':
