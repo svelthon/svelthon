@@ -428,7 +428,10 @@ export function python(options = {}) {
 // observed no attribute and exposed no property: it read its attributes once,
 // at connection. Each prop carries the type its annotation names, so an
 // attribute arrives as the number or the list it declares. In the written-out
-// object form, a `props` the author wrote is theirs, and left as it is.
+// object form, an entry the author wrote in `props` is theirs and is kept, and
+// every other prop is added beside it, as Svelte adds the props of a
+// destructured `$props()`: configuring one prop stopped the element observing
+// all the others.
 const ELEMENT_OPTION = /<svelte:options\b[^>]*?\bcustomElement\s*=\s*(["'])([^"']*)\1/;
 
 // The written-out form, `customElement={{ tag: "x", shadow: "none" }}`, which is
@@ -453,20 +456,45 @@ function elementObject(code) {
 }
 
 function elementOptions(code, python) {
-    const props = () =>
-        elementProps(python)
-            .map(({ name, type }) => `${name}: {${type ? ` type: ${JSON.stringify(type)} ` : ''}}`)
-            .join(', ');
+    const key = (one) => (one.type === 'Property' ? (one.key.name ?? one.key.value) : undefined);
+    const entry = ({ name, type }) => `${name}: {${type ? ` type: ${JSON.stringify(type)} ` : ''}}`;
+    // Read only for a component that is an element: every Python component
+    // comes through here.
+    const props = () => elementProps(python).map(entry).join(', ');
 
     const text = markupOnly(code);
 
     if (ELEMENT_OBJECT.test(text)) {
         const object = elementObject(code);
-        const named = (one) => one.type === 'Property' && (one.key.name ?? one.key.value) === 'props';
-        if (object === null || object.properties.some(named)) return code;
+        if (object === null) return code;
 
-        const at = object.start + 1;
-        return `${code.slice(0, at)} props: { ${props()} },${code.slice(at)}`;
+        const named = object.properties.find((one) => key(one) === 'props');
+
+        if (named === undefined) {
+            const at = object.start + 1;
+            return `${code.slice(0, at)} props: { ${props()} },${code.slice(at)}`;
+        }
+
+        // Anything but a literal is not ours to read, and Svelte refuses it.
+        if (named.value.type !== 'ObjectExpression') return code;
+
+        // The missing props go after the author's last entry, in the order they
+        // are declared, which is the order Svelte lists them in, measured on
+        // the same element written with `$props()`. The author's text stays
+        // where it is, line for line.
+        const written = named.value.properties;
+        const names = new Set(written.map(key));
+        const missing = elementProps(python).filter(({ name }) => !names.has(name)).map(entry);
+
+        if (missing.length === 0) return code;
+
+        if (written.length === 0) {
+            const at = named.value.start + 1;
+            return `${code.slice(0, at)} ${missing.join(', ')} ${code.slice(at)}`;
+        }
+
+        const at = written.at(-1).end;
+        return `${code.slice(0, at)}, ${missing.join(', ')}${code.slice(at)}`;
     }
 
     const found = ELEMENT_OPTION.exec(text);

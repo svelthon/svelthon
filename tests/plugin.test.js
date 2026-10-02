@@ -8,11 +8,40 @@ import { test, expect, describe } from 'vitest';
 import { createRequire } from 'node:module';
 import { resolve, relative } from 'node:path';
 import { readFileSync } from 'node:fs';
-import { preprocess } from 'svelte/compiler';
+import { preprocess, parse } from 'svelte/compiler';
 import { python, svelthon, withPrelude } from '../src/lib/svelthon.js';
 
 const { VIRTUAL_PREFIX } = createRequire(import.meta.url)('../src/lib/compile.cjs');
 const fixtures = resolve(import.meta.dirname, 'fixtures');
+
+// What the preprocessor writes into a custom element's written-out option,
+// read back with Svelte's parser: the author's entries, then the declared props
+// they do not name, which is the order Svelte lists them in, and the file on as
+// many lines as it had, since Svelte places its warnings by line.
+describe('the props a written-out customElement option is given', () => {
+    const written = (props) =>
+        `<svelte:options customElement={{\n    tag: 'x-el',\n    props: ${props},\n}} />\n\n` +
+        `<script lang="python">\nfirst: str = "a"\nmiddle: int = 1\nlast: str = "z"\n</script>\n\n<p>{first}</p>\n`;
+
+    const read = (source) => {
+        const { code } = python().markup({ content: source, filename: 'X.svelte' });
+        const blanked = code.replace(/<script[\s\S]*?<\/script>/, '');
+        const option = parse(blanked, { modern: true }).options.attributes.find((one) => one.name === 'customElement');
+        const props = option.value.expression.properties.find((one) => one.key.name === 'props').value;
+
+        return { keys: props.properties.map((one) => one.key.name), lines: code.split('\n').length };
+    };
+
+    test.for([
+        ['{}', ['first', 'middle', 'last']],
+        ['{ middle: { reflect: true } }', ['middle', 'first', 'last']],
+        ['{\n        extra: {},\n        last: { type: "String" },\n    }', ['extra', 'last', 'first', 'middle']]
+    ])('props: %s', ([props, keys]) => {
+        const source = written(props);
+
+        expect(read(source)).toEqual({ keys, lines: source.split('\n').length });
+    });
+});
 
 // The template language follows the script language, with no third mode: a
 // component without `lang="python"` is a JavaScript component and stays one.

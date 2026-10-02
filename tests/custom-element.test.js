@@ -5,6 +5,44 @@ import './fixtures/Stepper.svelte';
 import WordHost from './fixtures/WordHost.svelte';
 import './fixtures/TypedElement.svelte';
 import './fixtures/ObjectFormElement.svelte';
+import './fixtures/PartialPropsElement.svelte';
+import './fixtures/PartialPropsElementNative.svelte';
+
+// An entry written in `customElement.props` configures its prop, and every
+// other prop is observed beside it, in Svelte's order: configuring one used to
+// stop the element observing the rest, so an attribute changed after
+// connection never reached them.
+test('a partial props option keeps the other props, as Svelte does', async () => {
+    const observed = (tag) => customElements.get(tag).observedAttributes;
+
+    expect(observed('partial-props-element')).toEqual(observed('partial-props-element-native'));
+
+    const read = async (tag) => {
+        const element = document.createElement(tag);
+
+        element.setAttribute('first', 'b');
+        element.setAttribute('last', 'y');
+        document.body.appendChild(element);
+        await Promise.resolve();
+        flushSync();
+
+        try {
+            element.setAttribute('last', 'x');
+            element.middle = 7;
+            flushSync();
+            await Promise.resolve();
+
+            return element.querySelector('p').textContent;
+        } finally {
+            element.remove();
+        }
+    };
+
+    const native = await read('partial-props-element-native');
+
+    expect(native).toBe('b|7|x');
+    expect(await read('partial-props-element')).toEqual(native);
+});
 
 // The written-out form of the option, `customElement={{ tag, shadow }}`, gets
 // the same props as the short one.
