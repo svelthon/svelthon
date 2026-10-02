@@ -326,6 +326,17 @@ describe('the vendored Brython carries its repairs', () => {
     // The engine's conversion of a Python value for JavaScript asks Svelthon's
     // hook first, so a Python callable crosses as `pyHandler` publishes it. A
     // direct edit: a re-vendoring drops it, and this goes red.
+    // The engine's own conversion of a Python callable, behind the hook: a
+    // callable instance becomes a function, and a bound method keeps one
+    // function per instance and method. The hook answers first in Svelthon, so
+    // they are read off the source rather than observed.
+    test('the engine converts a callable instance and keeps a bound method one function', () => {
+        const source = String($B.pyobj2jsobj);
+
+        expect(source).toContain('_b_.callable(pyobj)');
+        expect(source).toContain('bound_methods(pyobj.im_self)');
+    });
+
     test('a Python callable handed to JavaScript asks the callback hook', () => {
         expect(String($B.pyobj2jsobj)).toContain('$B.$python_callback');
         expect(typeof $B.$python_callback).toBe('function');

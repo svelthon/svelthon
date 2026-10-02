@@ -1,7 +1,7 @@
 # Patches applied to the vendored Brython
 
 `brython_runtime.js` and `brython_compiler.js` are cut from one bundle, built
-from Brython's master plus twenty proposed commits, with **five** edits made
+from Brython's master plus twenty-two proposed commits, with **five** edits made
 in the file itself afterwards. The wrapper, the integer format, the `__call__`
 binding and the callback hook carry a `/* SVELTHON patch, see BRYTHON_FIX.md
 */` comment, the only way to find them again in 1.4 MB; the other edit *is* a
@@ -36,6 +36,8 @@ wait, which is what this project has always done rather than hold a fix back:
 | `identity-before-equality` | `list.index`, `tuple.index` and `list.remove` compared by equality alone, where `in` and `count` test identity first: `x = float("nan"); [x].index(x)` raised `ValueError`, and so did an object whose `__eq__` answers False. They test identity first now |
 | `nan-is-identity` | `$B.$is` answered True for any two NaN floats, so a container comparing its members by identity-or-equality found two distinct NaNs equal: `(float("nan"),) == (float("nan"),)` and `float("nan") in [float("nan")]` were True where CPython says False. Only the same NaN object is itself now |
 | `kw-bundle-symbol` | a call's keyword arguments travel under a symbol, `$B.KW`, and no longer under a `$kw` key. A JavaScript object passed as an argument and carrying `$kw` was taken for them: `f(obj)` raised `unexpected keyword argument '0'`, `dict(obj)` answered `{'0': 'a'}`, and `tojson(to_js({"$kw": …}))` refused its own argument. No argument can carry a symbol key |
+| `callable-instance-to-js` | `pyobj2jsobj` converts an instance of a class defining `__call__` into a JavaScript function, as it does a function and a method. It handed the object over, so `window.call(C())` raised `f is not a function` |
+| `bound-method-js-identity` | `pyobj2jsobj` keeps one JavaScript function per bound method, keyed on its instance and function. A bound method is a new object at each read, and the cache was on that object, so `same(h.run, h.run)` was false and `removeEventListener(h.run)` never removed what `addEventListener(h.run)` added |
 | `json-parse-str-subclass` | `javascript.JSON.parse` reads a subclass of str by its value. It was handed to `JSON.parse` as the object Brython keeps it in, so `JSON.parse(Text('{"answer": 42}'))` raised `"[object Object]" is not valid JSON`. `from_json` is this `parse` |
 
 The first one reaches Svelthon at `importjs`: a value handed to a JavaScript
