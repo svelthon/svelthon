@@ -582,6 +582,9 @@ function installMutationTracking($B) {
 
             if (spent) adopt(obj);
 
+            if (attr === 'append') indexed(obj, obj.length - 1);
+            else if (SHIFTS.has(attr) && !(attr === 'pop' && args.length === 0)) indexed(obj, 0);
+
             // `setdefault` is the one mutator that hands a child *back* rather
             // than taking one, so its result is linked as well as its arguments.
             //
@@ -1294,7 +1297,7 @@ const upwards = (marker, stamp, key) => {
         const holder = parent.target.deref();
         const known = verified.get(parent) === parent.stamp;
 
-        if (holder === undefined || (child !== undefined && !known && !holds(holder, child, marker.keys?.get(holder)))) {
+        if (holder === undefined || (child !== undefined && !known && !holds(holder, child, marker))) {
             parents.splice(i, 1);
             continue;
         }
@@ -1329,9 +1332,13 @@ function stored(obj, key, value) {
 
     if (!slice) {
         inherit(obj, key);
-        inherit(obj, value, key);
-    } else if (!keeps(value) || !inheritContents(obj, value)) {
-        adopt(obj);
+        // A negative index names a slot from the end, and the slot is what
+        // `holds` reads.
+        inherit(obj, value, Array.isArray(obj) && typeof key === 'number' && key < 0 ? key + obj.length : key);
+    } else {
+        if (!keeps(value) || !inheritContents(obj, value)) adopt(obj);
+
+        indexed(obj, 0);
     }
 }
 
@@ -1341,7 +1348,8 @@ function stored(obj, key, value) {
 // For a dict, the key the child entered under is read first when there is one
 // and it is a string or a number, whose hash runs no code of the author's: one
 // entry read, where every entry was, once per mutation of every row.
-function holds(holder, child, key) {
+function holds(holder, child, marker) {
+    const key = marker.keys?.get(holder);
     let cls;
     try {
         cls = globalThis.__BRYTHON__.get_class(holder);
@@ -1349,9 +1357,17 @@ function holds(holder, child, key) {
         return true;
     }
 
-    // For a list, the index it entered at, which holds until something is
-    // inserted or removed before it.
-    if (cls === _b_.list) return (typeof key === 'number' && holder[key] === child) || holder.includes(child);
+    // For a list, the index `indexed` keeps. A list changed where no mutator
+    // was seen is searched, once: the index found is kept for the next check.
+    if (cls === _b_.list) {
+        if (typeof key === 'number' && holder[key] === child) return true;
+
+        const at = holder.indexOf(child);
+
+        if (at !== -1) (marker.keys ??= new WeakMap()).set(holder, at);
+
+        return at !== -1;
+    }
 
     if (cls === _b_.dict) {
         if (plainKey(key)) {
@@ -1378,6 +1394,27 @@ function holds(holder, child, key) {
     return true;
 }
 
+// The index each watched child of a list sits at, from `from` to the end, kept
+// on its link so that `holds` reads one slot. A child linked without it was
+// searched for at its next mutation, and a table loaded with `extend` after the
+// watch began paid a search of the whole list for every row it updated. So the
+// rows an `append`, an `extend` or a `+=` add are indexed where they land, at
+// the end, and a mutation that moves the others indexes the list again, at a
+// cost no larger than its own.
+function indexed(list, from) {
+    if (!Array.isArray(list) || list.ob_type !== _b_.list) return;
+
+    for (let i = Math.max(0, from); i < list.length; i++) {
+        const own = MARKS.get(list[i]);
+
+        if (own !== undefined) (own.keys ??= new WeakMap()).set(list, i);
+    }
+}
+
+// Mutations of a list after which its children may sit elsewhere. `pop()`
+// without an index takes the last one and moves nothing.
+const SHIFTS = new Set(['insert', 'remove', 'pop', 'sort', 'reverse', '__delitem__']);
+
 // A key whose hash runs no code of the author's: a string, a number, a bool,
 // or a tuple of them, which is how a grid is keyed, `cells[(row, col)]`.
 const plainKey = (key) =>
@@ -1399,7 +1436,10 @@ function inheritContents(into, source) {
     const $B = globalThis.__BRYTHON__;
     const pairs = $B.is_dict(into);
     let whole = true;
+    let given = 0;
     const take = (child) => {
+        given++;
+
         if (!pairs) {
             inherit(into, child);
         } else if (Array.isArray(child) && child.length === 2 && [_b_.tuple, _b_.list].includes($B.get_class(child))) {
@@ -1414,6 +1454,7 @@ function inheritContents(into, source) {
         for (const child of source) take(child);
     } else if (globalThis.__BRYTHON__.is_dict(source)) {
         for (const [key, child] of pyEntries(source)) {
+            given++;
             inherit(into, key);
             inherit(into, child, key);
         }
@@ -1427,6 +1468,10 @@ function inheritContents(into, source) {
             }
         }
     }
+
+    // What a list was given lands at its end: `extend`, `+=`, and `__init__`,
+    // whose end is the whole list.
+    indexed(into, into.length - given);
 
     return whole;
 }
@@ -4886,20 +4931,27 @@ export function group(node, [current, write, chosen, binding, scope, where = []]
     // collection is sorted by document position rather than by insertion: a
     // group whose rows are reordered is the case an insertion order would get
     // wrong in the same way, one level down.
-    (token.nodes ??= new Set()).add(node);
+    //
+    // One array, as in Svelte's `bind_group`: an input joins it here and leaves
+    // it at teardown, so nothing else keeps a destroyed control alive, and it is
+    // sorted in place when the inputs registering in the same turn are all in
+    // place, once per group and not once per input. Sorting at every collection
+    // asked the document where a control was after a script had taken it out,
+    // and the answer for a detached node is the engine's choice.
+    const inputs = (token.inputs ??= []);
+
+    inputs.push(node);
     node.$svelthonValue = value;
 
-    // Sorted when the inputs register, once they are all in place, with
-    // Svelte's own comparator, and kept in that order afterwards: sorting at
-    // every collection asked the document where a control was after a script
-    // had taken it out, and the answer for a detached node is the engine's
-    // choice. `bind_group` does exactly this, in a microtask.
-    queueMicrotask(() => {
-        token.ordered = [...token.nodes].sort((a, b) =>
+    if (!token.sorting) {
+        token.sorting = true;
+
+        queueMicrotask(() => {
             // DOCUMENT_POSITION_FOLLOWING alone: `b` comes after `a`.
-            a.compareDocumentPosition(b) === 4 ? -1 : 1
-        );
-    });
+            inputs.sort((a, b) => (a.compareDocumentPosition(b) === 4 ? -1 : 1));
+            token.sorting = false;
+        });
+    }
 
     // **And the row is the third half of the identity**: the token is the
     // instance and the binding, and inside one `{#each}` every row shares both.
@@ -4911,16 +4963,9 @@ export function group(node, [current, write, chosen, binding, scope, where = []]
     // the document: a control taken out of the page by a script, or a component
     // mounted in a detached target, is still mounted, and Svelte's own group
     // keeps it until its teardown. Filtering on `isConnected` dropped a ticked
-    // box from the selection the moment it left the page.
-    const inOrder = () => {
-        const registered = token.ordered ?? [...token.nodes];
-
-        // An input that registered after the last sort is appended until the
-        // next one runs; one that was destroyed is no longer a member.
-        const members = [...registered, ...[...token.nodes].filter((one) => !registered.includes(one))];
-
-        return members.filter((one) => token.nodes.has(one) && one.$svelthonGroup === node.$svelthonGroup);
-    };
+    // box from the selection the moment it left the page. An input that
+    // registered after the last sort is at the end until the next one runs.
+    const inOrder = () => inputs.filter((one) => one.$svelthonGroup === node.$svelthonGroup);
 
     // Python's `==`, not JavaScript's `===`. A Brython float is an object
     // `{ob_type, value}`, so `value={0.5}` evaluated twice is two objects and
@@ -5035,7 +5080,9 @@ export function group(node, [current, write, chosen, binding, scope, where = []]
         destroy() {
             node.removeEventListener('change', changed);
             RESETS.delete(node);
-            token.nodes.delete(node);
+
+            const at = inputs.indexOf(node);
+            if (at !== -1) inputs.splice(at, 1);
         }
     };
 }
