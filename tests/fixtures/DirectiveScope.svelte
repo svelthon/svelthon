@@ -1,7 +1,7 @@
 <script lang="python">
 # Directives whose callee or whose options no earlier test reached: a name the
 # markup declared, options in a container, an export the module replaces.
-importjs { mark, replace, native_options, leased } from './directive_live.js'
+importjs { mark, replace, native_options, leased, first, second } from './directive_live.js'
 
 
 def measured(node, value):
@@ -29,6 +29,22 @@ lease = 0.5
 def renew():
     global lease
     lease = 0.75
+
+
+# The callee changes and the value does not; an action left out with None.
+chosen = first
+amount = 0.5
+maybe = None
+
+
+def swap_action():
+    global chosen
+    chosen = second
+
+
+def move():
+    global amount
+    amount = 0.75
 
 
 def grow():
@@ -60,6 +76,13 @@ def show():
 <p data-k="js-options" use:native_options={js_options}>not yet</p>
 
 <p data-k="lease" use:leased={lease}>not yet</p>
+
+<p data-k="counted" use:chosen={amount}>not yet</p>
+<p data-k="counted-bare" use:chosen>not yet</p>
+<p data-k="counted-same" use:chosen={amount > 0}>not yet</p>
+<p data-k="maybe" use:maybe={0.5}>not yet</p>
+<button data-k="swap-action" onclick={swap_action}>swap action</button>
+<button data-k="move" onclick={move}>move</button>
 <button data-k="renew" onclick={renew}>renew</button>
 
 <button data-k="grow" onclick={grow}>grow</button>

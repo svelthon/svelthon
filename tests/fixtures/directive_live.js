@@ -41,6 +41,21 @@ class Lease {
 
 export const leased = (node, value) => new Lease(node, value);
 
+// Two actions counting the updates they are given, written on the node.
+const counting = (name) => (node) => {
+    node.dataset.action = name;
+    node.dataset.updates = '0';
+
+    return {
+        update() {
+            node.dataset.updates = String(Number(node.dataset.updates) + 1);
+        }
+    };
+};
+
+export const first = counting('first');
+export const second = counting('second');
+
 const show = (node, options) => {
     node.textContent = `${options.nested.amount.toFixed(2)}/${options.values[0].toFixed(2)}`;
 };

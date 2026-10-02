@@ -37,6 +37,28 @@ def configuration(node):
     return {"duration": 0.5, "tick": tick, "easing": easing}
 
 
+def nullable(node, params):
+    # Optional callbacks written as None, which Svelte tests with `if (tick)`.
+    return {"duration": 0.5, "css": None, "tick": None}
+
+
+class NullableConfig:
+    duration = 0.5
+    css = None
+    tick = None
+
+
+def nullable_instance(node, params):
+    return NullableConfig()
+
+
+def nullable_deferred(node, params):
+    def configure(options):
+        return nullable(node, params)
+
+    return configure
+
+
 def deferred(node, params):
     # A deferred transition: Svelte calls what this returns, later.
     def configure(options):

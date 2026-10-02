@@ -26,7 +26,7 @@ const rewrite = (markup) =>
 describe('a directive that names a function', () => {
     test('hands its head and value to the adapter of its kind', () => {
         expect(rewrite('<p use:a.act={v} in:b.fade out:c.fade transition:d.fade|global>x</p>')).toMatch(
-            /^<p use:__directiveAction=\{\["a\.act", __expr_py_\d+\(\), __expr_py_\d+\(\)\]\} in:__directiveTransition=\{\["b\.fade", __expr_py_\d+\(\)\]\} out:__directiveTransition=\{\["c\.fade", __expr_py_\d+\(\)\]\} transition:__directiveTransition\|global=\{\["d\.fade", __expr_py_\d+\(\)\]\}>x<\/p>$/
+            /^<p use:__directiveAction=\{\["a\.act", \(\) => __expr_py_\d+\(\), __expr_py_\d+\(\)\]\} in:__directiveTransition=\{\["b\.fade", \(\) => __expr_py_\d+\(\)\]\} out:__directiveTransition=\{\["c\.fade", \(\) => __expr_py_\d+\(\)\]\} transition:__directiveTransition\|global=\{\["d\.fade", \(\) => __expr_py_\d+\(\)\]\}>x<\/p>$/
         );
     });
 
@@ -38,7 +38,7 @@ describe('a directive that names a function', () => {
 
     // One interpolation between quotes is the value, as Svelte reads it.
     test('with its value braced or quoted', () => {
-        expect(rewrite('<p use:act="{v}">x</p>')).toMatch(/use:__directiveAction=\{\["act", __expr_py_\d+\(\), __expr_py_\d+\(\)\]\}>/);
+        expect(rewrite('<p use:act="{v}">x</p>')).toMatch(/use:__directiveAction=\{\["act", \(\) => __expr_py_\d+\(\), __expr_py_\d+\(\)\]\}>/);
     });
 
     // An attribute may follow a quote with no space, and Svelte reads it.
@@ -52,7 +52,7 @@ describe('a directive that names a function', () => {
         'with whitespace around the equals sign: %s',
         (attribute) => {
             expect(rewrite(`<p ${attribute}>x</p>`)).toMatch(
-                /^<p use:__directiveAction=\{\["act", __expr_py_\d+\(\), __expr_py_\d+\(\)\]\}>x<\/p>$/
+                /^<p use:__directiveAction=\{\["act", \(\) => __expr_py_\d+\(\), __expr_py_\d+\(\)\]\}>x<\/p>$/
             );
         }
     );
@@ -235,6 +235,43 @@ describe('a directive whose callee is', () => {
         expect(lease.dataset.cleanup).toBe('done');
     });
 
+    // The callee is read when the action is installed and is no dependency of
+    // its value: a new callee did not call `update` with the old value, nor an
+    // action written without one. A new value still does, once.
+    test('an action whose callee changes is not updated, and one whose value does is', () => {
+        const target = document.body.appendChild(document.createElement('div'));
+        mount(DirectiveScope, { target });
+        flushSync();
+
+        const at = (k) => target.querySelector(`[data-k="${k}"]`);
+
+        at('swap-action').click();
+        flushSync();
+
+        expect(at('counted').dataset).toMatchObject({ action: 'first', updates: '0' });
+        expect(at('counted-bare').dataset).toMatchObject({ action: 'first', updates: '0' });
+
+        at('move').click();
+        flushSync();
+
+        expect(at('counted').dataset.updates).toBe('1');
+        expect(at('counted-bare').dataset.updates).toBe('0');
+
+        // Recomputed and equal, `True` both times: Svelte's own comparison
+        // does not update, and the payload, a new array each time, always
+        // looked changed to it.
+        expect(at('counted-same').dataset.updates).toBe('0');
+    });
+
+    // Svelte calls an action optionally: an absent one installs nothing.
+    test('an action that is None installs nothing', () => {
+        const target = document.body.appendChild(document.createElement('div'));
+        mount(DirectiveScope, { target });
+        flushSync();
+
+        expect(target.querySelector('[data-k="maybe"]').textContent).toBe('not yet');
+    });
+
     // A JavaScript export is read when the directive runs: one captured at
     // initialisation kept the function the module had since replaced.
     test('a JavaScript export the module replaced', () => {
@@ -267,12 +304,25 @@ describe("Svelte's protocol, kept around the payload", () => {
         mount(DirectiveModule, { target: document.body.appendChild(document.createElement('div')) });
 
         const js = node();
-        directiveTransition(js, ['defaults', defaults, ...value], { direction: 'in' });
+        directiveTransition(js, ['defaults', () => defaults, ...value], { direction: 'in' });
         expect(js.textContent).toBe('0.50');
 
         const py = node();
-        directiveTransition(py, ['with_params', python().with_params, ...value], { direction: 'in' });
+        directiveTransition(py, ['with_params', () => python().with_params, ...value], { direction: 'in' });
         expect(py.textContent).toBe('0.50');
+    });
+
+    // An optional callback written as None is absent: Svelte asks `if (tick)`,
+    // and `None` is an object, so it was a callback to call.
+    test.for(['nullable', 'nullable_instance', 'nullable_deferred'])('None callbacks are absent, %s', (key) => {
+        mount(DirectiveModule, { target: document.body.appendChild(document.createElement('div')) });
+
+        const result = directiveTransition(node(), [key, () => python()[key]], { direction: 'in' });
+        const config = typeof result === 'function' ? result({ direction: 'in' }) : result;
+
+        expect(config.duration).toBe(0.5);
+        expect(config.css ?? null).toBe(null);
+        expect(config.tick ?? null).toBe(null);
     });
 
     // A transition may hand back a function Svelte calls later for the
@@ -282,7 +332,7 @@ describe("Svelte's protocol, kept around the payload", () => {
         mount(DirectiveModule, { target: document.body.appendChild(document.createElement('div')) });
 
         const at = node();
-        const later = directiveTransition(at, [key, python()[key]], { direction: 'in' });
+        const later = directiveTransition(at, [key, () => python()[key]], { direction: 'in' });
 
         expect(typeof later).toBe('function');
 
@@ -305,7 +355,7 @@ describe('what a module member becomes for Svelte', () => {
 
         const typewriter = globalThis.__BRYTHON__.imported.directive_mod.typewriter;
 
-        return directiveTransition(node, ['directive_mod.typewriter', typewriter], options);
+        return directiveTransition(node, ['directive_mod.typewriter', () => typewriter], options);
     };
 
     // Svelte hands a transition three arguments; the Python signature declares

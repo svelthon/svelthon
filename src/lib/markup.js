@@ -1818,7 +1818,9 @@ function walk(markup, collect, onPython, seed, record, where) {
                 const argument = value === null ? '' : `, ${call(markup.slice(value.start, value.end), '', undefined, 'python')}`;
 
                 region = null;
-                out += `${kind}:${DIRECTIVE_ADAPTER[kind]}${modifiers}={[${JSON.stringify(head)}, ${callee}${argument}]}`;
+                // The head as a thunk: read by the adapter when the directive is
+                // installed, and so no dependency of the value Svelte watches.
+                out += `${kind}:${DIRECTIVE_ADAPTER[kind]}${modifiers}={[${JSON.stringify(head)}, () => ${callee}${argument}]}`;
                 index = next;
                 continue;
             } else if (index === unquoted) {
@@ -2483,5 +2485,4 @@ function uncomment(text) {
 
     return out;
 }
-
 

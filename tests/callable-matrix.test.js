@@ -145,7 +145,7 @@ describe.for(SHAPES)('%s', ([, key]) => {
     test('is called by the directive that names it', () => {
         const value = globalThis.__BRYTHON__.imported.callable_matrix[key];
 
-        expect(directiveAction('event', [key, value])).toBe(0.25);
+        expect(directiveAction('event', [key, () => value])).toBe(0.25);
     });
 });
 

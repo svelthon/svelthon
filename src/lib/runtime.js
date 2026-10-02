@@ -2979,7 +2979,9 @@ function callback(one) {
 }
 
 export function pyNumbers(value) {
-    if (value === null || typeof value !== 'object') return value;
+    // `None` itself is a singleton and not a container: walking its own
+    // properties would copy it, and the copy is no longer `None`.
+    if (value === null || typeof value !== 'object' || value === NONE) return value;
 
     const alone = pyScalar(value);
 
@@ -3033,6 +3035,13 @@ export function pyNumbers(value) {
             replacement = callback(one);
 
             if (replacement === one) continue;
+        } else if (one === NONE) {
+            // An absent field, which the framework tests for: Svelte asks `if
+            // (tick)` before calling it, and Python's `None` is an object, so
+            // `{'tick': None}` was a callback to call. `None` is `undefined` on
+            // the JavaScript side, the pairing the engine keeps at every other
+            // crossing.
+            replacement = undefined;
         } else continue;
 
         if (out === value) out = shallow(value);
@@ -4262,33 +4271,62 @@ const pythonValue = (value) =>
     typeof value === 'object' &&
     (pyClass(value.ob_type) || Array.isArray(value) || globalThis.__BRYTHON__.is_dict(value));
 
+// Svelte's `safe_not_equal`, asked of what the value is to JavaScript: a Python
+// float is an object, and would always count as changed where the number it
+// stands for does not. A container still always counts, as an object does.
+const changed = (before, after) => {
+    const a = before === NONE ? undefined : (pyScalar(before) ?? before);
+    const b = after === NONE ? undefined : (pyScalar(after) ?? after);
+
+    // eslint-disable-next-line no-self-compare
+    return a != a ? b == b : a !== b || (a !== null && typeof a === 'object') || typeof a === 'function';
+};
+
 // What an action hands back keeps the shape Svelte reads, and its `update` is
-// given the value alone: Svelte passes the whole payload again. Both are called
-// on the result, as Svelte calls them, so a method reading `this` finds it.
-const actionPayload = (python, result) => {
+// given the value alone: Svelte passes the whole payload again, and the payload
+// is a new array on every run, so Svelte's own comparison always answers yes.
+// It is made here instead, on the value, and an action written without one is
+// never updated. Both are called on the result, as Svelte calls them, so a
+// method reading `this` finds it.
+const actionPayload = (python, result, given) => {
     if (result === null || typeof result !== 'object') return result;
+
+    let held = given[0];
 
     return {
         update:
             typeof result.update === 'function'
-                ? ([, , value]) => result.update(python || !pythonValue(value) ? value : outbound(value))
+                ? ([, , ...next]) => {
+                      if (!given.length || !changed(held, next[0])) return;
+
+                      held = next[0];
+                      result.update(python || !pythonValue(held) ? held : outbound(held));
+                  }
                 : undefined,
         destroy: typeof result.destroy === 'function' ? () => result.destroy() : undefined
     };
 };
 
-// `use:`, called `(node, payload)`.
-export function directiveAction(node, [where, fn, ...value]) {
+// `use:`, called `(node, payload)`. The head is a thunk, read once here, when
+// Svelte installs the action: had it been part of the value, a new callee would
+// have counted as a new value and called `update`. Svelte calls an action
+// optionally, so an absent one installs nothing.
+export function directiveAction(node, [where, head, ...value]) {
+    const fn = head();
+
+    if (fn === undefined || fn === null || fn === NONE) return undefined;
+
     const { python, result } = directiveCall(where, fn, [node, ...value]);
 
-    return actionPayload(python, result);
+    return actionPayload(python, result, value);
 }
 
 // `transition:`, `in:` and `out:`, called `(node, payload, options)`. Svelte
 // gives `params ?? {}`, and the payload is never absent, so the empty value is
 // supplied here: a dict for Python, an object for JavaScript, whose own
 // transitions destructure it.
-export function directiveTransition(node, [where, fn, ...value], options) {
+export function directiveTransition(node, [where, head, ...value], options) {
+    const fn = head();
     const given = value.length ? value[0] : undefined;
     const params =
         given !== undefined && given !== null && given !== NONE
@@ -4301,8 +4339,8 @@ export function directiveTransition(node, [where, fn, ...value], options) {
 }
 
 // `animate:`, called `(node, { from, to }, payload)`.
-export function directiveAnimate(node, rects, [where, fn, ...value]) {
-    return directiveCall(where, fn, [node, rects, ...value]).result;
+export function directiveAnimate(node, rects, [where, head, ...value]) {
+    return directiveCall(where, head(), [node, rects, ...value]).result;
 }
 
 // What a directive hands back, read by Svelte: an action's `update` and
@@ -4338,7 +4376,7 @@ function directiveResult(value, where) {
 
                 const found = globalThis.__BRYTHON__.$getattr(value, key, MISSING);
 
-                if (found === MISSING) return undefined;
+                if (found === MISSING || found === NONE) return undefined;
 
                 return callable(found) ? pyHandler(found) : pyNumbers(found);
             }
