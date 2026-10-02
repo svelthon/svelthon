@@ -1,7 +1,7 @@
 # Patches applied to the vendored Brython
 
 `brython_runtime.js` and `brython_compiler.js` are cut from one bundle, built
-from Brython's master plus twenty-three proposed commits, with **four** edits
+from Brython's master plus twenty-five proposed commits, with **four** edits
 made in the file itself afterwards. The wrapper, the integer format and the
 `__call__` binding carry a `/* SVELTHON patch, see BRYTHON_FIX.md */` comment,
 the only way to find them again in 1.4 MB; the other edit *is* a comment, so
@@ -36,9 +36,11 @@ wait, which is what this project has always done rather than hold a fix back:
 | `identity-before-equality` | `list.index`, `tuple.index` and `list.remove` compared by equality alone, where `in` and `count` test identity first: `x = float("nan"); [x].index(x)` raised `ValueError`, and so did an object whose `__eq__` answers False. They test identity first now |
 | `nan-is-identity` | `$B.$is` answered True for any two NaN floats, so a container comparing its members by identity-or-equality found two distinct NaNs equal: `(float("nan"),) == (float("nan"),)` and `float("nan") in [float("nan")]` were True where CPython says False. Only the same NaN object is itself now |
 | `kw-bundle-symbol` | a call's keyword arguments travel under a symbol, `$B.KW`, and no longer under a `$kw` key. A JavaScript object passed as an argument and carrying `$kw` was taken for them: `f(obj)` raised `unexpected keyword argument '0'`, `dict(obj)` answered `{'0': 'a'}`, and `tojson(to_js({"$kw": …}))` refused its own argument. No argument can carry a symbol key |
-| `pyobj2jsobj-hook` | an extension point: `pyobj2jsobj` asks `$B.pyobj2jsobj_hook` first, and a result other than `undefined` is the conversion. The engine converts the arguments of every JavaScript call it makes with `pyobj2jsobj`, a local nothing outside can replace, so an application embedding Brython had no way to convert a value itself. Svelthon sets it so a Python callable crosses as `pyHandler` publishes it: trimmed to its arity before anything is read, one identity at every crossing |
+| `pyobj2jsobj-hook` | an extension point: `pyobj2jsobj` asks `$B.pyobj2jsobj_hook` first, and a result other than `undefined` is the conversion. The engine converts the arguments of every JavaScript call it makes with `pyobj2jsobj`, a local nothing outside can replace, so an application embedding Brython had no way to convert a value itself. Svelthon sets it so a Python callable crosses as `pyHandler` publishes it, trimmed to its arity before anything is read, one identity at every crossing, and a Python list, tuple or dict as a named import's arguments cross |
 | `callable-instance-to-js` | `pyobj2jsobj` converts an instance of a class defining `__call__` into a JavaScript function, as it does a function and a method. It handed the object over, so `window.call(C())` raised `f is not a function` |
 | `bound-method-js-identity` | `pyobj2jsobj` keeps one JavaScript function per bound method, keyed on its instance and function. A bound method is a new object at each read, and the cache was on that object, so `same(h.run, h.run)` was false and `removeEventListener(h.run)` never removed what `addEventListener(h.run)` added |
+| `js-method-receiver-cache` | the Python function made for a JavaScript method is kept in a WeakMap keyed on its receiver rather than in a property written on it. A frozen, sealed or non-extensible receiver refused the property, so every read of `box.run` made a new function and a registry could not remove what it had been given |
+| `pyobj2jsobj-graph` | the arguments of one JavaScript call are converted with one memo, and a list or dict is registered in it before its items are walked. `same(rows, rows)` handed over two arrays, and `rows.append(rows)` overflowed the stack. The memo is handed to the hook as its second argument, which is how Svelthon's conversion keeps the same graph |
 | `json-parse-str-subclass` | `javascript.JSON.parse` reads a subclass of str by its value. It was handed to `JSON.parse` as the object Brython keeps it in, so `JSON.parse(Text('{"answer": 42}'))` raised `"[object Object]" is not valid JSON`. `from_json` is this `parse` |
 
 The first one reaches Svelthon at `importjs`: a value handed to a JavaScript

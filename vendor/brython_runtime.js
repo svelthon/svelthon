@@ -1978,7 +1978,9 @@ var call_method=klass.tp_call
 if(test){console.log('call_method',call_method)}
 if(call_method===$B.NULL){$B.RAISE(_b_.TypeError,"'"+$B.class_name(callable)+
 "' object is not callable")}
-if(typeof call_method !=='function'){/* SVELTHON patch, see BRYTHON_FIX.md */var call_getter=$B.search_slot($B.get_class(call_method),'tp_descr_get',$B.NULL);if(call_getter !==$B.NULL){return $B.$call(call_getter(call_method,callable,klass),...args)};if($B.get_class(call_method).tp_call !==$B.NULL){
+if(typeof call_method !=='function'){/* SVELTHON patch, see BRYTHON_FIX.md */var call_getter=$B.search_slot($B.get_class(call_method),'tp_descr_get',$B.NULL)
+if(call_getter !==$B.NULL){return $B.$call(call_getter(call_method,callable,klass),...args)}
+if($B.get_class(call_method).tp_call !==$B.NULL){
 return $B.$call(call_method,...args)}else{
 $B.RAISE(_b_.TypeError,"'"+$B.class_name(callable)+
 "' object is not callable")}}
@@ -12488,8 +12490,8 @@ $B.RAISE(_b_.TypeError,_b_.str.$factory(obj)+
 const JSOBJ=$B.JSOBJ=Symbol('JSOBJ')
 const PYOBJ=$B.PYOBJ=Symbol('PYOBJ')
 const PYOBJ_MAP=$B.PYOBJ_MAP=new WeakMap()
-const PYOBJFCT=Symbol('PYOBJFCT')
-const PYOBJFCTS=Symbol('PYOBJFCTS')
+const JS_FUNCTIONS=new WeakMap()
+const JS_METHODS=new WeakMap()
 function*f(){}
 var Generator=Object.getPrototypeOf(f())
 var JSGenerator=$B.make_builtin_class('JavascriptGenerator')
@@ -12522,22 +12524,21 @@ if(jsobj instanceof Promise ||typeof jsobj.then=="function"){return jsobj}
 if(typeof jsobj==="function"){
 if(jsobj.ob_type !==undefined){return jsobj}
 _this=_this===undefined ? null :_this
-if(_this===null){const pyobj=jsobj[PYOBJFCT]
-if(pyobj !==undefined){return pyobj}}else{
-const pyobjfcts=_this[PYOBJFCTS]
-if(pyobjfcts !==undefined){const pyobj=pyobjfcts.get(jsobj)
-if(pyobj !==undefined){return pyobj}}else{
-try{
-_this[PYOBJFCTS]=new Map()}catch(err){}}}
-var res=function(){var args=new Array(arguments.length)
+let made
+if(_this===null){made=JS_FUNCTIONS}else if(typeof _this==='object' ||typeof _this==='function'){made=JS_METHODS.get(_this)
+if(made===undefined){made=new WeakMap()
+JS_METHODS.set(_this,made)}}
+const known=made?.get(jsobj)
+if(known !==undefined){return known}
+var res=function(){var args=new Array(arguments.length),memo=new Map()
 for(var i=0,len=arguments.length;i < len;++i){var arg=arguments[i]
 if(arg !==null && arg.constructor===Object && arg[$B.KW]){console.log(Error().stack)
 $B.RAISE(_b_.TypeError,'keyword arguments are not supported for '+
 'Javascript functions')}
-args[i]=pyobj2jsobj(arg)}
+args[i]=pyobj2jsobj(arg,memo)}
 try{
 return jsobj2pyobj(jsobj.apply(_this,args))}catch(err){throw $B.exception(err)}}
-if(_this===null){jsobj[PYOBJFCT]=res}else if(_this[PYOBJFCTS]!==undefined){_this[PYOBJFCTS].set(jsobj,res)}
+made?.set(jsobj,res)
 res[JSOBJ]=jsobj
 Object.defineProperty(res,'$js_func',{value:jsobj})
 Object.defineProperty(res,'$infos',{value:{__name__:jsobj.name,__qualname__:jsobj.name},writable:true})
@@ -12553,7 +12554,7 @@ PYOBJ_MAP.set(jsobj,res)
 res[JSOBJ]=jsobj
 return res}
 return jsobj}
-var pyobj2jsobj=$B.pyobj2jsobj=function(pyobj){
+var pyobj2jsobj=$B.pyobj2jsobj=function(pyobj,memo){
 switch(pyobj){case true:
 case false:
 return pyobj
@@ -12563,7 +12564,7 @@ case null:
 return null
 case _b_.None:
 return undefined}
-if($B.pyobj2jsobj_hook !==undefined){let converted=$B.pyobj2jsobj_hook(pyobj)
+if($B.pyobj2jsobj_hook !==undefined){let converted=$B.pyobj2jsobj_hook(pyobj,memo)
 if(converted !==undefined){return converted}}
 let _jsobj=pyobj[JSOBJ]
 if(_jsobj !==undefined){return _jsobj}
@@ -12571,17 +12572,23 @@ var klass=$B.get_class(pyobj)
 function has_type(cls,base){return cls===base ||$B.get_mro(cls).includes(base)}
 if(has_type(klass,$B.DOMNode)){return pyobj}
 if(has_type(klass,_b_.list)||has_type(klass,_b_.tuple)){
-var jsobj=pyobj.map(pyobj2jsobj)
+memo=memo ?? new Map()
+if(memo.has(pyobj)){return memo.get(pyobj)}
+var jsobj=[]
+memo.set(pyobj,jsobj)
+for(var item of pyobj){jsobj.push(pyobj2jsobj(item,memo))}
 PYOBJ_MAP.set(jsobj,pyobj)
-delete jsobj.ob_type 
 return jsobj}
 if(has_type(klass,_b_.dict)){
+memo=memo ?? new Map()
+if(memo.has(pyobj)){return memo.get(pyobj)}
 let jsobj={}
+memo.set(pyobj,jsobj)
 for(var entry of _b_.dict.$iter_items(pyobj)){var key=entry.key
 if(typeof key !=="string"){key=_b_.str.$factory(key)}
 if(typeof entry.value==='function'){
 entry.value.bind(jsobj)}
-jsobj[key]=pyobj2jsobj(entry.value)}
+jsobj[key]=pyobj2jsobj(entry.value,memo)}
 pyobj[JSOBJ]=jsobj
 PYOBJ_MAP.set(jsobj,pyobj)
 return jsobj}
@@ -12643,17 +12650,17 @@ var res=$B.empty_dict()
 for(var key in obj){$B.str_dict_set(res,key,convert_to_python(obj[key]))}
 return res}
 return $B.jsobj2pyobj(obj)}
-function pyargs2jsargs(pyargs){var args=new Array(pyargs.length)
+function pyargs2jsargs(pyargs){var args=new Array(pyargs.length),memo=new Map()
 for(var i=0,len=pyargs.length;i < len;i++){var arg=pyargs[i]
 if(arg !==undefined && arg !==null &&
 arg[$B.KW]!==undefined &&
 ! $B.keyword_is_empty(arg[$B.KW])){
 $B.RAISE(_b_.TypeError,"A Javascript function can't take "+
 "keyword arguments")}
-args[i]=$B.pyobj2jsobj(arg)}
+args[i]=$B.pyobj2jsobj(arg,memo)}
 return args}
 $B.JSClass=$B.make_builtin_class('JSClass',[_b_.type])
-$B.JSClass.tp_getattro=function(self,attr){if(attr=='new'){return function(){var args=Array.from(arguments).map(pyobj2jsobj)
+$B.JSClass.tp_getattro=function(self,attr){if(attr=='new'){return function(){var memo=new Map(),args=Array.from(arguments,arg=> pyobj2jsobj(arg,memo))
 return jsobj2pyobj(new self.js_class(...args))}}
 var res=_b_.type.tp_getattro(self,attr)
 if(res !==$B.NULL){return res}
@@ -12683,9 +12690,9 @@ return cls}
 var js_iterator=$B.make_builtin_class('js_iterator')
 js_iterator.tp_iternext=function*(self){for(var key of self.it){yield key}}
 $B.set_func_names(js_iterator,'builtins')
-function dict_to_js(d){var res={}
+function dict_to_js(d){var res={},memo=new Map([[d,res]])
 for(var entry of _b_.dict.$iter_items(d)){if(typeof entry.key !=='string'){return $B.NULL}
-res[entry.key]=pyobj2jsobj(entry.value)}
+res[entry.key]=pyobj2jsobj(entry.value,memo)}
 return res}
 function JSObj_eq(self,other){if(typeof self !=='object'){return false}
 if($B.is_dict(self)){self=dict_to_js(self)
@@ -12901,7 +12908,8 @@ return _b_.NotImplemented}}
 js_array.sq_concat=function(_self,other){
 var res=_self.slice()
 if($B.$isinstance(other,js_array)){return _self.slice().concat(other)}
-for(var item of $B.make_js_iterator(other)){res.push(pyobj2jsobj(item))}
+var memo=new Map()
+for(var item of $B.make_js_iterator(other)){res.push(pyobj2jsobj(item,memo))}
 return res}
 js_array.mp_ass_subscript=function(self,key,value){if(value===$B.NULL){self.splice(key,1)}else{
 self[key]=pyobj2jsobj(value)}}
@@ -12918,7 +12926,8 @@ js_array.sq_contains=function(self,item){item=pyobj2jsobj(item)
 for(var x of self){if($B.is_or_equals(x,item)){return true}}
 return false}
 js_array.nb_inplace_add=function(self,other){if($B.$isinstance(other,js_array)){for(var item of other){self.push(item)}}else{
-for(var item of $B.make_js_iterator(other)){self.push($B.pyobj2jsobj(item))}}
+var memo=new Map()
+for(var item of $B.make_js_iterator(other)){self.push($B.pyobj2jsobj(item,memo))}}
 return self}
 js_array.tp_iter=function(self){return js_array_iterator.$factory(self)}
 js_array.nb_multiply=function(self,nb){var res=self.slice()
@@ -12938,8 +12947,8 @@ const pyobj=PYOBJ_MAP.get(self)
 if(pyobj){pyobj.push(x)}
 return _b_.None}
 js_array_funcs.extend=function(self){var $=$B.args("extend",2,{self:null,t:null},arguments)
-var self=$.self,t=$.t
-for(var item of $B.make_js_iterator(t)){self[self.length]=$B.pyobj2jsobj(item)}
+var self=$.self,t=$.t,memo=new Map()
+for(var item of $B.make_js_iterator(t)){self[self.length]=$B.pyobj2jsobj(item,memo)}
 return _b_.None}
 js_array_funcs.__reduce_ex__=function(self,protocol){
 var items=new Array(self.length)
@@ -13480,8 +13489,8 @@ if(method !==null){
 return res.bind(self)}}
 if(res.$function_infos){
 return res}
-var func=(function(f,elt){return function(){var args=[]
-for(var i=0;i < arguments.length;i++){args.push($B.pyobj2jsobj(arguments[i]))}
+var func=(function(f,elt){return function(){var args=[],memo=new Map()
+for(var i=0;i < arguments.length;i++){args.push($B.pyobj2jsobj(arguments[i],memo))}
 var result=f.apply(elt,args)
 return convertDomValue(result)}})(res,self)
 func.$infos={__name__ :attr,__qualname__:attr}
@@ -14749,7 +14758,7 @@ delete browser.win}else if($B.isWebWorker){browser.is_webworker=true
 delete browser.window
 delete browser.win
 browser.self.send=function(){var $=$B.args('send',1,{message:null},arguments,null,'args',null)
-var message=$B.pyobj2structuredclone($.message),args=$.args.map($B.pyobj2jsobj)
+var message=$B.pyobj2structuredclone($.message),memo=new Map(),args=$.args.map(arg=> $B.pyobj2jsobj(arg,memo))
 self.postMessage(message,...args)}
 browser.document={__get__:function(self){$B.RAISE(_b_.ValueError,"'document' is not available in Web Workers")},__set__:function(self,value){browser.document=value}}}else{
 browser.is_webworker=false

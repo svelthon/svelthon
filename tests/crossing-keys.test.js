@@ -59,3 +59,24 @@ describe('a field called constructor is a field', () => {
         expect(plainData(url)).toBe(url);
     });
 });
+
+// An object that says how it serialises keeps its `toJSON`, unless it is
+// Python's. A dict keeps its class under a symbol rather than as `ob_type`, so
+// `{"toJSON": f}` was taken for a native object and crossed whole, symbols and
+// Brython float included.
+describe('a key called toJSON is a key', () => {
+    test('the dict is converted, and the key kept', () => {
+        const $B = globalThis.__BRYTHON__;
+        const dict = $B.builtins.dict.$factory();
+        const write = () => 'written';
+
+        $B.$setitem(dict, 'toJSON', write);
+        $B.$setitem(dict, 'amount', $B.builtins.float.$factory(1.5));
+
+        const out = plainData(dict);
+
+        expect(out).not.toBe(dict);
+        expect(out.amount).toBe(1.5);
+        expect(out.toJSON).toBe(write);
+    });
+});

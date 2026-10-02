@@ -16,6 +16,21 @@ class Handler:
         return 42
 
 
+class Rows(list):
+    def __call__(self):
+        return 42
+
+
+class Pair(tuple):
+    def __call__(self):
+        return 42
+
+
+class Bag(dict):
+    def __call__(self):
+        return 42
+
+
 class Box:
     def __init__(self):
         self.n = 1
@@ -36,6 +51,11 @@ SHAPES = {
     "lambda": lambda: 2,
     "method": box.save,
     "instance": handler,
+    # Containers that are callables too: a list and a tuple are arrays to
+    # JavaScript, and a dict keeps its class under a symbol.
+    "list": Rows([1]),
+    "tuple": Pair((1,)),
+    "dict": Bag(),
     # The one shape Python cannot name at all: what it knows is
     # `<JavascriptFunction object>`, identically for every import.
     "javascript": formatted,

@@ -154,13 +154,16 @@ describe('tojson', () => {
     // the worst, since `tojson` is written in templates, where `undefined`
     // renders as nothing.
     //
-    // Twelve cells and one sentence: the shape and the position are both the
+    // One sentence for every cell: the shape and the position are both the
     // author's, and neither may decide whether they are told.
     describe.for([
         ['a function', 'function'],
         ['a lambda', 'lambda'],
         ['a bound method', 'method'],
         ['a callable instance', 'instance'],
+        ['a callable list', 'list'],
+        ['a callable tuple', 'tuple'],
+        ['a callable dict', 'dict'],
         ['a function JavaScript built', 'javascript']
     ])('%s', ([, shape]) => {
         test.for([

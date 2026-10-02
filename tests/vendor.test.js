@@ -341,6 +341,27 @@ describe('the vendored Brython carries its repairs', () => {
         expect(typeof $B.pyobj2jsobj_hook).toBe('function');
     });
 
+    // `pyobj2jsobj-graph`: one memo per call, registered before the children
+    // are walked, and handed to the hook, which is what makes `same(rows, rows)`
+    // one array through a namespace. The hook answers lists and dicts first in
+    // Svelthon, so the engine's own walk is read off the source.
+    test('a call converts its arguments with one memo, which the hook is given', () => {
+        const source = String($B.pyobj2jsobj);
+
+        expect(source).toContain('$B.pyobj2jsobj_hook(pyobj,memo)');
+        expect(source).toContain('memo.set(pyobj,jsobj)');
+        expect(String($B.JSClass.tp_getattro)).toContain('pyobj2jsobj(arg,memo)');
+    });
+
+    // `js-method-receiver-cache`: the Python function made for a method is
+    // kept beside the receiver rather than on it, so a frozen object's method
+    // read twice is one function, and `off(box.run)` finds `on(box.run)`.
+    test('a method of a frozen object is one function across reads', () => {
+        const frozen = Object.freeze({ run() {} });
+
+        expect($B.jsobj2pyobj(frozen.run, frozen)).toBe($B.jsobj2pyobj(frozen.run, frozen));
+    });
+
     // The counter the code generator numbers functions with starts at random
     // and is private upstream; `$B.id_counter(n)` sets it and gives back the
     // value it replaces, which is what makes one source compile to one text.

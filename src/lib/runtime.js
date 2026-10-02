@@ -1144,6 +1144,19 @@ export const pyClass = (value) =>
     value.tp_name !== undefined &&
     value.tp_bases !== undefined;
 
+// The class of a Python object, or undefined for anything else. Brython keeps
+// it in two places: `ob_type` on most objects, and `Symbol(OB_TYPE)` on a dict
+// and every subclass of one, which has no `ob_type` at all. A site that looks a
+// protocol up on the class asks here, so `class Bag(dict)` defining `__call__`
+// is callable like any other class that defines it.
+const pyType = (value) => {
+    if (value === null || typeof value !== 'object') return undefined;
+
+    const type = value.ob_type ?? value[globalThis.__BRYTHON__.OB_TYPE];
+
+    return pyClass(type) ? type : undefined;
+};
+
 // Whether an object is a bag of keys, or something of a class of its own: a
 // Response, a URL, a Date, a Map, a Promise, any of which a `load()` may hand
 // straight back and whose keys copied would destroy it.
@@ -1495,9 +1508,11 @@ const declares = (cls, name) => {
 const declaresSlots = (value) => {
     const $B = globalThis.__BRYTHON__;
 
-    if (!pyClass(value.ob_type)) return false;
+    const type = pyType(value);
 
-    return declares(value.ob_type, '__slots__') !== $B.NULL;
+    if (type === undefined) return false;
+
+    return declares(type, '__slots__') !== $B.NULL;
 };
 
 // The two Python sets, asked by class the way the dict above is. Anything else
@@ -2345,7 +2360,7 @@ export function plainData(value, seen, adapt) {
     // Registered before the children are walked, which is what answers a cycle
     // with the object itself rather than with `null`. The shell has to be made
     // before it can be filled, so `branch` is given it to fill.
-    const shell = Array.isArray(value) ? [] : {};
+    const shell = sequence(value) ? [] : {};
 
     made.set(value, shell);
 
@@ -2366,6 +2381,16 @@ export function plainData(value, seen, adapt) {
     return out;
 }
 
+// An array that holds rows: a JavaScript one, or a Python list or tuple, a
+// subclass included. Brython builds other objects on an array too, a frame
+// among them, and those are objects of their own class, whose items are not
+// what they are.
+const sequence = (value) => {
+    const $B = globalThis.__BRYTHON__;
+
+    return Array.isArray(value) && (pyType(value) === undefined || Boolean($B.is_list(value) || $B.is_tuple(value)));
+};
+
 // `shell` is the object the graph rule registered before walking, so a cycle
 // found on the way down meets the same one. The JSON rule has none and builds as
 // it goes, which is why every `fill` below takes what it was given or makes one.
@@ -2374,9 +2399,9 @@ function branch(value, seen, shell, adapt) {
     // and a class instance alike: `JSON.stringify` calls its `toJSON`,
     // enumerable or not, own or inherited, with the receiver and the key. A
     // Python object with a `toJSON` key or attribute has a class, and is data.
-    if (typeof value.toJSON === 'function' && !pyClass(value.ob_type)) return value;
+    if (typeof value.toJSON === 'function' && pyType(value) === undefined) return value;
 
-    if (Array.isArray(value)) {
+    if (sequence(value)) {
         // list, tuple, and a subclass through whatever it says iterating it
         // means: `json.dumps` of a list subclass in CPython is its `__iter__`
         // too, and a component that renders `rows` one way and exports it the
@@ -3287,10 +3312,11 @@ export function pyCall(fn, where, lineOffset = 0, arity = Infinity, named, conve
 const callDescriptor = (value) => {
     const $B = globalThis.__BRYTHON__;
 
-    if (value === null || typeof value !== 'object' || !pyClass(value.ob_type)) return null;
-    if (pyClass(value) || boundMethod(value)) return null;
+    const type = pyType(value);
 
-    const found = declares(value.ob_type, '__call__');
+    if (type === undefined || pyClass(value) || boundMethod(value)) return null;
+
+    const found = declares(type, '__call__');
 
     return found === $B.NULL ? null : found;
 };
@@ -3314,9 +3340,7 @@ export const callable = (value) =>
 // slot. Python's own `callable()` answers, a class excluded, since a class
 // crossing is the class.
 const slotCallable = (value) =>
-    value !== null &&
-    typeof value === 'object' &&
-    pyClass(value.ob_type) &&
+    pyType(value) !== undefined &&
     !pyClass(value) &&
     _b_.callable(value) === true;
 
@@ -3685,13 +3709,23 @@ export function pyTeardown(value, where, lineOffset = 0) {
 // instead, an extension point proposed upstream and vendored (see
 // BRYTHON_FIX.md), so the conversion has one site and one contract.
 //
-// Only a Python callable is answered; anything else goes on to the engine.
-globalThis.__BRYTHON__.pyobj2jsobj_hook = (value) => {
-    if (typeof value !== 'function' && (value === null || typeof value !== 'object' || Array.isArray(value))) {
-        return undefined;
-    }
+// A Python list, tuple or dict is answered too, by `outbound`, the walk a named
+// import's arguments take, with the memo the engine keeps for the call. The
+// engine's own walk reuses the object a dict became on an earlier call, which
+// misses the mutations it does not mirror, `clear()` and a nested
+// `append()`; and two walks were two contracts, decided by the way a function
+// was imported. The callable question comes first: a list subclass that
+// defines `__call__` is a callback.
+//
+// Anything else goes on to the engine.
+globalThis.__BRYTHON__.pyobj2jsobj_hook = (value, memo) => {
+    const $B = globalThis.__BRYTHON__;
 
-    return declared(value) === null ? undefined : pyHandler(value);
+    if (value === null || (typeof value !== 'object' && typeof value !== 'function')) return undefined;
+    if (declared(value) !== null) return pyHandler(value);
+    if (!($B.is_list(value) || $B.is_tuple(value) || $B.is_dict(value))) return undefined;
+
+    return outbound(value, memo);
 };
 
 export function pyHandler(value) {
@@ -3837,8 +3871,25 @@ function perReceiver(self) {
 // its callbacks in an options object is the ordinary shape, and `pyHandler`
 // caches by function, so the same callback nested twice is one JavaScript
 // function and stays removable.
-const outbound = (value, made) =>
-    callable(value) ? pyHandler(value) : plainData(value, made, pyHandler);
+// `None` as an argument is `undefined`, the engine's pairing, so a parameter
+// with a default takes it whichever way the function was imported; inside a
+// container it is `null`, which is what JSON writes for it.
+//
+// A Python value converted is recorded in `$B.PYOBJ_MAP`, as the engine records
+// its own, so a library handing it back hands back the Python value: `back(rows)
+// is rows`, and `restored` below reads the same map.
+const outbound = (value, made) => {
+    if (value === NONE) return undefined;
+    if (callable(value)) return pyHandler(value);
+
+    const converted = plainData(value, made, pyHandler);
+
+    if (converted !== value && pyType(value) !== undefined && converted !== null && typeof converted === 'object') {
+        globalThis.__BRYTHON__.PYOBJ_MAP.set(converted, value);
+    }
+
+    return converted;
+};
 
 // And what comes *back*. Only the outbound half existed, and the asymmetry was
 // silent for as long as nobody looked at the answer: a value returned by an
