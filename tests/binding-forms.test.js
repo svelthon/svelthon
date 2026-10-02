@@ -23,6 +23,7 @@
 // compiler's, so a form the compiler learns to miss again turns it red.
 import { test, expect, describe } from 'vitest';
 import { createRequire } from 'node:module';
+import { parse } from 'svelte/compiler';
 
 import { bind } from '../src/lib/runtime.js';
 
@@ -98,24 +99,37 @@ describe('and a locked word is refused, however it was written', () => {
     );
 });
 
-// Which of them is state. A name the module assigns a value to is, however the
-// assignment is written: a `for` target, a `with … as` and a `match` capture
-// assign as `=` does, and a list bound by one and appended to by a handler left
-// the page showing its old length. A class and an import are declared, and an
-// `except … as` is unbound when the handler ends: none of those three is state.
-describe('and the ones that assign a value become a signal', () => {
+// Which of them is state. A name the module binds to a value is, however the
+// binding is written: a `for` target, a `with … as`, a `match` capture and an
+// import bind as `=` does, and a list bound by one and appended to by a handler
+// left the page showing its old length. A class is declared, and an `except …
+// as` is unbound when the handler ends: neither is state.
+describe('and the ones that bind a value become a signal', () => {
     const signals = (src) => [...script(src).matchAll(/let (\w+) = \$state\.raw/g)].map((m) => m[1]);
 
     test.for([
         ['a class', 'class thing:\n    pass'],
-        ['an import', 'import thing'],
         ['an except clause', 'try:\n    pass\nexcept Exception as thing:\n    pass']
     ])('%s gets no signal', ([, form]) => {
         expect(signals(`${form}\n`)).not.toContain('thing');
     });
 
+    // `*` names nothing, so it must not become a binding of its own: the script
+    // still parses.
+    test('a star import declares no name of its own', () => {
+        const emitted = script('from browser import *\n');
+
+        expect(emitted).not.toMatch(/\$state\.raw[^;]*\*|let \*|'\*'/);
+        expect(() => parse(`<script>${emitted}</script>`)).not.toThrow();
+    });
+
     test.for([
         ['an assignment', 'thing = 1'],
+        ['an import', 'import thing'],
+        ['an import of a dotted name', 'import thing.sub'],
+        ['an import renamed', 'import other as thing'],
+        ['a name imported from a module', 'from other import thing'],
+        ['a name imported and renamed', 'from other import name as thing'],
         ['a for target', 'for thing in [1]:\n    pass'],
         ['a for target unpacked', 'for other, thing in [(1, 2)]:\n    pass'],
         ['a with clause', 'with open() as thing:\n    pass'],

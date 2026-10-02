@@ -4845,7 +4845,7 @@ function watchReset() {
                 // writes: the first write re-renders, and the rebuild below
                 // needs the groups as they were when the form was reset.
                 const groups = new Map(inputs.map((one) => [one, one.$svelthonGroup]));
-                const rebuilt = new Map();
+                const rebuilt = [];
 
                 // The filled ones last. A radio group writes once per input, and
                 // the one that came back filled has to have the final word over
@@ -4875,28 +4875,19 @@ function watchReset() {
 // into a token here; `targetOf` adds the row.
 const GROUPS = new WeakMap();
 
-// One object per distinct tuple of mentioned values, so the same row answers the
-// same target on every render. Objects are held weakly: a row removed from the
-// list is not kept alive by the inputs it used to have.
-function targetOf(token, where) {
-    let level = (token.targets ??= { weak: new WeakMap(), strong: new Map() });
+// The target an input writes, held by the input and nowhere else. A registry of
+// one object per tuple of mentioned values answered the same row with the same
+// object on every render, and kept the string or the number of every row a
+// long-lived form had ever shown, since nothing told it a row was gone.
+const targetOf = (token, where) => ({ token, where });
 
-    for (const one of where) {
-        const table = one !== null && (typeof one === 'object' || typeof one === 'function')
-            ? level.weak
-            : level.strong;
-        let next = table.get(one);
-
-        if (next === undefined) {
-            next = { weak: new WeakMap(), strong: new Map() };
-            table.set(one, next);
-        }
-
-        level = next;
-    }
-
-    return level;
-}
+// Two inputs write one target when they are of one token and their bindings
+// mention the same values, compared the way a Map compares its keys: by
+// identity, a NaN equal to itself.
+const sameTarget = (a, b) =>
+    a.token === b.token &&
+    a.where.length === b.where.length &&
+    a.where.every((one, i) => one === b.where[i] || (one !== one && b.where[i] !== b.where[i]));
 
 function groupToken(scope, binding) {
     // No scope to share a token through: a token of its own, the one shape the
@@ -4983,7 +4974,7 @@ export function group(node, [current, write, chosen, binding, scope, where = []]
     // keeps it until its teardown. Filtering on `isConnected` dropped a ticked
     // box from the selection the moment it left the page. An input that
     // registered after the last sort is at the end until the next one runs.
-    const inOrder = () => inputs.filter((one) => one.$svelthonGroup === node.$svelthonGroup);
+    const inOrder = () => inputs.filter((one) => sameTarget(one.$svelthonGroup, node.$svelthonGroup));
 
     // Python's `==`, not JavaScript's `===`. A Brython float is an object
     // `{ob_type, value}`, so `value={0.5}` evaluated twice is two objects and
@@ -5067,11 +5058,11 @@ export function group(node, [current, write, chosen, binding, scope, where = []]
         if (!boxes) return write(node.checked ? value() : NONE);
 
         // Which inputs belong together: the target, see `groupToken`.
-        let kept = rebuilt.get(target);
+        let kept = rebuilt.find(([one]) => sameTarget(one, target))?.[1];
 
         if (kept === undefined) {
             kept = [];
-            rebuilt.set(target, kept);
+            rebuilt.push([target, kept]);
         }
 
         // The list is built one control at a time here, and not read off the

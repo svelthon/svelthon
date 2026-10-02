@@ -84,5 +84,8 @@ test.skipIf(!canSpawn)('a destroyed input is not kept by its group', () => {
 
     expect(out.controls).toBe(0);
     expect(out.registered).toBe(0);
+    // Nor is the target it wrote, named by a string: a registry of every row
+    // ever seen kept one per string for as long as the component lived.
+    expect(out.targets).toBe(0);
     expect(out.scope).toBe('object');
 });

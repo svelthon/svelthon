@@ -1818,10 +1818,10 @@ function surface(body) {
     //
     // The buckets above answer "what is reactive here": an assignment, however
     // it is written, including a walrus, a `global` in a function, a `for`
-    // target, a `with … as` and a `match` capture, each of which assigns a
-    // value to a name of the module as `=` does. A name a statement declares
-    // (`class`, `import`) is not state, and neither is an `except … as`, which
-    // Python unbinds when the handler ends.
+    // target, a `with … as`, a `match` capture and an import, each of which
+    // binds a name of the module to a value as `=` does. A class is declared,
+    // not state, and neither is an `except … as`, which Python unbinds when the
+    // handler ends.
     //
     // But three other rules read the same list, and for them the question is not
     // "is it reactive", it is "did the author take this word":
@@ -2083,10 +2083,15 @@ function surface(body) {
 
                 for (const item of node.items || []) unpacked(item.optional_vars);
 
-                // `import json`, `from m import a as b`. An alias is the name
-                // when there is one; a dotted `import a.b` binds `a`.
+                // `import json`, `from m import a as b`: the name is bound to what
+                // the import found, as `=` binds it, so it is state, and a list
+                // imported from a module and appended to repaints the page as
+                // `values = values` beside it did. An alias is the name when
+                // there is one; a dotted `import a.b` binds `a`; `*` names
+                // nothing. A `global` written at the top binds nothing itself.
                 for (const alias of node.names || []) {
-                    bind(typeof alias === 'string' ? alias : alias.asname || alias.name?.split('.')[0]);
+                    if (typeof alias === 'string') bind(alias);
+                    else if (alias.name !== '*') claim(alias.asname || alias.name?.split('.')[0]);
                 }
 
                 // `case {"amount": amount}:`, `case [x, *rest]:`, `case P(x=y)

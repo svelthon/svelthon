@@ -3,10 +3,10 @@ import { mount, flushSync } from './mounted.js';
 import BlockScope from './fixtures/BlockScope.svelte';
 import AssignedForms from './fixtures/AssignedForms.svelte';
 
-// A `for` target, a `with … as` and a `match` capture assign a value to a name
-// of the module, as `=` does, so the name is state: a list bound by one of them
-// and appended to by a handler left the page at its old length.
-test('a name a for, a with or a match assigns follows the DOM', () => {
+// A `for` target, a `with … as`, a `match` capture and an import bind a name of
+// the module to a value, as `=` does, so the name is state: a list bound by one
+// of them and appended to by a handler left the page at its old length.
+test('a name a for, a with, a match or an import binds follows the DOM', () => {
     const target = document.body.appendChild(document.createElement('div'));
 
     mount(AssignedForms, { target });

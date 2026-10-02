@@ -3,6 +3,8 @@
 # appended to by a handler, with no `global`: Python needs none to mutate in
 # place. `plain` is the witness. One paragraph per name, so a name that
 # notifies cannot repaint one that does not.
+from assigned_rows import rows as imported
+
 plain = []
 for loop in [[]]:
     pass
@@ -31,7 +33,7 @@ match {"rows": []}:
 
 
 def change():
-    for one in [plain, loop, left, right, entered, matched, starred]:
+    for one in [plain, loop, left, right, entered, matched, starred, imported]:
         one.append(1)
     rest.update(more=1)
 </script>
@@ -45,3 +47,4 @@ def change():
 <p data-k="matched">{len(matched)}</p>
 <p data-k="starred">{len(starred)}</p>
 <p data-k="rest">{len(rest)}</p>
+<p data-k="imported">{len(imported)}</p>

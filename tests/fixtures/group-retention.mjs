@@ -1,5 +1,6 @@
 // Run under `node --expose-gc`: registers 200 checkboxes in one group whose
-// scope stays alive, destroys them, collects, and prints how many are still
+// scope stays alive, each on a row named by a string, destroys them, collects,
+// and prints how many inputs, and how many of the targets they wrote, are still
 // alive. Inputs never registered are the control that says a collection
 // happened.
 //
@@ -16,6 +17,7 @@ for (const name of ['window', 'document', 'location', 'navigator', 'HTMLElement'
 
 const scope = {};
 const registered = [];
+const targets = [];
 const controls = [];
 const actions = [];
 
@@ -26,8 +28,9 @@ const register = () => {
 
         input.type = 'checkbox';
         document.body.appendChild(input);
-        actions.push(group(input, [[], () => {}, `item-${i}`, 'selected', scope]));
+        actions.push(group(input, [[], () => {}, `item-${i}`, 'selected', scope, [`row-${i}`]]));
         registered.push(new WeakRef(input));
+        targets.push(new WeakRef(input.$svelthonGroup));
 
         const control = document.createElement('input');
 
@@ -51,5 +54,7 @@ for (let i = 0; i < 8; i++) {
 
 const live = (refs) => refs.filter((ref) => ref.deref() !== undefined).length;
 
-console.log(JSON.stringify({ registered: live(registered), controls: live(controls), scope: typeof scope }));
+console.log(
+    JSON.stringify({ registered: live(registered), targets: live(targets), controls: live(controls), scope: typeof scope })
+);
 dom.window.close();
