@@ -45,7 +45,7 @@ describe('a tag written the short way', () => {
     test('an attachment', () => {
         const { out, defs } = rewrite('<p {@attach mark}>x</p>');
 
-        expect(out).toContain('{@attach __event(__expr_0())}');
+        expect(out).toContain('{@attach __attach(__expr_0())}');
         expect(defs[0]).toContain('return (mark)');
     });
 });

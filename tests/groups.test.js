@@ -1,6 +1,7 @@
 import { test, expect, describe } from 'vitest';
 import { mount, unmount, flushSync } from './mounted.js';
 import Groups from './fixtures/Groups.svelte';
+import GroupDetached from './fixtures/GroupDetached.svelte';
 
 // `bind:group` is the one directive Svelte refuses a getter/setter pair for: it
 // works out which inputs form a group from the *text* of the expression. Its own
@@ -107,6 +108,43 @@ describe('bind:group', () => {
 // The action's teardown had never run: nothing in the suite unmounted a
 // component holding a group, so the `change` listener it adds was never seen
 // being removed. A group inside an `{#if}` is the ordinary way to meet it.
+// Membership is the registration, which the action's teardown removes, and not
+// being in the document. A ticked box a script took out of the page left the
+// selection the next time another box was clicked, and in the order of a
+// detached node, which the engine chooses; Svelte keeps both, in the order it
+// sorted the group when the boxes registered.
+describe('a box out of the page while its component is mounted', () => {
+    const setup = (target) => {
+        mount(GroupDetached, { target });
+        flushSync();
+
+        return (k) => target.querySelector(k === 'p' ? 'p' : `[data-k="${k}"]`);
+    };
+
+    test('stays in the selection', () => {
+        const at = setup(document.body.appendChild(document.createElement('div')));
+
+        at('a').click();
+        flushSync();
+        at('a').remove();
+        at('b').click();
+        flushSync();
+
+        expect(at('p').textContent).toBe('a, b');
+    });
+
+    test('as do the boxes of a component mounted in a detached target', () => {
+        const at = setup(document.createElement('div'));
+        const box = at('a');
+
+        box.checked = true;
+        box.dispatchEvent(new Event('change'));
+        flushSync();
+
+        expect(at('p').textContent).toBe('a');
+    });
+});
+
 describe('the group action lets go', () => {
     test('unmounting removes the listener it added', () => {
         const target = document.body.appendChild(document.createElement('div'));

@@ -4805,18 +4805,38 @@ export function group(node, [current, write, chosen, binding, scope, where = []]
     (token.nodes ??= new Set()).add(node);
     node.$svelthonValue = value;
 
+    // Sorted when the inputs register, once they are all in place, with
+    // Svelte's own comparator, and kept in that order afterwards: sorting at
+    // every collection asked the document where a control was after a script
+    // had taken it out, and the answer for a detached node is the engine's
+    // choice. `bind_group` does exactly this, in a microtask.
+    queueMicrotask(() => {
+        token.ordered = [...token.nodes].sort((a, b) =>
+            // DOCUMENT_POSITION_FOLLOWING alone: `b` comes after `a`.
+            a.compareDocumentPosition(b) === 4 ? -1 : 1
+        );
+    });
+
     // **And the row is the third half of the identity**: the token is the
     // instance and the binding, and inside one `{#each}` every row shares both.
     // Collecting on the token alone gathered the whole loop, so ticking a box
     // on the second row wrote the first row's selection into it as well — a
     // form recording choices the reader never made for that item.
-    const inOrder = () =>
-        [...token.nodes]
-            .filter((one) => one.isConnected && one.$svelthonGroup === node.$svelthonGroup)
-            .sort((a, b) =>
-                // DOCUMENT_POSITION_FOLLOWING: `b` comes after `a`.
-                a.compareDocumentPosition(b) & 4 ? -1 : 1
-            );
+    //
+    // Membership is the registration, which `destroy` removes, and not being in
+    // the document: a control taken out of the page by a script, or a component
+    // mounted in a detached target, is still mounted, and Svelte's own group
+    // keeps it until its teardown. Filtering on `isConnected` dropped a ticked
+    // box from the selection the moment it left the page.
+    const inOrder = () => {
+        const registered = token.ordered ?? [...token.nodes];
+
+        // An input that registered after the last sort is appended until the
+        // next one runs; one that was destroyed is no longer a member.
+        const members = [...registered, ...[...token.nodes].filter((one) => !registered.includes(one))];
+
+        return members.filter((one) => token.nodes.has(one) && one.$svelthonGroup === node.$svelthonGroup);
+    };
 
     // Python's `==`, not JavaScript's `===`. A Brython float is an object
     // `{ob_type, value}`, so `value={0.5}` evaluated twice is two objects and
