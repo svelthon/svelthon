@@ -600,6 +600,10 @@ const HANDLER = /^(?:on[a-z]|on:)/;
 // offset, which the markup pass runs too early to know.
 const EVENT_WRAPPER = '__event';
 
+// And for `{@attach}`, whose return value has a consumer a handler's has not:
+// Svelte keeps it as the attachment's cleanup.
+const ATTACH_WRAPPER = '__attach';
+
 // `class:many={…}` is read for truthiness, so it needs Python's: an empty list
 // is false here and true in JavaScript, exactly as in `{#if}`.
 const CLASS_DIRECTIVE = /^class:/;
@@ -1972,7 +1976,7 @@ function walk(markup, collect, onPython, seed, record, where) {
                         // through the same wrapper a handler does, which trims
                         // the call to the declared arity, converts the element,
                         // and hands the teardown back.
-                        out += `{@attach ${EVENT_WRAPPER}(${call(attached.rest, '')})}`;
+                        out += `{@attach ${ATTACH_WRAPPER}(${call(attached.rest, '')})}`;
                     } else if (/^[\p{L}_$][\p{L}\p{M}\p{N}_$]*$/u.test(trimmed)) {
                         // {name}, Svelte's shorthand for name={name}. Expanding
                         // it is what routes the read through the namespace, and

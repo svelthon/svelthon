@@ -413,8 +413,17 @@ export const __pybridge = {
     // bindings expect it.
     //
     // Only None. Zero, an empty string and False are values a binding must keep.
+    //
+    // And a Python callable, handed to a prop as `cb={run}`, is adapted the way
+    // the same callable one level down already is, `config={{'cb': run}}`: a
+    // JavaScript child calls it with its own numbers and arguments, and a raw
+    // function raised on them where the nested one answered.
     bound(value) {
-        return value === NONE ? undefined : value;
+        if (value === NONE) return undefined;
+
+        return value !== null && (typeof value === 'object' || typeof value === 'function') && callable(value)
+            ? pyHandler(value)
+            : value;
     },
 
     // `{...attrs}`: Svelte diffs the spread object against the one from the
@@ -2983,6 +2992,12 @@ export function pyNumbers(value) {
     // properties would copy it, and the copy is no longer `None`.
     if (value === null || typeof value !== 'object' || value === NONE) return value;
 
+    // Nor is a callable: a bound method is `{ob_type, im_func, im_self}`, and
+    // walking it as a config replaced its `im_func` with a JavaScript wrapper,
+    // so the method was no longer one to the boundary that received it. It
+    // goes on whole, and that boundary adapts it.
+    if (callable(value)) return value;
+
     const alone = pyScalar(value);
 
     if (alone !== undefined) return alone;
@@ -3634,6 +3649,26 @@ export const invoke = (fn) => (typeof fn === 'function' ? fn() : globalThis.__BR
 // a cleanup it can call, or nothing. An `async def` hands back a coroutine,
 // which is started rather than read as a cleanup, the way Svelte runs an
 // `$effect(async () => …)` and does nothing with the promise it returns.
+// `{@attach fn}`: called as a handler is, and what it returns is the cleanup
+// Svelte runs when the element goes. Svelte keeps it only when `typeof` says
+// function, so a bound method or a callable instance handed back was dropped and
+// never ran. It goes through `pyTeardown`, the rule an effect's return follows.
+export function pyAttach(value, lineOffset = 0) {
+    const found = declared(value);
+
+    if (found === null) return __pybridge.bound(value);
+
+    const { fn: called, where, arity } = found;
+
+    return (...args) => {
+        try {
+            return pyTeardown(called(...taken(args, arity)), where, lineOffset);
+        } catch (error) {
+            throw thrown(pyError(error, where, lineOffset));
+        }
+    };
+}
+
 export function pyTeardown(value, where, lineOffset = 0) {
     if (pyCoroutine(value)) {
         schedule(value, where, lineOffset);

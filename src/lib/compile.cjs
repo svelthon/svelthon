@@ -1238,6 +1238,7 @@ const RUNTIME = {
     follow: '__follow',
     pyError: '__pyError',
     pyEvent: '__pyEvent',
+    pyAttach: '__pyAttach',
     plainData: '__plainData',
     pyArg: '__pyArg',
     pyData: '__pyData',
@@ -2326,7 +2327,7 @@ function preamble(c) {
         // short is exactly wrong, and `py` is a name an author may want.
         `import { ${runtimeAliases([
             'bind', '__pybridge', 'track', 'follow', 'pyError',
-            'pyEvent', 'plainData', 'pyArg', 'pyData', 'pyBoundary', 'pyComponent', 'pyExpression',
+            'pyEvent', 'pyAttach', 'plainData', 'pyArg', 'pyData', 'pyBoundary', 'pyComponent', 'pyExpression',
             'jsCall',
             'ticking', 'pyBind', 'NONE', 'helpers',
             'directiveAction', 'directiveTransition', 'directiveAnimate',
@@ -2437,6 +2438,7 @@ function templateBridge(c) {
 
     return [
         `const __event = (fn) => __pyEvent(fn, __lines);`,
+        `const __attach = (fn) => __pyAttach(fn, __lines);`,
         // What `(name := value)` in a handler compiles to. The write goes
         // through the namespace, so through the accessor, so the signal fires:
         // the whole reason the walrus can mean this here.
