@@ -696,7 +696,9 @@ function declaredJsImports(body, source, lineOffset = 0) {
 
             // The same question `importjs` asks, with the same answer.
             for (const one of strings(names)) {
-                if (!JS_NAME.test(one)) refuseAt(node, `names \`${one}\`, which is not a name`);
+                const why = unbindable(one);
+
+                if (why !== null) refuseAt(node, `names \`${one}\`, ${why}`);
             }
 
             return { from: key.value, names: strings(names) };
@@ -743,6 +745,20 @@ const IMPORTJS_EFFECT = /^importjs\s+(['"])([^'"]+)\1\s*$/;
 // for the same reason.
 const JS_NAME = /^[A-Za-z_$][\w$]*$/;
 const PY_NAME = /^[\p{L}_][\p{L}\p{M}\p{N}_]*$/u;
+
+// Why the local name of a JavaScript import cannot be bound, or null. It is a
+// binding of the generated module, so it answers to the two rules every name
+// there does, `refuseReserved` and `refuseLocked`: `new` and `default` stopped
+// the module parsing, `__py` declared a name the compiler had declared already,
+// and both were said by the JavaScript parser downstream rather than at the
+// line that wrote them.
+function unbindable(name) {
+    if (!JS_NAME.test(name)) return 'which is not a name';
+    if (JS_RESERVED.has(name)) return 'which JavaScript reserves, so the generated module cannot bind it';
+    if (COMPILER_PREFIX.test(name)) return "which starts with `__`, the compiler's own prefix";
+
+    return null;
+}
 
 // The triple-quote state after `line`. Only a triple-quoted string survives a
 // line break, so it is the only thing that can hide an `importjs` further down,
@@ -1075,8 +1091,21 @@ function importJsClause(line, where, source, lineno) {
     const clause = found[1].trim();
     const from = found[3];
 
+    // Every name the clause binds, whatever its shape: `__js__` asks the same.
+    // The name it imports may be any word, `{default as player}`; the one it
+    // binds may not.
+    const bound = (declared) => {
+        for (const { local } of declared.entries) {
+            const why = unbindable(local);
+
+            if (why !== null) throw refuse(`svelthon — importjs: \`${local}\` ${why} (${where})`, source, lineno);
+        }
+
+        return declared;
+    };
+
     const star = clause.match(/^\*\s+as\s+([A-Za-z_$][\w$]*)$/);
-    if (star) return { from, kind: 'namespace', entries: [{ name: null, local: star[1] }] };
+    if (star) return bound({ from, kind: 'namespace', entries: [{ name: null, local: star[1] }] });
 
     // `{a, b as c}`: the names between the braces, each optionally renamed.
     const namedEntries = (inner) => {
@@ -1103,7 +1132,7 @@ function importJsClause(line, where, source, lineno) {
     };
 
     const braced = clause.match(/^\{([\s\S]*)\}$/);
-    if (braced) return { from, kind: 'named', entries: namedEntries(braced[1]) };
+    if (braced) return bound({ from, kind: 'named', entries: namedEntries(braced[1]) });
 
     // `Player, {stopAll}`: the default and some names, from the same module.
     // JavaScript's own clause allows it, and a component that imports both a
@@ -1111,14 +1140,14 @@ function importJsClause(line, where, source, lineno) {
     // The default comes first in `entries`, marked by a null `name`.
     const mixed = clause.match(/^([A-Za-z_$][\w$]*)\s*,\s*\{([\s\S]*)\}$/);
     if (mixed) {
-        return {
+        return bound({
             from,
             kind: 'mixed',
             entries: [{ name: null, local: mixed[1] }, ...namedEntries(mixed[2])]
-        };
+        });
     }
 
-    if (JS_NAME.test(clause)) return { from, kind: 'default', entries: [{ name: null, local: clause }] };
+    if (JS_NAME.test(clause)) return bound({ from, kind: 'default', entries: [{ name: null, local: clause }] });
 
     throw refuse(
         `svelthon — importjs: \`${clause}\` is not an import clause (${where})`,
@@ -1788,9 +1817,11 @@ function surface(body) {
     // recognised as taken.
     //
     // The buckets above answer "what is reactive here": an assignment, however
-    // it is written, including a walrus and a `global` in a function. A name a
-    // statement leaves behind while being about something else (`class`,
-    // `import`, a `for` target, a `with … as`, an `except … as`) is not state.
+    // it is written, including a walrus, a `global` in a function, a `for`
+    // target, a `with … as` and a `match` capture, each of which assigns a
+    // value to a name of the module as `=` does. A name a statement declares
+    // (`class`, `import`) is not state, and neither is an `except … as`, which
+    // Python unbinds when the handler ends.
     //
     // But three other rules read the same list, and for them the question is not
     // "is it reactive", it is "did the author take this word":
@@ -1828,41 +1859,34 @@ function surface(body) {
         if (!lines.has(name) && typeof statement === 'number') lines.set(name, statement);
     };
 
-    // A target is a name, or a tuple or list of them, nested to any depth:
-    // `a, (b, c) = …` is one statement binding three names. A `*rest` wraps its
-    // name in a `Starred`, which is why the value is followed too.
-    const targets = (node) => {
-        if (!node) return;
-        if (node instanceof $B.ast.Name) return bind(node.id);
-        if (node instanceof $B.ast.Starred) return targets(node.value);
-        for (const one of node.elts || []) targets(one);
+    // A name the module assigns a value to, claimed as state the way a plain
+    // `x = …` claims one.
+    const claim = (name) => {
+        if (typeof name !== 'string' || !name || !take(name)) return;
+
+        bind(name);
+        state.push(name);
     };
 
     // The names a `match` pattern captures: `MatchAs` and `MatchStar` bind
     // their `name`, `MatchMapping` its `**rest`, and the others hold patterns.
     const captures = (pattern) => {
         if (!pattern || typeof pattern !== 'object') return;
-        if (pattern instanceof $B.ast.MatchAs || pattern instanceof $B.ast.MatchStar) bind(pattern.name);
-        if (pattern instanceof $B.ast.MatchMapping) bind(pattern.rest);
+        if (pattern instanceof $B.ast.MatchAs || pattern instanceof $B.ast.MatchStar) claim(pattern.name);
+        if (pattern instanceof $B.ast.MatchMapping) claim(pattern.rest);
 
         captures(pattern.pattern);
         for (const one of [...(pattern.patterns || []), ...(pattern.kwd_patterns || [])]) captures(one);
     };
 
-    // The same walk for an assignment at the top of the module, where every
-    // name it reaches is state, claimed the way a plain `x = …` claims one.
+    // A target is a name, or a tuple or list of them, nested to any depth:
+    // `a, (b, c) = …` is one statement binding three names, each of them state.
+    // A `*rest` wraps its name in a `Starred`, which is why the value is
+    // followed too.
     const unpacked = (node) => {
         if (!node) return;
         if (node instanceof $B.ast.Starred) return unpacked(node.value);
-
-        if (node instanceof $B.ast.Name) {
-            if (take(node.id)) {
-                bind(node.id);
-                state.push(node.id);
-            }
-
-            return;
-        }
+        if (node instanceof $B.ast.Name) return claim(node.id);
 
         for (const one of node.elts || []) unpacked(one);
     };
@@ -2050,21 +2074,23 @@ function surface(body) {
                 // descended into. An `except` handler and a `match` case arrive
                 // here as statements of their own and recurse the same way.
                 //
-                // Everything below binds a name without declaring anything: the
-                // statement is about something else and leaves a name behind.
-                targets(node.target); // `for x in …`, and `x += 1`
-                bind(node.name); // `except … as x`
+                // `for x in …`, `x += 1` and `with a() as x, b() as y:` assign
+                // a value to a name of the module, so it is state. An `except
+                // … as x` is unbound when the handler ends, and an import
+                // declares: those two are taken, not state.
+                unpacked(node.target);
+                bind(node.name);
 
-                // `with a() as x, b() as y:` and `import json`, `from m import a
-                // as b`. An alias is the name when there is one; a dotted
-                // `import a.b` binds `a`.
-                for (const item of node.items || []) targets(item.optional_vars);
+                for (const item of node.items || []) unpacked(item.optional_vars);
+
+                // `import json`, `from m import a as b`. An alias is the name
+                // when there is one; a dotted `import a.b` binds `a`.
                 for (const alias of node.names || []) {
                     bind(typeof alias === 'string' ? alias : alias.asname || alias.name?.split('.')[0]);
                 }
 
                 // `case {"amount": amount}:`, `case [x, *rest]:`, `case P(x=y)
-                // as p:` bind their captures in the module too. A value
+                // as p:` assign their captures in the module too. A value
                 // pattern, `case Colour.RED:`, refers to a name and binds none.
                 captures(node.pattern);
 

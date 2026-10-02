@@ -19,6 +19,7 @@
 // by having no `start` rather than a wrong one.
 import { test, expect, describe } from 'vitest';
 import { createRequire } from 'node:module';
+import { parse } from 'svelte/compiler';
 
 const require = createRequire(import.meta.url);
 const { compile } = require('../src/lib/compile.cjs');
@@ -45,7 +46,16 @@ describe('a compiler refusal names a position', () => {
         ['a rune inside a def', 'def go():\n    n = inspect(1)\n', {}, 2],
         // `surface()` records where each name was bound, which is what lets this
         // one point at the `def` that took the word.
-        ['a locked word', 'x = 1\ndef effect():\n    pass\n', {}, 2]
+        ['a locked word', 'x = 1\ndef effect():\n    pass\n', {}, 2],
+        // The local name of a JavaScript import is a binding of the generated
+        // module, held to the rules every binding there is: these used to reach
+        // the JavaScript parser downstream, which named no line of the author's.
+        ['a __js__ name JavaScript reserves', 'x = 1\n__js__ = {"./m.js": ["new"]}\n', { plain: true }, 2],
+        ['a __js__ name in the compiler prefix', '__js__ = {"./m.js": ["__py"]}\n', { plain: true }, 1],
+        ['an importjs default JavaScript reserves', 'x = 1\nimportjs default from "m"\n', {}, 2],
+        ['an importjs renamed to a reserved word', 'importjs {a as new} from "m"\n', {}, 1],
+        ['an importjs namespace in the compiler prefix', 'importjs * as __py from "m"\n', {}, 1],
+        ['an importjs naming `default` without renaming it', 'importjs {default} from "m"\n', {}, 1]
     ])('%s', ([, source, options, line]) => {
         const error = thrown(source, options);
 
@@ -53,6 +63,18 @@ describe('a compiler refusal names a position', () => {
         expect(error.filename).toBe(FILE);
         expect(error.start).toEqual({ line, column: 0 });
         expect(error.end).toEqual({ line, column: 0 });
+    });
+
+    // What the rule lets through still makes a module that parses: the word a
+    // foreign module exports may be reserved as long as the name it is bound to
+    // is not, and a dunder is Python's, not the compiler's.
+    test.for([
+        ['importjs {default as player} from "m"\nx = player\n', {}],
+        ['__js__ = {"./m.js": ["normal", "__version__"]}\ndef f():\n    return normal\n', { plain: true }]
+    ])('accepted, and parses: %s', ([source, options]) => {
+        const result = compile(source, 'P', FILE, options);
+
+        expect(() => parse(`<script>${result.script}</script>`)).not.toThrow();
     });
 
     // `__all__` names something the module never bound, so there is no binding

@@ -1,6 +1,27 @@
 import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import BlockScope from './fixtures/BlockScope.svelte';
+import AssignedForms from './fixtures/AssignedForms.svelte';
+
+// A `for` target, a `with … as` and a `match` capture assign a value to a name
+// of the module, as `=` does, so the name is state: a list bound by one of them
+// and appended to by a handler left the page at its old length.
+test('a name a for, a with or a match assigns follows the DOM', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+
+    mount(AssignedForms, { target });
+    flushSync();
+
+    const shown = () => Object.fromEntries([...target.querySelectorAll('p')].map((p) => [p.dataset.k, p.textContent]));
+    const before = shown();
+
+    target.querySelector('button').click();
+    flushSync();
+
+    const after = shown();
+
+    for (const key of Object.keys(before)) expect([key, Number(after[key])]).toEqual([key, Number(before[key]) + 1]);
+});
 
 // `surface()` used to walk the module's top-level statements and stop there, so
 // a name bound inside a block never became a signal. It stayed *readable* —

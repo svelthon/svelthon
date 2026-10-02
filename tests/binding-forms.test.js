@@ -98,24 +98,32 @@ describe('and a locked word is refused, however it was written', () => {
     );
 });
 
-// The reactivity rule does not move. A loop variable, a class and an import are
-// not state and must not get a signal, which is what `tests/block-scope.test.js`
-// asserts from the other side.
-describe('but none of them becomes a signal', () => {
+// Which of them is state. A name the module assigns a value to is, however the
+// assignment is written: a `for` target, a `with … as` and a `match` capture
+// assign as `=` does, and a list bound by one and appended to by a handler left
+// the page showing its old length. A class and an import are declared, and an
+// `except … as` is unbound when the handler ends: none of those three is state.
+describe('and the ones that assign a value become a signal', () => {
     const signals = (src) => [...script(src).matchAll(/let (\w+) = \$state\.raw/g)].map((m) => m[1]);
 
     test.for([
         ['a class', 'class thing:\n    pass'],
         ['an import', 'import thing'],
-        ['a for target', 'for thing in [1]:\n    pass'],
-        ['a with clause', 'with open() as thing:\n    pass'],
         ['an except clause', 'try:\n    pass\nexcept Exception as thing:\n    pass']
     ])('%s gets no signal', ([, form]) => {
         expect(signals(`${form}\n`)).not.toContain('thing');
     });
 
-    test('while an assignment still does', () => {
-        expect(signals('thing = 1\n')).toContain('thing');
+    test.for([
+        ['an assignment', 'thing = 1'],
+        ['a for target', 'for thing in [1]:\n    pass'],
+        ['a for target unpacked', 'for other, thing in [(1, 2)]:\n    pass'],
+        ['a with clause', 'with open() as thing:\n    pass'],
+        ['a match capture', 'match 1:\n    case thing:\n        pass'],
+        ['a match capture in a sequence', 'match [1]:\n    case [*thing]:\n        pass'],
+        ['a match capture in a mapping', 'match {}:\n    case {**thing}:\n        pass']
+    ])('%s gets one', ([, form]) => {
+        expect(signals(`${form}\n`)).toContain('thing');
     });
 });
 
