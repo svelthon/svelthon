@@ -1,16 +1,16 @@
 # Patches applied to the vendored Brython
 
 `brython_runtime.js` and `brython_compiler.js` are cut from one bundle, built
-from Brython's master plus twenty proposed commits, with **four** edits made
-in the file itself afterwards. The wrapper, the integer format and the
-`__call__` binding carry a `/* SVELTHON patch, see BRYTHON_FIX.md */` comment,
-the only way to find them again in 1.4 MB; the other edit *is* a comment, so
-`@vite-ignore` finds itself.
+from Brython's master plus twenty proposed commits, with **five** edits made
+in the file itself afterwards. The wrapper, the integer format, the `__call__`
+binding and the callback hook carry a `/* SVELTHON patch, see BRYTHON_FIX.md
+*/` comment, the only way to find them again in 1.4 MB; the other edit *is* a
+comment, so `@vite-ignore` finds itself.
 
-**The integer format and the `__call__` binding are edited in the built file
-only**, not in `vendor-base`, so `scripts/vendor-brython.py` drops them:
-re-apply them by hand after a re-vendoring. `tests/vendor.test.js` turns red
-until they are.
+**The integer format, the `__call__` binding and the callback hook are edited
+in the built file only**, not in `vendor-base`, so `scripts/vendor-brython.py`
+drops them: re-apply them by hand after a re-vendoring. `tests/vendor.test.js`
+turns red until they are.
 
 The commits are Brython's own, proposed upstream and carried here while they
 wait, which is what this project has always done rather than hold a fix back:
@@ -67,6 +67,7 @@ endpoint that builds its own `Response`, then returned 500 with
 | the whole file wrapped in `if (!(globalThis.__BRYTHON__ && globalThis.__BRYTHON__.ast))` | a second execution in one process rebuilds `$B.ast`, and the classes the compiler holds lose the `to_js()` the code generator attached |
 | `/* @vite-ignore */` on the two dynamic imports | Brython loads JS modules named from Python with `import(variable)`, which Vite cannot analyse and warns about twice on every dev-server start |
 | the integer format: `preformat` in `int_funcs`, and the `=` branch of `$B.format_width` | CPython's order for an int with a base prefix. The sign comes first, `-0xf` where Brython wrote `0x-f`, and a `0` fill goes after sign and prefix, `0x0f` where Brython wrote `00xf`. Right upstream too, and not yet sent there |
+| `pyobj2jsobj` asks `$B.$python_callback` first | Svelthon's contract for a Python callable handed to JavaScript, `pyHandler`: trimmed to its arity before anything is read, a bound method or callable instance made callable, one identity at every crossing. The engine converts the arguments of every JavaScript call it makes with its own `pyobj2jsobj`, a local the runtime cannot replace from outside, so a namespace member, a constructor through `.new`, an object a promise resolved to, a property written each crossed without the contract. Not upstream: it is Svelthon's rule, not a defect of the engine |
 | `$B.$call`: a `__call__` that is not a function goes through its `__get__` first | CPython's `slot_tp_call`, which binds before it calls. `@classmethod def __call__` gets its class, where Brython raised `object is not callable`; a `@staticmethod` one keeps its answer. Right upstream too, and not yet sent there |
 
 Wrapping the file works because `var` keeps its module scope inside a block, so
@@ -100,7 +101,7 @@ than by a build-time check, and going upstream retires none of them:
 | Behaviour | Turns red |
 |---|---|
 | `qualified_scope_name`, `make_comp`, the tokenizer | `tests/compiler.test.js`, `tests/fidelity.test.js` |
-| the two debug prints, the `PYOBJ` back-reference, `str.find`, the integer format, the `__call__` binding | `tests/vendor.test.js` |
+| the two debug prints, the `PYOBJ` back-reference, `str.find`, the integer format, the `__call__` binding, the callback hook | `tests/vendor.test.js`, and `tests/import-members.test.js` for the hook's behaviour |
 | `convert_to_python` | `tests/from-json.test.js`, where an array that stayed one fails `isinstance(x, list)` |
 | the file wrapper, the two `@vite-ignore` | `tests/vendor.test.js`, the last two tests |
 | the id counter, `$B.id_counter` | `tests/vendor.test.js`, and `tests/compile-determinism.test.js` if it stops holding the output |

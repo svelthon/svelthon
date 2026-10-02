@@ -323,6 +323,14 @@ describe('the vendored Brython carries its repairs', () => {
         expect(String($B.$call)).toContain("search_slot($B.get_class(call_method),'tp_descr_get'");
     });
 
+    // The engine's conversion of a Python value for JavaScript asks Svelthon's
+    // hook first, so a Python callable crosses as `pyHandler` publishes it. A
+    // direct edit: a re-vendoring drops it, and this goes red.
+    test('a Python callable handed to JavaScript asks the callback hook', () => {
+        expect(String($B.pyobj2jsobj)).toContain('$B.$python_callback');
+        expect(typeof $B.$python_callback).toBe('function');
+    });
+
     // The counter the code generator numbers functions with starts at random
     // and is private upstream; `$B.id_counter(n)` sets it and gives back the
     // value it replaces, which is what makes one source compile to one text.

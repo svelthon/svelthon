@@ -751,14 +751,6 @@ function installMutationTracking($B) {
 
     const getattr = $B.$getattr;
     $B.$getattr = function (obj, attr, ...rest) {
-        // A function of an imported object: see `importedMember`. Read here
-        // and only here, since a method call goes through this read too.
-        if (imported(obj)) {
-            const member = importedMember(obj, attr);
-
-            if (member !== undefined) return member;
-        }
-
         const result = getattr(obj, attr, ...rest);
 
         if (obj === null || typeof obj !== 'object') return result;
@@ -3681,6 +3673,25 @@ export function pyTeardown(value, where, lineOffset = 0) {
     return typeof cleanup === 'function' ? cleanup : undefined;
 }
 
+// **Every Python callable the engine hands to JavaScript goes through
+// `pyHandler`.** Brython converts the arguments of any JavaScript call it makes
+// — a method of a namespace or of an object a library returned or resolved, a
+// constructor through `.new`, a property written, a global like
+// `setTimeout` — with its own `pyobj2jsobj`, whose callback trims nothing,
+// cannot call an instance and is a second identity. Marking the objects that
+// lead there covered one path at a time, and each path left out was the next
+// defect. The vendored engine asks this hook first instead (see BRYTHON_FIX.md),
+// so the conversion has one site and one contract.
+//
+// Only a Python callable is answered; anything else goes on to the engine.
+globalThis.__BRYTHON__.$python_callback = (value) => {
+    if (typeof value !== 'function' && (value === null || typeof value !== 'object' || Array.isArray(value))) {
+        return undefined;
+    }
+
+    return declared(value) === null ? undefined : pyHandler(value);
+};
+
 export function pyHandler(value) {
     const found = declared(value);
     if (found === null) return value;
@@ -3904,24 +3915,8 @@ const crossing = (target, self, args) => {
     const given = withoutKeywords(target, args);
     const made = new WeakMap();
 
-    return inbound(marked(Reflect.apply(target, self, given.map((one) => outbound(one, made)))));
+    return inbound(Reflect.apply(target, self, given.map((one) => outbound(one, made))));
 };
-
-// What an imported function builds or answers is the library's too, and its
-// methods take callbacks the same way: `Tools.Counter.new().add(done)` and
-// `Lib.make().add(done)`. Not a list, whose methods are Python's to answer —
-// `sort` is not JavaScript's `sort` — and not a Python value.
-const marked = (value) => {
-    if (value !== null && typeof value === 'object' && !Array.isArray(value) && !pythonValue(value)) {
-        IMPORTED.add(value);
-    }
-
-    return value;
-};
-
-// A class among them is constructed by the engine, which converts the
-// arguments itself; only the instance is marked.
-const construct = (target, args, newTarget) => marked(Reflect.construct(target, args, newTarget));
 
 export function jsCall(value) {
     // An imported constant crosses here too, and it crosses once: `export const
@@ -3930,64 +3925,21 @@ export function jsCall(value) {
     // to object.__format__*. The same 0.5 returned by an imported *function*
     // came back a float, because the call goes through `inbound`. One value, two
     // capabilities, decided by the way it entered.
-    if (typeof value !== 'function') {
-        const bound = pyBind(value);
-
-        // A namespace, a default export, an object: its methods are imported
-        // functions too, and are adapted when read. See `importedMember`.
-        return marked(bound);
-    }
+    // A namespace, a default export or an object crosses as it is: the
+    // functions reached through it are the engine's to call, and the engine
+    // hands Python callables over through `$python_callback`, above `pyHandler`.
+    if (typeof value !== 'function') return pyBind(value);
 
     const known = ADAPTED.get(value);
 
     if (known !== undefined) return known;
 
-    const adapted = new Proxy(value, { apply: crossing, construct });
+    const adapted = new Proxy(value, { apply: crossing });
 
     ADAPTED.set(value, adapted);
 
     return adapted;
 }
-
-// **A function reached through an imported object is an imported function.**
-// `invoke(done)` went through the adapter above and `Tools.invoke(done)` did
-// not: the namespace crossed as an object and its member was called by the
-// engine's own interop, which trims nothing and cannot call an instance, so the
-// same callback raised under one spelling of the same import.
-//
-// So the member is adapted when it is read, by the same call, on its object as
-// the receiver, and read afresh each time, since a module's binding is live.
-// One adapter per object and function, held weakly. A member that is itself an
-// object is marked in turn, so the rule reaches `Tools.sub.fn`.
-const IMPORTED = new WeakSet();
-const MEMBERS = new WeakMap();
-
-function importedMember(obj, attr) {
-    const member = obj[attr];
-
-    marked(member);
-
-    if (typeof member !== 'function') return undefined;
-
-    let adapters = MEMBERS.get(obj);
-
-    if (adapters === undefined) MEMBERS.set(obj, (adapters = new WeakMap()));
-
-    let adapted = adapters.get(member);
-
-    if (adapted === undefined) {
-        adapted = new Proxy(member, { apply: (target, self, args) => crossing(target, obj, args), construct });
-        adapters.set(member, adapted);
-    }
-
-    return adapted;
-}
-
-// Whether `obj` is one whose members are read this way. Asked on the hottest
-// path there is, so the WeakSet is reached only for an object that is not a
-// Python instance.
-const imported = (obj) =>
-    obj !== null && typeof obj === 'object' && obj.ob_type === undefined && !Array.isArray(obj) && IMPORTED.has(obj);
 
 // One value of an exported mapping.
 //

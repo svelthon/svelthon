@@ -12563,6 +12563,7 @@ case null:
 return null
 case _b_.None:
 return undefined}
+/* SVELTHON patch, see BRYTHON_FIX.md */if($B.$python_callback !==undefined){let hooked=$B.$python_callback(pyobj);if(hooked !==undefined){return hooked}}
 let _jsobj=pyobj[JSOBJ]
 if(_jsobj !==undefined){return _jsobj}
 var klass=$B.get_class(pyobj)
