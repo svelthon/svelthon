@@ -107,6 +107,17 @@ describe('trailingKey reads through a string', () => {
         );
     });
 
+    // Python's strings, read as `atomic` reads them: a field that reuses its
+    // f-string's quote, and a lone quote inside a triple-quoted string. The
+    // key's own quote reading ended the string early in both, and the key was
+    // left in the markup as Python for Svelte to read as JavaScript.
+    test.for([
+        ['an f-string whose field reuses its quote', 'rows as row (f"{"("}{row.id}")'],
+        ['a triple-quoted string holding a lone quote', 'rows as row ("""an "(" quote""" + str(row.id))']
+    ])('%s is one key', ([, line]) => {
+        expect(each(line)).toBe('{#each __expr_py_0() as row (__expr_1(__follow(row)))}x{/each}');
+    });
+
     // The three shapes that are *not* a key, each for its own reason.
     test('a tuple target is a target, not a key with nothing before it', () => {
         expect(each('pairs as (name, count)')).toBe('{#each __expr_py_0() as [name, count]}x{/each}');

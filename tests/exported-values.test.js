@@ -92,6 +92,10 @@ describe.for([
     });
 });
 
+test('a str subclass holding text past U+FFFF crosses as the text', () => {
+    expect(astral.tagged).toBe('🌍');
+});
+
 // Last, since it rebinds a name of the fixture.
 describe("a store's def", () => {
     test('is one function on the store and by name', () => {

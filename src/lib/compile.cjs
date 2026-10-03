@@ -34,6 +34,7 @@ const $B = globalThis.__BRYTHON__;
 $B.brython({ ipy_id: [] });
 
 const { INJECTED } = require('./injected.cjs');
+const { atomic } = require('./lexical.js');
 
 // Name the generated module gives to the reactive namespace it receives.
 const NS = '__py';
@@ -791,45 +792,25 @@ function unbindable(name) {
     return null;
 }
 
-// The triple-quote state after `line`. Only a triple-quoted string survives a
-// line break, so it is the only thing that can hide an `importjs` further down,
-// the trap a regex over the whole source would walk straight into.
-function endQuote(line, quote) {
-    for (let i = 0; i < line.length; i++) {
-        const three = line.slice(i, i + 3);
+// For each line of `src`, whether it begins inside a string an earlier line
+// opened. Only a triple-quoted string survives a line break, so it is the only
+// thing that can hide an `importjs` or a sign further down, the trap a regex
+// over the whole source would walk straight into. Read over the whole source at
+// once, by `atomic`: an f-string's fields may hold quotes of their own, and no
+// line can then be read alone.
+function continuedLines(src) {
+    const inside = [false];
 
-        if (quote) {
-            if (three === quote) {
-                quote = null;
-                i += 2;
-            } else if (line[i] === '\\') i++;
-            continue;
-        }
+    for (let i = 0; i < src.length; i++) {
+        const skip = atomic(src, i);
 
-        if (three === '"""' || three === "'''") {
-            quote = three;
-            i += 2;
-            continue;
-        }
-
-        if (line[i] === '#') return quote; // a comment runs to the end of the line
-
-        // Walked rather than matched, and the inner loop's own decisions are
-        // **not** separable by behaviour: the outer loop rescans from wherever
-        // this leaves off, so a mis-read single quote re-enters a quote state
-        // that ends the line at `null` all the same. What is separable is what
-        // the line *leaves open*, and `tests/quote-state.test.js` is ten rows of
-        // exactly that.
-        if (line[i] === '"' || line[i] === "'") {
-            const one = line[i];
-            for (i++; i < line.length; i++) {
-                if (line[i] === '\\') i++;
-                else if (line[i] === one) break;
-            }
-        }
+        if (skip > 0) {
+            for (let j = i; j < i + skip; j++) if (src[j] === '\n') inside.push(true);
+            i += skip - 1;
+        } else if (src[i] === '\n') inside.push(false);
     }
 
-    return quote;
+    return inside;
 }
 
 // `x => expr`, the derived, written the way the state beside it is written.
@@ -852,8 +833,8 @@ function endQuote(line, quote) {
 // Only the expression form. A derivation that needs statements keeps `@derived`,
 // which is the counterpart of Svelte's own `$derived.by`: the same split their
 // runes make, and the one Python already makes between `lambda` and `def`.
-// Where a trailing comment starts, or -1. The same walk `endQuote` makes, for
-// the same reason: a `#` inside a string is not a comment.
+// Where a trailing comment starts, or -1, by `atomic`'s reading: a `#` inside a
+// string is not a comment.
 //
 // The dialect's signs each take the rest of the line — `(\S[\s\S]*)$` — and the
 // rewrite wraps what they took in parentheses, so a `#` commented out the
@@ -863,26 +844,11 @@ function endQuote(line, quote) {
 // three places each, which is how it was found.
 function commentAt(line) {
     for (let i = 0; i < line.length; i++) {
-        const three = line.slice(i, i + 3);
-
-        if (three === '"""' || three === "'''") {
-            const close = line.indexOf(three, i + 3);
-
-            if (close === -1) return -1; // the string runs past this line
-            i = close + 2;
-            continue;
-        }
-
         if (line[i] === '#') return i;
 
-        if (line[i] === '"' || line[i] === "'") {
-            const one = line[i];
-
-            for (i++; i < line.length; i++) {
-                if (line[i] === '\\') i++;
-                else if (line[i] === one) break;
-            }
-        }
+        // A string, which runs to the end of the line when it is not closed on it.
+        const skip = atomic(line, i);
+        if (skip > 0) i += skip - 1;
     }
 
     return -1;
@@ -924,30 +890,24 @@ const ARROW_EFFECT = /^=>\s*(\S[\s\S]*)$/;
 // the same rule and told apart by the name alone.
 const INSPECT = /^inspect(_with)?\s*\((\s*\S[\s\S]*)\)\s*$/;
 
-// The first argument of a call's text and the rest, split at the first comma
-// outside brackets and strings.
+// The first argument of a call's text and the rest, where Python's parser ends
+// the first argument: a comma does not say it, since `lambda kind, *values: …`
+// holds one between its parameters and a string or an f-string's field may
+// hold one too. A text that does not parse is handed back whole, and the
+// module's own parse then says what is wrong with it, at its line.
 function firstArgument(text) {
-    let depth = 0;
-    let quote = null;
+    let first;
 
-    for (let i = 0; i < text.length; i++) {
-        const char = text[i];
-
-        if (quote !== null) {
-            if (char === '\\') i++;
-            else if (text.startsWith(quote, i)) {
-                i += quote.length - 1;
-                quote = null;
-            }
-        } else if (char === '"' || char === "'") {
-            quote = text.startsWith(char.repeat(3), i) ? char.repeat(3) : char;
-            i += quote.length - 1;
-        } else if ('([{'.includes(char)) depth++;
-        else if (')]}'.includes(char)) depth--;
-        else if (char === ',' && depth === 0) return [text.slice(0, i).trim(), text.slice(i + 1).trim()];
+    try {
+        first = $B._PyPegen.run_parser(new $B.Parser(`f(${text})`, '<arguments>', 'file')).body[0].value.args[0];
+    } catch {
+        return [text.trim(), ''];
     }
 
-    return [text.trim(), ''];
+    // The columns are counted in characters on the one line, past `f(`.
+    const end = first.end_col_offset - 2;
+
+    return [text.slice(0, end).trim(), text.slice(end).replace(/^\s*,/, '').trim()];
 }
 
 // `value: str <=>`, a prop that also travels back up, and the fourth of the
@@ -978,19 +938,18 @@ const balanced = (expr) => opened(expr) === 0;
 // next line a continuation rather than a statement.
 function opened(expr) {
     let depth = 0;
-    let quote = null;
 
     for (let i = 0; i < expr.length; i++) {
-        const c = expr[i];
+        const skip = atomic(expr, i);
 
-        if (quote) {
-            if (c === '\\') i++;
-            else if (c === quote) quote = null;
+        if (skip > 0) {
+            i += skip - 1;
             continue;
         }
 
-        if (c === '"' || c === "'") quote = c;
-        else if (c === '(' || c === '[' || c === '{') depth++;
+        const c = expr[i];
+
+        if (c === '(' || c === '[' || c === '{') depth++;
         else if (c === ')' || c === ']' || c === '}') depth--;
     }
 
@@ -1000,8 +959,8 @@ const ARROW_INDENTED = /^[ \t]+(?:[\p{XID_Start}_]\p{XID_Continue}*\s*)?=>\s/u;
 
 function takeArrows(src, where, lineOffset, allowed) {
     const lines = src.split('\n');
+    const continued = continuedLines(src);
     const out = [];
-    let quote = null;
     let anonymous = 0;
     // Brackets left open, and a backslash at the end of the line before: the
     // line is then the continuation of a statement, whatever its column, and no
@@ -1014,8 +973,9 @@ function takeArrows(src, where, lineOffset, allowed) {
         const lineno = n + 1 + lineOffset;
         const at = `${where}:${lineno}`;
         const kind = (named) => (named ? 'derived' : 'effect');
+        const code = !continued[n];
 
-        if (quote === null && ARROW_INDENTED.test(line)) {
+        if (code && ARROW_INDENTED.test(line)) {
             throw refuse(
                 `svelthon — a derived and an effect both belong at the top level of ` +
                     `the module, and \`=>\` is only read there (${at})`,
@@ -1026,16 +986,16 @@ function takeArrows(src, where, lineOffset, allowed) {
 
         // Read without its trailing comment, so a sign may carry one the way
         // every other line of Python does. See `commentAt`.
-        const cut = quote === null ? commentAt(line) : -1;
-        const code = cut === -1 ? line : line.slice(0, cut).trimEnd();
-        const statement = quote === null && depth === 0 && !joined;
+        const cut = code ? commentAt(line) : -1;
+        const text = cut === -1 ? line : line.slice(0, cut).trimEnd();
+        const statement = code && depth === 0 && !joined;
 
-        if (quote === null) {
-            depth = Math.max(0, depth + opened(code));
-            joined = code.endsWith('\\');
+        if (code) {
+            depth = Math.max(0, depth + opened(text));
+            joined = text.endsWith('\\');
         }
 
-        const found = statement ? code.match(ARROW_DERIVED) || code.match(ARROW_EFFECT) : null;
+        const found = statement ? text.match(ARROW_DERIVED) || text.match(ARROW_EFFECT) : null;
 
         // A named match carries the name in group 1 and the expression in 2; an
         // anonymous one has the expression in 1, and its name is generated.
@@ -1066,10 +1026,10 @@ function takeArrows(src, where, lineOffset, allowed) {
 
         // `inspect(…)` at the top level of a component, whose arguments become a
         // lambda so that they are read again on every change.
-        const watched = statement && !found && allowed ? code.match(INSPECT) : null;
+        const watched = statement && !found && allowed ? text.match(INSPECT) : null;
 
         // `value: str <=>`, with an optional fallback after the arrow.
-        const both = statement && !found && !watched ? code.match(BINDABLE) : null;
+        const both = statement && !found && !watched ? text.match(BINDABLE) : null;
 
         if (both && !allowed) {
             throw refuse(
@@ -1096,8 +1056,6 @@ function takeArrows(src, where, lineOffset, allowed) {
         // The generated name is bound like any other effect's, so it stays out
         // of the way with the dunder prefix Python already reads as private.
         else out.push(`__effect_${anonymous++} = effect(lambda: ${expression})`);
-
-        quote = endQuote(line, quote);
     }
 
     return out.join('\n');
@@ -1195,16 +1153,16 @@ function importJsClause(line, where, source, lineno) {
 // `$B.set_lineno` exactly nothing.
 function takeImportJs(src, where, lineOffset, allowed) {
     const lines = src.split('\n');
+    const continued = continuedLines(src);
     const imports = [];
     const kept = [];
-    let quote = null;
 
     for (let n = 0; n < lines.length; n++) {
         const line = lines[n];
         const lineno = n + 1 + lineOffset;
         const at = `${where}:${lineno}`;
 
-        if (quote === null && IMPORTJS_ANYWHERE.test(line)) {
+        if (!continued[n] && IMPORTJS_ANYWHERE.test(line)) {
             // A JavaScript import is hoisted and static; there is no such thing
             // as one inside a branch, and silently hoisting it would be a lie.
             throw refuse(
@@ -1214,7 +1172,7 @@ function takeImportJs(src, where, lineOffset, allowed) {
             );
         }
 
-        if (quote === null && IMPORTJS.test(line)) {
+        if (!continued[n] && IMPORTJS.test(line)) {
             if (!allowed) {
                 throw refuse(
                     `svelthon — importjs belongs to a component; a .py module declares its ` +
@@ -1230,7 +1188,6 @@ function takeImportJs(src, where, lineOffset, allowed) {
         }
 
         kept.push(line);
-        quote = endQuote(line, quote);
     }
 
     return { source: kept.join('\n'), imports };

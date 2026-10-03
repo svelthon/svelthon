@@ -57,3 +57,39 @@ describe('a triple-quoted string hides what is inside it', () => {
         expect(() => build(body)).toThrow(/importjs must start the line/);
     });
 });
+
+// The dialect's signs are read by the same rule as the markup's scanners,
+// `atomic`, and its grammar is Python's: a field that reuses its f-string's
+// quote, and a lone quote inside a triple-quoted string. Read by a quote
+// scanner of the compiler's own, each ended a string early: a `=>` that fits on
+// its line was refused as not fitting, and one on the line after such a string
+// reached Brython as `invalid syntax`.
+describe("the signs read Python's strings", () => {
+    test.for([
+        ['an f-string whose field reuses its quote', 'total = 1\nlabel => f"{"("}{total}"\n'],
+        ['a triple-quoted string holding a lone quote', 'total = 1\nlabel => """a "(" b""" + str(total)\n'],
+        ['a `=>` after a line holding such an f-string', 'note = f"{"("}"\ntotal = 1\nlabel => total * 2\n']
+    ])('%s', ([, body]) => {
+        expect(build(body).script).toContain("'label'");
+    });
+
+    // `inspect_with(logger, *values)` is split where Python's parser ends the
+    // logger. It was split at the first comma outside a string, and a lambda of
+    // two parameters has one between them, as an f-string's field may: the
+    // halves made no Python.
+    test('the logger of `inspect_with` is read as Python reads it', () => {
+        expect(() =>
+            build('total = 1\ninspect_with(lambda kind, *values: print(f"{", "}", kind), total)\n')
+        ).not.toThrow();
+    });
+
+    // And the line state: a field holding a fence inside a string of its own is
+    // not the end of the triple-quoted f-string around it, so the lines under it
+    // are still the string's, and the `importjs` after its real end is code.
+    test('a fence inside a field does not close the f-string around it', () => {
+        const { script } = build(`doc = f"""{'"""'}\n${HIDDEN}"""\n${TAKEN}`);
+
+        expect(script).toContain('svelte/transition');
+        expect(script).not.toContain('nowhere');
+    });
+});
