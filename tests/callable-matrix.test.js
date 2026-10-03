@@ -284,6 +284,22 @@ describe('a static __call__ that takes an argument', () => {
     });
 });
 
+// And one that is a builtin, `staticmethod(abs)`, which has no signature to read
+// and is called through Python's own protocol: what it answers is what CPython
+// answers, `round(-0.5)` the int 0 and not a negative zero.
+describe('a static __call__ that is a builtin', () => {
+    test.for([
+        ['published on its own', () => [mod.absolute, mod.rounding]],
+        ['as a value of an exported mapping', () => [mod.builtin_held.abs, mod.builtin_held.round]]
+    ])('is a function, %s', ([, reach]) => {
+        const [absolute, rounding] = reach();
+
+        expect(typeof absolute).toBe('function');
+        expect(absolute(-0.5)).toBe(0.5);
+        expect(Object.is(rounding(-0.5), 0)).toBe(true);
+    });
+});
+
 // A class `__call__` declares the class as its receiver, which is taken out, and
 // nothing else.
 test('a classmethod __call__ that takes an argument receives it', () => {

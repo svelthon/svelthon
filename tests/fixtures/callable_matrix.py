@@ -17,6 +17,9 @@ __all__ = [
     "doubling",
     "class_doubling",
     "doublers",
+    "absolute",
+    "rounding",
+    "builtin_held",
     "mapped",
     "order",
     "listed",
@@ -131,6 +134,20 @@ class_doubling = ClassDoubling()
 # Its own container, since every value of `mapped` is the trivial callable the
 # matrix loops over and this one takes an argument.
 doublers = {"inner": doubling, "by_class": class_doubling}
+
+
+# A static `__call__` that is a builtin, which has no signature to read.
+class Absolute:
+    __call__ = staticmethod(abs)
+
+
+class Rounding:
+    __call__ = staticmethod(round)
+
+
+absolute = Absolute()
+rounding = Rounding()
+builtin_held = {"abs": absolute, "round": rounding}
 
 mapped = {
     "fn": fn,

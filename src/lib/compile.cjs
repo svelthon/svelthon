@@ -2315,8 +2315,10 @@ function refuseMissingModules(importedAt, resolves, source, lineOffset) {
 // `tests/generated-names.test.js` holds the two files to them.
 const fn = (name) => `__fn_${name}`;
 const local = (name) => `__local_${name}`;
-// A prop's override by the child, and the choice between it and the parent's.
+// A prop's override by the child, the default it falls back on, and the choice
+// between them and the parent's.
 const over = (name) => `__over_${name}`;
+const fallback = (name) => `__default_${name}`;
 const pick = (name) => `__pick_${name}`;
 // What `$effect.root` hands back. Python reads the decorated name and gets
 // this, exactly as JavaScript reads `const destroy = $effect.root(…)`, and
@@ -2426,15 +2428,23 @@ function declarations(c) {
         // reassigning a prop does in Svelte, until the parent passes a new one.
         // The default init() writes is not an override. A prop passed as
         // `undefined` takes the default, as in Svelte; `null` is a value.
+        //
+        // Svelte's own rule for the absence, read in `props.js`: the default is
+        // the one declared once the parent has passed a value, and a write the
+        // child made while nothing was passed until then. So the default is
+        // kept apart from the child's writes, and `due` says which one an
+        // absence reads.
         ...c.props.flatMap((n) => [
             `let ${local(n)} = $state.raw(undefined);`,
             `let ${rev(n)} = $state.raw(0);`,
             `let ${over(n)};`,
+            `const ${fallback(n)} = { value: undefined, due: false };`,
             `const ${bump(n)} = () => { ${rev(n)} += 1; };`,
             `const ${read(n)} = () => { ${rev(n)}; };`,
             `const ${pick(n)} = () => {` +
                 ` const __passed = __props.${n};` +
-                ` if (__passed === undefined) return ${local(n)};` +
+                ` if (__passed === undefined) return ${fallback(n)}.due ? ${fallback(n)}.value : ${local(n)};` +
+                ` ${fallback(n)}.due = true;` +
                 ` if (${over(n)} !== undefined) { if (Object.is(__passed, ${over(n)}.at)) return ${local(n)}; ${over(n)} = undefined; }` +
                 ` return __passed; };`,
             // Read by Svelte's own compiler and not by ours: a snippet is a
@@ -2537,11 +2547,19 @@ function authorBindings(c) {
         //
         // The fallback is the component's own, so a container in it is watched
         // like any state's: `rows.append(1)` on a default repaints its readers.
+        //
+        // A write after init() overrides what the parent passed, or is the
+        // value of this absence, and either way what was read before it may
+        // not have been the cell it lands in: the revision every reader reads
+        // is moved, as a write to an override is a write to Svelte's own
+        // derived.
         ...c.props.map(
             (n) =>
                 `__bind(__proto, '${n}', () => (${rev(n)}, __follow(__pyBind(${pick(n)}()))),` +
-                ` (${NEXT_VALUE}) => { if (!__initialising && '${n}' in __props) ${over(n)} = { at: __props.${n} };` +
-                ` ${local(n)} = __track(${NEXT_VALUE}, ${bump(n)}, ${read(n)}, ${SUBS}); },` +
+                ` (${NEXT_VALUE}) => { const __written = __track(${NEXT_VALUE}, ${bump(n)}, ${read(n)}, ${SUBS});` +
+                ` if (__initialising) { ${fallback(n)}.value = __written; ${local(n)} = __written; return; }` +
+                ` if (__props.${n} !== undefined) ${over(n)} = { at: __props.${n} }; else ${fallback(n)}.due = false;` +
+                ` ${local(n)} = __written; ${bump(n)}(); },` +
                 ` () => ${pick(n)}());`
         ),
         // What Svelte hands back for a write it kept for itself may be its own
