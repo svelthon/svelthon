@@ -3,6 +3,32 @@ import { mount, flushSync } from './mounted.js';
 import BlockScope from './fixtures/BlockScope.svelte';
 import AssignedForms from './fixtures/AssignedForms.svelte';
 import StarImported from './fixtures/StarImported.svelte';
+import DictViews from './fixtures/DictViews.svelte';
+
+// `keys()`, `values()` and `items()` are live views of their dict: kept in a
+// name, each follows an entry added, an entry removed, and a value changed in
+// place, as the dict itself does.
+test('a dict view kept in a name follows its dict', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+
+    mount(DictViews, { target });
+    flushSync();
+
+    const shown = () => ['keys', 'values', 'items'].map((k) => target.querySelector(`p[data-k="${k}"]`).textContent);
+    const click = (k) => {
+        target.querySelector(`button[data-k="${k}"]`).click();
+        flushSync();
+    };
+
+    click('grow');
+    expect(shown()).toEqual(['first,second', '[1, 1]', "[('first', 1), ('second', 1)]"]);
+
+    click('shrink');
+    expect(shown()).toEqual(['second', '[1]', "[('second', 1)]"]);
+
+    click('change');
+    expect(shown()).toEqual(['second', '[2]', "[('second', 2)]"]);
+});
 
 // `from m import *` binds names no statement lists, so the compiler cannot
 // give them a signal: the runtime gives each its accessor as the import binds

@@ -1104,6 +1104,11 @@ function keeps(value) {
 
     const $B = globalThis.__BRYTHON__;
 
+    // Keyword arguments, carried under `$B.KW`: the explicit ones in an object
+    // of their own, which holds what landed, then each `**` mapping as itself.
+    const keywords = value[$B.KW];
+    if (Array.isArray(keywords)) return keywords.slice(1).every(keeps);
+
     try {
         const cls = $B.get_class(value);
         return cls === _b_.list || cls === _b_.tuple || cls === _b_.dict
@@ -1445,7 +1450,20 @@ function inheritContents(into, source) {
         }
     };
 
-    if (Array.isArray(source)) {
+    if (Array.isArray(source?.[$B.KW])) {
+        // `update(key=row)` and `update(**rows)`: each keyword is an entry, the
+        // explicit ones read off their object and each `**` mapping off its own
+        // entries. A reading of the target's every entry per call, which is
+        // what the walk would do, made filling a table one keyword at a time
+        // quadratic.
+        const [named, ...mappings] = source[$B.KW];
+
+        for (const [key, child] of [...Object.entries(named), ...mappings.flatMap((one) => pyEntries(one))]) {
+            given++;
+            inherit(into, key);
+            inherit(into, child, key);
+        }
+    } else if (Array.isArray(source)) {
         for (const child of source) take(child);
     } else if (globalThis.__BRYTHON__.is_dict(source)) {
         for (const [key, child] of pyEntries(source)) {
@@ -1716,8 +1734,21 @@ function adopt(value) {
         for (const [hash, bucket] of Object.entries(value.$store)) {
             for (const child of bucket) inherit(value, child, hash);
         }
+    } else if (dictView(value)) {
+        // `keys()`, `values()` and `items()` are live: a view holds no entry of
+        // its own, only the dict it reads, `dict_obj`. So the dict is the view's
+        // child, and what changes the dict reaches what reads the view, as it
+        // reaches what reads the dict.
+        inherit(value, value.dict_obj);
     }
 }
+
+// The three views of a dict, which Python offers no way to subclass.
+const dictView = (value) => {
+    const $B = globalThis.__BRYTHON__;
+
+    return value.ob_type === $B.dict_keys || value.ob_type === $B.dict_values || value.ob_type === $B.dict_items;
+};
 
 // Sign one subscriber onto one marker, and tell `owner` about it so the same
 // subscriber can sign off. `owner` is the component's list; a store has none,

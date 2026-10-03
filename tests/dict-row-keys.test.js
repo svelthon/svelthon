@@ -12,6 +12,13 @@ import { track, unsubscribe } from '../src/lib/runtime.js';
 const $B = globalThis.__BRYTHON__;
 const list = (items) => $B.builtins.list.$factory(items);
 const call = (obj, name, ...args) => $B.$call($B.$getattr(obj, name), ...args);
+const dictOf = (key, value) => {
+    const dict = $B.empty_dict();
+
+    $B.$setitem(dict, key, value);
+
+    return dict;
+};
 
 const n = 256;
 
@@ -45,6 +52,40 @@ function updates(fill) {
 
     return { bumps: bumps - before, scanned };
 }
+
+// Filling a watched dict one row at a time by keyword: the keywords arrive in a
+// carrier under `$B.KW` that was taken for a source nobody could read again, so
+// every call walked the whole dict, n(n + 1) / 2 entries for n rows. Counted
+// here while the table is filled.
+test.each([
+    ['update(**source)', (key, row) => [{ [$B.KW]: [{}, dictOf(key, row)] }]],
+    ['update(key=row)', (key, row) => [{ [$B.KW]: [{ [key]: row }] }]],
+    ['update(source, **more)', (key, row) => [dictOf(`${key}-a`, list([])), { [$B.KW]: [{}, dictOf(key, row)] }]]
+])('filling a dict with %s reads none of its entries again', (_, args) => {
+    const parent = $B.empty_dict();
+    const owner = [];
+
+    track(parent, () => {}, () => {}, owner);
+
+    const original = $B.builtins.dict.$iter_items;
+    let scanned = 0;
+
+    $B.builtins.dict.$iter_items = function* (dict) {
+        for (const entry of original(dict)) {
+            if (dict === parent) scanned++;
+            yield entry;
+        }
+    };
+
+    try {
+        for (let i = 0; i < n; i++) call(parent, 'update', ...args(`row-${i}`, list([])));
+    } finally {
+        $B.builtins.dict.$iter_items = original;
+        unsubscribe(owner);
+    }
+
+    expect(scanned).toBe(0);
+});
 
 test.each([
     [
