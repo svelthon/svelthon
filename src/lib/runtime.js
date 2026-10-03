@@ -3175,8 +3175,11 @@ export function pyNumbers(value) {
 //                     | JavaScript to Python | Python to JavaScript |
 //   a prop            | pyBind               |                      |
 //   `bind:`           | pyBind               |                      |
-//   a store property  | pyArg (setter)       | plainScalar (getter) |
-//   a store @derived  |                      | plainScalar (getter) |
+//   a store property  | pyArg (setter)       | storeMember (getter) |
+//   a store @derived  |                      | storeMember (getter) |
+//
+// `storeMember` is `plainScalar` for a value, and for a Python callable the
+// call `pyComponent` makes, whatever bound the name.
 //
 // (a) `pyBoundary` does not trim. It copies `$function_infos` onto its wrapper
 //     so that whoever calls it later still can: losing them would leave every
@@ -3271,8 +3274,15 @@ const identified = (wrapper, name, arity) =>
 // not a question; what a caller actually gets is trimmed against the value at
 // the call. A name rebound afterwards therefore reports the old `length` and
 // behaves as the new value: the honest half is the behaviour.
+//
+// And a `def` whose name no longer holds a Python callable once the module has
+// run, replaced by what a decorator returned or by a later assignment, is
+// published as that value, as `pyExport` publishes any other.
 export function pyDef(read, where, lineOffset = 0) {
-    const first = declared(read());
+    const value = read();
+    const first = declared(value);
+
+    if (first === null) return pyExport(value, where, lineOffset);
 
     return identified(
         (...args) => pyHandler(read())(...args),
@@ -4377,6 +4387,23 @@ export const pyComponent = (read, where, lineOffset) => {
         first === null ? 0 : arityNow(first.arity)
     );
 };
+
+// What a store hands JavaScript for one of its names: the value the name holds
+// when it is read, for what it is, whatever bound the name. A Python callable
+// crosses as the store's own functions do, through `call` when the name is a
+// `def` and has its wrapper, through one made once per callable otherwise;
+// anything else as `plainScalar` hands it.
+const STORE_CALLS = new WeakMap();
+
+export function storeMember(value, where, lineOffset, call) {
+    if (declared(value) === null) return plainScalar(value);
+    if (call !== undefined) return call;
+
+    let wrapped = STORE_CALLS.get(value);
+    if (wrapped === undefined) STORE_CALLS.set(value, (wrapped = pyComponent(() => value, where, lineOffset)));
+
+    return wrapped;
+}
 
 // And the other half of the same wrapper: a function the *markup* compiled, one
 // per expression it met.

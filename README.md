@@ -77,7 +77,7 @@ rest of that configuration and what each line buys.
 npm install
 npm run dev
 
-npm test             # 1 461 tests: semantics, props, reactivity, Svelte surface
+npm test             # 1 474 tests: semantics, props, reactivity, Svelte surface
 npm run test:quiet   # the suite's own output: a green run must say nothing
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
@@ -804,8 +804,9 @@ def increment():
 ```
 
 Read from JavaScript, a scalar is JavaScript's own, so a price of `0.25` is the
-number `0.25`, and a container is the Python object itself, whose mutations the
-page follows.
+number `0.25`, a container is the Python object itself, whose mutations the
+page follows, and a Python function is called as the store's own are, whether
+it was defined there or imported.
 
 Its runes are compiled by vite-plugin-svelte, whose module filter the project
 widens to accept the extension: one setting, and the same shape the filter
@@ -1463,7 +1464,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 1 461 tests as written (vitest reports more, one per
+Validated by `npm test`, 1 474 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;

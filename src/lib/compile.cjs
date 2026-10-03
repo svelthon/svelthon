@@ -1283,6 +1283,7 @@ const RUNTIME = {
     ticking: '__ticking',
     pyBind: '__pyBind',
     plainScalar: '__plainScalar',
+    storeMember: '__storeMember',
     directiveAction: '__directiveAction',
     directiveTransition: '__directiveTransition',
     directiveAnimate: '__directiveAnimate',
@@ -2367,7 +2368,7 @@ function preamble(c) {
             'jsCall',
             'ticking', 'pyBind', 'NONE', 'helpers',
             'directiveAction', 'directiveTransition', 'directiveAnimate',
-            'plainScalar', 'invoke',
+            'plainScalar', 'storeMember', 'invoke',
             ...(c.store ? ['registerModule'] : SUBSCRIBING(c) ? ['unsubscribe'] : []),
             ...(c.bindables.length ? ['kept', 'unproxied'] : []),
             // Only an effect and `on_mount` hand a value back to be called
@@ -2653,6 +2654,11 @@ function injectedBindings(c) {
 
 // Running the module body, which is what fills every cell the sections above
 // declared. Nothing that reads a Python name may come before it.
+// A store's name as JavaScript reads it, from `value`, the expression that reads
+// what it holds now; `call` is a `def`'s own wrapper.
+const storeRead = (c, name, value, call) =>
+    `${RUNTIME.storeMember}(${value}, ${JSON.stringify(`${name}() — ${c.source}`)}, ${c.lineOffset}${call === undefined ? '' : `, ${call}`})`;
+
 // The sentence for a name `__all__` lists and the module does not bind, said by
 // the compiler when nothing in the source can bind it, and by the module once
 // it has run when a `from m import *` could have.
@@ -2729,13 +2735,15 @@ function instanceExports(c) {
                   // wrote no `__all__`.
                   //
                   // What a getter hands JavaScript is a crossing too, the other
-                  // way: `__plainScalar` makes a float a number and keeps a
-                  // container itself.
+                  // way, decided by the value the name holds when it is read and
+                  // not by what bound the name: `__storeMember` makes a float a
+                  // number, keeps a container itself, and hands a Python
+                  // callable over as a call, a `def` through its own wrapper.
                   `export const store = {`,
                   ...c.state
                       .filter(c.published)
-                      .map((n) => `    get ${n}() { return (${rev(n)}, __plainScalar(${n})); },`),
-                  ...c.unsignalled.map((n) => `    get ${n}() { return __plainScalar(${NS}.${n}); },`),
+                      .map((n) => `    get ${n}() { return (${rev(n)}, ${storeRead(c, n, n)}); },`),
+                  ...c.unsignalled.map((n) => `    get ${n}() { return ${storeRead(c, n, `${NS}.${n}`)}; },`),
                   // The parameter and the name its body reads are one constant.
                   // They were two: the signature still said `v` while the body
                   // had moved to `__next`, so every published setter of every
@@ -2767,19 +2775,26 @@ function instanceExports(c) {
                   ...c.unsignalled.map((n) => `    set ${n}(${NEXT_VALUE}) { ${NS}.${n} = __pyArg(${NEXT_VALUE}); },`),
                   ...c.deriveds
                       .filter((d) => c.published(d.name))
-                      .map((d) => `    get ${d.name}() { return __plainScalar(__follow(${d.name})); },`),
-                  ...c.funcs.filter((f) => c.published(f.name)).map((f) => `    ${f.name},`),
+                      .map((d) => `    get ${d.name}() { return ${storeRead(c, d.name, `__follow(${d.name})`)}; },`),
+                  ...c.funcs
+                      .filter((f) => c.published(f.name))
+                      .map((f) => `    get ${f.name}() { return ${storeRead(c, f.name, fn(f.name), f.name)}; },`),
                   `};`,
                   ``,
                   `export default store;`,
                   // Named exports too: a `.py` is not only a store. SvelteKit
                   // looks for `load`, `actions`, `GET`, by name, on the module.
+                  // Read once the module has run, as a `.py` reads its own: a
+                  // `def` a decorator turned into data is published as data.
                   ...(c.funcs.filter((f) => c.published(f.name)).length
                       ? [
                             ``,
+                            ...c.funcs
+                                .filter((f) => c.published(f.name))
+                                .map((f) => `const __export_${f.name} = ${storeRead(c, f.name, fn(f.name), f.name)};`),
                             `export { ${c.funcs
                                 .filter((f) => c.published(f.name))
-                                .map((f) => f.name)
+                                .map((f) => `__export_${f.name} as ${f.name}`)
                                 .join(', ')} };`
                         ]
                       : [])

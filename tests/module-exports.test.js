@@ -259,13 +259,13 @@ def unlisted():
     test('the listed function is on it, and exported by name', () => {
         const script = store(MODULE);
 
-        expect(script).toContain('    bump,');
-        expect(script).toContain('export { bump };');
+        expect(script).toContain('get bump()');
+        expect(script).toContain('export { __export_bump as bump };');
     });
 
     test('and the unlisted function is neither', () => {
-        expect(store(MODULE)).not.toContain('    unlisted,');
-        expect(store(MODULE)).not.toContain('unlisted };');
+        expect(store(MODULE)).not.toContain('get unlisted()');
+        expect(store(MODULE)).not.toContain('as unlisted');
     });
 
     // A class has no signal, and the store published only names that have
@@ -283,7 +283,7 @@ def unlisted():
 
         expect(script).toContain('get count()');
         expect(script).toContain('get hidden()');
-        expect(script).toContain('export { bump };');
+        expect(script).toContain('export { __export_bump as bump };');
     });
 });
 
