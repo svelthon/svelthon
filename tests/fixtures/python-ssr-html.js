@@ -15,3 +15,7 @@ export const SvelteConstructs =
 // Rendered with `amount` and `two_way` set to the JavaScript number 0.42.
 export const ScalarProps =
     "<!--[--><p data-k=\"amount\">0.4</p> <p data-k=\"two-way\">0.4</p> <p data-k=\"absent\">False</p><!--]-->";
+
+// Two groups, both empty: what the reader picks before hydrating is theirs.
+export const GroupHydrate =
+    "<!--[--><input data-k=\"box\" type=\"checkbox\" value=\"yes\"/> <input data-k=\"radio\" type=\"radio\" value=\"yes\"/> <p data-k=\"model\">|</p><!--]-->";

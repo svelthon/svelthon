@@ -5196,7 +5196,15 @@ export function group(node, [current, write, chosen, binding, scope, where = []]
     node.addEventListener('change', changed);
     RESETS.set(node, restored);
     watchReset();
-    show(current);
+
+    // A control the reader changed before the script ran, which is what a
+    // page hydrated after a click looks like: it is no longer at its default.
+    // The control wins, and the model is rebuilt from the group once its inputs
+    // are all registered and in order, as Svelte's own `bind_group` does;
+    // showing the model first erased the click. A fresh mount makes the two
+    // agree, so it shows the model as before.
+    if (node.defaultChecked === node.checked) show(current);
+    else queueMicrotask(() => (boxes || node.checked) && changed());
 
     return {
         update([next, , given, , , moved = []]) {

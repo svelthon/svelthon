@@ -7,6 +7,7 @@ import PythonTruthAttributes from './fixtures/PythonTruthAttributes.svelte';
 import KeyIdentity from './fixtures/KeyIdentity.svelte';
 import SvelteConstructs from './fixtures/SvelteConstructs.svelte';
 import ScalarProps from './fixtures/ScalarProps.svelte';
+import GroupHydrate from './fixtures/GroupHydrate.svelte';
 import * as html from './fixtures/python-ssr-html.js';
 
 const hydrated = [];
@@ -64,6 +65,29 @@ test('a hydrated list follows its mutations', () => {
 
     expect(q('[data-k="block"]')).toBe(block);
     expect(q('[data-k="block"]').textContent).toBe('2');
+});
+
+// A reader who ticks a box or picks a radio while the script is still loading
+// keeps the choice: the control wins over the empty model the server rendered,
+// and the model is rebuilt from it, as Svelte's own `bind:group` does. The
+// group used to show its model at install and erase the click.
+test('a group the reader changed before hydrating keeps the change', async () => {
+    const target = document.body.appendChild(document.createElement('div'));
+
+    target.innerHTML = html.GroupHydrate;
+    target.querySelector('[data-k="box"]').click();
+    target.querySelector('[data-k="radio"]').click();
+
+    hydrated.push(hydrate(GroupHydrate, { target }));
+    flushSync();
+    await Promise.resolve();
+    flushSync();
+
+    expect([target.querySelector('[data-k="box"]').checked, target.querySelector('[data-k="radio"]').checked]).toEqual([
+        true,
+        true
+    ]);
+    expect(target.querySelector('[data-k="model"]').textContent).toBe('yes|yes');
 });
 
 test('bind:this takes the node once hydrated, and the window its events', () => {
