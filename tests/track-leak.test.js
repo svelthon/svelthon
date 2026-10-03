@@ -12,6 +12,9 @@ import Host from './fixtures/LeakHost.svelte';
 // themselves, and the subscribers the list believes in. The test is that they
 // stay apart by a constant: one subscriber is the store's own, registered when
 // the module ran `rows = []`, and it never goes away.
+//
+// Two children, the list held in a name `=` bound and in one a `def` bound
+// first: a cell is a cell, and each signs off when its component goes.
 test('unmounting unsubscribes from a shared container', () => {
     const target = document.body.appendChild(document.createElement('div'));
     mount(Host, { target });
@@ -31,7 +34,7 @@ test('unmounting unsubscribes from a shared container', () => {
         return read();
     };
 
-    expect([read(), cycle(), cycle(), cycle()]).toEqual(['1/2', '1/2', '1/2', '1/2']);
+    expect([read(), cycle(), cycle(), cycle()]).toEqual(['2/3', '2/3', '2/3', '2/3']);
 });
 
 // The same list, read from the other side, and the second defect the same cause

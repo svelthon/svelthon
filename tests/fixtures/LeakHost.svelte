@@ -3,6 +3,7 @@
 # unsubscribes. `alive` is the roll call the children keep, and is right;
 # `subscribed` is what the list itself believes, and only ever goes up.
 importjs LeakChild from "./LeakChild.svelte"
+importjs LeakDefChild from "./LeakDefChild.svelte"
 importjs {watchers} from "./watchers.js"
 import leak_store
 
@@ -28,7 +29,7 @@ def toggle():
 </script>
 
 <button onclick={toggle}>{"unmount the child" if shown else "mount the child"}</button>
-{#if shown}<LeakChild />{/if}
+{#if shown}<LeakChild /><LeakDefChild />{/if}
 
 <p>children alive: <strong data-k="alive">{alive}</strong></p>
 <p>subscribers the list believes in: <strong data-k="subscribed">{subscribed}</strong></p>
