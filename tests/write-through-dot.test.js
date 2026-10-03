@@ -9,9 +9,9 @@ import { mount, flushSync } from './mounted.js';
 import WriteSetter from './fixtures/WriteSetter.svelte';
 import WriteSetterNative from './fixtures/WriteSetterNative.svelte';
 
-const typed = (Component, block) => {
+const typed = (Component, block, props = {}) => {
     const target = document.body.appendChild(document.createElement('div'));
-    const instance = mount(Component, { target });
+    const instance = mount(Component, { target, props });
 
     flushSync();
     instance.reset(block);
@@ -42,6 +42,14 @@ test.each([
     expect(typed(Component, true)).toEqual(['after', 0]);
 });
 
+// A class with an attribute protocol of its own still declares the property:
+// the declaration is asked first, and the protocol only for a name nothing
+// declares.
+test.each([['getattr'], ['getattribute']])('a class with its own %s: no read before the setter, none needed', (kind) => {
+    expect(typed(WriteSetter, false, { kind })).toEqual(['after', 0]);
+    expect(typed(WriteSetter, true, { kind })).toEqual(['after', 0]);
+});
+
 // The destination is still the one a read finds: an attribute held in the
 // instance's own dictionary wins over a key of the same name.
 test('a mapping with an attribute of a key\'s name is written where it is read', () => {
@@ -57,4 +65,22 @@ test('a mapping with an attribute of a key\'s name is written where it is read',
     flushSync();
 
     expect(target.querySelector('p').textContent).toBe('typed|key');
+});
+
+// And an attribute nothing declares, answered by `__getattr__`: the read finds
+// it through the protocol, so the write asks the protocol too and lands on the
+// attribute, not on the key beside it.
+test('an attribute only __getattr__ answers is written where it is read', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+
+    mount(WriteSetter, { target });
+    flushSync();
+
+    const field = target.querySelector('input[data-k="virtual"]');
+
+    field.value = 'typed';
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+    flushSync();
+
+    expect(target.querySelector('p[data-k="virtual"]').textContent).toBe('typed|key');
 });

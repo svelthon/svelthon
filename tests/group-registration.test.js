@@ -10,6 +10,7 @@
 import { test, expect } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { mount, flushSync } from './mounted.js';
+import { group } from '../src/lib/runtime.js';
 import GroupMany from './fixtures/GroupMany.svelte';
 import GroupGone from './fixtures/GroupGone.svelte';
 import GroupGoneNative from './fixtures/GroupGoneNative.svelte';
@@ -66,6 +67,50 @@ test('two hundred inputs mounted together are sorted once', async () => {
         delete HTMLInputElement.prototype.compareDocumentPosition;
     }
 });
+
+// A form reset rebuilds each group's list from its inputs, and finds the list a
+// target is rebuilt into through an index of its own, made and dropped with the
+// reset. It searched every target rebuilt so far, so a form of n rows, each its
+// own group, read n² coordinates. Counted here by the reads of the values each
+// binding mentions, for rows that are one group and rows that are many.
+test.each([['one shared group', () => 0], ['a group per row', (at) => at]])(
+    'a reset of 128 rows in %s reads each row a few times',
+    async (_, row) => {
+        const form = document.body.appendChild(document.createElement('form'));
+        const scope = {};
+        const actions = [];
+        const written = [];
+        let reads = 0;
+
+        for (let at = 0; at < 128; at++) {
+            const node = form.appendChild(document.createElement('input'));
+            const where = new Proxy([row(at)], {
+                get(target, key, receiver) {
+                    if (key === '0') reads++;
+                    return Reflect.get(target, key, receiver);
+                }
+            });
+
+            node.type = 'checkbox';
+            actions.push(group(node, [[], (value) => written.push(value), 'yes', 'rows', scope, where]));
+        }
+
+        await Promise.resolve();
+        reads = 0;
+
+        try {
+            form.reset();
+            await Promise.resolve();
+
+            expect(written.length).toBe(128);
+            expect(written.every((one) => Array.from(one).length === 0)).toBe(true);
+            expect(reads).toBeLessThanOrEqual(4 * 128);
+        } finally {
+            actions.forEach((one) => one.destroy());
+            form.remove();
+        }
+    }
+);
 
 const canSpawn = (() => {
     try {

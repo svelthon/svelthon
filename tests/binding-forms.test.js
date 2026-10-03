@@ -123,6 +123,16 @@ describe('and the ones that bind a value become a signal', () => {
         expect(() => parse(`<script>${emitted}</script>`)).not.toThrow();
     });
 
+    // The names it binds get their accessors at run time, unsubscribed with the
+    // component's own list, which the generated code hands over.
+    test('and hands the runtime the list its names unsubscribe with', () => {
+        const emitted = script('from browser import *\n');
+
+        expect(emitted).toContain("Object.defineProperty(__proto, '$svelthonStarred', { value: { owner: __subs } });");
+        expect(emitted).toContain('const __subs = [];');
+        expect(emitted).toContain('__unsubscribe(__subs)');
+    });
+
     test.for([
         ['an assignment', 'thing = 1'],
         ['an import', 'import thing'],

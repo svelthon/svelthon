@@ -4609,14 +4609,70 @@ export function registerModule(name, namespace) {
 export function withNamespace(name, namespace, run) {
     const $B = globalThis.__BRYTHON__;
     const original = $B.namespace;
+    const importFrom = $B.$import_from;
 
     $B.namespace = (requested) => (requested === name ? namespace : original(requested));
+
+    // `from m import *` binds names the compiler could not list, written onto the
+    // namespace as plain properties: in a reactive module they are given their
+    // accessors as the import binds them. A plain `.py` holds no signals.
+    $B.$import_from = function (module, names, aliases, level, locals) {
+        if (locals !== namespace || namespace.$svelthonStarred === undefined || !Array.isArray(names) || !names.includes('*')) {
+            return importFrom.apply(this, arguments);
+        }
+
+        const before = new Set(Object.keys(namespace));
+
+        try {
+            return importFrom.apply(this, arguments);
+        } finally {
+            for (const one of Object.keys(namespace)) if (!before.has(one) && !one.startsWith('$')) starred(namespace, one);
+        }
+    };
 
     try {
         return run();
     } finally {
         $B.namespace = original;
+        $B.$import_from = importFrom;
     }
+}
+
+// A name `from m import *` bound, given the accessor every name of the module
+// gets, on the prototype as `bind` places them, with a revision made here since
+// none was declared for it: a list imported this way and appended to repaints
+// what reads it, as one imported by name does. Unsubscribed with the
+// component's own list, which the compiler hands over on the prototype.
+function starred(namespace, name) {
+    const proto = Object.getPrototypeOf(namespace);
+
+    // Only the generated namespace's own prototype is ours to write on.
+    if (proto === null || proto === Object.prototype) return;
+
+    const { owner } = namespace.$svelthonStarred;
+    let update;
+    const changed = createSubscriber((one) => {
+        update = one;
+
+        return () => {
+            update = undefined;
+        };
+    });
+    const bump = () => update?.();
+    let held = track(namespace[name], bump, changed, owner);
+
+    delete namespace[name];
+
+    bind(
+        proto,
+        name,
+        () => (changed(), held),
+        (value) => {
+            held = track(value, bump, changed, owner);
+            bump();
+        },
+        () => held
+    );
 }
 
 // `pep.title` inside the markup, on a dict.
@@ -4745,23 +4801,27 @@ export const pyBind = (value) => {
 // reading it: a write that asked `$getattr` ran the getter of the property it was
 // about to set, so a getter that counts or refuses saw a read the assignment
 // never makes, and the setter was not reached when the getter raised. The class
-// dictionaries and the instance's own say where an attribute lives; only a
-// foreign object and a class with its own `__getattr__` or `__getattribute__`
-// leave the question to the protocol, which is the one that can answer it.
+// dictionaries and the instance's own say where an attribute lives, and they
+// are asked first, whatever protocol the class adds. Only a name found in
+// neither, on a foreign object or a class with its own `__getattr__` or
+// `__getattribute__`, is left to the protocol, the one thing that can answer
+// for an attribute nothing declares.
 function attributed(target, name) {
     const $B = globalThis.__BRYTHON__;
     const type = pyType(target);
-    const base = $B.search_in_dict(_b_.object, '__getattribute__', $B.NULL);
 
-    if (type === undefined || declares(type, '__getattr__') !== $B.NULL || declares(type, '__getattribute__') !== base) {
-        return $B.$getattr(target, name, MISSING) !== MISSING;
-    }
-
+    if (type === undefined) return $B.$getattr(target, name, MISSING) !== MISSING;
     if (declares(type, name) !== $B.NULL) return true;
 
     const own = ownAttributes(target);
 
-    return own !== undefined && $B.is_dict(own) && Boolean(_b_.dict.$contains(own, name));
+    if (own !== undefined && $B.is_dict(own) && _b_.dict.$contains(own, name)) return true;
+
+    const base = $B.search_in_dict(_b_.object, '__getattribute__', $B.NULL);
+
+    if (declares(type, '__getattr__') === $B.NULL && declares(type, '__getattribute__') === base) return false;
+
+    return $B.$getattr(target, name, MISSING) !== MISSING;
 }
 
 // What a write through a dot of the template compiles to: `(obj.attr := value)`,
@@ -4845,7 +4905,7 @@ function watchReset() {
                 // writes: the first write re-renders, and the rebuild below
                 // needs the groups as they were when the form was reset.
                 const groups = new Map(inputs.map((one) => [one, one.$svelthonGroup]));
-                const rebuilt = [];
+                const rebuilt = new Map();
 
                 // The filled ones last. A radio group writes once per input, and
                 // the one that came back filled has to have the final word over
@@ -4888,6 +4948,30 @@ const sameTarget = (a, b) =>
     a.token === b.token &&
     a.where.length === b.where.length &&
     a.where.every((one, i) => one === b.where[i] || (one !== one && b.where[i] !== b.where[i]));
+
+// The list a form reset rebuilds for a target, found through a tree that lives
+// as long as the reset: by token, then by each mentioned value, which is how a
+// Map compares its keys and so how `sameTarget` compares. One lookup per input:
+// searching every target rebuilt so far made a reset of n separate rows cost
+// n² comparisons.
+const REBUILT = Symbol('svelthon.rebuilt');
+
+function rebuiltFor(rebuilt, target) {
+    let level = rebuilt;
+
+    for (const one of [target.token, ...target.where]) {
+        let next = level.get(one);
+
+        if (next === undefined) level.set(one, (next = new Map()));
+        level = next;
+    }
+
+    let kept = level.get(REBUILT);
+
+    if (kept === undefined) level.set(REBUILT, (kept = []));
+
+    return kept;
+}
 
 function groupToken(scope, binding) {
     // No scope to share a token through: a token of its own, the one shape the
@@ -5058,12 +5142,7 @@ export function group(node, [current, write, chosen, binding, scope, where = []]
         if (!boxes) return write(node.checked ? value() : NONE);
 
         // Which inputs belong together: the target, see `groupToken`.
-        let kept = rebuilt.find(([one]) => sameTarget(one, target))?.[1];
-
-        if (kept === undefined) {
-            kept = [];
-            rebuilt.push([target, kept]);
-        }
+        const kept = rebuiltFor(rebuilt, target);
 
         // The list is built one control at a time here, and not read off the
         // group in one go the way `changed` reads it, because the first write

@@ -24,7 +24,20 @@ class Model:
         Model.blocked = False
 
 
-model = Model()
+class Fallback(Model):
+    def __getattr__(self, name):
+        raise AttributeError(name)
+
+
+class Delegating(Model):
+    def __getattribute__(self, name):
+        return object.__getattribute__(self, name)
+
+
+# The same property under a class that adds an attribute protocol of its own:
+# the property is still declared, so it is still where the write goes.
+kind: str = "plain"
+model = {"plain": Model, "getattr": Fallback, "getattribute": Delegating}[kind]()
 
 
 # A mapping that also holds an attribute of the name of one of its keys: the
@@ -36,6 +49,18 @@ class Row(dict):
 
 
 row = Row()
+
+
+# An attribute nothing declares, answered by `__getattr__`, beside a key of the
+# same name: only the protocol knows it is there, so it is asked.
+class Virtual(dict):
+    def __getattr__(self, name):
+        if name == "label":
+            return "virtual"
+        raise AttributeError(name)
+
+
+virtual = Virtual(label="key")
 
 
 @export
@@ -53,3 +78,5 @@ def written():
 <input bind:value={model.value} />
 <input data-k="row" bind:value={row.label} />
 <p>{row.label}|{row["label"]}</p>
+<input data-k="virtual" bind:value={virtual.label} />
+<p data-k="virtual">{virtual.label}|{virtual["label"]}</p>

@@ -1841,6 +1841,10 @@ function surface(body) {
     // name that is both a `def` and a loop target is still the `def`.
     const bound = [];
 
+    // Whether a `from m import *` binds names here that no statement lists: the
+    // runtime gives them their accessors when the import runs (`starred`).
+    let starred = false;
+
     // Where each name was written. Every module-level binding goes through
     // `bind`, whatever statement made it, so one line here answers for all of
     // them, and `refuseLocked` can say which line took one of Svelthon's words
@@ -2092,6 +2096,7 @@ function surface(body) {
                 for (const alias of node.names || []) {
                     if (typeof alias === 'string') bind(alias);
                     else if (alias.name !== '*') claim(alias.asname || alias.name?.split('.')[0]);
+                    else starred = true;
                 }
 
                 // `case {"amount": amount}:`, `case [x, *rest]:`, `case P(x=y)
@@ -2128,7 +2133,7 @@ function surface(body) {
     globals(body);
     walruses(body);
 
-    return { props, bindables, state, funcs, deriveds, effects, inspects, reserved, bound, lines, remarked };
+    return { props, bindables, state, funcs, deriveds, effects, inspects, reserved, bound, lines, remarked, starred };
 }
 
 // The modules the source imports, `import x` and `from x import y` alike.
@@ -2336,7 +2341,7 @@ const SUBS = '__subs';
 // vocabulary. This is a third category, a name the generated code uses for
 // itself, and the answer to that category is a prefix rather than a list.
 const NEXT_VALUE = '__next';
-const SUBSCRIBING = (c) => c.state.length > 0 || c.bindables.length > 0 || c.props.length > 0;
+const SUBSCRIBING = (c) => c.state.length > 0 || c.bindables.length > 0 || c.props.length > 0 || c.starred;
 
 const rev = (name) => `__rev_${name}`;
 const bump = (name) => `__bump_${name}`;
@@ -2495,6 +2500,12 @@ function templateBridge(c) {
 function authorBindings(c) {
     return [
         `const __proto = {};`,
+        // The names a `from m import *` binds get their accessors at run time,
+        // in a component unsubscribed with its own list; a store keeps its
+        // subscriptions for as long as the page.
+        ...(c.starred
+            ? [`Object.defineProperty(__proto, '$svelthonStarred', { value: { owner: ${c.store ? 'undefined' : SUBS} } });`]
+            : []),
         // Python may write to a prop; the write lands in the local fallback and
         // is shadowed for as long as the parent supplies a value, which is
         // Svelte's own rule for non-bindable props.
@@ -3155,7 +3166,7 @@ function compile(
         $B.id_counter(counter);
         $B.lambda_magic = tag;
     }
-    let { props, bindables, state, funcs, deriveds, effects, inspects, reserved, bound, lines, remarked } =
+    let { props, bindables, state, funcs, deriveds, effects, inspects, reserved, bound, lines, remarked, starred } =
         surface(root._ast.body);
 
     // Neither a store nor a plain module has a parent, so an annotation there
@@ -3347,6 +3358,7 @@ function compile(
         deriveds,
         effects,
         inspects,
+        starred,
         plainDeriveds,
         jsImports,
         jsImported,

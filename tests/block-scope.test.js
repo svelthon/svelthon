@@ -2,6 +2,26 @@ import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import BlockScope from './fixtures/BlockScope.svelte';
 import AssignedForms from './fixtures/AssignedForms.svelte';
+import StarImported from './fixtures/StarImported.svelte';
+
+// `from m import *` binds names no statement lists, so the compiler cannot
+// give them a signal: the runtime gives each its accessor as the import binds
+// it, and a list imported this way repaints what reads it, as one imported by
+// name does. A function among them is still the module's.
+test('a name a star import binds follows the DOM', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+
+    mount(StarImported, { target });
+    flushSync();
+
+    const at = (k) => target.querySelector(`[data-k="${k}"]`).textContent;
+    const before = Number(at('rows'));
+
+    target.querySelector('button').click();
+    flushSync();
+
+    expect([Number(at('rows')), at('label')]).toEqual([before + 1, 'from the module']);
+});
 
 // A `for` target, a `with … as`, a `match` capture and an import bind a name of
 // the module to a value, as `=` does, so the name is state: a list bound by one

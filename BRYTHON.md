@@ -68,6 +68,7 @@ Token type codes read off the tokenizer: `NAME 1`, `NUMBER 2`, `STRING 3`,
 | | |
 |---|---|
 | `$B.namespace(name)` | intercepted; the whole design hangs here |
+| `$B.$import_from(module, names, aliases, level, locals)` | what `from m import …` compiles to; intercepted beside `$B.namespace` while a reactive module runs, so the names a `from m import *` writes onto the namespace, which no statement lists, get the accessor every other name has |
 | `ns.$proxy = true` | makes `resolve_in_namespace` read the property normally instead of demanding an *own* property, the only place in Brython that consults this flag, and what lets accessors live on the prototype |
 | `$B.resolve_global(name, ns)` | not called, and the reason `$proxy` exists: it is the function that would demand an own property. It is here because it is the member whose disappearance would stop the whole namespace trick, and the one nobody would think to grep for |
 | `$B.delete_for_reassign(name, ns)` | emitted before rebinding a global; its `delete` is why accessors must be inherited, never own |
