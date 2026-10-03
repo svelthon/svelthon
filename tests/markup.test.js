@@ -475,6 +475,8 @@ describe('a declaration in a string of a script', () => {
         const option = '<svelte:options customElement="my-tag" />';
         expect(compileOptionsFor(`<div title='${option}'>x</div>`)).toBeUndefined();
         expect(compileOptionsFor(`<p>{'${option}'}</p>`)).toBeUndefined();
+        // On a tag whose name starts past ASCII, which is a tag to Svelte.
+        expect(compileOptionsFor(`<Étiquette title='${option}' />`)).toBeUndefined();
     });
 });
 

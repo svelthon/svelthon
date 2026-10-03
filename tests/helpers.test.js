@@ -16,6 +16,7 @@
 // where there is no DOM, and that branch is the whole server story.
 import { test, expect, describe } from 'vitest';
 
+import { runInNewContext } from 'node:vm';
 import { NONE, __pybridge } from '../src/lib/runtime.js';
 import {
     batch,
@@ -164,6 +165,33 @@ describe('tojson', () => {
 
         expect(text).toBeInstanceOf(String);
         expect(tojson(wrap(text))).toBe(json);
+    });
+
+    // What the serialiser writes by the engine's own slot, and not by the
+    // object's properties. `JSON.rawJSON` was copied out as `{"rawJSON": …}`,
+    // its slot left behind; a String, a Number or a Boolean object was refused
+    // as having no JSON of its own, while `JSON.stringify` writes its primitive.
+    // Built in this context and in another one, since the slot is what tells.
+    const other = (code) => runInNewContext(code);
+
+    test.for([
+        ['a raw JSON text', () => JSON.rawJSON('9007199254740993'), '9007199254740993'],
+        ['a String object', () => new String('é'), '"é"'],
+        ['a Number object', () => new Number(0.25), '0.25'],
+        ['a Boolean object', () => new Boolean(false), 'false'],
+        ['a BigInt object', () => Object(2n ** 70n), '1180591620717411303424'],
+        ['a Number object of another context', () => other('new Number(0.25)'), '0.25'],
+        ['a Boolean object of another context', () => other('new Boolean(false)'), 'false']
+    ])('%s is written as the serialiser writes it, alone and held', ([, make, json]) => {
+        expect(tojson(make())).toBe(json);
+        expect(tojson({ held: make() })).toBe(`{"held":${json}}`);
+    });
+
+    // The slot, not the look of it: a property called `rawJSON` is data, and a
+    // Number object holding NaN is the NaN every other number is refused for.
+    test('a property named rawJSON is data, and a boxed NaN is a NaN', () => {
+        expect(tojson({ rawJSON: '1' })).toBe('{"rawJSON":"1"}');
+        expect(() => tojson(new Number(NaN))).toThrow(/NaN has no JSON/);
     });
 
     // The rule above was stated for a class and enforced for a class alone,

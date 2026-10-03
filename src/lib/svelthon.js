@@ -736,6 +736,11 @@ export function svelthon(options = {}) {
             const graph = this.environment.moduleGraph;
             const stale = [];
 
+            // A Python file Vite reports changed is compiled again, whatever its
+            // date says: a copy or a tool that keeps `mtimeMs` left the cache
+            // serving the code it had before.
+            compiledStores.delete(file);
+
             const forget = (id) => {
                 const mod = graph.getModuleById(id);
                 if (mod) {

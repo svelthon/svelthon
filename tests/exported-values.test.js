@@ -15,6 +15,8 @@ import * as replaced from './fixtures/replaced_defs.py';
 import replacedStore, * as replacedExports from './fixtures/replaced_defs_store.svelte.py';
 import * as astral from './fixtures/astral_text.py';
 import * as astralStore from './fixtures/astral_text_store.svelte.py';
+import * as rawValues from './fixtures/raw_json_values.py';
+import { raw } from './fixtures/raw_json.js';
 
 describe.for([
     ['imported by name', named],
@@ -94,6 +96,14 @@ describe.for([
 
 test('a str subclass holding text past U+FFFF crosses as the text', () => {
     expect(astral.tagged).toBe('🌍');
+});
+
+// A raw JSON text has no prototype, and was copied out as `{rawJSON: "…"}`, its
+// slot left behind, by every walk that hands Python's values to JavaScript.
+test('a raw JSON text JavaScript handed Python comes back as itself', () => {
+    expect(rawValues.kept).toBe(raw);
+    expect(rawValues.held.raw).toBe(raw);
+    expect(rawValues.written()).toBe('{"raw":9007199254740993,"boxed":0.25}');
 });
 
 // Last, since it rebinds a name of the fixture.

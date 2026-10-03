@@ -30,7 +30,8 @@ import {
     opaque,
     pyBytes,
     thenable,
-    ticking
+    ticking,
+    unboxed
 } from './runtime.js';
 
 // What the author wrote, as a value JavaScript can read with `typeof`.
@@ -201,6 +202,11 @@ function instant(value) {
 // Handing the class over whole is right at the *boundary*, where JavaScript can
 // call it; it is not a thing to write into a page.
 const serialisable = (one) => {
+    // A String, a Number, a Boolean or a BigInt object is its primitive to the
+    // serialiser, and so to every refusal below: `new Number(NaN)` is `NaN`.
+    const box = unboxed(one);
+    if (box !== undefined) one = box.value;
+
     // **A number that is not finite.** JSON has no notation for `NaN` or
     // `±Infinity`, and `JSON.stringify` writes `null` for them: a page said
     // `null` where the model held a division by zero or an overflow, which is a

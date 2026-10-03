@@ -1214,12 +1214,43 @@ const pyType = (value) => {
 export const opaque = (value) => {
     try {
         return (
-            !Array.isArray(value) && !plainObject(value) && typeof value.toJSON !== 'function'
+            !Array.isArray(value) &&
+            !plainObject(value) &&
+            typeof value.toJSON !== 'function' &&
+            unboxed(value) === undefined
         );
     } catch {
         return false;
     }
 };
+
+// What `JSON.stringify` writes of an object by an internal slot rather than by
+// its properties: a String, a Number, a Boolean or a BigInt object stands for
+// its primitive, and `JSON.rawJSON` hands back a text written as it is. Asked of
+// the slot, as the serialiser asks it, so one built by another JavaScript
+// context is one too, and an object that only carries the tag, or a property
+// named `rawJSON`, is not.
+const BOXES = {
+    '[object String]': String.prototype.valueOf,
+    '[object Number]': Number.prototype.valueOf,
+    '[object Boolean]': Boolean.prototype.valueOf,
+    '[object BigInt]': BigInt.prototype.valueOf
+};
+
+// `{ value }`, the primitive an object of the four holds, or undefined.
+export const unboxed = (value) => {
+    if (value === null || typeof value !== 'object') return undefined;
+
+    try {
+        const unbox = BOXES[Object.prototype.toString.call(value)];
+
+        return unbox === undefined ? undefined : { value: unbox.call(value) };
+    } catch {
+        return undefined;
+    }
+};
+
+export const rawJSON = (value) => typeof JSON.isRawJSON === 'function' && JSON.isRawJSON(value);
 
 export const plainObject = (value) => {
     const prototype = Object.getPrototypeOf(value);
@@ -2488,6 +2519,10 @@ function branch(value, seen, shell, adapt) {
     // enumerable or not, own or inherited, with the receiver and the key. A
     // Python object with a `toJSON` key or attribute has a class, and is data.
     if (typeof value.toJSON === 'function' && pyType(value) === undefined) return value;
+
+    // So does a raw JSON text, which has no prototype and would otherwise be
+    // copied out as `{rawJSON: "…"}`, the slot that makes it raw left behind.
+    if (rawJSON(value)) return value;
 
     if (sequence(value)) {
         // list, tuple, and a subclass through whatever it says iterating it

@@ -679,7 +679,9 @@ const VOID = new Set([
 
 // Svelte's own rule for telling a component from an element: a capital first
 // letter, a dot in the name, or one of the two `svelte:` forms that stand for a
-// component. `svelte:element` renders an element and is not one of them.
+// component. `svelte:element` renders an element and is not one of them. The
+// capital is Unicode's, `\p{Lu}`, as in Svelte's `regex_valid_component_name`:
+// `<Étiquette>` and `<Δ>` are components.
 //
 // It is what `bind:group` has to ask before rewriting itself into an action.
 // Every word of the argument for that rewrite is about `<input>`: Svelte works
@@ -687,7 +689,7 @@ const VOID = new Set([
 // getter/setter pair has nothing to compare. A component has no group machinery
 // at all — Svelte reads `bind:group={x}` there as the prop of that name — and it
 // refuses `use:` outright, so the component did not compile.
-const COMPONENT = /^(?:[A-Z]|svelte:(?:component|self)\b)|\./;
+const COMPONENT = /^(?:\p{Lu}|svelte:(?:component|self)\b)|\./u;
 
 const isComponent = (tag) => tag !== null && COMPONENT.test(tag.name);
 
@@ -1221,8 +1223,9 @@ export function pythonExpressions(markup, collect, onPython, where) {
 }
 
 // A tag's opening, read where the walk stands rather than on a copy of the rest
-// of the markup.
-const TAG_OPEN = /<(\/?)\s*([A-Za-z][\w:.-]*)/y;
+// of the markup. A name starts as an identifier does, `\p{ID_Start}`, which is
+// what Svelte's component names allow: an ASCII letter left `<Étiquette>` no tag.
+const TAG_OPEN = /<(\/?)\s*(\p{ID_Start}[\p{ID_Continue}$‌‍:.-]*)/uy;
 
 function walk(markup, collect, onPython, seed, record, where) {
     let out = '';
@@ -2257,7 +2260,7 @@ export const markupOnly = (content) =>
             (_, open, name, body, close) => open + blank(body) + close
         )
         .replace(
-            /<[a-zA-Z][^\s/>]*(?:\s+[^\s=/>"']+(?:\s*=\s*(?:"[^"]*"|'[^']*'|\{[^{}]*\}|[^\s>"']+))?)*\s*\/?>|\{[^{}]*\}/g,
+            /<\p{ID_Start}[^\s/>]*(?:\s+[^\s=/>"']+(?:\s*=\s*(?:"[^"]*"|'[^']*'|\{[^{}]*\}|[^\s>"']+))?)*\s*\/?>|\{[^{}]*\}/gu,
             (found) => found.replace(QUOTED_TAG, blank)
         );
 

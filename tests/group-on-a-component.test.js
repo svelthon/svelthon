@@ -1,6 +1,7 @@
 import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import GroupHost from './fixtures/GroupHost.svelte';
+import GroupHostUnicode from './fixtures/GroupHostUnicode.svelte';
 
 // `bind:group` is rewritten into an action, and every word of the argument for
 // that is about `<input>`: Svelte works out which inputs form one group from the
@@ -41,4 +42,23 @@ describe('bind:group on a component', () => {
         expect(read('child')).toBe('z');
         expect(read('parent')).toBe('z');
     });
+});
+
+// The capital is Unicode's, as in Svelte's own rule: `<Étiquette>` and `<Δ>`
+// were not read as tags at all, so the binding became an action and Svelte
+// refused it on a component.
+test('a component named past ASCII binds the prop too, in both spellings', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+    const read = (selector) => target.querySelector(selector).textContent;
+
+    mount(GroupHostUnicode, { target });
+    flushSync();
+
+    expect([read('[data-k="long"] [data-k="child"]'), read('[data-k="short"] [data-k="child"]')]).toEqual(['a', 'b']);
+
+    target.querySelector('[data-k="long"] [data-k="pick"]').click();
+    target.querySelector('[data-k="short"] [data-k="pick"]').click();
+    flushSync();
+
+    expect([read('[data-k="chosen"]'), read('[data-k="group"]')]).toEqual(['z', 'z']);
 });
