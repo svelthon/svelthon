@@ -1,6 +1,9 @@
 import { test, expect, describe } from 'vitest';
 import { mount, unmount, flushSync } from './mounted.js';
 import Lifecycle from './fixtures/Lifecycle.svelte';
+import ConditionalLifecycleHost from './fixtures/ConditionalLifecycleHost.svelte';
+import BranchedLifecycle from './fixtures/BranchedLifecycle.svelte';
+import UnboundLifecycle from './fixtures/UnboundLifecycle.svelte';
 
 // on_mount / on_destroy by naming convention, backed by a single $effect: the
 // body runs once the DOM is in place, the cleanup when the component goes away.
@@ -43,5 +46,68 @@ describe('lifecycle', () => {
         flushSync();
 
         expect(target.querySelector('p[data-k="mounts"]').textContent).toBe('1');
+    });
+});
+
+// A hook is what its name holds once the script has run, not the `def` the
+// compiler saw: a `def` under an `if` not taken leaves the name unbound, and an
+// unbound hook is not called, as Svelte's `onMount` in a branch not taken is
+// never registered. Any other value is called and reports its own error.
+describe('a hook is the value its name holds', () => {
+    // Mounts, flushes, and hands back the instance, its target and the log.
+    const mounted = (Component, props) => {
+        const log = [];
+        const target = document.body.appendChild(document.createElement('div'));
+        const app = mount(Component, { target, props: { ...props, log: (line) => log.push(line) } });
+
+        flushSync();
+
+        return { app, target, log };
+    };
+
+    test.for([
+        [false, [], []],
+        [true, ['mount first'], ['mount first', 'cleanup', 'destroy']]
+    ])('defined under `if %s`: runs once, its cleanup before on_destroy', async ([enabled, alive, gone]) => {
+        const { app, target, log } = mounted(ConditionalLifecycleHost, { enabled });
+
+        app.relabel('second');
+        flushSync();
+
+        expect(target.querySelector('[data-k="label"]').textContent).toBe('second');
+        expect(log).toEqual(alive);
+
+        // Awaited: what a teardown throws rejects the promise `unmount` hands back.
+        await unmount(app);
+
+        expect(log).toEqual(gone);
+    });
+
+    test.for([
+        [true, ['mount short'], ['mount short']],
+        [false, ['mount long'], ['mount long', 'destroy long']]
+    ])('defined in an `if`/`else` (short=%s): the branch taken is the hook', async ([short, alive, gone]) => {
+        const { app, log } = mounted(BranchedLifecycle, { short });
+
+        expect(log).toEqual(alive);
+
+        await unmount(app);
+
+        expect(log).toEqual(gone);
+    });
+
+    test.for([
+        ['kept', ['mount', 'destroy']],
+        ['deleted', []]
+    ])('`%s`: a deleted hook is unbound, and is not called', async ([mode, gone]) => {
+        const { app, log } = mounted(UnboundLifecycle, { mode });
+
+        await unmount(app);
+
+        expect(log).toEqual(gone);
+    });
+
+    test('a hook bound to None is called, and says so', () => {
+        expect(() => mounted(UnboundLifecycle, { mode: 'none' })).toThrow(TypeError);
     });
 });

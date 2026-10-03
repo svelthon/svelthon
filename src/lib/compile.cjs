@@ -2858,23 +2858,32 @@ function effectBlocks(c) {
                   // from a teardown, once destroyed, yields no function at all.
                   // Held in the wrapper `on_mount` goes through, which starts
                   // an `async def` and places an error.
+                  //
+                  // A hook is the value its name holds once the script has run,
+                  // not the `def` the compiler saw: a `def` under an `if` not
+                  // taken leaves the name unbound, which here is `undefined`, as
+                  // `del` leaves it, and a hook nobody bound is not called, as
+                  // Svelte's `onMount` in a branch not taken is never
+                  // registered. Any other value is called and reports its own
+                  // error.
                   ...(c.lifecycle('on_destroy')
                       ? [
                             `    const __teardown = untrack(() => { const held = ${fn('on_destroy')};` +
-                                ` return __pyComponent(() => held, ${JSON.stringify(`on_destroy() — ${c.source}`)}, ${c.lineOffset}); });`
+                                ` return held === undefined ? undefined : __pyComponent(() => held, ${JSON.stringify(`on_destroy() — ${c.source}`)}, ${c.lineOffset}); });`
                         ]
                       : []),
                   // What `on_mount` hands back is its cleanup, as with Svelte's
                   // `onMount`, and it runs before `on_destroy`.
                   ...(c.lifecycle('on_mount')
                       ? [
-                            `    const __unmounted = ${RUNTIME.pyTeardown}(untrack(() => on_mount()),` +
+                            `    const __unmounted = untrack(() => ${fn('on_mount')}) === undefined ? undefined :` +
+                                ` ${RUNTIME.pyTeardown}(untrack(() => on_mount()),` +
                                 ` ${JSON.stringify(`on_mount() — ${c.source}`)}, ${c.lineOffset});`
                         ]
                       : []),
                   `    return () => {`,
                   ...(c.lifecycle('on_mount') ? [`        __unmounted?.();`] : []),
-                  ...(c.lifecycle('on_destroy') ? [`        __teardown();`] : []),
+                  ...(c.lifecycle('on_destroy') ? [`        __teardown?.();`] : []),
                   `    };`,
                   `});`
               ]
