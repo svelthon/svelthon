@@ -14,7 +14,7 @@ import {
 import { parse } from 'svelte/compiler';
 
 const require = createRequire(import.meta.url);
-const { compile, VIRTUAL_PREFIX, virtualId, pythonModuleName, elementProps } = require('./compile.cjs');
+const { compile, VIRTUAL_PREFIX, virtualId, pythonModuleName, elementProps, PY_NAME } = require('./compile.cjs');
 
 // Generated modules, keyed by component name. Filled by the preprocessor when
 // Svelte transforms a component, read back when Vite resolves the import that
@@ -90,7 +90,7 @@ export const nameFor = (filename) => {
 // A stem no `import` can write, `+page.server` for every route of that kind, is
 // never looked up, and never claimed.
 const pythonClaimed = (globalThis[Symbol.for('svelthon.pythonClaimed')] ??= new Map());
-const IMPORTABLE = /^[\p{L}_][\p{L}\p{M}\p{N}_]*$/u;
+const IMPORTABLE = PY_NAME;
 
 function claimPython(path) {
     const name = pythonModuleName(path);

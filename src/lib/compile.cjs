@@ -743,8 +743,12 @@ const IMPORTJS_EFFECT = /^importjs\s+(['"])([^'"]+)\1\s*$/;
 // pattern, `__all__ = ["élèves"]` was filtered to nothing and the module
 // exported nothing at all, in silence. Same class as `markup.js`'s `NAME`, and
 // for the same reason.
+//
+// Python's own classes, `XID_Start` and `XID_Continue`, which `str.isidentifier`
+// answers by: letters alone left out `℘`, `℮` and `ᢅ` at the start and `·` after
+// it, and a `def ℘()` was dropped from the exports with nothing said.
 const JS_NAME = /^[A-Za-z_$][\w$]*$/;
-const PY_NAME = /^[\p{L}_][\p{L}\p{M}\p{N}_]*$/u;
+const PY_NAME = /^[\p{XID_Start}_]\p{XID_Continue}*$/u;
 
 // Why the local name of a JavaScript import cannot be bound, or null. It is a
 // binding of the generated module, so it answers to the two rules every name
@@ -861,7 +865,7 @@ function commentAt(line) {
 // `[A-Za-z_]\w*` made `année` a name to the script's `=` and not to its `=>` or
 // its `<=>`, which refused it with Brython's `invalid syntax`. Marks are in the
 // class because a name in Vietnamese or Devanagari carries them.
-const ARROW_DERIVED = /^([\p{L}_][\p{L}\p{M}\p{N}_]*)\s*=>\s*(\S[\s\S]*)$/u;
+const ARROW_DERIVED = /^([\p{XID_Start}_]\p{XID_Continue}*)\s*=>\s*(\S[\s\S]*)$/u;
 
 // `=> expr`, the same arrow with nothing to name, which is the effect.
 //
@@ -938,7 +942,7 @@ function firstArgument(text) {
 // It is sugar over `bindable()`, which stays: a searchable name for the reader
 // who arrives from Svelte's `$bindable`, exactly as `derived(lambda: …)` stays
 // under `=>`.
-const BINDABLE = /^([\p{L}_][\p{L}\p{M}\p{N}_]*\s*:\s*[^=<>]+?)\s*<=>\s*(\S[\s\S]*)?$/u;
+const BINDABLE = /^([\p{XID_Start}_]\p{XID_Continue}*\s*:\s*[^=<>]+?)\s*<=>\s*(\S[\s\S]*)?$/u;
 
 // Brackets closed on the line, ignoring those inside a string.
 const balanced = (expr) => opened(expr) === 0;
@@ -965,7 +969,7 @@ function opened(expr) {
 
     return depth;
 }
-const ARROW_INDENTED = /^[ \t]+(?:[\p{L}_][\p{L}\p{M}\p{N}_]*\s*)?=>\s/u;
+const ARROW_INDENTED = /^[ \t]+(?:[\p{XID_Start}_]\p{XID_Continue}*\s*)?=>\s/u;
 
 function takeArrows(src, where, lineOffset, allowed) {
     const lines = src.split('\n');
@@ -3354,9 +3358,7 @@ function compile(
     const table = symbolTable(root._ast, source);
     const declaration = declaredExports(root._ast, table, source, lineOffset);
     const listed = declaration === null ? null : declaration.names;
-    const exported = (
-        listed ?? [...funcs.map((f) => f.name), ...plainDeriveds.map((d) => d.name)]
-    ).filter((n) => PY_NAME.test(n) && !JS_RESERVED.has(n));
+    const exported = listed ?? [...funcs.map((f) => f.name), ...plainDeriveds.map((d) => d.name)];
 
     // A name in `__all__` that the module never binds. Python raises on it at
     // `from m import *` and says nothing otherwise; here it used to emit a
@@ -3374,6 +3376,22 @@ function compile(
     const listedAt = line === undefined ? source : `${source}:${line}`;
 
     if (unbound.length && !starred) throw refuse(neverBinds(unbound[0], listedAt), source, line);
+
+    // What is left that the module cannot export under its name is what only a
+    // star import can bring: a word JavaScript reserves, or no name at all.
+    // Refused and named, as a binding of a reserved word is, rather than left
+    // out of the exports.
+    const unexportable = (listed ?? []).find((n) => !PY_NAME.test(n) || JS_RESERVED.has(n));
+
+    if (unexportable !== undefined) {
+        throw refuse(
+            `svelthon — \`__all__\` names \`${unexportable}\`, which ` +
+                `${PY_NAME.test(unexportable) ? 'JavaScript reserves' : 'is not a name'}, so the module ` +
+                `cannot export it (${listedAt}).`,
+            source,
+            line
+        );
+    }
 
     const isFunction = (name) =>
         funcs.some((f) => f.name === name) || plainDeriveds.some((d) => d.name === name);
@@ -3498,4 +3516,4 @@ function elementProps(src) {
     return [...props, ...bindables].map((name) => ({ name, type: types.get(name) }));
 }
 
-module.exports = { compile, VIRTUAL_PREFIX, virtualId, pythonModuleName, elementProps };
+module.exports = { compile, VIRTUAL_PREFIX, virtualId, pythonModuleName, elementProps, PY_NAME };

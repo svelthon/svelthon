@@ -256,7 +256,7 @@ function arguments_(text) {
 // keyword boundary below is the first reader; `NAME` and `NAME_END` are built
 // from it a few lines down, where the reason it is a Unicode class is written
 // out.
-const NAME_CHAR = '\\p{L}\\p{M}\\p{N}_';
+const NAME_CHAR = '\\p{XID_Continue}';
 
 // The keywords themselves, and the boundary in front of one is the same class as
 // the rest of a name — not `\w`, which is ASCII. `énot` is a
@@ -281,9 +281,11 @@ const KEYWORD_BEFORE = new RegExp(
 // parameters. They agree about intent and differed only by age, so the class is
 // named here and nothing spells it out again.
 //
-// Marks are in it because a name in Vietnamese or Devanagari carries them, and
-// `u` is required for `\p{…}` to mean anything at all.
-const NAME = `[\\p{L}_][${NAME_CHAR}]*`;
+// Python's own classes, `XID_Start` and `XID_Continue`, the ones
+// `str.isidentifier` answers by: marks are in them because a name in Vietnamese
+// or Devanagari carries them, and `℘` or `·` because Python takes them. `u` is
+// required for `\p{…}` to mean anything at all.
+const NAME = `[\\p{XID_Start}_][${NAME_CHAR}]*`;
 
 // What a callable can end with, just before the parenthesis of a call: the last
 // character of a name by the same classes as `NAME`, or the close of a
@@ -561,7 +563,11 @@ const GROUP_DIRECTIVE = /^bind:group\b/;
 //
 // So the shorthand is expanded before anything else looks at the tag, and the
 // long form is the only one the rest of this pass has to know about.
-const SHORTHAND = /\b(bind:([\p{L}_$][\p{L}\p{M}\p{N}_$]*))$/u;
+// The name a shorthand holds, `{name}` or `bind:name`: a name, or Svelte's with
+// its `$`.
+const SHORT_NAME = `[\\p{XID_Start}_$][${NAME_CHAR}$]*`;
+const SHORTHAND = new RegExp(`\\b(bind:(${SHORT_NAME}))$`, 'u');
+const SHORTHAND_ATTRIBUTE = new RegExp(`^${SHORT_NAME}$`, 'u');
 
 // The action the generated script defines for it. Named here and emitted there,
 // like `__event`.
@@ -1991,7 +1997,7 @@ function walk(markup, collect, onPython, seed, record, where) {
                         // the call to the declared arity, converts the element,
                         // and hands the teardown back.
                         out += `{@attach ${ATTACH_WRAPPER}(${call(attached.rest, '')})}`;
-                    } else if (/^[\p{L}_$][\p{L}\p{M}\p{N}_$]*$/u.test(trimmed)) {
+                    } else if (SHORTHAND_ATTRIBUTE.test(trimmed)) {
                         // {name}, Svelte's shorthand for name={name}. Expanding
                         // it is what routes the read through the namespace, and
                         // therefore through the accessor; and it is expanded
