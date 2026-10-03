@@ -42,10 +42,13 @@ const list = (name) => {
 // changes, which is the worst way for one to break. An equality cannot go
 // quiet: a reading that finds nothing fails as loudly as one that finds a word
 // nobody listed.
+//
+// `tag` is the element being written, and its name is an element's, `select`,
+// never a word of the chain: a comparison on it is left out by its receiver.
 const dispatched = [
     ...new Set([
         ...[...source.matchAll(/\b(?:opens|holds)\('(\w+)'\)/g)].map((one) => one[1]),
-        ...[...source.matchAll(/\.name === '(\w+)'/g)].map((one) => one[1])
+        ...[...source.matchAll(/\b(\w+)\??\.name === '(\w+)'/g)].filter((one) => one[1] !== 'tag').map((one) => one[2])
     ])
 ];
 

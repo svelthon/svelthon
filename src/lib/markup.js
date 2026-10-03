@@ -626,48 +626,74 @@ const DIRECTIVE_ADAPTER = {
 };
 
 function tagValue(markup, from) {
-    let at = from;
-
-    while (at < markup.length) {
+    for (let at = from; at < markup.length && markup[at] !== '>'; ) {
         const char = markup[at];
-        const named = () => (markup.slice(from, at).match(ATTRIBUTE_NAME) || [])[1] === 'value';
 
-        if (char === '"' || char === "'") {
-            // The quote that closes the attribute, not the first one written:
-            // `value="{data["id"]}"` holds two inside an interpolation, which
-            // is skipped whole, as the main pass skips it.
-            let end = at + 1;
-
-            while (end < markup.length && markup[end] !== char) {
-                if (markup[end] === '{') {
-                    const closed = closingBrace(markup, end);
-
-                    if (closed === -1) return null;
-                    end = closed;
-                }
-
-                end += 1;
-            }
-
-            if (end >= markup.length) return null;
-            if (named()) return { start: at + 1, end, braced: false };
-
-            at = end + 1;
-        } else if (char === '{') {
-            const end = closingBrace(markup, at);
-
-            if (end === -1) return null;
-            if (named()) return { start: at + 1, end, braced: true };
-
-            at = end + 1;
-        } else if (char === '>') {
-            return null;
-        } else {
+        if (char !== '"' && char !== "'" && char !== '{') {
             at += 1;
+            continue;
         }
+
+        const end = valueEnd(markup, at);
+
+        if (end === -1) return null;
+        if ((markup.slice(from, at).match(ATTRIBUTE_NAME) || [])[1] === 'value') {
+            return { start: at + 1, end, braced: char === '{' };
+        }
+
+        at = end + 1;
     }
 
     return null;
+}
+
+// Where an attribute value opened at `at`, by a quote or a brace, ends, or -1.
+// The quote that closes it, not the first one written: `value="{data["id"]}"`
+// holds two inside an interpolation, which is skipped whole, as the main pass
+// skips it.
+function valueEnd(markup, at) {
+    const quote = markup[at];
+
+    if (quote === '{') return closingBrace(markup, at);
+
+    let end = at + 1;
+
+    while (end < markup.length && markup[end] !== quote) {
+        if (markup[end] === '{') {
+            const closed = closingBrace(markup, end);
+
+            if (closed === -1) return -1;
+            end = closed;
+        }
+
+        end += 1;
+    }
+
+    return end < markup.length ? end : -1;
+}
+
+// The names of a tag's attributes, read from its start to its `>`, each value
+// skipped whole, so a name written inside one is not counted.
+function tagNames(markup, from) {
+    let names = '';
+
+    for (let at = from; at < markup.length && markup[at] !== '>'; ) {
+        const char = markup[at];
+
+        if (char !== '"' && char !== "'" && char !== '{') {
+            names += char;
+            at += 1;
+            continue;
+        }
+
+        const end = valueEnd(markup, at);
+
+        if (end === -1) break;
+        names += ' ';
+        at = end + 1;
+    }
+
+    return new Set(names.match(new RegExp(`${ATTRIBUTE_CHAR}+`, 'g'))?.map((name) => name.toLowerCase()));
 }
 
 // The elements HTML closes by itself, which therefore open no body and no
@@ -1402,6 +1428,8 @@ function walk(markup, collect, onPython, seed, record, where) {
     //             `bind:` read: a scalar is made JavaScript's, so `0.5` twice
     //             is one value, and a container is handed over as the object it
     //             is, so an option finds its select and a group its list.
+    //   'selection' the read of a `<select multiple>`'s binding: the same, item
+    //             by item, for the list whose items meet the options' values.
     const call = (expr, wrapper, source = expr, kind = '') => {
         const trimmed = expr.trim();
         const args = mentioned(trimmed);
@@ -1500,6 +1528,20 @@ function walk(markup, collect, onPython, seed, record, where) {
                     : JSON.stringify(attributeText(one.literal, quote))
             )
             .join(' + ');
+    };
+
+    // A binding's read/write pair, one rule for its two spellings,
+    // `bind:value={x}` and `bind:value`. Svelte compares what the read gives: a
+    // scalar is made JavaScript's and a container kept as the object it is
+    // (`scalar`), and the value of a `<select multiple>`, a list each of whose
+    // items meets an option's `value`, is made so item by item (`selection`).
+    // `multiple` is read off the whole tag, Svelte requiring it static there.
+    const boundPair = (directive, expr) => {
+        if (declaredHere(expr)) return expr.trim();
+
+        const multiple = directive === 'bind:value' && tag?.name === 'select' && tagNames(markup, tag.start).has('multiple');
+
+        return `() => ${call(expr, '__bound', undefined, multiple ? 'selection' : 'scalar')}, (${BOUND_VALUE}) => ${assign(expr)}`;
     };
 
     const groupAction = (expr) => {
@@ -1825,9 +1867,7 @@ function walk(markup, collect, onPython, seed, record, where) {
                         } else if (GROUP_DIRECTIVE.test(attribute[1])) {
                             out += `{${componentGroup(trimmed)}}`;
                         } else if (DIRECTIVE.test(attribute[1])) {
-                            out += declaredHere(inner)
-                                ? `{${inner.trim()}}`
-                                : `{() => ${call(inner, '__bound', undefined, 'scalar')}, (${BOUND_VALUE}) => ${assign(inner)}}`;
+                            out += `{${boundPair(attribute[1], inner)}}`;
                         } else {
                             out += attributeValue(attribute[1], inner);
                         }
@@ -1942,9 +1982,7 @@ function walk(markup, collect, onPython, seed, record, where) {
                     } else if (GROUP_DIRECTIVE.test(short[1])) {
                         out += `={${componentGroup(name)}}`;
                     } else {
-                        out += declaredHere(name)
-                            ? `={${name.trim()}}`
-                            : `={() => ${call(name, '__bound')}, (${BOUND_VALUE}) => ${assign(name)}}`;
+                        out += `={${boundPair(short[1], name)}}`;
                     }
                 }
             }
@@ -2331,8 +2369,8 @@ export function collector(defs, lines, columns) {
               ? 'lazy_'
               : kind === 'python'
                 ? 'py_'
-                : kind === 'scalar'
-                  ? 'scalar_'
+                : kind === 'scalar' || kind === 'selection'
+                  ? `${kind}_`
                   : '';
         const name = `__expr_${infix}${defs.length}`;
         seen.set(key, name);

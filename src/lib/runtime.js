@@ -4725,13 +4725,21 @@ export function storeMember(value, where, lineOffset, call) {
 // describing one: what it writes is a name, and everything a crossing does is on
 // this side of the line.
 //
-// `kept` is true for a value that stays Python, and `'scalar'` for one a
-// binding compares: a scalar made JavaScript's, a container handed over as the
-// object it is, since a copy is another object to `===`.
+// `kept` is true for a value that stays Python, and names how a binding
+// compares one: `'scalar'`, a scalar made JavaScript's and a container handed
+// over as the object it is, since a copy is another object to `===`; and
+// `'selection'`, the list a `<select multiple>` looks each option's value up
+// in, whose items are made so one by one, in a new array, the list left as it
+// is.
 const scalarOnly = (value) => {
     if (value === null || typeof value !== 'object') return value;
     const alone = pyScalar(value);
     return alone === undefined ? value : alone;
+};
+
+const COMPARED = {
+    scalar: scalarOnly,
+    selection: (value) => (Array.isArray(value) ? value.map(scalarOnly) : scalarOnly(value))
 };
 
 export const pyExpression = (call, where, lineOffset, arity, kept = false) =>
@@ -4741,7 +4749,7 @@ export const pyExpression = (call, where, lineOffset, arity, kept = false) =>
                 () => call(args.slice(0, arity).map(pyBind)),
                 where,
                 lineOffset,
-                kept === true ? null : kept === 'scalar' ? scalarOnly : pyNumbers
+                kept === true ? null : (COMPARED[kept] ?? pyNumbers)
             ),
         nameOf(where),
         arity
