@@ -4355,6 +4355,9 @@ const withoutKeywords = (target, args) => {
 // other side of the boundary.
 const ADAPTED = new WeakMap();
 
+// The adapters themselves, which convert what they are called with.
+const ADAPTERS = new WeakSet();
+
 // The call itself, Python's arguments out and JavaScript's answer back. The
 // memo is made here, so it lasts exactly one call: a longer-lived one would hand
 // a later call the snapshot an earlier one took, after Python had moved on.
@@ -4384,6 +4387,7 @@ export function jsCall(value) {
     const adapted = new Proxy(value, { apply: crossing });
 
     ADAPTED.set(value, adapted);
+    ADAPTERS.add(adapted);
 
     return adapted;
 }
@@ -4786,17 +4790,24 @@ const directiveCall = (where, fn, args) => {
         throw new TypeError(`svelthon — the directive \`${where}\` names ${String(fn)}, which is not callable`);
     }
 
-    // Not converted here: a JavaScript function reaches Python only through
-    // the engine's own wrapper or the proxy `importjs` publishes, and both
-    // convert what Python hands them.
-    return { python: false, result: fn(...args) };
+    // The adapter `importjs` publishes converts what it is called with, and is
+    // handed the arguments as they are; any other JavaScript function, one a
+    // prop brought among them, is handed them converted.
+    return { python: false, result: fn(...(ADAPTERS.has(fn) ? args : forJavaScript(args))) };
 };
 
-// A Python value, as opposed to a node or an object of Svelte's.
-const pythonValue = (value) =>
-    value !== null &&
-    typeof value === 'object' &&
-    (pyClass(value.ob_type) || Array.isArray(value) || globalThis.__BRYTHON__.is_dict(value));
+// What a JavaScript function is handed by a directive: a Python value converted
+// as an imported function's argument is, by `outbound` with one memo for the
+// call, and Svelte's own values, a node, the options and the rects, as they
+// are. Told apart by the descriptors and, for a function, by its signature, so
+// nothing of the author's is read.
+const forJavaScript = (args) => {
+    const made = new WeakMap();
+
+    return args.map((one) =>
+        quietPyType(one) !== undefined || (typeof one === 'function' && declared(one) !== null) ? outbound(one, made) : one
+    );
+};
 
 // Svelte's `safe_not_equal`, asked of what the value is to JavaScript: a Python
 // float is an object, and would always count as changed where the number it
@@ -4814,9 +4825,10 @@ const changed = (before, after) => {
 // is a new array on every run, so Svelte's own comparison always answers yes.
 // It is made here instead, on the value, and an action written without one is
 // never updated. Both are called on the result, as Svelte calls them, so a
-// method reading `this` finds it.
+// method reading `this` finds it. A function is a result like an object, since
+// Svelte reads the two methods off whatever it is handed.
 const actionPayload = (python, result, given) => {
-    if (result === null || typeof result !== 'object') return result;
+    if (result === null || (typeof result !== 'object' && typeof result !== 'function')) return result;
 
     let held = given[0];
 
@@ -4827,7 +4839,7 @@ const actionPayload = (python, result, given) => {
                       if (!given.length || !changed(held, next[0])) return;
 
                       held = next[0];
-                      result.update(python || !pythonValue(held) ? held : outbound(held));
+                      result.update(python ? held : forJavaScript([held])[0]);
                   }
                 : undefined,
         destroy: typeof result.destroy === 'function' ? () => result.destroy() : undefined
