@@ -1366,6 +1366,16 @@ function templateDots(def) {
     const edits = [];
     const insert = (at, text, node) => edits.push({ from: at, to: at, text, size: end(node) - begin(node) });
     const replace = (from, to, text) => edits.push({ from, to, text, size: 0 });
+    // Two texts around a node, outside everything the node holds: the opening
+    // one before every opening text at its start, the closing one after every
+    // closing text at its end. Half a character wider than the node is what
+    // orders them so.
+    const wrap = (node, before, after) => {
+        const size = end(node) - begin(node) + 0.5;
+
+        edits.push({ from: begin(node), to: begin(node), text: before, size });
+        edits.push({ from: end(node), to: end(node), text: after, size: -size });
+    };
 
     // A function whose parameters arrive as functions, `lazy` in `markup.js`:
     // each read of one becomes a call, except where a lambda or a comprehension
@@ -1442,6 +1452,17 @@ function templateDots(def) {
 
         if (node instanceof $B.ast.Name && node.ctx instanceof $B.ast.Load && lazy.has(node.id) && !shadowed.has(node.id)) {
             insert(end(node), '()', node);
+        }
+
+        // A walrus that binds one of those names binds the parameter itself,
+        // in a comprehension and in a lambda's default as much as here, and
+        // every read of it is a call. So it stores a function that answers its
+        // value, and gives the value: `(name := (lambda value: lambda:
+        // value)(new))()`, which a read after it calls as one before it calls
+        // the template's.
+        if (node instanceof $B.ast.NamedExpr && lazy.has(node.target.id) && !shadowed.has(node.target.id)) {
+            wrap(node, '(', ')()');
+            wrap(node.value, '(lambda value: lambda: value)(', ')');
         }
 
         const [target] = node instanceof $B.ast.Assign ? node.targets : [];
