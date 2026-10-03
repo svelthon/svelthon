@@ -1734,20 +1734,28 @@ function adopt(value) {
         for (const [hash, bucket] of Object.entries(value.$store)) {
             for (const child of bucket) inherit(value, child, hash);
         }
-    } else if (dictView(value)) {
-        // `keys()`, `values()` and `items()` are live: a view holds no entry of
-        // its own, only the dict it reads, `dict_obj`. So the dict is the view's
-        // child, and what changes the dict reaches what reads the view, as it
-        // reaches what reads the dict.
-        inherit(value, value.dict_obj);
+    } else if (viewed(value) !== undefined) {
+        // `keys()`, `values()`, `items()` and the read-only `mappingproxy` a view
+        // hands out as `.mapping` are live: they hold no entry of their own,
+        // only the dict they read. So the dict is the view's child, and what
+        // changes the dict reaches what reads the view, as it reaches what
+        // reads the dict.
+        inherit(value, viewed(value));
     }
 }
 
-// The three views of a dict, which Python offers no way to subclass.
-const dictView = (value) => {
+// The dict a live view reads, or undefined: the three views of a dict, which
+// Python offers no way to subclass, keep it as `dict_obj`; a `mappingproxy`
+// keeps it as `mapping`, and is followed only when that is a dict, the class
+// dictionary behind a `type.__dict__` being no data of the author's.
+const viewed = (value) => {
     const $B = globalThis.__BRYTHON__;
+    const type = value.ob_type;
 
-    return value.ob_type === $B.dict_keys || value.ob_type === $B.dict_values || value.ob_type === $B.dict_items;
+    if (type === $B.dict_keys || type === $B.dict_values || type === $B.dict_items) return value.dict_obj;
+    if (type === $B.mappingproxy && $B.is_dict(value.mapping)) return value.mapping;
+
+    return undefined;
 };
 
 // Sign one subscriber onto one marker, and tell `owner` about it so the same

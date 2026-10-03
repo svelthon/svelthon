@@ -5,29 +5,31 @@ import AssignedForms from './fixtures/AssignedForms.svelte';
 import StarImported from './fixtures/StarImported.svelte';
 import DictViews from './fixtures/DictViews.svelte';
 
-// `keys()`, `values()` and `items()` are live views of their dict: kept in a
-// name, each follows an entry added, an entry removed, and a value changed in
-// place, as the dict itself does.
+// `keys()`, `values()` and `items()` are live views of their dict, and so is
+// the read-only `mappingproxy` a view hands out as `.mapping`: kept in a name,
+// each follows an entry added, an entry removed, and a value changed in place,
+// as the dict itself does.
 test('a dict view kept in a name follows its dict', () => {
     const target = document.body.appendChild(document.createElement('div'));
 
     mount(DictViews, { target });
     flushSync();
 
-    const shown = () => ['keys', 'values', 'items'].map((k) => target.querySelector(`p[data-k="${k}"]`).textContent);
+    const shown = () =>
+        ['keys', 'values', 'items', 'proxy'].map((k) => target.querySelector(`p[data-k="${k}"]`).textContent);
     const click = (k) => {
         target.querySelector(`button[data-k="${k}"]`).click();
         flushSync();
     };
 
     click('grow');
-    expect(shown()).toEqual(['first,second', '[1, 1]', "[('first', 1), ('second', 1)]"]);
+    expect(shown()).toEqual(['first,second', '[1, 1]', "[('first', 1), ('second', 1)]", 'first,second']);
 
     click('shrink');
-    expect(shown()).toEqual(['second', '[1]', "[('second', 1)]"]);
+    expect(shown()).toEqual(['second', '[1]', "[('second', 1)]", 'second']);
 
     click('change');
-    expect(shown()).toEqual(['second', '[2]', "[('second', 2)]"]);
+    expect(shown()).toEqual(['second', '[2]', "[('second', 2)]", 'second']);
 });
 
 // `from m import *` binds names no statement lists, so the compiler cannot

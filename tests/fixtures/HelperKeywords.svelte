@@ -8,6 +8,19 @@ class Name(str):
     pass
 
 
+# A mapping that is not a dict: what `**` asks of one is `keys()` and
+# `__getitem__`, and a Python function gets exactly that.
+class Keywords:
+    def __init__(self, values):
+        self.values = values
+
+    def keys(self):
+        return self.values.keys()
+
+    def __getitem__(self, name):
+        return self.values[name]
+
+
 CALLS = {
     "json-positional": lambda: tojson(rows, 2),
     "json-keyword": lambda: tojson(rows, indent=2),
@@ -20,6 +33,9 @@ CALLS = {
     "fromnow-french": lambda: fromnow("2026-09-20", locale="fr-FR"),
     # A spread, which is the other half of what a keyword call carries.
     "json-spread": lambda: tojson(rows, **{"indent": 2}),
+    "json-mapping": lambda: tojson(rows, **Keywords({"indent": 2})),
+    "slug-mapping": lambda: slugify(**Keywords({"text": "Café Noir"})),
+    "slug-empty-mapping": lambda: slugify("Café Noir", **Keywords({})),
     # A key that is a subclass of str names the argument by its value.
     "str subclass key": lambda: slugify(**{Name("text"): "Café"}),
     # Data whose key is spelled `$kw` is still data, a Python dict as a

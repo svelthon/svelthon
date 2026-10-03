@@ -85,6 +85,13 @@ describe('an injected helper takes its arguments by name', () => {
         const read = setup();
 
         expect(read('json-spread')).toBe(read('json-positional'));
+
+        // And a mapping that is not a dict, read through `keys()` and
+        // `__getitem__` as a Python function reads it: it used to hand over
+        // the engine's own fields, `no argument named ob_type`.
+        expect(read('json-mapping')).toBe(read('json-positional'));
+        expect(read('slug-mapping')).toBe('café-noir');
+        expect(read('slug-empty-mapping')).toBe('café-noir');
     });
 
     // A name the helper does not take is the one thing the author can have got

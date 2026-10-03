@@ -752,26 +752,30 @@ const byName = (fn, signature) => {
         // call the author got wrong and was never told about. Python raises.
         const filled = new Set(given.keys());
 
-        for (const carrier of kw ?? []) {
-            for (const [key, value] of pyEntries(carrier)) {
-                // A subclass of str names the argument by the value it holds.
-                const name = written(key);
-                const at = names.indexOf(name);
+        // The engine's own reading of the keywords, which is what a Python
+        // function gets: the explicit ones, then each `**` mapping through its
+        // `keys()` and `__getitem__`, a key given twice refused. Each mapping
+        // was read here as an object instead, so a mapping that is not a dict
+        // handed over the engine's fields, `no argument named ob_type`.
+        const keywords = kw === null ? {} : globalThis.__BRYTHON__.parse_kwargs(kw, fn.name);
 
-                if (at === -1) {
-                    throw refuse(`${fn.name}(): no argument named ${name}. ${takes}`);
-                }
+        for (const [key, value] of Object.entries(keywords)) {
+            // A subclass of str names the argument by the value it holds.
+            const name = written(key);
+            const at = names.indexOf(name);
 
-                // The same name twice is the `**` spread's case as much as the
-                // plain one: `tojson(rows, indent=2, **{"indent": 4})` is two
-                // values for one parameter, spelled two ways.
-                if (filled.has(at)) {
-                    throw refuse(`${fn.name}() got multiple values for argument '${name}'`);
-                }
-
-                filled.add(at);
-                given[at] = value;
+            if (at === -1) {
+                throw refuse(`${fn.name}(): no argument named ${name}. ${takes}`);
             }
+
+            // A keyword that names a position already filled: `batch(rows, 2,
+            // n=3)` is two values for one parameter.
+            if (filled.has(at)) {
+                throw refuse(`${fn.name}() got multiple values for argument '${name}'`);
+            }
+
+            filled.add(at);
+            given[at] = value;
         }
 
         // **What the table could not say before.** It named the parameters and

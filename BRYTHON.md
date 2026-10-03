@@ -68,6 +68,7 @@ Token type codes read off the tokenizer: `NAME 1`, `NUMBER 2`, `STRING 3`,
 | | |
 |---|---|
 | `$B.namespace(name)` | intercepted; the whole design hangs here |
+| `$B.parse_kwargs(carrier, fname)` | the engine's reading of a call's keywords, explicit ones then each `**` mapping through `keys()` and `__getitem__`, a key given twice refused; the helpers read their keywords through it, as a Python function does |
 | `$B.$import_from(module, names, aliases, level, locals)` | what `from m import …` compiles to; intercepted beside `$B.namespace` while a reactive module runs, so the names a `from m import *` writes onto the namespace, which no statement lists, get the accessor every other name has |
 | `ns.$proxy = true` | makes `resolve_in_namespace` read the property normally instead of demanding an *own* property, the only place in Brython that consults this flag, and what lets accessors live on the prototype |
 | `$B.resolve_global(name, ns)` | not called, and the reason `$proxy` exists: it is the function that would demand an own property. It is here because it is the member whose disappearance would stop the whole namespace trick, and the one nobody would think to grep for |
@@ -93,6 +94,7 @@ Token type codes read off the tokenizer: `NAME 1`, `NUMBER 2`, `STRING 3`,
 | `$B.is_dict(obj)` | whether a value is a Python dict, answered from a flag on the object rather than by probing its symbols, which is what `get_class` would do. `urlencode` asks it to tell a mapping from every other Python object, all of which are objects here too |
 | `$B.is_list(obj)`, `$B.is_tuple(obj)` | the same question for a list and a tuple, subclasses included. Brython builds other objects on an array too, a frame among them, so being an array does not make a value a sequence |
 | `$B.dict_keys`, `$B.dict_values`, `$B.dict_items` | the classes of a dict's three live views, `{ob_type, dict_obj}`: a view holds no entry of its own, only the dict it reads under `dict_obj`, so watching a view watches that dict |
+| `$B.mappingproxy` | the read-only view a dict view hands out as `.mapping`, `{ob_type, mapping}`: live like the others, so watching it watches `mapping` when that is a dict |
 | `$B.OB_TYPE` | the symbol under which a dict, and every subclass of one, keeps its class: it has no `ob_type` property, so a protocol looked up on the class of a value reads both places |
 | `$B.method_wrapper` | the class of a **special method read off a builtin**: `rows.__setitem__` kept in a name is one of these, an object rather than a function, so a wrapper that follows mutators has to recognise it by class and call it with `$B.$call` |
 | `$B.method_descriptor` | the class of a **method read off a type**: `list.append` kept in a name. Also an object, and the one whose target is the caller's first argument rather than a receiver it carries |

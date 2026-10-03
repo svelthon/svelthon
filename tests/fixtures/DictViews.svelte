@@ -5,6 +5,7 @@ data = {"first": [1]}
 keys = data.keys()
 values = data.values()
 items = data.items()
+proxy = keys.mapping
 
 
 def grow():
@@ -25,3 +26,4 @@ def change():
 <p data-k="keys">{",".join(keys)}</p>
 <p data-k="values">{[len(one) for one in values]}</p>
 <p data-k="items">{[(key, len(one)) for key, one in items]}</p>
+<p data-k="proxy">{",".join(proxy)}</p>
