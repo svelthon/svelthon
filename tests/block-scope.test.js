@@ -4,6 +4,19 @@ import BlockScope from './fixtures/BlockScope.svelte';
 import AssignedForms from './fixtures/AssignedForms.svelte';
 import StarImported from './fixtures/StarImported.svelte';
 import DictViews from './fixtures/DictViews.svelte';
+import VoidNamedComponents from './fixtures/VoidNamedComponents.svelte';
+
+// HTML's void elements have no body, and `<Input>` and `<Link>` are components:
+// their opening pushed no scope and their closing popped the loop's, so the
+// next `{row}` was a module name and raised NameError.
+test('a component named like a void element keeps the loop name after it', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+
+    mount(VoidNamedComponents, { target });
+    flushSync();
+
+    expect([...target.querySelectorAll('p')].map((p) => p.textContent)).toEqual(['1', '1', '1', '2', '2', '2']);
+});
 
 // `keys()`, `values()` and `items()` are live views of their dict, and so is
 // the read-only `mappingproxy` a view hands out as `.mapping`: kept in a name,

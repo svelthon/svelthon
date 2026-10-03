@@ -1903,8 +1903,15 @@ function walk(markup, collect, onPython, seed, record, where) {
                 // dies at the closing tag. Seeding it any wider would replace a
                 // Python NameError with a JavaScript ReferenceError, which is
                 // the same failure with a worse message.
+                // A void element has no body, and the list is HTML's: `<Input>`
+                // is a component, with a body, and its closing tag pops a scope
+                // its opening must have pushed.
                 if (tag && tag.closing) pop();
-                else if (tag && !VOID.has(tag.name.toLowerCase()) && markup[index - 1] !== '/') {
+                else if (
+                    tag &&
+                    (isComponent(tag) || !VOID.has(tag.name.toLowerCase())) &&
+                    markup[index - 1] !== '/'
+                ) {
                     push([]);
                 }
 

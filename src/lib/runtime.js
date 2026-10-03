@@ -1217,7 +1217,7 @@ export const opaque = (value) => {
             !Array.isArray(value) &&
             !plainObject(value) &&
             typeof value.toJSON !== 'function' &&
-            unboxed(value) === undefined
+            boxed(value) === undefined
         );
     } catch {
         return false;
@@ -1226,28 +1226,53 @@ export const opaque = (value) => {
 
 // What `JSON.stringify` writes of an object by an internal slot rather than by
 // its properties: a String, a Number, a Boolean or a BigInt object stands for
-// its primitive, and `JSON.rawJSON` hands back a text written as it is. Asked of
-// the slot, as the serialiser asks it, so one built by another JavaScript
-// context is one too, and an object that only carries the tag, or a property
-// named `rawJSON`, is not.
-const BOXES = {
-    '[object String]': String.prototype.valueOf,
-    '[object Number]': Number.prototype.valueOf,
-    '[object Boolean]': Boolean.prototype.valueOf,
-    '[object BigInt]': BigInt.prototype.valueOf
-};
+// its primitive, and `JSON.rawJSON` hands back a text written as it is.
+//
+// Which of the four an object is, asked of the slot: each type's own `valueOf`
+// answers for its slot alone and throws for any other object, whatever tag the
+// object shows, and from whichever JavaScript context it was built in. The tag
+// is only a shortcut past an ordinary object, which shows `Object` unless it
+// says otherwise. No code of the author's runs: this is a question.
+const SLOTS = [
+    ['number', Number.prototype.valueOf],
+    ['string', String.prototype.valueOf],
+    ['boolean', Boolean.prototype.valueOf],
+    ['bigint', BigInt.prototype.valueOf]
+];
 
-// `{ value }`, the primitive an object of the four holds, or undefined.
-export const unboxed = (value) => {
-    if (value === null || typeof value !== 'object') return undefined;
+export const boxed = (value) => {
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined;
 
     try {
-        const unbox = BOXES[Object.prototype.toString.call(value)];
-
-        return unbox === undefined ? undefined : { value: unbox.call(value) };
+        if (plainObject(value) && Object.prototype.toString.call(value) === '[object Object]') return undefined;
     } catch {
         return undefined;
     }
+
+    for (const [kind, slot] of SLOTS) {
+        try {
+            slot.call(value);
+            return kind;
+        } catch {
+            // not this one
+        }
+    }
+
+    return undefined;
+};
+
+// `{ value }`, what the serialiser writes of one of the four, or undefined. A
+// Number and a String are converted as `JSON.stringify` converts them, by
+// `ToNumber` and `ToString`, so the author's `valueOf`, `toString` or
+// `Symbol.toPrimitive` decides; a Boolean and a BigInt are their slot.
+export const unboxed = (value) => {
+    const kind = boxed(value);
+
+    if (kind === undefined) return undefined;
+    if (kind === 'number') return { value: +value };
+    if (kind === 'string') return { value: `${value}` };
+
+    return { value: SLOTS.find(([one]) => one === kind)[1].call(value) };
 };
 
 export const rawJSON = (value) => typeof JSON.isRawJSON === 'function' && JSON.isRawJSON(value);
@@ -2521,8 +2546,11 @@ function branch(value, seen, shell, adapt) {
     if (typeof value.toJSON === 'function' && pyType(value) === undefined) return value;
 
     // So does a raw JSON text, which has no prototype and would otherwise be
-    // copied out as `{rawJSON: "…"}`, the slot that makes it raw left behind.
-    if (rawJSON(value)) return value;
+    // copied out as `{rawJSON: "…"}`, the slot that makes it raw left behind,
+    // and so does a Number, a String, a Boolean or a BigInt object given no
+    // prototype, which would be copied out as `{}`. Any other object of the four
+    // is not an ordinary one, and is handed over as it is further down.
+    if (rawJSON(value) || (plainObject(value) && boxed(value) !== undefined)) return value;
 
     if (sequence(value)) {
         // list, tuple, and a subclass through whatever it says iterating it

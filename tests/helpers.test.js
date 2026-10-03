@@ -187,6 +187,37 @@ describe('tojson', () => {
         expect(tojson({ held: make() })).toBe(`{"held":${json}}`);
     });
 
+    // Recognised by the slot and converted as the serialiser converts: a Number
+    // by `ToNumber` and a String by `ToString`, which run the author's
+    // conversions, a Boolean by its slot. The primitive held used to be written
+    // whatever the conversion said, and the kind was read off the tag, so a
+    // Number tagged `Money` was refused.
+    const tagged = (box, tag) => Object.defineProperty(box, Symbol.toStringTag, { value: tag });
+
+    test.for([
+        ['a Number with its own valueOf', () => Object.assign(new Number(1), { valueOf: () => 9 }), '9'],
+        ['a Number with its own toPrimitive', () => Object.assign(new Number(1), { [Symbol.toPrimitive]: () => 9 }), '9'],
+        ['a String with its own toString', () => Object.assign(new String('one'), { toString: () => 'nine' }), '"nine"'],
+        ['a Boolean with its own valueOf', () => Object.assign(new Boolean(false), { valueOf: () => true }), 'false'],
+        ['a Number tagged otherwise', () => tagged(new Number(1), 'Money'), '1'],
+        ['a String tagged otherwise', () => tagged(new String('one'), 'Token'), '"one"'],
+        ['a Boolean tagged otherwise', () => tagged(new Boolean(false), 'Flag'), 'false'],
+        ['an object that only carries the tag', () => tagged({ amount: 1 }, 'Number'), '{"amount":1}']
+    ])('%s is written as JSON.stringify writes it', ([, make, json]) => {
+        expect(JSON.stringify(make())).toBe(json);
+        expect(tojson(make())).toBe(json);
+        expect(tojson({ held: make() })).toBe(`{"held":${json}}`);
+    });
+
+    // And where the serialiser's conversion raises, so does this one: a Number
+    // with no prototype has nothing `ToNumber` can call.
+    test('a Number with nothing to convert it by raises, as the serialiser does', () => {
+        const bare = () => Object.setPrototypeOf(new Number(1), null);
+
+        expect(() => JSON.stringify(bare())).toThrow(TypeError);
+        expect(() => tojson(bare())).toThrow(TypeError);
+    });
+
     // The slot, not the look of it: a property called `rawJSON` is data, and a
     // Number object holding NaN is the NaN every other number is refused for.
     test('a property named rawJSON is data, and a boxed NaN is a NaN', () => {
