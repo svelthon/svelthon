@@ -3828,7 +3828,10 @@ function declared(value) {
     // `Infinity` is the honest arity: there is no number to trim to, so
     // everything is passed and the conversion does the rest.
     if (!infos[8] && typeof infos[10] !== 'number') {
-        if (method !== null || call !== null) return null;
+        // A builtin under a `__call__`, `staticmethod(abs)`, or under a bound
+        // method: the object is called through Python's own protocol, as a
+        // builtin type's descriptor is.
+        if (method !== null || call !== null) return slotDeclared(value);
 
         const where = `${infos[1]}() — ${infos[0]}`;
 

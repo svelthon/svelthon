@@ -112,6 +112,7 @@ than by a build-time check, and going upstream retires none of them:
 | the id counter, `$B.id_counter` | `tests/vendor.test.js`, and `tests/compile-determinism.test.js` if it stops holding the output |
 | the keyword symbol, `$B.KW` | `tests/vendor.test.js`, and `tests/helper-keywords.test.js` for a JavaScript object with a `$kw` key |
 | `jsobj2pyobj` reads `then` by its descriptor (branch `jsobj-then-getter`) | `tests/vendor.test.js`, a `then` getter not run on crossing |
+| an int is never a negative zero: `round`, `int`, `__floor__`, `__ceil__` of a float and `-0` (branch `int-negative-zero`) | `tests/vendor.test.js`, five ints made at zero |
 
 `scripts/browser-check.sh` covers the DOM node path as well, which is where
 identity across the boundary is observable.

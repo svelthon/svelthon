@@ -10292,7 +10292,8 @@ return value.toString()}
 _b_.int.tp_hash=function(self){
 if(self.__hashvalue__ !==undefined){return self.__hashvalue__}
 return int_or_long(int_hash(toBigInt(self)))}
-_b_.int.nb_negative=function(self){return-int_value(self)}
+_b_.int.nb_negative=function(self){var value=int_value(self)
+return value===0 ? 0 :-value}
 _b_.int.nb_positive=function(self){return int_value(self)}
 _b_.int.nb_absolute=function(self){var res=int_value(self)
 return res >=0 ? res :-res}
@@ -10670,7 +10671,7 @@ if(ndigits==0){var res=Math.round(x.value)
 if(Math.abs(x.value-res)==0.5){
 if(res % 2){return res-1}}
 if(no_digits){
-return res}
+return res+0}
 return $B.fast_float(res)}
 if(typeof ndigits=="bigint"){ndigits=Number(ndigits)}
 var pow1,pow2,y,z
@@ -10898,7 +10899,7 @@ if(Number.isInteger(self.value)){var res=BigInt(self.value),res_num=Number(res)
 return Number.isSafeInteger(res_num)?
 res_num :
 BigInt(res)}
-return Math.trunc(self.value)}
+return Math.trunc(self.value)+0}
 _b_.float.nb_float=function(self){return float_value(self)}
 _b_.float.nb_floor_divide=function(self,other){var[x,y]=conv_float(self,other)
 if(x===$B.NULL ||y===$B.NULL){return _b_.NotImplemented}
@@ -10913,10 +10914,10 @@ return _b_.NotImplemented}
 var float_funcs=_b_.float.tp_funcs={}
 float_funcs.__ceil__=function(self){check_self_is_float(self,'__ceil__')
 if(isnan(self)){$B.RAISE(_b_.ValueError,'cannot convert float NaN to integer')}else if(isinf(self)){$B.RAISE(_b_.OverflowError,'cannot convert float infinity to integer')}
-return Math.ceil(self.value)}
+return Math.ceil(self.value)+0}
 float_funcs.__floor__=function(self){check_self_is_float(self,'__floor__')
 if(isnan(self)){$B.RAISE(_b_.ValueError,'cannot convert float NaN to integer')}else if(isinf(self)){$B.RAISE(_b_.OverflowError,'cannot convert float infinity to integer')}
-return Math.floor(self.value)}
+return Math.floor(self.value)+0}
 float_funcs.__format__=function(self,format_spec){check_self_is_float(self,'__format__')
 var fmt=new $B.parse_format_spec(format_spec,self)
 return float.$format(self,fmt)}

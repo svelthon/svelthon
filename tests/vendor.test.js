@@ -532,3 +532,19 @@ test('a then getter is not run when an object crosses into Python', () => {
 
     expect(reads).toBe(0);
 });
+
+// An int has no negative zero: one rounded, truncated, floored or ceiled from a
+// negative fraction, and zero negated, are the int 0.
+test('an int made from a negative fraction, or by negating zero, is not a negative zero', () => {
+    const _b_ = globalThis.__BRYTHON__.builtins;
+    const float = (value) => _b_.float.$factory(value);
+    const made = [
+        _b_.round(float(-0.5)),
+        _b_.int.$factory(float(-0.5)),
+        _b_.float.tp_funcs.__floor__(float(-0)),
+        _b_.float.tp_funcs.__ceil__(float(-0.4)),
+        _b_.int.nb_negative(0)
+    ];
+
+    for (const one of made) expect(Object.is(one, 0)).toBe(true);
+});
