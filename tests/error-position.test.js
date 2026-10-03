@@ -104,6 +104,13 @@ describe('an error raised by a template expression', () => {
         expect(raise('inline')).toMatch(/^ZeroDivisionError: .*ExpressionRaise\.svelte:13\)$/);
     });
 
+    // The same expression written again is reported where it was written
+    // again: the two places shared one function, which reported line 13 for a
+    // click on line 16.
+    test('and written twice, the line of the one that ran', () => {
+        expect(raise('again')).toMatch(/^ZeroDivisionError: .*ExpressionRaise\.svelte:16\)$/);
+    });
+
     test('and a function of the script it calls names its own line', () => {
         expect(raise('called')).toMatch(/^ZeroDivisionError: .*ExpressionRaise\.svelte:7\)$/);
     });

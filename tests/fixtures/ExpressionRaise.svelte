@@ -13,3 +13,4 @@ def divide(n):
 <button data-k="inline" onclick={lambda: 1 // zero}>inline</button>
 <button data-k="called" onclick={lambda: divide(zero)}>called</button>
 <button data-k="elsewhere" onclick={lambda: raising_mod.explode()}>elsewhere</button>
+<button data-k="again" onclick={lambda: 1 // zero}>the expression of line 13, written again</button>

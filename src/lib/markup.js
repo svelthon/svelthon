@@ -2289,8 +2289,9 @@ export function moduleScript(content) {
 //
 // `lines`, when given, receives the file line each function stands for, in the
 // same order as `defs`: an error raised inside one is reported at the markup
-// that wrote it. An expression written twice is one function, and reports the
-// first place.
+// that wrote it. An expression written twice is two functions, one per place,
+// since a function shared by two places can report only one of them: the
+// second `{1 / divisor}` failing was reported at the first, never run.
 // `lines` and `columns` receive, per function, where its expression is written
 // in the file: the table an error is placed with, at compile time and at run
 // time.
@@ -2307,7 +2308,7 @@ export function collector(defs, lines, columns) {
         // lets it run over several lines. Both functions below hold it between
         // parentheses, which give that back and change nothing else, a target
         // included.
-        const key = `${assign ? 'set' : kind || 'get'}|${wrapper}|${args.join(',')}|${expression}`;
+        const key = `${assign ? 'set' : kind || 'get'}|${wrapper}|${args.join(',')}|${line}:${column}|${expression}`;
         if (seen.has(key)) return seen.get(key);
 
         // Every kind keeps the `__expr_` prefix: it is what makes the generated
