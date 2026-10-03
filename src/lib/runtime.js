@@ -2096,7 +2096,16 @@ export const pyScalar = (value) => {
 
     if (!Array.isArray(mro)) return value.ob_type === _b_.float ? value.value : undefined;
     if (mro.includes(_b_.float) || mro.includes(_b_.int)) return value.value;
-    if (mro.includes(_b_.str)) return value.$brython_value;
+
+    // A str is stored three ways: a JavaScript string; a `String` object, which
+    // Brython makes of one holding a character past U+FFFF so as to keep where
+    // its surrogate pairs fall; and a subclass's `$brython_value`, one of the
+    // first two. JavaScript receives the string itself.
+    if (mro.includes(_b_.str)) {
+        const text = value.$brython_value ?? value;
+
+        return text instanceof String ? text.valueOf() : typeof text === 'string' ? text : undefined;
+    }
 
     return undefined;
 };

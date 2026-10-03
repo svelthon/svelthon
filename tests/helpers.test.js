@@ -146,6 +146,26 @@ describe('tojson', () => {
         expect(tojson(table)).toBe('{"none":null,"big":1180591620717411303424}');
     });
 
+    // A str holding a character past U+FFFF is a `String` object in Brython,
+    // made by `$B.String` to keep where its surrogate pairs fall, and the
+    // conversion read only a subclass's storage: `tojson("🌍")` answered *🌍 is a
+    // str, and a str has no JSON*. The expected text is `json.dumps`'s with
+    // `ensure_ascii=False`, as `JSON.stringify` writes it.
+    test.for([
+        ['on its own', (text) => text, '"🌍"'],
+        ['inside a list', (text) => _b_.list.$factory(['before', text]), '["before","🌍"]'],
+        ['inside a dict', (text) => {
+            const d = _b_.dict.$factory();
+            globalThis.__BRYTHON__.$setitem(d, 'café', text);
+            return d;
+        }, '{"café":"🌍"}']
+    ])('a str past U+FFFF %s is written as text', ([, wrap, json]) => {
+        const text = globalThis.__BRYTHON__.String('🌍');
+
+        expect(text).toBeInstanceOf(String);
+        expect(tojson(wrap(text))).toBe(json);
+    });
+
     // The rule above was stated for a class and enforced for a class alone,
     // while the neighbouring unserialisable shape — a call — had no arm at all.
     // `JSON.stringify` has no notation for one, so it drops it, and the dropping

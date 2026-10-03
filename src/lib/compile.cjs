@@ -627,8 +627,12 @@ function declaredExports(ast, table, source, lineOffset = 0, src = '') {
         // export list, and the module exports its functions.
         const value = namespace.__all__;
 
+        // A name holding a character past U+FFFF, `𠀀`, is a `String` object
+        // here, the storage `pyScalar` reads in the runtime.
         if (value !== undefined && ($B.is_list(value) || $B.is_tuple(value))) {
-            names = [...value].filter((one) => typeof one === 'string');
+            names = [...value]
+                .map((one) => (one instanceof String ? one.valueOf() : one))
+                .filter((one) => typeof one === 'string');
         }
         line = run.at(-1).lineno + lineOffset;
     }

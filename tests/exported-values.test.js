@@ -13,6 +13,8 @@ import named from './fixtures/crossing_named_store.svelte.py';
 import starred from './fixtures/crossing_star_store.svelte.py';
 import * as replaced from './fixtures/replaced_defs.py';
 import replacedStore, * as replacedExports from './fixtures/replaced_defs_store.svelte.py';
+import * as astral from './fixtures/astral_text.py';
+import * as astralStore from './fixtures/astral_text_store.svelte.py';
 
 describe.for([
     ['imported by name', named],
@@ -71,6 +73,22 @@ describe.for([
 
     test('and a function a decorator handed back is still a function', () => {
         expect(published.kept()).toBe(0.25);
+    });
+});
+
+// A str holding a character past U+FFFF is a `String` object in Brython, and it
+// crossed as one, an object JavaScript prints as the text and compares as
+// nothing: `value === "🌍"` was false on every path.
+describe.for([
+    ['a .py', astral],
+    ['a .svelte.py', astralStore.store]
+])('in %s, text past U+FFFF is a JavaScript string', ([, published]) => {
+    test('as a value', () => {
+        expect(published.globe).toBe('🌍');
+    });
+
+    test('returned by a function', () => {
+        expect(published.give()).toBe('🌍');
     });
 });
 

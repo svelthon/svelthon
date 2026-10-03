@@ -78,6 +78,14 @@ hidden = 1
         );
     });
 
+    // Python hands back a name past U+FFFF as a `String` object, and a list of
+    // names kept only JavaScript strings, so this one was left out, unrefused.
+    test('and so is one past U+FFFF, which used to vanish from the list', () => {
+        expect(() => plain('__all__ = ["x", "𠀀"]\n\nx = 1\n')).toThrow(
+            /`__all__` names `𠀀`, which this module never binds/
+        );
+    });
+
     test.for([
         ['class Nope:\n    pass'],
         ['import Nope'],
