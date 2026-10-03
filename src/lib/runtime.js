@@ -829,7 +829,7 @@ function installMutationTracking($B) {
         // hierarchy, so no property of the author's is run by the act of
         // watching, and `inherit` steps over a function, a string or a class on
         // its own.
-        inherit(obj, result);
+        inherit(obj, result, undefined, true);
 
         return result;
     };
@@ -920,7 +920,7 @@ function installMutationTracking($B) {
             adopt(attributes);
         }
 
-        inherit(obj, value);
+        inherit(obj, value, undefined, true);
     };
 
     // `box.value = 1` and `del box.value`. Brython compiles an attribute write
@@ -1348,10 +1348,11 @@ let changes = 0;
 
 //
 // A link is checked as the walk crosses it. A child taken out of a list, a dict
-// or a set no longer belongs to it, and the link goes: `rows.clear()` then
-// `child.append(1)` would otherwise re-run what reads `rows`. Only those three,
-// whose membership is exact; an instance keeps its links, since what it hands
-// out may live on its class or behind a property.
+// or a set, or out of a subclass of one, no longer belongs to it, and the link
+// goes: `rows.clear()` then `child.append(1)` would otherwise re-run what reads
+// `rows`. An instance keeps its links, since what it hands out may live on its
+// class or behind a property, and so does a subclass for what it holds that
+// way (`holds`).
 const upwards = (marker, stamp, key) => {
     if (marker.seen === stamp) return;
     marker.seen = stamp;
@@ -1418,14 +1419,14 @@ function stored(obj, key, value) {
     }
 }
 
-// Whether `holder` still holds `child`, asked only where the answer is exact: a
-// list, a dict or a set of exactly that class. A subclass has attributes too.
-//
-// For a dict, the key the child entered under is read first when there is one
-// and it is a string or a number, whose hash runs no code of the author's: one
-// entry read, where every entry was, once per mutation of every row.
+// Whether `holder` still holds `child`, asked of a list, a dict or a set, whose
+// storage says it without running anything of the author's, and of a subclass
+// of one. A subclass is an object with attributes too, so a link it made through
+// an attribute (`loose`, which `inherit` keeps) holds as an instance's does, and
+// so does every link of a class that redefines how an item gets in or out,
+// which may keep it anywhere. Any other link is checked against the storage,
+// and the storage is asked first, being the common answer and the cheap one.
 function holds(holder, child, marker) {
-    const key = marker.keys?.get(holder);
     let cls;
     try {
         cls = globalThis.__BRYTHON__.get_class(holder);
@@ -1433,9 +1434,24 @@ function holds(holder, child, marker) {
         return true;
     }
 
+    const base = storedAs(cls);
+
+    if (base === undefined || stores(base, holder, child, marker)) return true;
+
+    return base !== cls && (marker.loose?.has(holder) === true || redefinesItems(cls));
+}
+
+// Whether the storage of a list, a dict or a set holds `child`.
+//
+// For a dict, the key the child entered under is read first when there is one
+// and it is a string or a number, whose hash runs no code of the author's: one
+// entry read, where every entry was, once per mutation of every row.
+function stores(base, holder, child, marker) {
+    const key = marker.keys?.get(holder);
+
     // For a list, the index `indexed` keeps. A list changed where no mutator
     // was seen is searched, once: the index found is kept for the next check.
-    if (cls === _b_.list) {
+    if (base === _b_.list) {
         if (typeof key === 'number' && holder[key] === child) return true;
 
         const at = holder.indexOf(child);
@@ -1445,10 +1461,12 @@ function holds(holder, child, marker) {
         return at !== -1;
     }
 
-    if (cls === _b_.dict) {
+    // Read off the dict's own table, so a subclass's `__getitem__` and
+    // `__missing__` are not run by the asking.
+    if (base === _b_.dict) {
         if (plainKey(key)) {
             try {
-                if (globalThis.__BRYTHON__.$getitem(holder, key) === child) return true;
+                if (_b_.dict.$getitem(holder, key, true) === child) return true;
             } catch {
                 /* no such key any more: the full read below says where it went */
             }
@@ -1460,15 +1478,39 @@ function holds(holder, child, marker) {
 
     // For a set, the bucket it was found in: the hash it is stored under, which
     // the set keeps as a key of its store.
-    if (cls === _b_.set) {
-        if (typeof key === 'string' && holder.$store[key]?.includes(child)) return true;
+    if (typeof key === 'string' && holder.$store[key]?.includes(child)) return true;
 
-        for (const bucket of Object.values(holder.$store)) if (bucket.includes(child)) return true;
-        return false;
-    }
-
-    return true;
+    for (const bucket of Object.values(holder.$store)) if (bucket.includes(child)) return true;
+    return false;
 }
+
+// Which of the three a class keeps its items as: itself, or the one a subclass
+// descends from, read off its MRO.
+const storedAs = (cls) => {
+    if (cls === _b_.list || cls === _b_.dict || cls === _b_.set) return cls;
+
+    const mro = cls?.tp_mro;
+
+    return Array.isArray(mro) ? [_b_.list, _b_.dict, _b_.set].find((one) => mro.includes(one)) : undefined;
+};
+
+// The methods by which an item gets into a container or is handed out of it.
+// Construction and the attribute protocol are not among them: an `__init__` of
+// the author's fills the storage or an attribute, and an attribute's link is
+// kept by itself.
+const ITEM_METHODS = [...FOLLOWED, '__getitem__', '__iter__'].filter(
+    (name) => !['__init__', '__setattr__', '__delattr__'].includes(name)
+);
+
+// Whether a class of the author's along the MRO defines one of them, read from
+// the class dictionaries, as `declares` reads them.
+const redefinesItems = (cls) => {
+    const $B = globalThis.__BRYTHON__;
+
+    return cls.tp_mro.some(
+        (one) => _b_[one.tp_name] !== one && ITEM_METHODS.some((name) => $B.search_in_dict(one, name, $B.NULL) !== $B.NULL)
+    );
+};
 
 // The index each watched child of a list sits at, from `from` to the end, kept
 // on its link so that `holds` reads one slot. A child linked without it was
@@ -1478,7 +1520,7 @@ function holds(holder, child, marker) {
 // the end, and a mutation that moves the others indexes the list again, at a
 // cost no larger than its own.
 function indexed(list, from) {
-    if (!Array.isArray(list) || list.ob_type !== _b_.list) return;
+    if (!Array.isArray(list) || storedAs(list.ob_type) !== _b_.list) return;
 
     for (let i = Math.max(0, from); i < list.length; i++) {
         const own = MARKS.get(list[i]);
@@ -1742,7 +1784,7 @@ function adopt(value) {
         // dict to `adopt`, and `tests/first-instance.test.js` is the test that
         // fails if it ever stops being one: nothing there re-reads the
         // attribute, so the initial walk is the only route.
-        inherit(value, attributes);
+        inherit(value, attributes, undefined, true);
     }
 
     // An instance is not its `__dict__`. A class declaring `__slots__` has no
@@ -1761,7 +1803,7 @@ function adopt(value) {
     // keeps its slots on the array beside the elements.
     if (!Array.isArray(value) || declaresSlots(value)) {
         for (const key of Object.keys(value)) {
-            if (key.startsWith(SLOT)) inherit(value, value[key]);
+            if (key.startsWith(SLOT)) inherit(value, value[key], undefined, true);
         }
     }
 
@@ -1928,7 +1970,9 @@ export function unsubscribe(owner) {
 // just before it could be mutated.
 // `key` is the key a dict holds `child` under, when the caller knows it: the
 // link is then checked by reading that one entry rather than every entry.
-function inherit(parent, child, key) {
+// `loose` says the link was made through an attribute, which no storage of the
+// parent's can confirm, so `holds` keeps it.
+function inherit(parent, child, key, loose = false) {
     if (child === null || typeof child !== 'object') return child;
 
     let own = MARKS.get(child);
@@ -1969,6 +2013,7 @@ function inherit(parent, child, key) {
     // author's that the dict itself had let go. The container already holds
     // its key, so this holds it no longer than the container lives.
     if (key !== undefined) (own.keys ??= new WeakMap()).set(parent, key);
+    if (loose) (own.loose ??= new WeakSet()).add(parent);
 
     if (revived) adopt(child);
 
