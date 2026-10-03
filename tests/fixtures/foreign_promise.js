@@ -42,6 +42,34 @@ export const awaitable = () => {
     return one;
 };
 
+// The same shapes with a `then` a getter or a proxy's trap gives, which `await`
+// reads as it reads a method, once; and a promise whose `then` is a getter,
+// which `await` does not read at all. Each read is counted.
+let reads = 0;
+
+export const thenReads = () => reads;
+
+const counted = (then) => () => {
+    reads += 1;
+    return then;
+};
+const resolving = (resolve) => resolve(payload());
+
+export const getter = () => Object.defineProperty({}, 'then', { get: counted(resolving) });
+export const trapped = () =>
+    new Proxy({}, { get: (target, key) => (key === 'then' ? counted(resolving)() : target[key]) });
+export const promiseGetter = () =>
+    Object.defineProperty(Promise.resolve(payload()), 'then', { get: counted(Promise.prototype.then) });
+export const functionGetter = () => Object.defineProperty(function () {}, 'then', { get: counted(resolving) });
+
+// A `then` getter that raises, which `await` turns into a rejection.
+export const raising = () =>
+    Object.defineProperty({}, 'then', {
+        get: () => {
+            throw new Error('no then');
+        }
+    });
+
 // The control beside it: an ordinary function, which is not awaitable and has to
 // come back as something a caller can call.
 export const plainFunction = () => {

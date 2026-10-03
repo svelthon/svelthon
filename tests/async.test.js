@@ -12,9 +12,15 @@ import {
     from_callable,
     from_function,
     from_rejected,
+    from_getter,
+    from_trapped,
+    from_promise_getter,
+    from_function_getter,
+    from_raising,
     callbacks,
     then_calls
 } from './fixtures/promises.py';
+import { getter, trapped, promiseGetter, functionGetter, raising, thenReads } from './fixtures/foreign_promise.js';
 
 // Calling an `async def` from JavaScript returns a coroutine nobody runs — the
 // handler would appear to do nothing at all. Brython has its own event loop, so
@@ -165,13 +171,42 @@ describe('a value handed back behind a promise', () => {
         // carrying a `then`. `await` and `Promise.resolve` call it like anyone
         // else's, so the row belongs beside the others rather than in a case of
         // its own — the matrix was three rows and the missing one was a *type*.
-        ['a function with a then', () => from_callable()]
+        ['a function with a then', () => from_callable()],
+        // And a `then` given by a getter or a proxy's trap, which `await` reads
+        // as it reads a method.
+        ['an object whose then is a getter', () => from_getter()],
+        ['a proxy whose trap gives a then', () => from_trapped()],
+        ['a promise whose then is a getter', () => from_promise_getter()],
+        ['a function whose then is a getter', () => from_function_getter()]
     ])('%s crosses as data', async ([, run]) => {
         await expect(run()).resolves.toEqual(expected);
     });
 
+    // And its `then` is read as many times as `await` reads it: once for a
+    // getter or a trap, never for a promise's own.
+    test.for([
+        ['an object whose then is a getter', getter, from_getter],
+        ['a proxy whose trap gives a then', trapped, from_trapped],
+        ['a promise whose then is a getter', promiseGetter, from_promise_getter],
+        ['a function whose then is a getter', functionGetter, from_function_getter]
+    ])('%s has its then read as await reads it', async ([, native, crossing]) => {
+        let before = thenReads();
+        await native();
+        const awaited = thenReads() - before;
+
+        before = thenReads();
+        await crossing();
+        expect(thenReads() - before).toBe(awaited);
+    });
+
     test('and a rejection passes through untouched', async () => {
         await expect(from_rejected()).rejects.toThrow(/gone/);
+    });
+
+    // A `then` getter that raises rejects, as `await` rejects.
+    test('and a then getter that raises rejects as await rejects', async () => {
+        await expect((async () => await raising())()).rejects.toThrow(/no then/);
+        await expect(from_raising()).rejects.toThrow(/no then/);
     });
 
     // A Python dict whose key is `then` is data: no promise, no call.

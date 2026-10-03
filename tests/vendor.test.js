@@ -521,3 +521,14 @@ describe('the vendored Brython carries its repairs', () => {
         expect(source).toContain('import(/* @vite-ignore */ refs[0])');
     });
 });
+
+// Converting a JavaScript object for Python asks whether it is a promise. The
+// descriptor of `then` answers without running a getter of that name.
+test('a then getter is not run when an object crosses into Python', () => {
+    let reads = 0;
+    const value = Object.defineProperty({}, 'then', { enumerable: true, get: () => ++reads });
+
+    globalThis.__BRYTHON__.jsobj2pyobj(value);
+
+    expect(reads).toBe(0);
+});

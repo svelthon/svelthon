@@ -3,9 +3,13 @@
 # The value itself is built in JavaScript, by `foreign_promise.js`, for the
 # reason written there: a Python argument is converted on its way into a `__js__`
 # helper, so a dict handed in would already be plain data and no row could fail.
-__js__ = {"./foreign_promise.js": ["foreign", "local", "custom", "awaitable", "plainFunction", "rejecting"]}
+__js__ = {"./foreign_promise.js": [
+    "foreign", "local", "custom", "awaitable", "plainFunction", "rejecting",
+    "getter", "trapped", "promiseGetter", "functionGetter", "raising",
+]}
 __all__ = [
     "from_foreign", "from_local", "from_custom", "from_callable", "from_function", "from_rejected",
+    "from_getter", "from_trapped", "from_promise_getter", "from_function_getter", "from_raising",
     "callbacks", "then_calls",
 ]
 
@@ -48,6 +52,26 @@ def from_callable():
 
 def from_function():
     return plainFunction()
+
+
+def from_getter():
+    return getter()
+
+
+def from_trapped():
+    return trapped()
+
+
+def from_promise_getter():
+    return promiseGetter()
+
+
+def from_function_getter():
+    return functionGetter()
+
+
+def from_raising():
+    return raising()
 
 
 def from_rejected():

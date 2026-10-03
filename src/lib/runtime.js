@@ -1160,6 +1160,29 @@ const pyType = (value) => {
     return pyClass(type) ? type : undefined;
 };
 
+// What an object holds under a name, read off the descriptors along its chain
+// without running a getter: undefined for an accessor, which the serialiser
+// alone reads, at its turn.
+const quietly = (value, name) => {
+    for (let at = value; at !== null; at = Object.getPrototypeOf(at)) {
+        const found = Object.getOwnPropertyDescriptor(at, name);
+
+        if (found !== undefined) return 'value' in found ? found.value : undefined;
+    }
+
+    return undefined;
+};
+
+// `pyType`, asked that way: an `ob_type` getter of a JavaScript object is the
+// author's code, and a data field of that name is read once, by the serialiser.
+const quietPyType = (value) => {
+    if (value === null || typeof value !== 'object') return undefined;
+
+    const type = quietly(value, 'ob_type') ?? quietly(value, globalThis.__BRYTHON__.OB_TYPE);
+
+    return pyClass(type) ? type : undefined;
+};
+
 // Whether an object is a bag of keys, or something of a class of its own: a
 // Response, a URL, a Date, a Map, a Promise, any of which a `load()` may hand
 // straight back and whose keys copied would destroy it.
@@ -1205,8 +1228,10 @@ const pyType = (value) => {
 // Asked as a behaviour and not as a list of names, which is the shape this
 // project keeps getting wrong: the question is *what will the serialiser do with
 // it*, and the answer covers a Map, a Set, a Headers, a Response and whatever
-// the platform adds next. A Date and a URL carry `toJSON` and are excluded by
-// it; a Brython instance is a plain object here and never reaches this.
+// the platform adds next. A Date and a URL carry a `toJSON`, which `plainData`
+// reads once and hands on before asking this; a `toJSON` that gives no
+// function is no hook and keeps nothing from here. A Brython instance is a
+// plain object here and never reaches this.
 //
 // Asked inside a `try` for the reason every recognition is: a value nobody
 // vouched for may throw from `ownKeys`, and a question must not be the place
@@ -1216,7 +1241,6 @@ export const opaque = (value) => {
         return (
             !Array.isArray(value) &&
             !plainObject(value) &&
-            typeof value.toJSON !== 'function' &&
             boxed(value) === undefined
         );
     } catch {
@@ -1230,9 +1254,11 @@ export const opaque = (value) => {
 //
 // Which of the four an object is, asked of the slot: each type's own `valueOf`
 // answers for its slot alone and throws for any other object, whatever tag the
-// object shows, and from whichever JavaScript context it was built in. The tag
-// is only a shortcut past an ordinary object, which shows `Object` unless it
-// says otherwise. No code of the author's runs: this is a question.
+// object shows, and from whichever JavaScript context it was built in. Nothing
+// is read: not the tag, which a getter or a proxy's trap may give, and no
+// property at all, so no code of the author's runs. Four throws for an
+// ordinary object, which is why a JavaScript object's turn asks the serialiser
+// instead, and why nothing asks it of a Python value nor of what a walk built.
 const SLOTS = [
     ['number', Number.prototype.valueOf],
     ['string', String.prototype.valueOf],
@@ -1242,12 +1268,6 @@ const SLOTS = [
 
 export const boxed = (value) => {
     if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined;
-
-    try {
-        if (plainObject(value) && Object.prototype.toString.call(value) === '[object Object]') return undefined;
-    } catch {
-        return undefined;
-    }
 
     for (const [kind, slot] of SLOTS) {
         try {
@@ -2199,35 +2219,52 @@ function thrown(error) {
 // that asks stays satisfied: it is still an instance of Promise.
 class Waited extends Promise {}
 
-// Awaitable, asked the way `await` itself asks: a `then` that can be called.
-//
-// `instanceof Promise` asks about *our* Promise constructor, and a promise built
-// in another JavaScript context has its own — the same realm mistake as `URL`
-// and `Date`, at the one site where it decides whether a **resolved** value gets
-// converted. A `.py` module handing back `js.fetch_from_frame()` answered its
-// JavaScript caller with a raw Brython dict, symbols and all, where the same
-// function returning a local promise answered `{answer: 42}`.
-//
-// Measured and dismissed a day earlier, on the reasoning that a foreign promise
-// resolves to a JavaScript value with nothing to convert. That is true of a
-// promise a foreign library made *for itself*, and false the moment it was
-// handed a Python value to resolve with — which is exactly what a `__js__`
-// helper does. The measurement was right and the inference from it was not.
+// Awaitable, as the serialiser asks it before writing a value out: a `then` that
+// can be called, read off the descriptors as `quietly` reads them. A `then`
+// getter is the author's code and `JSON.stringify` never runs it, so the
+// question does not either; a promise's `then` is a method, which this finds.
+// The call boundary asks `awaited` below, which reads `then` as `await` does.
 //
 // A Python value is never one: Brython keeps an instance's attributes under a
 // symbol, so a plain `.then` read finds nothing on it, and a dict, which keeps
 // its string keys as its own properties, is asked by name, since `{"then": f}`
 // is a dict of callbacks and not a promise.
-// A **function** is one too, and that is the language's rule rather than a
-// courtesy: `await fn` and `Promise.resolve(fn)` call `fn.then` like anyone
-// else's. Asking `typeof === 'object'` left the one awaitable shape that is also
-// a callable on the synchronous road, so what it resolved to crossed as a raw
-// Brython dict while an awaitable *object* beside it crossed as data.
 export const thenable = (value) =>
     value !== null &&
     (typeof value === 'object' || typeof value === 'function') &&
-    typeof value.then === 'function' &&
+    typeof quietly(value, 'then') === 'function' &&
     !globalThis.__BRYTHON__.is_dict(value);
+
+// What `await` makes of a value, asked as `await` asks it: a promise is awaited
+// as it is, and anything else has its `then` read once, a getter or a proxy's
+// trap included, and is awaited through it when that is a function. Undefined
+// for a value `await` hands back unchanged, which a dict of callbacks is.
+//
+// A promise built in another JavaScript context is not an instance of our
+// Promise and is found by its `then`, so what it resolves to is converted as a
+// local promise's is: a `__js__` helper may resolve one with a Python value.
+// A **function** is awaitable too, by the language's rule: `await fn` calls
+// `fn.then` like anyone else's.
+//
+// The `then` read here is the one that runs: what is awaited is a relay that
+// calls it, with the value as receiver, at the turn `await` would. A getter that
+// throws rejects, as `await` rejects.
+const awaited = (value) => {
+    if (value === null || (typeof value !== 'object' && typeof value !== 'function')) return undefined;
+    if (value instanceof Promise) return value;
+
+    let then;
+
+    try {
+        then = value.then;
+    } catch (error) {
+        return Promise.reject(error);
+    }
+
+    if (typeof then !== 'function' || globalThis.__BRYTHON__.is_dict(value)) return undefined;
+
+    return { then: (resolve, reject) => then.call(value, resolve, reject) };
+};
 
 // Calling an `async def` from JavaScript returns a coroutine that nobody runs:
 // the handler appears to do nothing at all, silently. Brython has its own event
@@ -2356,9 +2393,137 @@ const CROSSED = new WeakMap();
 // a positional argument the author never declared, for the same function. It is
 // a parameter and not a change of policy because the other five consumers must
 // not get it: `tojson` has no use for a wrapper, and JSON cannot hold one.
+// A JavaScript object's turn in `JSON.stringify`, which is what the serialiser
+// does there: its `toJSON` read once and called with the object and the key,
+// then what came of it written. A primitive, a raw text, a boxed scalar and a
+// Python value are written as they always are. An array or an object comes out
+// as a copy whose every part is read when the serialiser reaches it, by a
+// getter, so a hook still sees what the hooks before it changed. What has no
+// JSON is refused: an object of a class of its own that gave no hook, and one a
+// hook gave back with nothing enumerable to write, a Map. One that gave itself
+// back is written, as the serialiser writes it, by its own properties.
+//
+// The copies a turn made, already asked everything: what reads them next is the
+// serialiser, and a question of the replacer's would run their getters, which
+// read the author's, a second time. And the containers the walk built for a
+// Python value, which are ours and hold nothing to ask of them.
+const COPIES = new WeakSet();
+
+export const jsonCopy = (value) => COPIES.has(value);
+
+// The stand-in the serialiser is asked about an object through: one for every
+// turn rather than one made at each, and emptied as it is read, so it holds on
+// to nothing.
+const PROBE = {
+    held: undefined,
+    toJSON() {
+        const one = this.held;
+
+        this.held = undefined;
+
+        return one;
+    }
+};
+const NO_KEY = Object.freeze([]);
+
+// A copy is made at every turn, its keys and its length read then, as the
+// serialiser reads them for each occurrence. `chain` is the objects being
+// written around this one, so a loop raises as the serialiser raises.
+function turn(value, key, seen, adapt, chain) {
+    const hook = value.toJSON;
+    const hooked = typeof hook === 'function';
+    const result = hooked ? hook.call(value, key) : value;
+
+    if (result === null || typeof result !== 'object' || quietPyType(result) !== undefined) {
+        return plainData(result, seen, adapt);
+    }
+
+    if (rawJSON(result)) return result;
+
+    // A Number, a String, a Boolean or a BigInt object is written by its slot,
+    // and the serialiser tells one from any other object without reading it:
+    // told to write no key, it writes `{}` of any other object, with no read and
+    // no trap, and converts one of the four as it does at its turn, once. What
+    // it wrote is the value. A number with no JSON is handed on for the refusal
+    // to name, and a BigInt object, which it refuses, is a big integer here as
+    // a BigInt is.
+    if (!Array.isArray(result)) {
+        let written;
+
+        try {
+            PROBE.held = result;
+            written = JSON.stringify(PROBE, NO_KEY);
+        } catch (error) {
+            if (boxed(result) === 'bigint') return result;
+            throw error;
+        }
+
+        if (written === 'null') return result;
+        if (written !== '{}') return JSON.parse(written);
+    }
+
+    if (chain.includes(result)) throw new TypeError('Converting circular structure to JSON');
+    if (thenable(result)) return adapt(result);
+
+    // Neither ordinary nor one of the four is an object of a class of its own,
+    // refused unless a hook gave it back with something enumerable to write.
+    // Its keys are read once, as the serialiser reads them, and the copy is
+    // made of those.
+    const ordinary = Array.isArray(result) || plainObject(result);
+
+    if (!ordinary && !hooked) return adapt(result);
+
+    const names = Array.isArray(result) ? Array.from({ length: result.length }, (_, i) => i) : Object.keys(result);
+
+    if (!ordinary && names.length === 0) return adapt(result);
+
+    const copy = Array.isArray(result) ? [] : {};
+
+    COPIES.add(copy);
+    const inner = [...chain, result];
+
+    for (const name of names) {
+        Object.defineProperty(copy, name, {
+            enumerable: true,
+            configurable: true,
+            get: () => {
+                const outer = seen.chain;
+
+                seen.chain = inner;
+                try {
+                    return plainData(result[name], seen, adapt);
+                } finally {
+                    seen.chain = outer;
+                }
+            }
+        });
+    }
+
+    return copy;
+}
+
 export function plainData(value, seen, adapt) {
     if (value === undefined || value === null || value === NONE) return null;
     if (typeof value === 'function') return adapt === undefined ? value : adapt(value);
+
+    // Under the serialiser's rule, a JavaScript object is handed on as a
+    // stand-in whose `toJSON` the serialiser calls at the object's own turn,
+    // with its key, and nothing of it is read before then: not its fields, not
+    // its hook, and not a getter that happens to be called `ob_type` or `then`,
+    // which is why it is told from a Python value by its descriptors. A raw JSON
+    // text is the serialiser's own and stays as it is; a boxed scalar takes its
+    // turn like any object, and its turn hands it back as it is.
+    if (
+        adapt !== undefined &&
+        seen instanceof Set &&
+        typeof value === 'object' &&
+        quietPyType(value) === undefined &&
+        !rawJSON(value)
+    ) {
+        const chain = seen.chain ?? [];
+
+        return { toJSON: (key) => turn(value, key, seen, adapt, chain) };
+    }
 
     // A callable that `typeof` calls an object — a bound method, an instance
     // whose class defines `__call__` — and only when someone asked for
@@ -2383,6 +2548,7 @@ export function plainData(value, seen, adapt) {
     const scalar = pyScalar(value);
 
     if (scalar !== undefined) return scalar;
+
 
     // A promise, under the serialiser's rule only.
     //
@@ -2490,7 +2656,11 @@ export function plainData(value, seen, adapt) {
         seen.add(value);
 
         try {
-            return branch(value, seen, undefined, adapt);
+            const out = branch(value, seen, undefined, adapt);
+
+            if (out !== value) COPIES.add(out);
+
+            return out;
         } finally {
             seen.delete(value);
         }
@@ -2543,23 +2713,34 @@ function branch(value, seen, shell, adapt) {
     // and a class instance alike: `JSON.stringify` calls its `toJSON`,
     // enumerable or not, own or inherited, with the receiver and the key. A
     // Python object with a `toJSON` key or attribute has a class, and is data.
-    if (typeof value.toJSON === 'function' && pyType(value) === undefined) return value;
+    // Under the serialiser's rule `plainData` has read it already, once.
+    if (!(adapt !== undefined && seen instanceof Set) && typeof value.toJSON === 'function' && pyType(value) === undefined) {
+        return value;
+    }
 
     // So does a raw JSON text, which has no prototype and would otherwise be
     // copied out as `{rawJSON: "…"}`, the slot that makes it raw left behind,
     // and so does a Number, a String, a Boolean or a BigInt object given no
     // prototype, which would be copied out as `{}`. Any other object of the four
-    // is not an ordinary one, and is handed over as it is further down.
-    if (rawJSON(value) || (plainObject(value) && boxed(value) !== undefined)) return value;
+    // is not an ordinary one, and is handed over as it is further down. A Python
+    // value is none of the four.
+    if (rawJSON(value) || (plainObject(value) && quietPyType(value) === undefined && boxed(value) !== undefined)) {
+        return value;
+    }
 
     if (sequence(value)) {
         // list, tuple, and a subclass through whatever it says iterating it
         // means: `json.dumps` of a list subclass in CPython is its `__iter__`
         // too, and a component that renders `rows` one way and exports it the
         // other is the same defect twice.
+        //
+        // What `iterated` hands back is walked by its indices: a JavaScript
+        // array is its indexed elements, as `JSON.stringify` and a structured
+        // clone read it, and not what a `Symbol.iterator` of its own yields.
         const out = shell ?? [];
+        const items = iterated(value);
 
-        for (const one of iterated(value)) out.push(plainData(one, seen, adapt));
+        for (let i = 0; i < items.length; i++) out.push(plainData(items[i], seen, adapt));
 
         return out;
     }
@@ -3384,24 +3565,28 @@ export function pyCall(fn, where, lineOffset = 0, arity = Infinity, named, conve
             // Noted at the twenty-ninth reading as a limit and carried since;
             // what makes it a defect rather than a limit is that the rule
             // already exists, one line away, and every other crossing passes it.
-            // `Promise.resolve` rather than `result.then`, because a bare
-            // thenable's `then` answers whatever its author wrote — `undefined`
-            // for the three-line shape everyone writes — and what a caller was
-            // handed has to stay awaitable. This normalises all three into one
-            // promise of this realm, which is also what `await` would do.
+            // `await` rather than `result.then`, because a bare thenable's
+            // `then` answers whatever its author wrote — `undefined` for the
+            // three-line shape everyone writes — and what a caller was handed
+            // has to stay awaitable. The async function hands back one promise
+            // of this realm for every shape.
             //
             // The conversion of a resolved value runs after this `try` has
             // returned, so it carries its own: a refusal there names the call
             // the way the same refusal does for a value returned directly.
-            return thenable(result)
-                ? Promise.resolve(result).then((one) => {
-                      try {
-                          return plainData(one, undefined, pyHandler);
-                      } catch (error) {
-                          throw pyError(error, where, lineOffset);
-                      }
-                  })
-                : plainData(result, undefined, pyHandler);
+            const pending = awaited(result);
+
+            if (pending === undefined) return plainData(result, undefined, pyHandler);
+
+            return (async () => {
+                const one = await pending;
+
+                try {
+                    return plainData(one, undefined, pyHandler);
+                } catch (error) {
+                    throw pyError(error, where, lineOffset);
+                }
+            })();
         } catch (error) {
             throw pyError(error, where, lineOffset);
         }

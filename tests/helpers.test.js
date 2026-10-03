@@ -209,6 +209,198 @@ describe('tojson', () => {
         expect(tojson({ held: make() })).toBe(`{"held":${json}}`);
     });
 
+    // A tag a getter gives is the author's code, which the serialiser never
+    // runs, so telling a boxed scalar from an object does not run it either.
+    const taggedBy = (box, tag) => {
+        let reads = 0;
+        const value = Object.defineProperty(box, Symbol.toStringTag, {
+            get: () => {
+                reads += 1;
+                return tag(value);
+            }
+        });
+        return { value, reads: () => reads };
+    };
+
+    // And a tag a proxy's trap gives, with no descriptor to say so.
+    const trapped = (tag) => {
+        let reads = 0;
+        const target = { answer: 1 };
+        const value = new Proxy(target, {
+            get: (on, key, receiver) => {
+                if (key !== Symbol.toStringTag) return Reflect.get(on, key, receiver);
+                reads += 1;
+                return tag(target);
+            }
+        });
+        return { value, reads: () => reads };
+    };
+
+    test.for([
+        ['an object whose tag changes a field', () => taggedBy({ answer: 1 }, (value) => (value.answer += 1, 'Object'))],
+        ['an object whose tag deletes a field', () => taggedBy({ answer: 1 }, (value) => (delete value.answer, 'Object'))],
+        ['an object whose tag raises', () => taggedBy({ answer: 1 }, () => { throw new Error('read'); })],
+        ['a Number whose tag raises', () => taggedBy(new Number(1), () => { throw new Error('read'); })],
+        ['a proxy whose trap changes a field', () => trapped((target) => (target.answer += 1, 'Object'))],
+        ['a proxy whose trap deletes a field', () => trapped((target) => (delete target.answer, 'Object'))],
+        ['a proxy whose trap raises', () => trapped(() => { throw new Error('read'); })]
+    ])('%s has its tag read as JSON.stringify reads it', ([, make]) => {
+        const native = make();
+        const json = JSON.stringify(native.value);
+
+        for (const write of [(value) => tojson(value), (value) => tojson({ held: value }).slice(8, -1)]) {
+            const one = make();
+
+            expect(write(one.value)).toBe(json);
+            expect(one.reads()).toBe(native.reads());
+        }
+    });
+
+    // One of the four is converted by its own `valueOf` or `toString` as often
+    // as the serialiser converts it: once, at its turn.
+    const converting = (box, name, answer) => {
+        let calls = 0;
+        const value = Object.assign(box, {
+            [name]: () => {
+                calls += 1;
+                return answer;
+            }
+        });
+        return { value, calls: () => calls };
+    };
+
+    test.for([
+        ['a Number', () => converting(new Number(1), 'valueOf', 9)],
+        ['a String', () => converting(new String('one'), 'toString', 'nine')],
+        ['a Number of a class of its own', () => converting(new (class Money extends Number {})(1), 'valueOf', 9)],
+        ['a Number given a plain prototype', () => converting(Object.setPrototypeOf(new Number(1), Object.prototype), 'valueOf', 9)],
+        ['a Number of another context', () => converting(other('new Number(1)'), 'valueOf', 9)]
+    ])('%s is converted as often as JSON.stringify converts it', ([, make]) => {
+        const native = make();
+        const json = JSON.stringify(native.value);
+
+        for (const write of [(value) => tojson(value), (value) => tojson({ held: value }).slice(8, -1)]) {
+            const one = make();
+
+            expect(write(one.value)).toBe(json);
+            expect(one.calls()).toBe(native.calls());
+        }
+    });
+
+    // What the serialiser reads of an array and of a hook, and nothing more. An
+    // array is its indices, whatever its own iterator yields or raises; a
+    // `toJSON` is read once, by the serialiser, so a getter answers once. The
+    // walk read the iterator, and read the hook a first time to decide.
+    const counted = () => {
+        let reads = 0;
+        return Object.defineProperty({ kept: 1 }, 'toJSON', {
+            get: () => {
+                reads += 1;
+                return () => ({ reads });
+            }
+        });
+    };
+
+    const enumerated = (second) => {
+        let listings = 0;
+        class Point {
+            constructor() {
+                this.answer = 1;
+            }
+            toJSON() {
+                return this;
+            }
+        }
+        return new Proxy(new Point(), {
+            ownKeys: (target) => {
+                listings += 1;
+                if (listings > 1) second(target);
+                return Reflect.ownKeys(target);
+            }
+        });
+    };
+
+    test.for([
+        ['an array whose iterator yields other values', () => Object.assign([1, 2], { *[Symbol.iterator]() { yield 9; } })],
+        ['an Array subclass whose iterator yields other values', () => new (class extends Array { *[Symbol.iterator]() { yield 9; } })(1, 2)],
+        ['an array whose iterator raises', () => Object.assign([1, 2], { [Symbol.iterator]() { throw new Error('no'); } })],
+        ['an array whose element getter counts its reads', () => {
+            let reads = 0;
+            return Object.defineProperty([0], 0, { enumerable: true, get: () => ++reads });
+        }],
+        ['a hook a getter gives on its first read only', () => {
+            let reads = 0;
+            return Object.defineProperty({ kept: 1 }, 'toJSON', { get: () => (++reads === 1 ? () => ({ selected: 9 }) : undefined) });
+        }],
+        ['a hook that counts its reads', counted],
+        ['a class whose hook getter counts its reads', () => {
+            let reads = 0;
+            class Counted {
+                get toJSON() {
+                    reads += 1;
+                    return () => ({ reads });
+                }
+            }
+            return new Counted();
+        }],
+        ['a getter that gives no hook', () => Object.defineProperty({ kept: 1 }, 'toJSON', { get: () => undefined })],
+        ['a getter that gives a hook only from its second read', () => {
+            let reads = 0;
+            return Object.defineProperty({ kept: 1 }, 'toJSON', { get: () => (++reads > 1 ? () => ({ second: 2 }) : undefined) });
+        }],
+        // A Proxy gives its hook by its `get` and shows no descriptor for it.
+        ['a hook a Proxy gives', () => new Proxy({ kept: 1 }, {
+            get: (target, key, receiver) => (key === 'toJSON' ? () => ({ selected: 9 }) : Reflect.get(target, key, receiver))
+        })],
+        ['a hook a Proxy gives over a class instance', () => new Proxy(new (class Kept { kept = 1; })(), {
+            get: (target, key, receiver) => (key === 'toJSON' ? () => ({ selected: 9 }) : Reflect.get(target, key, receiver))
+        })],
+        ['a toJSON that is not a function', () => ({ toJSON: 5, kept: 1 })],
+        // Each at its own turn, as the serialiser reaches it: the hook of the
+        // first occurrence runs before the second is read, and a hook that
+        // changes what comes after it is seen to.
+        ['one object twice, whose hook getter counts', () => {
+            let reads = 0;
+            const one = Object.defineProperty({}, 'toJSON', { get: () => { reads += 1; return () => reads; } });
+            return [one, one];
+        }],
+        ['a hook that changes what a later getter reads', () => {
+            let state = 0;
+            return {
+                a: { toJSON: () => { state = 1; return 1; } },
+                get b() { return state; }
+            };
+        }],
+        ['a hook that writes a later field', () => {
+            const root = { a: { toJSON: () => { root.b = 2; return 1; } }, b: 0 };
+            return root;
+        }],
+        ['a class whose hook gives itself back', () => new (class Point { constructor() { this.x = 1; } toJSON() { return this; } })()],
+        // Its keys read once, as the serialiser reads them: a proxy's `ownKeys`
+        // that answers otherwise from its second call is called once.
+        ['a proxied instance given back, a field added on a second listing', () => enumerated((target) => { target.extra = 2; })],
+        ['a proxied instance given back, a field deleted on a second listing', () => enumerated((target) => { delete target.answer; })],
+        ['a proxied instance given back, raising on a second listing', () => enumerated(() => { throw new Error('second ownKeys'); })],
+        // Read at each occurrence: an object that grows between its two turns.
+        ['one object twice, a key added in between', () => {
+            const one = { a: 1 };
+            return [one, { toJSON: () => { one.b = 2; return 0; } }, one];
+        }],
+        // A getter named like a question this walk asks is read once, by the
+        // serialiser, as any other field.
+        ['a getter named then', () => {
+            let reads = 0;
+            return Object.defineProperty({}, 'then', { enumerable: true, get: () => ++reads });
+        }],
+        ['a getter named ob_type', () => {
+            let reads = 0;
+            return Object.defineProperty({}, 'ob_type', { enumerable: true, get: () => ++reads });
+        }]
+    ])('%s is written as JSON.stringify writes it', ([, make]) => {
+        expect(tojson(make())).toBe(JSON.stringify(make()));
+        expect(tojson({ held: make() })).toBe(JSON.stringify({ held: make() }));
+    });
+
     // And where the serialiser's conversion raises, so does this one: a Number
     // with no prototype has nothing `ToNumber` can call.
     test('a Number with nothing to convert it by raises, as the serialiser does', () => {
@@ -411,6 +603,17 @@ describe('tojson', () => {
 
         expect(() => tojson({ toJSON: () => ({ inner: make() }) })).toThrow(message);
         expect(() => tojson(new Holder())).toThrow(message);
+    });
+
+    // A `toJSON` that gives no function is no hook, and keeps a Map or a Set
+    // from nothing: it is refused as one without it is, at the root and held.
+    test.for([
+        ['a Map whose getter gives undefined', () => Object.defineProperty(new Map([['held', 1]]), 'toJSON', { get: () => undefined }), /a Map has no JSON/],
+        ['a Map whose getter gives a string', () => Object.defineProperty(new Map([['held', 1]]), 'toJSON', { get: () => 'no' }), /a Map has no JSON/],
+        ['a Set whose getter gives undefined', () => Object.defineProperty(new Set([1]), 'toJSON', { get: () => undefined }), /a Set has no JSON/]
+    ])('%s is refused', ([, make, message]) => {
+        expect(() => tojson(make())).toThrow(message);
+        expect(() => tojson({ held: make() })).toThrow(message);
     });
 
     test('and a class that does not is refused rather than guessed at', () => {

@@ -12522,7 +12522,9 @@ return jsobj}
 if(pyobj !==undefined){return pyobj}
 if(Array.isArray(jsobj)){
 return jsobj}
-if(jsobj instanceof Promise ||typeof jsobj.then=="function"){return jsobj}
+var then
+for(var o=jsobj;o !==null && then===undefined;o=Object.getPrototypeOf(o)){then=Object.getOwnPropertyDescriptor(o,'then')}
+if(jsobj instanceof Promise ||typeof then?.value=="function"){return jsobj}
 if(typeof jsobj==="function"){
 if(jsobj.ob_type !==undefined){return jsobj}
 _this=_this===undefined ? null :_this

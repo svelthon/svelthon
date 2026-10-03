@@ -31,7 +31,8 @@ import {
     pyBytes,
     thenable,
     ticking,
-    unboxed
+    unboxed,
+    jsonCopy
 } from './runtime.js';
 
 // What the author wrote, as a value JavaScript can read with `typeof`.
@@ -202,6 +203,10 @@ function instant(value) {
 // Handing the class over whole is right at the *boundary*, where JavaScript can
 // call it; it is not a thing to write into a page.
 const serialisable = (one) => {
+    // A copy `plainData` made at an object's turn has been asked already, and
+    // asking it again would read its fields, which read the author's.
+    if (jsonCopy(one)) return one;
+
     // A String, a Number, a Boolean or a BigInt object is its primitive to the
     // serialiser, and so to every refusal below: `new Number(NaN)` is `NaN`.
     const box = unboxed(one);
