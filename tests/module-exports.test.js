@@ -174,28 +174,40 @@ describe('__all__ is read as the value the module ends with', () => {
         // the last value here too: a list before it is gone, one after it rules.
         ['a constant after a list', '__all__ = ["a"]\n__all__ = "load"', ['a', 'b', 'c']],
         ['None after a list', '__all__ = ["a"]\n__all__ = None', ['a', 'b', 'c']],
-        ['a list after a constant', '__all__ = "load"\n__all__ = ["b"]', ['b']]
+        ['a list after a constant', '__all__ = "load"\n__all__ = ["b"]', ['b']],
+        // Every statement the source spells with literals is run as Python runs
+        // it, so a form is followed because it is Python, not because a method
+        // was written into a list here. Each answer is CPython's, measured.
+        ['an item stored', '__all__ = ["a"]\n__all__[0] = "b"', ['b']],
+        ['an item deleted', '__all__ = ["a", "b"]\ndel __all__[0]', ['b']],
+        ['the name deleted', '__all__ = ["a"]\ndel __all__', ['a', 'b', 'c']],
+        ['multiplied', '__all__ = ["a"]\n__all__ *= 2', ['a']],
+        ['sorted by a key', '__all__ = ["c", "a"]\n__all__.sort(key=len, reverse=True)', ['c', 'a']],
+        ['popped into a name', '__all__ = ["a", "b"]\nx = __all__.pop()', ['a']],
+        // A string is iterated, so `+= "bc"` adds `b` and `c`.
+        ['extended by a string', '__all__ = ["a"]\n__all__ += "bc"', ['a', 'b', 'c']],
+        ['built from two lists', '__all__ = ["a"] + ["b"]', ['a', 'b']],
+        ['computed by a builtin', '__all__ = sorted(["b", "a"])', ['a', 'b']],
+        ['appended a computed name', '__all__ = ["a"]\n__all__.append("" + "b")', ['a', 'b']],
+        // The statements are run from a parse of their own, found by where they
+        // stand: a docstring, which the code generator takes out of the body,
+        // used to shift them by one.
+        ['after a docstring', '"""Doc."""\n__all__ = ["a"]', ['a']]
     ])('%s', ([, head, names]) => {
         expect(exported(head)).toEqual(names);
     });
 
-    // A write the static read cannot follow: under a condition, in a loop, in
-    // a function that declares the name global, item by item, or through a
-    // method or an operator whose result the source does not spell.
+    // A write whose result the source does not decide: under a condition, in a
+    // loop, in a function, a class body or a default, at an index held by a
+    // name, or on a list handed on.
     test.for([
         ['appended under a condition', '__all__ = ["a"]\nif True:\n    __all__.append("b")', 3],
         ['removed in a try', '__all__ = ["a"]\ntry:\n    __all__.remove("a")\nexcept ValueError:\n    pass', 3],
         ['cleared by a function', '__all__ = ["a"]\ndef reset():\n    __all__.clear()', 3],
         ['assigned by a global function', '__all__ = ["a"]\ndef reset():\n    global __all__\n    __all__ = []', 4],
-        ['an item stored', '__all__ = ["a"]\n__all__[0] = "b"', 2],
-        ['an item deleted', '__all__ = ["a", "b"]\ndel __all__[0]', 2],
-        ['the name deleted', '__all__ = ["a"]\ndel __all__', 2],
         ['popped at a computed index', '__all__ = ["a"]\ni = 0\n__all__.pop(i)', 3],
-        ['multiplied', '__all__ = ["a"]\n__all__ *= 2', 2],
-        ['sorted by a key', '__all__ = ["a"]\n__all__.sort(key=len)', 2],
         ['changed in a class body', '__all__ = ["a"]\nclass C:\n    __all__.append("b")', 3],
         ['changed in a default', '__all__ = ["a"]\ndef f(x=__all__.clear()):\n    pass', 2],
-        ['popped into a name', '__all__ = ["a", "b"]\nx = __all__.pop()', 2],
         ['rebound by a loop', '__all__ = ["a"]\nfor __all__ in [["b"]]:\n    pass', 2],
         // Handed on, the list can be changed where no static reading follows.
         ['handed to a name', '__all__ = ["a"]\nnames = __all__\nnames.clear()', 2],
@@ -204,12 +216,12 @@ describe('__all__ is read as the value the module ends with', () => {
         // A builtin's name is the builtin only where nothing else binds it.
         ['handed to a function named list', 'def list(values):\n    values.clear()\n\n__all__ = ["a"]\nlist(__all__)', 5],
         ['handed to a parameter named len', '__all__ = ["a"]\ndef count(len):\n    return len(__all__)', 3],
-        // `+= "ab"` adds two names to a list and makes a longer string of a
-        // string: no static reading is the right one.
-        ['extended by a constant', '__all__ = ["a"]\n__all__ += "bc"', 2],
         // Python raises at import on these: the module never runs past them.
         ['a name removed that is not there', '__all__ = ["a"]\n__all__.remove("z")', 2],
-        ['an empty list popped', '__all__ = []\n__all__.pop()', 2]
+        ['an empty list popped', '__all__ = []\n__all__.pop()', 2],
+        ['extended by an integer', '__all__ = ["a"]\n__all__ += 42', 2],
+        ['appended to a tuple', '__all__ = ("a",)\n__all__.append("b")', 2],
+        ['sorted with a name and a number', '__all__ = ["a", 1]\n__all__.sort()', 2]
     ])('%s is refused, at its line', ([, head, line]) => {
         let error;
         try {
@@ -222,16 +234,15 @@ describe('__all__ is read as the value the module ends with', () => {
         expect(error?.start?.line).toBe(line);
     });
 
-    // The export list is read before the module runs, so a value the source does
-    // not spell cannot be followed. Refused rather than dropped: dropping it is
-    // what published everything.
+    // The export list is read before the module runs, so a value taken from a
+    // name, or from a function of the module's, cannot be followed. Refused
+    // rather than dropped, and the name said: dropping it is what published
+    // everything.
     test.for([
-        ['built from two lists', '__all__ = ["a"] + ["b"]'],
-        ['computed by a call', '__all__ = sorted(["a"])'],
-        ['taken from a name', 'NAMES = ["a"]\n__all__ = NAMES'],
-        ['appended a computed name', '__all__ = ["a"]\n__all__.append("b" + "c")']
-    ])('%s is refused', ([, head]) => {
-        expect(() => plain(`${head}${BODY}`)).toThrow(/`__all__`/);
+        ['taken from a name', 'NAMES = ["a"]\n__all__ = NAMES', 'NAMES'],
+        ['computed by a function of the module', 'def sorted(x):\n    return x\n\n__all__ = sorted(["a"])', 'sorted']
+    ])('%s is refused', ([, head, name]) => {
+        expect(() => plain(`${head}${BODY}`)).toThrow(`\`__all__\` is computed from \`${name}\``);
     });
 });
 

@@ -75,7 +75,7 @@ reste de cette configuration et ce que chaque ligne apporte.
 npm install
 npm run dev
 
-npm test             # 1 479 tests : sémantique, props, réactivité, surface Svelte
+npm test             # 1 480 tests : sémantique, props, réactivité, surface Svelte
 npm run test:quiet   # la sortie de la suite : un run vert ne doit rien dire
 npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
@@ -795,15 +795,17 @@ classe, une constante, une fonction, un nom amené par un import. Et un nom qu'i
 invente est refusé à la compilation, puisqu'un module exporte ce qu'il définit,
 ou une fois le module exécuté quand un `from m import *` aurait pu l'amener.
 
-**Il est lu comme la valeur sur laquelle le module s'arrête** : une deuxième
-affectation remplace la première, `+=`, `.append()`, `.extend()` et `.insert()`
-l'étendent, `.remove()`, `.pop()` et `.clear()` le réduisent. Il est lu dans la
-source avant que le module ne tourne, en revanche, donc les noms doivent être
-écrits au niveau du module : `__all__ = sorted(noms)`, une modification sous un
-`if` ou dans une fonction, ou `del __all__[0]` est refusé plutôt qu'ignoré en
-silence. La liste passée ailleurs l'est aussi, `noms = __all__` ou
-`list.clear(__all__)`, puisque ce qu'on en fait ensuite échappe à la lecture ;
-`list(__all__)` en donne une copie à manipuler.
+**C'est la valeur sur laquelle le module s'arrête, telle que Python la
+calcule.** Chaque instruction du niveau du module qui l'écrit, avec des
+littéraux, `__all__` lui-même et les builtins, est exécutée par Python avant le
+module : une deuxième affectation remplace la première, `+= "bc"` ajoute `b` et
+`c`, `del __all__[0]` et `.sort()` font ce qu'ils font, et `.append()` sur un
+tuple est refusé avec l'erreur que Python lève. Ce que la source ne décide pas
+ne peut pas se lire avant que le module tourne, et est refusé plutôt qu'ignoré
+en silence : `__all__ = sorted(noms)`, une modification sous un `if`, dans une
+boucle ou dans une fonction. La liste passée ailleurs l'est aussi,
+`noms = __all__` ou `list.clear(__all__)`, puisque ce qu'on en fait ensuite
+échappe à la lecture ; `list(__all__)` en donne une copie à manipuler.
 
 **Une fonction rendue par un appel `importjs` est la fonction elle-même**, et
 c'est ce qui fait marcher les fonctions distantes de SvelteKit depuis Python :
@@ -1475,7 +1477,7 @@ part jamais.
 
 ## État
 
-Validé par `npm test`, 1 479 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 1 480 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;

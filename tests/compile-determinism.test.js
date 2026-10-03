@@ -18,6 +18,21 @@ test('twice in one process, the same code', () => {
     expect(compiled()).toBe(compiled());
 });
 
+// And Brython's own counter and tag are given back, so a page that compiles
+// leaves the sequence the rest of the page numbers with where it was: the
+// module's own run, and the run of the statements of `__all__` that the
+// compiler makes Python compute.
+test("a compile leaves Brython's counter and tag where they were", () => {
+    const $B = globalThis.__BRYTHON__;
+    const before = [$B.id_counter(), $B.lambda_magic];
+
+    compile('__all__ = ["a"]\n__all__ += "b"\n\n\ndef a():\n    pass\n\n\ndef b():\n    pass\n', 'M', 'src/m.py', {
+        plain: true
+    });
+
+    expect([$B.id_counter(), $B.lambda_magic]).toEqual(before);
+});
+
 // The range each file draws from differs, so two files still name their
 // functions apart, as Brython's random start meant them to.
 test('two files, two sets of names', () => {

@@ -262,17 +262,22 @@ function sourceMap(generated, source, content, lineOffset) {
 // ordinary Python name and the value it holds when the module has finished
 // running is the one `from m import *` obeys.
 //
-// The literal forms are what a static read can follow. Anything else is
-// refused rather than skipped, and that is the half the silence was hiding:
-// `__all__ = ["a"] + ["b"]` matched no branch, so the whole declaration was
-// dropped and the module fell back to **exporting everything** — a file that
-// states a contract and publishes past it, with nothing said.
-// Two failures, and they are not the same one. **Unreadable** is an element the
-// source does not spell — a name, a call, a sum — and there is nothing a static
-// read can do with it. **Invalid** is an element spelled out that is not a name,
-// which CPython itself raises on at `from m import *`; this file has long
-// treated that as a declaration with a bad entry and kept the good ones, and
+// What literals spell, Python computes the same on every run, so each such
+// statement is run, by Python, rather than read by a copy of its rules: a copy
+// was written once per method and was wrong where it stopped, `+= "bc"`
+// refused and `.append()` on a tuple accepted. Anything else is refused rather
+// than skipped, and that is the half the silence was hiding: a declaration
+// that matched nothing was dropped and the module fell back to **exporting
+// everything** — a file that states a contract and publishes past it, with
+// nothing said.
+//
+// An entry that is not a string, which CPython itself raises on at
+// `from m import *`, has long been left out while the good ones are kept, and
 // that decision stands.
+//
+// `__js__` keeps the literal reading below: it is a directive of this project,
+// set by one assignment and changed by nothing else. **Unreadable** is an
+// element its source does not spell.
 const UNREADABLE = Symbol('unreadable');
 
 const NAMES = (node) =>
@@ -284,14 +289,6 @@ const readable = (given) => given !== null && !given.includes(UNREADABLE);
 const strings = (given) => given.filter((one) => typeof one === 'string');
 
 const isAll = (node) => node instanceof $B.ast.Name && node.id === '__all__';
-
-// The method a statement calls on `__all__`, `__all__.append("x")`, or null.
-const mutatesAll = (node) => {
-    const call = node instanceof $B.ast.Expr ? node.value : null;
-    const to = call instanceof $B.ast.Call ? call.func : null;
-
-    return to instanceof $B.ast.Attribute && isAll(to.value) ? to.attr : null;
-};
 
 // Methods of a list that read it and change nothing.
 const READS_LIST = new Set(['copy', 'count', 'index', '__len__', '__contains__', '__iter__', '__getitem__']);
@@ -470,21 +467,109 @@ const moduleBinds = (table) => {
     return bound;
 };
 
-// Python orders strings by code point; JavaScript's `<` by UTF-16 unit.
-const byCodePoint = (one, other) => {
-    const a = Array.from(one, (c) => c.codePointAt(0));
-    const b = Array.from(other, (c) => c.codePointAt(0));
-    for (let i = 0; i < Math.min(a.length, b.length); i++) if (a[i] !== b[i]) return a[i] - b[i];
-    return a.length - b.length;
+// The builtins a statement of `__all__` may call: each reads what it is given
+// and keeps nothing, so the call answers the same on every run.
+const PURE_BUILTINS = new Set([...READS_ONLY].filter((name) => name !== 'print'));
+
+// What a statement cannot be written with and still give one answer before the
+// module runs: a function of its own, a walrus, a comprehension's names, a
+// suspension.
+const UNSPELLED = ['Lambda', 'NamedExpr', 'ListComp', 'SetComp', 'DictComp', 'GeneratorExp', 'Await', 'Yield', 'YieldFrom'];
+
+// What in a statement keeps its result from being known before the module runs:
+// a name read that is neither `__all__` nor a builtin above, or a construct of
+// `UNSPELLED`. Null when it is written with literals alone, and Python's
+// answer is then the only answer. A name it binds, `x = __all__.pop()`, binds
+// it and changes nothing about the list.
+function unspelled(node, pure) {
+    if (node instanceof $B.ast.Name) {
+        const read = !(node.ctx instanceof $B.ast.Store);
+        return read && node.id !== '__all__' && !pure(node.id) ? `computed from \`${node.id}\`` : null;
+    }
+    const kind = UNSPELLED.find((one) => node instanceof $B.ast[one]);
+    if (kind !== undefined) return `written with a ${kind}`;
+    for (const child of children(node)) {
+        const found = unspelled(child, pure);
+        if (found !== null) return found;
+    }
+    return null;
+}
+
+// What a node holds, by the fields its class declares, as CPython's `ast` walks
+// it. Not its own keys: a node also carries `$parent`, and the walk would climb
+// back to the module.
+const children = (node) =>
+    (node?.constructor?._fields ?? []).flatMap((field) => {
+        const value = node[field];
+        if (Array.isArray(value)) return value.filter((one) => one !== null && typeof one === 'object');
+        return value !== null && typeof value === 'object' ? [value] : [];
+    });
+
+// Whether a node writes `__all__` anywhere inside it.
+const hasWrite = (node) => writesAll(node) || children(node).some(hasWrite);
+
+// Every node a statement holds, so the walk of every write below knows the
+// statement was followed.
+const nodesOf = (node, into) => {
+    into.add(node);
+    for (const child of children(node)) nodesOf(child, into);
+    return into;
 };
+
+// Runs statements as Python runs them, one by one in a namespace of their own,
+// and hands back that namespace, or the statement Python raised at with what it
+// raised. Each statement is taken from a parse of its own of the same source:
+// the module's tree carries the marks its symbol table reads, and a second table
+// over it would overwrite them.
+//
+// Brython's counter is given back afterwards, as `compile()` gives it back
+// around its own run, so that what this runs changes nothing in the code
+// generated next. Its tag is not touched: it names lambdas, and a statement of
+// `__all__` holds none.
+//
+// A statement is found in that parse by where it stands, never by its index:
+// Brython's code generator takes a module's docstring out of the body it
+// compiled, and the two bodies then count differently.
+function runStatements(src, statements) {
+    const name = '__svelthon_all__';
+    const tree = $B._PyPegen.run_parser(new $B.Parser(src, name, 'file'));
+    const at = (node) => `${node.lineno}:${node.col_offset}`;
+    const parsed = new Map(tree.body.map((node) => [at(node), node]));
+    const namespace = {};
+    const original = $B.namespace;
+    const counter = $B.id_counter(counterStart(name));
+
+    $B.namespace = (requested) => (requested === name ? namespace : original(requested));
+    try {
+        for (const statement of statements) {
+            const module = new $B.ast.Module([parsed.get(at(statement))], []);
+            const symtable = $B._PySymtable_Build(module, name, $B.future_features(module, name));
+
+            try {
+                (0, eval)($B.js_from_root({ ast: module, symtable, filename: name, src }).js);
+            } catch (error) {
+                const raised = error?.ob_type ? `${$B.class_name(error)}: ${$B.builtins.str.$factory(error)}` : String(error);
+
+                return { namespace, statement, raised };
+            }
+        }
+    } finally {
+        $B.namespace = original;
+        $B.id_counter(counter);
+    }
+
+    return { namespace };
+}
 
 // What comes back is the list and the line of the statement that last set it,
 // which is where a refusal about the list points.
 //
-// The list is followed with Python's own semantics, order included, since a
-// `pop()` after a `sort()` removes what the sort put last. A write this cannot
-// follow, anywhere it resolves to the module's `__all__`, is refused.
-function declaredExports(ast, table, source, lineOffset = 0) {
+// Each statement of the module's own that writes `__all__` is run as Python runs
+// it, when it is written with literals, `__all__` and the builtins above, since
+// Python's answer is then the only one: `+= "bc"` adds `b` and `c`, `.append()`
+// on a tuple raises. A write this cannot run, anywhere it resolves to the
+// module's `__all__`, is refused.
+function declaredExports(ast, table, source, lineOffset = 0, src = '') {
     const body = ast.body;
     const handled = new Set();
     let names = null;
@@ -493,136 +578,66 @@ function declaredExports(ast, table, source, lineOffset = 0) {
     const refuseUnreadable = (node, what) => {
         throw refuse(
             `svelthon — \`__all__\` is ${what}, and the export list is read from the source ` +
-                `before the module runs, so it has to be written out at the top level of the ` +
-                `module: a list or a tuple of plain strings, assigned or \`+=\`, and changed by ` +
-                `\`.append()\`, \`.extend()\`, \`.insert()\`, \`.remove()\`, \`.pop()\` or ` +
-                `\`.clear()\`. Write the names, or drop \`__all__\` and let the module export ` +
-                `its functions.`,
+                `before the module runs: a statement at the top level of the module written ` +
+                `with literals, \`__all__\` itself and the builtins is run as Python runs it, ` +
+                `and nothing else can be followed. Write the names, or drop \`__all__\` and let ` +
+                `the module export its functions.`,
             source,
             node.lineno === undefined ? undefined : node.lineno + lineOffset
         );
     };
 
-    // Python raises there, at import: the module never runs past it.
-    const refuseRaising = (node, what) => {
-        throw refuse(
-            `svelthon — \`__all__\` ${what}, which Python raises on when the module is ` +
-                `imported (${source}:${node.lineno + lineOffset})`,
-            source,
-            node.lineno + lineOffset
-        );
-    };
+    // A name is the builtin at the top of the module where the module binds
+    // nothing of that name.
+    const bound = moduleBinds(table);
 
-    // A string argument, or UNREADABLE; an integer one, `2` or `-1`, or null.
-    const spelled = (arg) => (arg instanceof $B.ast.Constant && typeof arg.value === 'string' ? arg.value : UNREADABLE);
-    const integer = (arg) => {
-        const negative = arg instanceof $B.ast.UnaryOp && arg.op instanceof $B.ast.USub;
-        const literal = negative ? arg.operand : arg;
-        if (!(literal instanceof $B.ast.Constant) || !Number.isInteger(literal.value)) return null;
-        return negative ? -literal.value : literal.value;
-    };
+    // The module's own statements that write `__all__`, in order: a compound
+    // one, a condition, a loop, a function, is left to the walk below.
+    const simple = ['Assign', 'AugAssign', 'AnnAssign', 'Delete', 'Expr'];
+    const run = [];
 
     for (const node of body) {
-        const mutated = mutatesAll(node);
+        if (!simple.some((kind) => node instanceof $B.ast[kind]) || !hasWrite(node)) continue;
 
-        if (mutated !== null && !READS_LIST.has(mutated)) {
-            const { args, keywords } = node.value;
-            const current = [...(names ?? [])];
-            let next;
+        const why = unspelled(node, (name) => PURE_BUILTINS.has(name) && !bound.has(name));
+        if (why !== null) refuseUnreadable(node, why);
 
-            if (keywords.length > 0) {
-                refuseUnreadable(node, `changed by \`.${mutated}()\` with keywords, which this file cannot follow`);
-            } else if (mutated === 'append' || mutated === 'extend') {
-                const added = mutated === 'append' ? [spelled(args[0])] : NAMES(args[0]);
-                if (!readable(added)) {
-                    refuseUnreadable(node, `given a name this file cannot read (\`.${mutated}()\`)`);
-                }
-                next = [...current, ...strings(added)];
-            } else if (mutated === 'insert' && args.length === 2 && integer(args[0]) !== null && readable([spelled(args[1])])) {
-                // `list.insert`: a negative index counts from the end, and
-                // either is clamped to the list.
-                const index = integer(args[0]);
-                const at = Math.min(Math.max(index < 0 ? index + current.length : index, 0), current.length);
-                next = [...current.slice(0, at), args[1].value, ...current.slice(at)];
-            } else if (mutated === 'remove' && args.length === 1 && readable([spelled(args[0])])) {
-                const at = current.indexOf(args[0].value);
-                if (at === -1) refuseRaising(node, `has no \`${args[0].value}\` to \`.remove()\``);
-                next = current.filter((_, index) => index !== at);
-            } else if (mutated === 'pop' && (args.length === 0 || integer(args[0]) !== null)) {
-                const index = args.length === 0 ? -1 : integer(args[0]);
-                const at = index < 0 ? current.length + index : index;
-                if (at < 0 || at >= current.length) refuseRaising(node, 'has no item to `.pop()` there');
-                next = current.filter((_, i) => i !== at);
-            } else if (mutated === 'clear' && args.length === 0) {
-                next = [];
-            } else if (mutated === 'sort' && args.length === 0) {
-                next = [...current].sort(byCodePoint);
-            } else if (mutated === 'reverse' && args.length === 0) {
-                next = [...current].reverse();
-            } else {
-                refuseUnreadable(node, `changed by \`.${mutated}()\` in a form this file cannot follow`);
-            }
+        nodesOf(node, handled);
+        run.push(node);
+    }
 
-            handled.add(node.value);
-            names = next;
-            line = node.lineno + lineOffset;
-            continue;
+    if (run.length) {
+        const { namespace, statement, raised } = runStatements(src, run);
+
+        // Python raises there, at import: the module never runs past it.
+        if (raised !== undefined) {
+            const at = statement.lineno + lineOffset;
+
+            throw refuse(
+                `svelthon — Python raises \`${raised}\` here when the module is imported, so ` +
+                    `\`__all__\` has no value to export (${source}:${at})`,
+                source,
+                at
+            );
         }
 
-        const assigns =
-            (node instanceof $B.ast.Assign && node.targets.some(isAll)) ||
-            ((node instanceof $B.ast.AugAssign || node instanceof $B.ast.AnnAssign) && isAll(node.target));
+        // A list or a tuple is the export list, and an entry that is not a
+        // string is left out, as a bad entry always was. Anything else, a
+        // string or `None`, or no `__all__` at all once `del` has run, is no
+        // export list, and the module exports its functions.
+        const value = namespace.__all__;
 
-        if (!assigns) continue;
-
-        handled.add(node);
-
-        if (node instanceof $B.ast.AugAssign && !(node.op instanceof $B.ast.Add)) {
-            refuseUnreadable(node, 'changed by an operator other than `+=`');
+        if (value !== undefined && ($B.is_list(value) || $B.is_tuple(value))) {
+            names = [...value].filter((one) => typeof one === 'string');
         }
-
-        // `__all__: list[str]` alone annotates and binds nothing.
-        if (node instanceof $B.ast.AnnAssign && !node.value) continue;
-
-        const given = NAMES(node.value);
-
-        // Not a sequence at all — `__all__ = "load"` — is not an export list,
-        // and this file reads it as a name the module uses for itself. The
-        // fallback is the older decision and it is kept; what is refused below
-        // is the case it was hiding.
-        //
-        // It is the last value that counts here too, so a constant written
-        // after a list puts the fallback back rather than leaving the list in
-        // force. `+=` with one has no reading this file can give: `+= "ab"`
-        // adds two names to a list and makes a longer string of a string.
-        if (given === null) {
-            if (!(node.value instanceof $B.ast.Constant)) {
-                refuseUnreadable(node, 'built rather than written out');
-            }
-
-            if (node instanceof $B.ast.AugAssign) refuseUnreadable(node, 'extended by `+=` with something other than a list');
-
-            names = null;
-            continue;
-        }
-
-        if (!readable(given)) refuseUnreadable(node, 'given a name this file cannot read');
-
-        // `+=` extends what is already there; a plain `=` replaces it, which is
-        // what Python does.
-        names =
-            node instanceof $B.ast.AugAssign
-                ? [...(names ?? []), ...strings(given)]
-                : strings(given);
-        line = node.lineno + lineOffset;
+        line = run.at(-1).lineno + lineOffset;
     }
 
     // Every other write that reaches the module's `__all__`: under a condition,
     // in a loop, in a function or a class that does not make the name its own,
-    // item by item, deleted, or rebound by a loop, an import or a walrus.
+    // or rebound by a loop, an import or a walrus.
     // A name is the builtin where no scope binds it: not the function's own, not
     // the module's.
-    const bound = moduleBinds(table);
     const builtin = (name, scope) => {
         const block = scope === null ? null : table.blockOf(scope);
         if (block !== null && block !== undefined && !isGlobalScope(scopeIn(block, name))) return false;
@@ -3364,7 +3379,7 @@ function compile(
     // caller. SvelteKit is strict about it: a `+page.server.py` exporting
     // anything but load/actions/prerender/… is refused, and rightly so.
     const table = symbolTable(root._ast, source);
-    const declaration = declaredExports(root._ast, table, source, lineOffset);
+    const declaration = declaredExports(root._ast, table, source, lineOffset, src);
     const listed = declaration === null ? null : declaration.names;
     const exported = listed ?? [...funcs.map((f) => f.name), ...plainDeriveds.map((d) => d.name)];
 

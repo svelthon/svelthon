@@ -77,7 +77,7 @@ rest of that configuration and what each line buys.
 npm install
 npm run dev
 
-npm test             # 1 479 tests: semantics, props, reactivity, Svelte surface
+npm test             # 1 480 tests: semantics, props, reactivity, Svelte surface
 npm run test:quiet   # the suite's own output: a green run must say nothing
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
@@ -762,14 +762,16 @@ constant, a function, a name brought in by an import. And a name it invents is
 refused at compile time, since a module exports what it defines, or once the
 module has run when a `from m import *` could have brought it.
 
-**It is read as the value the module ends with**, so a second assignment
-replaces the first, `+=`, `.append()`, `.extend()` and `.insert()` grow it, and
-`.remove()`, `.pop()` and `.clear()` shrink it. It is read from the source before
-the module runs, though, so the names have to be spelled out at the top level of
-the module: `__all__ = sorted(names)`, a change under an `if` or in a function,
-or `del __all__[0]` is refused rather than quietly ignored. So is the list handed
-on, `names = __all__` or `list.clear(__all__)`, since what is done to it next is
-out of sight; `list(__all__)` is a copy to work on.
+**It is the value the module ends with, as Python computes it.** Each statement
+at the top level of the module that writes it, spelled with literals, `__all__`
+itself and the builtins, is run by Python before the module is: a second
+assignment replaces the first, `+= "bc"` adds `b` and `c`, `del __all__[0]` and
+`.sort()` do what they do, and `.append()` on a tuple is refused with the error
+Python raises. What the source does not decide cannot be read before the module
+runs, and is refused rather than quietly ignored: `__all__ = sorted(names)`, a
+change under an `if`, in a loop or in a function. So is the list handed on,
+`names = __all__` or `list.clear(__all__)`, since what is done to it next is out
+of sight; `list(__all__)` is a copy to work on.
 
 **A function an `importjs` call hands back is the function itself**, which is
 what makes SvelteKit's remote functions work from Python: `accepted = query(…)`
@@ -1465,7 +1467,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 1 479 tests as written (vitest reports more, one per
+Validated by `npm test`, 1 480 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;
