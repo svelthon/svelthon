@@ -268,6 +268,14 @@ def unlisted():
         expect(store(MODULE)).not.toContain('unlisted };');
     });
 
+    // A class has no signal, and the store published only names that have
+    // one, so the check above let it through and the store left it out.
+    test('a listed class is on it, as itself', async () => {
+        const { store: published } = await import('./fixtures/listed_class_store.svelte.py');
+
+        expect(published.Widget.tp_name).toBe('Widget');
+    });
+
     // A module that says nothing exports everything, which is what every store
     // in the project relies on.
     test('a module with no __all__ still publishes all of it', () => {
@@ -400,5 +408,63 @@ describe('a name taken from JavaScript goes back as itself', () => {
         const mod = await import('./fixtures/exported_js.py');
 
         expect(mod.plain).toBe(7);
+    });
+});
+
+// A star import binds names the source does not spell, and `__all__` may hand
+// them on, as Python allows. The module reads them off its namespace once it
+// has run, in a `.py` and a `.svelte.py` alike, and a name nothing brought is
+// refused then, in the sentence the compiler says when nothing can bind it.
+describe('__all__ hands on what a star import brought', () => {
+    const published = (mod) => mod.store ?? mod;
+
+    test.for([
+        ['a .py', './fixtures/reexport_star.py', './fixtures/reexport_named.py'],
+        ['a .svelte.py', './fixtures/reexport_star_store.svelte.py', './fixtures/reexport_named_store.svelte.py']
+    ])('%s publishes them as it publishes names imported one by one', async ([, star, named]) => {
+        const starred = published(await import(star));
+        const listed = published(await import(named));
+
+        expect(Object.keys(starred)).toEqual(Object.keys(listed));
+        expect([...starred.rows]).toEqual([...listed.rows]);
+        expect(starred.label()).toBe('from the module');
+    });
+
+    // A store hands JavaScript the container itself, here the source module's.
+    test('a .svelte.py hands on the very list the source holds', async () => {
+        const starred = published(await import('./fixtures/reexport_star_store.svelte.py'));
+        const listed = published(await import('./fixtures/reexport_named_store.svelte.py'));
+
+        expect(starred.rows).toBe(listed.rows);
+    });
+
+    test('and takes a write through the store, as a name imported by name does', async () => {
+        const starred = published(await import('./fixtures/reexport_star_store.svelte.py'));
+        const before = starred.rows;
+
+        try {
+            starred.rows = [7];
+
+            expect([...starred.rows]).toEqual([7]);
+        } finally {
+            starred.rows = before;
+        }
+    });
+
+    test.for([
+        ['a .py', './fixtures/reexport_missing.py', /\(tests\/fixtures\/reexport_missing\.py:4\)/],
+        ['a .svelte.py', './fixtures/reexport_missing_store.svelte.py', /\(tests\/fixtures\/reexport_missing_store\.svelte\.py:4\)/]
+    ])('in %s, a name the star import did not bring is refused once the module has run', async ([, path, where]) => {
+        const refused = import(path);
+
+        await expect(refused).rejects.toThrow(/`__all__` names `nope`, which this module never binds/);
+        await expect(refused).rejects.toThrow(where);
+    });
+
+    // Without a star import nothing can bind the name, and the compiler says so.
+    test('without one, the compiler still refuses it', () => {
+        expect(() => plain('from calendrier import date\n__all__ = ["nope"]\n')).toThrow(
+            /`__all__` names `nope`, which this module never binds \(src\/m\.py:2\)/
+        );
     });
 });

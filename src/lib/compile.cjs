@@ -2653,10 +2653,26 @@ function injectedBindings(c) {
 
 // Running the module body, which is what fills every cell the sections above
 // declared. Nothing that reads a Python name may come before it.
+// The sentence for a name `__all__` lists and the module does not bind, said by
+// the compiler when nothing in the source can bind it, and by the module once
+// it has run when a `from m import *` could have.
+const neverBinds = (name, where) =>
+    `svelthon — \`__all__\` names \`${name}\`, which this module never binds (${where}). A module ` +
+    `exports what it defines: check the spelling, or remove it from the list.`;
+
+// Right after `__init`, the first moment the namespace holds what the star
+// imports brought, and before any export reads it. Unbound reads `undefined`
+// on the namespace, which is what `del` leaves too.
+const unboundRefusals = (c) =>
+    c.unbound.map(
+        (n) => `if (${NS}[${JSON.stringify(n)}] === undefined) throw new Error(${JSON.stringify(neverBinds(n, c.listedAt))});`
+    );
+
 function initCall(c) {
     return [
         ``,
         `__init(${NS});`,
+        ...unboundRefusals(c),
         ...(c.bindables.length || c.props.length ? [`__initialising = false;`] : []),
         ``
     ];
@@ -2719,6 +2735,7 @@ function instanceExports(c) {
                   ...c.state
                       .filter(c.published)
                       .map((n) => `    get ${n}() { return (${rev(n)}, __plainScalar(${n})); },`),
+                  ...c.unsignalled.map((n) => `    get ${n}() { return __plainScalar(${NS}.${n}); },`),
                   // The parameter and the name its body reads are one constant.
                   // They were two: the signature still said `v` while the body
                   // had moved to `__next`, so every published setter of every
@@ -2747,6 +2764,7 @@ function instanceExports(c) {
                   ...c.state
                       .filter(c.published)
                       .map((n) => `    set ${n}(${NEXT_VALUE}) { ${NS}.${n} = __pyArg(${NEXT_VALUE}); },`),
+                  ...c.unsignalled.map((n) => `    set ${n}(${NEXT_VALUE}) { ${NS}.${n} = __pyArg(${NEXT_VALUE}); },`),
                   ...c.deriveds
                       .filter((d) => c.published(d.name))
                       .map((d) => `    get ${d.name}() { return __plainScalar(__follow(${d.name})); },`),
@@ -2959,6 +2977,7 @@ function plainInit(c) {
         ``,
         ...registration(c),
         `__init(${NS});`,
+        ...unboundRefusals(c),
         ``
     ];
 }
@@ -3319,24 +3338,28 @@ function compile(
     // with `ReferenceError: Widget is not defined` and took everything it
     // exported down with it. Reading the value off the namespace fixed the
     // class and the import, and would have made this one quietly `undefined`.
+    //
+    // A `from m import *` binds names the source does not spell, so with one
+    // the question waits until the module has run (`unboundRefusals`).
     const binds = moduleBinds(table);
-    const missing = (listed ?? []).find((n) => !declared.includes(n) && !binds.has(n));
+    const unbound = (listed ?? []).filter((n) => !declared.includes(n) && !binds.has(n));
+    // The name is bound nowhere, so the line is the one `__all__` is on.
+    const line = declaration?.line;
+    const listedAt = line === undefined ? source : `${source}:${line}`;
 
-    if (missing) {
-        // The name is bound nowhere, so the line is the one `__all__` is on.
-        const { line } = declaration;
-
-        throw refuse(
-            `svelthon — \`__all__\` names \`${missing}\`, which this module never ` +
-                `binds (${line === undefined ? source : `${source}:${line}`}). A module ` +
-                `exports what it defines: check the spelling, or remove it from the list.`,
-            source,
-            line
-        );
-    }
+    if (unbound.length && !starred) throw refuse(neverBinds(unbound[0], listedAt), source, line);
 
     const isFunction = (name) =>
         funcs.some((f) => f.name === name) || plainDeriveds.some((d) => d.name === name);
+
+    // What `__all__` lists and the compiler gave no signal: a class, or a name a
+    // star import brought. A store reads it off the namespace, as a `.py` does.
+    const unsignalled =
+        listed === null
+            ? []
+            : exported.filter(
+                  (n) => !state.includes(n) && !deriveds.some((d) => d.name === n) && !isFunction(n)
+              );
 
     // Everything the sections read, gathered once. Nothing is computed here:
     // the whole of `compile()` above this line is the reading, and everything
@@ -3368,6 +3391,9 @@ function compile(
         effects,
         inspects,
         starred,
+        unbound: starred ? unbound : [],
+        listedAt,
+        unsignalled,
         plainDeriveds,
         jsImports,
         jsImported,
