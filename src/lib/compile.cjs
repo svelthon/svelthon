@@ -2342,7 +2342,8 @@ const SUBS = '__subs';
 // vocabulary. This is a third category, a name the generated code uses for
 // itself, and the answer to that category is a prefix rather than a list.
 const NEXT_VALUE = '__next';
-const SUBSCRIBING = (c) => c.state.length > 0 || c.bindables.length > 0 || c.props.length > 0 || c.starred;
+const SUBSCRIBING = (c) =>
+    c.state.length > 0 || c.funcs.length > 0 || c.bindables.length > 0 || c.props.length > 0 || c.starred;
 
 const rev = (name) => `__rev_${name}`;
 const bump = (name) => `__bump_${name}`;
@@ -2438,7 +2439,14 @@ function declarations(c) {
             `const ${bump(n)} = () => { ${rev(n)} += 1; };`,
             `const ${read(n)} = () => { ${rev(n)}; };`
         ]),
-        ...c.funcs.map((f) => `let ${fn(f.name)} = $state.raw(undefined);`),
+        // A `def`'s cell is a state cell: a decorator or a later line may put a
+        // list there, and its mutations are followed as any name's are.
+        ...c.funcs.flatMap((f) => [
+            `let ${fn(f.name)} = $state.raw(undefined);`,
+            `let ${rev(f.name)} = $state.raw(0);`,
+            `const ${bump(f.name)} = () => { ${rev(f.name)} += 1; };`,
+            `const ${read(f.name)} = () => { ${rev(f.name)}; };`
+        ]),
         ...c.inspects.map((i) => `let ${fn(i.name)} = $state.raw(undefined);`),
         ...c.effects.flatMap((e) =>
             e.root
@@ -2546,8 +2554,8 @@ function authorBindings(c) {
         ...c.funcs.map(
             (f) =>
                 `__bind(__proto, '${f.name}', () => ` +
-                `${c.store ? `__pyBoundary(${fn(f.name)})` : fn(f.name)}, ` +
-                `(${NEXT_VALUE}) => { ${fn(f.name)} = ${NEXT_VALUE}; }, () => ${fn(f.name)});`
+                `(${rev(f.name)}, ${c.store ? `__pyBoundary(${fn(f.name)})` : fn(f.name)}), ` +
+                `(${NEXT_VALUE}) => { ${fn(f.name)} = __track(${NEXT_VALUE}, ${bump(f.name)}, ${read(f.name)}${c.store ? '' : `, ${SUBS}`}); }, () => ${fn(f.name)});`
         ),
         ...c.inspects.map(
             (i) => `__bind(__proto, '${i.name}', () => ${fn(i.name)}, (${NEXT_VALUE}) => { ${fn(i.name)} = ${NEXT_VALUE}; });`
@@ -2778,7 +2786,7 @@ function instanceExports(c) {
                       .map((d) => `    get ${d.name}() { return ${storeRead(c, d.name, `__follow(${d.name})`)}; },`),
                   ...c.funcs
                       .filter((f) => c.published(f.name))
-                      .map((f) => `    get ${f.name}() { return ${storeRead(c, f.name, fn(f.name), f.name)}; },`),
+                      .map((f) => `    get ${f.name}() { return ${storeRead(c, f.name, `${NS}.${f.name}`, f.name)}; },`),
                   `};`,
                   ``,
                   `export default store;`,
@@ -2786,12 +2794,15 @@ function instanceExports(c) {
                   // looks for `load`, `actions`, `GET`, by name, on the module.
                   // Read once the module has run, as a `.py` reads its own: a
                   // `def` a decorator turned into data is published as data.
+                  // Through the namespace, as the getter above reads it: the
+                  // cell itself read at the top of the module is what Svelte
+                  // reports as `state_referenced_locally`.
                   ...(c.funcs.filter((f) => c.published(f.name)).length
                       ? [
                             ``,
                             ...c.funcs
                                 .filter((f) => c.published(f.name))
-                                .map((f) => `const __export_${f.name} = ${storeRead(c, f.name, fn(f.name), f.name)};`),
+                                .map((f) => `const __export_${f.name} = ${storeRead(c, f.name, `${NS}.${f.name}`, f.name)};`),
                             `export { ${c.funcs
                                 .filter((f) => c.published(f.name))
                                 .map((f) => `__export_${f.name} as ${f.name}`)

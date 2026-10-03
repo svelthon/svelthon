@@ -18,7 +18,7 @@ import { createRequire } from 'node:module';
 import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { compile as compileSvelte } from 'svelte/compiler';
+import { compile as compileSvelte, compileModule } from 'svelte/compiler';
 import { python, compileOptionsFor } from '../src/lib/svelthon.js';
 
 const { compile } = createRequire(import.meta.url)('../src/lib/compile.cjs');
@@ -98,5 +98,32 @@ describe('the script the compiler emits', () => {
         }
 
         expect(warned, 'a fixture the compiler warns about, on every run').toEqual([]);
+    });
+
+    // A store is the other half of what the build hands Svelte: a `.svelte.py`
+    // compiled to module-scope runes and then by `compileModule`, under the
+    // `.svelte.js` identity the plugin serves it with. Its named exports read
+    // the function cells at the top of the module, and every store printed
+    // `state_referenced_locally` about a `__fn_` name its author never typed.
+    test('and no store fixture warns when Svelte compiles it as a module', () => {
+        const warned = [];
+
+        for (const name of readdirSync(FIXTURES).filter((one) => one.endsWith('.svelte.py'))) {
+            const source = readFileSync(`${FIXTURES}${name}`, 'utf8');
+            let codes;
+            try {
+                const { script } = compile(source, 'Store', name, { store: true, sourceContent: source });
+
+                codes = compileModule(script, { filename: name.replace(/\.py$/, '.js') }).warnings.map(
+                    (one) => one.code
+                );
+            } catch {
+                continue;
+            }
+
+            if (codes.length) warned.push(`${name}: ${codes.join(', ')}`);
+        }
+
+        expect(warned, 'a store fixture the compiler warns about, on every run').toEqual([]);
     });
 });
