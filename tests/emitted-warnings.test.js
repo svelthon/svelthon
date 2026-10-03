@@ -30,6 +30,13 @@ const FIXTURES = fileURLToPath(new URL('./fixtures/', import.meta.url));
 const warningsFor = (name) => {
     const filename = fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url));
     const whole = readFileSync(filename, 'utf8');
+
+    // A JavaScript fixture is compiled as it is: the build hands it to Svelte
+    // unchanged, and what it says is said on every run all the same.
+    if (!whole.includes('<script lang="python">')) {
+        return compileSvelte(whole, { name: 'Probe', ...compileOptionsFor(whole) }).warnings.map((one) => one.code);
+    }
+
     const pre = python();
     const markup = pre.markup({ content: whole, filename });
 

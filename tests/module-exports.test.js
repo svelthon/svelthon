@@ -169,7 +169,12 @@ describe('__all__ is read as the value the module ends with', () => {
                 'for one in __all__:\n    pass\nnames = [one for one in __all__]\ntext = f"{__all__}"',
             ['a']
         ],
-        ['a class attribute', 'class C:\n    __all__ = ["x"]\n\n__all__ = ["a"]', ['a']]
+        ['a class attribute', 'class C:\n    __all__ = ["x"]\n\n__all__ = ["a"]', ['a']],
+        // A constant is no export list and puts the functions back, and it is
+        // the last value here too: a list before it is gone, one after it rules.
+        ['a constant after a list', '__all__ = ["a"]\n__all__ = "load"', ['a', 'b', 'c']],
+        ['None after a list', '__all__ = ["a"]\n__all__ = None', ['a', 'b', 'c']],
+        ['a list after a constant', '__all__ = "load"\n__all__ = ["b"]', ['b']]
     ])('%s', ([, head, names]) => {
         expect(exported(head)).toEqual(names);
     });
@@ -199,6 +204,9 @@ describe('__all__ is read as the value the module ends with', () => {
         // A builtin's name is the builtin only where nothing else binds it.
         ['handed to a function named list', 'def list(values):\n    values.clear()\n\n__all__ = ["a"]\nlist(__all__)', 5],
         ['handed to a parameter named len', '__all__ = ["a"]\ndef count(len):\n    return len(__all__)', 3],
+        // `+= "ab"` adds two names to a list and makes a longer string of a
+        // string: no static reading is the right one.
+        ['extended by a constant', '__all__ = ["a"]\n__all__ += "bc"', 2],
         // Python raises at import on these: the module never runs past them.
         ['a name removed that is not there', '__all__ = ["a"]\n__all__.remove("z")', 2],
         ['an empty list popped', '__all__ = []\n__all__.pop()', 2]
@@ -467,4 +475,21 @@ describe('__all__ hands on what a star import brought', () => {
             /`__all__` names `nope`, which this module never binds \(src\/m\.py:2\)/
         );
     });
+
+    // What only a star import can bring and JavaScript cannot export under its
+    // name was left out of the exports, with nothing said.
+    test('a reserved word it may bring is refused, and named', () => {
+        expect(() => plain('from calendrier import *\n__all__ = ["delete"]\n')).toThrow(
+            /`__all__` names `delete`, which JavaScript reserves, so the module cannot export it \(src\/m\.py:2\)/
+        );
+    });
+});
+
+// A name is what Python says one is, `XID_Start` then `XID_Continue`, and a
+// `def` under one of the names letters alone leave out was dropped from the
+// exports while Python called it perfectly well.
+test.for([['℘'], ['℮'], ['ᢅ'], ['l·l']])('a function named %s is exported and runs', async ([name]) => {
+    const mod = await import('./fixtures/unicode_names.py');
+
+    expect(mod[name]()).toBe(42);
 });

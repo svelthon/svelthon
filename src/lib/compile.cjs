@@ -590,11 +590,19 @@ function declaredExports(ast, table, source, lineOffset = 0) {
         // and this file reads it as a name the module uses for itself. The
         // fallback is the older decision and it is kept; what is refused below
         // is the case it was hiding.
+        //
+        // It is the last value that counts here too, so a constant written
+        // after a list puts the fallback back rather than leaving the list in
+        // force. `+=` with one has no reading this file can give: `+= "ab"`
+        // adds two names to a list and makes a longer string of a string.
         if (given === null) {
             if (!(node.value instanceof $B.ast.Constant)) {
                 refuseUnreadable(node, 'built rather than written out');
             }
 
+            if (node instanceof $B.ast.AugAssign) refuseUnreadable(node, 'extended by `+=` with something other than a list');
+
+            names = null;
             continue;
         }
 

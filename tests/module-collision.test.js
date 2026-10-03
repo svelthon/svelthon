@@ -21,6 +21,14 @@ describe('two Python modules of one name', () => {
         );
     });
 
+    // A name is what Python says one is: `import ℘oids` is written, so the
+    // stem is claimed like any other.
+    test('a stem Python takes and letters alone do not is claimed too', () => {
+        nameFor('tests/fixtures/collide/℘oids.py');
+
+        expect(() => nameFor('tests/fixtures/collide_again/℘oids.py')).toThrow(/both imported as `℘oids`/);
+    });
+
     // Paths nothing has on disk: the first claimant is gone, which is what a
     // file moved under a running dev server looks like.
     test('a first claimant that is gone is a rename, not a collision', () => {

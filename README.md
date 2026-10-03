@@ -77,7 +77,7 @@ rest of that configuration and what each line buys.
 npm install
 npm run dev
 
-npm test             # 1 474 tests: semantics, props, reactivity, Svelte surface
+npm test             # 1 479 tests: semantics, props, reactivity, Svelte surface
 npm run test:quiet   # the suite's own output: a green run must say nothing
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
@@ -759,7 +759,8 @@ import { chercher } from '$lib/peps.py';
 
 It names anything the module binds, not only what it assigns: a class, a
 constant, a function, a name brought in by an import. And a name it invents is
-refused at compile time, since a module exports what it defines.
+refused at compile time, since a module exports what it defines, or once the
+module has run when a `from m import *` could have brought it.
 
 **It is read as the value the module ends with**, so a second assignment
 replaces the first, `+=`, `.append()`, `.extend()` and `.insert()` grow it, and
@@ -1464,7 +1465,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 1 474 tests as written (vitest reports more, one per
+Validated by `npm test`, 1 479 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;

@@ -64,7 +64,13 @@ const ALPHABETS = [
     ['a Cyrillic name', 'метка'],
     // No case, no ASCII letter anywhere, and nothing `\p{M}` or `\p{N}` can
     // match: the row that shares the least with the reference.
-    ['a Chinese name', '学生平均分']
+    ['a Chinese name', '学生平均分'],
+    // Python's classes, `XID_Start` and `XID_Continue`, and not letters: a
+    // symbol and a mark it takes at the start, and the middle dot of Catalan
+    // after it. Every site read them as no name at all.
+    ['a name that starts on a symbol', '℘oids'],
+    ['a name that starts on a mark', 'ᢅmark'],
+    ['a name a middle dot continues', 'l·lal']
 ];
 
 const markup = (body) => {

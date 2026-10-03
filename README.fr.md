@@ -75,7 +75,7 @@ reste de cette configuration et ce que chaque ligne apporte.
 npm install
 npm run dev
 
-npm test             # 1 474 tests : sémantique, props, réactivité, surface Svelte
+npm test             # 1 479 tests : sémantique, props, réactivité, surface Svelte
 npm run test:quiet   # la sortie de la suite : un run vert ne doit rien dire
 npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
@@ -792,7 +792,8 @@ import { chercher } from '$lib/peps.py';
 
 Il nomme tout ce que le module lie, et pas seulement ce qu'il affecte : une
 classe, une constante, une fonction, un nom amené par un import. Et un nom qu'il
-invente est refusé à la compilation, puisqu'un module exporte ce qu'il définit.
+invente est refusé à la compilation, puisqu'un module exporte ce qu'il définit,
+ou une fois le module exécuté quand un `from m import *` aurait pu l'amener.
 
 **Il est lu comme la valeur sur laquelle le module s'arrête** : une deuxième
 affectation remplace la première, `+=`, `.append()`, `.extend()` et `.insert()`
@@ -1474,7 +1475,7 @@ part jamais.
 
 ## État
 
-Validé par `npm test`, 1 474 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 1 479 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
