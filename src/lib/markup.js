@@ -168,6 +168,49 @@ const NAME = `[\\p{XID_Start}_][${NAME_CHAR}]*`;
 // subscript, a group or a string.
 const NAME_END = new RegExp(`[${NAME_CHAR})\\]"']$`, 'u');
 
+// Whether an expression is a call at its top, which is what Svelte asks of a
+// handler before warning that it gave no function (`has_side_effects`):
+// `onclick={save()}` gave none by mistake, and a name holding None gives none
+// on purpose, as an optional handler. A call at the top is the expression's
+// last group, after something a callable ends with, with nothing at the top
+// level binding looser: no operator, keyword or comma. A walrus is an
+// assignment, which Svelte counts as one too.
+const LOOSER = new RegExp(
+    `[-+*/%@<>=!|&^~,:]|(?<![${NAME_CHAR}])(?:lambda|if|else|or|and|not|in|is|await|yield|for)(?![${NAME_CHAR}])`,
+    'u'
+);
+
+function calledAtTop(expression) {
+    let text = expression.trim();
+
+    while (text.startsWith('(') && closingPair(text, 0) === text.length - 1) text = text.slice(1, -1).trim();
+
+    let top = '';
+    let last = -1;
+    let depth = 0;
+
+    for (let i = 0; i < text.length; i++) {
+        const skip = atomic(text, i);
+
+        if (skip > 0) {
+            i += skip - 1;
+            continue;
+        }
+
+        const c = text[i];
+
+        if (c === '(' && depth === 0) last = i;
+        if (c === '(' || c === '[' || c === '{') depth++;
+        else if (c === ')' || c === ']' || c === '}') depth--;
+        else if (depth === 0) top += c;
+    }
+
+    if (top.includes(':=')) return true;
+    if (LOOSER.test(top) || last <= 0 || closingPair(text, last) !== text.length - 1) return false;
+
+    return NAME_END.test(text.slice(0, last).trimEnd());
+}
+
 const WALRUS_NAME = new RegExp(`^\\s*(${NAME})`, 'u');
 const WALRUS_ARROW = /^\s*:=\s*/;
 
@@ -1675,9 +1718,16 @@ function walk(markup, collect, onPython, seed, record, where) {
             // well read the answer of, so it crosses as every prop does: one
             // published function, its result converted, sync or awaited. It
             // still writes, since the child calls it on an event.
-            return isComponent(tag)
-                ? `{${call(rewritten, '__bound', inner)}}`
-                : `{${EVENT_WRAPPER}(${call(rewritten, '', inner)})}`;
+            // The adapting call is not the author's: written as one only when
+            // the author's own expression is one, so Svelte warns about None
+            // where it warns about `undefined`, after `save()` and not after a
+            // name holding an optional handler. `?? undefined` is a form
+            // Svelte reads as no call, and changes no value.
+            if (isComponent(tag)) return `{${call(rewritten, '__bound', inner)}}`;
+
+            const adapted = `${EVENT_WRAPPER}(${call(rewritten, '', inner)})`;
+
+            return calledAtTop(inner) ? `{${adapted}}` : `{${adapted} ?? undefined}`;
         }
 
         if (CLASS_DIRECTIVE.test(name)) return `{${call(inner, '__truthy')}}`;

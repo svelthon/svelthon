@@ -458,13 +458,20 @@ export const __pybridge = {
     // way that attribute is read when written by name. Only None is converted
     // first, as the direct path converts it: an object stays the object, which
     // is how an `<option>`'s value finds its `<select>`.
-    spreadElement(value) {
+    //
+    // A key Svelte takes for a handler, one beginning with `on`, is adapted as
+    // a handler written by name is, by the component's `event`: a raise reaches
+    // the page as an `Error` and a coroutine is run and its failure reported,
+    // where a callback's contract handed the host the Brython exception and a
+    // rejected promise nobody looks at.
+    spreadElement(value, event = (one) => pyEvent(one)) {
         const out = spreadOf(value, __pybridge.bound);
         if (out === null || typeof out !== 'object') return out;
 
         for (const key of Object.keys(out)) {
             const wrapper = attributeWrapper(key);
-            if (wrapper === '__class') out[key] = __pybridge.klass(value[key]);
+            if (key[0] + key[1] === 'on') out[key] = event(value[key]);
+            else if (wrapper === '__class') out[key] = __pybridge.klass(value[key]);
             else if (wrapper === '__truthy') out[key] = __pybridge.truthy(value[key]);
             else if (wrapper === '__hidden') out[key] = __pybridge.hidden(value[key]);
         }
@@ -5097,6 +5104,14 @@ function starred(namespace, name) {
 // the rule when it runs later, on a click.
 const MISSING = Symbol('svelthon.missing');
 
+// A module namespace object: no prototype, and the tag `Module` as a data
+// property of its own, which a module's exports cannot replace.
+const moduleNamespace = (value) =>
+    value !== null &&
+    typeof value === 'object' &&
+    Object.getPrototypeOf(value) === null &&
+    Object.getOwnPropertyDescriptor(value, Symbol.toStringTag)?.value === 'Module';
+
 export function readAttr(target, name) {
     const $B = globalThis.__BRYTHON__;
 
@@ -5116,6 +5131,13 @@ export function readAttr(target, name) {
 
         $B.RAISE(_b_.AttributeError, `'${name}'`);
     }
+
+    // A function a module's namespace exports, `importjs * as callbacks`, is the
+    // function the same import by name gives: `jsCall`'s adapter, which hands
+    // the call the receiver it is called with. Read as the engine reads any
+    // object's member, it was bound to the namespace, so `onclick={callbacks.
+    // receiver}` was called with the namespace where Svelte hands the element.
+    if (moduleNamespace(target) && typeof target[name] === 'function') return jsCall(target[name]);
 
     // With a default, so a miss costs no exception: building one on every field
     // read of every dict would be the whole cost of this feature.

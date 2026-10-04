@@ -2674,7 +2674,8 @@ function injectedBindings(c) {
                   `__bind(__proto, '__seq', () => __pybridge.seq);`,
                   `__bind(__proto, '__key', () => __pybridge.key);`,
                   `__bind(__proto, '__class', () => __pybridge.klass);`,
-                  `__bind(__proto, '__spreadElement', () => __pybridge.spreadElement);`,
+                  // A handler in a spread is adapted as one written by name.
+                  `__bind(__proto, '__spreadElement', () => (value) => __pybridge.spreadElement(value, __event));`,
                   `__bind(__proto, '__spread', () => __pybridge.spread);`,
                   `__bind(__proto, '__bound', () => __pybridge.bound);`,
                   `__bind(__proto, '__assign', () => __assign);`,
