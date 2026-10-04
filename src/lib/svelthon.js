@@ -280,7 +280,7 @@ export const compileOptionsFor = (code) =>
 //
 // - `lineOffset`: Python line numbers count from the start of the <script> body
 //   and the file counts from its first line. The gap is the number of lines
-//   before the opening tag.
+//   before the end of the opening tag.
 // - `defs`: the hidden functions the markup needs, appended to its Python.
 // - `jsNames`: what the file imports from JavaScript.
 // - `element`: whether the file declares itself a custom element.
@@ -363,10 +363,15 @@ export function python(options = {}) {
 
             refuseSpacedClose(declaring.closing, filename);
 
+            // The body starts after the tag's `>`, which a tag written over two
+            // lines puts on the second: counted from `<script`, every line of
+            // the Python was reported one line up.
+            const open = content.indexOf('>', declaring.index) + 1;
+
             const file = {
                 jsNames: moduleImports(content),
                 element: compileOptionsFor(content) !== undefined,
-                lineOffset: content.slice(0, declaring.index).split('\n').length - 1,
+                lineOffset: content.slice(0, open).split('\n').length - 1,
                 defs: [],
                 defLines: [],
                 defColumns: []
@@ -381,15 +386,21 @@ export function python(options = {}) {
                 pythonExpressions(markup, collect, undefined, { filename, content, offset })
             );
 
-            const open = content.indexOf('>', declaring.index) + 1;
             const python = content.slice(open, content.indexOf('</script', open));
 
             return { code: tagged(elementOptions(code, python), calls.open(file)) };
         },
         script({ content, attributes, filename }) {
-            if (attributes.lang !== 'python') return;
+            // Read as `pythonScript` reads the tag, by names in any case: Svelte
+            // hands them over as written, and `<script LANG="python">` had its
+            // markup compiled for Python while this hook let the Python through
+            // as JavaScript.
+            const named = (wanted) => Object.keys(attributes).find((key) => key.toLowerCase() === wanted);
+            const langKey = named('lang');
 
-            const { lang, [CALL]: call, ...rest } = attributes;
+            if (langKey === undefined || attributes[langKey] !== 'python') return;
+
+            const { [langKey]: lang, [CALL]: call, ...rest } = attributes;
             const about = calls.take(call);
 
             // One component, one generated module: this hook fires once per
@@ -403,7 +414,7 @@ export function python(options = {}) {
             // Both spellings, because Svelte 5 still parses the Svelte 4 one:
             // `<script module>` gives `module: true`, `<script
             // context="module">` gives `context: 'module'`.
-            if (attributes.module || attributes.context === 'module') {
+            if (attributes[named('module')] || attributes[named('context')] === 'module') {
                 throw new SyntaxError(
                     `svelthon — a <script module> cannot hold Python; state shared ` +
                         `by every instance belongs in a .svelte.py module, which a ` +

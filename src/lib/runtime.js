@@ -242,8 +242,9 @@ export const __pybridge = {
 
         // The names the list yields, which for a subclass with its own
         // `__iter__` are not the ones it stores: the loop beside it reads the
-        // same ones.
-        if (Array.isArray(value)) {
+        // same ones. A set is the natural type for a set of classes, and
+        // written through `str()` it gave the classes `{'primary',` and `'btn'}`.
+        if (Array.isArray(value) || isSet(value)) {
             return iterated(value)
                 .filter((one) => __pybridge.truthy(one))
                 .map((one) => __pybridge.klass(one));
@@ -1715,12 +1716,10 @@ const SLOT = 'slot_value_';
 // dictionaries rather than through the attribute protocol, so nothing of the
 // author's runs while a value is merely being converted.
 //
-// `$B.search_in_dict` reads one dictionary and stops. Both readers below took it
-// for a walk of the chain, and both comments said so in as many words, which is
-// how it went unnoticed on two boundaries at once: an instance whose `__call__`
-// is defined on a base class was not callable anywhere, and a subclass that
-// inherits `__slots__` without redeclaring them crossed to JavaScript as `{}`,
-// its fields gone and its JSON valid.
+// `$B.search_in_dict` reads one dictionary and stops, so the chain is walked
+// here: an instance whose `__call__` is defined on a base class is callable, and
+// a subclass that inherits `__slots__` without redeclaring them crosses to
+// JavaScript with its fields.
 //
 // The loop is Brython's own: `super.__getattribute__` asks `search_in_dict` once
 // per class of the MRO. `tp_mro` begins at the class itself — `[cls, ...bases,
@@ -3098,16 +3097,14 @@ function branch(value, seen, shell, adapt) {
     // A value that **descends from a builtin** is not an instance of the
     // author's, and the difference decides which of the two rules below it gets.
     // A `complex` has an instance dictionary and it is empty, so the fields path
-    // wrote `{}` for it: the same silent loss as a Map, from the arm written to
-    // serialise what an author put on their own object.
+    // would write `{}` for it, the arm meant for what an author put on their own
+    // object.
     //
-    // Asked of the **MRO**, not of the class by identity, which is the mistake
-    // this file has now made four times and repaired three: `class Money(complex)`
-    // is not the entry in Brython's table, so it answered no and came out as its
-    // attributes — `{}`, or `{"label":"kept"}` with one field on it, the number
-    // gone. Asked against Brython's own table rather than a list of type names
-    // written here, and `object` is excluded because every class descends from
-    // it.
+    // Asked of the **MRO**, not of the class by identity: `class Money(complex)`
+    // is not the entry in Brython's table, and asked by identity it would come
+    // out as its attributes, the number gone. Asked against Brython's own table
+    // rather than a list of type names written here, and `object` is excluded
+    // because every class descends from it.
     const owned =
         pyClass(value.ob_type) &&
         Array.isArray(value.ob_type.tp_mro) &&
@@ -3334,41 +3331,29 @@ export function pyData(value, made) {
 // Does it behave like a URL — asked somewhere a throw is expected rather than
 // fatal.
 //
-// Two failures, one on each side, produced this shape. Reading
-// `url.searchParams.get` threw during prerendering, where SvelteKit hands over a
-// **proxy** and refuses the one part of a URL a page built ahead of time cannot
-// have, so the recognition threw before the fallback it guards could run.
-// Replacing that with `instanceof URL` traded the throw for a **realm**: a URL
-// built in another JavaScript context answers everything a URL answers and fails
-// the identity, so a genuine event crossed as an ordinary object and the Python
-// handler raised on `event['method']`. The comment below already said exactly
-// that about `Request`, which made it my own contradiction rather than a
-// surprise.
-//
-// So a behaviour again, and the `try` is what keeps the first failure closed:
-// whatever a guarded member does, it does not escape from here.
-//
-// A throw answers **no**, and that was the other way round for a day. *A guarded
-// member is still a URL* sounds right and admits every object whose getter
-// throws, which is a recognition widened by an accident rather than by a
-// measurement — and the failure it trades against is the mild one. Refusing a
-// genuine event is loud: the handler raises on `event['method']` and the author
-// reads a Python error. Admitting a business object is silent: its fields
-// disappear and the page is merely wrong. Between a loud wrong answer and a
-// quiet one, take the loud one.
+// A behaviour and not `instanceof URL`: a URL built in another JavaScript
+// context answers everything a URL answers and fails the identity, and a genuine
+// event would cross as an ordinary object, the Python handler raising on
+// `event['method']`. The same holds for `Request` below.
 //
 // The path and the scheme rather than the query, because those are the parts a
-// prerendered page necessarily has — it is rendered *for* a path — so no member
-// SvelteKit is known to guard is read at all.
+// prerendered page necessarily has — it is rendered *for* a path. While
+// prerendering, SvelteKit hands over a **proxy** that refuses the one part a page
+// built ahead of time cannot have, `searchParams`, so no member it is known to
+// guard is read at all, and the `try` of the caller keeps whatever a guarded
+// member does from escaping.
 //
-// And a URL is **a value of a class**, never a bag of keys, which is the
-// question `plainObject` was written for and which `plainData` already asks to
-// decide what it may flatten. Two strings are cheap to write down, and the
-// fourth reading of this line did exactly that: an ordinary HTTP context whose
-// `url` was `{pathname, protocol, href, searchParams}` — with a real Request, a
-// fetch and params beside it — passed every other test and lost its own fields.
-// Every URL a framework hands over carries its own prototype, our realm's or
-// another's; only an imitation is built out of Object.
+// A throw answers **no**. Refusing a genuine event is loud: the handler raises
+// on `event['method']` and the author reads a Python error. Admitting a business
+// object whose getter throws is silent: its fields disappear and the page is
+// merely wrong. Between a loud wrong answer and a quiet one, take the loud one.
+//
+// And a URL is **a value of a class**, never a bag of keys, the question
+// `plainObject` answers for `plainData` too: an ordinary HTTP context whose `url`
+// is `{pathname, protocol, href, searchParams}`, a real Request, a fetch and
+// params beside it, keeps its own fields. Every URL a framework hands over
+// carries its own prototype, our realm's or another's; only an imitation is
+// built out of Object.
 const urlish = (value) =>
     typeof value?.pathname === 'string' &&
     typeof value?.protocol === 'string' &&
@@ -3651,19 +3636,18 @@ export function pyNumbers(value) {
 
 // The crossings, all of them, in one place.
 //
-// Nine functions below carry a value between Python and JavaScript, and each
+// Eight functions below carry a value between Python and JavaScript, and each
 // applies some part of the same five treatments. Every choice is argued beside
 // the function it belongs to, and that is the right place for a *reason*; it is
 // the wrong place for a *comparison*, because the choices are not independent.
 // Whether a `load()` converts its result and a DOM handler does not is one
-// decision taken nine times, and nobody could see it without this table.
+// decision taken eight times, and nobody could see it without this table.
 //
 //                | arity | args in  | coroutine | result out | memoised |
 //   pyCall       |  yes  | pyArg    | awaited   | plainData  |          |
 //   pyHandler    |  yes  | pyCall, with the arity read off the signature  |
 //   pyEvent      |  yes  | pyArg    | fired     |            |          |
 //   pyBoundary   |  (a)  | restored |           |            |   yes    |
-//   pyModule     |  yes  |          |           | pyNumbers  |   yes    |
 //   pyExport     |       |          |   (b)     | plainData  |   yes    |
 //   jsCall       |       | outbound |           | inbound    |          |
 //   pyComponent  |  yes  |          | scheduled | pyNumbers  |          |
@@ -4872,15 +4856,7 @@ export const pyExpression = (call, where, lineOffset, arity, kept = false) =>
     identified(
         (...args) =>
             running(
-                () => {
-                    templateReads += 1;
-
-                    try {
-                        return call(args.slice(0, arity).map(pyBind));
-                    } finally {
-                        templateReads -= 1;
-                    }
-                },
+                () => call(args.slice(0, arity).map(pyBind)),
                 where,
                 lineOffset,
                 kept === true ? null : (COMPARED[kept] ?? pyNumbers)
@@ -4893,21 +4869,29 @@ export const pyExpression = (call, where, lineOffset, arity, kept = false) =>
 // that did not run, or deleted — is read by Python code as CPython reads it,
 // `NameError` (`$B.resolve_in_scopes`, where a read the namespace no longer
 // answers goes), and by the template as Svelte renders a value that is not
-// there: empty. The template is the reader while one of its expressions is
-// evaluated, which `templateReads` counts; what that expression calls is read
-// under the same rule.
-let templateReads = 0;
+// there: empty.
+//
+// The template is the text between its braces, the way the dot is: a read is
+// the template's when the frame making it is one of the functions the markup
+// pass compiled, which carry the name `__expr_…` and nothing an author may
+// write. A function that expression calls is Python and reads as Python does,
+// so its `except NameError` is taken whoever called it.
+const TEMPLATE_FRAME = '__expr_';
 
 (function installTemplateAbsence($B) {
     const resolve = $B.resolve_in_scopes;
     const declares = (namespace, name) =>
         namespace !== null && typeof namespace === 'object' && namespace.$proxy === true && name in namespace;
+    const templates = () => {
+        const code = $B.frame_obj?.frame?.[0];
+        return typeof code === 'string' && code.startsWith(TEMPLATE_FRAME);
+    };
 
     $B.resolve_in_scopes = function (name, namespaces, inum) {
         try {
             return resolve.call(this, name, namespaces, inum);
         } catch (error) {
-            if (templateReads > 0 && namespaces.some((one) => declares(one, name))) return undefined;
+            if (templates() && namespaces.some((one) => declares(one, name))) return undefined;
 
             throw error;
         }

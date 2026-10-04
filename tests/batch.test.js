@@ -48,10 +48,10 @@ describe('batch', () => {
     });
 
     test('a size below one is refused, and says so', () => {
-        expect(setup()('bad')).toContain('size must be an integer of at least one');
+        expect(setup()('bad')).toContain('n must be an integer of at least one');
     });
 
     test('and so is a fractional size', () => {
-        expect(setup()('fractional')).toContain('size must be an integer of at least one');
+        expect(setup()('fractional')).toContain('n must be an integer of at least one');
     });
 });

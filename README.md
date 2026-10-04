@@ -77,7 +77,7 @@ rest of that configuration and what each line buys.
 npm install
 npm run dev
 
-npm test             # 1 560 tests: semantics, props, reactivity, Svelte surface
+npm test             # 1 572 tests: semantics, props, reactivity, Svelte surface
 npm run test:quiet   # the suite's own output: a green run must say nothing
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
@@ -161,7 +161,7 @@ of that prefix in the same scope.
 | `fromnow(value)` | *none*, "3 days ago" or "in 2 hours", kept right as time passes |
 | `slugify(text)` | *none*, a title made into a URL segment, as Django's `\|slugify` |
 | `striptags(html)` | *none*, HTML shown as text, parsed rather than pattern-matched |
-| `urlencode(value)` | *none*, a value, or a mapping, encoded into a URL |
+| `urlencode(value)` | *none*, a value, a mapping or a list of pairs, encoded into a URL |
 | `js` | *none*, the JavaScript globals: `js.Response`, `js.JSON`, `js.URL` |
 | `items.append(x)` | `items.push(x)`, since `$state` proxies deeply |
 
@@ -407,9 +407,9 @@ A template reads as Python and means what Python means, with two deliberate
 exceptions. Both exist so that the everyday line stays one line, and both are
 worth knowing before writing a component.
 
-*(The script has two of its own, `importjs` and `=>`, the arrow being a derived
-when it names and an effect when it does not. The five are gathered at the end of
-this section.)*
+*(The script has its own: `importjs`, `=>`, the arrow being a derived when it
+names and an effect when it does not, and `<=>`. All of them are gathered at the
+end of this section.)*
 
 **The dot finds a key.** `{row.label}` reads a dict as well as an object, exactly
 as Jinja's dot does, so the shape of your data stops dictating the shape of your
@@ -464,9 +464,9 @@ being Python.
 
 ### The whole dialect, in one table
 
-Five places read as something other than plain Python. Three are in the markup,
-two in the script, and there are no others: everything else in a component is
-Python that means what Python means.
+Eight forms read as something other than plain Python, five in the markup and
+four in the script, the named arrow being in both, and there are no others:
+everything else in a component is Python that means what Python means.
 
 | | Where | Reads as | Because |
 |---|---|---|---|
@@ -499,7 +499,7 @@ derived that follows it — the same two signs the script uses.
 different one. `bind:` is the way to write a name the markup declared.
 
 The four in the script are the only lines a component holds that Python would
-refuse to parse. Both are rewritten **on the same line**, so nothing downstream,
+refuse to parse. All four are rewritten **on the same line**, so nothing downstream,
 line numbers, tracebacks or source maps, can tell the difference. A plain `.py`
 gets neither: a module is Python, and only a file with a template has the
 dialect.
@@ -568,9 +568,11 @@ It is also JavaScript's arrow, and that is what a derived is: an expression
 re-evaluated rather than a value computed once.
 
 `=>` is a `SyntaxError` in Python, so no valid source can contain one outside a
-string or a comment. It is rewritten to `doubled = derived(lambda: count * 2)`
+string or a comment. It is rewritten to `doubled = derived(lambda: (count * 2))`
 **on the same line**, so every line number, traceback and source map is
-untouched, and `=>` inside a string or comment is left alone.
+untouched, and `=>` inside a string or comment is left alone. The parentheses
+keep what `=` would read: `pair => a, b` is the tuple. A `:=` inside the arrow
+is refused, since it would bind its name inside the lambda.
 
 **For anything that needs statements, `@derived` decorates a function:**
 
@@ -1091,10 +1093,6 @@ async def load():
     rows = ["…"]
 ```
 
-An exception raised *inside* a coroutine surfaces through Brython's loop, not
-through the wrapper, so it does not carry the file and line the synchronous path
-adds.
-
 `@effect` on an `async def` runs too, as Svelte runs `$effect(async () => …)`:
 what it reads **before its first `await`** is what it follows, and nothing it
 returns is taken for a cleanup.
@@ -1364,11 +1362,11 @@ renders `-4` server-side.
 in the module, so it is shared by every request the process serves. Svelte warns
 about exactly this for module-level `$state` in a `.svelte.js`. Harmless when
 **prerendering**, one pass with no concurrent users, and a data leak under
-per-request rendering. Svelte's answer is context, which Svelthon does not
-expose to Python yet, so the two gaps compound: per-request SSR needs context
-first.
+per-request rendering. Svelte's answer is context, and Python has it: what
+belongs to one request goes through `set_context` and `get_context`, not into a
+store.
 
-Prerendering is therefore the reachable target: it needs no server, it fits the
+Prerendering is the simplest target: it needs no server, it fits the
 build chain that already runs Brython under Node, and it is what a documentation
 or demo site actually wants.
 
@@ -1401,7 +1399,7 @@ the page updates to code that never changed. The plugin's `hotUpdate` hook
 invalidates the component's virtual modules, and `npm run test:hmr` checks both
 paths.
 
-A store goes through a different path, `load()` rather than the preprocessor, so
+A store goes through a different path, `load()` rather than the preprocessor,
 and had the same illness, worse: its own `.svelte.js` module has to be
 invalidated too, or its `load()` never re-runs and the cache keeps the old body.
 
@@ -1411,7 +1409,10 @@ invalidated too, or its `load()` never re-runs and the cache keeps the old body.
 sitting beside the component or on the configured `path`. Python's standard
 library does not ship: `import json`, `import math` or `from browser import
 timer` is refused on its line when the component compiles, with what stands in
-for it where there is something. A module is found by its file name alone: a
+for it where there is something. So is what would reach for it at run time, a
+`type` alias or a generic `def f[T]`, `__reduce__()` and `help("name")`, and
+so are the builtins a page cannot run: `eval`, `exec` and `compile`, which need
+a parser the runtime leaves out, `__import__` and `open`. A module is found by its file name alone: a
 subdirectory is not a package, so `from lib import models` is refused too, and
 `models.py` is imported as `import models` once `lib` is on `path`. Everything else a template needs is already a
 name: `tojson`, `from_json`, `batch`, `date`, `fromnow`, `slugify`, `striptags`,
@@ -1435,7 +1436,7 @@ rendered in the reader's own zone, which is what an instant is for.
 
 The whole runtime, gzipped, is **220 KB**. That is
 `vendor/brython_runtime.js`, the half without the parsing chain, which is what a
-browser gets; the full bundle it is cut from is 271 KB and never ships.
+browser gets; the full bundle it is cut from is 272 KB and never ships.
 
 ## Svelte surface covered
 
@@ -1467,7 +1468,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 1 560 tests as written (vitest reports more, one per
+Validated by `npm test`, 1 572 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;
@@ -1485,13 +1486,10 @@ one that short-circuits `augm_assign` breaks `Protocols`.
 
 ### Known divergences
 
-Three, each flagged by a `test.fails` that will speak up the day it changes. Two
-are Brython's: a comprehension's variable **leaks into the enclosing scope**
-(`[q for q in range(3)]` leaves `q` defined), at module level and inside a
-function alike. The third is Svelte's, and it is not a bug: a `$derived` that
-hands back the object it was given compares equal to itself, so nothing
-propagates from it, which is why a reader subscribes to the object rather than
-to the derived (see [Reactivity](#reactivity-one-signal-per-name)).
+One, and it is Svelte's, not a bug: a `$derived` that hands back the object it
+was given compares equal to itself, so nothing propagates from it, which is why
+a reader subscribes to the object rather than to the derived (see
+[Reactivity](#reactivity-one-signal-per-name)).
 
 ## Editor support
 
@@ -1558,14 +1556,9 @@ reloads.
 
 **Blocks a real application**
 
-- **Packaging.** `src/lib/` is the framework, mixed in with the demo. Using it
-  anywhere else means turning it into an installable npm package. Nothing
-  technical stands in the way. It is the one item on this list that is pure
-  work. The SvelteKit spike already showed the shape it has to take: the
-  preprocessor and the plugin must share their registry through
-  `globalThis`, because SvelteKit loads `svelte.config.js` and Vite loads
-  `vite.config.js` through different loaders, and this file is then evaluated
-  twice.
+- **Publishing.** The package is defined, its `exports` and its `files`, and it
+  is not on npm yet, so the `npm install svelthon` of the quick start waits for
+  it.
 
 
 **Design notes**: [notes/template.md](notes/template.md) on what a template
@@ -1662,5 +1655,5 @@ covered by that licence and keeps its own, BSD-3-Clause, Copyright (c) 2012
 Pierre Quentel. Its notice travels beside the files it covers, in
 `vendor/LICENSE`, and both are in the published tarball.
 
-What those two files are built from, and the five commits proposed upstream they
+What those two files are built from, and the commits proposed upstream they
 carry ahead of a release, is in `vendor/BRYTHON_FIX.md`.

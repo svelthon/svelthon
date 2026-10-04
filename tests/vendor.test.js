@@ -598,6 +598,22 @@ test('help is callable', () => {
     expect(_b_.callable(_b_.help)).toBe(true);
 });
 
+// Four syntax errors Brython failed to raise, failing in its own code instead:
+// a message dropped, a location read off the wrong fields, a helper called
+// under a name that no longer exists, and a recursion past the stack. Each is
+// the error CPython 3.14 raises for the same source.
+test.for([
+    ['fstring-conversion-message', 'x = 1\ny = f"{x!z}"\n', "f-string: invalid conversion character 'z': expected 's', 'r', or 'a'"],
+    ['bytes-str-concat-message', 'x = b"a" "b"\n', 'cannot mix bytes and nonbytes literals'],
+    ['future-import-errors', 'from __future__ import braces\n', 'not a chance'],
+    ['future-import-errors', 'from __future__ import nothing_here\n', 'future feature nothing_here is not defined'],
+    ['too-many-nested-parentheses', `x = ${'('.repeat(201)}1${')'.repeat(201)}\n`, 'too many nested parentheses']
+])('syntax errors as CPython raises them: %s', ([, source, message]) => {
+    const { compile } = createRequire(import.meta.url)('../src/lib/compile.cjs');
+
+    expect(() => compile(source, 'Probe', 'probe.py', { plain: true })).toThrow(`SyntaxError: ${message}`);
+});
+
 // Imported here and not at the top: the module does not compile without the
 // repair, and that has to fail this test alone.
 test('t-strings as CPython has them: tstring-nested-in-fstring', async () => {

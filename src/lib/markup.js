@@ -2581,7 +2581,14 @@ export function collector(defs, lines, columns) {
                 ].join('\n')
             );
         } else {
-            defs.push(`def ${name}(${args.join(', ')}):\n    return ${wrapper || ''}(${expression})`);
+            // A comma at the top level gets its own parentheses inside the
+            // wrapper's: `{a, b}` is the tuple Python reads, where `__text(a, b)`
+            // handed the wrapper two arguments and showed `1`.
+            const held = wrapper && atTopLevel(expression, (i) => expression[i] === ',') !== -1;
+
+            defs.push(
+                `def ${name}(${args.join(', ')}):\n    return ${wrapper || ''}(${held ? `(${expression})` : expression})`
+            );
         }
 
         return name;

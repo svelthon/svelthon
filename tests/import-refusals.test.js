@@ -35,6 +35,17 @@ test.for([
     await expect(compiled(written)).rejects.toThrow(message);
 });
 
+// The line is counted from where the body starts, after the tag's `>`: an
+// opening tag written over two lines made every line of the Python one too few.
+test.for([['<script lang="python">\nx = 1\nimport json\n', 3], ['<script\n    lang="python">\nx = 1\nimport json\n', 4]])(
+    'the line is the file s own, for a tag laid out as %j',
+    async ([opening, line]) => {
+        await expect(preprocess(`${opening}</script>\n\n<p>{x}</p>\n`, [python()], { filename: FILE })).rejects.toThrow(
+            `(src/App.svelte:${line})`
+        );
+    }
+);
+
 // A module is found by its file name, beside the component or on `path`. A
 // directory of the project, `src/lib` here, is not a package, and the refusal
 // says so rather than blaming the standard library.
@@ -87,6 +98,25 @@ test.for([
 ])('`%s` is refused on its line', ([written, message]) => {
     expect(() => compile(`${written}\n`, 'C', 'src/C.svelte')).toThrow(message);
     expect(() => compile(`${written}\n`, 'C', 'src/C.svelte', { plain: true })).toThrow(message);
+});
+
+// The builtins that need a parser, a module fetched at run time or a file
+// system compiled, and died in the browser on `$B.Parser is not a constructor`
+// or `Network error`. Refused while the name is the builtin.
+test.for([
+    ['x = eval("1 + 1")', /`eval\(\)` parses its text at run time.*\(src\/C\.svelte:1\)/],
+    ['def run(code):\n    exec(code)', /`exec\(\)` parses its text.*\(src\/C\.svelte:2\)/],
+    ['code = compile("1", "<s>", "eval")', /`compile\(\)` parses its text/],
+    ['json = __import__("json")', /`__import__\(\)` loads a module at run time.*`import name`/],
+    ['def read():\n    with open("notes.txt") as f:\n        return f.read()', /`open\(\)` reads a file.*\(src\/C\.svelte:2\)/]
+])('`%s` is refused on its line', ([written, message]) => {
+    expect(() => compile(`${written}\n`, 'C', 'src/C.svelte')).toThrow(message);
+    expect(() => compile(`${written}\n`, 'C', 'src/C.svelte', { plain: true })).toThrow(message);
+});
+
+test('while a function of the author s own of that name is theirs', () => {
+    expect(() => compile('def open(path):\n    return path\n\nopen("x")\n', 'C', 'src/C.svelte')).not.toThrow();
+    expect(() => compile('def run(evaluate):\n    return evaluate("1")\n', 'C', 'src/C.svelte')).not.toThrow();
 });
 
 // What needs none of them compiles: `help` of an object prints its docstring, of

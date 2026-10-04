@@ -34,7 +34,7 @@ describe('a helper refuses in the project’s own dialect', () => {
     test.for([
         ['date', 'show_date', /date\(\): .* is not a date/],
         ['fromnow', 'show_fromnow', /fromnow\(\): .* is not a date/],
-        ['batch', 'show_batch', /batch\(\): size must be an integer/]
+        ['batch', 'show_batch', /batch\(\): n must be an integer/]
     ])('%s says what is wrong, with the prefix and the position', ([, call, sentence]) => {
         const component = setup();
 
@@ -88,6 +88,6 @@ describe('and the mark is what makes that possible', () => {
     });
 
     test('a helper called outside a component still says what is wrong', () => {
-        expect(() => batch([1], 0)).toThrow(/^svelthon — batch\(\): size must be an integer/);
+        expect(() => batch([1], 0)).toThrow(/^svelthon — batch\(\): n must be an integer/);
     });
 });

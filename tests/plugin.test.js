@@ -220,6 +220,18 @@ describe('the preprocessor decides by the script tag', () => {
 
         expect(code.match(/<script\b[^>]*>/)[0]).toBe('<script generics="T">');
     });
+
+    // An attribute's name is read in any case, by both passes: the markup was
+    // compiled for `<script LANG="python">` while the script went through as
+    // JavaScript, and the page said `rows is not defined`.
+    test('and reads the attribute in any case, as the markup pass does', async () => {
+        const filename = resolve(fixtures, 'BlockScope.svelte');
+        const source = readFileSync(filename, 'utf8').replace('<script lang="python">', '<script LANG="python">');
+        const { code } = await preprocess(source, [pre], { filename });
+
+        expect(code.match(/<script\b[^>]*>/)[0]).toBe('<script>');
+        expect(code.match(/<script>([\s\S]*?)<\/script>/)[1]).toContain('$state');
+    });
 });
 
 // One component, one generated module. Both script blocks derive their id from

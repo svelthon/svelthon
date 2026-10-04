@@ -51,7 +51,7 @@ const FORMS = [
     ['a starred unpacking', 'a, *date = [1, 2, 3]'],
     ['a for target', 'for date in [1]:\n    pass'],
     ['a for target inside an if', 'if True:\n    for date in [1]:\n        pass'],
-    ['a with clause', 'with open() as date:\n    pass'],
+    ['a with clause', 'with manager() as date:\n    pass'],
     ['an except clause', 'try:\n    pass\nexcept Exception as date:\n    pass'],
     ['a global written in a def', 'def go():\n    global date\n    date = 1'],
     ['a walrus at the top level', 'if (date := 1):\n    pass']
@@ -142,7 +142,7 @@ describe('and the ones that bind a value become a signal', () => {
         ['a name imported and renamed', 'from other import name as thing'],
         ['a for target', 'for thing in [1]:\n    pass'],
         ['a for target unpacked', 'for other, thing in [(1, 2)]:\n    pass'],
-        ['a with clause', 'with open() as thing:\n    pass'],
+        ['a with clause', 'with manager() as thing:\n    pass'],
         ['a match capture', 'match 1:\n    case thing:\n        pass'],
         ['a match capture in a sequence', 'match [1]:\n    case [*thing]:\n        pass'],
         ['a match capture in a mapping', 'match {}:\n    case {**thing}:\n        pass']

@@ -35,6 +35,17 @@ describe('compile errors carry Python’s own message', () => {
         expect(failure(src)).toContain(expected);
     });
 
+    // Brython failing in its own JavaScript, rather than raising a Python
+    // exception, arrived as the bare JavaScript error, naming no file. Brackets
+    // nested just below the tokenizer's limit of 200 still recurse past the
+    // parser's stack.
+    test('and a failure of Brython s own code still says which file', () => {
+        const nested = failure(`x = ${'['.repeat(199)}${']'.repeat(199)}`);
+
+        expect(nested).toContain('Brython could not compile this file: RangeError');
+        expect(nested).toContain('(probe.py)');
+    });
+
     // The line number is what a source map cannot recover on its own.
     test('and the line it happened on', () => {
         expect(failure('x = 1\ny = 2\nreturn 3')).toContain('probe.py:3');

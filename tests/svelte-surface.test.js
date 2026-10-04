@@ -88,6 +88,10 @@ describe('the directives that are not bind: or on:', () => {
     test('a class array joins its truthy members', () =>
         expect(render(ClassArray).at('class').className).toBe('one two'));
 
+    // Written through `str()`, a set gave the classes `{'primary',` and `'btn'}`.
+    test('and so does a set, in whatever order it yields them', () =>
+        expect([...render(ClassArray).at('set').classList].sort()).toEqual(['btn', 'primary']));
+
     test('use: hands its parameters to the action as a dict', () =>
         expect(render(UseParams).at('use').dataset.mark).toBe('yes'));
 

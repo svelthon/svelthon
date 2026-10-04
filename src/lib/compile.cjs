@@ -139,11 +139,21 @@ const habitsIn = (text) => {
 // at compile time. A syntax error in `{ok ? "yes" : "no"}` names the line of
 // markup it is written on, quotes it, and says what Python writes instead.
 function pythonError(error, source, lineOffset, block = '', ranges = [], src = '') {
-    // A JavaScript Error is not ours to describe: it already carries a message
-    // and a stack, and wrapping it produced the useless
-    // `JSObject: <Javascript object: [object Error]>`, which hid what actually
-    // went wrong behind our own formatting.
-    if (error instanceof Error) return error;
+    // A JavaScript Error is Brython failing in its own code rather than raising
+    // a Python exception: `RangeError` on a few hundred nested brackets. Its
+    // message is kept as it is, since read through Python's formatting it gave
+    // `JSObject: <Javascript object: [object Error]>`, and the file is said,
+    // which the bare error never did.
+    if (error instanceof Error) {
+        const wrapped = positioned(
+            new SyntaxError(`svelthon — Brython could not compile this file: ${error.name}: ${error.message} (${source})`),
+            source
+        );
+
+        wrapped.cause = error;
+
+        return wrapped;
+    }
 
     let described = 'PythonError';
     let where = source;
@@ -948,6 +958,24 @@ function opened(expr) {
 
     return depth;
 }
+// The name the first `:=` of an expression binds, outside its strings, or null.
+function walrusIn(expr) {
+    for (let i = 0; i < expr.length; i++) {
+        const skip = atomic(expr, i);
+
+        if (skip > 0) {
+            i += skip - 1;
+            continue;
+        }
+
+        if (expr[i] === ':' && expr[i + 1] === '=') {
+            return expr.slice(0, i).match(/([\p{XID_Start}_]\p{XID_Continue}*)\s*$/u)?.[1] ?? '';
+        }
+    }
+
+    return null;
+}
+
 const ARROW_INDENTED = /^[ \t]+(?:[\p{XID_Start}_]\p{XID_Continue}*\s*)?=>\s/u;
 
 function takeArrows(src, where, lineOffset, allowed) {
@@ -1009,6 +1037,21 @@ function takeArrows(src, where, lineOffset, allowed) {
             );
         }
 
+        // The right-hand side becomes the body of a lambda, and a name `:=`
+        // binds there is the lambda's: `doubled => (half := count) * 2` left
+        // `half` unbound in the module, where `=` would have bound it.
+        const walrus = found ? walrusIn(expression) : null;
+
+        if (walrus !== null) {
+            throw refuse(
+                `svelthon — \`${walrus} :=\` inside \`=>\` would bind \`${walrus}\` in the ` +
+                    `lambda the ${kind(named)} becomes, not in the module; assign it on a ` +
+                    `line of its own (${at})`,
+                where,
+                lineno
+            );
+        }
+
         if (found && !allowed) {
             throw refuse(
                 `svelthon — \`=>\` belongs to a component; a .py module writes a ` +
@@ -1045,11 +1088,15 @@ function takeArrows(src, where, lineOffset, allowed) {
             );
         } else if (watched)
             out.push(`__inspect_${anonymous++} = inspect(lambda: [${watched[2]}])`);
-        else if (both) out.push(`${both[1]} = bindable(${both[2] || ''})`);
-        else if (named) out.push(`${found[1]} = derived(lambda: ${expression})`);
+        // The right-hand side in parentheses, as the `=` it stands for reads it:
+        // `pair => a, b` is the tuple `(a, b)`, where a bare comma made `b` a
+        // second argument of the marker, dropped, and `=> f(a), g(a)` ran `g(a)`
+        // once, outside the effect.
+        else if (both) out.push(`${both[1]} = bindable(${both[2] ? `(${both[2]})` : ''})`);
+        else if (named) out.push(`${found[1]} = derived(lambda: (${expression}))`);
         // The generated name is bound like any other effect's, so it stays out
         // of the way with the dunder prefix Python already reads as private.
-        else out.push(`__effect_${anonymous++} = effect(lambda: ${expression})`);
+        else out.push(`__effect_${anonymous++} = effect(lambda: (${expression}))`);
     }
 
     return out.join('\n');
@@ -1739,6 +1786,46 @@ const decoratorSpelling = (node) => {
 // top level reads them as a statement, so a deeper one is the same construct.
 const STATEMENT_RUNES = new Set(['inspect', 'inspect_with']);
 
+// `effect(f)` and `derived(f)` are the call spelling of a decorator, and at run
+// time a decorator is the identity: what the compiler wires is read off a
+// declaration. Written as a statement, at any level, the call is a declaration
+// of nothing, and the effect never ran without a word.
+const BARE_MARKERS = new Set(['effect', 'derived']);
+
+const bareMarker = (node) => {
+    if (!(node instanceof $B.ast.Expr) || !(node.value instanceof $B.ast.Call)) return null;
+
+    const callee = node.value.func;
+    const name =
+        callee instanceof $B.ast.Name
+            ? callee.id
+            : callee instanceof $B.ast.Attribute && callee.value instanceof $B.ast.Name
+              ? callee.value.id
+              : null;
+
+    if (!BARE_MARKERS.has(name)) return null;
+
+    return callee instanceof $B.ast.Name ? `${name}(…)` : `${name}.${callee.attr}(…)`;
+};
+
+// Both names are locked words, so a call to either is always ours.
+function refuseBareMarker(node, source, lineOffset) {
+    const spelling = bareMarker(node);
+    if (spelling === null) return;
+
+    const line = node.lineno + lineOffset;
+    const instead = spelling.startsWith('effect')
+        ? 'an effect is `=> expression`, or a `def` decorated with `@effect`'
+        : 'a derived value is `name => expression`, or a `def` decorated with `@derived`';
+
+    throw refuse(
+        `svelthon — \`${spelling}\` written alone declares nothing, so it would never run: ` +
+            `${instead} (${source}:${line})`,
+        source,
+        line
+    );
+}
+
 function refuseNestedRunes(body, source, lineOffset) {
     const called = (node, names) =>
         node.value instanceof $B.ast.Call &&
@@ -1747,6 +1834,8 @@ function refuseNestedRunes(body, source, lineOffset) {
 
     const scoped = (statements) => {
         for (const node of statements) {
+            refuseBareMarker(node, source, lineOffset);
+
             const spelling =
                 decoratorSpelling(node) ||
                 ((node instanceof $B.ast.Assign && called(node, RUNE_NAMES)) ||
@@ -1772,6 +1861,8 @@ function refuseNestedRunes(body, source, lineOffset) {
     // wired whether it ran or not. At the top level these are the mechanism
     // itself, since `x => expr` compiles to `x = derived(lambda: …)`.
     for (const node of body) {
+        refuseBareMarker(node, source, lineOffset);
+
         if (
             node instanceof $B.ast.FunctionDef ||
             node instanceof $B.ast.AsyncFunctionDef ||
@@ -2327,6 +2418,18 @@ function refuseTypeParameters(body, source, lineOffset) {
 // the builtin only while the author binds no name of that spelling.
 const IMPORTED_BY_METHOD = { __reduce__: 'copyreg', __reduce_ex__: 'copyreg' };
 
+// Builtins that need what the page does not have, each refused while the name
+// is the builtin: they compiled, and died in the browser on `$B.Parser is not a
+// constructor` or `Network error`.
+const PARSED = 'parses its text at run time, and the runtime the page loads has no parser';
+const UNSHIPPED_BUILTINS = {
+    eval: PARSED,
+    exec: PARSED,
+    compile: PARSED,
+    __import__: 'loads a module at run time, past the compiler that checks and bundles imports; write `import name`',
+    open: 'reads a file, and a page has no file system to read it from'
+};
+
 function refuseLibraryCalls(tree, source, lineOffset) {
     const calls = [];
     const bound = new Set();
@@ -2360,9 +2463,22 @@ function refuseLibraryCalls(tree, source, lineOffset) {
             $B.stdlib[name.split('.')[0]] === undefined &&
             $B.builtins[name] === undefined;
 
-        if (module === undefined && !documented) continue;
+        const builtin =
+            func instanceof $B.ast.Name && Object.hasOwn(UNSHIPPED_BUILTINS, func.id) && !bound.has(func.id)
+                ? func.id
+                : null;
+
+        if (module === undefined && !documented && builtin === null) continue;
 
         const line = call.lineno + lineOffset;
+
+        if (builtin !== null) {
+            throw refuse(
+                `svelthon — \`${builtin}()\` ${UNSHIPPED_BUILTINS[builtin]} (${source}:${line})`,
+                source,
+                line
+            );
+        }
 
         throw refuse(
             module !== undefined

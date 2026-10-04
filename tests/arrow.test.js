@@ -2,6 +2,62 @@ import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import ArrowDerived from './fixtures/ArrowDerived.svelte';
 import ArrowEffect from './fixtures/ArrowEffect.svelte';
+import ArrowTuple from './fixtures/ArrowTuple.svelte';
+import { createRequire } from 'node:module';
+
+const { compile } = createRequire(import.meta.url)('../src/lib/compile.cjs');
+
+// The right-hand side of an arrow reads as the right-hand side of `=` reads:
+// a comma makes a tuple. Wrapped bare in the lambda, `pair => a, b` handed `b`
+// to the marker as a second argument and kept `1`, `size: tuple <=> 3, 4`
+// defaulted to `3`, and the effect `=> f(a), g(a)` ran `g(a)` once, outside it.
+describe('an arrow whose right-hand side holds a comma', () => {
+    test('is the tuple `=` would give, and so is a bindable default', () => {
+        globalThis.arrowTupleLog = [];
+        const target = document.body.appendChild(document.createElement('div'));
+        mount(ArrowTuple, { target });
+        flushSync();
+
+        const read = (k) => target.querySelector(`p[data-k="${k}"]`).textContent;
+
+        expect(read('pair')).toBe(read('assigned'));
+        expect(read('pair')).toBe('(1, 2)');
+        expect(read('size')).toBe('(3, 4)');
+
+        // The template's braces hold a Python expression the same way: its
+        // wrapper took `{a, b}` as two arguments and showed `1`.
+        expect(read('template')).toBe(read('assigned'));
+
+        target.querySelector('button').click();
+        flushSync();
+
+        expect(read('pair')).toBe('(2, 2)');
+    });
+
+    test('and an effect runs every call of its tuple, each time', () => {
+        globalThis.arrowTupleLog = [];
+        const target = document.body.appendChild(document.createElement('div'));
+        mount(ArrowTuple, { target });
+        flushSync();
+
+        target.querySelector('button').click();
+        flushSync();
+
+        expect(globalThis.arrowTupleLog).toEqual(['first 1', 'second 1', 'first 2', 'second 2']);
+    });
+
+    // `:=` inside the arrow would bind in the lambda the arrow becomes, not in
+    // the module where `=` binds.
+    test('while a walrus inside an arrow is refused, on its line', () => {
+        expect(() => compile('count = 1\ndoubled => (half := count) * 2\n', 'Probe', 'src/Probe.svelte')).toThrow(
+            /`half :=` inside `=>` would bind `half` in the lambda the derived becomes.*\(src\/Probe\.svelte:2\)/
+        );
+        expect(() => compile('count = 1\n=> print(seen := count)\n', 'Probe', 'src/Probe.svelte')).toThrow(
+            /`seen :=` inside `=>` would bind `seen` in the lambda the effect becomes/
+        );
+        expect(() => compile('count = 1\nlabel => f"{count}:="\n', 'Probe', 'src/Probe.svelte')).not.toThrow();
+    });
+});
 
 // `doubled => count * 2` — a derived, written the way the state beside it is
 // written. Naming is not required for state, since a bare assignment already

@@ -30,14 +30,12 @@ same crossing seen from two places.
 | JavaScript → Python | an argument reaching a Python callback from JavaScript | `inbound` | `jsobj2pyobj` on each, so a number arrives as a number and not as a BigInt candidate |
 | both ways | Python calls a JavaScript function it imported | `jsCall` | converts arguments in depth going out, and the result coming back |
 | both ways | JavaScript calls a Python function of a module | `pyBoundary` | undoes the conversion Brython's interop applied on the way in, using the back-reference map |
-| both ways | a directive names a function of a Python module | `pyModule` | reads `$B.imported` lazily, trims to the declared arity, hands the result through `pyNumbers` |
-| neither | a value read for its signature | `declared` | unwraps `$js_func`, refuses any shape whose arity is not a number |
+| neither | a value read for its signature | `declared` | reads the arity of a function, a bound method or an instance's `__call__`; a builtin or a slot Python calls has none to trim to, and takes every argument; anything not callable answers `null` |
 
 ## The two rules that decide most cases
 
 **Who is calling.** If JavaScript is about to call Python, the door trims the
-call and converts the arguments — `pyEvent`, `pyHandler`, `pyModule`,
-`pyBoundary`. If Python is about to call JavaScript, the door converts what it
+call and converts the arguments — `pyEvent`, `pyHandler`, `pyBoundary`. If Python is about to call JavaScript, the door converts what it
 hands over — `jsCall`, `plainData`.
 
 **How deep it must go.** `plainData` walks; `pyNumbers` does not. The shallow one

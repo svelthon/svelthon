@@ -75,7 +75,7 @@ reste de cette configuration et ce que chaque ligne apporte.
 npm install
 npm run dev
 
-npm test             # 1 560 tests : sémantique, props, réactivité, surface Svelte
+npm test             # 1 572 tests : sémantique, props, réactivité, surface Svelte
 npm run test:quiet   # la sortie de la suite : un run vert ne doit rien dire
 npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
@@ -162,7 +162,7 @@ noms sur ce préfixe, dans la même portée.
 | `fromnow(valeur)` | *aucun*, « il y a 3 jours » ou « dans 2 heures », et ça reste juste |
 | `slugify(texte)` | *aucun*, un titre transformé en segment d'URL, comme le `\|slugify` de Django |
 | `striptags(html)` | *aucun*, du HTML affiché en texte, analysé et non filtré par motif |
-| `urlencode(valeur)` | *aucun*, une valeur, ou un dict, encodés dans une URL |
+| `urlencode(valeur)` | *aucun*, une valeur, un dict ou une liste de paires, encodés dans une URL |
 | `js` | *aucun*, les globales JavaScript : `js.Response`, `js.JSON`, `js.URL` |
 | `items.append(x)` | `items.push(x)`, puisque `$state` proxifie en profondeur |
 
@@ -416,9 +416,9 @@ exceptions délibérées près. Les deux existent pour que la ligne de tous les 
 tienne sur une ligne, et les deux méritent d'être sues avant d'écrire un
 composant.
 
-*(Le script en a deux à lui, `importjs` et `=>`, la flèche étant un dérivé quand
-elle nomme et un effet quand elle ne nomme pas. Les cinq sont rassemblées à la
-fin de cette section.)*
+*(Le script a les siennes : `importjs`, `=>`, la flèche étant un dérivé quand
+elle nomme et un effet quand elle ne nomme pas, et `<=>`. Toutes sont rassemblées
+à la fin de cette section.)*
 
 **Le point trouve une clé.** `{row.label}` lit un dict aussi bien qu'un objet,
 exactement comme le point de Jinja : la forme de vos données cesse donc de dicter
@@ -475,9 +475,10 @@ du gabarit en Python.
 
 ### Tout le dialecte, en un tableau
 
-Cinq endroits se lisent autrement que du Python nu. Trois dans le balisage,
-deux dans le script, et il n'y en a pas d'autres : tout le reste d'un composant
-est du Python qui veut dire ce que Python veut dire.
+Huit formes se lisent autrement que du Python nu, cinq dans le balisage et
+quatre dans le script, la flèche nommée étant dans les deux, et il n'y en a pas
+d'autres : tout le reste d'un composant est du Python qui veut dire ce que
+Python veut dire.
 
 | | Où | Se lit comme | Parce que |
 |---|---|---|---|
@@ -510,7 +511,7 @@ dérivé qui le suit — les deux signes que le script emploie déjà.
 `bind:` est la façon d'écrire un nom déclaré par le gabarit.
 
 Les quatre du script sont les seules lignes d'un composant que Python refuserait
-de parser. Toutes trois sont réécrites **sur la même ligne**, si bien que rien en
+de parser. Toutes quatre sont réécrites **sur la même ligne**, si bien que rien en
 aval (numéros de ligne, tracebacks, source maps) ne peut faire la différence.
 Un `.py` ordinaire n'a ni l'une ni l'autre : un module est du Python, et seul un
 fichier qui a un gabarit porte le dialecte.
@@ -582,9 +583,11 @@ expression réévaluée, pas une valeur calculée une fois.
 
 `=>` est une `SyntaxError` en Python, donc aucune source valide n'en contient
 hors chaîne ou commentaire. Il est réécrit en
-`doubled = derived(lambda: count * 2)` **sur la même ligne**, si bien que les
+`doubled = derived(lambda: (count * 2))` **sur la même ligne**, si bien que les
 numéros de ligne, les tracebacks et les source maps sont intacts, et un `=>`
-dans une chaîne ou un commentaire est laissé tel quel.
+dans une chaîne ou un commentaire est laissé tel quel. Les parenthèses gardent
+ce que `=` lirait : `pair => a, b` est le tuple. Un `:=` dans la flèche est
+refusé, puisqu'il lierait son nom dans la lambda.
 
 **Pour tout ce qui demande des instructions, `@derived` décore une fonction :**
 
@@ -1135,10 +1138,6 @@ async def load():
     rows = ["…"]
 ```
 
-Une exception levée *dans* une coroutine remonte par la boucle de Brython, pas
-par l'enveloppe : elle ne porte donc pas le fichier et la ligne que le chemin
-synchrone ajoute.
-
 `@effect` sur un `async def` s'exécute aussi, comme Svelte exécute
 `$effect(async () => …)` : ce qu'il lit **avant son premier `await`** est ce qu'il
 suit, et rien de ce qu'il rend n'est pris pour un nettoyage.
@@ -1415,10 +1414,10 @@ dans le module, donc il est partagé par toutes les requêtes servies par le
 processus. Svelte pose exactement le même avertissement pour un `$state` de
 niveau module dans un `.svelte.js`. Sans danger au **prérendu**, une seule
 passe et aucun utilisateur concurrent, et fuite de données en rendu par requête.
-La réponse de Svelte est le contexte, que Svelthon n'expose pas encore au
-Python : les deux manques se composent.
+La réponse de Svelte est le contexte, et Python l'a : ce qui appartient à une
+requête passe par `set_context` et `get_context`, pas par un store.
 
-Le prérendu est donc la cible atteignable : aucun serveur nécessaire, il tient
+Le prérendu est la cible la plus simple : aucun serveur nécessaire, il tient
 dans la chaîne de build qui exécute déjà Brython sous Node, et c'est ce dont un
 site de documentation ou une démo a réellement besoin.
 
@@ -1446,7 +1445,11 @@ qu'à ce qui remonte jusqu'à JavaScript.
 quel `.py` posé à côté du composant ou sur le `path` configuré. La
 bibliothèque standard de Python n'est pas livrée : `import json`, `import math`
 ou `from browser import timer` est refusé sur sa ligne à la compilation, avec
-ce qui le remplace quand il existe. Un module se trouve par son seul nom de
+ce qui le remplace quand il existe. De même pour ce qui irait la chercher à
+l'exécution, un alias `type` ou un `def f[T]` générique, `__reduce__()` et
+`help("nom")`, et pour les builtins qu'une page ne peut pas exécuter : `eval`,
+`exec` et `compile`, qui demandent un parseur que le moteur laisse de côté,
+`__import__` et `open`. Un module se trouve par son seul nom de
 fichier : un sous-dossier n'est pas un paquet, donc `from lib import models`
 est refusé aussi, et `models.py` s'importe par `import models` une fois `lib`
 sur le `path`. Tout ce dont un gabarit a besoin est déjà
@@ -1474,12 +1477,12 @@ instant.
 
 Le runtime entier, gzippé, fait **220 Ko**. C'est
 `vendor/brython_runtime.js`, la moitié sans la chaîne de parsing, celle qu'un
-navigateur reçoit ; le bundle complet dont elle est découpée en fait 271 et ne
+navigateur reçoit ; le bundle complet dont elle est découpée en fait 272 et ne
 part jamais.
 
 ## État
 
-Validé par `npm test`, 1 560 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 1 572 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
@@ -1497,13 +1500,10 @@ casse `Integers`, qui court-circuite `augm_assign` casse `Protocols`.
 
 ### Divergences connues
 
-Trois, chacune signalée par un `test.fails` qui alertera le jour où elle
-changera. Deux sont de Brython : la variable d'une compréhension **fuit dans la
-portée englobante** (`[q for q in range(3)]` laisse `q` défini), au niveau module
-comme dans une fonction. La troisième est de Svelte, et ce n'est pas un bug : un
-`$derived` qui rend l'objet qu'on lui a donné se compare égal à lui-même, donc
-rien n'en propage : c'est pourquoi un lecteur s'abonne à l'objet plutôt qu'au
-dérivé (voir [Réactivité](#réactivité--un-signal-par-nom)).
+Une, et elle est de Svelte, ce n'est pas un bug : un `$derived` qui rend l'objet
+qu'on lui a donné se compare égal à lui-même, donc rien n'en propage : c'est
+pourquoi un lecteur s'abonne à l'objet plutôt qu'au dérivé (voir
+[Réactivité](#réactivité--un-signal-par-nom)).
 
 ## Surface Svelte couverte
 
@@ -1602,13 +1602,9 @@ l'application ne recharge jamais.
 
 **Bloque une vraie application**
 
-- **Empaquetage.** `src/lib/` est le framework, mêlé à la démo. L'utiliser
-  ailleurs demande d'en faire un paquet npm installable. Rien ne s'y oppose
-  techniquement : c'est le seul point de cette liste qui soit du pur travail. Le
-  spike SvelteKit a déjà montré la forme que ça doit prendre : le préprocesseur
-  et le plugin doivent partager leur registre par `globalThis`, parce que
-  SvelteKit charge `svelte.config.js` et Vite charge `vite.config.js` par des
-  loaders différents, si bien que ce fichier est évalué **deux fois**.
+- **Publication.** Le paquet est défini, ses `exports` et ses `files`, et il
+  n'est pas encore sur npm : le `npm install svelthon` du démarrage rapide
+  l'attend.
 
 
 **Notes de conception** : [notes/template.md](notes/template.md) sur ce en quoi
@@ -1707,6 +1703,6 @@ couvert par cette licence et garde la sienne, BSD-3-Clause, Copyright (c) 2012
 Pierre Quentel. Son préavis voyage à côté des fichiers qu'il couvre, dans
 `vendor/LICENSE`, et les deux sont dans le tarball publié.
 
-Ce dont ces deux fichiers sont construits, et les cinq commits proposés en amont
+Ce dont ces deux fichiers sont construits, et les commits proposés en amont
 qu'ils portent en avance sur une version publiée, est dans
 `vendor/BRYTHON_FIX.md`.

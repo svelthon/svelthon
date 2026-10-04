@@ -1,7 +1,7 @@
 # Patches applied to the vendored Brython
 
 `brython_runtime.js` and `brython_compiler.js` are cut from one bundle, built
-from Brython's master plus forty-four proposed commits, with **four** edits
+from Brython's master plus forty-eight proposed commits, with **four** edits
 made in the file itself afterwards. The wrapper, the integer format and the
 `__call__` binding carry a `/* SVELTHON patch, see BRYTHON_FIX.md */` comment,
 the only way to find them again in 1.4 MB; the other edit *is* a comment, so
@@ -129,6 +129,10 @@ than by a build-time check, and going upstream retires none of them:
 | a template is iterated by a `TemplateIter` of its own, so `list()` works and two iterations do not share a counter (branch `tstring-template-iter`) | the same |
 | a t-string nested in an f-string leaves the f-string an f-string: the kind of each open string is kept with it (branch `tstring-nested-in-fstring`) | `tests/vendor.test.js`, `template_nested.py` imported alone |
 | `help` is the builtin function again, not the string `'type help()'` that replaced it in the builtins module, so `help(obj)` prints the docstring rather than raising `'str' object is not callable` (branch `help-is-callable`) | `tests/vendor.test.js`, `callable(help)` |
+| an invalid f-string conversion, `f"{x!z}"`, raises its `SyntaxError` with its message, which was passed in place of the parser and read as `undefined` (branch `fstring-conversion-message`) | `tests/vendor.test.js`, syntax errors as CPython raises them |
+| bytes concatenated with a string, `b"a" "b"`, raises `cannot mix bytes and nonbytes literals`: its location was read off token fields the AST nodes do not have (branch `bytes-str-concat-message`) | the same |
+| `from __future__ import braces` and an unknown future feature raise their `SyntaxError`, through `$B.raise_error_known_location`, where a local function of that name no longer exists (branch `future-import-errors`) | the same |
+| more than 200 nested brackets raise `too many nested parentheses` in the tokenizer, before the parser recurses past the stack (branch `too-many-nested-parentheses`) | the same |
 
 `scripts/browser-check.sh` covers the DOM node path as well, which is where
 identity across the boundary is observable.

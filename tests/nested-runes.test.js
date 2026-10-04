@@ -60,6 +60,21 @@ describe('a rune written below the top level', () => {
         expect(emitted.match(/\$inspect\(/g)).toHaveLength(1);
     });
 
+    // The call spelling written as a statement declares nothing at any level,
+    // the top one included: the decorator is the identity at run time, and the
+    // effect never ran, with nothing said.
+    test.for([
+        ['at the top level', 'count = 0\neffect(lambda: print(count))\n', '`effect(…)`', 2, /`=> expression`/],
+        ['dotted', 'count = 0\neffect.pre(lambda: print(count))\n', '`effect.pre(…)`', 2, /`@effect`/],
+        ['under an if', 'count = 0\nif count:\n    effect(lambda: print(count))\n', '`effect(…)`', 3, /`=> expression`/],
+        ['in a def', 'count = 0\ndef later():\n    effect(lambda: print(count))\n', '`effect(…)`', 3, /`=> expression`/],
+        ['derived', 'count = 0\nderived(lambda: count * 2)\n', '`derived(…)`', 2, /`name => expression`/]
+    ])('and a marker called as a statement is refused %s', ([, body, spelling, line, instead]) => {
+        expect(script(body)).toThrow(`${spelling} written alone declares nothing`);
+        expect(script(body)).toThrow(`(src/Probe.svelte:${line})`);
+        expect(script(body)).toThrow(instead);
+    });
+
     // A class body is no more the top level than a function body is.
     test('and inside a class', () => {
         expect(

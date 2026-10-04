@@ -413,7 +413,7 @@ export function batch(xs, size, fill) {
     size = written(size);
 
     if (!Number.isInteger(size) || size < 1) {
-        throw refuse('batch(): size must be an integer of at least one');
+        throw refuse('batch(): n must be an integer of at least one');
     }
 
     const items = __pybridge.seq(xs);
@@ -556,7 +556,8 @@ export function slugify(value) {
         .normalize('NFC')
         .toLowerCase()
         .replace(/[^\p{L}\p{N}\p{M}_]+/gu, '-')
-        .replace(/^-+|-+$/g, '');
+        // Django's `strip("-_")`: an underscore is kept inside, not at the ends.
+        .replace(/^[-_]+|[-_]+$/g, '');
 }
 
 // Jinja's `|striptags`, done by the browser's own parser, because nothing else
@@ -601,21 +602,18 @@ function mapping(value) {
     if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
     if (globalThis.__BRYTHON__.is_dict(value)) return true;
 
-    // The same question `plainData` asks, asked of the same predicate. This line
-    // read `=== Object.prototype` and the converter accepted a null prototype
-    // too, so one shape crossed three ways: `to_js` and `tojson` rendered it and
-    // `urlencode` wrote `<Javascript object: [object Object]>` into the page.
-    // A **class** under that name, and not the name alone. `ob_type` is
+    // The same question `plainData` asks, asked of the same predicate, so `to_js`,
+    // `tojson` and `urlencode` take the same shapes, a null prototype included.
+    // A **class** under the name `ob_type`, and not the name alone: it is
     // Brython's mark, and a foreign object is free to carry a field spelled the
-    // same: `{ob_type: "business", value: 42}` came out of `urlencode` as
-    // `%5Bobject%20Object%5D`, every parameter gone, while the identical Python
-    // dict encoded correctly. The question is *is this a Python object*, and
-    // `pyClass` is what the rest of the project asks — the same repair the
-    // inbound converter got when it read `ob_type === undefined`.
+    // same, `{ob_type: "business", value: 42}`, which encodes as the identical
+    // Python dict does. The question is *is this a Python object*, and `pyClass`
+    // is what the rest of the project asks.
     return !pyClass(value.ob_type) && plainObject(value);
 }
 
-// Jinja's shape: a string, or a mapping that becomes a whole query string. Not
+// Jinja's shape: a string, or a mapping or a sequence of pairs that becomes a
+// whole query string. Not
 // Jinja's behaviour, and not Django's either: both leave `/` unquoted, which
 // quietly turns `/tag/{urlencode(t)}` into two path segments.
 //
@@ -645,10 +643,20 @@ export function urlencode(value) {
         return encodeURIComponent(new Date(held).toISOString());
     }
 
-    if (mapping(value)) {
+    // A mapping, or a sequence of pairs, which Jinja's `|urlencode` and
+    // CPython's `urlencode` both take, and which is the only way to write one
+    // key twice: `dict(pairs)` keeps the last `tag`. Read as a value, the list
+    // was encoded as its own repr.
+    const entries = mapping(value)
+        ? pyEntries(value)
+        : Array.isArray(value) && value.every((one) => Array.isArray(one) && one.length === 2)
+          ? value
+          : null;
+
+    if (entries !== null) {
         const pairs = new URLSearchParams();
 
-        for (const [key, one] of pyEntries(value)) {
+        for (const [key, one] of entries) {
             pairs.append(__pybridge.str(key), __pybridge.str(one));
         }
 

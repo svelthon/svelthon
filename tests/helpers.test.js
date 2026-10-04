@@ -796,9 +796,10 @@ describe('batch', () => {
         expect(rows(batch(__pybridge.list([1, 2, 3]), 2, NONE))).toBe('[[1, 2], [3]]');
     });
 
+    // Named `n`, as the signature the author reads and writes names it.
     test.for([[0], [-1], [1.5], ['2'], [NONE]])('a size of %s is refused', ([size]) => {
         expect(() => batch(__pybridge.list([1]), size)).toThrow(
-            /size must be an integer of at least one/
+            /batch\(\): n must be an integer of at least one/
         );
     });
 
@@ -1035,6 +1036,12 @@ describe('slugify', () => {
         expect(slugify('  --- a  //  b --- ')).toBe('a-b');
     });
 
+    // Django's `strip("-_")`: an underscore at an end goes, one inside stays.
+    test('and so are underscores at the ends, as in Django', () => {
+        expect(slugify('_Hello World_')).toBe('hello-world');
+        expect(slugify('__snake_case__')).toBe('snake_case');
+    });
+
     test('a non-string is read through Python first', () => {
         expect(slugify(42)).toBe('42');
     });
@@ -1054,6 +1061,22 @@ describe('urlencode', () => {
     test('a string is escaped whole, the slash included', () => {
         expect(urlencode('a/b')).toBe('a%2Fb');
         expect(urlencode('café & co')).toBe('caf%C3%A9%20%26%20co');
+    });
+
+    // Jinja's other shape, and CPython's: a sequence of pairs, the only way to
+    // write one key twice. Read as a value, the list encoded its own repr.
+    test('and so does a sequence of pairs, a key repeated included', () => {
+        const pairs = __pybridge.list([
+            globalThis.__BRYTHON__.fast_tuple(['tag', 'x']),
+            globalThis.__BRYTHON__.fast_tuple(['tag', 'y'])
+        ]);
+
+        expect(urlencode(pairs)).toBe('tag=x&tag=y');
+        expect(urlencode(__pybridge.list([]))).toBe('');
+    });
+
+    test('while a list of anything but pairs is still a value', () => {
+        expect(urlencode(__pybridge.list(['a', 'b']))).toBe(encodeURIComponent("['a', 'b']"));
     });
 
     test('a mapping becomes a query string', () => {
