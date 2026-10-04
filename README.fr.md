@@ -75,7 +75,7 @@ reste de cette configuration et ce que chaque ligne apporte.
 npm install
 npm run dev
 
-npm test             # 1 536 tests : sémantique, props, réactivité, surface Svelte
+npm test             # 1 548 tests : sémantique, props, réactivité, surface Svelte
 npm run test:quiet   # la sortie de la suite : un run vert ne doit rien dire
 npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
@@ -527,10 +527,11 @@ moins coûteuse que le walrus d'à côté :
 {/each}
 ```
 
-Ça marche parce qu'un dict à clés textuelles **est** déjà un objet JavaScript
-dont les clés sont des propriétés propres, mesuré et non supposé, donc rien
-n'est converti à la frontière. La ligne est dépaquetée là où on la lit, et
-l'alternative épelle deux fois la même chose : `{cat.id}`, `{cat.name}`.
+Chaque clé est lue par la règle du point : un dict et une instance se dépaquettent
+de la même façon, et une clé que la ligne n'a pas lève l'`AttributeError` que
+lève `{cat.nmae}` ; `name="anon"` lui donne plutôt un défaut, et `...rest` est le
+dict des clés non nommées. L'alternative épelle deux fois la même chose :
+`{cat.id}`, `{cat.name}`.
 
 ## Composition
 
@@ -663,15 +664,16 @@ son identité.
 
 Détecter la mutation est l'autre moitié, et c'est là que Python paie. Svelte
 proxifie la valeur en profondeur, ce qui est inutilisable ici : un objet Brython
-proxifié échoue à ses propres vérifications de type. Mais une liste Python *est*
-un tableau JavaScript : l'objet peut donc porter lui-même une marque non
-énumérable. `$B.get_class` ne lit que `ob_type`, donc `type(items) is list` reste
-vrai et `repr` est intact. Et Brython fait passer chaque écriture par une
-poignée de fonctions : appel de méthode, écriture et lecture indicées, écriture
-d'attribut, `del` : **sept points de répartition couvrent tout le langage**, et un
-objet non marqué ne paie qu'un accès manqué.
+proxifié échoue à ses propres vérifications de type. Un objet surveillé reçoit
+donc une marque tenue hors de lui, dans une `WeakMap` : l'objet reste celui que
+Brython a construit, `type(items) is list` reste vrai et `repr` est intact. Et
+Brython fait passer chaque écriture par une poignée de fonctions : appel de
+méthode, écriture et lecture indicées, lecture et écriture d'attribut,
+affectation augmentée, `del`, et le descripteur d'un slot : **onze points de
+répartition couvrent tout le langage**, et un objet non marqué ne paie qu'un
+accès manqué à la `WeakMap`.
 
-La marque voyage avec l'objet, ce qu'aucune analyse à la compilation ne saurait
+La marque suit l'objet, ce qu'aucune analyse à la compilation ne saurait
 faire :
 
 ```python
@@ -1477,7 +1479,7 @@ part jamais.
 
 ## État
 
-Validé par `npm test`, 1 536 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 1 548 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
@@ -1650,7 +1652,7 @@ npm run dev          # page de démonstration
 npm run build
 ```
 
-### Deux réglages non évidents dans `vite.config.js`
+### Un réglage non évident dans `vite.config.js`
 
 `optimizeDeps.entries: []` : le scanner de dépendances de Vite tourne **avant**
 le pipeline de plugins : il lit les entrées HTML, tombe sur
@@ -1659,11 +1661,15 @@ le pipeline de plugins : il lit les entrées HTML, tombe sur
 unique rôle ici étant de découvrir les imports nus, on le court-circuite et on
 nomme le seul paquet qui mérite d'être pré-bundlé.
 
-Le Brython vendu porte **deux** modifications écrites dans le fichier lui-même,
-chacune tenue par un test : un garde contre une seconde exécution dans le même
-processus, marqué `/* SVELTHON patch */`, et `/* @vite-ignore */` sur les deux
-imports dynamiques. Huit autres réparations y vivaient et sont désormais en
-amont. `vendor/BRYTHON_FIX.md` les liste toutes les dix. Elles vivent dans le
+### Le Brython vendu
+
+Le Brython vendu est construit depuis le master de Brython et les réparations
+qui y sont proposées sans être encore fusionnées, un commit chacune, et il porte
+**quatre** modifications écrites dans le fichier lui-même, chacune tenue par un
+test : un garde contre une seconde exécution dans le même processus,
+`/* @vite-ignore */` sur les deux imports dynamiques, l'ordre de CPython pour un
+entier formaté avec un préfixe de base, et la liaison d'un `__call__` qui n'est
+pas une fonction. `vendor/BRYTHON_FIX.md` les liste toutes. Elles vivent dans le
 fichier plutôt que dans une étape de build, parce que le compilateur charge la même
 copie par `require` sous Node, donc un correctif appliqué seulement à la copie
 servie laisserait le rendu serveur tourner sur un Brython non réparé.

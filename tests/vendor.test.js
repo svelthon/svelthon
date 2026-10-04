@@ -11,6 +11,7 @@ import * as deleteOrder from './fixtures/delete_order.py';
 import * as strKeywords from './fixtures/str_keywords.py';
 import * as jsonText from './fixtures/json_text.py';
 import * as deletedGlobal from './fixtures/deleted_global.py';
+import * as templateStrings from './fixtures/template_strings.py';
 
 // Behaviours of the vendored Brython that Svelthon rests on, each observable,
 // so a build that loses one turns a test red rather than a page. The first
@@ -560,4 +561,11 @@ test('an int made from a negative fraction, or by negating zero, is not a negati
 // read: NameError, or the builtin it shadowed.
 test('a global deleted through globals() reads as unbound', () => {
     expect(deletedGlobal.drop()).toBe('missing|2');
+});
+
+// A t-string field ending with a name, `t"Hello {name}"`, compiles: its closing
+// brace carries the expression text the parser reads. And an Interpolation's
+// attributes are readable from Python.
+test('a t-string compiles, and its interpolations are read', () => {
+    expect(templateStrings.described()).toBe('Hello |Ada|name|None');
 });

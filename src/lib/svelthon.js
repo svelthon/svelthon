@@ -116,23 +116,6 @@ function claimPython(path) {
 // hook below has a reading of its own that it cannot be talked out of
 // (`attributes.lang`), and every file the two disagreed about was broken.
 
-// What the `markup` hook works out about a file and the `script` hook then needs,
-// one entry per file:
-//
-// - `lineOffset`: Python line numbers count from the start of the <script> body
-//   and the file counts from its first line. The gap is the number of lines
-//   before the opening tag.
-// - `defs`: the hidden functions the markup needs, appended to its Python.
-// - `jsNames`: what the file imports from JavaScript.
-//
-// Held inside `python()` and not at module scope, which is where they were. Both
-// hooks live on the object it returns, so they have no reason to be shared by
-// every preprocessor a process constructs: two of them, a playground beside a
-// SvelteKit app, wrote into the same four maps keyed by filename and would have
-// overwritten each other the day two filenames matched.
-//
-// `generated` and `claimed` above are the opposite case and stay global: the
-// preprocessor and the plugin are not always the same module instance.
 // HTML allows whitespace before the `>` of a closing tag, and Svelte's parser
 // reads it — its own fixture is named `whitespace-after-style-tag`. Svelte's
 // *preprocessor* does not: its pattern ends in `<\/script>`, with no room for a
@@ -292,6 +275,23 @@ export function moduleImports(content) {
 export const compileOptionsFor = (code) =>
     /<svelte:options[^>]*\bcustomElement\b/.test(markupOnly(code)) ? { customElement: true } : undefined;
 
+// What the `markup` hook works out about a file and the `script` hook then needs,
+// one entry per file:
+//
+// - `lineOffset`: Python line numbers count from the start of the <script> body
+//   and the file counts from its first line. The gap is the number of lines
+//   before the opening tag.
+// - `defs`: the hidden functions the markup needs, appended to its Python.
+// - `jsNames`: what the file imports from JavaScript.
+// - `element`: whether the file declares itself a custom element.
+//
+// Held inside `python()` and not at module scope. Both hooks live on the object
+// it returns, so they have no reason to be shared by every preprocessor a
+// process constructs: two of them, a playground beside a SvelteKit app, would
+// otherwise write under the same filename keys.
+//
+// `generated` and `claimed` above are the opposite case and stay global: the
+// preprocessor and the plugin are not always the same module instance.
 const perFile = () => {
     const files = new Map();
 

@@ -70,6 +70,24 @@ test('a relative import is refused by the compiler alone', () => {
     );
 });
 
+// The syntax of PEP 695 imports the standard library on its own: Brython builds
+// an alias and a type parameter with `_typing`, so the component compiled and
+// died at mount on `Network error`. Refused on its line, wherever it stands.
+test.for([
+    ['type Pair = tuple[int, int]', /`type Pair = …` builds its objects with `typing`.*`Pair = …` \(src\/C\.svelte:1\)/],
+    ['def first[T](xs: list[T]) -> T:\n    return xs[0]', /`def first\[T\]` builds its objects with `typing`.*\(src\/C\.svelte:1\)/],
+    ['class Box[T]:\n    pass', /`class Box\[T\]` builds its objects with `typing`/],
+    ['def outer():\n    type Row = dict[str, str]\n    return Row', /`type Row = …`.*\(src\/C\.svelte:2\)/]
+])('`%s` is refused on its line', ([written, message]) => {
+    expect(() => compile(`${written}\n`, 'C', 'src/C.svelte')).toThrow(message);
+    expect(() => compile(`${written}\n`, 'C', 'src/C.svelte', { plain: true })).toThrow(message);
+});
+
+// The annotations PEP 695 replaces compile as they always did.
+test('a generic annotation without parameters compiles', () => {
+    expect(() => compile('def first(xs: list[int]) -> int:\n    return xs[0]\n', 'C', 'src/C.svelte')).not.toThrow();
+});
+
 test('an import the runtime holds compiles', () => {
     expect(compiled('import browser.html\nfrom browser import document, html, aio\nfrom javascript import JSON')).not.toThrow();
 });

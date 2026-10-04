@@ -1,7 +1,7 @@
 # Patches applied to the vendored Brython
 
 `brython_runtime.js` and `brython_compiler.js` are cut from one bundle, built
-from Brython's master plus twenty-six proposed commits, with **four** edits
+from Brython's master plus thirty-one proposed commits, with **four** edits
 made in the file itself afterwards. The wrapper, the integer format and the
 `__call__` binding carry a `/* SVELTHON patch, see BRYTHON_FIX.md */` comment,
 the only way to find them again in 1.4 MB; the other edit *is* a comment, so
@@ -114,6 +114,8 @@ than by a build-time check, and going upstream retires none of them:
 | `jsobj2pyobj` reads `then` by its descriptor (branch `jsobj-then-getter`) | `tests/vendor.test.js`, a `then` getter not run on crossing |
 | an int is never a negative zero: `round`, `int`, `__floor__`, `__ceil__` of a float and `-0` (branch `int-negative-zero`) | `tests/vendor.test.js`, five ints made at zero |
 | a module global deleted through `globals()` reads as unbound, `NameError` or the builtin it shadowed (branch `global-deleted-at-run-time`) | `tests/vendor.test.js`, a global and a builtin popped |
+| a t-string field ending with a name, `t"Hello {name}"`, compiles: its closing brace carries the expression text the parser reads, which it lacked on that path and only that one (branch `tstring-field-ending-in-name`) | `tests/vendor.test.js`, `template_strings.py` compiles |
+| the attributes of a t-string `Interpolation`, `value`, `expression`, `conversion` and `format_spec`, are readable, as `Template`'s already were (branch `tstring-interpolation-members`) | `tests/vendor.test.js`, an interpolation read |
 
 `scripts/browser-check.sh` covers the DOM node path as well, which is where
 identity across the boundary is observable.

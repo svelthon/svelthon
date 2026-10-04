@@ -1005,8 +1005,9 @@ function takeArrows(src, where, lineOffset, allowed) {
         // The expression has to finish on its line. A `{` or a `(` left open
         // would swallow the lines under it into a lambda, and Brython would
         // report a mismatched bracket several lines further down, which says
-        // nothing about what to do. This says it.
-        if (found && !balanced(expression)) {
+        // nothing about what to do. This says it, for a backslash at the end of
+        // the line as well.
+        if (found && (!balanced(expression) || joined)) {
             throw refuse(
                 `svelthon — a ${kind(named)} written with \`=>\` must fit on one line; ` +
                     `use @${kind(named)} on a def for anything longer (${at})`,
@@ -1755,15 +1756,22 @@ const decoratorSpelling = (node) => {
     return null;
 };
 
+// The runes whose spelling is a call standing alone, `inspect(count)`: the
+// top level reads them as a statement, so a deeper one is the same construct.
+const STATEMENT_RUNES = new Set(['inspect', 'inspect_with']);
+
 function refuseNestedRunes(body, source, lineOffset) {
+    const called = (node, names) =>
+        node.value instanceof $B.ast.Call &&
+        node.value.func instanceof $B.ast.Name &&
+        names.has(node.value.func.id);
+
     const scoped = (statements) => {
         for (const node of statements) {
             const spelling =
                 decoratorSpelling(node) ||
-                (node instanceof $B.ast.Assign &&
-                node.value instanceof $B.ast.Call &&
-                node.value.func instanceof $B.ast.Name &&
-                RUNE_NAMES.has(node.value.func.id)
+                ((node instanceof $B.ast.Assign && called(node, RUNE_NAMES)) ||
+                (node instanceof $B.ast.Expr && called(node, STATEMENT_RUNES))
                     ? `${node.value.func.id}()`
                     : null);
 
@@ -2309,6 +2317,42 @@ function refuseMissingModules(importedAt, resolves, source, lineOffset) {
             line + lineOffset
         );
     }
+}
+
+// The syntax of PEP 695, `type Pair = tuple[int, int]` and the parameters of
+// `def first[T]` or `class Box[T]`, builds its objects with `typing`, which
+// Brython imports as `_typing` from the standard library: it compiled, and the
+// component died at mount on `Network error`. Refused on its line, as an import
+// of a module that does not ship is. Recognised by shape, for the reason
+// `moduleImports` gives: an alias holds its parameters and no body.
+function refuseTypeParameters(body, source, lineOffset) {
+    const walk = (statements) => {
+        for (const node of statements) {
+            const alias = Array.isArray(node.type_params) && node.body === undefined;
+
+            if (alias || node.type_params?.length > 0) {
+                const line = node.lineno + lineOffset;
+                const written = alias
+                    ? `type ${node.name.id} = …`
+                    : `${node.bases ? 'class' : 'def'} ${node.name}[${node.type_params.map((one) => one.name).join(', ')}]`;
+
+                throw refuse(
+                    `svelthon — \`${written}\` builds its objects with \`typing\`, part ` +
+                        `of Python's standard library, which does not ship; ` +
+                        (alias
+                            ? `an alias is an ordinary assignment, \`${node.name.id} = …\``
+                            : `an annotation names the type itself, without the parameters`) +
+                        ` (${source}:${line})`,
+                    source,
+                    line
+                );
+            }
+
+            for (const key of BODIES) if (node[key]) walk(node[key]);
+        }
+    };
+
+    walk(body);
 }
 
 // The names the emitted script gives to what it generates. Pure functions of the
@@ -3347,6 +3391,7 @@ function compile(
 
     refuseRelativeImports(relative, source, lineOffset);
     if (resolves) refuseMissingModules(importedAt, resolves, source, lineOffset);
+    refuseTypeParameters(root._ast.body, source, lineOffset);
     const module = [
         `import { ${runtimeAliases(['withNamespace', 'pyError'])} } from 'svelthon/runtime';`,
         ``,

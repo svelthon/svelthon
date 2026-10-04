@@ -868,14 +868,14 @@ const referenced = (text) => {
 // A walk translates the delimiters it recognised and leaves an expression
 // alone, because an expression leaves through `call` before its parentheses are
 // ever looked at.
-function parameterPattern(part, call, names, tuple = false) {
+function parameterPattern(part, call, names, tuple, unpack) {
     const at = atTopLevel(part, (i) => part[i] === '=');
 
     // `x=expr`, and `[x]=expr` too: what carries the default may be a pattern
     // itself, so the left half goes back through this walk rather than to
     // `identifiers`.
     if (at !== -1) {
-        const target = parameterPattern(part.slice(0, at), call, names, tuple);
+        const target = parameterPattern(part.slice(0, at), call, names, tuple, unpack);
 
         return `${target}= ${call(part.slice(at + 1), '', undefined, 'lazy')}`;
     }
@@ -897,9 +897,13 @@ function parameterPattern(part, call, names, tuple = false) {
     // a bracket too — `[field.upper()]: value` — so a group with anything after
     // it is not a pattern, and reading one as a pattern took the key apart as
     // if its expression were a list of targets.
+    if (close === trimmed.length - 1 && trimmed[0] === '{') {
+        return `${lead}${unpackByKey(trimmed.slice(1, close), call, names, tuple, unpack)}${tail}`;
+    }
+
     if (close === trimmed.length - 1) {
         const inside = arguments_(trimmed.slice(1, close))
-            .map((one) => parameterPattern(one, call, names, tuple))
+            .map((one) => parameterPattern(one, call, names, tuple, unpack))
             .join(',');
 
         const [opened, closed] =
@@ -908,29 +912,98 @@ function parameterPattern(part, call, names, tuple = false) {
         return `${lead}${opened}${inside}${closed}${tail}`;
     }
 
-    // `{ key: target }` binds the target and not the key, which is the one
-    // place a name inside a pattern is not a name the block declares.
-    //
-    // And a key may be **computed** — `{[field.upper()]: value}` — which is the
-    // other place a pattern holds an expression. It was copied across as
-    // written, so `field.upper()` reached the browser as a JavaScript method
-    // call: *get(...).upper is not a function*. Compiled here, and its names
-    // are read and not bound, which is what the `names` array not growing says.
-    const colon = atTopLevel(trimmed, (i) => trimmed[i] === ':');
-
-    if (colon !== -1) {
-        const key = trimmed.slice(0, colon).trim();
-        const target = parameterPattern(trimmed.slice(colon + 1), call, names, tuple);
-        const computed = key.startsWith('[') && closingPair(key, 0) === key.length - 1;
-        const written = computed ? `[${call(key.slice(1, -1), '', undefined, 'lazy')}]` : key;
-
-        return `${lead}${written}:${target}${tail}`;
-    }
-
     names.push(...identifiers(trimmed));
 
     return part;
 }
+
+// The name a row unpacked by key stands under, inside the block that unpacks it.
+const UNPACKED = '__unpacked_';
+
+// What one declaration list unpacks by key, gathered while its patterns are
+// walked: the aliases standing where the braces stood, in order, and for each
+// key the `{@const}` that reads it.
+const unpacker = () => {
+    let next = 0;
+
+    return { alias: () => `${UNPACKED}${next++}`, aliases: [], consts: [], bound: new Set() };
+};
+
+// `{id, name}` in a pattern: a row unpacked by key, which is the dialect's
+// shorter spelling of `{row.id}` and `{row.name}`, so each key is read by the
+// dot's rule. Svelte destructures a JavaScript object, which finds the keys of
+// a dict and nothing else: an instance keeps its attributes under a symbol and
+// came out empty, and a misspelt key was `undefined`, which renders as nothing
+// where the dot raises the AttributeError.
+//
+// So the braces become one name, the row, and every key a `{@const}` of the
+// block reading `__getattr(row, key)`. A default is read only when the key is
+// missing, as Svelte reads it on `undefined`; a key may be computed,
+// `{[field.upper()]: value}`; the target may be a pattern itself; and
+// `...rest` is the dict of the keys not named, as `**rest` is in a `match`.
+function unpackByKey(inside, call, names, tuple, unpack) {
+    const alias = unpack.alias();
+    const before = names.length;
+    const keys = [];
+
+    unpack.aliases.push(alias);
+
+    for (const entry of arguments_(inside)) {
+        const text = entry.trim();
+
+        if (text === '') continue;
+
+        if (text.startsWith('...')) {
+            const target = text.slice(3).trim();
+
+            unpack.consts.push({
+                target,
+                read: `{k: v for k, v in __getattr(${alias}, "items")() if k not in (${keys.map((one) => `${one}, `).join('')})}`,
+                source: '',
+                lazy: false
+            });
+            names.push(...identifiers(target));
+            continue;
+        }
+
+        // `id`, `id=0`, `id: target` or `id: target=0`: the default belongs to
+        // the target, and a computed key holds an expression of its own.
+        const colon = atTopLevel(text, (i) => text[i] === ':');
+        const value = colon === -1 ? text : text.slice(colon + 1);
+        const equals = atTopLevel(value, (i) => value[i] === '=');
+        const target = equals === -1 ? value : value.slice(0, equals);
+        const fallback = equals === -1 ? null : value.slice(equals + 1).trim();
+        const key = colon === -1 ? target.trim() : text.slice(0, colon).trim();
+        const computed = key.startsWith('[') && closingPair(key, 0) === key.length - 1;
+        const named = computed ? `(${key.slice(1, -1)})` : /^['"]/.test(key) ? key : JSON.stringify(key);
+
+        keys.push(named);
+
+        // The slot is taken before the target is walked, since a pattern there
+        // reads the value this one binds.
+        const slot = unpack.consts.length;
+
+        unpack.consts.push(null);
+        unpack.consts[slot] = {
+            target: parameterPattern(target, call, names, tuple, unpack).trim(),
+            read: `__getattr(${alias}, ${named}${fallback === null ? '' : `, lambda: (${fallback})`})`,
+            source: fallback ?? (computed ? key.slice(1, -1) : ''),
+            lazy: fallback !== null
+        };
+    }
+
+    for (const one of names.slice(before)) unpack.bound.add(one);
+
+    return alias;
+}
+
+// The `{@const}` lines a declaration list unpacks into, compiled once every
+// name of the block is in scope. A default goes through `lazy`, so a later key
+// it reads is read only when the default is taken.
+const unpacked = (unpack, call) =>
+    unpack.consts
+        .map(({ target, read, source, lazy }) => `{@const ${target} = ${call(read, '', source, lazy ? 'lazy' : 'python')}}`)
+        .join('');
 
 // The names a declaration binds, read without compiling anything.
 //
@@ -943,25 +1016,30 @@ function parameterPattern(part, call, names, tuple = false) {
 // expressions are compiled second; one pass could only have offered the outer
 // namespace, and `{#each rows as [first, second=first]}` then read a module's
 // `first` instead of the row's, silently and with the right shape.
-const boundBy = (parts, tuple) => {
+const boundBy = (parts, tuple, unpack) => {
     const names = [];
 
-    for (const part of parts) parameterPattern(part, () => '', names, tuple);
+    for (const part of parts) parameterPattern(part, () => '', names, tuple, unpack);
 
     return names;
 };
 
 // A comma list of patterns that a block declares: its names go to `declare`,
-// which opens the block's scope, and the list comes back with every expression
-// in it compiled inside that scope. Every construct that binds names in the
-// markup goes through here: a snippet's parameters, an `{#each}` target, and
-// the value an `{#await}` hands to `then` or `catch`.
+// which opens the block's scope, with the aliases of the rows it unpacks by key
+// beside them, and the list comes back with every expression in it compiled
+// inside that scope. Every construct that binds names in the markup goes
+// through here: a snippet's parameters, an `{#each}` target, and the value an
+// `{#await}` hands to `then` or `catch`. `consts` is what the block opens with.
 const destructured = (text, declare, call, tuple) => {
     const parts = arguments_(text.trim());
+    const first = unpacker();
 
-    declare(boundBy(parts, tuple));
+    declare(boundBy(parts, tuple, first), first.aliases);
 
-    return parts.map((part) => parameterPattern(part, call, [], tuple)).join(',');
+    const unpack = unpacker();
+    const pattern = parts.map((part) => parameterPattern(part, call, [], tuple, unpack)).join(',');
+
+    return { pattern, unpack, consts: unpacked(unpack, call) };
 };
 
 // `{#snippet row(one, value=True)}` read apart: the names go to `declare`,
@@ -979,14 +1057,14 @@ function snippetParameters(trimmed, declare, call) {
     // No parameter list, or one Svelte will refuse in its own words: nothing is
     // declared.
     if (close === -1) {
-        declare([]);
+        declare([], []);
 
-        return trimmed.replace(/^#snippet\s*/, '');
+        return `${trimmed.replace(/^#snippet\s*/, '')}}`;
     }
 
-    const written = destructured(trimmed.slice(open + 1, close), declare, call, false);
+    const { pattern, consts } = destructured(trimmed.slice(open + 1, close), declare, call, false);
 
-    return `${name}(${written})${trimmed.slice(close + 1)}`;
+    return `${name}(${pattern})${trimmed.slice(close + 1)}}${consts}`;
 }
 
 // The key that trails an `{#each}` target: `[target, key]`, or null when the line
@@ -1092,9 +1170,21 @@ function eachBlock(trimmed, declare, call) {
     // expressions. Converted, its floats became numbers, a fresh list each render,
     // so a row had no identity left to key by.
     const iterable = call(body.slice(0, at), '__seq', undefined, 'python');
-    const target = destructured(keyed ? keyed[0] : named, declare, call, true);
+    const { pattern, unpack, consts } = destructured(keyed ? keyed[0] : named, declare, call, true);
 
-    return `{#each ${iterable} as ${target}` + (keyed ? ` (${call(keyed[1], '__key')})` : '') + '}';
+    return `{#each ${iterable} as ${pattern}` + (keyed ? ` (${eachKey(keyed[1], unpack, call)})` : '') + `}${consts}`;
+}
+
+// The key of an `{#each}` is computed outside the block, from the pattern's own
+// names, and a key unpacked by key is a `{@const}` of the block. So such a name
+// is bound again in the key's own expression, by a comprehension over the row,
+// and is not handed in from a scope the key does not see.
+function eachKey(key, unpack, call) {
+    if (unpack.consts.length === 0) return call(key, '__key');
+
+    const loops = unpack.consts.map(({ target, read }) => ` for ${target} in [${read}]`).join('');
+
+    return call(`[(${key})${loops}][0]`, '__key', key, '', [...unpack.bound]);
 }
 
 // What Svelte's template language holds, named here so that anything else stops
@@ -1379,10 +1469,12 @@ function walk(markup, collect, onPython, seed, record, where) {
         );
     };
 
-    const push = (names) => {
+    // `generated` are the pass's own names, the aliases of `unpackByKey`, which
+    // the prefix rule does not apply to.
+    const push = (names, generated = []) => {
         opened += 1;
         ids.push(opened);
-        scopes.push([...(seed.get(opened) || []), ...refuseCompilerName(names)]);
+        scopes.push([...(seed.get(opened) || []), ...refuseCompilerName(names), ...generated]);
     };
 
     // A clause of the open block: a new branch, numbered like a block so the
@@ -1513,9 +1605,11 @@ function walk(markup, collect, onPython, seed, record, where) {
     //             is, so an option finds its select and a group its list.
     //   'selection' the read of a `<select multiple>`'s binding: the same, item
     //             by item, for the list whose items meet the options' values.
-    const call = (expr, wrapper, source = expr, kind = '') => {
+    // `bound` names the block's names the expression binds for itself, which
+    // are therefore not handed in: the key of an `{#each}`, see `eachKey`.
+    const call = (expr, wrapper, source = expr, kind = '', bound = []) => {
         const trimmed = expr.trim();
-        const args = mentioned(trimmed);
+        const args = mentioned(trimmed).filter((one) => !bound.includes(one));
         const lazy = kind === 'lazy';
 
         locate(source.trim());
@@ -2210,7 +2304,9 @@ function walk(markup, collect, onPython, seed, record, where) {
                     push([]);
                     out += `{#await ${promise}}`;
                 } else {
-                    out += `{#await ${promise} ${tail[1]} ${destructured(tail[2], push, call, false)}}`;
+                    const { pattern, consts } = destructured(tail[2], push, call, false);
+
+                    out += `{#await ${promise} ${tail[1]} ${pattern}}${consts}`;
                 }
             } else if (opens('snippet')) {
                 // A snippet declares names and holds no expression of its own:
@@ -2248,12 +2344,12 @@ function walk(markup, collect, onPython, seed, record, where) {
                 // ordinary JavaScript and Svelte compiles it as one.
                 out += `{#snippet ${snippetParameters(
                     trimmed,
-                    (names) => {
-                        push(names);
-                        scopes[scopes.length - 1].parameters = new Set(names);
+                    (names, aliases) => {
+                        push(names, aliases);
+                        scopes[scopes.length - 1].parameters = new Set([...names, ...aliases]);
                     },
                     call
-                )}}`;
+                )}`;
             } else {
                 throw refuse(unknownTag(trimmed, 'block', BLOCKS, said()));
             }
@@ -2276,8 +2372,8 @@ function walk(markup, collect, onPython, seed, record, where) {
             // and the names its clause binds.
             branch();
 
-            const rebind = (names) => {
-                scopes[scopes.length - 1]?.push(...refuseCompilerName(names));
+            const rebind = (names, generated = []) => {
+                scopes[scopes.length - 1]?.push(...refuseCompilerName(names), ...generated);
             };
 
             const elseIf = /^:else\s+if\s/.test(trimmed);
@@ -2288,7 +2384,9 @@ function walk(markup, collect, onPython, seed, record, where) {
             if (elseIf) {
                 out += `{:else if ${condition}}`;
             } else if (clause !== null && ['then', 'catch'].includes(clause.name) && clause.rest.trim()) {
-                out += `{:${clause.name} ${destructured(clause.rest, rebind, call, false)}}`;
+                const { pattern, consts } = destructured(clause.rest, rebind, call, false);
+
+                out += `{:${clause.name} ${pattern}}${consts}`;
             } else if (clause !== null && CLAUSES.includes(clause.name)) {
                 // `:else`, and `:then` or `:catch` that name nothing.
                 out += markup.slice(index, end + 1);

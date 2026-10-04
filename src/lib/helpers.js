@@ -55,10 +55,9 @@ const written = (value) => pyScalar(value) ?? value;
 //
 // `instanceof Date` asks about *our* Date constructor, and an iframe, a worker,
 // a `vm` context or a SvelteKit adapter has its own: a Date from one of them is
-// a Date by every behaviour and answers false, so `{date(stamp)}` refused a
-// perfectly good value and the component did not mount. The same realm mistake
-// the route boundary made with `URL`, at the three sites of this file, and it
-// was mine to sweep there and I did not.
+// a Date by every behaviour and answers false, so `{date(stamp)}` would refuse a
+// perfectly good value and the component would not mount. The three sites of
+// this file ask it here.
 //
 // `getTime` called against the value is the brand itself: the internal slot a
 // Date carries is per-object, not per-realm, so this accepts every context's

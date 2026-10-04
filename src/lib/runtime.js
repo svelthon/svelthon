@@ -601,10 +601,9 @@ const FOLLOWED = new Set([...MUTATORS, ...VIEWS, 'get']);
 // Python object behind a JavaScript proxy fails Brython's own type checks
 // (`repr((1, 2))` raises "requires a 'tuple' object but received a 'tuple'").
 //
-// A Python list *is* a JavaScript array, so the object itself can carry a
-// non-enumerable marker instead, since `$B.get_class` reads only `ob_type`, so
-// `type(items) is list` stays true, `repr` is untouched, and nothing that walks
-// the value can see the marker.
+// So a watched object is given a marker instead, held outside it in a WeakMap,
+// `MARKS`: the object is the one Brython made, `type(items) is list` stays true,
+// `repr` is untouched, and nothing that walks the value can see the marker.
 //
 // The rule the code below holds is one sentence: a watched container notifies
 // whenever it is mutated, and every container inside a watched one is watched
@@ -621,9 +620,9 @@ const FOLLOWED = new Set([...MUTATORS, ...VIEWS, 'get']);
 // `list(rows)[0]` hand out a row that is watched already, so Brython's own
 // iteration and copying are untouched, and so is every other builtin that
 // reaches inside a container. Every check reads the marker first, so an object
-// nobody watches pays one property miss and nothing else.
+// nobody watches pays one WeakMap miss and nothing else.
 //
-// The marker travels with the object: a list handed to a helper that mutates it
+// The marker follows the object: a list handed to a helper that mutates it
 // deep inside a function still notifies, which no static analysis could do.
 function installMutationTracking($B) {
     if ($B.$svelthonTracking) return;
@@ -1272,43 +1271,6 @@ const quietPyType = (value) => {
     return pyClass(type) ? type : undefined;
 };
 
-// Whether an object is a bag of keys, or something of a class of its own: a
-// Response, a URL, a Date, a Map, a Promise, any of which a `load()` may hand
-// straight back and whose keys copied would destroy it.
-//
-// Read on the prototype and not as `value.constructor`, which a dict may carry
-// as data: `{"constructor": "invoice"}` answered a constructor of its own and
-// the whole mapping crossed unconverted, floats and all. A Brython dict and a
-// plain object both sit on `Object.prototype`, and a **null** prototype is the
-// other bag of keys — `Object.create(null)`, what `Object.groupBy` returns, and
-// a module namespace object, measured.
-//
-// A predicate and not two lines, because it was two lines: `branch` walked a
-// null-prototype object and `mapping()` in helpers.js did not, so `to_js` and
-// `tojson` rendered `{"a":1,"b":2}` while `urlencode` wrote
-// `<Javascript object: [object Object]>` into the page, percent-encoded, with no
-// error and no warning. Two of the three crossings already agreed; this is the
-// third asking the same question instead of its own.
-// And a **root** prototype rather than *our* `Object.prototype`, which is the
-// realm mistake of `URL`, `Date` and `Promise` at a fourth family of sites. An
-// object built by another JavaScript context sits on that context's
-// `Object.prototype`, is a bag of keys by every use, and failed this test: it
-// crossed as a `JSObject` where the local twin became a dict, so `.get()` raised
-// in Python; it kept a Brython dict raw inside an exported object; and
-// `urlencode` wrote the engine's spelling of it into the query string.
-//
-// *Root* is what every realm's `Object.prototype` has in common: a `Date` sits
-// on `Date.prototype`, which sits on `Object.prototype` in turn, so it is two
-// steps from null and stays excluded — here and in every other realm.
-//
-// Rootless is not enough, and the line above said it was. `class Thing extends
-// null {}` is valid JavaScript and its prototype is rootless too, so an instance
-// carrying a method was flattened into its fields and the method was gone. What
-// separates the two is that a realm's `Object.prototype` **is** the object
-// protocol: `hasOwnProperty` is its own property, where a class prototype's own
-// properties are the author's plus `constructor`. Called generically, because
-// the function has to work on a prototype from any realm — including one whose
-// own `hasOwnProperty` is exactly what is being looked for.
 // A native object `JSON.stringify` has nothing to write of: a class of its own,
 // no `toJSON` to ask, and no enumerable own property to copy. Its answer is
 // `{}` — valid JSON that silently drops everything the value held, so
@@ -1386,6 +1348,35 @@ export const unboxed = (value) => {
 
 export const rawJSON = (value) => typeof JSON.isRawJSON === 'function' && JSON.isRawJSON(value);
 
+// Whether an object is a bag of keys, or something of a class of its own: a
+// Response, a URL, a Date, a Map, a Promise, any of which a `load()` may hand
+// straight back and whose keys copied would destroy it.
+//
+// Read on the prototype and not as `value.constructor`, which a dict may carry
+// as data: `{"constructor": "invoice"}` would answer a constructor of its own.
+// A Brython dict and a plain object both sit on `Object.prototype`, and a
+// **null** prototype is the other bag of keys: `Object.create(null)`, what
+// `Object.groupBy` returns, and a module namespace object.
+//
+// One predicate for every crossing that asks it, `branch`, `mapping()` in
+// helpers.js and `urlencode`, so `to_js`, `tojson` and a query string agree on
+// what a bag of keys is.
+//
+// And a **root** prototype rather than *our* `Object.prototype`: an object built
+// by another JavaScript context sits on that context's `Object.prototype`, and
+// is a bag of keys by every use. *Root* is what every realm's `Object.prototype`
+// has in common: a `Date` sits on `Date.prototype`, which sits on
+// `Object.prototype` in turn, so it is two steps from null and stays excluded,
+// here and in every other realm.
+//
+// Rootless is not enough on its own. `class Thing extends null {}` is valid
+// JavaScript and its prototype is rootless too, and an instance carrying a
+// method must not be flattened into its fields. What separates the two is that
+// a realm's `Object.prototype` **is** the object protocol: `hasOwnProperty` is
+// its own property, where a class prototype's own properties are the author's
+// plus `constructor`. Called generically, because the function has to work on a
+// prototype from any realm, including one whose own `hasOwnProperty` is exactly
+// what is being looked for.
 export const plainObject = (value) => {
     const prototype = Object.getPrototypeOf(value);
 
@@ -1442,44 +1433,72 @@ let changes = 0;
 // `rows`. An instance keeps its links, since what it hands out may live on its
 // class or behind a property, and so does a subclass for what it holds that
 // way (`holds`).
-const upwards = (marker, stamp, key) => {
-    if (marker.seen === stamp) return;
-    marker.seen = stamp;
+//
+// Climbed with a stack of its own rather than by recursion, for the reason
+// `adopt` gives: a mutation at the tail of a long chain climbs every link of it.
+const upwards = (start, stamp, key) => {
+    if (start.seen === stamp) return;
+    start.seen = stamp;
 
-    for (const one of marker[key]) one();
+    for (const one of start[key]) one();
 
-    const parents = marker.parents;
-    if (parents === undefined) return;
+    if (start.parents === undefined) return;
 
-    const child = marker.target.deref();
+    // One frame per marker being climbed from: the parent it is at, counting
+    // down, and the one it climbed into last, which is checked on the way back.
+    const frames = [climbing(start)];
 
-    // A link found to hold stays found until its parent changes: a dict of rows
-    // whose rows are each updated would otherwise read every entry of the dict
-    // once per row.
-    const verified = (marker.verified ??= new WeakMap());
-
-    for (let i = parents.length - 1; i >= 0; i--) {
-        const parent = parents[i];
-        const holder = parent.target.deref();
-        const known = verified.get(parent) === parent.stamp;
-
-        if (holder === undefined || (child !== undefined && !known && !holds(holder, child, marker))) {
-            parents.splice(i, 1);
-            continue;
-        }
-
-        verified.set(parent, parent.stamp);
-
-        upwards(parent, stamp, key);
+    while (frames.length > 0) {
+        const frame = frames[frames.length - 1];
+        const { marker, child, verified } = frame;
+        const parents = marker.parents;
 
         // A parent nobody listens to and that leads nowhere is a dead end: the
         // container of a component that is gone. Its link goes, or every
         // mutation of shared data would visit one per mount the session has
         // seen. `track` links a container's children again if it is ever
         // subscribed to anew.
-        if (dead(parent)) parents.splice(i, 1);
+        if (frame.climbed !== null) {
+            if (dead(frame.climbed)) parents.splice(frame.at, 1);
+            frame.climbed = null;
+        }
+
+        if (--frame.at < 0) {
+            frames.pop();
+            continue;
+        }
+
+        const parent = parents[frame.at];
+        const holder = parent.target.deref();
+        const known = verified.get(parent) === parent.stamp;
+
+        if (holder === undefined || (child !== undefined && !known && !holds(holder, child, marker))) {
+            parents.splice(frame.at, 1);
+            continue;
+        }
+
+        verified.set(parent, parent.stamp);
+        frame.climbed = parent;
+
+        if (parent.seen === stamp) continue;
+        parent.seen = stamp;
+
+        for (const one of parent[key]) one();
+
+        if (parent.parents !== undefined) frames.push(climbing(parent));
     }
 };
+
+// A link found to hold stays found until its parent changes: a dict of rows
+// whose rows are each updated would otherwise read every entry of the dict once
+// per row.
+const climbing = (marker) => ({
+    marker,
+    child: marker.target.deref(),
+    verified: (marker.verified ??= new WeakMap()),
+    at: marker.parents.length,
+    climbed: null
+});
 
 const dead = (marker) =>
     marker.bumps.length === 0 &&
@@ -1853,7 +1872,31 @@ function mark(value) {
 // Called again after a mutation that raised, where the same question arises for
 // the same reason: children may have landed inside without anything handing
 // them the watch.
+//
+// A queue and not a recursion: `mark` → `adopt` → `inherit` → `mark` took three
+// frames of stack per object, so a linked list of two thousand nodes, the kind a
+// loop builds, overflowed it where Python walks it without a limit. A value met
+// while the queue drains waits its turn, and the outermost call returns once
+// the whole graph is in hand, as it did.
+const unadopted = [];
+let adopting = false;
+
 function adopt(value) {
+    unadopted.push(value);
+
+    if (adopting) return;
+
+    adopting = true;
+
+    try {
+        while (unadopted.length > 0) adoptOne(unadopted.pop());
+    } finally {
+        adopting = false;
+        unadopted.length = 0;
+    }
+}
+
+function adoptOne(value) {
     const attributes = ownAttributes(value);
     if (attributes !== undefined) {
         // The storage itself, and not only what it holds. Setting an attribute
@@ -2219,29 +2262,6 @@ export function pyError(error, where, lineOffset = 0) {
     return error;
 }
 
-// What leaves a handler, where nothing Python will catch it again.
-//
-// `pyError` fills a `message` and a `stack` into the Brython exception and hands
-// back **the same object**, deliberately: Python semantics upstream have to be
-// untouched, and a `except ValueError` further up must still see its own value.
-// A DOM handler is the other end of that: past it there is no Python left, only
-// whatever the host does with an uncaught error.
-//
-// What the host does is walk it. A Brython exception carries `ob_type`, and from
-// there its class and `__mro__`, which contains itself — so a runner cloning the
-// error to send it from its worker to the main thread walks a cycle through a
-// class object. Measured: `Aborted (core dumped)`, `OOMErrorHandler`, on a
-// five-line component whose handler raises. Not a failing test naming the file —
-// the worker dying, and `npm test` ending on a V8 abort.
-//
-// So the boundary hands over an ordinary `Error` and **keeps nothing of the
-// Python object on it**. Keeping it under a non-enumerable property was tried
-// first and the abort survived: the walk reaches an own property whether it is
-// enumerable or not, so a reference kept for a debugger is a reference kept for
-// the serialiser. Measured both ways, with and without.
-//
-// Same shape as `plainData` and `__mro__` in §3.20: the third time this project
-// has met a Brython object walked by something that serialises.
 // A call that has been made and not finished.
 //
 // Asked in four places and written out in all four, one of them in `helpers.js`,
@@ -2499,6 +2519,24 @@ function viewOf(value) {
     return view;
 }
 
+// What leaves a handler, where nothing Python will catch it again.
+//
+// `pyError` fills a `message` and a `stack` into the Brython exception and hands
+// back **the same object**, deliberately: Python semantics upstream have to be
+// untouched, and a `except ValueError` further up must still see its own value.
+// A DOM handler is the other end of that: past it there is no Python left, only
+// whatever the host does with an uncaught error.
+//
+// What the host does is walk it. A Brython exception carries `ob_type`, and from
+// there its class and `__mro__`, which contains itself, so a runner cloning the
+// error to send it from its worker to the main thread walks a cycle through a
+// class object: `Aborted (core dumped)`, `OOMErrorHandler`, on a five-line
+// component whose handler raises.
+//
+// So the boundary hands over an ordinary `Error` and **keeps nothing of the
+// Python object on it**, not even under a non-enumerable property: the walk
+// reaches an own property whether it is enumerable or not, so a reference kept
+// for a debugger is a reference kept for the serialiser.
 function thrown(error) {
     if (error instanceof Error || error === null || typeof error !== 'object') return error;
 
@@ -5412,7 +5450,9 @@ const moduleNamespace = (value) =>
     Object.getPrototypeOf(value) === null &&
     Object.getOwnPropertyDescriptor(value, Symbol.toStringTag)?.value === 'Module';
 
-export function readAttr(target, name) {
+// `otherwise`, when given, is a callable whose result stands for a name that is
+// neither: the default of a key in a pattern, `{#each rows as {id=0}}`.
+export function readAttr(target, name, otherwise) {
     const $B = globalThis.__BRYTHON__;
 
     // A JavaScript record whose own data has a field called `ob_type`: the
@@ -5428,6 +5468,7 @@ export function readAttr(target, name) {
         !$B.is_dict(target)
     ) {
         if (name in target) return $B.jsobj2pyobj(target[name], target);
+        if (otherwise !== undefined) return $B.$call(otherwise);
 
         $B.RAISE(_b_.AttributeError, `'${name}'`);
     }
@@ -5447,8 +5488,8 @@ export function readAttr(target, name) {
     const item = lookup(target, name);
     if (item !== MISSING) return item;
 
-    // No such key either: the real lookup raises.
-    return $B.$getattr(target, name);
+    // No such key either: the default, or the real lookup, which raises.
+    return otherwise === undefined ? $B.$getattr(target, name) : $B.$call(otherwise);
 }
 
 // Builtin sequences, whose `__getitem__` refuses a string key with a TypeError:

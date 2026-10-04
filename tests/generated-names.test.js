@@ -36,6 +36,8 @@ const MARKUP_LOCAL = new Set([
     '__range_',
     // The token declared beside a markup cell a `bind:group` writes.
     '__cell_',
+    // The row a pattern unpacks by key stands under, `{#each rows as {id}}`.
+    '__unpacked_',
     // A stand-in used by the first, throwaway walk that only collects snippet
     // names; nothing it returns is emitted.
     '__probe'

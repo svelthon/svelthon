@@ -43,6 +43,23 @@ describe('a rune written below the top level', () => {
         expect(script('def register():\n    y = inspect(1)\n')).toThrow(/`inspect\(\)`/);
     });
 
+    // `inspect(count)` standing alone is the spelling the top level reads, and
+    // below it the call was kept and logged nothing. `if DEBUG:` is the natural
+    // way to write a conditional trace, so that is where it was lost.
+    test.for([
+        ['under an if', 'DEBUG = True\ncount = 0\nif DEBUG:\n    inspect(count)\n', '`inspect()`', 4],
+        ['in a def', 'count = 0\ndef watch():\n    inspect(count)\n', '`inspect()`', 3],
+        ['with a logger, in a def', 'count = 0\ndef watch():\n    inspect_with(print, count)\n', '`inspect_with()`', 3]
+    ])('and inspect written as a statement is refused %s', ([, body, spelling, line]) => {
+        expect(script(body)).toThrow(`${spelling} is only read there (src/Probe.svelte:${line})`);
+    });
+
+    test('while the same statement at the top level is the rune', () => {
+        const { script: emitted } = compile('count = 0\ninspect(count)\n', 'Probe', 'src/Probe.svelte');
+
+        expect(emitted.match(/\$inspect\(/g)).toHaveLength(1);
+    });
+
     // A class body is no more the top level than a function body is.
     test('and inside a class', () => {
         expect(
