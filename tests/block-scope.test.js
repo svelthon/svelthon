@@ -3,6 +3,7 @@ import { mount, flushSync } from './mounted.js';
 import BlockScope from './fixtures/BlockScope.svelte';
 import AssignedForms from './fixtures/AssignedForms.svelte';
 import StarImported from './fixtures/StarImported.svelte';
+import StarPlain from './fixtures/StarPlain.svelte';
 import DictViews from './fixtures/DictViews.svelte';
 import VoidNamedComponents from './fixtures/VoidNamedComponents.svelte';
 
@@ -62,6 +63,23 @@ test('a name a star import binds follows the DOM', () => {
     flushSync();
 
     expect([Number(at('rows')), at('label')]).toEqual([before + 1, 'from the module']);
+});
+
+// And from a module with no `__all__`, which hands over every name that does
+// not start with an underscore, as CPython's `import *` does.
+test('a star import of a module with no __all__ takes its public names', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+
+    mount(StarPlain, { target });
+    flushSync();
+
+    const at = (k) => target.querySelector(`[data-k="${k}"]`).textContent;
+    const before = Number(at('rows'));
+
+    target.querySelector('button').click();
+    flushSync();
+
+    expect([Number(at('rows')), at('label'), at('hidden')]).toEqual([before + 1, 'from the module', 'False']);
 });
 
 // A `for` target, a `with … as`, a `match` capture and an import bind a name of

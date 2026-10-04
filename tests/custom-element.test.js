@@ -7,6 +7,47 @@ import './fixtures/TypedElement.svelte';
 import './fixtures/ObjectFormElement.svelte';
 import './fixtures/PartialPropsElement.svelte';
 import './fixtures/PartialPropsElementNative.svelte';
+import './fixtures/ReflectElement.svelte';
+import './fixtures/ReflectElementNative.svelte';
+
+// A prop declared `reflect` is written back to its attribute, as Svelte writes
+// it: its default, a value the page sets, an attribute the page writes, and a
+// value the component computes itself, a float made JavaScript's number.
+test('a reflected prop follows its value onto the attribute, as Svelte does', async () => {
+    const settle = async () => {
+        flushSync();
+        await Promise.resolve();
+        flushSync();
+    };
+
+    const read = async (tag) => {
+        const element = document.createElement(tag);
+        const seen = [];
+
+        document.body.appendChild(element);
+        await settle();
+
+        try {
+            seen.push(element.getAttribute('level'));
+            element.level = 7;
+            await settle();
+            seen.push(element.getAttribute('level'));
+            element.setAttribute('level', '9');
+            await settle();
+            seen.push(element.getAttribute('level'));
+            element.querySelector('[data-k="step"]').click();
+            await settle();
+            seen.push(element.getAttribute('level'), String(element.level));
+
+            return seen;
+        } finally {
+            element.remove();
+        }
+    };
+
+    expect(await read('reflect-element')).toEqual(await read('reflect-element-native'));
+    expect(await read('reflect-element-native')).toEqual(['1', '7', '9', '9.5', '9.5']);
+});
 
 // An entry written in `customElement.props` configures its prop, and every
 // other prop is observed beside it, in Svelte's order: configuring one used to

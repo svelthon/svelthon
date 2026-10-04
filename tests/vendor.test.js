@@ -8,6 +8,7 @@ import CoroutineAwaited from './fixtures/CoroutineAwaited.svelte';
 import * as deleteOrder from './fixtures/delete_order.py';
 import * as strKeywords from './fixtures/str_keywords.py';
 import * as jsonText from './fixtures/json_text.py';
+import * as deletedGlobal from './fixtures/deleted_global.py';
 
 // Behaviours of the vendored Brython that Svelthon rests on, each observable,
 // so a build that loses one turns a test red rather than a page. The first
@@ -547,4 +548,10 @@ test('an int made from a negative fraction, or by negating zero, is not a negati
     ];
 
     for (const one of made) expect(Object.is(one, 0)).toBe(true);
+});
+
+// A module global deleted at run time, through globals(), is unbound when it is
+// read: NameError, or the builtin it shadowed.
+test('a global deleted through globals() reads as unbound', () => {
+    expect(deletedGlobal.drop()).toBe('missing|2');
 });

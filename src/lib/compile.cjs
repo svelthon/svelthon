@@ -1280,6 +1280,7 @@ const RUNTIME = {
     unsubscribe: '__unsubscribe',
     kept: '__kept',
     unproxied: '__unproxied',
+    handOver: '__handOver',
     registerModule: '__registerModule',
     withNamespace: '__withNamespace',
     __pybridge: '__pybridge',
@@ -1688,7 +1689,7 @@ function refuseRemarked(remarked, source, lines, lineOffset = 0) {
 
 const injections = (declared, component, names) =>
     INJECTED.filter((one) => injectable(one, declared, component, names)).map(
-        (one) => `__bind(__proto, '${one.name}', ${one.value});`
+        (one) => `__bind(__proto, '${one.name}', ${one.value}, undefined, undefined, false);`
     );
 
 // The lines those injections need in the component's preamble, before any of
@@ -2320,6 +2321,9 @@ const local = (name) => `__local_${name}`;
 const over = (name) => `__over_${name}`;
 const fallback = (name) => `__default_${name}`;
 const pick = (name) => `__pick_${name}`;
+// A `bindable` prop's last scalar written by Python, beside the number Svelte
+// was handed for it (`handOver`).
+const crossed = (name) => `__crossed_${name}`;
 // What `$effect.root` hands back. Python reads the decorated name and gets
 // this, exactly as JavaScript reads `const destroy = $effect.root(…)`, and
 // the name belongs to the destructor on both sides.
@@ -2383,7 +2387,7 @@ function preamble(c) {
             'directiveAction', 'directiveTransition', 'directiveAnimate',
             'plainScalar', 'storeMember', 'invoke',
             ...(c.store ? ['registerModule'] : SUBSCRIBING(c) ? ['unsubscribe'] : []),
-            ...(c.bindables.length ? ['kept', 'unproxied'] : []),
+            ...(c.bindables.length ? ['kept', 'unproxied', 'handOver'] : []),
             // Only an effect and `on_mount` hand a value back to be called
             // later, so only a component with one needs the name.
             ...(c.effects.length || c.lifecycle('on_mount') ? ['pyTeardown'] : []),
@@ -2406,6 +2410,7 @@ function declarations(c) {
                   `let { ${c.bindables.map((b) => `${b} = $bindable()`).join(', ')}, ...__props } =` +
                       ` $props();`,
                   ...c.bindables.flatMap((b) => [
+                      `let ${crossed(b)} = null;`,
                       `let ${rev(b)} = $state.raw(0);`,
                       `const ${bump(b)} = () => { ${rev(b)} += 1; };`,
                       `const ${read(b)} = () => { ${rev(b)}; };`
@@ -2565,11 +2570,13 @@ function authorBindings(c) {
                 ` () => ${pick(n)}());`
         ),
         // What Svelte hands back for a write it kept for itself may be its own
-        // proxy of it: `kept` and `unproxied` give Python its object again.
+        // proxy of it: `kept` and `unproxied` give Python its object again. A
+        // scalar goes up as JavaScript's own, its original kept beside it
+        // (`handOver`).
         ...c.bindables.map(
             (b) =>
-                `__bind(__proto, '${b}', () => (${rev(b)}, __follow(__pyBind(__unproxied(${b})))),` +
-                ` (${NEXT_VALUE}) => { if (!__initialising || ${b} === undefined) { const __written = __track(${NEXT_VALUE}, ${bump(b)}, ${read(b)}${c.store ? '' : `, ${SUBS}`}); ${b} = __written; __kept(${b}, __written); } }, () => ${b});`
+                `__bind(__proto, '${b}', () => (${rev(b)}, __follow(__pyBind(__unproxied(${b}, ${crossed(b)})))),` +
+                ` (${NEXT_VALUE}) => { if (!__initialising || ${b} === undefined) { const __written = __track(${NEXT_VALUE}, ${bump(b)}, ${read(b)}${c.store ? '' : `, ${SUBS}`}); ${crossed(b)} = __handOver(__written, (__crossing) => { ${b} = __crossing; }); __kept(${b}, __written); } }, () => ${b});`
         ),
         // Reading the revision alongside the value is what registers the
         // dependency: an in-place mutation then invalidates every reader,
@@ -3151,6 +3158,8 @@ function compile(
         jsNames = [],
         lineOffset = 0,
         sourceContent = null,
+        // Whether the component is compiled as a custom element.
+        element = false,
         // Whether an imported name is one of the project's own `.py` files,
         // `'file'`, or names a directory of the project, `'package'`, asked by
         // whoever can read the file system. Without it the imports are not
@@ -3253,6 +3262,16 @@ function compile(
     }
     let { props, bindables, state, funcs, deriveds, effects, inspects, reserved, bound, lines, remarked, starred } =
         surface(root._ast.body);
+
+    // A custom element's props belong to its element, which reads each back,
+    // as `element.middle` and as the attribute `reflect` writes. Svelte answers
+    // both from an accessor it publishes for a destructured prop, the one a
+    // `bindable` is, so every prop takes that path; a scalar the component
+    // writes reaches the element as JavaScript's own (`handOver`).
+    if (element && !store && !plain) {
+        bindables = [...props, ...bindables];
+        props = [];
+    }
 
     // Neither a store nor a plain module has a parent, so an annotation there
     // declares plain state, and $props() would be meaningless at module scope.

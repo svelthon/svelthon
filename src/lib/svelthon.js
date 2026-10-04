@@ -346,6 +346,7 @@ export function python(options = {}) {
             const file = about(filename);
 
             file.jsNames = moduleImports(content);
+            file.element = compileOptionsFor(content) !== undefined;
             file.lineOffset = content.slice(0, declaring.index).split('\n').length - 1;
             file.defs = [];
             file.defLines = [];

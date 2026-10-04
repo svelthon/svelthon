@@ -15,6 +15,10 @@ set_context("whole", state)
 @export
 def bump():
     state["count"] += 1
+
+
+@export
+def share():
     shared["count"] += 1
 
 

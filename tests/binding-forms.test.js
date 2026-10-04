@@ -58,7 +58,7 @@ const FORMS = [
 ];
 
 // The line the compiler emits when it believes nobody has taken the name.
-const injected = (src) => script(src).includes("bind(__proto, 'date', () => __helpers.date)");
+const injected = (src) => script(src).includes("bind(__proto, 'date', () => __helpers.date,");
 
 describe('a name the author bound is the author’s, however it was written', () => {
     test.for(FORMS)('%s keeps the name', ([, form]) => {

@@ -11,6 +11,9 @@
 
     export function bump() {
         state.count += 1;
+    }
+
+    export function share() {
         shared.count += 1;
     }
 
@@ -24,4 +27,4 @@
 </script>
 
 <p data-k="owner">{state.count}|{state.rate}|{state.inner.n}|{rows.join(',')}|{shared.count}</p>
-<LiveReader {state} {rows} />
+<LiveReader bind:state bind:rows />

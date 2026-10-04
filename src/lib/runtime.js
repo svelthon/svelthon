@@ -5234,6 +5234,9 @@ export function withNamespace(name, namespace, run) {
 
     $B.namespace = (requested) => (requested === name ? namespace : original(requested));
 
+    // The module's `__dict__`, which the engine reads a module's names from.
+    namespace[$B.DICT] = namespaceDict(namespace);
+
     // `from m import *` binds names the compiler could not list, written onto the
     // namespace as plain properties: in a reactive module they are given their
     // accessors as the import binds them. A plain `.py` holds no signals.
@@ -5430,6 +5433,10 @@ const keyed = (target, name) => lookup(target, name) !== MISSING;
 // field hands over `null`, and `value is None` has to say so.
 export const pyBind = (value) => {
     if (value === null || value === undefined) return NONE;
+
+    // The number a Python write is handing over right now (`handOver`) is the
+    // value it was written as.
+    if (handed !== null && Object.is(value, handed.js)) return handed.py;
     if (typeof value === 'number') return globalThis.__BRYTHON__.jsobj2pyobj(value);
 
     // A view a JavaScript reader was handed (`viewOf`) is its container again.
@@ -5847,7 +5854,10 @@ export function ticking(after) {
 // derived's body run. It is what `del` watches; without one, `get` is it.
 const STORED = new WeakMap();
 
-export function bind(proto, key, get, set, source) {
+// `listed` is false for a helper the compiler injects: a word of the framework,
+// readable like a builtin, and no name of the module's own, so `globals()` does
+// not list it.
+export function bind(proto, key, get, set, source, listed = true) {
     if (source !== undefined) {
         let sources = STORED.get(proto);
         if (sources === undefined) STORED.set(proto, (sources = new Map()));
@@ -5878,7 +5888,7 @@ export function bind(proto, key, get, set, source) {
                     configurable: true
                 });
             },
-        enumerable: true,
+        enumerable: listed,
         configurable: true
     });
 }
@@ -5897,8 +5907,46 @@ export const kept = (seen, written) => {
     return written;
 };
 
-export const unproxied = (value) =>
-    (value !== null && typeof value === 'object' && WRITTEN.get(value)) || value;
+export const unproxied = (value, crossed) => {
+    if (crossed != null && Object.is(value, crossed.js)) return crossed.py;
+
+    return (value !== null && typeof value === 'object' && WRITTEN.get(value)) || value;
+};
+
+// **A scalar Python writes into a `bindable` prop crosses as JavaScript's own**,
+// because the parent may be JavaScript: a float handed to it as the Brython
+// object it is has no `toFixed`. And the parent may be Python, which wants the
+// float it was written, `15.0` and not the `15` a JavaScript number reads back
+// as. Both, because the parent's setter runs inside the write: the original is
+// handed over beside the number for exactly that long, and `pyBind` takes it
+// back when it meets the number it stands for. What comes back is what the
+// child keeps as well (`crossed`), so its own read gives the float again while
+// Svelte still holds the number it wrote. A container, a string or an int is
+// its own JavaScript form and crosses as itself.
+let handed = null;
+
+export const handOver = (written, write) => {
+    const crossing = plainScalar(written);
+
+    if (crossing === written) {
+        write(written);
+
+        return null;
+    }
+
+    const record = { js: crossing, py: written };
+    const previous = handed;
+
+    handed = record;
+
+    try {
+        write(crossing);
+    } finally {
+        handed = previous;
+    }
+
+    return record;
+};
 
 // `del name` on a name `bind` publishes. Brython's `del` deletes an own
 // property, and the name is an accessor the namespace inherits.
@@ -5971,5 +6019,112 @@ export const unproxied = (value) =>
         }
         return isMember.call(this, item, container);
     };
+})(globalThis.__BRYTHON__);
+
+// **`globals()` is a dict**, as CPython has it, and the module's own: what is
+// written to it is a global, what is deleted from it is gone. Our namespace is a
+// JavaScript object whose names are accessors on its prototype, so Brython
+// handed it over as a foreign object: `"count" in globals()` held and
+// `globals().keys()`, `.copy()`, `.pop()`, `list(globals())` did not.
+//
+// So `globals()` answers a dict that is a view of the namespace: a Brython dict
+// as its target, which is what gives it its class, and every key read, written
+// and deleted on the namespace itself. A dict of string keys keeps them as its
+// own properties, so the view reports the module's names as its own. The names
+// are the author's: the compiler's own (`__truthy`, `__py`) and the helpers it
+// injects (`tojson`, `effect`) are no more globals than `len` is, and a name
+// deleted or not yet bound is not there. `locals()` at the top of a module is
+// the same dict, as in CPython, and `dir()` reads it.
+//
+// One key shape is refused rather than half kept: a key that is not a string
+// would move a Brython dict to its table, a copy that stops following the
+// namespace.
+//
+// The same dict is the module's `__dict__` to the engine (`$B.DICT`, set by
+// `withNamespace`), which is where `from m import *` reads a module with no
+// `__all__`, and `from m import name` the name.
+const COMPILER_NAME = /^__(?!.*__$)/;
+const DICTS = new WeakMap();
+
+function namespaceDict(namespace) {
+    const $B = globalThis.__BRYTHON__;
+    const known = DICTS.get(namespace);
+
+    if (known !== undefined) return known;
+
+    const proto = Object.getPrototypeOf(namespace);
+    const named = (key) =>
+        typeof key === 'string' &&
+        !key.startsWith('$') &&
+        !COMPILER_NAME.test(key) &&
+        (Object.hasOwn(namespace, key) || Object.getOwnPropertyDescriptor(proto, key)?.enumerable === true) &&
+        namespace[key] !== undefined;
+    const names = () => [...new Set([...Object.keys(namespace), ...Object.keys(proto)])].filter(named);
+
+    const dict = new Proxy($B.empty_dict(), {
+        get(target, key) {
+            return named(key) ? namespace[key] : Reflect.get(target, key);
+        },
+        has(target, key) {
+            return named(key) || Reflect.has(target, key);
+        },
+        ownKeys(target) {
+            return [...names(), ...Reflect.ownKeys(target)];
+        },
+        getOwnPropertyDescriptor(target, key) {
+            return named(key)
+                ? { value: namespace[key], writable: true, enumerable: true, configurable: true }
+                : Reflect.getOwnPropertyDescriptor(target, key);
+        },
+        set(target, key, value) {
+            if (typeof key === 'string') {
+                namespace[key] = value;
+
+                return true;
+            }
+
+            if (!Object.hasOwn(target, key)) {
+                throw $B.$call($B.builtins.TypeError, "svelthon — a module's globals() takes names, which are strings");
+            }
+
+            return Reflect.set(target, key, value);
+        },
+        deleteProperty(target, key) {
+            if (named(key)) $B.$delete(key, namespace);
+
+            return true;
+        }
+    });
+
+    DICTS.set(namespace, dict);
+
+    return dict;
+}
+
+(function installGlobals($B) {
+    const ours = (namespace) => namespace !== null && typeof namespace === 'object' && namespace.$proxy === true;
+
+    const wrap = (name, answer) => {
+        const original = $B.builtins[name];
+        const wrapped = function (...args) {
+            return answer(original, this, args);
+        };
+
+        $B.builtins[name] = Object.assign(wrapped, original);
+    };
+
+    wrap('globals', (original, self, args) => {
+        const found = original.apply(self, args);
+
+        return ours(found) ? namespaceDict(found) : found;
+    });
+
+    wrap('locals', (original, self, args) => {
+        const frame = $B.frame_obj?.frame;
+
+        return frame !== undefined && ours(frame[1]) && frame[1] === frame[3]
+            ? namespaceDict(frame[1])
+            : original.apply(self, args);
+    });
 })(globalThis.__BRYTHON__);
 
