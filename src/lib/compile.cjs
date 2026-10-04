@@ -1886,6 +1886,64 @@ function refuseNestedRunes(body, source, lineOffset) {
     }
 }
 
+// The call spellings of the markers are read in one place each: the whole value
+// of an assignment, `twice = derived(…)`, and `inspect(…)` as a statement of
+// its own. Anywhere else the call declares nothing and the decorator it stands
+// for is the identity at run time: `print(effect(…))` never ran,
+// `watch = inspect(count)` and `twice = derived(count * 2)` handed a value
+// where a function was expected and raised a bare `TypeError` later, on another
+// line.
+const CALLED_MARKERS = new Set(['derived', 'effect', 'inspect', 'inspect_with', 'export']);
+const SHORT_FORM = {
+    derived: 'the short form is `name => expression`',
+    effect: 'the short form is `=> expression`',
+    export: 'decorate a `def` with `@export`'
+};
+// What cannot be a function, whatever the names in it are bound to.
+const NOT_CALLABLE = [
+    'Constant', 'BinOp', 'UnaryOp', 'BoolOp', 'Compare', 'JoinedStr', 'List', 'Tuple', 'Dict', 'Set',
+    'ListComp', 'SetComp', 'DictComp', 'GeneratorExp'
+];
+
+const markerCalled = (node) => {
+    if (!(node instanceof $B.ast.Call)) return null;
+    const { func } = node;
+    if (func instanceof $B.ast.Name && CALLED_MARKERS.has(func.id)) return func.id;
+    if (func instanceof $B.ast.Attribute && func.value instanceof $B.ast.Name && func.value.id === 'effect') return 'effect';
+    return null;
+};
+
+function refuseMisplacedMarkers(body, source, lineOffset) {
+    walkScoped(body, (node, scope, line, parent) => {
+        const marker = markerCalled(node);
+        if (marker === null) return;
+
+        const at = line + lineOffset;
+        const fail = (sentence) => {
+            throw refuse(`svelthon — ${sentence} (${source}:${at})`, source, at);
+        };
+        const assigned = parent instanceof $B.ast.Assign && parent.value === node;
+
+        if (!assigned && !(parent instanceof $B.ast.Expr) && !(parent instanceof $B.ast.AnnAssign)) {
+            fail(`\`${marker}(…)\` is read only as the whole value of an assignment; inside another expression it declares nothing`);
+        }
+
+        if (!assigned) return;
+
+        const generated = parent.targets.every((one) => one instanceof $B.ast.Name && one.id.startsWith('__'));
+
+        if ((marker === 'inspect' || marker === 'inspect_with') && !generated) {
+            fail(`\`${marker}(…)\` is a statement of its own, \`${marker}(values)\`; assigned, it is handed values where it reads a function`);
+        }
+
+        const [first] = node.args;
+
+        if (first !== undefined && NOT_CALLABLE.some((one) => first instanceof $B.ast[one]) && SHORT_FORM[marker]) {
+            fail(`\`${marker}(…)\` takes a function, and is handed a value here; ${SHORT_FORM[marker]}`);
+        }
+    });
+}
+
 // The two assignments that are declarations to the compiler rather than data to
 // the module. Both are read off the AST, and neither is state.
 const DIRECTIVES = new Set(['__all__', '__js__']);
@@ -3585,6 +3643,7 @@ function compile(
     refuseReserved(reserved, source, lines, lineOffset);
     refuseRemarked(remarked, source, lines, lineOffset);
     refuseNestedRunes(root._ast.body, source, lineOffset);
+    refuseMisplacedMarkers(root._ast.body, source, lineOffset);
 
     // Functions by default, what a framework calls by name. A module that wants
     // to export values says so with `__all__`, exactly as it would to a Python

@@ -88,11 +88,13 @@ describe('inspect', () => {
 
         // A line at the left margin inside open brackets, or after a backslash,
         // continues a statement: it is not the rune, whatever it starts with.
+        // The call stays inside its expression, where it declares nothing, and
+        // is refused there.
         test.for([
             ['open brackets', 'total = sum([\ninspect(1)])\n'],
             ['a backslash', 'total = 1 + \\\ninspect(1)\n']
         ])('and reads no rune on a line continued by %s', ([, src]) => {
-            expect(script(src)).not.toContain('$inspect');
+            expect(() => script(src)).toThrow(/`inspect\(…\)` is read only as the whole value of an assignment/);
         });
     });
 });

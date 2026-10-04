@@ -75,6 +75,23 @@ describe('a rune written below the top level', () => {
         expect(script(body)).toThrow(instead);
     });
 
+    // Read only as the whole value of an assignment, or `inspect(…)` alone:
+    // anywhere else the call declared nothing, and handed a value where a
+    // function is read it raised a bare TypeError later, on another line.
+    test.for([
+        ['inside an expression', 'count = 0\nprint(effect(lambda: count))\n', /`effect\(…\)` is read only as the whole value of an assignment.*:2\)/],
+        ['assigned inspect', 'count = 0\nwatch = inspect(count)\n', /`inspect\(…\)` is a statement of its own.*:2\)/],
+        ['a derived handed a value', 'count = 0\ntwice = derived(count * 2)\n', /`derived\(…\)` takes a function.*`name => expression`.*:2\)/],
+        ['an effect handed a value', 'count = 0\nrun = effect(count + 1)\n', /`effect\(…\)` takes a function.*`=> expression`/]
+    ])('and a marker is refused %s', ([, body, message]) => {
+        expect(script(body)).toThrow(message);
+    });
+
+    test('while the spellings it reads compile', () => {
+        expect(script('count = 0\ntwice => count * 2\n=> print(count)\ninspect(count)\n')).not.toThrow();
+        expect(script('def double():\n    return 2\n\ntwice = derived(double)\nfocus = export(lambda: 1)\n')).not.toThrow();
+    });
+
     // A class body is no more the top level than a function body is.
     test('and inside a class', () => {
         expect(
