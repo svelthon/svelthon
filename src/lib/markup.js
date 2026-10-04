@@ -495,6 +495,19 @@ const GROUP_ACTION = '__group';
 // The setter's parameter. Generated, so it only has to avoid the author's names.
 const BOUND_VALUE = '__value';
 
+// A name the markup declares and a `bind:group` writes, `{picked = []}` then
+// `bind:group={picked}`, gets a token declared beside it under this prefix: the
+// cell's own identity. Each row of an `{#each}` declares its own cell, and two
+// rows may hold equal values, `0` or one shared list, so the value cannot tell
+// their groups apart and the token does. Svelte keeps such rows apart too.
+const CELL = '__cell_';
+
+// The names a `bind:group` writes as a whole, `bind:group={picked}` or the
+// shorthand `bind:group`, read off the markup before the walk: a declaration
+// comes before the binding that writes it, and has to know.
+const GROUPED = /\bbind:group(?:\s*=\s*["']?\{([^{}]*)\})?/gu;
+const groupedNames = (markup) => new Set([...markup.matchAll(GROUPED)].map(([, expr]) => (expr ?? 'group').trim()));
+
 // The module namespace the compiler binds beside the template. Named here and
 // emitted there, like `GROUP_ACTION`: the two have to agree.
 const NAMESPACE = '__py';
@@ -1319,6 +1332,7 @@ function walk(markup, collect, onPython, seed, record, where) {
     let opened = 0;
     const ids = [0];
     const scopes = [[...(seed.get(0) || [])]];
+    const grouped = groupedNames(markup);
 
     // The tag being read, so that its closing `>` knows what it closed.
     let tag = null;
@@ -1591,7 +1605,13 @@ function walk(markup, collect, onPython, seed, record, where) {
         // The Python list itself: the group compares with Python's `==`, and
         // its inputs know each other by the list they share.
         const read = call(expr, '', undefined, 'python');
-        const write = assign(expr);
+
+        // A name the markup declared is Svelte's cell, which Svelte writes
+        // itself: `assign` would hand it to a `def` as a parameter and write
+        // that. The value still crosses into Python on the way.
+        const target = expr.trim();
+        const own = declaredHere(target);
+        const write = own ? `${target} = ${BIND_VALUE}(${BOUND_VALUE})` : assign(expr);
         const found = tag === null ? null : tagValue(markup, tag.start);
         const outer = region;
 
@@ -1623,8 +1643,9 @@ function walk(markup, collect, onPython, seed, record, where) {
         // And the template names the binding mentions, which are what tell the
         // rows of an `{#each}` apart: `row.picked` is one target per `row`.
         // The list the row holds cannot stand in for them, since two rows may
-        // be handed one default list and are still two targets.
-        const where = mentioned(expr.trim());
+        // be handed one default list and are still two targets. A cell the
+        // markup declared is its own target, told by its token.
+        const where = own && inScope().includes(`${CELL}${target}`) ? [`${CELL}${target}`] : mentioned(target);
 
         // And `checked` for the server, which runs no action: Svelte's server
         // writes it for its own group, from the model, when the tag has a value,
@@ -2297,6 +2318,11 @@ function walk(markup, collect, onPython, seed, record, where) {
                         : `{const ${declared.name} = $derived(${value})}`;
 
                 scopes[scopes.length - 1]?.push(...refuseCompilerName([declared.name]));
+
+                if (declared.rune === 'state' && grouped.has(declared.name)) {
+                    out += `{const ${CELL}${declared.name} = {}}`;
+                    scopes[scopes.length - 1]?.push(`${CELL}${declared.name}`);
+                }
             } else {
                 out += `{${call(inner, '__text')}}`;
             }

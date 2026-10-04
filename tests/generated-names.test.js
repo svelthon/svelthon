@@ -34,6 +34,8 @@ const MARKUP_LOCAL = new Set([
     '__value',
     // The loop variable of a compiled `{#each}` over a range.
     '__range_',
+    // The token declared beside a markup cell a `bind:group` writes.
+    '__cell_',
     // A stand-in used by the first, throwaway walk that only collects snippet
     // names; nothing it returns is emitted.
     '__probe'
