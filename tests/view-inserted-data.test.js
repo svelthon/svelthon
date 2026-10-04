@@ -41,6 +41,21 @@ test('an object put in by JavaScript is followed like the ones Python made, as i
     }
 });
 
+// A view already handed out, put back inside a new object, is the container it
+// stands for and not a copy of it: the object holds the same dict, and a later
+// write to the dict is seen through both.
+test('a view nested in an object put in stays the container it is, as in Svelte', () => {
+    const shared = (values) => {
+        values.rows.push({ n: 0, item: values.record });
+        const same = values.rows.at(-1).item === values.record;
+        values.record.nested = { n: 9 };
+        return [same, values.rows.at(-1).item.nested.n];
+    };
+
+    expect(shared(mounted(ViewInsertedData).values)).toEqual(shared(mounted(ViewInsertedDataNative).values));
+    expect(shared(mounted(ViewInsertedData).values)).toEqual([true, 9]);
+});
+
 // The line Svelte draws: a plain object put in comes back as another object, a
 // class instance as itself.
 test('and only a plain object is taken in: an instance keeps its identity', () => {

@@ -19,6 +19,17 @@ const mounted = (Component, props = {}) => {
     return { text: target.querySelector('p').textContent, exported: instance.state() };
 };
 
+// A shared `.svelte.py` exports its functions under their own names, through
+// the store object and as named exports, and both read the renamed wrapper:
+// reading the bare name, the module failed to import with `state is not
+// defined`.
+test('a store whose functions are named state and props imports and answers', async () => {
+    const module = await import('./fixtures/rune_named.svelte.py');
+
+    expect([module.state(), module.props(), module.answer()]).toEqual([42, 1, 7]);
+    expect([module.default.state(), module.default.props()]).toEqual([42, 1]);
+});
+
 test('a def named state or props mounts, renders and exports, as in Svelte', () => {
     expect(mounted(RuneNamedDefs)).toEqual(mounted(RuneNamedDefsNative));
     expect(mounted(RuneNamedDefs, { label: 'cells' })).toEqual(mounted(RuneNamedDefsNative, { label: 'cells' }));

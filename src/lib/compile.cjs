@@ -3079,7 +3079,7 @@ function instanceExports(c) {
                       .map((d) => `    get ${d.name}() { return ${storeRead(c, d.name, `__follow(${d.name})`)}; },`),
                   ...c.funcs
                       .filter((f) => c.published(f.name))
-                      .map((f) => `    get ${f.name}() { return ${storeRead(c, f.name, `${NS}.${f.name}`, f.name)}; },`),
+                      .map((f) => `    get ${f.name}() { return ${storeRead(c, f.name, `${NS}.${f.name}`, wrapperName(f.name))}; },`),
                   `};`,
                   ``,
                   `export default store;`,
@@ -3095,7 +3095,7 @@ function instanceExports(c) {
                             ``,
                             ...c.funcs
                                 .filter((f) => c.published(f.name))
-                                .map((f) => `const __export_${f.name} = ${storeRead(c, f.name, `${NS}.${f.name}`, f.name)};`),
+                                .map((f) => `const __export_${f.name} = ${storeRead(c, f.name, `${NS}.${f.name}`, wrapperName(f.name))};`),
                             `export { ${c.funcs
                                 .filter((f) => c.published(f.name))
                                 .map((f) => `__export_${f.name} as ${f.name}`)

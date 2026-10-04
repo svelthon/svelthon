@@ -3237,6 +3237,10 @@ export function pyData(value, made) {
 
     if (typeof value !== 'object') return pyBind(value);
 
+    // A view a JavaScript reader was handed is its container again, at any
+    // depth: `{item: values.original}` holds the dict itself, not a copy of it.
+    if (VIEWED.has(value)) return pyBind(value);
+
     // A Brython list and a Brython tuple are JavaScript arrays too, told apart
     // from a foreign one by the `ob_type` they carry. Rebuilding one made a list
     // of a tuple — the immutability went, and with it the right to be a dict key
