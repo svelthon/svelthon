@@ -638,22 +638,26 @@ describe('the blocks that declare names', () => {
         }
     });
 
-    // A `bind:` on a name the markup declared cannot go through the read/write
-    // pair: the generated `def` receives that name as a *parameter*, so the
+    // A `bind:` on a name the markup declared cannot be written by the pair's
+    // setter: the generated `def` receives that name as a *parameter*, so the
     // write would land on the parameter and die with the call. Svelte knows how
-    // to write those, so the directive is handed over untouched.
-    test('a bind: on a markup name is handed to Svelte', () => {
-        expect(rewrite('{draft = name}<input bind:value={draft} />').out).toContain(
-            'bind:value={draft}'
+    // to write those, so the setter writes the name itself; the read still goes
+    // through Python, since the cell holds a Python value.
+    test('a bind: on a markup name is written by Svelte and read through Python', () => {
+        expect(rewrite('{draft = name}<input bind:value={draft} />').out).toMatch(
+            /bind:value=\{\(\) => __expr_scalar_\d+\(__follow\(draft\)\), \(__value\) => draft = __pyBind\(__value\)\}/
         );
-        expect(rewrite('{value = ""}<input bind:value />').out).toContain('bind:value={value}');
+        expect(rewrite('{value = ""}<input bind:value />').out).toContain(
+            '(__value) => value = __pyBind(__value)'
+        );
     });
 
     // Same failure, and it was there before markup declarations existed: an
-    // `{#each}` alias is a parameter too.
+    // `{#each}` alias is a parameter too. Svelte refuses a write to one in
+    // runes mode, the pair's as it does the bare binding's.
     test('and so is one on a block s own alias', () => {
         expect(rewrite('{#each xs as row}<input bind:value={row} />{/each}').out).toContain(
-            'bind:value={row}'
+            '(__value) => row = __pyBind(__value)'
         );
     });
 

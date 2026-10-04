@@ -1665,12 +1665,15 @@ function walk(markup, collect, onPython, seed, record, where) {
     // (`scalar`), and the value of a `<select multiple>`, a list each of whose
     // items meets an option's `value`, is made so item by item (`selection`).
     // `multiple` is read off the whole tag, Svelte requiring it static there.
+    //
+    // A name the markup declared is read the same way, its cell holding the
+    // Python value, and written by the setter itself, see `declaredHere`.
     const boundPair = (directive, expr) => {
-        if (declaredHere(expr)) return expr.trim();
-
         const multiple = directive === 'bind:value' && tag?.name === 'select' && tagNames(markup, tag.start).has('multiple');
+        const target = expr.trim();
+        const write = declaredHere(target) ? `${target} = ${BIND_VALUE}(${BOUND_VALUE})` : assign(expr);
 
-        return `() => ${call(expr, '__bound', undefined, multiple ? 'selection' : 'scalar')}, (${BOUND_VALUE}) => ${assign(expr)}`;
+        return `() => ${call(expr, '__bound', undefined, multiple ? 'selection' : 'scalar')}, (${BOUND_VALUE}) => ${write}`;
     };
 
     const groupAction = (expr) => {
@@ -1770,14 +1773,18 @@ function walk(markup, collect, onPython, seed, record, where) {
     };
 
     // A `bind:` whose target is a name the *markup* declared, a `{x = e}` or a
-    // block's own alias, cannot go through the pair above. The generated `def`
+    // block's own alias, cannot be written by `assign`. The generated `def`
     // receives that name as a parameter, so `x = value` would assign to the
     // parameter and the write would die with the call. Silently.
     //
-    // Svelte already knows how to write those, so the directive is handed over
-    // untouched. In Svelte 5.56.9, a tag-declared `$state.raw` that nothing
-    // writes to compiles to a bare binding, and Svelte upgrades it to a real
-    // signal the moment a `bind:` targets it.
+    // Svelte already knows how to write those, so the setter writes the name
+    // itself. In Svelte 5.56.9, a tag-declared `$state.raw` that nothing writes
+    // to compiles to a bare binding, and Svelte upgrades it to a real signal the
+    // moment an assignment targets it.
+    //
+    // The read still goes through Python: the cell holds a Python value, and
+    // handed to the DOM as it is, a float showed `[object Object]` in a text
+    // field and `None` showed `None`.
     const declaredHere = (expr) => {
         const name = expr.trim();
 

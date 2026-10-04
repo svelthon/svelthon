@@ -69,6 +69,39 @@ describe('two projects in one process', () => {
     });
 });
 
+// One `.py` both projects import, reached by a different path from each: the
+// module name is made of that path, and the compiled file was cached under the
+// file alone, so the second project was handed a script importing the first
+// project's module, which its plugin does not serve.
+describe('one Python file shared by two projects', () => {
+    test.for([['shared.py'], ['shared.svelte.py']])('%s is served to each under its own name', ([stem]) => {
+        const original = process.cwd();
+        const file = join(temporary, 'common', stem);
+        const loads = [];
+
+        mkdirSync(join(temporary, 'common'), { recursive: true });
+        writeFileSync(file, 'answer = 42\n');
+
+        try {
+            for (const root of [join(temporary, 'one'), join(temporary, 'two', 'nested')]) {
+                mkdirSync(root, { recursive: true });
+                process.chdir(root);
+
+                const plugin = svelthon();
+                const script = plugin.load.call({ addWatchFile() {} }, file);
+                const id = script.match(/from "(virtual:svelthon\/\w+)"/)[1];
+
+                loads.push({ id, module: plugin.load('\0' + id) });
+            }
+        } finally {
+            process.chdir(original);
+        }
+
+        expect(loads[0].id).not.toBe(loads[1].id);
+        for (const { module } of loads) expect(module?.code).toContain('answer');
+    });
+});
+
 describe('two versions of one file preprocessed at once', () => {
     const filename = join(temporary, 'Same.svelte');
     const first = '<script lang="python">\nalpha = 1\n</script>\n<p>{alpha + 1}</p>\n';

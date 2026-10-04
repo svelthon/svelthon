@@ -562,21 +562,35 @@ const compiledStores = new Map();
 // The compile checks every import against the files it finds, so the files its
 // imports resolve to are part of the key: a module deleted or renamed beside it
 // compiles, and checks, this one again.
+//
+// So is the path the file is reached by, from the directory the process is in,
+// which its module name and the import of that module are made of: one file
+// shared by two projects is `../shared/x.py` from one and `../../shared/x.py`
+// from the other, and the second was handed a script importing the first one's
+// module.
 function compilePython(file, path) {
     const stamp = statSync(file).mtimeMs;
+    const shown = relative(process.cwd(), file);
     const cached = compiledStores.get(file);
     const found = (imports) => imports.map((mod) => moduleFile(mod, dirname(file), path) ?? '').join('\n');
-    if (cached && cached.stamp === stamp && cached.found === found(cached.result.imports)) return cached.result;
+    if (
+        cached &&
+        cached.stamp === stamp &&
+        cached.shown === shown &&
+        cached.found === found(cached.result.imports)
+    ) {
+        return cached.result;
+    }
 
     const source = readFileSync(file, 'utf8');
     const mode = isReactive(file) ? { store: true } : { plain: true };
-    const result = compile(source, nameFor(file), relative(process.cwd(), file), {
+    const result = compile(source, nameFor(file), shown, {
         ...mode,
         sourceContent: source,
         resolves: (mod) => moduleKind(mod, dirname(file), path)
     });
 
-    compiledStores.set(file, { stamp, result, found: found(result.imports) });
+    compiledStores.set(file, { stamp, shown, result, found: found(result.imports) });
     return result;
 }
 
