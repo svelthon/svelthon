@@ -2327,6 +2327,14 @@ export const plainScalar = (value) => {
 const VIEW_OF = new WeakMap();
 const VIEWED = new WeakSet();
 
+// A list's view is an array whose prototype is not `Array.prototype` itself,
+// only inherits from it: Svelte wraps a plain array put in a `$state` in a proxy
+// of its own, which keeps every write to itself, so a JavaScript parent that
+// binds a Python list would push into a copy Python never sees. Not being a
+// plain array is what tells Svelte to keep the view as it is. Every method, the
+// iterator and `Array.isArray` are the array's.
+const LIST_VIEW = Object.create(Array.prototype);
+
 const forReader = (one) => {
     if (one === NONE) return null;
     if (one !== null && (typeof one === 'object' || typeof one === 'function') && callable(one)) return pyHandler(one);
@@ -2411,6 +2419,9 @@ function viewOf(value) {
     };
 
     const view = new Proxy(sequence ? [] : {}, {
+        getPrototypeOf(shell) {
+            return sequence ? LIST_VIEW : Object.getPrototypeOf(shell);
+        },
         get(shell, key, receiver) {
             follow(value);
 
@@ -5956,12 +5967,13 @@ export const unproxied = (value, crossed) => {
 // handed over beside the number for exactly that long, and `pyBind` takes it
 // back when it meets the number it stands for. What comes back is what the
 // child keeps as well (`crossed`), so its own read gives the float again while
-// Svelte still holds the number it wrote. A container, a string or an int is
-// its own JavaScript form and crosses as itself.
+// Svelte still holds the number it wrote. A list, a tuple or a dict crosses as
+// its view (`viewOf`), which a JavaScript parent reads and writes live; a
+// string or an int is its own JavaScript form and crosses as itself.
 let handed = null;
 
 export const handOver = (written, write) => {
-    const crossing = plainScalar(written);
+    const crossing = viewOf(plainScalar(written));
 
     if (crossing === written) {
         write(written);
