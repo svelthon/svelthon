@@ -13,13 +13,16 @@ test.each([
     ['kind', 'dict|True|True'],
     [
         'names',
-        'added_value,count,deleted,kind,label,names,popped,reads,restore,top,top_dir,top_locals,writes'
+        'added_value,count,deleted,kind,label,names,popped,popped_read,reads,restore,top,top_dir,top_locals,unbound,writes'
     ],
     ['reads', 'True|True|True|3|3|3|x|True'],
     ['writes', '5'],
     ['popped', 'x|False'],
     ['deleted', 'False'],
-    ['top', 'True|True|True|False']
+    ['top', 'True|True|True|False'],
+    // A name never bound, and one popped from globals(), read from a function.
+    ['unbound', 'missing'],
+    ['popped_read', 'missing']
 ])('globals() answers %s as CPython does', (step, cpython) => {
     expect(module[step]()).toBe(cpython);
 });

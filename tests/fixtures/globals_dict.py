@@ -40,6 +40,25 @@ def deleted():
     return str("count" in globals())
 
 
+if False:
+    ghost = 1
+
+
+def unbound():
+    try:
+        return str(ghost)
+    except NameError:
+        return "missing"
+
+
+def popped_read():
+    globals().pop("label")
+    try:
+        return str(label)
+    except NameError:
+        return "missing"
+
+
 top_locals = locals() is globals()
 top_dir = dir()
 

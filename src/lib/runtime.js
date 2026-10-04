@@ -4979,7 +4979,15 @@ export const pyExpression = (call, where, lineOffset, arity, kept = false) =>
     identified(
         (...args) =>
             running(
-                () => call(args.slice(0, arity).map(pyBind)),
+                () => {
+                    templateReads += 1;
+
+                    try {
+                        return call(args.slice(0, arity).map(pyBind));
+                    } finally {
+                        templateReads -= 1;
+                    }
+                },
                 where,
                 lineOffset,
                 kept === true ? null : (COMPARED[kept] ?? pyNumbers)
@@ -4987,6 +4995,26 @@ export const pyExpression = (call, where, lineOffset, arity, kept = false) =>
         nameOf(where),
         arity
     );
+
+// **A name of the module that nothing has bound yet** — assigned in a branch
+// that did not run, or deleted — is read by Python code as CPython reads it,
+// `NameError` (`$B.resolve_missing_global`), and by the template as Svelte
+// renders a value that is not there: empty. The template is the reader while
+// one of its expressions is evaluated, which `templateReads` counts; what that
+// expression calls is read under the same rule.
+let templateReads = 0;
+
+(function installTemplateAbsence($B) {
+    const missing = $B.resolve_missing_global;
+
+    $B.resolve_missing_global = function (name, namespace) {
+        if (templateReads > 0 && namespace !== null && typeof namespace === 'object' && namespace.$proxy === true && name in namespace) {
+            return undefined;
+        }
+
+        return missing.call(this, name, namespace);
+    };
+})(globalThis.__BRYTHON__);
 
 // **A directive is a call whose callee is a Python expression.** The markup pass
 // writes `use:act.measured={v}` as `use:__directiveAction={["act.measured",
