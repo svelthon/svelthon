@@ -1617,9 +1617,8 @@ function walk(markup, collect, onPython, seed, record, where) {
         // And the instance, as its namespace. Two *instances* of one component
         // have the same binding text and may have been handed the same list —
         // `selected = initial`, with one empty list passed to both — so neither
-        // of the two halves above tells them apart, and a reset merged their
-        // groups. The namespace is the thing every element of one instance
-        // shares and no other instance has.
+        // of the two halves above tells them apart. The namespace is the thing
+        // every element of one instance shares and no other instance has.
         //
         // And the template names the binding mentions, which are what tell the
         // rows of an `{#each}` apart: `row.picked` is one target per `row`.

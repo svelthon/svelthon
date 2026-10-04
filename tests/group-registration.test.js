@@ -68,13 +68,11 @@ test('two hundred inputs mounted together are sorted once', async () => {
     }
 });
 
-// A form reset rebuilds each group's list from its inputs, and finds the list a
-// target is rebuilt into through an index of its own, made and dropped with the
-// reset. It searched every target rebuilt so far, so a form of n rows, each its
-// own group, read n² coordinates. Counted here by the reads of the values each
-// binding mentions, for rows that are one group and rows that are many.
+// A form reset empties each group, as Svelte's `bind:group` does, without asking
+// the controls what they show: one write per binding, and no read of the values
+// a binding mentions, for rows that are one group and rows that are many.
 test.each([['one shared group', () => 0], ['a group per row', (at) => at]])(
-    'a reset of 128 rows in %s reads each row a few times',
+    'a reset of 128 rows in %s writes each row once and reads none',
     async (_, row) => {
         const form = document.body.appendChild(document.createElement('form'));
         const scope = {};
@@ -104,7 +102,7 @@ test.each([['one shared group', () => 0], ['a group per row', (at) => at]])(
 
             expect(written.length).toBe(128);
             expect(written.every((one) => Array.from(one).length === 0)).toBe(true);
-            expect(reads).toBeLessThanOrEqual(4 * 128);
+            expect(reads).toBe(0);
         } finally {
             actions.forEach((one) => one.destroy());
             form.remove();

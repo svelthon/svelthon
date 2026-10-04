@@ -2,8 +2,7 @@
 // its binding writes, and two rows of an `{#each}` are two targets even when
 // both hold the same list: keying the rows on the list they hold merged them,
 // so ticking `b` on the second row wrote `['a', 'b']` there, an `a` no control
-// of that row carries. The same key served the reset rebuild, with the same
-// result.
+// of that row carries.
 import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import GroupSharedDefault from './fixtures/GroupSharedDefault.svelte';
