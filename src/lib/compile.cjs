@@ -34,7 +34,7 @@ const $B = globalThis.__BRYTHON__;
 $B.brython({ ipy_id: [] });
 
 const { INJECTED } = require('./injected.cjs');
-const { atomic } = require('./lexical.js');
+const { atomic, replaceLiterals } = require('./lexical.js');
 
 // Name the generated module gives to the reactive namespace it receives.
 const NS = '__py';
@@ -70,8 +70,8 @@ const namespaceFor = (filename) => filename.replace(/\./g, '_');
 //
 // Refusing is right: a line out of line with its neighbours is a mistake, and
 // compiling it anyway would accept in silence what the rest of the project
-// rejects out loud. What was missing is only the sentence saying so. Returns the
-// line to blame, or 0 when there is nothing to say.
+// rejects out loud. Returns the line to blame, or 0 when there is nothing to
+// say.
 function flushLine(src) {
     const lines = src.split('\n');
     if (!lines.some((line) => /^[ \t]+\S/.test(line))) return 0;
@@ -124,9 +124,12 @@ const HABITS = [
     [/\.length\b/, '`.length` is `len(…)`']
 ];
 
+// A comment goes, a string becomes `""`, and a backquoted text stays: it is no
+// Python string, and it is one of the habits.
 const habitsIn = (text) => {
-    // Across lines too, so a triple-quoted string is text as a whole.
-    const code = text.replace(/(["'])(?:\\[\s\S]|(?!\1)[\s\S])*\1/g, '""');
+    const code = replaceLiterals(text, (literal) =>
+        literal[0] === '#' ? '' : literal[0] === '`' ? literal : '""'
+    );
     return HABITS.filter(([pattern]) => pattern.test(code)).map(([, said]) => said);
 };
 
@@ -256,25 +259,19 @@ function sourceMap(generated, source, content, lineOffset) {
 // the closest thing it has to TypeScript's `export` keyword. Read from the AST,
 // so it stays a plain assignment in the source.
 //
-// **Every statement, in order, and the value that counts is the last one.**
-// This read the *first* assignment and stopped, so a module that narrowed its
-// list afterwards — a second `__all__ = [...]`, or the `+=` that a conditional
-// export is written with — exported the list it no longer had. `__all__` is an
-// ordinary Python name and the value it holds when the module has finished
-// running is the one `from m import *` obeys.
+// **Every statement, in order, and the value that counts is the last one**: a
+// module that narrows its list afterwards, with a second `__all__ = [...]` or
+// the `+=` a conditional export is written with, exports the list it ends
+// with, the one `from m import *` obeys.
 //
 // What literals spell, Python computes the same on every run, so each such
-// statement is run, by Python, rather than read by a copy of its rules: a copy
-// was written once per method and was wrong where it stopped, `+= "bc"`
-// refused and `.append()` on a tuple accepted. Anything else is refused rather
-// than skipped, and that is the half the silence was hiding: a declaration
-// that matched nothing was dropped and the module fell back to **exporting
-// everything** — a file that states a contract and publishes past it, with
-// nothing said.
+// statement is run, by Python, rather than read by a copy of its rules.
+// Anything else is refused rather than skipped: a declaration that matched
+// nothing would fall back to **exporting everything**, a file that states a
+// contract and publishes past it.
 //
 // An entry that is not a string, which CPython itself raises on at
-// `from m import *`, has long been left out while the good ones are kept, and
-// that decision stands.
+// `from m import *`, is left out while the good ones are kept.
 //
 // `__js__` keeps the literal reading below: it is a directive of this project,
 // set by one assignment and changed by nothing else. **Unreadable** is an
@@ -741,8 +738,8 @@ function declaredJsImports(body, source, lineOffset = 0) {
 // `__js__` covers a plain `.py`, and only the named form, which is all a module
 // ever asks for: `error`, `redirect`, `query`, `browser`. A component asks for
 // three more, and every one of them is a template concern: the default export,
-// which is how a `.svelte` child is imported and by far the commonest (25 of the
-// 65 imports measured across the three projects); a stylesheet, imported for its
+// which is how a `.svelte` child is imported and by far the commonest (25 of
+// 65 imports across three projects); a stylesheet, imported for its
 // effect; and a namespace, which is what `<Dialog.Root>` needs. None of the three
 // can occur in a module with no markup, which is why the dialect stops at the
 // component and a `.py` keeps parsing as Python.
@@ -761,20 +758,18 @@ const IMPORTJS = /^importjs\b/;
 const IMPORTJS_ANYWHERE = /^[ \t]+importjs\b/;
 const IMPORTJS_CLAUSE = /^importjs\s+([\s\S]*?)\s+from\s+(['"])([^'"]+)\2\s*$/;
 const IMPORTJS_EFFECT = /^importjs\s+(['"])([^'"]+)\1\s*$/;
-// Two questions, and one pattern used to answer both. `JS_NAME` is what an
-// `importjs` clause may contain, and ASCII is a defensible line there even
-// though JavaScript takes `let élève = 1`: the name is one the author copies out
-// of a JavaScript package.
+// Two questions, two patterns. `JS_NAME` is what an `importjs` clause may
+// contain, and ASCII is a defensible line there even though JavaScript takes
+// `let élève = 1`: the name is one the author copies out of a JavaScript
+// package.
 //
 // `PY_NAME` is the other question, and it has Python's answer: what a `.py`
-// exports, whether through `__all__` or by default. Asked with the JavaScript
-// pattern, `__all__ = ["élèves"]` was filtered to nothing and the module
-// exported nothing at all, in silence. Same class as `markup.js`'s `NAME`, and
-// for the same reason.
+// exports, whether through `__all__` or by default, so `__all__ = ["élèves"]`
+// exports `élèves`. Same class as `markup.js`'s `NAME`, and for the same
+// reason.
 //
 // Python's own classes, `XID_Start` and `XID_Continue`, which `str.isidentifier`
-// answers by: letters alone left out `℘`, `℮` and `ᢅ` at the start and `·` after
-// it, and a `def ℘()` was dropped from the exports with nothing said.
+// answers by: `℘`, `℮` and `ᢅ` start a name and `·` continues one.
 const JS_NAME = /^[A-Za-z_$][\w$]*$/;
 const PY_NAME = /^[\p{XID_Start}_]\p{XID_Continue}*$/u;
 
@@ -824,7 +819,7 @@ function continuedLines(src) {
 // It also reads as JavaScript's arrow, which is what a derived is: an
 // expression that is re-evaluated rather than a value that was computed once.
 //
-// `=>` is a SyntaxError in Python, measured, so no valid source can contain one
+// `=>` is a SyntaxError in Python, so no valid source can contain one
 // outside a string or a comment, so the rewrite has no ambiguity to resolve. It
 // becomes `x = derived(lambda: expr)` **on the same line**: `derived` is already
 // injected as the identity, `surface()` reads the call off the AST, and the
@@ -836,12 +831,10 @@ function continuedLines(src) {
 // Where a trailing comment starts, or -1, by `atomic`'s reading: a `#` inside a
 // string is not a comment.
 //
-// The dialect's signs each take the rest of the line — `(\S[\s\S]*)$` — and the
-// rewrite wraps what they took in parentheses, so a `#` commented out the
-// closing one and the author was told `'(' was never closed` about a parenthesis
-// they never typed. Everything Python's own syntax carries accepts a trailing
-// comment; every sign of ours refused one. The READMEs teach the refused form in
-// three places each, which is how it was found.
+// The dialect's signs each take the rest of the line, `(\S[\s\S]*)$`, and the
+// rewrite wraps what they took in parentheses, so a trailing comment is cut
+// first, or its `#` would comment out the closing one. Everything Python's own
+// syntax carries accepts a trailing comment, and so does every sign of ours.
 function commentAt(line) {
     for (let i = 0; i < line.length; i++) {
         if (line[i] === '#') return i;
@@ -1236,14 +1229,11 @@ const EXPR_PREFIX = '__expr_';
 
 // Every name the runtime lends the generated code arrives under a `__` spelling.
 //
-// They used to arrive bare, and a component's own declarations sit in the same
-// scope: `group: str = "a"` gave `Identifier 'group' has already been declared`,
-// and twenty-one more words did the same — `init`, `track`, `follow`, `schedule`
-// among them, each the way a Python author would write it. Neither guard covered
-// it: `JS_RESERVED` refuses what JavaScript will not take, and `group` is a fine
-// JavaScript name; the locked list refuses Svelthon's own vocabulary, and `group`
-// is not one of its words. This is the third list, and the repair was already in
-// the file one line above the wound — `helpers as __helpers`.
+// A component's own declarations sit in the same scope, and `group`, `init`,
+// `track`, `follow` or `schedule` are words a Python author writes. Neither
+// guard covers them: `JS_RESERVED` refuses what JavaScript will not take, and
+// the locked list Svelthon's own vocabulary. The runtime's names are a third
+// category, and the answer is a prefix, as `helpers as __helpers` has.
 //
 // The list is written out rather than derived, so the spelling exists as text in
 // this file: `tests/generated-names.test.js` checks that the markup pass and the
@@ -1297,11 +1287,9 @@ const runtimeAliases = (names) =>
 // How many positional arguments a caller may hand a Python function, read off
 // its signature so the wrapper can drop the rest.
 //
-// It used to be `args.args.length` alone, which is only the middle third of a
-// positional signature. `def positional(x, /, y)` puts `x` in `posonlyargs`, so
-// the wrapper passed one argument and Python raised about a missing one; and
-// `def variadic(*values)` has no `args` at all, so `variadic(2, 3)` answered
-// **0**, with nothing raised to say the arguments had been dropped on the way.
+// Not `args.args.length` alone, which is only the middle third of a positional
+// signature: `def positional(x, /, y)` puts `x` in `posonlyargs`, and
+// `def variadic(*values)` has no `args` at all.
 //
 // `Infinity` for a `*args`, because there is no number to truncate to: it is a
 // JavaScript literal and `slice(0, Infinity)` is the whole list. Truncation
@@ -1501,13 +1489,9 @@ function templateDots(def) {
 // because Svelte refuses `$host()` outright in a component that is not a custom
 // element.
 //
-// Asked of the AST, because the question is about a **name**. It used to be a
-// text search over the generated JavaScript, and Brython emits a Python string
-// literal as a JavaScript one: `role = "host"` became `locals.role = 'host'`, so
-// the search matched its own quotation marks. The component then emitted
-// `$host()`, Svelte refused it outside a custom element, and a component holding
-// that word in a string did not render at all. Every position reached it — a
-// dict key, a comparison, an f-string — since the word alone was the test.
+// Asked of the AST, because the question is about a **name**: a text search over
+// the generated JavaScript would match a Python string, `role = "host"`, and
+// emit `$host()` where Svelte refuses it.
 //
 // A `Name` node is the question, and a `Constant` whose value happens to read
 // the same is not. Nor is every `Name`: a parameter or a local called `host`
@@ -1542,15 +1526,14 @@ const injectable = (one, declared, component, names) =>
 //
 // Seven families of name are built out of the author's — `__fn_go`, `__rev_c`,
 // `__bump_c`, `__read_c`, `__local_n`, `__js_mount`, `__root_loop` — and
-// declared in the same scope as the author's names, beside `__proto`. Each was
-// measured colliding with the construct that emits it, and what the author saw
-// was `Identifier '__fn_go' has already been declared` at a line and column
-// inside the emitted script, under a frame of three lines they never wrote.
+// declared in the same scope as the author's names, beside `__proto`: an
+// author's name of that shape collides with the construct that emits it,
+// `Identifier '__fn_go' has already been declared`, inside the emitted script.
 //
 // A prefix rather than a list, because a list cannot cover the family added
 // next. And a *trailing* `__` is what makes it safe: every name Python itself
-// puts in a module carries one — `__all__`, `__doc__`, `__js__` — measured
-// clean, so the rule refuses the compiler's shape and leaves Python's alone.
+// puts in a module carries one, `__all__`, `__doc__`, `__js__`, so the rule
+// refuses the compiler's shape and leaves Python's alone.
 const COMPILER_PREFIX = /^__(?!.*__$)/;
 
 const GENERATED = new RegExp(`^(?:${EXPR_PREFIX}|__inspect_|__effect_)`);
@@ -1630,14 +1613,10 @@ function refuseLocked(declared, component, source, lines, lineOffset = 0) {
 
 // A module-level name JavaScript will not take as a binding.
 //
-// It used to be dropped in silence, and the three shapes that took were each
-// worse than the last. A component rendered its **first** value and then never
-// followed it: `new = 2` shows 2, the handler moves the model to 3, the page
-// stays at 2, with no error anywhere — the witness beside it, `ok`, repaints.
-// A module's `def default()` was simply not exported. And a value named in
-// `__all__` reached the refusal below this one and was told *this module never
-// binds it*, which is false: the module binds it, JavaScript reserves it. The
-// author was sent looking for a typo.
+// Kept, it would fail three ways: a component would render its **first** value
+// and never follow it, a module's `def default()` would not be exported, and a
+// value named in `__all__` would be told *this module never binds it*, which is
+// false: the module binds it, JavaScript reserves it.
 //
 // So it is refused, for the reason `injected.cjs` gives about its own list:
 // winning in silence is the worst of the three behaviours. The cost is one
@@ -2046,8 +2025,8 @@ function surface(body) {
                     (isBindable(node) ? bindables : props).push(node.target.id);
                 }
             } else if (
-                // `async def` is a different AST node, and missing it left async
-                // handlers undefined: a click did nothing at all, silently.
+                // `async def` is a different AST node, and an async handler is a
+                // function all the same.
                 node instanceof $B.ast.FunctionDef ||
                 node instanceof $B.ast.AsyncFunctionDef
             ) {
@@ -2087,8 +2066,7 @@ function surface(body) {
                 bucket.push(entry);
             } else if (node instanceof $B.ast.ClassDef) {
                 // A class is a scope, so nothing inside it is module state, and
-                // the descent stops here as it always did. The *name* is still
-                // the author's, which is the half that was missing.
+                // the descent stops here. The *name* is still the author's.
                 bind(node.name);
             } else {
                 // A block is not a scope in Python: a name bound inside `if`,
@@ -2159,30 +2137,16 @@ function surface(body) {
 // The modules the source imports, `import x` and `from x import y` alike.
 //
 // Brython's own bookkeeping, `root.imports`, records `import x` and nothing
-// else, so `from counter_store import count` was invisible to the prelude that
-// resolves a sibling `.py`, and the component compiled cleanly then failed in
-// the browser on a module it had never been given.
+// else, so the walk reads `from x import y` too: the prelude that resolves a
+// sibling `.py` needs both.
 //
 // Walked rather than read off the top level, because an import inside a function
 // or a `try` is still an import.
 //
-// Asked of the AST alone. It was asked of the text as well, by a regex anchored
-// with `m`, and `^` matches the start of any line — including a line inside a
-// triple-quoted string, which is where usage examples live:
-//
-//     doc = """
-//     from effet import quelque_chose
-//     """
-//
-// The prelude then carried a real `import` for `effet`, so Vite loaded the file
-// and ran its module body, for a name that appears only in documentation. The
-// cost was measured as "a name listed that was already going to be"; it was a
-// module executed, watched and shipped.
-//
-// The belt was there for a bundled build with two sets of AST classes, where
-// `instanceof` answers false for a node that is plainly an ImportFrom. The walk
-// below no longer asks `instanceof` — it recognises the node by shape, for that
-// exact reason — so the belt guarded nothing the walk had not already covered.
+// Asked of the AST alone: a regular expression over the text would read an
+// import in a triple-quoted string, where usage examples live, and load a
+// module for a name that appears only in documentation. The walk recognises a
+// node by shape, since a bundled build carries a second set of AST classes.
 //
 // `import x` is read by the same walk, so every module the source names comes
 // with the line that names it first: what a refusal of that import points at.
@@ -2207,8 +2171,8 @@ function moduleImports(ast) {
         // Recognised by shape, not by class. Brython builds its AST classes with
         // `eval`, and a bundled build ends up with a second set: `instanceof`
         // then answers false for a node that is plainly an ImportFrom, and a
-        // sibling module silently stopped being resolved for any component
-        // compiled in a browser. An ImportFrom is the only node carrying a
+        // sibling module would not be resolved for a component compiled in a
+        // browser. An ImportFrom is the only node carrying a
         // module name, an alias list and a level together, and a relative
         // import (`from . import x`) names no module.
         const importFrom =
@@ -2443,22 +2407,15 @@ const SUBS = '__subs';
 
 // The setter's parameter, in every `bind()` below.
 //
-// It was `v`, and `v` is what anyone writes after a decade of
-// `for k, v in d.items()`. A module-level name gets a binding, and the setter
-// assigns to it, so for that one spelling the parameter shadowed the cell the
-// assignment was meant for: `(${NEXT_VALUE}) => { v = __track(${NEXT_VALUE},…) }` writes the parameter,
-// the `let v` is never touched, and the name is `<Javascript undefined>` for the
-// life of the component. Nothing is reported at any point.
+// A module-level name gets a binding, and the setter assigns to it, so a bare
+// parameter would shadow the cell for its own spelling, and `v` is what anyone
+// writes after a decade of `for k, v in d.items()`. So it carries the prefix
+// the rest of the generated code carries.
 //
-// Probed against `value`, `one`, `n`, `f`, `fn`, `key`, `x`, `a`, `init`,
-// `bind`, `track`, `follow`, `err`, `teardown` and `args`: `v` was the only
-// collision, because it was the only bare name the generated code gave itself.
-// So it carries the prefix the rest of the generated code carries.
-//
-// `JS_RESERVED` did not catch it and could not: `v` is a perfectly good
-// JavaScript binding. The locked words did not either: `v` is not Svelthon's
-// vocabulary. This is a third category, a name the generated code uses for
-// itself, and the answer to that category is a prefix rather than a list.
+// `JS_RESERVED` cannot catch such a name, a perfectly good JavaScript binding,
+// and the locked words cannot either, since it is not Svelthon's vocabulary.
+// A name the generated code uses for itself is a third category, and the
+// answer to that category is a prefix rather than a list.
 const NEXT_VALUE = '__next';
 const SUBSCRIBING = (c) =>
     c.state.length > 0 || c.funcs.length > 0 || c.bindables.length > 0 || c.props.length > 0 || c.starred;
@@ -2477,10 +2434,8 @@ function preamble(c) {
     return [
         `import { init as __init } from ${JSON.stringify(virtualId(c.name))};`,
         // The bridge behind `__truthy` and the three beside it. Imported under a
-        // name no one would type: it was called `py` back when a template's
-        // expressions were JavaScript and an author wrote `py.str(items)` in the
-        // markup, short on purpose. Now that only generated code touches it,
-        // short is exactly wrong, and `py` is a name an author may want.
+        // name no one would type: only generated code touches it, and `py` is a
+        // name an author may want.
         `import { ${runtimeAliases([
             'bind', '__pybridge', 'track', 'follow', 'pyError',
             'pyEvent', 'pyAttach', 'plainData', 'pyArg', 'pyData', 'pyBoundary', 'pyComponent', 'pyExpression',
@@ -2839,10 +2794,8 @@ function instanceExports(c) {
         // policy (jsobj2pyobj on demand), enough to make handlers work.
         // An uncaught Python exception arrives in JS without message or stack;
         // pyError fills them in, naming the function and the file it came from.
-        // `pyComponent`, and not the wrapper written out here. It was the last
-        // boundary this file spelled itself, and a rule added to the runtime's
-        // own could not reach a template literal: the conversion of an action's
-        // arguments landed at two of the three wrappers and stopped here.
+        // `pyComponent`, and not a wrapper written out here: a rule added to the
+        // runtime's own reaches this boundary too.
         // A **reader** for the component's own functions, and the written-out
         // call for a template expression. The two wrappers differ in what they
         // are given because they differ in what the name means: an author's
@@ -2858,7 +2811,7 @@ function instanceExports(c) {
         ),
         // What a parent holding `bind:this` can call. Svelte gathers whatever an
         // instance script exports into `$$exports` and hands that object back,
-        // so a specifier list is enough: measured, `export { focus }` becomes
+        // so a specifier list is enough: `export { focus }` becomes
         // `var $$exports = { focus }`.
         //
         // A component with no `@export` exports nothing, which is theirs too: an
@@ -2893,20 +2846,10 @@ function instanceExports(c) {
                       .map((n) => `    get ${n}() { return (${rev(n)}, ${storeRead(c, n, n)}); },`),
                   ...c.unsignalled.map((n) => `    get ${n}() { return ${storeRead(c, n, `${NS}.${n}`)}; },`),
                   // The parameter and the name its body reads are one constant.
-                  // They were two: the signature still said `v` while the body
-                  // had moved to `__next`, so every published setter of every
-                  // store answered `ReferenceError: __next is not defined` —
-                  // `store.count = 7` did nothing and said that, while
-                  // `store.increment()` worked, which is what kept it hidden.
-                  // `__pyArg`, because this setter is a **crossing**, and it was
-                  // the only one in the project that treated its value as
-                  // already Python. `store.amount = 0.25` put a raw JavaScript
-                  // number where Python expected a float: `type(amount)`
-                  // answered `JSObject` and `format(amount, ".2f")` raised
-                  // *non-empty format string passed to object.__format__*, while
-                  // `store.set_amount(0.25)` beside it worked — one value, two
-                  // capabilities, decided by the door it came through. The table
-                  // of crossings in runtime.js lists this door and its getter.
+                  // `__pyArg`, because this setter is a **crossing**:
+                  // `store.amount = 0.25` puts a Python float where Python
+                  // expects one, as `store.set_amount(0.25)` does. The table of
+                  // crossings in runtime.js lists this door and its getter.
                   //
                   // The same conversion the call boundary owes, and no more: a
                   // scalar becomes its Python self and an object keeps its
@@ -3152,13 +3095,9 @@ function plainExports(c) {
     return [
         // `pyCall`, and not a copy of it written out here.
         //
-        // This line used to spell the whole boundary again — the trim, the
-        // arguments, the coroutine, the conversion, the position — and a rule
-        // added to the runtime's own wrapper then held everywhere except here. It
-        // cost a defect: a callable *returned* by a module's function crossed
-        // with no callback policy, so a bound method handed back by a factory
-        // arrived as an object while the same method exported directly was
-        // callable.
+        // One boundary, so a rule added to the runtime's wrapper, such as the
+        // callback policy a callable *returned* by a module's function crosses
+        // with, holds here too.
         //
         // The arrow is what keeps the late binding: `__fn_name` is a `let` the
         // namespace writes into, so the function is read at the call and not
@@ -3511,11 +3450,10 @@ function compile(
     const exported = listed ?? [...funcs.map((f) => f.name), ...plainDeriveds.map((d) => d.name)];
 
     // A name in `__all__` that the module never binds. Python raises on it at
-    // `from m import *` and says nothing otherwise; here it used to emit a
-    // reference to a name that does not exist, so the module failed to evaluate
-    // with `ReferenceError: Widget is not defined` and took everything it
-    // exported down with it. Reading the value off the namespace fixed the
-    // class and the import, and would have made this one quietly `undefined`.
+    // `from m import *` and says nothing otherwise; here a reference to a name
+    // that does not exist would fail the module's evaluation and take
+    // everything it exports down with it, and the value read off the namespace
+    // would be a quiet `undefined`.
     //
     // A `from m import *` binds names the source does not spell, so with one
     // the question waits until the module has run (`unboundRefusals`).

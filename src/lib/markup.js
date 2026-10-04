@@ -4,7 +4,7 @@
 // while the file next door needs `fs` and `path` and cannot be loaded there.
 import { parse } from 'svelte/compiler';
 import { attributeWrapper } from './attributes.js';
-import { atomic } from './lexical.js';
+import { atomic, replaceLiterals } from './lexical.js';
 
 export { atomic };
 
@@ -135,12 +135,10 @@ function arguments_(text) {
 const NAME_CHAR = '\\p{XID_Continue}';
 
 // The keywords themselves, and the boundary in front of one is the same class as
-// the rest of a name — not `\w`, which is ASCII. `énot` is a
-// perfectly good Python name ending in four letters that spell a keyword, and an
-// ASCII boundary saw `é` as the end of the word before it: the call was taken for
-// a grouping and `énot(x := 1)` was rewritten into `énot__assign("x", 1)`, a name
-// that does not exist. It is the repair of `NAME_END` again, one predicate over,
-// which is why the class is a constant now and the three readers share it.
+// the rest of a name — not `\w`, which is ASCII. `énot` is a perfectly good
+// Python name ending in four letters that spell a keyword: with an ASCII
+// boundary, `é` would end the word before it and `énot(x := 1)` would read as a
+// grouping. The class is a constant, and the three readers share it.
 const KEYWORD_BEFORE = new RegExp(
     `(^|[^${NAME_CHAR}.])(not|and|or|if|else|in|is|return|yield|lambda|await|assert|` +
         `del|elif|while|for|from|import|raise|with|as|None|True|False)$`,
@@ -150,12 +148,9 @@ const KEYWORD_BEFORE = new RegExp(
 // A name, spelled the way Python spells one, and the single source every pattern
 // in this file that reads a name is built from.
 //
-// `\w` is ASCII in JavaScript, so `[A-Za-z_]\w*` made `année` a name to the
-// script half and not to the signs. Corrected once, for the signs; the eleven
-// sites that ask "is this a name" were then written on different days and three
-// were still ASCII, which is how a snippet called `ligné` silently lost its
-// parameters. They agree about intent and differed only by age, so the class is
-// named here and nothing spells it out again.
+// `\w` is ASCII in JavaScript, and `année` or `ligné` is a name to Python. Every
+// site that asks "is this a name" reads this one class, and nothing spells it
+// out again.
 //
 // Python's own classes, `XID_Start` and `XID_Continue`, the ones
 // `str.isidentifier` answers by: marks are in them because a name in Vietnamese
@@ -331,9 +326,9 @@ export function walrus(expression) {
             // is the one expression Python has that assigns twice, and it is
             // what a handler needs: JavaScript reaches for its comma operator
             // there, which exists for the same reason: a `for` clause takes one
-            // expression and you want two. Reading only the start of the group
-            // took `1, b := 2` for the value and lost every assignment but the
-            // first, silently.
+            // expression and you want two. Read from its start alone, the group
+            // would take `1, b := 2` for the value and keep only the first
+            // assignment.
             //
             // The parentheses are already required for a single assignment, so
             // the several-element form costs the author no new syntax.
@@ -401,11 +396,10 @@ export function overMarkup(content, transform) {
 const blocks = () => /<(script|style)\b([^>]*)>[\s\S]*?(<\/\1\s*>)/gi;
 
 // `lang="python"` as an attribute of its own, and not as three letters inside
-// another name: `\blang` matched `data-lang`, a hyphen being no word character.
-// The value may be double-quoted, single-quoted or bare, which is the set
-// Svelte's parser accepts and hands to the `script` hook as `attributes.lang`;
-// the bare form used to be missed, so the body was compiled as Python and the
-// template around it was not.
+// another name: not `data-lang`, a hyphen being no word character. The value
+// may be double-quoted, single-quoted or bare, which is the set Svelte's parser
+// accepts and hands to the `script` hook as `attributes.lang`, and all three
+// are read here.
 //
 // Whitespace around the `=` is read too, though a component written that way
 // never runs: Svelte's parser refuses `<script lang = "python">` with `Expected
@@ -430,13 +424,10 @@ const declaresPython = (text) => attributesOf(text).get('lang') === 'python';
 // Where a file's Python script block begins and how it is closed, or `null` for
 // a file that declares none.
 //
-// Read from the blocks themselves, never from the text of the whole file. A
-// JavaScript component holding `const example = '<script lang="python">'` — a
-// string, a doc page, a code sample — declared nothing, and the template around
-// it was compiled as Python while the script hook, which reads the real
-// attributes, left the body alone. What the author saw was a call to an
-// expression function nobody generated, named by nothing they had written. The
-// same for a tag quoted in a `<style>` body.
+// Read from the blocks themselves, never from the text of the whole file: a
+// JavaScript component holding `const example = '<script lang="python">'`, a
+// string, a doc page, a code sample, declares nothing, and neither does a tag
+// quoted in a `<style>` body.
 export function pythonScript(content) {
     let block;
 
@@ -453,11 +444,11 @@ export function pythonScript(content) {
 // takes a pair for exactly that, `bind:value={() => v, (n) => v = n}`, so the
 // value is compiled twice: once as an expression, once as an assignment target.
 // A bare name barely notices, being written the same way in both languages; what
-// this buys is `bind:value={row.name}`, a member expression that used to be
-// JavaScript's and silently missed a dict.
+// this buys is `bind:value={row.name}`, a member expression read by Python's
+// rules, so the dot finds a dict's key.
 //
-// Everything else that used to sit here (`use:`, the transition family,
-// `class:`, `style:`) takes an ordinary *value*, and takes a Python one.
+// Every other directive (`use:`, the transition family, `class:`, `style:`)
+// takes an ordinary *value*, and takes a Python one.
 const DIRECTIVE = /^bind:/;
 
 // `bind:group` refuses the pair: Svelte works out which inputs form one group
@@ -521,8 +512,8 @@ const NAMESPACE = '__py';
 // Every runtime name the generated code uses carries a `__`, and this is why: a
 // component's own declarations live in the same scope as that import, so a bare
 // `pyBind` or `follow` would be a word an author could not use for a name of
-// their own. Measured on twenty-two of them — `group`, `init`, `track` and
-// `schedule` among the ones a Python author really writes.
+// their own: `group`, `init`, `track` and `schedule` are words a Python author
+// writes.
 const BIND_VALUE = '__pyBind';
 
 // The subscriber every compiled expression calls on the names it reads.
@@ -580,19 +571,16 @@ const LET_DIRECTIVE = /^let:/;
 //
 // So the question is asked once, here, before either branch runs.
 
-// What an attribute's name is made of, and the single answer five sites used to
-// give differently.
+// What an attribute's name is made of, one answer for every site that asks.
 //
 // HTML lets an attribute follow a quoted value with no space between them, and
 // Svelte's parser follows HTML, so `<b title="y"onclick={go}>` is two
-// attributes. Read with a class that did not exclude the quote, the name came
-// back as `"y"onclick`, which matches no rule this project has: the handler was
-// never wrapped, a binding lost its write-back, a `class:` lost its truthiness
-// and `let:` lost its refusal. Nothing said so, and a dead button looks like a
-// live one.
+// attributes. The class excludes the quote: a name read as `"y"onclick` would
+// match no rule, and a handler would go unwrapped, a binding without its
+// write-back, a `class:` without its truthiness and `let:` without its refusal.
 //
 // The three patterns below are built from the class rather than each carrying
-// their own, because the five sites disagreeing *was* the defect.
+// their own.
 const ATTRIBUTE_CHAR = '[^\\s=/>"\']';
 
 // The trailing `\s*` is load-bearing too: Svelte accepts `on:click= {foo}`, and
@@ -644,11 +632,9 @@ function loneInterpolation(markup, at, closing) {
 // handed to the action.
 //
 // The braced spelling carries the value; a quoted one is text Svelte
-// concatenates, and the node's own value is exactly right for it — *at the
-// moment it is read*. That was the whole of the rule, and the half it was
-// missing is time: `value="item-{label}"` gave the action nothing that changes
-// when `label` does, so the action never re-ran, kept the text it had read at
-// mount, and wrote `item-first` into Python while the field said `item-second`.
+// concatenates, and the node's own value is right for it *at the moment it is
+// read*. It changes, though: `value="item-{label}"` has to re-run the action
+// when `label` does.
 //
 // So both spellings are reported, told apart by `braced`, and the caller makes a
 // dependency out of the quoted one.
@@ -846,28 +832,22 @@ const referenced = (text) => {
 // target of an `{#each}`. Either may be a name, a pattern Svelte takes apart,
 // or either of those carrying a default.
 //
-// **A default may sit at any depth.** Measured on Svelte's own compiler, which
-// takes `[value = 1]`, `{ a = 1 }` and `{ a: { b = 1 } }` in both positions and
-// refuses only a rest parameter. The split was made at the top level alone, so
-// `value=True` compiled and `[value=True]` — the same default, one bracket
-// lower — crossed as written: Svelte was handed a JavaScript `True` and the
-// component died at mount with `ReferenceError: True is not defined`.
+// **A default may sit at any depth.** Svelte's own compiler takes
+// `[value = 1]`, `{ a = 1 }` and `{ a: { b = 1 } }` in both positions and
+// refuses only a rest parameter, so each default is compiled wherever it sits:
+// one left as written would hand Svelte a JavaScript `True`.
 //
-// And the same miss took the names with it. They were read off the whole entry,
-// so `True` entered the block's scope as if the author had bound it; here a
-// name is collected only where a name is *bound*, which is what a walk that
-// knows a default from a target can say and a regular expression cannot.
+// And a name is collected only where a name is *bound*, which is what a walk
+// that knows a default from a target can say and a regular expression cannot:
+// the `True` of a default is no name of the block.
 //
 // `tuple` is the `{#each}` half of the job, and it is done here rather than
 // beside it for the reason the rest of this walk exists. `for k, v in
 // d.items()` is how Python unpacks and `as (k, v)` is how it reads, so a
-// parenthesised group becomes the brackets Svelte destructures with — and the
-// translation used to be a blanket `replace(/[()]/g, …)` over the whole target,
-// which is fine while a target holds nothing but names and mangles the first
-// call written inside one: `as (a, b=len(x))` would have become `b=len[x]`.
-// A walk translates the delimiters it recognised and leaves an expression
-// alone, because an expression leaves through `call` before its parentheses are
-// ever looked at.
+// parenthesised group becomes the brackets Svelte destructures with. The walk
+// translates the delimiters it recognises and leaves an expression alone,
+// because an expression leaves through `call` before its parentheses are ever
+// looked at: `as (a, b=len(x))` keeps `len(x)`.
 function parameterPattern(part, call, names, tuple, unpack) {
     const at = atTopLevel(part, (i) => part[i] === '=');
 
@@ -1007,15 +987,14 @@ const unpacked = (unpack, call) =>
 
 // The names a declaration binds, read without compiling anything.
 //
-// **Two passes, because a default reads the names beside it.** Measured on
-// Svelte: `(j, k = j)` gives `k` the `j` of the same list, `[a, b = a]` the same
-// in an `{#each}`, and a default that reaches a name declared *after* it throws
-// `Cannot access 'h' before initialization` — which is JavaScript's own rule,
-// and which our own output inherits for free, since a compiled default reads
-// the binding Svelte emitted. So every name goes into the scope first and the
-// expressions are compiled second; one pass could only have offered the outer
-// namespace, and `{#each rows as [first, second=first]}` then read a module's
-// `first` instead of the row's, silently and with the right shape.
+// **Two passes, because a default reads the names beside it.** In Svelte,
+// `(j, k = j)` gives `k` the `j` of the same list, `[a, b = a]` the same in an
+// `{#each}`, and a default that reaches a name declared *after* it throws
+// `Cannot access 'h' before initialization`, JavaScript's own rule, which our
+// output inherits since a compiled default reads the binding Svelte emitted. So
+// every name goes into the scope first and the expressions are compiled second:
+// in one pass, `{#each rows as [first, second=first]}` would read a module's
+// `first` instead of the row's.
 const boundBy = (parts, tuple, unpack) => {
     const names = [];
 
@@ -1071,13 +1050,7 @@ function snippetParameters(trimmed, declare, call) {
 // carries none.
 //
 // A key is an expression, so it holds parentheses of its own: a call, a builtin,
-// a tuple. Matching it with `\(([^()]*)\)$` therefore failed on exactly those, and
-// failed *silently*: the whole line was taken for the target, so the key travelled
-// into the generated markup uncompiled, JavaScript in a template where nothing
-// else is, and the names inside it were declared as the block's own. Measured
-// before this existed: `(str(r.id))` reached the browser as `ReferenceError: str
-// is not defined`, and a tuple key, which is how Python writes a composite one,
-// could not be written at all.
+// a tuple, which is how Python writes a composite key.
 //
 // So the group is found by balance rather than by content, ignoring parentheses
 // inside a string, as `atomic` reads one: a triple-quoted string holding a lone
@@ -1123,11 +1096,8 @@ function eachBlock(trimmed, declare, call) {
 
     if (!head) return `{${trimmed}}`;
 
-    // **The separator at the top level, not the first one written.** This was a
-    // non-greedy regex, so `{#each ["a as b"] as item}` split inside the string:
-    // the iterable came out as `["a`, and the compiler answered `'[' was never
-    // closed` about a bracket the author had closed. A word of ordinary English
-    // in a list made the component impossible to compile.
+    // **The separator at the top level, not the first one written**, so
+    // `{#each ["a as b"] as item}` does not split inside the string.
     //
     // `atTopLevel` is the mechanism the `await` block already uses for its own
     // `then` and `catch`, three hundred lines down: it skips what `atomic`
@@ -1147,12 +1117,10 @@ function eachBlock(trimmed, declare, call) {
     const named = body.slice(at).replace(/^\s+as\s+/, '');
     const keyed = trailingKey(named);
 
-    // **A target destructures, and a destructuring holds expressions.** The
-    // same sentence as a snippet's parameter list, at the other site that
-    // declares names, and it was written at one of the two: `{#each rows as
-    // [value=True]}` handed Svelte a JavaScript `True` and died at mount, and
-    // its identifiers were read whole, so `True` was declared as a name of the
-    // block. One walk answers for both now.
+    // **A target destructures, and a destructuring holds expressions**, as a
+    // snippet's parameter list does, and one walk answers for both: in
+    // `{#each rows as [value=True]}` the default is Python and `True` is no name
+    // of the block.
     //
     // Split at the top level first, because the target is a comma list of its
     // own — `as (a, b), i` is a pattern and then Svelte's index — and each
@@ -1167,8 +1135,8 @@ function eachBlock(trimmed, declare, call) {
     // are the defaults compiled, and the key last, since it is evaluated inside
     // the block on each row.
     // Kept Python: Svelte only walks it, and every row goes back to Python
-    // expressions. Converted, its floats became numbers, a fresh list each render,
-    // so a row had no identity left to key by.
+    // expressions. Converted, it would be a fresh list each render, its floats
+    // numbers, and a row would have no identity left to key by.
     const iterable = call(body.slice(0, at), '__seq', undefined, 'python');
     const { pattern, unpack, consts } = destructured(keyed ? keyed[0] : named, declare, call, true);
 
@@ -1188,11 +1156,8 @@ function eachKey(key, unpack, call) {
 }
 
 // What Svelte's template language holds, named here so that anything else stops
-// rather than crosses. The branch that used to end these three chains was a
-// catch-all written for one case, `{@debug}` and `{#snippet}`, and it silently
-// carried every construct nobody had thought about, leaving its expression as
-// JavaScript inside a component that promised Python. Five of them were found
-// one at a time before this list existed.
+// rather than crosses: a construct nobody listed would otherwise carry its
+// expression as JavaScript inside a component that promises Python.
 const BLOCKS = ['if', 'each', 'key', 'await', 'snippet'];
 const CLAUSES = ['else', 'then', 'catch'];
 // `{@…}` is read in two positions and the two sets do not overlap: Svelte places
@@ -1204,17 +1169,11 @@ const ATTACHMENTS = ['attach'];
 
 // **A keyword and what follows it are parted by whitespace, not by a space.**
 //
-// Measured on Svelte's own compiler over every block, clause and tag it has: a
-// tab and a newline part them exactly as a space does, and only an *absent*
-// separator is refused. A condition wrapped over two lines is ordinary markup,
-// and `prettier-plugin-svelte` writes one for a long `{#if}`.
-//
-// The rule was already written at the four inner sites that needed a regular
-// expression for another reason — the body of an `{#each}`, the `then` of an
-// `{#await}`, `{:else if}`, a snippet's name — and spelled as a literal space
-// at the eight gates standing in front of them. So `{#each\n  rows as row}` was
-// turned away by the gate, by a sentence listing `each` among the blocks it
-// knows, before the body that would have read it correctly. Asked once here.
+// In Svelte's own compiler, over every block, clause and tag it has, a tab and a
+// newline part them exactly as a space does, and only an *absent* separator is
+// refused. A condition wrapped over two lines is ordinary markup, and
+// `prettier-plugin-svelte` writes one for a long `{#if}`. Asked once here, for
+// every gate.
 //
 // The keyword is a whole word, so `{@debugger}` is not `{@debug}` with a
 // suffix, and the text after it is handed on unread: every branch below trims
@@ -1243,7 +1202,7 @@ const keyword = (trimmed, sigil) => {
 // ordinary local, does not hold: the markup is not a Python scope, so there is
 // no Python rule to inherit.
 //
-// And the powerful form costs nothing when nobody uses the power: measured on
+// And the powerful form costs nothing when nobody uses the power: in Svelte
 // 5.56.9, a `$state.raw` that nothing writes to compiles to a bare binding,
 // exactly as a `const` would. Svelte upgrades it to a signal only when a `bind:`
 // writes to it.
@@ -1380,15 +1339,13 @@ function lineColumn(content, offset) {
 
 // A snippet's name belongs to the scope that *encloses* the block, and to the
 // whole of it: Svelte hoists the declaration, so `<Card {row} />` may be written
-// above the `{#snippet row(x)}` it names, measured, it compiles. One
-// left-to-right walk cannot know a name it has not reached yet, so the markup is
-// walked twice: once with a throwaway collector, to record which scope each
-// snippet name belongs to, then for real with every scope seeded.
+// above the `{#snippet row(x)}` it names. One left-to-right walk cannot know a
+// name it has not reached yet, so the markup is walked twice: once with a
+// throwaway collector, to record which scope each snippet name belongs to, then
+// for real with every scope seeded.
 //
-// The parameters are the other half and were already handled: `x` belongs
-// *inside* the block, the name belongs outside it. That is the whole difference,
-// and it is why `{#snippet row(x)}<b>{x}</b>{/snippet}` always worked while
-// `<Card {row} />` did not.
+// The parameters are the other half: `x` belongs *inside* the block, the name
+// belongs outside it.
 // `where` is `{ filename, content, offset }`, and it is what a refusal needs to
 // name a position: `markup` is one chunk of the file, `offset` is where that
 // chunk starts, and `content` is the whole of it. Optional, since the playground
@@ -1549,10 +1506,9 @@ function walk(markup, collect, onPython, seed, record, where) {
     };
 
     // The block names an expression actually reads, rather than every name in
-    // scope. Passing all of them was harmless until the markup could declare
-    // one: Svelte then warns `state_referenced_locally` about a name the
-    // expression never mentions, because it sees a tag-declared state read
-    // outside a reactive position.
+    // scope: passed a tag-declared state the expression never mentions, Svelte
+    // warns `state_referenced_locally`, since it sees the state read outside a
+    // reactive position.
     //
     // It is the right shape anyway. `follow(x)` subscribes the reader to `x`,
     // and an expression that does not read `x` has no business depending on it.
@@ -1645,29 +1601,25 @@ function walk(markup, collect, onPython, seed, record, where) {
     // The group action, in one place for the two spellings of `bind:group`.
     //
     // It takes the read, the write, and the value the tag was given: the DOM
-    // keeps only the text of that value, so a number bound from `value={1}` came
-    // back as "1" and matched nothing. See `tagValue` for why the node cannot
-    // answer this.
-    // A quoted value, compiled the way Svelte compiles it — which was measured
-    // against Svelte itself rather than assumed, and the assumption that stood
-    // here was wrong twice over:
+    // keeps only the text of that value, so a number bound from `value={1}`
+    // comes back as "1" and matches nothing. See `tagValue` for why the node
+    // cannot answer this.
+    // A quoted value, compiled the way Svelte compiles it:
     //
     // - **One interpolation and nothing else** is not text. `value="{n}"` binds
-    //   the number `1`, exactly as `value={n}` does; reading it off the node
-    //   gave the group the string `"1"`, which is the very failure the braced
-    //   spelling exists to avoid.
-    // - **Text around an interpolation** is a concatenation, and it *changes*.
-    //   Reading it off the node meant reading it whenever the action happened to
-    //   run, which is not ordered against Svelte writing the attribute.
+    //   the number `1`, exactly as `value={n}` does.
+    // - **Text around an interpolation** is a concatenation, and it *changes*:
+    //   read off the node, it would be read whenever the action happens to run,
+    //   which is not ordered against Svelte writing the attribute.
     //
     // So the parts are compiled here and joined here, under the rules the
     // attribute itself is built by, since the two have to give one string:
     //
     // - each interpolation through `__text`, as the main pass compiles an
     //   attribute's: `None` is empty and `False` is `False`, where `String()`
-    //   gave `None` and `false`;
+    //   would give `None` and `false`;
     // - each literal decoded as Svelte decodes it, asked of Svelte's own parser:
-    //   `a&amp;{n}` is `a&1` on the node, and was `a&amp;1` in the model.
+    //   `a&amp;{n}` is `a&1` on the node and in the model alike.
     //
     // A lone interpolation keeps its typed value. A value with no interpolation
     // is left to the node: it is static text and nothing can move it.
@@ -1823,7 +1775,7 @@ function walk(markup, collect, onPython, seed, record, where) {
     // parameter and the write would die with the call. Silently.
     //
     // Svelte already knows how to write those, so the directive is handed over
-    // untouched. Measured on 5.56.9: a tag-declared `$state.raw` that nothing
+    // untouched. In Svelte 5.56.9, a tag-declared `$state.raw` that nothing
     // writes to compiles to a bare binding, and Svelte upgrades it to a real
     // signal the moment a `bind:` targets it.
     const declaredHere = (expr) => {
@@ -1839,8 +1791,8 @@ function walk(markup, collect, onPython, seed, record, where) {
     //
     // Refused rather than supported: `bind:` writes those names already, and a
     // handler that wants to toggle something has the script for it. What is
-    // missing is the ability to *write* a markup name from a handler, and no
-    // corpus asks for it: measured, zero of 889 components.
+    // missing is the ability to *write* a markup name from a handler, and none
+    // of the 889 components of the corpus asks for it.
     const refuseMarkupWalrus = (rewritten, source) => {
         for (const [, name] of rewritten.matchAll(ASSIGNED)) {
             if (!inScope().includes(name)) continue;
@@ -2036,10 +1988,9 @@ function walk(markup, collect, onPython, seed, record, where) {
                     // `<svelte:options>` is read by Svelte's compiler rather
                     // than rendered, and its values have to be literals in
                     // Svelte's own grammar. They are configuration, not
-                    // expressions, so they cross untouched. The quoted spelling
-                    // always did, having no braces to catch; `customElement={{…}}`,
-                    // which is how shadow mode and props are configured, came
-                    // out as a call and Svelte asked for a string literal.
+                    // expressions, so they cross untouched, `customElement={{…}}`
+                    // included, which is how shadow mode and props are
+                    // configured.
                     if (tag !== null && tag.name === 'svelte:options') {
                         out += markup.slice(index, end + 1);
                         index = end + 1;
@@ -2082,13 +2033,9 @@ function walk(markup, collect, onPython, seed, record, where) {
                         // `style:color=red{variable}`: an unquoted value with an
                         // interpolation glued onto it, which Svelte reads as text
                         // followed by an expression. The brace does not open an
-                        // attribute of its own, and the shorthand below claimed
-                        // it: the text before it was swallowed into a name nobody
-                        // wrote — `redvariable={…}` — and Svelte answered
-                        // `Expected token >` about a token the author never
-                        // typed. Every quoted spelling of the same value was
-                        // already right; this is the one the scanner read as the
-                        // start of something new.
+                        // attribute of its own: read as the shorthand below, the
+                        // text before it would become a name nobody wrote,
+                        // `redvariable={…}`.
                         out += directive(glued[1])
                             ? markup.slice(index, end + 1)
                             : `{${call(inner, '__text')}}`;
@@ -2144,7 +2091,7 @@ function walk(markup, collect, onPython, seed, record, where) {
             } else if (char === '>') {
                 inTag = false;
 
-                // An element's body is a scope of its own, measured: Svelte
+                // An element's body is a scope of its own: Svelte
                 // emits `const row = …` inside a JavaScript block for a snippet
                 // written in a `<div>` as much as in a `<Card>`, so the name
                 // dies at the closing tag. Seeding it any wider would replace a
@@ -2326,18 +2273,11 @@ function walk(markup, collect, onPython, seed, record, where) {
                 }
 
                 // **A parameter may carry a default, and a default is an
-                // expression.** This passed the whole declaration through as
-                // written, so `{#snippet row(value=True)}` handed Svelte a
-                // JavaScript `True` and the component died at mount with
-                // `ReferenceError: True is not defined` — while `{@render
-                // row(False)}` beside it worked, because an argument *given* is
-                // compiled and one *defaulted* took another path.
-                //
-                // Svelte takes a default, and takes a call in one (measured
-                // against its own compiler), so the expression is compiled where
-                // it stands. And only the name is declared: reading identifiers
-                // out of the whole parameter text put `True` in scope as if the
-                // author had bound it.
+                // expression**, compiled where it stands like an argument given
+                // to `{@render}`: `{#snippet row(value=True)}` hands Svelte
+                // Python's `True`. Svelte takes a default, and a call in one.
+                // And only the name is declared: `True` is no name of the
+                // block.
                 //
                 // `push` goes *into* the function rather than after it, because
                 // a default reads the parameters beside it — `(j, k = j)` is
@@ -2659,18 +2599,6 @@ const swallowedBrace = (at) =>
 
 // The text without its Python comments, strings left whole.
 function uncomment(text) {
-    let out = '';
-
-    for (let i = 0; i < text.length; ) {
-        const step = atomic(text, i);
-
-        if (text[i] === '#') i += step;
-        else if (step > 0) {
-            out += text.slice(i, i + step);
-            i += step;
-        } else out += text[i++];
-    }
-
-    return out;
+    return replaceLiterals(text, (literal) => (literal[0] === '#' ? '' : literal));
 }
 

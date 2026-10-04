@@ -149,15 +149,10 @@ function refuseSpacedClose(closing, filename) {
 // from Python. That is what lets a Python component reach `page` from
 // `$app/state`, or any npm library at all.
 //
-// **Read from Svelte's parse, not from the text.** This was a pair of regular
-// expressions over the raw block, and a grammar reconstituted that way fails in
-// both directions at once: it invented a binding for `// import Missing from
-// './none.js'` — a commented-out import, or one quoted in a string — so the
-// component died at mount with `Missing is not defined`, about a name present
-// in no running code; and it read one name per declaration, so `const first =
-// 1, second = 2` published `first` alone and Python raised `NameError` on the
-// other, which a line break would have fixed. Destructuring published nothing
-// at all.
+// **Read from Svelte's parse, not from the text.** A regular expression over the
+// block would take a commented-out or quoted import for a binding, read one name
+// per declaration where `const first = 1, second = 2` binds two, and see nothing
+// in a destructuring.
 //
 // JavaScript is Svelte's grammar here, not ours, and this runs inside a Svelte
 // build by definition. The block is parsed alone, wrapped in a component with
@@ -322,7 +317,7 @@ export function python(options = {}) {
     // module instance, so a value on the global is the only channel between
     // them. See the registry above.
     //
-    // This preprocessor no longer reads it: it passes `searchPath` to the
+    // This preprocessor does not read it: it passes `searchPath` to the
     // resolution itself, so a second `python(options)` built afterwards cannot
     // change what this one resolves. What is left on the global is the fallback
     // for the plugin alone, which has no way of telling configurations apart;
@@ -414,8 +409,8 @@ export function python(options = {}) {
             // otherwise. Leaving `lang="python"` in place is invisible to the
             // Svelte compiler, which parses the content as JavaScript either
             // way, but every tool downstream reads the attribute and refuses:
-            // `svelte-check`, installed by 93% of SvelteKit projects, reported
-            // dozens of parse errors per component until this line existed.
+            // `svelte-check`, installed by 93% of SvelteKit projects, would
+            // report dozens of parse errors per component.
             const { lang, ...rest } = attributes;
 
             return { code: sameLines(script, content), attributes: rest };
@@ -480,9 +475,9 @@ function elementOptions(code, python) {
         if (named.value.type !== 'ObjectExpression') return code;
 
         // The missing props go after the author's last entry, in the order they
-        // are declared, which is the order Svelte lists them in, measured on
-        // the same element written with `$props()`. The author's text stays
-        // where it is, line for line.
+        // are declared, which is the order Svelte lists them in for the same
+        // element written with `$props()`. The author's text stays where it is,
+        // line for line.
         const written = named.value.properties;
         const names = new Set(written.map(key));
         const missing = elementProps(python).filter(({ name }) => !names.has(name)).map(entry);
@@ -577,13 +572,11 @@ const countTests = () =>
 
 // The generated module, behind the imports it needs evaluated first.
 //
-// Exported, and it is the one export in this file that exists for its test.
-// `pyCall`, `mangle` and the rest were privatised because their behaviour is
-// reachable through a hook; this one is not. The defect it guards is arithmetic,
-// **one `;` per prelude line and not one `;` in total**, which put every mapping
-// one line too high the day a component imported two modules. Reproducing a
-// count through the door would take one fixture per count, and a fixture that
-// exists to make a number bigger tests the fixture.
+// Exported, and it is the one export in this file that exists for its test: the
+// rest is reachable through a hook, and this is not. What it holds is
+// arithmetic, **one `;` per prelude line and not one `;` in total**, and a count
+// reproduced through the door would take one fixture per count, which tests the
+// fixture.
 //
 // A source map's `mappings` is delta-encoded per generated line, lines separated
 // by `;`, so the prelude costs one `;` per line it adds: get that wrong and a

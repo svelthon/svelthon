@@ -3,11 +3,9 @@
 // compiler's alike. Free of any import, so the compiler, which is CommonJS, can
 // `require` it, and the browser playground can load it.
 //
-// The scanners each knew ordinary quotes once, a smaller grammar than Python's:
-// a `}` inside a **comment** or a **triple-quoted** string ended an expression
-// in the wrong place, and an f-string field that reuses its own quote, which
-// Python takes since 3.12, ended a key or a line in the wrong place. One rule,
-// so that a grammar learned here is learned everywhere.
+// One rule, so that a grammar learned here is learned everywhere: a `}` inside a
+// **comment** or a **triple-quoted** string ends nothing, and neither does the
+// quote of an f-string field that reuses its own, which Python takes since 3.12.
 
 // How far to step over a Python comment or string literal starting at `at`, and
 // 0 when neither starts there.
@@ -55,12 +53,9 @@ export function atomic(source, at, onField) {
 
         // A backslash hides the character after it, so that `"\""` is one string
         // and not two — **except a brace**, which it cannot hide: the escape for
-        // a brace is `{{`, and a backslash before one leaves it opening a field.
-        // Measured against CPython 3.14: `rf"\{ x }"` answers `\5` for `x = 5`,
-        // and the plain spelling answers the same with a warning about the
-        // escape. Skipping it read the quote inside the field as the end of the
-        // string and cut the expression in half, so the template kept the first
-        // half and Svelte was handed the rest as markup.
+        // a brace is `{{`, and a backslash before one leaves it opening a field:
+        // CPython 3.14 answers `\5` for `rf"\{ x }"` with `x = 5`, and the same,
+        // with a warning about the escape, without the `r`.
         if (!spec && source[i] === '\\' && !(formatted && '{}'.includes(source[i + 1]))) {
             i++;
             continue;
@@ -128,4 +123,22 @@ function interpolated(source, at) {
 
     // A t-string (PEP 750) has the fields of an f-string.
     return /[fFtT]/.test(prefix);
+}
+
+// `source` with every comment and string literal replaced by what `replace`
+// returns for it, the code between them kept as written: the text a scanner
+// reads when it wants the code alone.
+export function replaceLiterals(source, replace) {
+    let out = '';
+
+    for (let i = 0; i < source.length; ) {
+        const step = atomic(source, i);
+
+        if (step > 0) {
+            out += replace(source.slice(i, i + step));
+            i += step;
+        } else out += source[i++];
+    }
+
+    return out;
 }

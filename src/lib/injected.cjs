@@ -12,16 +12,16 @@
 //
 // A **helper** is skipped when the module already declares a name of that
 // spelling: the author's own wins, exactly as a Python module that defines
-// `list` shadows the builtin and loses it. `date` is the one measured in real
-// code, twice, for a variable holding a date, the most natural name there is.
+// `list` shadows the builtin and loses it. `date` is the likeliest, for a
+// variable holding a date, the most natural name there is.
 //
 // A **locked** name is refused outright. These are not builtins, they are
 // Svelthon's own words: redefining `effect` is closer to redefining `def` than
 // to shadowing `list`, and a reader who meets it can no longer read the file.
 // Svelte draws the same line: `$state` and `$effect` cannot be redefined at all,
 // the `$` prefix being reserved inside a component. The refusal is loud and
-// names the culprit; winning in silence is what the `js` defect did, and it is
-// the worst of the three behaviours.
+// names the culprit; winning in silence would be the worst of the three
+// behaviours.
 //
 // The filter is what makes that true, and it is not optional: these are bound
 // after the author's own names, onto the same prototype, so without it the
@@ -45,8 +45,8 @@ const INJECTED = [
 
     // `inspect_with(log, count, message)` is `$inspect(…).with(fn)`. Their form
     // chains, which Python cannot spell: `with` is a keyword, and `with=` is
-    // not an argument name either. A keyword argument was the first answer and
-    // it costs a parser: `$inspect` is variadic, so pulling one named argument
+    // not an argument name either. A keyword argument would cost a parser:
+    // `$inspect` is variadic, so pulling one named argument
     // out of the list means splitting the source text at depth zero. Taking the
     // callable *first* needs no parsing at all, since the split happens on the
     // evaluated list, where position is reliable, and it is what Python does
@@ -161,7 +161,7 @@ const INJECTED = [
     // regex Django and Jinja ship leaves entities undecoded (`caf&eacute;`),
     // lets markup escape through an attribute holding a `>`, and drops the tags
     // around a `<script>` while keeping its source. Django's documentation warns
-    // that the output is not safe; measured, it is not even right.
+    // that the output is not safe, and it is not even right.
     //
     // Which is why there is no fallback: off a browser this returns nothing
     // rather than something wrong. A first render shows less and then shows the

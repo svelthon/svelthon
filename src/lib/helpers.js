@@ -1,14 +1,7 @@
-// The template helpers, as ordinary functions.
-//
-// They used to live in `injected.cjs` as strings of JavaScript pasted into the
-// generated component. That works, and it costs the one thing this set cannot
-// afford: 90 lines of code that no coverage tool can instrument, holding the
-// most user-facing behaviour in the project. `fromnow` alone chooses between
-// seven units and two directions, and nothing could say which of those branches
-// a test had never taken.
-//
-// So the values move here and `injected.cjs` keeps the *names*. What it emits is
-// now a reference, `() => __helpers.date`, rather than a body.
+// The template helpers, as ordinary functions, where a coverage tool can
+// instrument them: `fromnow` alone chooses between seven units and two
+// directions. `injected.cjs` keeps the *names*, and what it emits is a
+// reference, `() => __helpers.date`, rather than a body.
 //
 // Why the generated script reaches them through one object rather than by name:
 // a component is free to call its own state `date` or `batch`, and an import of
@@ -38,16 +31,13 @@ import {
 // What the author wrote, as a value JavaScript can read with `typeof`.
 //
 // Python's `str`, `int` and `float` subclasses are *objects* here, holding the
-// value in a field, and `typeof` says `object` for all three. Every helper in
-// this file asked its own narrow question about the values it takes, and each
-// one answered wrongly in its own way for the same input: `batch` refused a
-// size, `date` refused a timestamp — which in a template is a component that
-// does not mount — and then, seven lines further on, silently ignored a style
-// and formatted in the default one.
+// value in a field, and `typeof` says `object` for all three: read as it
+// stands, a size, a timestamp or a style written as one would be refused or
+// ignored.
 //
 // Shared recognition, not shared rules. Each helper still says for itself what
 // it will accept; this only lets it see what it was handed. A value that is not
-// a Python scalar comes back untouched, so every refusal already written stands.
+// a Python scalar comes back untouched.
 const written = (value) => pyScalar(value) ?? value;
 
 // The instant a Date holds, whichever JavaScript context built it — and
@@ -97,8 +87,7 @@ function refuse(message) {
 // Not `JSON.stringify` alone: Python's None is an object with a reference back
 // to its own class, so serialising it throws *Converting circular structure to
 // JSON* and the refusal never gets to say what was wrong. `{date(maybe_none)}`
-// is the commonest way to reach these two messages, and it was the one way to
-// get a JavaScript accident instead of one.
+// is the commonest way to reach these two messages.
 function shown(value) {
     // A function is the one shape with neither a JSON notation nor a useful
     // `String()`, which would be its whole source text. Three things may know
@@ -135,8 +124,7 @@ function shown(value) {
 // A Python int above 2^53 is a JavaScript BigInt, and `JSON.stringify` refuses
 // one outright: `TypeError: Do not know how to serialize a BigInt`, a JavaScript
 // accident out of a template filter, where `json.dumps(2 ** 70)` writes the
-// digits. Svelthon renders that very number on its own front page, so this was
-// the one place a big integer was refused.
+// digits.
 //
 // The digits have to go out *unquoted*, which a replacer cannot do by itself: a
 // BigInt back from it throws again and a string comes out in quotes.
@@ -177,11 +165,9 @@ function instant(value) {
     // `written` first, then this helper's own domain: what is shared is the
     // recognition, not the rule about what a date may be.
     //
-    // The line this replaces asked `pyScalar` and kept its answer **only when it
-    // was a number**, so `class Stamp(float)` was repaired and `class Text(str)`
-    // holding an ISO date was not — and the two are one question. The domain
-    // below is unchanged: a string or a number is a date, a boolean, a list or
-    // an object is not.
+    // A `class Stamp(float)` and a `class Text(str)` holding an ISO date are one
+    // question. The domain below: a string or a number is a date, a boolean, a
+    // list or an object is not.
     const one = moment(written(value));
 
     return typeof one === 'string' || typeof one === 'number' ? new Date(one) : new Date(NaN);
@@ -212,11 +198,11 @@ const serialisable = (one) => {
     if (box !== undefined) one = box.value;
 
     // **A number that is not finite.** JSON has no notation for `NaN` or
-    // `±Infinity`, and `JSON.stringify` writes `null` for them: a page said
-    // `null` where the model held a division by zero or an overflow, which is a
-    // different value and nothing said so. It belongs to the same family as
-    // every other refusal here — a shape the serialiser silently replaces — and
-    // it is the one that arrives without an object around it.
+    // `±Infinity`, and `JSON.stringify` writes `null` for them: a page would say
+    // `null` where the model holds a division by zero or an overflow, a
+    // different value, without a word. It belongs to the same family as every
+    // other refusal here, a shape the serialiser replaces, and it is the one
+    // that arrives without an object around it.
     //
     // CPython writes `NaN` and `Infinity`, which is not JSON either: the
     // `JSON.parse` on the other side of a page refuses both. So there is no
@@ -268,17 +254,14 @@ const serialisable = (one) => {
 // function, a bound method, and a callable instance. The fields of that instance
 // are not what it is — the export hands it to JavaScript as its call.
 const noCall = (one) => {
-    // The walk hands this rule five shapes now, and the name it still carries is
-    // the first of them. What they share is the sentence: *there is no JSON for
-    // this*, said about the value the author passed rather than about whatever
-    // the walk had in hand by the time it noticed.
+    // The walk hands this rule five shapes, and the name it carries is the first
+    // of them. What they share is the sentence: *there is no JSON for this*,
+    // said about the value the author passed rather than about whatever the walk
+    // had in hand by the time it noticed.
     //
     // **Awaitable**, in either language: a call not yet made and a call made and
-    // not finished. The coroutine used to be *started* by the asking — the
-    // serialiser scheduled the body and wrote `{}` — and a promise said `{}`
-    // without even that excuse. A bare thenable used to be told its `then` was
-    // callable, which is one value answered two ways by which constructor built
-    // it.
+    // not finished. Asking starts no coroutine, and a promise and a bare thenable
+    // get one answer, whichever constructor built them.
     if (pyCoroutine(one) || thenable(one)) {
         const kind = pyCoroutine(one) ? 'coroutine' : 'promise';
 
@@ -290,8 +273,8 @@ const noCall = (one) => {
 
     // **Callable**, and it comes second because it is the most specific thing a
     // value can be here. A lambda, a bound method and a callable instance all
-    // carry a class, so the general Python arm below would answer for them —
-    // measured, by twelve cells turning red — and *callable* is what they are.
+    // carry a class, so the general Python arm below would answer for them, and
+    // *callable* is what they are.
     // A plain JavaScript function is caught here too, where the last arm would
     // otherwise call it a Function.
     if (callable(one)) {
@@ -388,18 +371,10 @@ const parseJson = (() => {
     return $B.$getattr($B.$getattr($B.imported.javascript, 'JSON'), 'parse');
 })();
 
-// And the way back, through Brython's route rather than the JavaScript one.
-//
-// It used to be `JSON.parse` with a reviver of our own for `null`, and that
-// reviver is the reason this changed: a reviver cannot repair an integer past
-// 2^53, because `JSON.parse` has already made a double of it by the time one
-// runs. `javascript.JSON` reads the source text of the literal instead, so the
-// digits survive, and it answers `None` for `null` at every depth without our
-// help.
-//
-// Measured against the old route on fourteen documents, containers and bare
-// values, and on three malformed ones: the same value everywhere except the
-// large integers, and the same refusal to the character.
+// And the way back, through Brython's route rather than the JavaScript one:
+// `javascript.JSON` reads the source text of each literal, so an integer past
+// 2^53 keeps its digits, where a reviver runs only after `JSON.parse` has made a
+// double of it, and it answers `None` for `null` at every depth.
 export function from_json(text) {
     return parseJson(text);
 }
@@ -413,9 +388,8 @@ export function from_json(text) {
 // otherwise sail through an `!== undefined` test and be rendered as a cell.
 export function batch(xs, size, fill) {
     // The same recognition, for the same reason: `Number.isInteger` asked of the
-    // object a Python `int` subclass is answers false, so a perfectly good size
-    // was refused before its value was ever read. The constraint below is this
-    // helper's own and stays exactly as it was.
+    // object a Python `int` subclass is answers false, so the size is read
+    // through `written` first. The constraint below is this helper's own.
     size = written(size);
 
     if (!Number.isInteger(size) || size < 1) {
@@ -455,10 +429,9 @@ export function date(value, dateStyle, timeStyle, locale) {
     // undefined would hand Intl a Brython singleton and fail on a value the
     // author wrote as "nothing".
     //
-    // And `written`, because a `class Text(str)` is an object here too — this
-    // read it as absent and formatted in the default style, which is the same
-    // defect as the one above without the mercy of an error: `date(when,
-    // Text("full"))` rendered a medium date and said nothing.
+    // And `written`, because a `class Text(str)` is an object here too: read as
+    // it stands, `date(when, Text("full"))` would render a medium date and say
+    // nothing.
     const options = {};
     const style = written(dateStyle);
     const clock = written(timeStyle);
@@ -522,9 +495,9 @@ export function fromnow(value, locale) {
     const count = Math.round(gap / span);
 
     // When the text next changes, which is not when the *gap* next crosses a
-    // whole unit. The delay used to be the remainder of one, and the display is
-    // rounded: a date 90.1 seconds ahead reads "in 2 minutes" and stops being
-    // true 0.1 second later, where that arithmetic asked to be woken in 29.9.
+    // whole unit. The display is rounded: a date 90.1 seconds ahead reads "in 2
+    // minutes" and stops being true 0.1 second later, where the remainder of a
+    // unit would wait 29.9.
     //
     // Two boundaries, and the nearer one wins. The shown number turns over half
     // a unit from here — `Math.round` ties towards +∞, and the gap only ever
@@ -579,12 +552,10 @@ export function striptags(value) {
 
     // A script and a style hold text that is not text of the document, and
     // `textContent` cannot tell the difference. Dropping the source of a script
-    // is a rule this helper already claimed — `tests/stripped.test.js` has
-    // asserted it since the day it was written — and it held by an **accident of
-    // parsing**: a `<script>` opening the fragment lands in `<head>`, which is
-    // not read here, while the same element between two words lands in `<body>`
-    // and printed `alert("x")` into the page. One element, two answers, decided
-    // by where it stood.
+    // is this helper's rule, held by `tests/stripped.test.js`, and the parser
+    // alone does not hold it: a `<script>` opening the fragment lands in
+    // `<head>`, which is not read here, while the same element between two words
+    // lands in `<body>`.
     //
     // This is where the project takes its own answer rather than Jinja's, and it
     // is written where the test says so: the regex behind `|striptags` keeps
@@ -598,13 +569,9 @@ export function striptags(value) {
 
 // Which values become a query string rather than a single encoded value.
 //
-// It used to be `typeof value === 'object'`, with `None` named as the one
-// exception, and that was one instance of a general problem rather than the
-// problem: almost everything in Python is an object here. A float is
-// `{ob_type, value}`, so `{urlencode(1.5)}` wrote
-// `ob_type=%3Cclass+%27float%27%3E&value=1.5` into the page; a list added
-// `ob_type=<class 'list'>` after its items, and a set wrote its whole internal
-// store. Jinja reads a float as a plain value, `1.5`, and so do we now.
+// Not `typeof value === 'object'`: almost everything in Python is an object
+// here, a float is `{ob_type, value}`, a list carries its class and a set its
+// internal store. Jinja reads a float as a plain value, `1.5`, and so do we.
 //
 // So the shapes are named: a Python dict, or a plain JavaScript object, which is
 // what `js.` interop and a `load()` hand over. `$B.is_dict` answers the first
@@ -633,8 +600,8 @@ function mapping(value) {
 // quietly turns `/tag/{urlencode(t)}` into two path segments.
 //
 // A key that is not a string is written the way `str()` writes it, and two that
-// collide once written both stay: measured against CPython's
-// `urllib.parse.urlencode`, which answers `1=a&1=b` for `{1: "a", "1": "b"}`.
+// collide once written both stay, as in CPython's `urllib.parse.urlencode`,
+// which answers `1=a&1=b` for `{1: "a", "1": "b"}`.
 export function urlencode(value) {
     // A Date is a value and never a mapping, and the sortable spelling is the
     // one a URL wants. Reading it through Python instead gave
@@ -676,24 +643,20 @@ export function urlencode(value) {
 
 // **Called by name as well as by position.** The README writes these signatures
 // the way Python writes them — `tojson(value, indent=None)`, `batch(xs, n)` —
-// and an author writes what the documentation shows. Nothing read the keywords.
+// and an author writes what the documentation shows.
 //
-// They do arrive: Brython hands a keyword call a trailing object carrying,
-// under its symbol `$B.KW`, an array whose first entry holds the literal
-// keywords and whose rest are the dicts a `**` spread contributed. Dropping it was the worst of the
-// three behaviours this project names: `tojson(rows, indent=2)` wrote
-// unindented JSON and said nothing, and `batch(rows, n=2)` refused the author
-// for a size they had just given.
+// Brython hands a keyword call a trailing object carrying, under its symbol
+// `$B.KW`, an array whose first entry holds the literal keywords and whose rest
+// are the dicts a `**` spread contributed. Dropped, `tojson(rows, indent=2)`
+// would write unindented JSON without a word.
 //
 // The names are ours, which is the whole reason this is fixable here: a
 // JavaScript function carries no parameter names to place them by.
 //
 // **Written the way Python writes a signature**, which is also the way the
 // README shows it: a name alone has to be given, a name carrying a default does
-// not. The table used to hold the names and nothing else, so it could say which
-// parameters exist and not which a call must fill — and the refusal below had
-// to hedge with *at most* where CPython says *from 1 to 2*. They are one fact
-// about a signature, and they are written in one place now.
+// not. Which parameters exist and which a call must fill are one fact about a
+// signature, so the refusal below says *from 1 to 2*, as CPython does.
 //
 // `fn.length` cannot stand in for it: these are JavaScript functions whose
 // optional parameters are declared like every other one, so `tojson.length` is

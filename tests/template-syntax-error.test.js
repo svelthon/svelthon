@@ -57,6 +57,19 @@ test.for([
     expect(error.message).toContain(said);
 });
 
+// A sign inside a string is not a habit, read by Python's own lexical rule: an
+// f-string field reusing its quote, `f"{ "&&" }"`, is one literal. Cut at its
+// inner quote, the `&&` was taken for code and the hint blamed it.
+test.for([
+    ['an f-string field reusing its quote', '{f"{ "&&" }" ++}', '`and`'],
+    ['a triple-quoted string', '{"""a && b""" ++}', '`and`']
+])('a sign inside %s is not a habit', async ([, markup, wrong]) => {
+    const error = await refused(`${markup}\n`);
+
+    expect(error.message).toContain('`x++`');
+    expect(error.message).not.toContain(wrong);
+});
+
 // A sign inside a string is not a habit: the expression is valid Python.
 test('control: a string holding the signs compiles', async () => {
     const source = `<script lang="python">\nx = ""\n</script>\n{"a ? b : c && !d" + x}\n`;
