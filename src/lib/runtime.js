@@ -487,12 +487,13 @@ export const __pybridge = {
         const out = __pybridge.toContext(value);
 
         set(key, out);
-        set(beside(key), out === value ? undefined : { js: out, py: value });
+        set(beside(key, true), out === value ? undefined : { js: out, py: value });
     },
 
     provided(get, key) {
         const value = get(key);
-        const original = get(beside(key));
+        const side = beside(key);
+        const original = side === undefined ? undefined : get(side);
 
         return original !== undefined && Object.is(value, original.js) ? original.py : __pybridge.received(value);
     },
@@ -2310,13 +2311,24 @@ const VIEW_OF = new WeakMap();
 const VIEWED = new WeakSet();
 
 // The key a context's original Python value is kept under (`provide`), one per
-// context key.
-const BESIDE = new Map();
+// context key, made by a write and only looked up by a read. Held no longer than
+// the key, as Svelte's own context map holds it: an object, a function or a
+// symbol of its own goes when nothing else holds it. A string, a number or a
+// `Symbol.for` cannot be held weakly, and is kept by value.
+const BESIDE = new WeakMap();
+const BESIDE_VALUES = new Map();
 
-const beside = (key) => {
-    let found = BESIDE.get(key);
+const beside = (key, made = false) => {
+    let found = BESIDE.get(key) ?? BESIDE_VALUES.get(key);
 
-    if (found === undefined) BESIDE.set(key, (found = Symbol('svelthon.context')));
+    if (found === undefined && made) {
+        found = Symbol('svelthon.context');
+        try {
+            BESIDE.set(key, found);
+        } catch {
+            BESIDE_VALUES.set(key, found);
+        }
+    }
 
     return found;
 };
@@ -2486,6 +2498,13 @@ function viewOf(value) {
         },
         deleteProperty(shell, key) {
             return typeof key === 'string' && remove(key);
+        },
+        // The keys are the container's, which Python may still add to, and a
+        // shell that refused new ones could no longer announce them: refused,
+        // as `Reflect.preventExtensions` answers a refusal, before the shell is
+        // locked.
+        preventExtensions() {
+            return false;
         }
     });
 

@@ -36,6 +36,23 @@ describe.for(SHAPES)('on %s', ([, data, key]) => {
         expect(Object.getOwnPropertyDescriptor(python, key).writable).toBe(true);
     });
 
+    // Svelte's state stays readable once it refuses new keys, the keys being
+    // real on its target. A view's are its container's, which Python may still
+    // add to: it refuses instead, before its shell is locked, and stays readable
+    // and growable. `freeze` and `seal` begin with the same request.
+    test.for([['preventExtensions'], ['freeze'], ['seal']])('`Object.%s` is refused and the view stays readable', ([name]) => {
+        const { svelte, python } = pair(data);
+
+        expect(() => Object[name](python)).toThrow(TypeError);
+        expect(Reflect.preventExtensions(python)).toBe(false);
+
+        expect(Object.keys(python)).toEqual(Object.keys(svelte));
+        expect(() => Object.getPrototypeOf(python)).not.toThrow();
+        expect(Array.isArray(python)).toBe(Array.isArray(svelte));
+        expect(Object.isExtensible(python)).toBe(true);
+        expect(python[key]).toBe(1);
+    });
+
     test.for([
         ['in full', { value: 7, writable: true, enumerable: true, configurable: true }],
         ['with only a value', { value: 7 }]
