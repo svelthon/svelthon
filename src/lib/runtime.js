@@ -4998,21 +4998,26 @@ export const pyExpression = (call, where, lineOffset, arity, kept = false) =>
 
 // **A name of the module that nothing has bound yet** — assigned in a branch
 // that did not run, or deleted — is read by Python code as CPython reads it,
-// `NameError` (`$B.resolve_missing_global`), and by the template as Svelte
-// renders a value that is not there: empty. The template is the reader while
-// one of its expressions is evaluated, which `templateReads` counts; what that
-// expression calls is read under the same rule.
+// `NameError` (`$B.resolve_in_scopes`, where a read the namespace no longer
+// answers goes), and by the template as Svelte renders a value that is not
+// there: empty. The template is the reader while one of its expressions is
+// evaluated, which `templateReads` counts; what that expression calls is read
+// under the same rule.
 let templateReads = 0;
 
 (function installTemplateAbsence($B) {
-    const missing = $B.resolve_missing_global;
+    const resolve = $B.resolve_in_scopes;
+    const declares = (namespace, name) =>
+        namespace !== null && typeof namespace === 'object' && namespace.$proxy === true && name in namespace;
 
-    $B.resolve_missing_global = function (name, namespace) {
-        if (templateReads > 0 && namespace !== null && typeof namespace === 'object' && namespace.$proxy === true && name in namespace) {
-            return undefined;
+    $B.resolve_in_scopes = function (name, namespaces, inum) {
+        try {
+            return resolve.call(this, name, namespaces, inum);
+        } catch (error) {
+            if (templateReads > 0 && namespaces.some((one) => declares(one, name))) return undefined;
+
+            throw error;
         }
-
-        return missing.call(this, name, namespace);
     };
 })(globalThis.__BRYTHON__);
 
