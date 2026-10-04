@@ -47,11 +47,11 @@ describe('closingBrace reads through a string', () => {
 // The bracket that closes a call or a subscript, for `{@render}` and the walrus.
 describe('closingPair reads through a string', () => {
     test('a parenthesis inside a snippet argument stays inside it', () => {
-        expect(rewrite('{@render row("a)b")}')).toBe('{@render row(__expr_py_0())}');
+        expect(rewrite('{@render row("a)b")}')).toBe('{@render row(__expr_0())}');
     });
 
     test('and an escaped quote does not end that string early', () => {
-        expect(rewrite('{@render row("a\\")b")}')).toBe('{@render row(__expr_py_0())}');
+        expect(rewrite('{@render row("a\\")b")}')).toBe('{@render row(__expr_0())}');
     });
 });
 

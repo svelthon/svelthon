@@ -3422,8 +3422,6 @@ function shallow(value) {
 
 export function pyNumbers(value) {
     // A JavaScript function Python held through its adapter goes out as itself.
-    if (ADAPTERS.has(value)) return pyHandler(value);
-
     // `None` itself is a singleton and not a container: walking its own
     // properties would copy it, and the copy is no longer `None`.
     if (value === null || typeof value !== 'object' || value === NONE) return value;

@@ -700,14 +700,24 @@ describe('{@render}', () => {
     test('each argument is compiled separately', () => {
         const { out } = rewrite('{@render row(item, index)}');
 
-        expect(out).toMatch(/\{@render row\(__expr_py_\d+\(\), __expr_py_\d+\(\)\)\}/);
+        expect(out).toMatch(/\{@render row\(__expr_\d+\(\), __expr_\d+\(\)\)\}/);
     });
 
     test('a comma inside an argument is not a separator', () => {
         const { out, defs } = rewrite('{@render row(f(a, b))}');
 
-        expect(out).toMatch(/\{@render row\(__expr_py_\d+\(\)\)\}/);
+        expect(out).toMatch(/\{@render row\(__expr_\d+\(\)\)\}/);
         expect(defs.some((one) => one.includes('f(a, b)'))).toBe(true);
+    });
+
+    // A snippet the markup declares is Python and is handed Python values; any
+    // other, `children` or a snippet prop, may be JavaScript's and is handed
+    // what a prop is.
+    test('a snippet the markup declares keeps its arguments Python', () => {
+        const { out, defs } = rewrite('{#snippet row(x)}{x}{/snippet}{@render row(half)}{@render other?.(half)}');
+
+        expect(out).toMatch(/\{@render row\(__expr_py_\d+\(\)\)\}\{@render other\?\.\(__expr_\d+\(\)\)\}/);
+        expect(defs.filter((one) => one.includes('__bound(half)'))).toHaveLength(1);
     });
 
     test('a snippet rendered without arguments crosses whole', () => {
