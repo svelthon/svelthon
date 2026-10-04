@@ -994,7 +994,8 @@ function walrusIn(expr) {
 
 const ARROW_INDENTED = /^[ \t]+(?:[\p{XID_Start}_]\p{XID_Continue}*\s*)?=>\s/u;
 
-function takeArrows(src, where, lineOffset, allowed) {
+// `theirs` names what the author imported with `importjs`.
+function takeArrows(src, where, lineOffset, allowed, theirs = new Set()) {
     const lines = src.split('\n');
     const continued = continuedLines(src);
     const out = [];
@@ -1078,8 +1079,10 @@ function takeArrows(src, where, lineOffset, allowed) {
         }
 
         // `inspect(…)` at the top level of a component, whose arguments become a
-        // lambda so that they are read again on every change.
-        const watched = statement && !found && allowed ? text.match(INSPECT) : null;
+        // lambda so that they are read again on every change. A call to an
+        // `inspect` the author imported from JavaScript is theirs, as written.
+        const inspected = statement && !found && allowed ? text.match(INSPECT) : null;
+        const watched = inspected && !theirs.has(inspected[1] ? 'inspect_with' : 'inspect') ? inspected : null;
 
         // `value: str <=>`, with an optional fallback after the arrow.
         const both = statement && !found && !watched ? text.match(BINDABLE) : null;
@@ -1088,6 +1091,20 @@ function takeArrows(src, where, lineOffset, allowed) {
             throw refuse(
                 `svelthon — \`<=>\` marks a prop, and a prop belongs to a component; ` +
                     `a module has no parent to bind with (${at})`,
+                where,
+                lineno
+            );
+        }
+
+        // Each sign is written with a marker, and one the author imported from
+        // JavaScript under that name would be called in its place.
+        const marker = found ? kind(named) : both ? 'bindable' : null;
+
+        if (theirs.has(marker)) {
+            throw refuse(
+                `svelthon — \`${both ? '<=>' : named ? 'name =>' : '=>'}\` is written with ` +
+                    `\`${marker}\`, and \`${marker}\` here is the one imported from JavaScript; ` +
+                    `import it under another name, \`importjs {${marker} as …}\` (${at})`,
                 where,
                 lineno
             );
@@ -1958,7 +1975,10 @@ const DIRECTIVES = new Set(['__all__', '__js__']);
 // The calls that declare what a name is, in their call spelling.
 const MARKERS = ['derived', 'effect', 'inspect', 'inspect_with', 'export'];
 
-function surface(body) {
+// `theirs` names what the author imported from JavaScript, an `importjs
+// {inspect}` among them: a call to it is theirs, and its value is data.
+function surface(body, theirs = new Set()) {
+    const marked = (node, name) => !theirs.has(name) && isCallTo(node, name);
     const props = [];
     const bindables = [];
     const state = [];
@@ -2146,7 +2166,7 @@ function surface(body) {
                         continue;
                     }
 
-                    const called = MARKERS.find((one) => isCallTo(node, one));
+                    const called = MARKERS.find((one) => marked(node, one));
                     if (called !== undefined && seen.has(target.id)) {
                         remarked.push({ name: target.id, spelling: `${called}()`, line: node.lineno });
                     }
@@ -2160,12 +2180,12 @@ function surface(body) {
                     // below needs no special case for either: it already writes
                     // `$derived.by(() => __fn_x())` and `$effect(() => __fn_x())`,
                     // and a lambda answers a call exactly as a `def` does.
-                    if (isCallTo(node, 'derived')) deriveds.push({ name: target.id, arity: 0 });
-                    else if (isCallTo(node, 'effect')) effects.push({ name: target.id, arity: 0 });
-                    else if (isCallTo(node, 'inspect')) inspects.push({ name: target.id, arity: 0 });
+                    if (marked(node, 'derived')) deriveds.push({ name: target.id, arity: 0 });
+                    else if (marked(node, 'effect')) effects.push({ name: target.id, arity: 0 });
+                    else if (marked(node, 'inspect')) inspects.push({ name: target.id, arity: 0 });
                     // The callable comes first, so the emission takes it off the
                     // front of the evaluated list rather than out of the source.
-                    else if (isCallTo(node, 'inspect_with'))
+                    else if (marked(node, 'inspect_with'))
                         inspects.push({ name: target.id, arity: 0, logger: true });
                     // `focus = export(lambda: field.focus())`, the call form of
                     // `@export`, and the shape their own `export const focus =
@@ -2174,7 +2194,7 @@ function surface(body) {
                     // omission, not a rule. The arity comes off the lambda, since
                     // unlike a derived or an effect an exported function is
                     // called with arguments.
-                    else if (isCallTo(node, 'export'))
+                    else if (marked(node, 'export'))
                         funcs.push({
                             name: target.id,
                             arity: arityOf(node.value.args?.[0]?.args),
@@ -3496,7 +3516,13 @@ function compile(
 
     const lifted = takeImportJs(src, source, lineOffset, component);
 
-    src = takeArrows(lifted.source, source, lineOffset, component);
+    src = takeArrows(
+        lifted.source,
+        source,
+        lineOffset,
+        component,
+        new Set(lifted.imports.flatMap((one) => one.entries.map((e) => e.local)))
+    );
 
     // Brython reads the source back out of this cache to quote the offending
     // line, and `compiler_error` does it without checking: an unregistered
@@ -3526,8 +3552,21 @@ function compile(
         $B.id_counter(counter);
         $B.lambda_magic = tag;
     }
+
+    // The two declarations meet here, in one shape: `__js__` is the module's and
+    // only ever names, `importjs` is the component's and covers the four forms.
+    const jsImports = [
+        ...declaredJsImports(root._ast.body, source, lineOffset).map((one) => ({
+            from: one.from,
+            kind: 'named',
+            entries: one.names.map((n) => ({ name: n, local: n }))
+        })),
+        ...lifted.imports
+    ];
+    const jsImported = jsImports.flatMap((one) => one.entries.map((e) => e.local));
+
     let { props, bindables, state, funcs, deriveds, effects, inspects, reserved, bound, lines, remarked, starred } =
-        surface(root._ast.body);
+        surface(root._ast.body, new Set(jsImported));
 
     // A custom element's props belong to its element, which reads each back,
     // as `element.middle` and as the attribute `reflect` writes. Svelte answers
@@ -3626,18 +3665,6 @@ function compile(
         `  } catch (err) { throw __pyError(err,${JSON.stringify(source)}, ${lineOffset}); }`,
         `}`
     ].join('\n');
-
-    // The two declarations meet here, in one shape: `__js__` is the module's and
-    // only ever names, `importjs` is the component's and covers the four forms.
-    const jsImports = [
-        ...declaredJsImports(root._ast.body, source, lineOffset).map((one) => ({
-            from: one.from,
-            kind: 'named',
-            entries: one.names.map((n) => ({ name: n, local: n }))
-        })),
-        ...lifted.imports
-    ];
-    const jsImported = jsImports.flatMap((one) => one.entries.map((e) => e.local));
 
     // Lifecycle by convention, mapped onto a single $effect: its body runs once
     // after the DOM exists, its teardown when the component goes away. Both
