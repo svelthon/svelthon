@@ -479,16 +479,18 @@ const scopeIn = (block, name) =>
 const isGlobalScope = (scope) =>
     scope === $B.SYMBOL_FLAGS.GLOBAL_EXPLICIT || scope === $B.SYMBOL_FLAGS.GLOBAL_IMPLICIT;
 
-// The names the module itself binds, whatever binds them: an assignment, an
+// The names a block itself binds, whatever binds them: an assignment, an
 // import, a `def`, a walrus in a default, a `match` capture. Python's answer,
-// read off the module's block.
-const moduleBinds = (table) => {
+// read off the block.
+const blockBinds = (block) => {
     const bound = new Set();
-    for (const { key, value } of $B.builtins.dict.$iter_items(table.top.symbols)) {
+    for (const { key, value } of $B.builtins.dict.$iter_items(block.symbols)) {
         if (value & $B.SYMBOL_FLAGS.DEF_BOUND) bound.add(key);
     }
     return bound;
 };
+
+const moduleBinds = (table) => blockBinds(table.top);
 
 // The builtins a statement of `__all__` may call: each reads what it is given
 // and keeps nothing, so the call answers the same on every run.
@@ -2537,15 +2539,16 @@ function refuseLibraryCalls(ast, table, source, lineOffset) {
     const unshipped = (name) => Object.hasOwn(UNSHIPPED_BUILTINS, name);
 
     // The names that are the builtins module, `import builtins [as b]`, and
-    // the methods a class of the file defines itself, whose call is the
-    // author's and needs nothing that does not ship.
+    // the attributes a class of the file binds itself, by a `def`, an `async
+    // def` or an assignment, whose call is the author's and needs nothing that
+    // does not ship.
     const modules = new Set();
     const defined = new Set();
-    walkScoped(ast.body, (node, scope) => {
+    walkScoped(ast.body, (node) => {
         if (node instanceof $B.ast.Import) {
             for (const one of node.names) if (one.name === 'builtins') modules.add(one.asname ?? 'builtins');
         }
-        if (node instanceof $B.ast.FunctionDef && scope instanceof $B.ast.ClassDef) defined.add(node.name);
+        if (node instanceof $B.ast.ClassDef) for (const name of blockBinds(table.blockOf(node))) defined.add(name);
     });
     const isModule = (name, scope) => modules.has(name) || (name === '__builtins__' && builtin(name, scope));
     const refuseBuiltin = (name, line) => {

@@ -95,6 +95,33 @@ describe('a rune written below the top level', () => {
         ).not.toThrow();
     });
 
+    // At the top level as well, assigned or alone, and through `__js__`: no
+    // `$inspect` is emitted for the author's function. Mounted against the same
+    // component in JavaScript in `imported-markers.test.js`.
+    test.for([
+        ['assigned', 'importjs {inspect} from "./foreign.js"\nanswer = inspect(41)\n'],
+        ['alone', 'importjs {inspect} from "./foreign.js"\ninspect(41)\n'],
+        ['with a logger', 'importjs {inspect_with} from "./foreign.js"\ninspect_with(print, 41)\n'],
+        ['through __js__', '__js__ = {"./foreign.js": ["inspect"]}\nanswer = inspect(41)\n']
+    ])('and one named inspect is called %s', ([, body]) => {
+        expect(script(body)().script).not.toMatch(/\$inspect|__inspect_/);
+    });
+
+    // A sign is written with its marker, and the marker would be the import:
+    // refused, with the alias that frees it.
+    test.for([
+        ['name =>', 'derived', 'twice => 2\n'],
+        ['=>', 'effect', '=> print(1)\n'],
+        ['<=>', 'bindable', 'value: int <=> 0\n']
+    ])('while `%s` with %s imported from JavaScript is refused', ([sign, marker, body]) => {
+        const compiled = script(`importjs {${marker}} from "./foreign.js"\n${body}`);
+
+        expect(compiled).toThrow(`\`${sign}\` is written with \`${marker}\``);
+        expect(compiled).toThrow(`importjs {${marker} as …}`);
+        expect(compiled).toThrow('(src/Probe.svelte:2)');
+        expect(script(`importjs {${marker} as theirs} from "./foreign.js"\n${body}`)).not.toThrow();
+    });
+
     test('while the spellings it reads compile', () => {
         expect(script('count = 0\ntwice => count * 2\n=> print(count)\ninspect(count)\n')).not.toThrow();
         expect(script('def double():\n    return 2\n\ntwice = derived(double)\nfocus = export(lambda: 1)\n')).not.toThrow();
