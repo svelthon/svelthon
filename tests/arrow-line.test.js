@@ -71,7 +71,6 @@ describe('an arrow reads to the end of its line', () => {
     ])('%s is refused on its own line', ([, body]) => {
         expect(() => build(`${body}\n    2\n`)).toThrow(/must fit on one line; use @\w+ on a def for anything longer \(src\/App\.svelte:1\)/);
     });
-
     // A bracket inside a string closes nothing, so this one fits.
     test('a bracket inside a string does not leave the line open', () => {
         expect(() => build('total => "(" + ")"\n')).not.toThrow();
