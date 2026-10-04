@@ -1493,12 +1493,6 @@ hands back the object it was given compares equal to itself, so nothing
 propagates from it, which is why a reader subscribes to the object rather than
 to the derived (see [Reactivity](#reactivity-one-signal-per-name)).
 
-## Testing
-
-No parallelism. Each worker reloads and re-transforms the Brython runtime for
-itself instead of sharing the work: measured on this project at over 30 minutes
-in parallel against under one sequentially.
-
 ## Editor support
 
 Not a gap in Svelthon, but worth knowing: the Svelte TextMate grammar falls back

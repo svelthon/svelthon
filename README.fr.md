@@ -1533,12 +1533,6 @@ le sens de Svelte : élément et index. Ce qu'un composant importe ou déclare d
 son `<script module>` se lit aussi depuis Python, et c'est ainsi qu'un composant
 Python atteint une bibliothèque JavaScript.
 
-## Tests
-
-Aucun parallélisme : chaque worker recharge et retransforme le runtime Brython
-pour son compte au lieu de partager le travail. Mesuré sur ce projet à plus de
-30 minutes en parallèle contre moins d'une en séquentiel.
-
 ## Support éditeur
 
 Ce n'est pas un manque de Svelthon, mais autant le savoir : la grammaire
