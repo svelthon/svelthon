@@ -1,5 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import v8 from 'node:v8';
+import { runInNewContext } from 'node:vm';
 
 import { test, expect, describe, vi } from 'vitest';
 import '../src/lib/runtime.js';
@@ -454,12 +456,10 @@ describe('the vendored Brython carries its repairs', () => {
         expect($B.pyobj2jsobj(made)).toEqual({ $kw: ['a'] });
     });
 
-    // A coroutine that leaves the frame it was created in has not been dropped:
-    // `{#await later()}` hands it to Svelte, which awaits it. Brython warned
-    // `coroutine 'later' was never awaited` as soon as that frame was left,
-    // where CPython says nothing; the question is now asked one turn later.
-    // One created and thrown away is still told, which is the half that keeps
-    // the check honest.
+    // A coroutine is reported as never awaited when it is reclaimed without
+    // having started, as CPython reports it: `{#await later()}` hands one to
+    // Svelte, which awaits it, and nothing is said; one created and thrown away
+    // is told once the garbage collector takes it, which the test forces.
     test('a coroutine handed on is not reported as never awaited', async () => {
         const said = [];
         const spies = ['error', 'warn', 'log'].map((level) =>
@@ -479,7 +479,13 @@ describe('the vendored Brython carries its repairs', () => {
             flushSync();
             await new Promise((resolve) => setTimeout(resolve));
 
-            expect(said.some((one) => one.includes("coroutine 'later' was never awaited"))).toBe(true);
+            v8.setFlagsFromString('--expose-gc');
+            const gc = runInNewContext('gc');
+
+            await settled(() => {
+                gc();
+                expect(said.some((one) => one.includes("coroutine 'later' was never awaited"))).toBe(true);
+            });
         } finally {
             for (const spy of spies) spy.mockRestore();
         }
