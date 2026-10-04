@@ -29,8 +29,7 @@ const { compile, VIRTUAL_PREFIX, virtualId, pythonModuleName, elementProps, PY_N
 //
 // The key holds the project as well as the id: the directory the process is in,
 // which every name is relative to. Two projects built in one process, each with
-// a `src/Card.svelte`, give the same id, and one map under the id alone handed
-// the first project's plugin the second project's Python.
+// a `src/Card.svelte`, give the same id, and each plugin serves its own.
 const generated = (globalThis[Symbol.for('svelthon.generated')] ??= new Map());
 const generatedKey = (root, id) => `${root}\n${id}`;
 
@@ -285,12 +284,12 @@ export const compileOptionsFor = (code) =>
 // - `jsNames`: what the file imports from JavaScript.
 // - `element`: whether the file declares itself a custom element.
 //
-// One entry per call of Svelte's `preprocess()`, not per file. Two calls on two
+// One entry per call of Svelte's `preprocess()`, not per file: two calls on two
 // versions of one file can run at once, both `markup` hooks before either
-// `script` hook, and an entry under the filename gave the first version the
-// second one's expressions. The `markup` hook writes the entry's key on the
-// Python `<script>` tag as the attribute below, which Svelte hands to the
-// `script` hook with the others, and the `script` hook takes the attribute off.
+// `script` hook, and each `script` hook needs the expressions of its own
+// version. The `markup` hook writes the entry's key on the Python `<script>`
+// tag as the attribute below, which Svelte hands to the `script` hook with the
+// others, and the `script` hook takes the attribute off.
 //
 // Held inside `python()` and not at module scope. Both hooks live on the object
 // it returns, so they have no reason to be shared by every preprocessor a
@@ -364,8 +363,7 @@ export function python(options = {}) {
             refuseSpacedClose(declaring.closing, filename);
 
             // The body starts after the tag's `>`, which a tag written over two
-            // lines puts on the second: counted from `<script`, every line of
-            // the Python was reported one line up.
+            // lines puts on the second line.
             const open = content.indexOf('>', declaring.index) + 1;
 
             const file = {
@@ -392,9 +390,8 @@ export function python(options = {}) {
         },
         script({ content, attributes, filename }) {
             // Read as `pythonScript` reads the tag, by names in any case: Svelte
-            // hands them over as written, and `<script LANG="python">` had its
-            // markup compiled for Python while this hook let the Python through
-            // as JavaScript.
+            // hands them over as written, and the two passes have to agree that
+            // `<script LANG="python">` is Python.
             const named = (wanted) => Object.keys(attributes).find((key) => key.toLowerCase() === wanted);
             const langKey = named('lang');
 
@@ -577,8 +574,7 @@ const compiledStores = new Map();
 // So is the path the file is reached by, from the directory the process is in,
 // which its module name and the import of that module are made of: one file
 // shared by two projects is `../shared/x.py` from one and `../../shared/x.py`
-// from the other, and the second was handed a script importing the first one's
-// module.
+// from the other, and each project imports the module of its own path.
 function compilePython(file, path) {
     const stamp = statSync(file).mtimeMs;
     const shown = relative(process.cwd(), file);

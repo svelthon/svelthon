@@ -140,10 +140,9 @@ const habitsIn = (text) => {
 // markup it is written on, quotes it, and says what Python writes instead.
 function pythonError(error, source, lineOffset, block = '', ranges = [], src = '') {
     // A JavaScript Error is Brython failing in its own code rather than raising
-    // a Python exception: `RangeError` on a few hundred nested brackets. Its
-    // message is kept as it is, since read through Python's formatting it gave
-    // `JSObject: <Javascript object: [object Error]>`, and the file is said,
-    // which the bare error never did.
+    // a Python exception, a stack overflowed by deeply nested brackets. Its
+    // message is kept as it is, since Python's formatting would read it as
+    // `JSObject: <Javascript object: [object Error]>`, and the file is said.
     if (error instanceof Error) {
         const wrapped = positioned(
             new SyntaxError(`svelthon — Brython could not compile this file: ${error.name}: ${error.message} (${source})`),
@@ -1055,8 +1054,8 @@ function takeArrows(src, where, lineOffset, allowed) {
         }
 
         // The right-hand side becomes the body of a lambda, and a name `:=`
-        // binds there is the lambda's: `doubled => (half := count) * 2` left
-        // `half` unbound in the module, where `=` would have bound it.
+        // binds there is the lambda's: in `doubled => (half := count) * 2`,
+        // `half` would stay unbound in the module, where `=` binds it.
         const walrus = found ? walrusIn(expression) : null;
 
         if (walrus !== null) {
@@ -1106,9 +1105,8 @@ function takeArrows(src, where, lineOffset, allowed) {
         } else if (watched)
             out.push(`__inspect_${anonymous++} = inspect(lambda: [${watched[2]}])`);
         // The right-hand side in parentheses, as the `=` it stands for reads it:
-        // `pair => a, b` is the tuple `(a, b)`, where a bare comma made `b` a
-        // second argument of the marker, dropped, and `=> f(a), g(a)` ran `g(a)`
-        // once, outside the effect.
+        // `pair => a, b` is the tuple `(a, b)`, and `=> f(a), g(a)` makes both
+        // calls in the effect, rather than a second argument of the marker.
         else if (both) out.push(`${both[1]} = bindable(${both[2] ? `(${both[2]})` : ''})`);
         else if (named) out.push(`${found[1]} = derived(lambda: (${expression}))`);
         // The generated name is bound like any other effect's, so it stays out
@@ -1806,7 +1804,7 @@ const STATEMENT_RUNES = new Set(['inspect', 'inspect_with']);
 // `effect(f)` and `derived(f)` are the call spelling of a decorator, and at run
 // time a decorator is the identity: what the compiler wires is read off a
 // declaration. Written as a statement, at any level, the call is a declaration
-// of nothing, and the effect never ran without a word.
+// of nothing, and the effect would never run.
 const BARE_MARKERS = new Set(['effect', 'derived']);
 
 const bareMarker = (node) => {
@@ -1896,9 +1894,9 @@ function refuseNestedRunes(body, source, lineOffset) {
 // The call spellings of the markers are read in one place each: the whole value
 // of an assignment, `twice = derived(…)`, and `inspect(…)` as a statement of
 // its own. Anywhere else the call declares nothing and the decorator it stands
-// for is the identity at run time: `print(effect(…))` never ran,
-// `watch = inspect(count)` and `twice = derived(count * 2)` handed a value
-// where a function was expected and raised a bare `TypeError` later, on another
+// for is the identity at run time, so `print(effect(…))` would never run; and
+// `watch = inspect(count)` or `twice = derived(count * 2)` hand a value where a
+// function is read, which would raise a bare `TypeError` later, on another
 // line.
 const CALLED_MARKERS = new Set(['derived', 'effect', 'inspect', 'inspect_with', 'export']);
 const SHORT_FORM = {
@@ -1920,10 +1918,11 @@ const markerCalled = (node) => {
     return null;
 };
 
-function refuseMisplacedMarkers(body, source, lineOffset) {
+// `theirs` names what the author took, an `importjs {inspect}` among them.
+function refuseMisplacedMarkers(body, source, lineOffset, theirs) {
     walkScoped(body, (node, scope, line, parent) => {
         const marker = markerCalled(node);
-        if (marker === null) return;
+        if (marker === null || theirs.has(marker)) return;
 
         const at = line + lineOffset;
         const fail = (sentence) => {
@@ -2494,7 +2493,7 @@ function refuseTypeParameters(body, source, lineOffset) {
 const IMPORTED_BY_METHOD = { __reduce__: 'copyreg', __reduce_ex__: 'copyreg' };
 
 // Builtins that need what the page does not have, each refused while the name
-// is the builtin: they compiled, and died in the browser on `$B.Parser is not a
+// is the builtin: in the browser they would raise `$B.Parser is not a
 // constructor` or `Network error`.
 const PARSED = 'parses its text at run time, and the runtime the page loads has no parser';
 const UNSHIPPED_BUILTINS = {
@@ -2581,9 +2580,9 @@ const local = (name) => `__local_${name}`;
 
 // The JavaScript name of a `def`'s wrapper in a rune script: its own, unless it
 // is a rune's. Svelte reads `$state` as a subscription to a store once the script
-// binds `state` to an ordinary value, so `def state()` made every `$state.raw`
-// of the component read a store declared further down: `Cannot access 'state'
-// before initialization`, and `def props()` did the same to `$props()`. A cell is
+// binds `state` to an ordinary value, so a wrapper named `state` would turn
+// every `$state.raw` of the component into a read of a store declared further
+// down, and one named `props` would do the same to `$props()`. A cell is
 // declared by a rune and is not read that way. Exported under its own name.
 const SVELTE_RUNES = new Set(['state', 'derived', 'effect', 'props', 'bindable', 'inspect', 'host']);
 const wrapperName = (name) => (SVELTE_RUNES.has(name) ? `__def_${name}` : name);
@@ -3650,7 +3649,7 @@ function compile(
     refuseReserved(reserved, source, lines, lineOffset);
     refuseRemarked(remarked, source, lines, lineOffset);
     refuseNestedRunes(root._ast.body, source, lineOffset);
-    refuseMisplacedMarkers(root._ast.body, source, lineOffset);
+    refuseMisplacedMarkers(root._ast.body, source, lineOffset, new Set([...declared, ...jsImported]));
 
     // Functions by default, what a framework calls by name. A module that wants
     // to export values says so with `__all__`, exactly as it would to a Python

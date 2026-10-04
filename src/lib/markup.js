@@ -1789,9 +1789,8 @@ function walk(markup, collect, onPython, seed, record, where) {
     // to compiles to a bare binding, and Svelte upgrades it to a real signal the
     // moment an assignment targets it.
     //
-    // The read still goes through Python: the cell holds a Python value, and
-    // handed to the DOM as it is, a float showed `[object Object]` in a text
-    // field and `None` showed `None`.
+    // The read still goes through Python: the cell holds a Python value, which
+    // the DOM reads only once made its own, a float a number and `None` empty.
     const declaredHere = (expr) => {
         const name = expr.trim();
 
@@ -2582,8 +2581,8 @@ export function collector(defs, lines, columns) {
             );
         } else {
             // A comma at the top level gets its own parentheses inside the
-            // wrapper's: `{a, b}` is the tuple Python reads, where `__text(a, b)`
-            // handed the wrapper two arguments and showed `1`.
+            // wrapper's: `{a, b}` is the tuple Python reads, one argument and
+            // not two.
             const held = wrapper && atTopLevel(expression, (i) => expression[i] === ',') !== -1;
 
             defs.push(

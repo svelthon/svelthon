@@ -242,8 +242,8 @@ export const __pybridge = {
 
         // The names the list yields, which for a subclass with its own
         // `__iter__` are not the ones it stores: the loop beside it reads the
-        // same ones. A set is the natural type for a set of classes, and
-        // written through `str()` it gave the classes `{'primary',` and `'btn'}`.
+        // same ones. A set is the natural type for a set of classes, and is
+        // read the same way.
         if (Array.isArray(value) || isSet(value)) {
             return iterated(value)
                 .filter((one) => __pybridge.truthy(one))
@@ -338,9 +338,8 @@ export const __pybridge = {
     },
 
     // What a `<select multiple>` writes back: Svelte's array of the chosen
-    // options' values, which is a list in Python, each value crossing as a
-    // binding's does. Kept as the array, the name held a `JavascriptArray` after
-    // the first choice, and `clear()` was no longer there.
+    // options' values, which is a list in Python, with a list's methods, each
+    // value crossing as a binding's does.
     selected(value) {
         return Array.isArray(value) ? _b_.list.$factory(value.map(pyBind)) : pyBind(value);
     },
@@ -2347,9 +2346,9 @@ const INDEX = /^(?:0|[1-9]\d*)$/;
 
 // What JavaScript writes into a view. A plain object or an array of its own is
 // data, made Python's the way `to_py` makes it, so that a later write to it goes
-// through a view of its own and is followed: kept as it was, `rows.push({n: 2})`
-// showed 2 and `rows.at(-1).n = 3` changed the data and never the page. Svelte
-// draws the same line, making a proxy of exactly those two kinds when one is put
+// through a view of its own and is followed: after `rows.push({n: 2})`,
+// `rows.at(-1).n = 3` reaches the page as well as the data. Svelte draws the
+// same line, making a proxy of exactly those two kinds when one is put
 // into its state. Anything else crosses as a binding's value does: a view handed
 // back is its container again, and a class instance, a Date or a DOM node keeps
 // its identity.

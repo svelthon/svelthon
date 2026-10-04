@@ -645,8 +645,7 @@ export function urlencode(value) {
 
     // A mapping, or a sequence of pairs, which Jinja's `|urlencode` and
     // CPython's `urlencode` both take, and which is the only way to write one
-    // key twice: `dict(pairs)` keeps the last `tag`. Read as a value, the list
-    // was encoded as its own repr.
+    // key twice: `dict(pairs)` keeps the last `tag`.
     const entries = mapping(value)
         ? pyEntries(value)
         : Array.isArray(value) && value.every((one) => Array.isArray(one) && one.length === 2)
