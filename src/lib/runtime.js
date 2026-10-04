@@ -3421,6 +3421,9 @@ function shallow(value) {
 // plain numbers, allocates nothing.
 
 export function pyNumbers(value) {
+    // A JavaScript function Python held through its adapter goes out as itself.
+    if (ADAPTERS.has(value)) return pyHandler(value);
+
     // `None` itself is a singleton and not a container: walking its own
     // properties would copy it, and the copy is no longer `None`.
     if (value === null || typeof value !== 'object' || value === NONE) return value;
@@ -4182,7 +4185,7 @@ globalThis.__BRYTHON__.pyobj2jsobj_hook = (value, memo) => {
     const $B = globalThis.__BRYTHON__;
 
     if (value === null || (typeof value !== 'object' && typeof value !== 'function')) return undefined;
-    if (declared(value) !== null) return pyHandler(value);
+    if (declared(value) !== null || ADAPTERS.has(value)) return pyHandler(value);
     if (!($B.is_list(value) || $B.is_tuple(value) || $B.is_dict(value))) return undefined;
 
     return outbound(value, memo);
@@ -4190,7 +4193,10 @@ globalThis.__BRYTHON__.pyobj2jsobj_hook = (value, memo) => {
 
 export function pyHandler(value) {
     const found = declared(value);
-    if (found === null) return value;
+
+    // A JavaScript function crosses back as itself, and one Python held through
+    // its adapter (`jsCall`) as the function the adapter stands for.
+    if (found === null) return ADAPTERS.get(value) ?? value;
 
     // Three identities, because three things arrive here and they are not the
     // same thing twice.
@@ -4372,14 +4378,16 @@ const outbound = (value, made) => {
 // returned untouched, so a result handed straight back to JavaScript crosses
 // unchanged and an awaited promise still awaits.
 //
-// A function is the exception, and it goes past untouched. `jsobj2pyobj` builds
-// a Python-callable one around it, which is a different object: what a library
-// marks, a framework no longer recognises. SvelteKit's `query()` returns a
-// function carrying `__.type`, and `accepted = query(_accepted)` in a
-// `.remote.py` must export the object SvelteKit built. Brython calls a plain
-// JavaScript function perfectly well.
+// A function is the exception: it becomes the adapter a named import is, so
+// `factory()(0.25)` is called as `decimal(0.25)` is, its numbers and callbacks
+// converted. `jsobj2pyobj` would build a Python-callable object around it
+// instead, which reads no mark and gives none back. The adapter forwards every
+// property, and going back out to JavaScript it is the function itself again
+// (`pyHandler`): SvelteKit's `query()` returns a function carrying `__.type`,
+// and `accepted = query(_accepted)` in a `.remote.py` exports the object
+// SvelteKit built.
 const inbound = (value) =>
-    typeof value === 'function' ? value : globalThis.__BRYTHON__.jsobj2pyobj(value);
+    typeof value === 'function' ? jsCall(value) : globalThis.__BRYTHON__.jsobj2pyobj(value);
 
 // **Brython's own refusal, which this proxy was going around.**
 //
@@ -4430,8 +4438,9 @@ const withoutKeywords = (target, args) => {
 // other side of the boundary.
 const ADAPTED = new WeakMap();
 
-// The adapters themselves, which convert what they are called with.
-const ADAPTERS = new WeakSet();
+// The adapters themselves, which convert what they are called with, each with
+// the function it adapts: what goes back out to JavaScript.
+const ADAPTERS = new WeakMap();
 
 // The call itself, Python's arguments out and JavaScript's answer back. The
 // memo is made here, so it lasts exactly one call: a longer-lived one would hand
@@ -4454,6 +4463,7 @@ export function jsCall(value) {
     // functions reached through it are the engine's to call, and the engine
     // hands Python callables over through `pyobj2jsobj_hook`, above `pyHandler`.
     if (typeof value !== 'function') return pyBind(value);
+    if (ADAPTERS.has(value)) return value;
 
     const known = ADAPTED.get(value);
 
@@ -4462,7 +4472,7 @@ export function jsCall(value) {
     const adapted = new Proxy(value, { apply: crossing });
 
     ADAPTED.set(value, adapted);
-    ADAPTERS.add(adapted);
+    ADAPTERS.set(adapted, value);
 
     return adapted;
 }
@@ -4533,8 +4543,9 @@ export function pyExport(value, where, lineOffset = 0) {
     // Asked as `declared`, which reads the signature Python recorded, and not as
     // `callable`: a function JavaScript built and a Python name published —
     // `accepted = query(_accepted)` in a `.remote.py` — must cross as the object
-    // its library made, marks included. `declared` answers null for it.
-    if (declared(value) !== null) return exported(value);
+    // its library made, marks included. `declared` answers null for it, and
+    // the adapter Python held it through gives it back.
+    if (declared(value) !== null || ADAPTERS.has(value)) return exported(value);
 
     if (value === null || typeof value !== 'object') return value;
 
