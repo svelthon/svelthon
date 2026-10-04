@@ -103,11 +103,8 @@ describe('control flow', () => {
         });
     });
 
-    // A Brython divergence, repaired in the vendored build: the iteration
-    // variable stayed bound in the enclosing scope, where Python 3 gives the
-    // comprehension a scope of its own. Both of these were `test.fails` until
-    // the patch landed — see BRYTHON.md. They now guard it: lose the patch and
-    // they go red.
+    // Python 3 gives a comprehension a scope of its own, and the vendored build
+    // does too: lose that and these go red.
     test('a comprehension variable does not leak, at module level', () => {
         expect(report(Flow).leaked).toBe('False');
     });

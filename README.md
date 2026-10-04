@@ -1476,8 +1476,8 @@ row of a `test.for`), none expected to fail:
   updates flowing through to Python;
 - **semantic fidelity grid**: integers, text, protocols, control flow, frames.
   Every expected value was produced by running the component's Python through
-  CPython 3.12 as-is, never written by hand. Brython matches CPython on **39 of
-  40 points**;
+  CPython 3.12 as-is, never written by hand. Brython matches CPython on **every
+  point**;
 - production build: **225 KB gzip**, Brython runtime included.
 
 The grid doubles as an acceptance bench for optimising code generators: one that

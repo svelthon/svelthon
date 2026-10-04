@@ -1491,7 +1491,7 @@ rangée d'un `test.for`), aucun échec attendu :
 - **grille de fidélité sémantique** : entiers, texte, protocoles, flot de
   contrôle et frames. Chaque valeur attendue a été produite par CPython 3.12 en
   exécutant le code du composant tel quel, jamais écrite à la main. Brython
-  reproduit CPython sur **39 des 40 points** ;
+  reproduit CPython sur **chaque point** ;
 - build de production : **225 Ko gzip**, runtime Brython compris.
 
 La grille sert de banc d'acceptation aux codegens optimisés (wasthonf) : un
