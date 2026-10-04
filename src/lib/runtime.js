@@ -444,23 +444,22 @@ export const __pybridge = {
     // an attribute over. It is asked rather than repeated: what "absent" means
     // at a DOM boundary is one sentence, and it is written there.
     //
-    // Only the top level, and only None, because that is all the direct path
-    // converts: False, 0, the empty string, a callback and a native object
-    // reach an attribute by the same road whichever way they are written.
+    // On a component each value is a prop, and crosses as one written by name
+    // does: `bound`, then the floats of a config made numbers by `pyNumbers`, a
+    // level down from the value. Converting the dict of props alone left them
+    // a level further down than a prop written by name, so `{**attrs}` handed
+    // a child `config.rate` as a Brython float where `config={config}` handed
+    // it a number.
     spread(value) {
-        if (value === null || value === undefined || typeof value !== 'object') return value;
-
-        const out = { ...value };
-
-        for (const key of Object.keys(out)) out[key] = __pybridge.bound(out[key]);
-
-        return out;
+        return spreadOf(value, (one) => pyNumbers(__pybridge.bound(one)));
     },
 
     // A spread on an element: each key is the attribute it becomes, read the
-    // way that attribute is read when written by name.
+    // way that attribute is read when written by name. Only None is converted
+    // first, as the direct path converts it: an object stays the object, which
+    // is how an `<option>`'s value finds its `<select>`.
     spreadElement(value) {
-        const out = __pybridge.spread(value);
+        const out = spreadOf(value, __pybridge.bound);
         if (out === null || typeof out !== 'object') return out;
 
         for (const key of Object.keys(out)) {
@@ -473,6 +472,18 @@ export const __pybridge = {
         return out;
     }
 };
+
+// A spread's copy, each value converted: a fresh object, as a JavaScript spread
+// of a `$state` proxy is, so Svelte's diff sees a dict mutated in place.
+function spreadOf(value, convert) {
+    if (value === null || value === undefined || typeof value !== 'object') return value;
+
+    const out = { ...value };
+
+    for (const key of Object.keys(out)) out[key] = convert(out[key]);
+
+    return out;
+}
 
 // Methods that change a container.
 //
