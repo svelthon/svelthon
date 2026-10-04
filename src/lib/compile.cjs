@@ -968,22 +968,29 @@ function opened(expr) {
 
     return depth;
 }
-// The name the first `:=` of an expression binds, outside its strings, or null.
+// The name the first `:=` of an expression binds in the expression's own scope,
+// or null, read off its AST: one in an f-string's field counts, one in a lambda
+// of its own binds there and does not. A text the parser refuses answers null,
+// and the compile that follows reports it.
 function walrusIn(expr) {
-    for (let i = 0; i < expr.length; i++) {
-        const skip = atomic(expr, i);
-
-        if (skip > 0) {
-            i += skip - 1;
-            continue;
-        }
-
-        if (expr[i] === ':' && expr[i + 1] === '=') {
-            return expr.slice(0, i).match(/([\p{XID_Start}_]\p{XID_Continue}*)\s*$/u)?.[1] ?? '';
-        }
+    let tree;
+    try {
+        tree = $B._PyPegen.run_parser(new $B.Parser(`(${expr})\n`, '<arrow>', 'file'));
+    } catch {
+        return null;
     }
 
-    return null;
+    const find = (node) => {
+        if (node instanceof $B.ast.Lambda) return null;
+        if (node instanceof $B.ast.NamedExpr) return node.target.id;
+        for (const one of children(node)) {
+            const found = find(one);
+            if (found !== null) return found;
+        }
+        return null;
+    };
+
+    return find(tree);
 }
 
 const ARROW_INDENTED = /^[ \t]+(?:[\p{XID_Start}_]\p{XID_Continue}*\s*)?=>\s/u;

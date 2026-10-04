@@ -57,6 +57,18 @@ describe('an arrow whose right-hand side holds a comma', () => {
         );
         expect(() => compile('count = 1\nlabel => f"{count}:="\n', 'Probe', 'src/Probe.svelte')).not.toThrow();
     });
+
+    // Read off the expression's AST, not its text: a walrus in an f-string's
+    // field binds in the lambda all the same, and one in a lambda of its own
+    // binds there, which is what Python does with it anyway.
+    test('a walrus in an f-string field is refused, one in an inner lambda is not', () => {
+        expect(() => compile('count = 1\nlabel => f"{(half := count)}"\n', 'Probe', 'src/Probe.svelte')).toThrow(
+            /`half :=` inside `=>`/
+        );
+        expect(() =>
+            compile('count = 1\nwrapped => (lambda: (inner := count))()\n', 'Probe', 'src/Probe.svelte')
+        ).not.toThrow();
+    });
 });
 
 // `doubled => count * 2` — a derived, written the way the state beside it is

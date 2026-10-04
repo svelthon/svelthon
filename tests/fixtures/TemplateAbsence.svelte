@@ -21,6 +21,9 @@ def deleted():
         return "no gone"
 
 
+names = ["a", "b"]
+
+
 @derived
 def summary():
     try:
@@ -30,6 +33,8 @@ def summary():
 </script>
 
 <p data-k="direct">{total}</p>
+<p data-k="lambda">{(lambda: total)()}</p>
+<p data-k="generator">{", ".join(f"{one}{total}" for one in names)}</p>
 <p data-k="call">{describe()}</p>
 <p data-k="deleted">{deleted()}</p>
 <p data-k="derived">{summary}</p>
