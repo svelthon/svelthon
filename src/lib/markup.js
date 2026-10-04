@@ -668,7 +668,7 @@ const DIRECTIVE_ADAPTER = {
     animate: '__directiveAnimate'
 };
 
-function tagValue(markup, from) {
+function tagValue(markup, from, name = 'value') {
     for (let at = from; at < markup.length && markup[at] !== '>'; ) {
         const char = markup[at];
 
@@ -680,7 +680,7 @@ function tagValue(markup, from) {
         const end = valueEnd(markup, at);
 
         if (end === -1) return null;
-        if ((markup.slice(from, at).match(ATTRIBUTE_NAME) || [])[1] === 'value') {
+        if ((markup.slice(from, at).match(ATTRIBUTE_NAME) || [])[1] === name) {
             return { start: at + 1, end, braced: char === '{' };
         }
 
@@ -1627,9 +1627,26 @@ function walk(markup, collect, onPython, seed, record, where) {
         // be handed one default list and are still two targets.
         const where = mentioned(expr.trim());
 
+        // And `checked` for the server, which runs no action: Svelte's server
+        // writes it for its own group, from the model, when the tag has a value,
+        // a checkbox being one whose `type` is the static text `checkbox`. With
+        // no node to read static text off, the server is handed the text. A tag
+        // that writes `checked` itself is checked by it, as Svelte's is, and
+        // gets no second one.
+        const kind = tag === null ? null : tagValue(markup, tag.start, 'type');
+        const boxes = kind !== null && !kind.braced && markup.slice(kind.start, kind.end) === 'checkbox';
+        const served =
+            found !== null && value === 'undefined'
+                ? JSON.stringify(attributeText(markup.slice(found.start, found.end), markup[found.start - 1]))
+                : value;
+        const checked =
+            tag !== null && tagNames(markup, tag.start).has('checked')
+                ? ''
+                : ` checked={__pybridge.groupChecked(() => ${read}, () => ${served}, ${boxes})}`;
+
         return (
             `use:${GROUP_ACTION}={[${read}, (${BOUND_VALUE}) => ${write}, ${value}, ` +
-            `${JSON.stringify(expr.trim())}, ${NAMESPACE}, [${where.join(', ')}]]}`
+            `${JSON.stringify(expr.trim())}, ${NAMESPACE}, [${where.join(', ')}]]}${checked}`
         );
     };
 

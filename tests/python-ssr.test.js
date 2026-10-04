@@ -11,6 +11,8 @@ import KeyIdentity from './fixtures/KeyIdentity.svelte';
 import SvelteConstructs from './fixtures/SvelteConstructs.svelte';
 import ScalarProps from './fixtures/ScalarProps.svelte';
 import GroupHydrate from './fixtures/GroupHydrate.svelte';
+import GroupServer from './fixtures/GroupServer.svelte';
+import GroupServerNative from './fixtures/GroupServerNative.svelte';
 import * as html from './fixtures/python-ssr-html.js';
 
 test.for([
@@ -21,4 +23,19 @@ test.for([
     ['two empty groups', GroupHydrate, {}, 'GroupHydrate']
 ])('the server renders %s', ([, Component, props, name]) => {
     expect(render(Component, { props }).body).toBe(html[name]);
+});
+
+// A group whose model holds a selection is checked by the server, as Svelte's
+// server checks its own: the page shows it, and a form sent before the script
+// runs sends it.
+test('the server checks what a group holds, as Svelte does', () => {
+    const checked = (Component) =>
+        [...render(Component).body.matchAll(/<input data-k="([^"]+)"[^>]*>/g)]
+            .filter((one) => /\schecked(?:[\s=/>]|$)/.test(one[0]))
+            .map((one) => one[1]);
+
+    const native = checked(GroupServerNative);
+
+    expect(native).toEqual(['b', 'y', 'half']);
+    expect(checked(GroupServer)).toEqual(native);
 });

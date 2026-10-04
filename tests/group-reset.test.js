@@ -13,7 +13,9 @@ import GroupResetDuplicateNative from './fixtures/GroupResetDuplicateNative.svel
 //
 // Svelte's own binding listens for `reset` on the document, in the capture
 // phase, and does its work one microtask later, because the controls have not
-// been put back yet when the event fires. This does the same.
+// been put back yet when the event fires. This does the same, and answers as
+// Svelte answers: the selection is emptied, `[]` or None, and the controls
+// follow it, a default `checked` included.
 describe('a group after a form reset', () => {
     const setup = async () => {
         const target = document.body.appendChild(document.createElement('div'));
@@ -41,7 +43,7 @@ describe('a group after a form reset', () => {
         };
     };
 
-    test('a checkbox group goes back to what the form shows', async () => {
+    test('a checkbox group is emptied', async () => {
         const { read, click, filled, reset } = await setup();
 
         click('c-a');
@@ -52,15 +54,15 @@ describe('a group after a form reset', () => {
         expect(read('selected')).toBe('[]');
     });
 
-    test('a radio group comes back to its default', async () => {
+    test('a radio group is emptied, its default included', async () => {
         const { read, click, filled, reset } = await setup();
 
         click('r-y');
         expect(read('choice')).toBe('y');
 
         await reset();
-        expect(filled('r-')).toBe('r-x');
-        expect(read('choice')).toBe('x');
+        expect(filled('r-')).toBe('');
+        expect(read('choice')).toBe('');
     });
 
     // The reset is a round trip, not a one-way street: what it restores has to
@@ -76,14 +78,11 @@ describe('a group after a form reset', () => {
     });
 });
 
-// The rebuild has to know which inputs belong together, and this design gives
-// the group no identity of its own: the first answer was the Python list they
-// all hold, which is the one thing they share. It is not enough. Two bindings
-// may hold the same list — `left = shared` and `right = shared` — and sharing a
-// value is not sharing a binding: `right` came back holding `a`, a value none of
-// its own controls carries.
+// Each binding is emptied by the reset, whatever list it shares with another:
+// `left = shared` and `right = shared` are two bindings, and two instances of
+// one component handed one list are two groups.
 describe('two groups that happen to hold one list', () => {
-    test('are rebuilt apart', async () => {
+    test('are each emptied', async () => {
         const target = document.body.appendChild(document.createElement('div'));
         mount(GroupShared, { target });
         flushSync();
@@ -94,16 +93,11 @@ describe('two groups that happen to hold one list', () => {
         await Promise.resolve();
         flushSync();
 
-        expect(read('left')).toBe("['a']");
-        expect(read('right')).toBe("['b']");
+        expect(read('left')).toBe('[]');
+        expect(read('right')).toBe('[]');
+        expect([...target.querySelectorAll('input')].filter((one) => one.checked)).toEqual([]);
     });
 
-    // The third dimension, and the one the first repair could not see: two
-    // *instances* of one component, handed the same list to start from. The
-    // binding text is `selected` in both and the list is one object, so neither
-    // half of the identity tells them apart. What does is the instance — its own
-    // namespace, which every one of its elements shares and no other instance
-    // has.
     test('and so are two instances of one component', async () => {
         const target = document.body.appendChild(document.createElement('div'));
         mount(GroupInstances, { target });
@@ -115,29 +109,16 @@ describe('two groups that happen to hold one list', () => {
         await Promise.resolve();
         flushSync();
 
-        expect(read('a')).toBe("['a']");
-        expect(read('b')).toBe("['b']");
+        expect(read('a')).toBe('[]');
+        expect(read('b')).toBe('[]');
+        expect([...target.querySelectorAll('input')].filter((one) => one.checked)).toEqual([]);
     });
 });
 
-// **A value goes into a group's list once, on the reset path as much as on the
-// change path.** A form may show one option in two sections, and the reset put
-// both controls back and added each of them: a selection nobody had touched
-// came back as `['a', 'a']`, and what a form submits is the list.
-//
-// The rule is Python equality, so it is not about the *spelling* of a value
-// either: `value={0.5}` written twice is two Brython floats, equal and not the
-// same object, and `{#each}` rows put the same pair on every line.
-//
-// **Svelte is not the oracle for this one, and the row below says why.**
-// Measured on the same form in its own language: Svelte answers a reset by
-// writing the *model* back into the controls, so every box comes back off and
-// the list stays empty — the form's own `checked` attributes lose. This file
-// exists because the project chose the other direction, the one a Reset button
-// means on a plain HTML form: the markup wins and the list is read back off it.
-// So Svelte says what happens when nobody restores, and the shape of the list
-// is ours to get right.
-describe('a reset that brings back two controls for one value', () => {
+// A form whose controls carry `checked` by default, two of them for one value,
+// in a list, as floats and in `{#each}` rows: the reset answers what the same
+// form written in Svelte answers.
+describe('a reset of controls checked by default', () => {
     const after = async (Component) => {
         const target = document.body.appendChild(document.createElement('div'));
         mount(Component, { target });
@@ -160,18 +141,12 @@ describe('a reset that brings back two controls for one value', () => {
         };
     };
 
-    test('holds each value once, with the form s own controls back on', async () => {
-        expect(await after(GroupResetDuplicate)).toEqual({
-            selected: 'a',
-            halves: '0.5',
-            rows: 'x / x',
-            checked: 'a1 a2 h1 h2 r0-1 r0-2 r1-1 r1-2'
-        });
+    test('empties the selections as Svelte does', async () => {
+        expect(await after(GroupResetDuplicate)).toEqual(await after(GroupResetDuplicateNative));
     });
 
-    // The measurement that says the row above is a choice and not an accident,
-    // kept here rather than in a note nobody re-runs.
-    test('while Svelte writes the model back instead, and restores nothing', async () => {
+    // The witness: Svelte writes the emptied model back into the controls.
+    test('the Svelte form is the rule', async () => {
         expect(await after(GroupResetDuplicateNative)).toEqual({
             selected: '',
             halves: '',

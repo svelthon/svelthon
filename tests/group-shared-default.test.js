@@ -51,7 +51,7 @@ describe('rows sharing a default list', () => {
         expect(read()).toBe('b / a');
     });
 
-    test('rebuild each row on its own after a form reset', async () => {
+    test('are each emptied by a form reset, as Svelte empties a group', async () => {
         const { target, read, input } = setup();
 
         for (const k of ['named-1', 'named-2']) input(k).defaultChecked = true;
@@ -60,6 +60,6 @@ describe('rows sharing a default list', () => {
         await Promise.resolve();
         flushSync();
 
-        expect(read()).toBe('a / b');
+        expect(read()).toBe(' / ');
     });
 });

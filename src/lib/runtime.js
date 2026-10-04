@@ -426,6 +426,34 @@ export const __pybridge = {
             : value;
     },
 
+    // A `bind:group` control's `checked`, written by the server, where no action
+    // runs: whether the model holds the control's value, by Python's `==`, as
+    // Svelte's server writes it for its own group. In the browser the action
+    // keeps the control, and this answers nothing, which Svelte leaves alone;
+    // the model and the value are handed over as reads, so the browser reads
+    // neither.
+    groupChecked(model, chosen, boxes) {
+        if (typeof document !== 'undefined') return undefined;
+
+        const value = chosen();
+
+        if (value === undefined) return undefined;
+
+        const mine = pyBind(value);
+        const current = model();
+        const same = (one) => {
+            try {
+                return __pybridge.truthy(globalThis.__BRYTHON__.rich_comp('__eq__', one, mine));
+            } catch (error) {
+                if (raised(error)) throw error;
+
+                return one === mine;
+            }
+        };
+
+        return boxes ? Array.from(current === NONE ? [] : (current ?? [])).some(same) : same(current);
+    },
+
     // What a context holds, written by Python. Either end may be JavaScript's,
     // so a callable is published as at every other door (`pyHandler`) and a
     // JavaScript reader can call it; a scalar is made JavaScript's; a container
@@ -5325,14 +5353,13 @@ export function writeItem(target, key, value) {
 // carries an action instead. So the markup pass reads the tag's own `value` and
 // passes it here. It is absent when the tag has no braced value, and then the
 // node's text is exactly right: that is what a plain HTML form hands over.
-// A form reset moves the controls without firing `change` on any of them, so a
-// group that listens for `change` alone keeps what the clicks left in it while
-// the form on screen says otherwise — and the list is what gets submitted.
+// A form reset moves the controls without firing `change` on any of them, and a
+// group answers it as Svelte's own `bind:group` does: the selection is emptied,
+// `[]` for checkboxes and None for radios, and the controls follow the model.
 //
 // One listener for the whole document, in the capture phase so nothing can stop
-// it, and the work done one microtask later: when the event fires the controls
-// have not been put back yet, so `checked` still reads the old state. Svelte's
-// own binding is built the same way, for the same reason.
+// it, and the work done one microtask later, after the form has put its
+// controls back: Svelte's own binding is built the same way.
 const RESETS = new WeakMap();
 
 let watching = false;
@@ -5344,24 +5371,10 @@ function watchReset() {
     document.addEventListener(
         'reset',
         (event) => {
-            const form = event.target;
-
             queueMicrotask(() => {
                 if (event.defaultPrevented) return;
 
-                const inputs = [...form.elements].filter((one) => RESETS.has(one));
-
-                // The group each input belongs to, read *before* any of them
-                // writes: the first write re-renders, and the rebuild below
-                // needs the groups as they were when the form was reset.
-                const groups = new Map(inputs.map((one) => [one, one.$svelthonGroup]));
-                const rebuilt = new Map();
-
-                // The filled ones last. A radio group writes once per input, and
-                // the one that came back filled has to have the final word over
-                // the others, which write absence.
-                for (const one of inputs) if (!one.checked) RESETS.get(one)(rebuilt, groups.get(one));
-                for (const one of inputs) if (one.checked) RESETS.get(one)(rebuilt, groups.get(one));
+                for (const one of event.target.elements) RESETS.get(one)?.();
             });
         },
         { capture: true }
@@ -5398,30 +5411,6 @@ const sameTarget = (a, b) =>
     a.token === b.token &&
     a.where.length === b.where.length &&
     a.where.every((one, i) => one === b.where[i] || (one !== one && b.where[i] !== b.where[i]));
-
-// The list a form reset rebuilds for a target, found through a tree that lives
-// as long as the reset: by token, then by each mentioned value, which is how a
-// Map compares its keys and so how `sameTarget` compares. One lookup per input:
-// searching every target rebuilt so far made a reset of n separate rows cost
-// n² comparisons.
-const REBUILT = Symbol('svelthon.rebuilt');
-
-function rebuiltFor(rebuilt, target) {
-    let level = rebuilt;
-
-    for (const one of [target.token, ...target.where]) {
-        let next = level.get(one);
-
-        if (next === undefined) level.set(one, (next = new Map()));
-        level = next;
-    }
-
-    let kept = level.get(REBUILT);
-
-    if (kept === undefined) level.set(REBUILT, (kept = []));
-
-    return kept;
-}
 
 function groupToken(scope, binding) {
     // No scope to share a token through: a token of its own, the one shape the
@@ -5541,12 +5530,6 @@ export function group(node, [current, write, chosen, binding, scope, where = []]
     // choice — a form showing the same option in two sections — and Python
     // equality is what says they are one choice, since two Brython values that
     // are equal are rarely the same object.
-    //
-    // Written here because the list is built on two paths and they have to
-    // agree: `changed`, when the reader ticks a box, and `restored`, when a
-    // form reset puts the controls back. The reset path added every checked
-    // control without asking, so a reset turned `['a']` into `['a', 'a']` and
-    // changed the contract of a selection nobody had touched.
     const include = (into, held) => {
         if (!into.some((already) => alike(already, held))) into.push(held);
     };
@@ -5584,25 +5567,8 @@ export function group(node, [current, write, chosen, binding, scope, where = []]
         );
     };
 
-    // What the reset writes back, once the control has been put back. A radio
-    // that came back empty writes absence rather than nothing at all, so a group
-    // whose inputs carry no `checked` reaches Python as None instead of keeping
-    // the answer the reset just threw away.
-    const restored = (rebuilt, target) => {
-        if (!boxes) return write(node.checked ? value() : NONE);
-
-        // Which inputs belong together: the target, see `groupToken`.
-        const kept = rebuiltFor(rebuilt, target);
-
-        // The list is built one control at a time here, and not read off the
-        // group in one go the way `changed` reads it, because the first write
-        // re-renders and hands every other control a *new* list: a second
-        // reader would then find no control left in the group it was asked
-        // about. So each control adds itself, under the rule both paths share.
-        if (node.checked) include(kept, value());
-
-        write(__pybridge.list([...kept]));
-    };
+    // What a reset writes: the empty selection, as Svelte's `bind:group` does.
+    const restored = () => write(boxes ? __pybridge.list([]) : NONE);
 
     node.addEventListener('change', changed);
     RESETS.set(node, restored);
