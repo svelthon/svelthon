@@ -127,6 +127,22 @@ test.for([
     expect(() => compile(`${written}\n`, 'C', 'src/C.svelte', { plain: true })).not.toThrow();
 });
 
+// A method the file defines itself is the author's, whatever its name, and
+// `builtins` is the module only when the file imports it under that name.
+test.for([
+    ['an own __reduce__', 'class Box:\n    def __reduce__(self):\n        return 42\n\nanswer = Box().__reduce__()'],
+    ['an own __reduce_ex__', 'class Box:\n    def __reduce_ex__(self, p):\n        return 42\n\nanswer = Box().__reduce_ex__(2)'],
+    ['an object named builtins', 'class Own:\n    def eval(self, v):\n        return v + 1\n\nbuiltins = Own()\nanswer = builtins.eval(41)']
+])('%s is theirs', ([, written]) => {
+    expect(() => compile(`${written}\n`, 'C', 'src/C.svelte', { plain: true })).not.toThrow();
+});
+
+test('while the builtins module imported under another name is still refused', () => {
+    expect(() => compile('import builtins as b\nx = b.eval("1")\n', 'C', 'src/C.svelte', { plain: true })).toThrow(
+        /`eval\(\)` parses its text/
+    );
+});
+
 // And the builtin is refused however it is reached: handed on, read through
 // the `builtins` module, imported from it, or called in one function while
 // another binds a local of the same name.

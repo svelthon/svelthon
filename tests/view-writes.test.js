@@ -33,6 +33,21 @@ describe('a length an array would refuse', () => {
         }
     );
 
+    // A `delete` keeps the length, at the last index as at any other, as on an
+    // array; `pop` is what shortens it.
+    test.for([[0], [1], [2]])('delete at %s keeps the length, as on an array', ([at]) => {
+        const native = [1, 2, 3];
+        const { view: list } = view([1, 2, 3]);
+
+        delete native[at];
+        delete list[at];
+
+        expect(list.length).toBe(native.length);
+        list.pop();
+        native.pop();
+        expect(list.length).toBe(native.length);
+    });
+
     // Growing fills with None where an array has holes: both read as nothing.
     test.for([[1], [5], ['2'], [0]])('while %s is a length, as for an array', ([length]) => {
         const native = [1, 2, 3];

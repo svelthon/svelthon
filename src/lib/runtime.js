@@ -2421,15 +2421,15 @@ function viewOf(value) {
         return true;
     };
 
-    // A JavaScript `delete` leaves a hole where an array had an element, and
-    // only the last one shortens it, which is what `pop` does through it.
+    // A JavaScript `delete` leaves a hole where an array had an element, the
+    // last one included, and the length as it was: `pop` and `splice` shorten
+    // the array by writing its `length` afterwards.
     const remove = (key) => {
         if (!holds(key)) return true;
         if (!sequence) return $B.$call($B.$getattr(value, '__delitem__'), key), true;
         if (!$B.is_list(value)) return false;
 
-        if (index(key) === length() - 1) $B.$call($B.$getattr(value, 'pop'));
-        else $B.$setitem(value, index(key), NONE);
+        $B.$setitem(value, index(key), NONE);
 
         return true;
     };

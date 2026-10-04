@@ -87,6 +87,14 @@ describe('a rune written below the top level', () => {
         expect(script(body)).toThrow(message);
     });
 
+    // A JavaScript function imported under a rune's name is the author's, in
+    // any form, assigned in a function included.
+    test('while an import named inspect is no rune, wherever it is called', () => {
+        expect(
+            script('importjs {inspect} from "./foreign.js"\n\ndef run():\n    answer = inspect(41)\n    return answer\n')
+        ).not.toThrow();
+    });
+
     test('while the spellings it reads compile', () => {
         expect(script('count = 0\ntwice => count * 2\n=> print(count)\ninspect(count)\n')).not.toThrow();
         expect(script('def double():\n    return 2\n\ntwice = derived(double)\nfocus = export(lambda: 1)\n')).not.toThrow();

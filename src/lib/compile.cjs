@@ -1841,11 +1841,12 @@ function refuseBareMarker(node, source, lineOffset) {
     );
 }
 
-function refuseNestedRunes(body, source, lineOffset) {
+function refuseNestedRunes(body, source, lineOffset, theirs = new Set()) {
     const called = (node, names) =>
         node.value instanceof $B.ast.Call &&
         node.value.func instanceof $B.ast.Name &&
-        names.has(node.value.func.id);
+        names.has(node.value.func.id) &&
+        !theirs.has(node.value.func.id);
 
     const scoped = (statements) => {
         for (const node of statements) {
@@ -2514,6 +2515,19 @@ const BUILTINS_MODULES = new Set(['builtins', '__builtins__']);
 function refuseLibraryCalls(ast, table, source, lineOffset) {
     const builtin = builtinIn(table, moduleBinds(table));
     const unshipped = (name) => Object.hasOwn(UNSHIPPED_BUILTINS, name);
+
+    // The names that are the builtins module, `import builtins [as b]`, and
+    // the methods a class of the file defines itself, whose call is the
+    // author's and needs nothing that does not ship.
+    const modules = new Set();
+    const defined = new Set();
+    walkScoped(ast.body, (node, scope) => {
+        if (node instanceof $B.ast.Import) {
+            for (const one of node.names) if (one.name === 'builtins') modules.add(one.asname ?? 'builtins');
+        }
+        if (node instanceof $B.ast.FunctionDef && scope instanceof $B.ast.ClassDef) defined.add(node.name);
+    });
+    const isModule = (name, scope) => modules.has(name) || (name === '__builtins__' && builtin(name, scope));
     const refuseBuiltin = (name, line) => {
         throw refuse(
             `svelthon — \`${name}()\` ${UNSHIPPED_BUILTINS[name]} (${source}:${line + lineOffset})`,
@@ -2530,7 +2544,7 @@ function refuseLibraryCalls(ast, table, source, lineOffset) {
         if (
             node instanceof $B.ast.Attribute &&
             node.value instanceof $B.ast.Name &&
-            BUILTINS_MODULES.has(node.value.id) &&
+            isModule(node.value.id, scope) &&
             unshipped(node.attr)
         ) {
             refuseBuiltin(node.attr, line);
@@ -2546,7 +2560,8 @@ function refuseLibraryCalls(ast, table, source, lineOffset) {
         const { func } = node;
         const [first] = node.args;
         const name = first instanceof $B.ast.Constant && typeof first.value === 'string' ? first.value : null;
-        const module = func instanceof $B.ast.Attribute ? IMPORTED_BY_METHOD[func.attr] : undefined;
+        const module =
+            func instanceof $B.ast.Attribute && !defined.has(func.attr) ? IMPORTED_BY_METHOD[func.attr] : undefined;
         const documented =
             func instanceof $B.ast.Name &&
             func.id === 'help' &&
@@ -3648,8 +3663,10 @@ function compile(
     refuseLocked([...declared, ...reserved], !plain && !store, source, lines, lineOffset);
     refuseReserved(reserved, source, lines, lineOffset);
     refuseRemarked(remarked, source, lines, lineOffset);
-    refuseNestedRunes(root._ast.body, source, lineOffset);
-    refuseMisplacedMarkers(root._ast.body, source, lineOffset, new Set([...declared, ...jsImported]));
+    // What the author took, an `importjs {inspect}` among them, is no rune.
+    const theirs = new Set([...declared, ...jsImported]);
+    refuseNestedRunes(root._ast.body, source, lineOffset, theirs);
+    refuseMisplacedMarkers(root._ast.body, source, lineOffset, theirs);
 
     // Functions by default, what a framework calls by name. A module that wants
     // to export values says so with `__all__`, exactly as it would to a Python
