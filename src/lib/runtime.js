@@ -426,6 +426,26 @@ export const __pybridge = {
             : value;
     },
 
+    // What a context holds, written by Python. Either end may be JavaScript's,
+    // so a callable is published as at every other door (`pyHandler`) and a
+    // JavaScript reader can call it; a scalar is made JavaScript's; a container
+    // is the object it is.
+    toContext(value) {
+        return value !== null && (typeof value === 'object' || typeof value === 'function') && callable(value)
+            ? pyHandler(value)
+            : plainScalar(value);
+    },
+
+    // And read by Python: what Python published is its own callable again, so a
+    // Python reader holds what a Python writer held; a JavaScript function is
+    // the adapter an import of it gets (`jsCall`), which converts what Python
+    // hands it and what it answers; anything else is read as `pyBind` reads it.
+    fromContext(value) {
+        if (typeof value !== 'function') return pyBind(value);
+
+        return PUBLISHED.get(value) ?? (declared(value) === null ? jsCall(value) : value);
+    },
+
     // `{...attrs}`: Svelte diffs the spread object against the one from the
     // previous render, and a dict mutated in place *is* the same object. In
     // JavaScript the problem does not arise: spreading a $state proxy produces a
@@ -4195,9 +4215,15 @@ export function pyHandler(value) {
     // other. It is the conversion `pyCall` applies now, after trimming, so
     // identity is settled here and only here.
     cache.set(key, wrapped);
+    PUBLISHED.set(wrapped, value);
 
     return wrapped;
 }
+
+// The Python callable each function `pyHandler` published stands for, so that
+// what comes back to Python through a door that keeps values, a context, is
+// the callable it handed over.
+const PUBLISHED = new WeakMap();
 
 // A receiver Brython keeps as a JavaScript primitive — a `str`, a small `int`,
 // a `bool` — cannot key a WeakMap, and `"hello".upper` read twice is two method

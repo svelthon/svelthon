@@ -197,18 +197,24 @@ const INJECTED = [
     // module body runs.
     //
     // Either end may be JavaScript's, so a value crosses as it does at every
-    // other door: set, a scalar becomes JavaScript's own (`__plainScalar`), and
-    // read, a number becomes Python's and an absence None (`__pyBind`). A
-    // container keeps its identity both ways. The key is a key as a dict has
-    // one, the way `{#key}` makes it (`__pybridge.key`): a number is
-    // JavaScript's own, so `0.5` finds what `setContext(0.5, …)` set, and `1`,
-    // `1.0` and `True` are one key, while two NaN are two.
+    // other door (`__pybridge.toContext` and `fromContext`): set, a scalar
+    // becomes JavaScript's own and a callable one JavaScript can call; read, a
+    // number becomes Python's, an absence None, a JavaScript function one
+    // Python can call, and a callable Python set is itself again. A container
+    // keeps its identity both ways. The key is a key as a dict has one, the
+    // way `{#key}` makes it (`__pybridge.key`): a number is JavaScript's own,
+    // so `0.5` finds what `setContext(0.5, …)` set, and `1`, `1.0` and `True`
+    // are one key, while two NaN are two.
     {
         name: 'set_context',
-        value: '() => (key, value) => setContext(__pybridge.key(key), __plainScalar(value))',
+        value: '() => (key, value) => setContext(__pybridge.key(key), __pybridge.toContext(value))',
         component: true
     },
-    { name: 'get_context', value: '() => (key) => __pyBind(getContext(__pybridge.key(key)))', component: true },
+    {
+        name: 'get_context',
+        value: '() => (key) => __pybridge.fromContext(getContext(__pybridge.key(key)))',
+        component: true
+    },
 
     // `$props.id()`, whose name follows theirs the way `set_context` follows
     // `setContext`. It is not a prop, the parent never passes it, but a reader

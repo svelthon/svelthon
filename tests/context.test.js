@@ -4,6 +4,8 @@ import CtxHost from './fixtures/CtxHost.svelte';
 import ContextFromJs from './fixtures/ContextFromJs.svelte';
 import ContextFromPy from './fixtures/ContextFromPy.svelte';
 import ContextKeys from './fixtures/ContextKeys.svelte';
+import ContextCallbacks from './fixtures/ContextCallbacks.svelte';
+import ContextCallbacksFromJs from './fixtures/ContextCallbacksFromJs.svelte';
 
 // A context value crosses languages like any other value: a scalar becomes the
 // reader's own. JavaScript's 0.42 is a Python float, and Python's 0.42 is a
@@ -35,6 +37,32 @@ describe('a context number across languages', () => {
 
     test('a key is equal as a dict key is', () => {
         expect(read(ContextKeys, 'found')).toBe("['half', 'one', 'one', 'pair', 'own nan', None]");
+    });
+});
+
+// And a callable: a function, a bound method and a callable instance set in
+// Python are JavaScript functions to a JavaScript reader, called with its own
+// arguments as a JavaScript parent's would be, and the callables themselves to
+// a Python reader. A JavaScript callback is called from Python with
+// JavaScript's values.
+describe('a context callable across languages', () => {
+    const read = (Component, key) => {
+        const target = document.body.appendChild(document.createElement('div'));
+        mount(Component, { target });
+        flushSync();
+        return target.querySelector(`[data-k="${key}"]`).textContent;
+    };
+
+    test('set in Python, called from JavaScript', () => {
+        expect(read(ContextCallbacks, 'javascript-calls')).toBe('function:7 function:0.25 function:0.5 function:0.5');
+    });
+
+    test('set in Python, read in Python as itself', () => {
+        expect(read(ContextCallbacks, 'python-calls')).toBe("[7, '0.25', 'float', 2]");
+    });
+
+    test('set in JavaScript, called from Python', () => {
+        expect(read(ContextCallbacksFromJs, 'python-calls-javascript')).toBe('0.25|number,number');
     });
 });
 
