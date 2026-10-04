@@ -14,6 +14,11 @@ import { python, svelthon, withPrelude } from '../src/lib/svelthon.js';
 const { VIRTUAL_PREFIX } = createRequire(import.meta.url)('../src/lib/compile.cjs');
 const fixtures = resolve(import.meta.dirname, 'fixtures');
 
+// A fixture through Svelte's own `preprocess`, which runs the `markup` hook and
+// then the `script` hook with the attributes of the tag the first one wrote.
+const preprocessed = (filename, pre = python()) =>
+    preprocess(readFileSync(filename, 'utf8'), [pre], { filename });
+
 // What the preprocessor writes into a custom element's written-out option,
 // read back with Svelte's parser: the author's entries, then the declared props
 // they do not name, which is the order Svelte lists them in, and the file on as
@@ -61,7 +66,7 @@ describe('the preprocessor decides by the script tag', () => {
         });
 
         expect(out.code).toContain('__expr_0()');
-        expect(out.code).toContain('<script lang="python">');
+        expect(out.code).toMatch(/<script [^>]*\blang="python">/);
     });
 
     // HTML allows whitespace before the `>` of a closing tag and Svelte's parser
@@ -190,38 +195,30 @@ describe('the preprocessor decides by the script tag', () => {
 
     // The markup pass has to have run first: its hidden functions are what the
     // script pass appends to the author's Python.
-    test('the script pass turns Python into a component script', () => {
+    test('the script pass turns Python into a component script', async () => {
         // A real file: the script hook reads it whole, so a debugger opens the
         // `.svelte` rather than a thousand lines of generated JavaScript.
         const filename = resolve(fixtures, 'BlockScope.svelte');
-        const content = readFileSync(filename, 'utf8').match(
-            /<script lang="python">([\s\S]*?)<\/script>/
-        )[1];
+        const { code } = await preprocess(readFileSync(filename, 'utf8'), [pre], { filename });
+        const script = code.match(/<script>([\s\S]*?)<\/script>/)[1];
 
-        pre.markup({ content: readFileSync(filename, 'utf8'), filename });
-        const out = pre.script({ content, attributes: { lang: 'python' }, filename });
-
-        expect(out.code).toContain('$state');
-        expect(out.code).toContain('__expr_0');
+        expect(script).toContain('$state');
+        expect(script).toContain('__expr_0');
     });
 
     // The content is JavaScript now, so the tag must stop claiming otherwise.
     // Leaving `lang="python"` is invisible to the Svelte compiler and fatal to
     // everything downstream that reads the attribute — `svelte-check` first.
-    test('and drops the lang attribute, keeping the others', () => {
+    // The attribute the markup pass adds for the script pass goes with it.
+    test('and drops the lang attribute, keeping the others', async () => {
         const filename = resolve(fixtures, 'BlockScope.svelte');
-        const content = readFileSync(filename, 'utf8').match(
-            /<script lang="python">([\s\S]*?)<\/script>/
-        )[1];
+        const source = readFileSync(filename, 'utf8').replace(
+            '<script lang="python">',
+            '<script lang="python" generics="T">'
+        );
+        const { code } = await preprocess(source, [pre], { filename });
 
-        pre.markup({ content: readFileSync(filename, 'utf8'), filename });
-        const out = pre.script({
-            content,
-            attributes: { lang: 'python', generics: 'T' },
-            filename
-        });
-
-        expect(out.attributes).toEqual({ generics: 'T' });
+        expect(code.match(/<script\b[^>]*>/)[0]).toBe('<script generics="T">');
     });
 });
 
@@ -324,17 +321,10 @@ describe('the plugin resolves what Vite cannot', () => {
     // The two halves meet here: the preprocessor compiles and files the module
     // away, the plugin serves it — with the map, which is what a debugger
     // follows back to the `.svelte`.
-    test('a compiled component is served with its source map', () => {
+    test('a compiled component is served with its source map', async () => {
         const filename = resolve(fixtures, 'BlockScope.svelte');
-        const whole = readFileSync(filename, 'utf8');
-        const pre = python();
 
-        pre.markup({ content: whole, filename });
-        pre.script({
-            content: whole.match(/<script lang="python">([\s\S]*?)<\/script>/)[1],
-            attributes: { lang: 'python' },
-            filename
-        });
+        await preprocessed(filename);
 
         // The module is filed under the path, not the basename: two components
         // may share a name and only the path tells them apart.
@@ -428,17 +418,10 @@ describe('hot update invalidates the generated module too', () => {
         };
     };
 
-    test('editing a component forgets its generated body', () => {
+    test('editing a component forgets its generated body', async () => {
         const filename = resolve(fixtures, 'BlockScope.svelte');
-        const pre = python();
-        const whole = readFileSync(filename, 'utf8');
 
-        pre.markup({ content: whole, filename });
-        pre.script({
-            content: whole.match(/<script lang="python">([\s\S]*?)<\/script>/)[1],
-            attributes: { lang: 'python' },
-            filename
-        });
+        await preprocessed(filename);
 
         const env = graph();
         const out = plugin.hotUpdate.call({ environment: env }, { file: filename, modules: [] });
@@ -488,32 +471,22 @@ describe('hot update invalidates the generated module too', () => {
 // arrow that declares a derived. Both run for every component that uses them,
 // and both were reached only from inside Vite's process.
 describe('the rewrites that precede Brython', () => {
-    const compiled = (name) => {
-        const filename = resolve(fixtures, name);
-        const whole = readFileSync(filename, 'utf8');
-        const pre = python();
+    // The component's script, which is what the `script` hook returns.
+    const compiled = async (name) =>
+        (await preprocessed(resolve(fixtures, name))).code.match(/<script>([\s\S]*?)<\/script>/)[1];
 
-        pre.markup({ content: whole, filename });
-
-        return pre.script({
-            content: whole.match(/<script lang="python">([\s\S]*?)<\/script>/)[1],
-            attributes: { lang: 'python' },
-            filename
-        }).code;
-    };
-
-    test('importjs becomes a JavaScript import, in the component', () => {
-        const code = compiled('ImportJsLines.svelte');
+    test('importjs becomes a JavaScript import, in the component', async () => {
+        const code = await compiled('ImportJsLines.svelte');
 
         expect(code).toMatch(/import .* from ['"]/);
     });
 
-    test('an arrow becomes a derived', () => {
-        expect(compiled('ArrowDerived.svelte')).toContain('$derived');
+    test('an arrow becomes a derived', async () => {
+        expect(await compiled('ArrowDerived.svelte')).toContain('$derived');
     });
 
-    test('an arrow with no name becomes an effect', () => {
-        expect(compiled('ArrowEffect.svelte')).toContain('$effect');
+    test('an arrow with no name becomes an effect', async () => {
+        expect(await compiled('ArrowEffect.svelte')).toContain('$effect');
     });
 });
 
@@ -540,17 +513,10 @@ describe('a store takes the other branch of the compiler', () => {
 // evaluated before init() runs, so its namespace is registered by the time
 // Brython looks it up.
 describe('a component importing a module', () => {
-    test('is served with the import ahead of its own body', () => {
+    test('is served with the import ahead of its own body', async () => {
         const filename = resolve(fixtures, 'RootStore.svelte');
-        const whole = readFileSync(filename, 'utf8');
-        const pre = python();
 
-        pre.markup({ content: whole, filename });
-        pre.script({
-            content: whole.match(/<script lang="python">([\s\S]*?)<\/script>/)[1],
-            attributes: { lang: 'python' },
-            filename
-        });
+        await preprocessed(filename);
 
         const name = relative(process.cwd(), filename).replace(/\W/g, '_');
         const served = svelthon().load('\0' + VIRTUAL_PREFIX + name);

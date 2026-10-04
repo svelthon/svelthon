@@ -16,7 +16,7 @@ import { parse } from 'svelte/compiler';
 const require = createRequire(import.meta.url);
 const { compile, VIRTUAL_PREFIX, virtualId, pythonModuleName, elementProps, PY_NAME } = require('./compile.cjs');
 
-// Generated modules, keyed by component name. Filled by the preprocessor when
+// Generated modules, keyed by project and component name. Filled by the preprocessor when
 // Svelte transforms a component, read back when Vite resolves the import that
 // the preprocessor just wrote into that component's script.
 //
@@ -26,7 +26,13 @@ const { compile, VIRTUAL_PREFIX, virtualId, pythonModuleName, elementProps, PY_N
 // loader, while Vite bundles `vite.config.js`, where the plugin is. This file
 // is then evaluated twice, and a module-level Map would leave the plugin
 // looking in an empty one.
+//
+// The key holds the project as well as the id: the directory the process is in,
+// which every name is relative to. Two projects built in one process, each with
+// a `src/Card.svelte`, give the same id, and one map under the id alone handed
+// the first project's plugin the second project's Python.
 const generated = (globalThis[Symbol.for('svelthon.generated')] ??= new Map());
+const generatedKey = (root, id) => `${root}\n${id}`;
 
 // Which file claimed each generated name, on the same global registry and for
 // the same reason: the preprocessor and the plugin are not always the same
@@ -270,8 +276,7 @@ export function moduleImports(content) {
 export const compileOptionsFor = (code) =>
     /<svelte:options[^>]*\bcustomElement\b/.test(markupOnly(code)) ? { customElement: true } : undefined;
 
-// What the `markup` hook works out about a file and the `script` hook then needs,
-// one entry per file:
+// What the `markup` hook works out about a file and the `script` hook then needs:
 //
 // - `lineOffset`: Python line numbers count from the start of the <script> body
 //   and the file counts from its first line. The gap is the number of lines
@@ -280,27 +285,47 @@ export const compileOptionsFor = (code) =>
 // - `jsNames`: what the file imports from JavaScript.
 // - `element`: whether the file declares itself a custom element.
 //
+// One entry per call of Svelte's `preprocess()`, not per file. Two calls on two
+// versions of one file can run at once, both `markup` hooks before either
+// `script` hook, and an entry under the filename gave the first version the
+// second one's expressions. The `markup` hook writes the entry's key on the
+// Python `<script>` tag as the attribute below, which Svelte hands to the
+// `script` hook with the others, and the `script` hook takes the attribute off.
+//
 // Held inside `python()` and not at module scope. Both hooks live on the object
 // it returns, so they have no reason to be shared by every preprocessor a
-// process constructs: two of them, a playground beside a SvelteKit app, would
-// otherwise write under the same filename keys.
+// process constructs.
 //
 // `generated` and `claimed` above are the opposite case and stay global: the
 // preprocessor and the plugin are not always the same module instance.
-const perFile = () => {
-    const files = new Map();
+const CALL = 'svelthon-call';
 
-    return (filename) => {
-        let one = files.get(filename);
+const perCall = () => {
+    const calls = new Map();
+    let last = 0;
 
-        if (one === undefined) {
-            one = { lineOffset: 0, defs: [], jsNames: [] };
-            files.set(filename, one);
+    return {
+        open(about) {
+            last += 1;
+            calls.set(String(last), about);
+            return String(last);
+        },
+        // The `script` hook without the `markup` hook before it has no entry, and
+        // the markup then needs nothing from it.
+        take(key) {
+            const about = calls.get(key) ?? { lineOffset: 0, defs: [], jsNames: [] };
+            calls.delete(key);
+            return about;
         }
-
-        return one;
     };
 };
+
+// `<script` and the attribute naming the call, on the tag `pythonScript` finds.
+function tagged(code, key) {
+    const at = pythonScript(withoutComments(code)).index + '<script'.length;
+
+    return `${code.slice(0, at)} ${CALL}="${key}"${code.slice(at)}`;
+}
 
 // The Svelte preprocessor: runs before Svelte parses the component, so the
 // compiler only ever sees ordinary JavaScript with runes.
@@ -310,7 +335,7 @@ const perFile = () => {
 // would appear to work purely by load order.
 export function python(options = {}) {
     const searchPath = options.path || [];
-    const about = perFile();
+    const calls = perCall();
 
     // Shared with the plugin, which compiles the `.py` files themselves and has
     // to resolve their imports the same way. The two halves may not be the same
@@ -338,14 +363,14 @@ export function python(options = {}) {
 
             refuseSpacedClose(declaring.closing, filename);
 
-            const file = about(filename);
-
-            file.jsNames = moduleImports(content);
-            file.element = compileOptionsFor(content) !== undefined;
-            file.lineOffset = content.slice(0, declaring.index).split('\n').length - 1;
-            file.defs = [];
-            file.defLines = [];
-            file.defColumns = [];
+            const file = {
+                jsNames: moduleImports(content),
+                element: compileOptionsFor(content) !== undefined,
+                lineOffset: content.slice(0, declaring.index).split('\n').length - 1,
+                defs: [],
+                defLines: [],
+                defColumns: []
+            };
 
             // The collector itself is in markup.js, which the browser can load.
             const collect = collector(file.defs, file.defLines, file.defColumns);
@@ -359,10 +384,13 @@ export function python(options = {}) {
             const open = content.indexOf('>', declaring.index) + 1;
             const python = content.slice(open, content.indexOf('</script', open));
 
-            return { code: elementOptions(code, python) };
+            return { code: tagged(elementOptions(code, python), calls.open(file)) };
         },
         script({ content, attributes, filename }) {
             if (attributes.lang !== 'python') return;
+
+            const { lang, [CALL]: call, ...rest } = attributes;
+            const about = calls.take(call);
 
             // One component, one generated module: this hook fires once per
             // script block and both derive their id from `nameFor(filename)`,
@@ -390,7 +418,7 @@ export function python(options = {}) {
                 name,
                 relative(process.cwd(), filename || 'Component'),
                 {
-                    ...about(filename),
+                    ...about,
                     // The whole file, so a debugger opens the .svelte itself.
                     sourceContent: filename ? readFileSync(filename, 'utf8') : content,
                     resolves: (mod) => moduleKind(mod, dirname(filename || '.'), searchPath)
@@ -403,7 +431,7 @@ export function python(options = {}) {
             // Brython looks it up.
             const prelude = pythonImports(imports, dirname(filename || '.'), searchPath);
 
-            generated.set(virtualId(name), withPrelude(module, map, prelude));
+            generated.set(generatedKey(process.cwd(), virtualId(name)), withPrelude(module, map, prelude));
 
             // The content is JavaScript now, so the tag must stop claiming
             // otherwise. Leaving `lang="python"` in place is invisible to the
@@ -411,8 +439,6 @@ export function python(options = {}) {
             // way, but every tool downstream reads the attribute and refuses:
             // `svelte-check`, installed by 93% of SvelteKit projects, would
             // report dozens of parse errors per component.
-            const { lang, ...rest } = attributes;
-
             return { code: sameLines(script, content), attributes: rest };
         }
     };
@@ -662,6 +688,12 @@ export function svelthon(options = {}) {
     // right for the ordinary case of one configuration per process.
     const searchPath = options.path;
 
+    // The project this plugin serves, read as it is made, the way Vite reads its
+    // configuration in the project's directory: what the process is in when it
+    // later asks for a module may be another project.
+    const root = process.cwd();
+    const key = (id) => generatedKey(root, id);
+
     return {
         name: 'svelthon:modules',
         // 'pre', or Vite's own resolver claims `./store.py` as a plain file and
@@ -698,7 +730,7 @@ export function svelthon(options = {}) {
             if (id === '\0' + STATS_ID) return `export const tests = ${countTests()};`;
 
             if (id.startsWith('\0')) {
-                const entry = generated.get(id.slice(1));
+                const entry = generated.get(key(id.slice(1)));
                 return entry && (entry.map ? { code: entry.code, map: entry.map } : entry.code);
             }
             if (!id.endsWith('.py')) return;
@@ -711,7 +743,7 @@ export function svelthon(options = {}) {
             // data layer. Same prelude a component gets.
             const prelude = pythonImports(imports, dirname(file), searchPath);
 
-            generated.set(virtualId(name), withPrelude(module, map, prelude));
+            generated.set(key(virtualId(name)), withPrelude(module, map, prelude));
 
             this.addWatchFile(file);
             return script;
@@ -754,7 +786,7 @@ export function svelthon(options = {}) {
             // `mangle` and not `nameFor`: this hook sees every changed file in
             // the project and is only asking whether one of them is ours.
             const name = mangle(file);
-            if (!generated.has(virtualId(name))) return;
+            if (!generated.has(key(virtualId(name)))) return;
 
             forget('\0' + virtualId(name));
 

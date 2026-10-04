@@ -12,6 +12,7 @@
 // Found by an outside reading, which reproduced it through the real hooks rather
 // than by reasoning about the code.
 import { test, expect, describe } from 'vitest';
+import { preprocess } from 'svelte/compiler';
 
 import { python, svelthon } from '../src/lib/svelthon.js';
 
@@ -35,23 +36,17 @@ const FILE = 'src/App.svelte';
 // the global on purpose, since the two halves may be two module instances.
 const generated = globalThis[Symbol.for('svelthon.generated')];
 
-const compile = (preprocessor) => {
-    const { code } = preprocessor.markup({ content: COMPONENT, filename: FILE });
-
-    preprocessor.script({
-        content: code.match(/<script lang="python">([\s\S]*?)<\/script>/)[1],
-        attributes: { lang: 'python' },
-        filename: FILE
-    });
+const compile = async (preprocessor) => {
+    await preprocess(COMPONENT, [preprocessor], { filename: FILE });
 
     return [...generated.values()].map((one) => one.code ?? one).join('\n');
 };
 
 describe('a second configuration leaves the first alone', () => {
-    test('the path resolves an import at all, which is what the rest measures', () => {
+    test('the path resolves an import at all, which is what the rest measures', async () => {
         const a = python({ path: ['tests/fixtures'] });
 
-        expect(compile(a)).toContain('shapes.py');
+        expect(await compile(a)).toContain('shapes.py');
     });
 
     // The reproduction, in the order the audit found it: A compiles, B is built
@@ -60,25 +55,25 @@ describe('a second configuration leaves the first alone', () => {
     // and accumulates across a file, so the comparison would measure the map
     // rather than the resolution. What the audit demonstrated is the import
     // disappearing, and that is what this asks.
-    test('and keeps resolving it after a second one is built', () => {
+    test('and keeps resolving it after a second one is built', async () => {
         const a = python({ path: ['tests/fixtures'] });
 
-        expect(compile(a)).toContain('shapes.py');
+        expect(await compile(a)).toContain('shapes.py');
 
         python({ path: [] });
 
-        expect(compile(a)).toContain('shapes.py');
+        expect(await compile(a)).toContain('shapes.py');
     });
 
     // The other order, which the audit asked for and which the old code passed
     // by luck: B first, then A, then B again. B's path finds no `shapes`, so B
     // refuses the import.
-    test('in either order', () => {
+    test('in either order', async () => {
         const b = python({ path: [] });
         const a = python({ path: ['tests/fixtures'] });
 
-        expect(compile(a)).toContain('shapes.py');
-        expect(() => compile(b)).toThrow(/`shapes` is not a module a component can import/);
+        expect(await compile(a)).toContain('shapes.py');
+        await expect(compile(b)).rejects.toThrow(/`shapes` is not a module a component can import/);
     });
 
     // The plugin is the half that cannot tell configurations apart, so it takes

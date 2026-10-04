@@ -917,6 +917,37 @@ describe('date', () => {
         expect(() => fromnow(value)).toThrow(/fromnow\(\): .* is not a date/);
     });
 
+    // A day its month does not have, which V8 carries into the next month:
+    // `2026-02-30` displayed as 2 March. The answers on the right are CPython
+    // 3.14's `datetime.fromisoformat` on the same strings, a refusal for every
+    // impossible day and the date itself for every real one.
+    test.for([
+        ['2026-02-30', null],
+        ['2026-04-31', null],
+        ['2026-02-29', null],
+        ['1900-02-29', null],
+        ['2026-02-30T10:00', null],
+        ['2026-02-31 10:00', null],
+        ['+002026-02-30', null],
+        ['2024-02-29', '29 Feb 2024'],
+        ['2000-02-29', '29 Feb 2000'],
+        ['2026-01-31', '31 Jan 2026']
+    ])('%s is read as Python reads it', ([value, shown]) => {
+        if (shown === null) {
+            expect(() => date(value, 'medium', undefined, 'en-GB')).toThrow(/date\(\): .* is not a date/);
+            expect(() => fromnow(value, 'en-GB')).toThrow(/fromnow\(\): .* is not a date/);
+        } else {
+            expect(date(value, 'medium', undefined, 'en-GB')).toBe(shown);
+            expect(fromnow(value, 'en-GB')).toMatch(/ago|in /);
+        }
+    });
+
+    // An instant whose zone moves it to another day is still the day written:
+    // the check reads the string, not the instant.
+    test('a real day moved to the previous one by its zone is kept', () => {
+        expect(date('2026-03-01T00:30+05:00', 'medium', undefined, 'en-GB')).toMatch(/2026/);
+    });
+
     // And the shape that must keep crossing: `from_json` gives a Brython float
     // for every JSON number with a decimal point, and a float is an object here,
     // so naming the shapes rather than coercing had to let this one through.

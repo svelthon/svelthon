@@ -9,6 +9,7 @@ import { mkdtempSync, writeFileSync, unlinkSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createRequire } from 'node:module';
+import { preprocess } from 'svelte/compiler';
 import { python, svelthon } from '../src/lib/svelthon.js';
 
 const { compile } = createRequire(import.meta.url)('../src/lib/compile.cjs');
@@ -17,17 +18,10 @@ const { compile } = createRequire(import.meta.url)('../src/lib/compile.cjs');
 // has to exist, because the hook reads the source back to map its lines.
 const FILE = 'src/App.svelte';
 
-const compiled = (written) => () => {
-    const content = `<script lang="python">\nx = 1\n${written}\n</script>\n\n<p>{x}</p>\n`;
-    const preprocessor = python();
-    const { code } = preprocessor.markup({ content, filename: FILE });
-
-    preprocessor.script({
-        content: code.match(/<script lang="python">([\s\S]*?)<\/script>/)[1],
-        attributes: { lang: 'python' },
+const compiled = (written) =>
+    preprocess(`<script lang="python">\nx = 1\n${written}\n</script>\n\n<p>{x}</p>\n`, [python()], {
         filename: FILE
     });
-};
 
 test.for([
     ['import json', /`json` is not a module a component can import.*`from_json\(text\)`.*\(src\/App\.svelte:3\)/],
@@ -37,8 +31,8 @@ test.for([
     ['import browser.timer', /`browser\.timer` is not a module/],
     ['from browser import document, timer', /`browser\.timer` is not a module.*\(src\/App\.svelte:3\)/],
     ['from __future__ import annotations', /`__future__` is not a module/]
-])('`%s` is refused on its line', ([written, message]) => {
-    expect(compiled(written)).toThrow(message);
+])('`%s` is refused on its line', async ([written, message]) => {
+    await expect(compiled(written)).rejects.toThrow(message);
 });
 
 // A module is found by its file name, beside the component or on `path`. A
@@ -48,9 +42,9 @@ test.for([
     ['from lib import models', /`lib` is not a module.*`lib` is a directory.*add `lib` to `path`.*\(src\/App\.svelte:3\)/],
     ['import lib.models', /`lib\.models` is not a module.*`lib` is a directory/],
     ['from lib.models import greet', /`lib\.models` is not a module.*`lib` is a directory/]
-])('`%s` is refused as a package', ([written, message]) => {
-    expect(compiled(written)).toThrow(message);
-    expect(compiled(written)).not.toThrow(/standard library/);
+])('`%s` is refused as a package', async ([written, message]) => {
+    await expect(compiled(written)).rejects.toThrow(message);
+    await expect(compiled(written)).rejects.not.toThrow(/standard library/);
 });
 
 // A relative import has no package to be relative to, whether its target exists
@@ -59,8 +53,8 @@ test.for([
     ['from . import counter_store', /relative import.*`import counter_store`.*\(src\/App\.svelte:3\)/],
     ['from .counter_store import count as n', /relative import.*`from counter_store import count as n`/],
     ['from ..elsewhere import thing', /relative import.*`from elsewhere import thing`/]
-])('`%s` is refused with its absolute spelling', ([written, message]) => {
-    expect(compiled(written)).toThrow(message);
+])('`%s` is refused with its absolute spelling', async ([written, message]) => {
+    await expect(compiled(written)).rejects.toThrow(message);
 });
 
 // Refused without the file system too, since no file makes it work.
@@ -113,8 +107,10 @@ test('a generic annotation without parameters compiles', () => {
     expect(() => compile('def first(xs: list[int]) -> int:\n    return xs[0]\n', 'C', 'src/C.svelte')).not.toThrow();
 });
 
-test('an import the runtime holds compiles', () => {
-    expect(compiled('import browser.html\nfrom browser import document, html, aio\nfrom javascript import JSON')).not.toThrow();
+test('an import the runtime holds compiles', async () => {
+    await expect(
+        compiled('import browser.html\nfrom browser import document, html, aio\nfrom javascript import JSON')
+    ).resolves.toHaveProperty('code');
 });
 
 // A `.py` module goes through the plugin, and is held to the same rule.

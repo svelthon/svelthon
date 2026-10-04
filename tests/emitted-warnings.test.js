@@ -18,56 +18,33 @@ import { createRequire } from 'node:module';
 import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-import { compile as compileSvelte, compileModule } from 'svelte/compiler';
+import { compile as compileSvelte, compileModule, preprocess } from 'svelte/compiler';
 import { python, compileOptionsFor } from '../src/lib/svelthon.js';
 
 const { compile } = createRequire(import.meta.url)('../src/lib/compile.cjs');
 
 const FIXTURES = fileURLToPath(new URL('./fixtures/', import.meta.url));
 
-// The real chain: the markup hook first, because it is what appends the
-// expression functions the script hook then compiles.
-const warningsFor = (name) => {
+// The real chain: Svelte's own `preprocess`, which runs the markup hook, the one
+// that collects the expression functions, and then the script hook that compiles
+// them. A JavaScript fixture comes out of it unchanged, as the build hands it to
+// Svelte, and what it says is said on every run all the same.
+const warningsFor = async (name) => {
     const filename = fileURLToPath(new URL(`./fixtures/${name}`, import.meta.url));
     const whole = readFileSync(filename, 'utf8');
-
-    // A JavaScript fixture is compiled as it is: the build hands it to Svelte
-    // unchanged, and what it says is said on every run all the same.
-    if (!whole.includes('<script lang="python">')) {
-        return compileSvelte(whole, { name: 'Probe', ...compileOptionsFor(whole) }).warnings.map((one) => one.code);
-    }
-
-    const pre = python();
-    const markup = pre.markup({ content: whole, filename });
-
-    const { script } = compile(
-        whole.match(/<script lang="python">([\s\S]*?)<\/script>/)[1],
-        'Probe',
-        name,
-        { ...pre, sourceContent: whole }
-    );
-
-    void script;
-
-    const rewritten = markup.code.replace(
-        /<script lang="python">[\s\S]*?<\/script>/,
-        `<script>${
-            compile(whole.match(/<script lang="python">([\s\S]*?)<\/script>/)[1], 'Probe', name)
-                .script
-        }</script>`
-    );
+    const { code } = await preprocess(whole, [python()], { filename });
 
     // Compiled the way the build compiles it, options included: a guard that
     // reads warnings has to ask the same compiler question the build asks, or
     // it invents them.
-    return compileSvelte(rewritten, { name: 'Probe', ...compileOptionsFor(whole) }).warnings.map(
+    return compileSvelte(code, { name: 'Probe', ...compileOptionsFor(whole) }).warnings.map(
         (one) => one.code
     );
 };
 
 describe('the script the compiler emits', () => {
-    test('does not read a signal outside its rune', () => {
-        expect(warningsFor('InspectWith.svelte')).not.toContain('state_referenced_locally');
+    test('does not read a signal outside its rune', async () => {
+        expect(await warningsFor('InspectWith.svelte')).not.toContain('state_referenced_locally');
     });
 
     // Every code rather than the one above, which names the code it was written
@@ -87,17 +64,18 @@ describe('the script the compiler emits', () => {
     // `browser-check.sh` is: it starts a second full run. So this file is not
     // sufficient on its own and is not meant to be — deleting that script as
     // redundant would leave a guard that looks like the class and is the rule.
-    test('and no fixture warns when compiled the way the build compiles it', () => {
+    test('and no fixture warns when compiled the way the build compiles it', async () => {
         const warned = [];
+        const refused = [];
 
         for (const name of readdirSync(FIXTURES).filter((one) => one.endsWith('.svelte'))) {
-            // A fixture with no Python block has nothing for this chain to
-            // compile, and one refuses on purpose — `snippet-names.test.js`
-            // asserts that refusal.
+            // Some fixtures refuse on purpose, and the test that owns each one
+            // asserts its refusal: `snippet-names.test.js` for one of them.
             let codes;
             try {
-                codes = warningsFor(name);
+                codes = await warningsFor(name);
             } catch {
+                refused.push(name);
                 continue;
             }
 
@@ -105,6 +83,11 @@ describe('the script the compiler emits', () => {
         }
 
         expect(warned, 'a fixture the compiler warns about, on every run').toEqual([]);
+
+        // A chain that refuses everything warns about nothing: the refusals are
+        // a handful of fixtures written for a refusal or for another `path`,
+        // not the fixtures at large.
+        expect(refused.length, refused.join(', ')).toBeLessThan(10);
     });
 
     // A store is the other half of what the build hands Svelte: a `.svelte.py`
