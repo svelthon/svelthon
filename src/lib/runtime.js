@@ -423,7 +423,7 @@ export const __pybridge = {
 
         return value !== null && (typeof value === 'object' || typeof value === 'function') && callable(value)
             ? pyHandler(value)
-            : value;
+            : viewOf(value);
     },
 
     // A `bind:group` control's `checked`, written by the server, where no action
@@ -461,7 +461,7 @@ export const __pybridge = {
     toContext(value) {
         return value !== null && (typeof value === 'object' || typeof value === 'function') && callable(value)
             ? pyHandler(value)
-            : plainScalar(value);
+            : viewOf(plainScalar(value));
     },
 
     // And read by Python: what Python published is its own callable again, so a
@@ -2305,6 +2305,154 @@ export const plainScalar = (value) => {
     return scalar === undefined ? value : scalar;
 };
 
+// **A Python list, tuple or dict that a JavaScript component reads is read
+// through a view**, as Svelte hands a child a `$state` object: a proxy whose
+// every read subscribes the reader. Handed the container itself, a JavaScript
+// child read a dict's keys as plain properties, which nothing follows, so
+// `state["count"] += 1` repainted every Python reader and left the JavaScript one
+// where it was, the dict given as a prop or through a context alike.
+//
+// A read gives what the same value gives at the other doors: None is `null`, as
+// `plainData` writes it inside a container, a scalar is JavaScript's own, a
+// callable is adapted (`pyHandler`), and a container inside is a view in its
+// turn. A write is Python's own `obj[key] = value`, `append` or `del`, so it
+// notifies as the same line written in Python does.
+//
+// One view per container, so a reader comparing what it holds finds the same
+// object. And the engine's own map hands the container back: `jsobj2pyobj` and
+// `pyBind` read it, so a view that comes back to Python, as a prop, a context, a
+// binding or an argument, is the container again.
+const VIEW_OF = new WeakMap();
+const VIEWED = new WeakSet();
+
+const forReader = (one) => {
+    if (one === NONE) return null;
+    if (one !== null && (typeof one === 'object' || typeof one === 'function') && callable(one)) return pyHandler(one);
+
+    const scalar = pyScalar(one);
+
+    return scalar === undefined ? viewOf(one) : scalar;
+};
+
+// A key as JavaScript spells it: a property name is a string, and a Python key
+// that is not one has no name a JavaScript reader could use.
+const keyName = (key) => (typeof key === 'string' ? key : key instanceof String ? key.valueOf() : undefined);
+
+const INDEX = /^(?:0|[1-9]\d*)$/;
+
+function viewOf(value) {
+    const $B = globalThis.__BRYTHON__;
+
+    if (value === null || typeof value !== 'object') return value;
+
+    const known = VIEW_OF.get(value);
+
+    if (known !== undefined) return known;
+
+    const sequence = Boolean($B.is_list(value) || $B.is_tuple(value));
+
+    if (!sequence && !$B.is_dict(value)) return value;
+
+    const length = () => $B.builtins.len(value);
+    const index = (key) => (typeof key === 'string' && INDEX.test(key) ? Number(key) : undefined);
+    const holds = (key) => {
+        if (sequence) {
+            const at = index(key);
+
+            return at !== undefined && at < length();
+        }
+
+        return typeof key === 'string' && $B.$is_member(key, value);
+    };
+    const read = (key) => forReader($B.$getitem(value, sequence ? index(key) : key));
+    const keys = () =>
+        sequence
+            ? Array.from({ length: length() }, (_, at) => String(at))
+            : pyEntries(value).map(([key]) => keyName(key)).filter((key) => key !== undefined);
+
+    const write = (key, given) => {
+        if (!sequence) return $B.$setitem(value, key, pyBind(given)), true;
+        if (!$B.is_list(value)) return false;
+
+        if (key === 'length') {
+            const wanted = Number(given);
+
+            while (length() > wanted) $B.$call($B.$getattr(value, 'pop'));
+            while (length() < wanted) $B.$call($B.$getattr(value, 'append'), NONE);
+
+            return true;
+        }
+
+        const at = index(key);
+
+        if (at === undefined) return false;
+
+        while (length() < at) $B.$call($B.$getattr(value, 'append'), NONE);
+
+        if (at === length()) $B.$call($B.$getattr(value, 'append'), pyBind(given));
+        else $B.$setitem(value, at, pyBind(given));
+
+        return true;
+    };
+
+    // A JavaScript `delete` leaves a hole where an array had an element, and
+    // only the last one shortens it, which is what `pop` does through it.
+    const remove = (key) => {
+        if (!holds(key)) return true;
+        if (!sequence) return $B.$call($B.$getattr(value, '__delitem__'), key), true;
+        if (!$B.is_list(value)) return false;
+
+        if (index(key) === length() - 1) $B.$call($B.$getattr(value, 'pop'));
+        else $B.$setitem(value, index(key), NONE);
+
+        return true;
+    };
+
+    const view = new Proxy(sequence ? [] : {}, {
+        get(shell, key, receiver) {
+            follow(value);
+
+            if (sequence && key === 'length') return length();
+
+            return holds(key) ? read(key) : Reflect.get(shell, key, receiver);
+        },
+        has(shell, key) {
+            follow(value);
+
+            return holds(key) || Reflect.has(shell, key);
+        },
+        ownKeys(shell) {
+            follow(value);
+
+            return sequence ? [...keys(), 'length'] : keys();
+        },
+        getOwnPropertyDescriptor(shell, key) {
+            follow(value);
+
+            if (sequence && key === 'length') {
+                return { value: length(), writable: true, enumerable: false, configurable: false };
+            }
+
+            return holds(key) ? { value: read(key), writable: true, enumerable: true, configurable: true } : undefined;
+        },
+        set(shell, key, given) {
+            return typeof key === 'string' && write(key, given);
+        },
+        defineProperty(shell, key, descriptor) {
+            return 'value' in descriptor && typeof key === 'string' && write(key, descriptor.value);
+        },
+        deleteProperty(shell, key) {
+            return typeof key === 'string' && remove(key);
+        }
+    });
+
+    VIEW_OF.set(value, view);
+    VIEWED.add(view);
+    $B.PYOBJ_MAP.set(view, value);
+
+    return view;
+}
+
 function thrown(error) {
     if (error instanceof Error || error === null || typeof error !== 'object') return error;
 
@@ -3423,8 +3571,9 @@ function shallow(value) {
 export function pyNumbers(value) {
     // A JavaScript function Python held through its adapter goes out as itself.
     // `None` itself is a singleton and not a container: walking its own
-    // properties would copy it, and the copy is no longer `None`.
-    if (value === null || typeof value !== 'object' || value === NONE) return value;
+    // properties would copy it, and the copy is no longer `None`. A view reads
+    // its numbers out as JavaScript's already (`viewOf`).
+    if (value === null || typeof value !== 'object' || value === NONE || VIEWED.has(value)) return value;
 
     // Nor is a callable: a bound method is `{ob_type, im_func, im_self}`, and
     // walking it as a config replaced its `im_func` with a JavaScript wrapper,
@@ -5281,7 +5430,10 @@ const keyed = (target, name) => lookup(target, name) !== MISSING;
 // field hands over `null`, and `value is None` has to say so.
 export const pyBind = (value) => {
     if (value === null || value === undefined) return NONE;
-    return typeof value === 'number' ? globalThis.__BRYTHON__.jsobj2pyobj(value) : value;
+    if (typeof value === 'number') return globalThis.__BRYTHON__.jsobj2pyobj(value);
+
+    // A view a JavaScript reader was handed (`viewOf`) is its container again.
+    return VIEWED.has(value) ? globalThis.__BRYTHON__.PYOBJ_MAP.get(value) : value;
 };
 
 // Whether a read through the dot would find an attribute, answered without
