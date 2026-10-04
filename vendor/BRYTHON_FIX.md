@@ -1,7 +1,7 @@
 # Patches applied to the vendored Brython
 
 `brython_runtime.js` and `brython_compiler.js` are cut from one bundle, built
-from Brython's master plus thirty-one proposed commits, with **four** edits
+from Brython's master plus forty-three proposed commits, with **four** edits
 made in the file itself afterwards. The wrapper, the integer format and the
 `__call__` binding carry a `/* SVELTHON patch, see BRYTHON_FIX.md */` comment,
 the only way to find them again in 1.4 MB; the other edit *is* a comment, so
@@ -116,6 +116,18 @@ than by a build-time check, and going upstream retires none of them:
 | a module global deleted through `globals()` reads as unbound, `NameError` or the builtin it shadowed (branch `global-deleted-at-run-time`) | `tests/vendor.test.js`, a global and a builtin popped |
 | a t-string field ending with a name, `t"Hello {name}"`, compiles: its closing brace carries the expression text the parser reads, which it lacked on that path and only that one (branch `tstring-field-ending-in-name`) | `tests/vendor.test.js`, `template_strings.py` compiles |
 | the attributes of a t-string `Interpolation`, `value`, `expression`, `conversion` and `format_spec`, are readable, as `Template`'s already were (branch `tstring-interpolation-members`) | `tests/vendor.test.js`, an interpolation read |
+| the format specification of an interpolation is kept: the node factory was called without its position, so the specification was taken for it, `t"{x:.2f}"` had no interpolation and `t"{x:{w}}"` raised (branch `tstring-format-spec`) | `tests/vendor.test.js`, the rows of `t-strings as CPython has them`, one per branch |
+| the `expression` of an interpolation is its source text, trailing spaces and `=` stripped from the end, where it was the name read off the value, `'undefined'` for `{1 + 2}` (branch `tstring-expression-text`, on top of `tstring-format-spec`) | the same |
+| a t-string ending with an interpolation ends its `strings` with an empty one (branch `tstring-trailing-string`) | the same |
+| `Template(...)` takes `Interpolation` objects, joins consecutive strings and refuses anything else (branch `tstring-template-new`, on top of `tstring-trailing-string`) | the same |
+| the repr of a `Template` is CPython's, `Template(strings=(...), interpolations=(...))` (branch `tstring-template-repr`) | the same |
+| two templates concatenate, the last string of one joined to the first of the other (branch `tstring-template-concat`) | the same |
+| `Template` and `Interpolation` carry CPython's type flags and dotted names, so `type(t"")` names `string.templatelib` once (branch `tstring-type-names`) | the same |
+| the `__name__` and `__qualname__` of a builtin type named `module.name` are `name` (branch `dotted-type-name`) | the same |
+| `Interpolation(value, expression)` called from Python takes the defaults of its signature (branch `tstring-interpolation-defaults`) | the same |
+| `Interpolation.__match_args__`, through a `tp_match_args` slot that finalization writes into the class (branch `tstring-match-args`) | the same |
+| a template is iterated by a `TemplateIter` of its own, so `list()` works and two iterations do not share a counter (branch `tstring-template-iter`) | the same |
+| a t-string nested in an f-string leaves the f-string an f-string: the kind of each open string is kept with it (branch `tstring-nested-in-fstring`) | `tests/vendor.test.js`, `template_nested.py` imported alone |
 
 `scripts/browser-check.sh` covers the DOM node path as well, which is where
 identity across the boundary is observable.

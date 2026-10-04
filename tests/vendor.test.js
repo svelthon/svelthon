@@ -585,8 +585,15 @@ test.for([
     ['tstring-interpolation-defaults', 'defaulted', "Interpolation(1, 'x', None, '')"],
     ['tstring-match-args', 'matched', ['Ada', 'name', 'r', '^9']],
     ['tstring-template-new', 'made', ['a', 'bc']],
-    ['tstring-template-iter', 'iterated', ['a', 1, 'a', 'b']],
-    ['tstring-nested-in-fstring', 'nested', "<Template(strings=('a',), interpolations=())>"]
+    ['tstring-template-iter', 'iterated', ['a', 1, 'a', 'b']]
 ])('t-strings as CPython has them: %s', ([, read, expected]) => {
     expect(templateStrings[read]()).toEqual(expected);
+});
+
+// Imported here and not at the top: the module does not compile without the
+// repair, and that has to fail this test alone.
+test('t-strings as CPython has them: tstring-nested-in-fstring', async () => {
+    const { nested } = await import('./fixtures/template_nested.py');
+
+    expect(nested()).toBe("<Template(strings=('a',), interpolations=())>");
 });

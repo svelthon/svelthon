@@ -51,11 +51,6 @@ def made():
     return Template("a", Interpolation(1, "x"), "b", "c").strings
 
 
-# Compiled when called, so an engine that cannot parse it fails this row alone.
-def nested():
-    return eval("f\"<{t'a'!r}>\"")
-
-
 def iterated():
     template = t"a{1}b"
     first, second = iter(template), iter(template)
