@@ -83,6 +83,31 @@ test.for([
     expect(() => compile(`${written}\n`, 'C', 'src/C.svelte', { plain: true })).toThrow(message);
 });
 
+// Brython's runtime imports `copyreg` for `__reduce__` and `__reduce_ex__`, and
+// `pydoc` for `help()` asked about a name it cannot link to: both died at run
+// time on `Network error`. Refused on their line, the way an import is.
+test.for([
+    ['class Box:\n    pass\n\nstate = Box().__reduce_ex__(2)', /`__reduce_ex__\(\)` builds its answer with `copyreg`.*\(src\/C\.svelte:4\)/],
+    ['def save(box):\n    return box.__reduce__()', /`__reduce__\(\)` builds its answer with `copyreg`.*\(src\/C\.svelte:2\)/],
+    ['help("str.join")', /`help\("str\.join"\)` looks the name up with `pydoc`.*`help\(obj\)` prints.*\(src\/C\.svelte:1\)/]
+])('`%s` is refused on its line', ([written, message]) => {
+    expect(() => compile(`${written}\n`, 'C', 'src/C.svelte')).toThrow(message);
+    expect(() => compile(`${written}\n`, 'C', 'src/C.svelte', { plain: true })).toThrow(message);
+});
+
+// What needs none of them compiles: `help` of an object prints its docstring, of
+// a builtin or a standard module's name links to the documentation, and a `help`
+// of the author's own is theirs.
+test.for([
+    'help(len)',
+    'help("len")',
+    'help("json")',
+    'def help(topic):\n    return topic\n\nhelp("anything")',
+    'class Box:\n    def __reduce__(self):\n        return (Box, ())'
+])('`%s` compiles', (written) => {
+    expect(() => compile(`${written}\n`, 'C', 'src/C.svelte')).not.toThrow();
+});
+
 // The annotations PEP 695 replaces compile as they always did.
 test('a generic annotation without parameters compiles', () => {
     expect(() => compile('def first(xs: list[int]) -> int:\n    return xs[0]\n', 'C', 'src/C.svelte')).not.toThrow();

@@ -2355,6 +2355,64 @@ function refuseTypeParameters(body, source, lineOffset) {
     walk(body);
 }
 
+// What Brython's runtime imports on its own from the standard library: `copyreg`
+// for `__reduce__` and `__reduce_ex__`, and `pydoc` for `help("name")` when the
+// name is neither a standard module nor a builtin, which Brython answers with a
+// link to the documentation. Each compiled and died at run time on `Network
+// error`; refused on its line, as an import of the module would be. `help` is
+// the builtin only while the author binds no name of that spelling.
+const IMPORTED_BY_METHOD = { __reduce__: 'copyreg', __reduce_ex__: 'copyreg' };
+
+function refuseLibraryCalls(tree, source, lineOffset) {
+    const calls = [];
+    const bound = new Set();
+    const seen = new Set();
+    const walk = (node) => {
+        if (node === null || typeof node !== 'object' || seen.has(node)) return;
+        if (Array.isArray(node)) return node.forEach(walk);
+        seen.add(node);
+        // A constant's value is a Python object, not a part of the tree.
+        if (node instanceof $B.ast.Constant) return;
+        if (node instanceof $B.ast.Call) calls.push(node);
+        if (node instanceof $B.ast.Name && node.ctx instanceof $B.ast.Store) bound.add(node.id);
+        if (typeof node.name === 'string' && Array.isArray(node.body)) bound.add(node.name);
+        if (typeof node.arg === 'string') bound.add(node.arg);
+        if (typeof node.asname === 'string') bound.add(node.asname);
+        for (const key of Object.keys(node)) if (key !== 'parent') walk(node[key]);
+    };
+
+    walk(tree);
+
+    for (const call of calls) {
+        const { func } = call;
+        const [first] = call.args;
+        const name = first instanceof $B.ast.Constant && typeof first.value === 'string' ? first.value : null;
+        const module = func instanceof $B.ast.Attribute ? IMPORTED_BY_METHOD[func.attr] : undefined;
+        const documented =
+            func instanceof $B.ast.Name &&
+            func.id === 'help' &&
+            !bound.has('help') &&
+            name !== null &&
+            $B.stdlib[name.split('.')[0]] === undefined &&
+            $B.builtins[name] === undefined;
+
+        if (module === undefined && !documented) continue;
+
+        const line = call.lineno + lineOffset;
+
+        throw refuse(
+            module !== undefined
+                ? `svelthon — \`${func.attr}()\` builds its answer with \`${module}\`, part of ` +
+                      `Python's standard library, which does not ship (${source}:${line})`
+                : `svelthon — \`help(${JSON.stringify(name)})\` looks the name up with \`pydoc\`, part ` +
+                      `of Python's standard library, which does not ship; \`help(obj)\` prints ` +
+                      `the object's docstring (${source}:${line})`,
+            source,
+            line
+        );
+    }
+}
+
 // The names the emitted script gives to what it generates. Pure functions of the
 // author's name. `markup.js` writes calls to the same spellings, and
 // `tests/generated-names.test.js` holds the two files to them.
@@ -3392,6 +3450,7 @@ function compile(
     refuseRelativeImports(relative, source, lineOffset);
     if (resolves) refuseMissingModules(importedAt, resolves, source, lineOffset);
     refuseTypeParameters(root._ast.body, source, lineOffset);
+
     const module = [
         `import { ${runtimeAliases(['withNamespace', 'pyError'])} } from 'svelthon/runtime';`,
         ``,

@@ -590,6 +590,14 @@ test.for([
     expect(templateStrings[read]()).toEqual(expected);
 });
 
+// `help` is the builtin function, not the string `'type help()'` that replaced
+// it, so `help(obj)` prints the docstring rather than raising.
+test('help is callable', () => {
+    const _b_ = globalThis.__BRYTHON__.builtins;
+
+    expect(_b_.callable(_b_.help)).toBe(true);
+});
+
 // Imported here and not at the top: the module does not compile without the
 // repair, and that has to fail this test alone.
 test('t-strings as CPython has them: tstring-nested-in-fstring', async () => {
