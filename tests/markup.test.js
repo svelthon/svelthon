@@ -847,6 +847,17 @@ describe('the attribute pass', () => {
         }
     );
 
+    // `class:active` is Svelte's `class:active={active}`. Unexpanded, Svelte read
+    // the raw cell with JavaScript's truth, so None and `[]` set the class.
+    test.for([
+        ['<p class:active>x</p>', '<p class:active={active}>x</p>'],
+        ['<p class:active></p>', '<p class:active={active}></p>'],
+        ['<p style:color>x</p>', '<p style:color={color}>x</p>'],
+        ['<p style:color|important>x</p>', '<p style:color|important={color}>x</p>']
+    ])('the directive shorthand %s compiles as its long spelling', ([short, long]) => {
+        expect(rewrite(short).out).toBe(rewrite(long).out);
+    });
+
     // Three attribute kinds that are not expressions. Two of them were compiled
     // as if they were, and each failure lands in someone else's compiler with a
     // message about a line the author never wrote.

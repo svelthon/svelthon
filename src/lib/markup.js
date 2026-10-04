@@ -481,11 +481,14 @@ const GROUP_DIRECTIVE = /^bind:group\b/;
 // FileList`.
 //
 // So the shorthand is expanded before anything else looks at the tag, and the
-// long form is the only one the rest of this pass has to know about.
+// long form is the only one the rest of this pass has to know about. The same
+// holds for `class:active` and `style:color`, whose unexpanded read is
+// JavaScript's truth of the raw cell: None and `[]` are objects, so both set
+// the class.
 // The name a shorthand holds, `{name}` or `bind:name`: a name, or Svelte's with
 // its `$`.
 const SHORT_NAME = `[\\p{XID_Start}_$][${NAME_CHAR}$]*`;
-const SHORTHAND = new RegExp(`\\b(bind:(${SHORT_NAME}))$`, 'u');
+const SHORTHAND = new RegExp(`\\b((bind|class|style):(${SHORT_NAME}))(\\|important)?$`, 'u');
 const SHORTHAND_ATTRIBUTE = new RegExp(`^${SHORT_NAME}$`, 'u');
 
 // The action the generated script defines for it. Named here and emitted there,
@@ -2078,8 +2081,10 @@ function walk(markup, collect, onPython, seed, record, where) {
                 if (bare !== undefined && LET_DIRECTIVE.test(bare)) refuseLet(bare);
 
                 const short = tagText().match(SHORTHAND);
-                if (short) {
-                    const name = short[2];
+                if (short && short[2] !== 'bind') {
+                    out += `=${attributeValue(short[1], short[3])}`;
+                } else if (short && short[4] === undefined) {
+                    const name = short[3];
 
                     // The same test the long form makes, against the same
                     // pattern. `bind:group` refuses the pair for the reason
