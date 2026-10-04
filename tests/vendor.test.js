@@ -569,3 +569,24 @@ test('a global deleted through globals() reads as unbound', () => {
 test('a t-string compiles, and its interpolations are read', () => {
     expect(templateStrings.described()).toBe('Hello |Ada|name|None');
 });
+
+// The rest of PEP 750, one row per commit, each the answer CPython 3.14 gives.
+test.for([
+    ['tstring-format-spec', 'formatted', '.2f'],
+    ['tstring-trailing-string', 'ended', ['Hello ', '']],
+    ['tstring-expression-text', 'expressed', '1 + 2'],
+    ['tstring-template-repr', 'shown', "Template(strings=('a',), interpolations=())"],
+    ['tstring-template-concat', 'joined', ['a', 'b']],
+    [
+        'tstring-type-names and dotted-type-name',
+        'typed',
+        "<class 'string.templatelib.Template'>|<class 'string.templatelib.Interpolation'>|Template"
+    ],
+    ['tstring-interpolation-defaults', 'defaulted', "Interpolation(1, 'x', None, '')"],
+    ['tstring-match-args', 'matched', ['Ada', 'name', 'r', '^9']],
+    ['tstring-template-new', 'made', ['a', 'bc']],
+    ['tstring-template-iter', 'iterated', ['a', 1, 'a', 'b']],
+    ['tstring-nested-in-fstring', 'nested', "<Template(strings=('a',), interpolations=())>"]
+])('t-strings as CPython has them: %s', ([, read, expected]) => {
+    expect(templateStrings[read]()).toEqual(expected);
+});
