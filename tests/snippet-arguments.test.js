@@ -6,6 +6,8 @@ import SnippetArgsChildNative from './fixtures/SnippetArgsChildNative.svelte';
 import SnippetArgsHost from './fixtures/SnippetArgsHost.svelte';
 import SnippetArgsPythonHost from './fixtures/SnippetArgsPythonHost.svelte';
 import SnippetLocalWhole from './fixtures/SnippetLocalWhole.svelte';
+import SnippetAlias from './fixtures/SnippetAlias.svelte';
+import SnippetAliasNative from './fixtures/SnippetAliasNative.svelte';
 
 const shown = async (Component, props) => {
     const target = document.body.appendChild(document.createElement('div'));
@@ -47,6 +49,17 @@ describe('a snippet a JavaScript parent gives a Python child', () => {
 // back an int.
 test('a snippet of the same markup keeps a whole float', async () => {
     expect(await shown(SnippetLocalWhole)).toBe('own=float:1.0');
+});
+
+// The same snippet rendered through an alias, `{alias = row}`, is handed the
+// same values: the callable is itself again, as Svelte's is, and the float a
+// float.
+test('a snippet rendered through an alias is handed what its name is handed', async () => {
+    expect(await shown(SnippetAlias)).toBe('row=True|7|float row=True|7|float');
+});
+
+test('the Svelte markup is the rule', async () => {
+    expect(await shown(SnippetAliasNative)).toBe('row=true|7|number row=true|7|number');
 });
 
 // A Python parent's snippet rendered by a Python child still reads Python

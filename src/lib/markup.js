@@ -525,6 +525,10 @@ const BIND_VALUE = '__pyBind';
 // The subscriber every compiled expression calls on the names it reads.
 const FOLLOW = '__follow';
 
+// How a value handed into Python is read, a snippet's parameter here as a
+// context's value in `get_context`.
+const RECEIVED = '__pybridge.received';
+
 // A handler takes a *callable*, and Python's is `lambda`. So its value is
 // compiled as Python like everything else, and what the expression yields is
 // wrapped for JavaScript: `pyHandler` reads the signature Brython recorded,
@@ -1408,6 +1412,21 @@ function walk(markup, collect, onPython, seed, record, where) {
 
     const inScope = () => [...new Set(scopes.flat())];
 
+    // A snippet's parameter is handed over by whoever renders the snippet, a
+    // JavaScript component or this markup, converted or not: it is read as
+    // every value coming into Python is (`__pybridge.received`), so a callable
+    // Python handed out is itself again. The innermost scope holding the name
+    // says whether it is one.
+    const received = (name) => {
+        for (let at = scopes.length - 1; at >= 0; at--) {
+            if (scopes[at].includes(name)) {
+                return scopes[at].parameters?.has(name) ? `${RECEIVED}(${name})` : name;
+            }
+        }
+
+        return name;
+    };
+
     // The `{` of the construct being read, as the author sees it. `region.start`
     // is the character after the brace, so this steps back onto it.
     const position = () =>
@@ -1505,7 +1524,7 @@ function walk(markup, collect, onPython, seed, record, where) {
         // follow() on the block's own names: a row of an {#each} is a plain
         // JavaScript value, not a signal, so reading `it.label` registers
         // nothing by itself. This is what subscribes the row's block to the row.
-        const handed = (arg) => (lazy ? `() => ${FOLLOW}(${arg})` : `${FOLLOW}(${arg})`);
+        const handed = (arg) => (lazy ? `() => ${FOLLOW}(${received(arg)})` : `${FOLLOW}(${received(arg)})`);
 
         return `${name}(${args.map(handed).join(', ')})`;
     };
@@ -1521,7 +1540,7 @@ function walk(markup, collect, onPython, seed, record, where) {
         const args = mentioned(expr.trim());
         const at = position();
         const name = collect(expr.trim(), '', args, true, at?.line, '', at?.column);
-        const rest = args.map((arg) => `${FOLLOW}(${arg})`);
+        const rest = args.map((arg) => `${FOLLOW}(${received(arg)})`);
 
         return `${name}(${[`${BIND_VALUE}(${BOUND_VALUE})`, ...rest].join(', ')})`;
     };
@@ -2222,7 +2241,14 @@ function walk(markup, collect, onPython, seed, record, where) {
                 // `push` goes *into* the function rather than after it, because
                 // a default reads the parameters beside it — `(j, k = j)` is
                 // ordinary JavaScript and Svelte compiles it as one.
-                out += `{#snippet ${snippetParameters(trimmed, push, call)}}`;
+                out += `{#snippet ${snippetParameters(
+                    trimmed,
+                    (names) => {
+                        push(names);
+                        scopes[scopes.length - 1].parameters = new Set(names);
+                    },
+                    call
+                )}}`;
             } else {
                 throw refuse(unknownTag(trimmed, 'block', BLOCKS, said()));
             }

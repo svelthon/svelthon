@@ -197,7 +197,7 @@ const INJECTED = [
     // module body runs.
     //
     // Either end may be JavaScript's, so a value crosses as it does at every
-    // other door (`__pybridge.toContext` and `fromContext`): set, a scalar
+    // other door (`__pybridge.toContext` and `received`): set, a scalar
     // becomes JavaScript's own and a callable one JavaScript can call; read, a
     // number becomes Python's, an absence None, a JavaScript function one
     // Python can call, and a callable Python set is itself again. A container
@@ -212,7 +212,7 @@ const INJECTED = [
     },
     {
         name: 'get_context',
-        value: '() => (key) => __pybridge.fromContext(getContext(__pybridge.key(key)))',
+        value: '() => (key) => __pybridge.received(getContext(__pybridge.key(key)))',
         component: true
     },
 

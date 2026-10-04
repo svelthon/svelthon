@@ -464,11 +464,13 @@ export const __pybridge = {
             : viewOf(plainScalar(value));
     },
 
-    // And read by Python: what Python published is its own callable again, so a
-    // Python reader holds what a Python writer held; a JavaScript function is
-    // the adapter an import of it gets (`jsCall`), which converts what Python
-    // hands it and what it answers; anything else is read as `pyBind` reads it.
-    fromContext(value) {
+    // A value handed into Python by a door that may be JavaScript's, a context
+    // or a snippet's parameter: what Python published is its own callable
+    // again, so a Python reader holds what a Python writer held; a JavaScript
+    // function is the adapter an import of it gets (`jsCall`), which converts
+    // what Python hands it and what it answers; anything else is read as
+    // `pyBind` reads it, a view its container.
+    received(value) {
         if (typeof value !== 'function') return pyBind(value);
 
         return PUBLISHED.get(value) ?? (declared(value) === null ? jsCall(value) : value);
