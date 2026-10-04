@@ -197,22 +197,23 @@ const INJECTED = [
     // module body runs.
     //
     // Either end may be JavaScript's, so a value crosses as it does at every
-    // other door (`__pybridge.toContext` and `received`): set, a scalar
+    // other door (`__pybridge.provide` and `provided`): set, a scalar
     // becomes JavaScript's own and a callable one JavaScript can call; read, a
     // number becomes Python's, an absence None, a JavaScript function one
-    // Python can call, and a callable Python set is itself again. A container
+    // Python can call, and what Python set, a callable or a scalar of its own
+    // class, is itself again. A container
     // keeps its identity both ways. The key is a key as a dict has one, the
     // way `{#key}` makes it (`__pybridge.key`): a number is JavaScript's own,
     // so `0.5` finds what `setContext(0.5, …)` set, and `1`, `1.0` and `True`
     // are one key, while two NaN are two.
     {
         name: 'set_context',
-        value: '() => (key, value) => setContext(__pybridge.key(key), __pybridge.toContext(value))',
+        value: '() => (key, value) => __pybridge.provide(setContext, __pybridge.key(key), value)',
         component: true
     },
     {
         name: 'get_context',
-        value: '() => (key) => __pybridge.received(getContext(__pybridge.key(key)))',
+        value: '() => (key) => __pybridge.provided(getContext, __pybridge.key(key))',
         component: true
     },
 

@@ -476,6 +476,27 @@ export const __pybridge = {
         return PUBLISHED.get(value) ?? (declared(value) === null ? jsCall(value) : value);
     },
 
+    // `set_context` and `get_context`. A scalar is set as JavaScript's own, for
+    // a JavaScript reader, and its original beside it under a key of
+    // Svelthon's, for a Python one: `Price(0.5)` reads back a `Price` and
+    // `1.0` a float, where the number alone would read back `0.5` and `1`. The
+    // original is taken only while the key still holds the number it was made
+    // into, so a JavaScript component between the two that sets the key again
+    // is read as it set it.
+    provide(set, key, value) {
+        const out = __pybridge.toContext(value);
+
+        set(key, out);
+        set(beside(key), out === value ? undefined : { js: out, py: value });
+    },
+
+    provided(get, key) {
+        const value = get(key);
+        const original = get(beside(key));
+
+        return original !== undefined && Object.is(value, original.js) ? original.py : __pybridge.received(value);
+    },
+
     // `{...attrs}`: Svelte diffs the spread object against the one from the
     // previous render, and a dict mutated in place *is* the same object. In
     // JavaScript the problem does not arise: spreading a $state proxy produces a
@@ -2326,6 +2347,18 @@ export const plainScalar = (value) => {
 // binding or an argument, is the container again.
 const VIEW_OF = new WeakMap();
 const VIEWED = new WeakSet();
+
+// The key a context's original Python value is kept under (`provide`), one per
+// context key.
+const BESIDE = new Map();
+
+const beside = (key) => {
+    let found = BESIDE.get(key);
+
+    if (found === undefined) BESIDE.set(key, (found = Symbol('svelthon.context')));
+
+    return found;
+};
 
 // A list's view is an array whose prototype is not `Array.prototype` itself,
 // only inherits from it: Svelte wraps a plain array put in a `$state` in a proxy
@@ -4919,7 +4952,13 @@ const running = (call, where, lineOffset, convert = pyNumbers) => {
 // callable returned whole is a callback like one returned inside a config.
 const returned = (value) => (callable(value) ? pyHandler(value) : pyNumbers(value));
 
-export const pyComponent = (read, where, lineOffset) => {
+// What an `@export` hands the parent that calls it through `bind:this` is data,
+// the instance's API and not a framework's options, so it crosses as a prop's
+// value does (`bound`): a list or a dict as its live view, which a JavaScript
+// reader follows and writes, rather than the Brython object with its internals.
+const published = (value) => pyNumbers(__pybridge.bound(value));
+
+export const pyComponent = (read, where, lineOffset, exported = false) => {
     const first = declared(read());
 
     return identified(
@@ -4932,7 +4971,7 @@ export const pyComponent = (read, where, lineOffset) => {
                 () => (found === null ? value(...given) : found.fn(...given)),
                 where,
                 lineOffset,
-                returned
+                exported ? published : returned
             );
         },
         nameOf(where),

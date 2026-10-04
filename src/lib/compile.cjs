@@ -2752,7 +2752,7 @@ function instanceExports(c) {
                   `${JSON.stringify(`${f.name}() — ${c.source}`)}, __lines, ${f.arity}, ` +
                   `${KEPT_PYTHON.test(f.name) ? 'true' : COMPARED.test(f.name) ? `'${f.name.match(COMPARED)[1]}'` : 'false'});`
                 : `const ${f.name} = ${RUNTIME.pyComponent}(() => ${fn(f.name)}, ` +
-                  `${JSON.stringify(`${f.name}() — ${c.source}`)}, ${c.lineOffset});`
+                  `${JSON.stringify(`${f.name}() — ${c.source}`)}, ${c.lineOffset}${f.exported && !c.store ? ', true' : ''});`
         ),
         // What a parent holding `bind:this` can call. Svelte gathers whatever an
         // instance script exports into `$$exports` and hands that object back,

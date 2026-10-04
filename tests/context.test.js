@@ -6,6 +6,21 @@ import ContextFromPy from './fixtures/ContextFromPy.svelte';
 import ContextKeys from './fixtures/ContextKeys.svelte';
 import ContextCallbacks from './fixtures/ContextCallbacks.svelte';
 import ContextCallbacksFromJs from './fixtures/ContextCallbacksFromJs.svelte';
+import ContextScalars from './fixtures/ContextScalars.svelte';
+
+// A scalar a Python provider sets is both readers' own: a JavaScript child reads
+// a number and a string, and a Python one the value that was set, of its own
+// class and a whole float still a float, as CPython hands it over.
+test('a scalar set by Python reads as itself in Python and as a number in JavaScript', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+    mount(ContextScalars, { target });
+    flushSync();
+
+    const read = (k) => target.querySelector(`[data-k="${k}"]`).textContent;
+
+    expect(read('python')).toBe('Price|EUR|float|1.0|Label|HELLO!');
+    expect(read('js')).toBe('number|0.50|number|1.00|string|hello');
+});
 
 // A context value crosses languages like any other value: a scalar becomes the
 // reader's own. JavaScript's 0.42 is a Python float, and Python's 0.42 is a
