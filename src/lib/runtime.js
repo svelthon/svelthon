@@ -2467,8 +2467,22 @@ function viewOf(value) {
         set(shell, key, given) {
             return typeof key === 'string' && write(key, given);
         },
+        // Svelte's rule for its own state, checked before anything is written: a
+        // view holds values, so a descriptor carries one and leaves the
+        // property writable, enumerable and configurable.
         defineProperty(shell, key, descriptor) {
-            return 'value' in descriptor && typeof key === 'string' && write(key, descriptor.value);
+            if (
+                !('value' in descriptor) ||
+                descriptor.configurable === false ||
+                descriptor.enumerable === false ||
+                descriptor.writable === false
+            ) {
+                throw new TypeError(
+                    'Property descriptors defined on a Python view must contain `value` and always be `enumerable`, `configurable` and `writable`'
+                );
+            }
+
+            return typeof key === 'string' && write(key, descriptor.value);
         },
         deleteProperty(shell, key) {
             return typeof key === 'string' && remove(key);
