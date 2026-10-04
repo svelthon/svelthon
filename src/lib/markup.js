@@ -1334,6 +1334,10 @@ function walk(markup, collect, onPython, seed, record, where) {
     const scopes = [[...(seed.get(0) || [])]];
     const grouped = groupedNames(markup);
 
+    // Every snippet this markup declares, wherever: the first walk recorded
+    // them, scope by scope.
+    const snippets = new Set([...seed.values()].flat());
+
     // The tag being read, so that its closing `>` knows what it closed.
     let tag = null;
 
@@ -2267,17 +2271,28 @@ function walk(markup, collect, onPython, seed, record, where) {
             if (holds('html')) {
                 out += `{@html ${call(written.rest, '__text')}}`;
             } else if (holds('render')) {
-                // The snippet itself is a JavaScript function and stays one;
-                // what it is *given* is Python. Arguments are split at depth
-                // zero, so a comma inside a call or a literal stays put.
+                // The snippet itself is a JavaScript function and stays one.
+                // Arguments are split at depth zero, so a comma inside a call or
+                // a literal stays put.
+                //
+                // What it is *given* depends on whose snippet it is. One this
+                // markup declares is Python, and reads its arguments as Python
+                // values. Any other, a `children` or a snippet prop, comes from
+                // the parent, which may be JavaScript: its arguments cross as a
+                // prop's do, a float made a number, None made `undefined` and a
+                // callable adapted.
                 const called = written.rest.trim();
                 const opens = called.indexOf('(');
                 const closes = opens === -1 ? -1 : closingPair(called, opens);
+                const callee = opens === -1 ? '' : called.slice(0, opens).replace(/\?\.\s*$/, '').trim();
+                const ours = snippets.has(callee) && inScope().includes(callee);
 
                 out += closes === -1
                     ? markup.slice(index, end + 1)
                     : `{@render ${called.slice(0, opens)}(${arguments_(called.slice(opens + 1, closes))
-                          .map((one) => (one.trim() ? call(one, '', undefined, 'python') : one))
+                          .map((one) =>
+                              !one.trim() ? one : ours ? call(one, '', undefined, 'python') : call(one, '__bound')
+                          )
                           .join(', ')})${called.slice(closes + 1)}}`;
             } else if (written !== null && written.name === 'debug') {
                 // `{@debug}` takes names rather than an expression, and the

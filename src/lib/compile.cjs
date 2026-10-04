@@ -2450,8 +2450,10 @@ function declarations(c) {
             // Read by Svelte's own compiler and not by ours: a snippet is a
             // prop, and `{@render name(…)}` references the bare name. Python
             // reaches the same value through the namespace accessor below, and
-            // that is the copy a falsy value has to survive.
-            `const ${n} = $derived((${rev(n)}, ${pick(n)}()) ?? __NONE);`
+            // that is the copy a falsy value has to survive. This one is
+            // Svelte's, so its absence is JavaScript's: None is `undefined`,
+            // which `{@render name?.()}` skips as it skips an omitted prop.
+            `const ${n} = $derived.by(() => { ${rev(n)}; const __given = ${pick(n)}(); return __given === __NONE ? undefined : __given; });`
         ]),
         ...c.state.flatMap((n) => [
             `let ${n} = $state.raw(undefined);`,
