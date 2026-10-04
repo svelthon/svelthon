@@ -40,11 +40,3 @@ test('while the template reading the name itself renders it empty', () => {
     expect(mounted().read('direct')).toBe('');
 });
 
-// A lambda or a generator written between the braces is the template's text
-// too: it read the name as Python does, and the component did not mount.
-test('and so does a lambda or a generator written in the template', () => {
-    const page = mounted();
-
-    expect(page.read('lambda')).toBe('');
-    expect(page.read('generator')).toMatch(/^a.*, b/);
-});

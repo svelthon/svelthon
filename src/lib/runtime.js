@@ -4871,35 +4871,26 @@ export const pyExpression = (call, where, lineOffset, arity, kept = false) =>
 // there: empty.
 //
 // The template is the text between its braces, the way the dot is: a read is
-// the template's when it is written inside one of the functions the markup pass
-// compiled, which carry the name `__expr_…` and nothing an author may write. A
-// lambda or a generator written between the braces is inside it: the scopes
-// Brython hands its read include that function's own. A function the
-// expression calls is Python and reads as Python does, so its `except
-// NameError` is taken whoever called it.
+// the template's when the frame making it is one of the functions the markup
+// pass compiled, which carry the name `__expr_…` and nothing an author may
+// write. A function the expression calls is Python and reads as Python does,
+// so its `except NameError` is taken whoever called it.
 const TEMPLATE_FRAME = '__expr_';
 
 (function installTemplateAbsence($B) {
     const resolve = $B.resolve_in_scopes;
     const declares = (namespace, name) =>
         namespace !== null && typeof namespace === 'object' && namespace.$proxy === true && name in namespace;
-    // The scopes of the template functions seen running, kept past their frame:
-    // a generator resumed by `join` runs with no frame under its own, while the
-    // scopes it reads through still hold the template's.
-    const scopes = new WeakSet();
-    const templates = (namespaces) => {
-        for (let at = $B.frame_obj; at !== null && at !== undefined; at = at.prev) {
-            const [code, locals] = at.frame ?? [];
-            if (typeof code === 'string' && code.startsWith(TEMPLATE_FRAME)) scopes.add(locals);
-        }
-        return namespaces.some((one) => one !== null && typeof one === 'object' && scopes.has(one));
+    const templates = () => {
+        const code = $B.frame_obj?.frame?.[0];
+        return typeof code === 'string' && code.startsWith(TEMPLATE_FRAME);
     };
 
     $B.resolve_in_scopes = function (name, namespaces, inum) {
         try {
             return resolve.call(this, name, namespaces, inum);
         } catch (error) {
-            if (templates(namespaces) && namespaces.some((one) => declares(one, name))) return undefined;
+            if (templates() && namespaces.some((one) => declares(one, name))) return undefined;
 
             throw error;
         }
