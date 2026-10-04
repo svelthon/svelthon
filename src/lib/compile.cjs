@@ -361,20 +361,16 @@ const keepsAll = (parent, grand, node, builtin) =>
         builtin(parent.func.id) &&
         parent.args.includes(node));
 
-// Every place the source writes `__all__`, with the line of the statement it
-// is in and the scope its value is evaluated in: a `def`, a `class`, a lambda
-// or a comprehension, or null for the module. What Python evaluates where the
-// definition stands, a default, a decorator, an annotation, a base, a
-// comprehension's first iterable, belongs to the enclosing scope, as it does
-// in Python.
-//
-// And every read that hands the list on, `escapes`, where what is done to it
-// next is out of sight.
-function allWrites(ast, builtin = () => false) {
-    const found = [];
+// Every node of a module's AST, handed to `enter` with the line of the
+// statement it is in, its parent and grandparent, and the scope its value is
+// evaluated in: a `def`, a `class`, a lambda or a comprehension, or null for
+// the module. What Python evaluates where the definition stands, a default, a
+// decorator, an annotation, a base, a comprehension's first iterable, belongs
+// to the enclosing scope, as it does in Python. A constant's value is a Python
+// object and not a part of the tree, so it is not walked.
+function walkScoped(body, enter) {
     const seen = new Set();
     const is = (node, ...names) => names.some((one) => node instanceof $B.ast[one]);
-    // The node being visited and its parent, so a read knows where it stands.
     let parent = null;
     let grand = null;
 
@@ -387,14 +383,8 @@ function allWrites(ast, builtin = () => false) {
         seen.add(node);
 
         const at = typeof node.lineno === 'number' ? node.lineno : line;
-        if (writesAll(node)) found.push({ node, scope, line: at });
-        if (
-            isAll(node) &&
-            node.ctx instanceof $B.ast.Load &&
-            !keepsAll(parent, grand, node, (name) => builtin(name, scope))
-        ) {
-            found.push({ node, scope, line: at, escapes: true });
-        }
+        enter(node, scope, at, parent, grand);
+        if (node instanceof $B.ast.Constant) return;
 
         const [outer, outerGrand] = [parent, grand];
         [parent, grand] = [node, parent];
@@ -436,9 +426,35 @@ function allWrites(ast, builtin = () => false) {
         for (const [key, value] of Object.entries(node)) if (key !== 'parent') visit(value, scope, at);
     };
 
-    visit(ast.body, null, undefined);
+    visit(body, null, undefined);
+}
+
+// Every place the source writes `__all__`, and every read that hands the list
+// on, `escapes`, where what is done to it next is out of sight.
+function allWrites(ast, builtin = () => false) {
+    const found = [];
+
+    walkScoped(ast.body, (node, scope, line, parent, grand) => {
+        if (writesAll(node)) found.push({ node, scope, line });
+        if (
+            isAll(node) &&
+            node.ctx instanceof $B.ast.Load &&
+            !keepsAll(parent, grand, node, (name) => builtin(name, scope))
+        ) {
+            found.push({ node, scope, line, escapes: true });
+        }
+    });
+
     return found;
 }
+
+// A name is the builtin where no scope binds it: not the block's own, not an
+// enclosing function's, not the module's.
+const builtinIn = (table, bound) => (name, scope) => {
+    const block = scope === null ? null : table.blockOf(scope);
+    if (block !== null && block !== undefined && !isGlobalScope(scopeIn(block, name))) return false;
+    return !bound.has(name);
+};
 
 // Python's symbol table for a module, built once per compile: the module's
 // block, and every block by the AST node it stands for, which Brython marks
@@ -648,13 +664,7 @@ function declaredExports(ast, table, source, lineOffset = 0, src = '') {
     // Every other write that reaches the module's `__all__`: under a condition,
     // in a loop, in a function or a class that does not make the name its own,
     // or rebound by a loop, an import or a walrus.
-    // A name is the builtin where no scope binds it: not the function's own, not
-    // the module's.
-    const builtin = (name, scope) => {
-        const block = scope === null ? null : table.blockOf(scope);
-        if (block !== null && block !== undefined && !isGlobalScope(scopeIn(block, name))) return false;
-        return !bound.has(name);
-    };
+    const builtin = builtinIn(table, bound);
 
     for (const { node, scope, line: at, escapes } of allWrites(ast, builtin)) {
         if (handled.has(node)) continue;
@@ -2430,55 +2440,60 @@ const UNSHIPPED_BUILTINS = {
     open: 'reads a file, and a page has no file system to read it from'
 };
 
-function refuseLibraryCalls(tree, source, lineOffset) {
-    const calls = [];
-    const bound = new Set();
-    const seen = new Set();
-    const walk = (node) => {
-        if (node === null || typeof node !== 'object' || seen.has(node)) return;
-        if (Array.isArray(node)) return node.forEach(walk);
-        seen.add(node);
-        // A constant's value is a Python object, not a part of the tree.
-        if (node instanceof $B.ast.Constant) return;
-        if (node instanceof $B.ast.Call) calls.push(node);
-        if (node instanceof $B.ast.Name && node.ctx instanceof $B.ast.Store) bound.add(node.id);
-        if (typeof node.name === 'string' && Array.isArray(node.body)) bound.add(node.name);
-        if (typeof node.arg === 'string') bound.add(node.arg);
-        if (typeof node.asname === 'string') bound.add(node.asname);
-        for (const key of Object.keys(node)) if (key !== 'parent') walk(node[key]);
+// Whether a name means the builtin is Python's question, answered by the symbol
+// table scope by scope: a `from db import exec` or a parameter named `compile`
+// is the author's, and a local `eval` in one function leaves `eval` the builtin
+// everywhere else. Any read of one counts, not only a call: `run = eval` hands
+// it on. So does reaching it through the `builtins` module.
+const BUILTINS_MODULES = new Set(['builtins', '__builtins__']);
+
+function refuseLibraryCalls(ast, table, source, lineOffset) {
+    const builtin = builtinIn(table, moduleBinds(table));
+    const unshipped = (name) => Object.hasOwn(UNSHIPPED_BUILTINS, name);
+    const refuseBuiltin = (name, line) => {
+        throw refuse(
+            `svelthon — \`${name}()\` ${UNSHIPPED_BUILTINS[name]} (${source}:${line + lineOffset})`,
+            source,
+            line + lineOffset
+        );
     };
 
-    walk(tree);
+    walkScoped(ast.body, (node, scope, line) => {
+        if (node instanceof $B.ast.Name && !(node.ctx instanceof $B.ast.Store) && unshipped(node.id) && builtin(node.id, scope)) {
+            refuseBuiltin(node.id, line);
+        }
 
-    for (const call of calls) {
-        const { func } = call;
-        const [first] = call.args;
+        if (
+            node instanceof $B.ast.Attribute &&
+            node.value instanceof $B.ast.Name &&
+            BUILTINS_MODULES.has(node.value.id) &&
+            unshipped(node.attr)
+        ) {
+            refuseBuiltin(node.attr, line);
+        }
+
+        if (node instanceof $B.ast.ImportFrom && BUILTINS_MODULES.has(node.module)) {
+            const taken = node.names.find((one) => unshipped(one.name));
+            if (taken !== undefined) refuseBuiltin(taken.name, line);
+        }
+
+        if (!(node instanceof $B.ast.Call)) return;
+
+        const { func } = node;
+        const [first] = node.args;
         const name = first instanceof $B.ast.Constant && typeof first.value === 'string' ? first.value : null;
         const module = func instanceof $B.ast.Attribute ? IMPORTED_BY_METHOD[func.attr] : undefined;
         const documented =
             func instanceof $B.ast.Name &&
             func.id === 'help' &&
-            !bound.has('help') &&
+            builtin('help', scope) &&
             name !== null &&
             $B.stdlib[name.split('.')[0]] === undefined &&
             $B.builtins[name] === undefined;
 
-        const builtin =
-            func instanceof $B.ast.Name && Object.hasOwn(UNSHIPPED_BUILTINS, func.id) && !bound.has(func.id)
-                ? func.id
-                : null;
+        if (module === undefined && !documented) return;
 
-        if (module === undefined && !documented && builtin === null) continue;
-
-        const line = call.lineno + lineOffset;
-
-        if (builtin !== null) {
-            throw refuse(
-                `svelthon — \`${builtin}()\` ${UNSHIPPED_BUILTINS[builtin]} (${source}:${line})`,
-                source,
-                line
-            );
-        }
+        line += lineOffset;
 
         throw refuse(
             module !== undefined
@@ -2490,7 +2505,7 @@ function refuseLibraryCalls(tree, source, lineOffset) {
             source,
             line
         );
-    }
+    });
 }
 
 // The names the emitted script gives to what it generates. Pure functions of the
@@ -3575,7 +3590,6 @@ function compile(
     // to export values says so with `__all__`, exactly as it would to a Python
     // caller. SvelteKit is strict about it: a `+page.server.py` exporting
     // anything but load/actions/prerender/… is refused, and rightly so.
-    const table = symbolTable(root._ast, source);
     const declaration = declaredExports(root._ast, table, source, lineOffset, src);
     const listed = declaration === null ? null : declaration.names;
     const exported = listed ?? [...funcs.map((f) => f.name), ...plainDeriveds.map((d) => d.name)];

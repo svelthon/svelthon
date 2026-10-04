@@ -114,9 +114,33 @@ test.for([
     expect(() => compile(`${written}\n`, 'C', 'src/C.svelte', { plain: true })).toThrow(message);
 });
 
-test('while a function of the author s own of that name is theirs', () => {
-    expect(() => compile('def open(path):\n    return path\n\nopen("x")\n', 'C', 'src/C.svelte')).not.toThrow();
-    expect(() => compile('def run(evaluate):\n    return evaluate("1")\n', 'C', 'src/C.svelte')).not.toThrow();
+// What the name means is Python's question, scope by scope, as the symbol
+// table answers it. An import binds a name without `as` too, so a project's own
+// `compile` was refused with a sentence about the parser.
+test.for([
+    ['a function of the author s', 'def open(path):\n    return path\n\nopen("x")'],
+    ['a parameter', 'def run(evaluate, compile):\n    return compile(evaluate("1"))'],
+    ['an import without as', 'from regexes import compile\npattern = compile("a+")'],
+    ['another', 'from db import exec\nrows = exec("select 1")'],
+    ['help imported from a module', 'from docs import help\nhelp("intro")']
+])('%s of that name is theirs', ([, written]) => {
+    expect(() => compile(`${written}\n`, 'C', 'src/C.svelte', { plain: true })).not.toThrow();
+});
+
+// And the builtin is refused however it is reached: handed on, read through
+// the `builtins` module, imported from it, or called in one function while
+// another binds a local of the same name.
+test.for([
+    ['handed on', 'run = eval\nx = run("1 + 1")', /`eval\(\)` parses its text.*\(src\/C\.svelte:1\)/],
+    ['through builtins', 'import builtins\nx = builtins.eval("1 + 1")', /`eval\(\)` parses its text.*\(src\/C\.svelte:2\)/],
+    ['imported from builtins', 'from builtins import open', /`open\(\)` reads a file.*\(src\/C\.svelte:1\)/],
+    [
+        'beside a local of that name',
+        'def safe():\n    eval = len\n    return eval([1])\n\nx = eval("1")',
+        /`eval\(\)` parses its text.*\(src\/C\.svelte:5\)/
+    ]
+])('the builtin %s is refused', ([, written, message]) => {
+    expect(() => compile(`${written}\n`, 'C', 'src/C.svelte', { plain: true })).toThrow(message);
 });
 
 // What needs none of them compiles: `help` of an object prints its docstring, of
