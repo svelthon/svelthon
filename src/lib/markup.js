@@ -516,6 +516,9 @@ const NAMESPACE = '__py';
 // writes.
 const BIND_VALUE = '__pyBind';
 
+// The same crossing for the array a `<select multiple>` writes back.
+const SELECTED_VALUE = '__pybridge.selected';
+
 // The subscriber every compiled expression calls on the names it reads.
 const FOLLOW = '__follow';
 
@@ -1589,13 +1592,13 @@ function walk(markup, collect, onPython, seed, record, where) {
     // The value crosses through `pyBind`, which is where a JavaScript number
     // becomes a Python one. It is the only conversion a binding makes, and every
     // binding makes it here rather than each at its own site.
-    const assign = (expr) => {
+    const assign = (expr, crossing = BIND_VALUE) => {
         const args = mentioned(expr.trim());
         const at = position();
         const name = collect(expr.trim(), '', args, true, at?.line, '', at?.column);
         const rest = args.map((arg) => `${FOLLOW}(${received(arg)})`);
 
-        return `${name}(${[`${BIND_VALUE}(${BOUND_VALUE})`, ...rest].join(', ')})`;
+        return `${name}(${[`${crossing}(${BOUND_VALUE})`, ...rest].join(', ')})`;
     };
 
     // The group action, in one place for the two spellings of `bind:group`.
@@ -1666,12 +1669,16 @@ function walk(markup, collect, onPython, seed, record, where) {
     // items meets an option's `value`, is made so item by item (`selection`).
     // `multiple` is read off the whole tag, Svelte requiring it static there.
     //
+    // What comes back is crossed the same way: the selection Svelte writes is
+    // an array, a list in Python (`__pybridge.selected`).
+    //
     // A name the markup declared is read the same way, its cell holding the
     // Python value, and written by the setter itself, see `declaredHere`.
     const boundPair = (directive, expr) => {
         const multiple = directive === 'bind:value' && tag?.name === 'select' && tagNames(markup, tag.start).has('multiple');
+        const crossing = multiple ? SELECTED_VALUE : BIND_VALUE;
         const target = expr.trim();
-        const write = declaredHere(target) ? `${target} = ${BIND_VALUE}(${BOUND_VALUE})` : assign(expr);
+        const write = declaredHere(target) ? `${target} = ${crossing}(${BOUND_VALUE})` : assign(expr, crossing);
 
         return `() => ${call(expr, '__bound', undefined, multiple ? 'selection' : 'scalar')}, (${BOUND_VALUE}) => ${write}`;
     };

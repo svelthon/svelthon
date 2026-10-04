@@ -336,6 +336,14 @@ export const __pybridge = {
         return _b_.list.$factory(items);
     },
 
+    // What a `<select multiple>` writes back: Svelte's array of the chosen
+    // options' values, which is a list in Python, each value crossing as a
+    // binding's does. Kept as the array, the name held a `JavascriptArray` after
+    // the first choice, and `clear()` was no longer there.
+    selected(value) {
+        return Array.isArray(value) ? _b_.list.$factory(value.map(pyBind)) : pyBind(value);
+    },
+
     // `{#each}` walks a JavaScript array. A Python list or tuple already is one,
     // but a dict, a set, a range, a generator or the result of .items() is not,
     // and iterating those is the whole point of writing the loop in Python.
@@ -2338,6 +2346,23 @@ const keyName = (key) => (typeof key === 'string' ? key : key instanceof String 
 
 const INDEX = /^(?:0|[1-9]\d*)$/;
 
+// What JavaScript writes into a view. A plain object or an array of its own is
+// data, made Python's the way `to_py` makes it, so that a later write to it goes
+// through a view of its own and is followed: kept as it was, `rows.push({n: 2})`
+// showed 2 and `rows.at(-1).n = 3` changed the data and never the page. Svelte
+// draws the same line, making a proxy of exactly those two kinds when one is put
+// into its state. Anything else crosses as a binding's value does: a view handed
+// back is its container again, and a class instance, a Date or a DOM node keeps
+// its identity.
+const entering = (given) =>
+    given !== null &&
+    typeof given === 'object' &&
+    !VIEWED.has(given) &&
+    !pyClass(given.ob_type) &&
+    (Array.isArray(given) || plainObject(given))
+        ? pyData(given)
+        : pyBind(given);
+
 function viewOf(value) {
     const $B = globalThis.__BRYTHON__;
 
@@ -2369,11 +2394,16 @@ function viewOf(value) {
             : pyEntries(value).map(([key]) => keyName(key)).filter((key) => key !== undefined);
 
     const write = (key, given) => {
-        if (!sequence) return $B.$setitem(value, key, pyBind(given)), true;
+        if (!sequence) return $B.$setitem(value, key, entering(given)), true;
         if (!$B.is_list(value)) return false;
 
         if (key === 'length') {
             const wanted = Number(given);
+
+            // An array's own rule, checked before the first element goes: a
+            // length is a whole number below 2³², and anything else, `-1`, `1.5`
+            // or `NaN`, is a RangeError that leaves the array as it was.
+            if (wanted >>> 0 !== wanted) throw new RangeError('Invalid array length');
 
             while (length() > wanted) $B.$call($B.$getattr(value, 'pop'));
             while (length() < wanted) $B.$call($B.$getattr(value, 'append'), NONE);
@@ -2387,8 +2417,8 @@ function viewOf(value) {
 
         while (length() < at) $B.$call($B.$getattr(value, 'append'), NONE);
 
-        if (at === length()) $B.$call($B.$getattr(value, 'append'), pyBind(given));
-        else $B.$setitem(value, at, pyBind(given));
+        if (at === length()) $B.$call($B.$getattr(value, 'append'), entering(given));
+        else $B.$setitem(value, at, entering(given));
 
         return true;
     };

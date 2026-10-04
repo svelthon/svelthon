@@ -2382,6 +2382,15 @@ function refuseLibraryCalls(tree, source, lineOffset) {
 // `tests/generated-names.test.js` holds the two files to them.
 const fn = (name) => `__fn_${name}`;
 const local = (name) => `__local_${name}`;
+
+// The JavaScript name of a `def`'s wrapper in a rune script: its own, unless it
+// is a rune's. Svelte reads `$state` as a subscription to a store once the script
+// binds `state` to an ordinary value, so `def state()` made every `$state.raw`
+// of the component read a store declared further down: `Cannot access 'state'
+// before initialization`, and `def props()` did the same to `$props()`. A cell is
+// declared by a rune and is not read that way. Exported under its own name.
+const SVELTE_RUNES = new Set(['state', 'derived', 'effect', 'props', 'bindable', 'inspect', 'host']);
+const wrapperName = (name) => (SVELTE_RUNES.has(name) ? `__def_${name}` : name);
 // A prop's override by the child, the default it falls back on, and the choice
 // between them and the parent's.
 const over = (name) => `__over_${name}`;
@@ -2803,10 +2812,10 @@ function instanceExports(c) {
         // call, and an `__expr_N` is this compiler's own and never moves.
         ...c.funcs.map((f) =>
             componentWrapper(f) === RUNTIME.pyExpression
-                ? `const ${f.name} = ${RUNTIME.pyExpression}((a) => ${fn(f.name)}(...a), ` +
+                ? `const ${wrapperName(f.name)} = ${RUNTIME.pyExpression}((a) => ${fn(f.name)}(...a), ` +
                   `${JSON.stringify(`${f.name}() — ${c.source}`)}, __lines, ${f.arity}, ` +
                   `${KEPT_PYTHON.test(f.name) ? 'true' : COMPARED.test(f.name) ? `'${f.name.match(COMPARED)[1]}'` : 'false'});`
-                : `const ${f.name} = ${RUNTIME.pyComponent}(() => ${fn(f.name)}, ` +
+                : `const ${wrapperName(f.name)} = ${RUNTIME.pyComponent}(() => ${fn(f.name)}, ` +
                   `${JSON.stringify(`${f.name}() — ${c.source}`)}, ${c.lineOffset}${f.exported && !c.store ? ', true' : ''});`
         ),
         // What a parent holding `bind:this` can call. Svelte gathers whatever an
@@ -2817,7 +2826,13 @@ function instanceExports(c) {
         // A component with no `@export` exports nothing, which is theirs too: an
         // instance exposes only what it says it exposes.
         ...(!c.store && c.funcs.some((f) => f.exported)
-            ? [``, `export { ${c.funcs.filter((f) => f.exported).map((f) => f.name).join(', ')} };`]
+            ? [
+                  ``,
+                  `export { ${c.funcs
+                      .filter((f) => f.exported)
+                      .map((f) => (wrapperName(f.name) === f.name ? f.name : `${wrapperName(f.name)} as ${f.name}`))
+                      .join(', ')} };`
+              ]
             : []),
         ...(c.store
             ? [
