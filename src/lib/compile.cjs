@@ -1943,7 +1943,7 @@ function refuseNestedRunes(body, source, lineOffset, theirs = new Set()) {
 
             const spelling =
                 decoratorSpelling(node) ||
-                ((node instanceof $B.ast.Assign && called(node, RUNE_NAMES)) ||
+                (((node instanceof $B.ast.Assign || node instanceof $B.ast.AnnAssign) && called(node, RUNE_NAMES)) ||
                 (node instanceof $B.ast.Expr && called(node, STATEMENT_RUNES))
                     ? `${node.value.func.id}()`
                     : null);
@@ -1982,8 +1982,8 @@ function refuseNestedRunes(body, source, lineOffset, theirs = new Set()) {
 }
 
 // The call spellings of the markers are read in one place each: the whole value
-// of an assignment, `twice = derived(…)`, and `inspect(…)` as a statement of
-// its own. Anywhere else the call declares nothing and the decorator it stands
+// of an assignment, `twice = derived(…)`, annotated or not, and `inspect(…)` as
+// a statement of its own. Anywhere else the call declares nothing and the decorator it stands
 // for is the identity at run time, so `print(effect(…))` would never run; and
 // `watch = inspect(count)` or `twice = derived(count * 2)` hand a value where a
 // function is read, which would raise a bare `TypeError` later, on another
@@ -2018,9 +2018,12 @@ function refuseMisplacedMarkers(body, source, lineOffset, theirs, component) {
         const fail = (sentence) => {
             throw refuse(`svelthon — ${sentence} (${source}:${at})`, source, at);
         };
-        const assigned = parent instanceof $B.ast.Assign && parent.value === node;
+        // An annotated assignment is an assignment, `total: int = derived(…)`
+        // read as `total = derived(…)` is, and answers to the same checks.
+        const assigned =
+            (parent instanceof $B.ast.Assign || parent instanceof $B.ast.AnnAssign) && parent.value === node;
 
-        if (!assigned && !(parent instanceof $B.ast.Expr) && !(parent instanceof $B.ast.AnnAssign)) {
+        if (!assigned && !(parent instanceof $B.ast.Expr)) {
             fail(`\`${marker}(…)\` is read only as the whole value of an assignment; inside another expression it declares nothing`);
         }
 
@@ -2033,7 +2036,7 @@ function refuseMisplacedMarkers(body, source, lineOffset, theirs, component) {
 
         if (!assigned) return;
 
-        const generated = parent.targets.every((one) => one instanceof $B.ast.Name && one.id.startsWith('__'));
+        const generated = (parent.targets ?? [parent.target]).every((one) => one instanceof $B.ast.Name && one.id.startsWith('__'));
 
         if ((marker === 'inspect' || marker === 'inspect_with') && !generated) {
             fail(`\`${marker}(…)\` is a statement of its own, \`${marker}(values)\`; assigned, it is handed values where it reads a function`);
