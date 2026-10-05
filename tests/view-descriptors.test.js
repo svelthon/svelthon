@@ -53,6 +53,25 @@ describe.for(SHAPES)('on %s', ([, data, key]) => {
         expect(python[key]).toBe(1);
     });
 
+    // The prototype is the view's shape, a list's methods among it: the list
+    // took a new one and went on announcing the old, `push` gone. Refused, as
+    // Svelte's state refuses it.
+    test.for([
+        ['null', null],
+        ["an object's", Object.prototype],
+        ["an array's", Array.prototype]
+    ])('a prototype, %s, is refused, as by Svelte', ([, proto]) => {
+        const { svelte, python } = pair(data);
+        const before = Object.getPrototypeOf(python);
+
+        expect(() => Object.setPrototypeOf(svelte, proto)).toThrow();
+        expect(() => Object.setPrototypeOf(python, proto)).toThrow(TypeError);
+
+        expect(Object.getPrototypeOf(python)).toBe(before);
+        expect(typeof python.push).toBe(typeof svelte.push);
+        expect(Object.keys(python)).toEqual(Object.keys(svelte));
+    });
+
     test.for([
         ['in full', { value: 7, writable: true, enumerable: true, configurable: true }],
         ['with only a value', { value: 7 }]

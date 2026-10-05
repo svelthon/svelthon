@@ -2387,7 +2387,13 @@ function viewOf(value) {
     if (!sequence && !$B.is_dict(value)) return value;
 
     const length = () => $B.builtins.len(value);
-    const index = (key) => (typeof key === 'string' && INDEX.test(key) ? Number(key) : undefined);
+    // An array index is one below 2³² − 1; a larger number is an ordinary
+    // property to an array, which a list does not hold.
+    const index = (key) => {
+        const at = typeof key === 'string' && INDEX.test(key) ? Number(key) : undefined;
+
+        return at < 2 ** 32 - 1 ? at : undefined;
+    };
     const holds = (key) => {
         if (sequence) {
             const at = index(key);
@@ -2505,6 +2511,11 @@ function viewOf(value) {
         // locked.
         preventExtensions() {
             return false;
+        },
+        // The prototype is the view's shape, a list's methods among it, and
+        // Svelte's state refuses the same request.
+        setPrototypeOf() {
+            throw new TypeError('Cannot set the prototype of a Python view');
         }
     });
 

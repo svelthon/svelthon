@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config';
+import { defineConfig, configDefaults } from 'vitest/config';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { fileURLToPath } from 'node:url';
 import { python, svelthon, compileOptionsFor } from './src/lib/svelthon.js';
@@ -31,6 +31,10 @@ export default defineConfig({
     },
     test: {
         environment: 'jsdom',
+
+        // An audit keeps a copy of the tests it ran beside its evidence, and a
+        // copy is no test of this tree: it imports what is no longer there.
+        exclude: [...configDefaults.exclude, 'tests/scratch/*-evidence/**'],
 
         // **The clock is declared, the way the locale already is at every call.**
         // Every assertion that depends on a language passes one — `en-GB`,
