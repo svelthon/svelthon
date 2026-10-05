@@ -75,7 +75,7 @@ reste de cette configuration et ce que chaque ligne apporte.
 npm install
 npm run dev
 
-npm test             # 1 606 tests : sémantique, props, réactivité, surface Svelte
+npm test             # 1 610 tests : sémantique, props, réactivité, surface Svelte
 npm run test:quiet   # la sortie de la suite : un run vert ne doit rien dire
 npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
@@ -544,9 +544,12 @@ instance, comme `vars(row)` les lit, les autres propriétés propres d'un objet
 JavaScript, comme Svelte les lit. L'alternative épelle deux fois la même chose :
 `{cat.id}`, `{cat.name}`.
 
-Par position aussi, une cible est celle de Python : `[first, *others]` fait
-d'`others` une liste, où que soit l'étoile, comme `first, *others = row`. `...`
-est l'Ellipsis de Python, à laquelle rien ne s'affecte : `...rest` est refusé.
+Par position, un nom étoilé est celui de Python : `[first, *others]` fait
+d'`others` une liste, où que soit l'étoile, comme `first, *others = row`, et une
+ligne trop courte pour lui lève ce que lève Python. Sans étoile, les crochets
+gardent la lecture de Svelte, où une valeur peut manquer ou être de trop : c'est
+à cela que sert un défaut, `[first, second=0]`. `...` est l'Ellipsis de Python,
+à laquelle rien ne s'affecte : `...rest` est refusé.
 
 ## Composition
 
@@ -1495,14 +1498,14 @@ lecteur à l'ouest de Greenwich voyait la veille. Une valeur qui porte une heure
 est un instant, et se rend dans le fuseau du lecteur, ce qui est le propre d'un
 instant.
 
-Le runtime entier, gzippé, fait **220 Ko**. C'est
+Le runtime entier, gzippé, fait **219 Ko**. C'est
 `vendor/brython_runtime.js`, la moitié sans la chaîne de parsing, celle qu'un
-navigateur reçoit ; le bundle complet dont elle est découpée en fait 272 et ne
+navigateur reçoit ; le bundle complet dont elle est découpée en fait 271 et ne
 part jamais.
 
 ## État
 
-Validé par `npm test`, 1 606 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 1 610 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;

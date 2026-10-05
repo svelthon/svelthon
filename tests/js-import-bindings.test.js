@@ -18,6 +18,9 @@ import * as Private from './fixtures/js_import_private.py';
 import { write, write_attribute } from './fixtures/js_import_private_writer.py';
 import * as Source from './fixtures/js_reexport_source.js';
 import JsImportWrite from './fixtures/JsImportWrite.svelte';
+import JsImportComprehension from './fixtures/JsImportComprehension.svelte';
+import * as Reads from './fixtures/js_import_reads.py';
+import * as ReadsExported from './fixtures/js_import_reads_exported.py';
 
 const { compile } = createRequire(import.meta.url)('../src/lib/compile.cjs');
 
@@ -101,6 +104,52 @@ const parses = (script) => {
 describe.skipIf(!canSpawn)('what only reads the name compiles to a module an engine loads', () => {
     test.for(READS)('%s', ([, body]) => {
         expect(parses(plain(body))).toBe(true);
+    });
+});
+
+// And it runs. A comprehension of the module whose name is spelt like the
+// import, `[counter for counter in range(2)]`, raised the TypeError of a write
+// at import: the engine set a comprehension's names in the enclosing namespace,
+// where the import's accessor took the write. A comprehension has a scope of
+// its own now, as in CPython. `python3`, the import standing for 0, gives each
+// answer below.
+describe('what only reads the name runs, and answers what Python answers', () => {
+    test('in a .py', () => {
+        Source.reset();
+
+        expect(Reads.answers()).toEqual([
+            [0, 1],
+            { 0: 1, 1: 1 },
+            [0, 1],
+            [0, 1],
+            0,
+            5,
+            4,
+            3,
+            4,
+            [0, 1],
+            [[0, 1], 1],
+            2
+        ]);
+
+        Source.bump();
+        expect(Reads.read()).toBe(1);
+    });
+
+    test('in a .py that exports the name', () => {
+        Source.reset();
+
+        expect([ReadsExported.listed, ReadsExported.counter]).toEqual([[0, 1], 0]);
+    });
+
+    test('in a component', () => {
+        Source.reset();
+        const target = document.body.appendChild(document.createElement('div'));
+        mount(JsImportComprehension, { target });
+        flushSync();
+
+        expect(target.textContent.trim()).toBe('[0, 1]|0');
+        target.remove();
     });
 });
 
