@@ -104,6 +104,24 @@ describe('a dict whose keys are not strings', () => {
     // A Brython float is an object, so this is the half that coercion could not
     // spell at all: `[object Object]`. An int key survived it by luck, which is
     // why the bypass stayed invisible.
+    // A JavaScript symbol is a key like any other since `symbol-hash`, and the
+    // copy and the export wrote it as its description, `"Symbol(tail)"`: the key
+    // the dict was asked by never arrived, and two symbols of one name folded
+    // into one. It crosses as itself, as JavaScript's `{[token]: 1}` keeps it
+    // and as a spread already wrote it. JSON has no notation for one, and the
+    // serialiser refuses it as it refuses a symbol value, where `JSON.stringify`
+    // drops it in silence; CPython's `json.dumps` refuses any key that is not a
+    // str, an int, a float, a bool or None.
+    test('a symbol key crosses as itself, and has no JSON', () => {
+        const [token, twin] = [Symbol('tail'), Symbol('tail')];
+        const copied = plainData(dict([[token, 1], [twin, 2], ['a', 3]]));
+        const exported = pyExport(dict(withFunction([[token, 1]])), 'm');
+
+        expect([copied[token], copied[twin], copied.a, Object.keys(copied)]).toEqual([1, 2, 3, ['a']]);
+        expect(exported[token]).toBe(1);
+        expect(() => tojson(dict([[token, 1]]))).toThrow('tojson(): Symbol(tail) is a symbol, and a symbol has no JSON');
+    });
+
     test('and a float key crosses as the name it reads as, not as an object', () => {
         const out = pyExport(dict(withFunction([[1, 'one'], [_b_.float.$factory(2.5), 'half']])), 'm');
 

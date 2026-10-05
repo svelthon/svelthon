@@ -77,7 +77,7 @@ rest of that configuration and what each line buys.
 npm install
 npm run dev
 
-npm test             # 1 622 tests: semantics, props, reactivity, Svelte surface
+npm test             # 1 625 tests: semantics, props, reactivity, Svelte surface
 npm run test:quiet   # the suite's own output: a green run must say nothing
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
@@ -388,7 +388,10 @@ Python's truthiness, and a binding names something Python can assign to:
 The rule: everything in a template is Python, every attribute, component prop
 included, every directive's value, and the shorthand `{name}` and the spread
 `{**attrs}`, which are expanded so that the read goes through the namespace
-rather than around it, with no exception left.
+rather than around it, with no exception left. The spread takes what Python's
+`{**attrs}` takes, a mapping's entries, and one thing more: an instance, which
+Python refuses, gives its attributes, as `vars()` reads them. Anything else,
+None or a str among them, raises Python's `TypeError`.
 
 `bind:group` was the last one, and it took a different shape rather than a pair:
 Svelte will not accept a getter and a setter there, because it works out which
@@ -1492,7 +1495,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 1 622 tests as written (vitest reports more, one per
+Validated by `npm test`, 1 625 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;

@@ -10,7 +10,10 @@
 // `import` can write is never claimed, and SvelteKit gives every route of a kind
 // the same one.
 import { test, expect, describe } from 'vitest';
-import { nameFor } from '../src/lib/svelthon.js';
+import { nameFor as claimIn } from '../src/lib/svelthon.js';
+
+// The project these paths are written from, the directory the suite runs in.
+const nameFor = (filename) => claimIn(filename, process.cwd());
 
 describe('two Python modules of one name', () => {
     test('the second is refused, and both files are named', () => {

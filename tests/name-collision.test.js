@@ -15,6 +15,9 @@ import { test, expect, describe } from 'vitest';
 
 import { nameFor, svelthon } from '../src/lib/svelthon.js';
 
+// The project these paths are written from, the directory the suite runs in.
+const claim = (filename) => nameFor(filename, process.cwd());
+
 describe('two files that mangle to one module name', () => {
     // Called directly rather than through the `script` hook, which would read
     // each file off disk for its source map. The contract under test is the one
@@ -28,7 +31,7 @@ describe('two files that mangle to one module name', () => {
     // The registry is per process. A pair may be replayed, because re-claiming
     // from the same path is allowed and the second path still collides, but no
     // test relies on what another one claimed.
-    const compile = (filename) => nameFor(filename);
+    const compile = claim;
 
     test('the second is refused, and both files are named', () => {
         compile('tests/fixtures/collide/deep.svelte');
@@ -68,7 +71,7 @@ describe('two files that mangle to one module name', () => {
         compile('tests/fixtures/moved-on.svelte');
         compile('tests/fixtures/moved_on.svelte');
 
-        expect(nameFor('tests/fixtures/moved_on.svelte')).toBe('tests_fixtures_moved_on_svelte');
+        expect(claim('tests/fixtures/moved_on.svelte')).toBe('tests_fixtures_moved_on_svelte');
     });
 
     // The preprocessor runs its hooks more than once per file, and a watched file
@@ -111,7 +114,7 @@ describe('asking whether a module exists does not claim its name', () => {
     test('and neither of them ends up claimed', () => {
         touch('src/seven-utils.ts');
 
-        expect(() => nameFor('src/seven_utils.ts')).not.toThrow();
+        expect(() => claim('src/seven_utils.ts')).not.toThrow();
     });
 
     // The two answer the same name; only one records it. Asked through the hook
@@ -121,6 +124,6 @@ describe('asking whether a module exists does not claim its name', () => {
         touch('src/eight/theta.svelte');
         touch('src/eight_theta.svelte');
 
-        expect(nameFor('src/eight/theta.svelte')).toBe('src_eight_theta_svelte');
+        expect(claim('src/eight/theta.svelte')).toBe('src_eight_theta_svelte');
     });
 });

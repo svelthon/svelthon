@@ -543,7 +543,7 @@ export const __pybridge = {
     // Each property is read once, as a JavaScript spread reads it: a getter
     // asked again may answer otherwise, or refuse.
     spreadElement(value, event = (one) => pyEvent(one)) {
-        if (value === null || value === undefined || typeof value !== 'object') return value;
+        if (value === null || value === undefined) return value;
 
         const read = spreadOf(value, (one) => one);
         const out = spreadOf(read, __pybridge.bound);
@@ -571,13 +571,14 @@ export const __pybridge = {
 // symbols included, as JavaScript's `...` takes them. Copied as a JavaScript
 // object, a dict handed its child the engine's storage beside its keys, a key
 // that is not a string never arrived, and a mapping that is not a dict or an
-// instance arrived empty.
+// instance arrived empty. A str, an int and a bool are Python's, refused as a
+// rest refuses them, where JavaScript's `...` spread a string's characters.
 function spreadOf(value, convert) {
-    if (value === null || value === undefined || typeof value !== 'object') return value;
+    if (value === null || value === undefined) return value;
 
     const out = {};
 
-    if (quietPyType(value) === undefined) {
+    if (javaScriptRow(value)) {
         for (const key of Reflect.ownKeys(value)) {
             if (Object.prototype.propertyIsEnumerable.call(value, key)) define(out, key, convert(value[key]));
         }
@@ -585,9 +586,7 @@ function spreadOf(value, convert) {
         return out;
     }
 
-    for (const [key, one] of starredEntries(value)) {
-        define(out, typeof key === 'string' || typeof key === 'symbol' ? key : propertyName(key, out), convert(one));
-    }
+    for (const [key, one] of starredEntries(value)) define(out, propertyName(key, out), convert(one));
 
     return out;
 }
@@ -1269,8 +1268,10 @@ const quietly = (value, name) => {
 
 // `pyType`, asked that way: an `ob_type` getter of a JavaScript object is the
 // author's code, and a data field of that name is read once, by the serialiser.
+// A function too, which the engine's own carry as a field: a Python function
+// is the engine's, and a JavaScript one is not.
 const quietPyType = (value) => {
-    if (value === null || typeof value !== 'object') return undefined;
+    if (value === null || (typeof value !== 'object' && typeof value !== 'function')) return undefined;
 
     const type = quietly(value, 'ob_type') ?? quietly(value, globalThis.__BRYTHON__.OB_TYPE);
 
@@ -3202,7 +3203,7 @@ function branch(value, seen, shell, adapt) {
     const out = shell ?? {};
 
     for (const [key, one] of pyEntries(value)) {
-        define(out, propertyName(key, out), plainData(one, seen, adapt));
+        define(out, propertyName(key, out, seen, adapt), plainData(one, seen, adapt));
     }
 
     return out;
@@ -3211,14 +3212,22 @@ function branch(value, seen, shell, adapt) {
 // The name a Python key takes as a JavaScript property, and the refusal that
 // belongs with it.
 //
-// Two sites write a mapping out, this converter and the export branch that
-// adapts a dict holding a function, and both ask here: a key handed to
-// `define` and coerced by JavaScript would fold `{1: "numeric", "1": "text"}`
-// into a single `"1"` key.
-function propertyName(key, out) {
+// Three sites write a mapping out, this converter, the export branch that
+// adapts a dict holding a function, and a spread, and all ask here: a key
+// handed to `define` and coerced by JavaScript would fold `{1: "numeric", "1":
+// "text"}` into a single `"1"` key, whichever of the two comes first.
+//
+// A symbol is a property key of its own and stays one: written as its
+// description, two symbols of one name became one key, and the copy no longer
+// held the key the dict was asked by. JSON has no notation for one, and under
+// the serialiser's rule it is refused as a symbol value is, where
+// `JSON.stringify` would drop it in silence.
+function propertyName(key, out, seen, adapt) {
+
+
     // A JavaScript property name is a string, and a Brython float is an object,
     // so `{1.5: "x"}` would otherwise be keyed by `[object Object]`.
-    const name = String(plainData(key));
+    const name = typeof key === 'symbol' ? key : String(plainData(key));
 
     // Two keys Python keeps apart that JavaScript can only spell one way. The
     // narrowing is the destination's, but the silence would be ours, and this
@@ -5346,10 +5355,10 @@ const moduleNamespace = (value) =>
 // property "2024", as Svelte does.
 //
 // A Python value is its entries when it is a mapping, through `keys()` and
-// `__getitem__`, which is what Python's own `{**row}` asks of one, and
-// `vars(row)` otherwise, Python's own: an instance of a class with
-// `__slots__`, which has no `__dict__`, raises the TypeError `vars` raises
-// rather than coming out empty.
+// `__getitem__`, which is what Python's own `{**row}` asks of one, and its
+// attributes otherwise, what `vars(row)` holds: an instance of a class with
+// `__slots__`, which has none, raises the TypeError `{**row}` raises rather
+// than coming out empty.
 //
 // A mapping is a dict, or a row whose class declares `__getitem__` and whose
 // `keys` answers with something callable, read as Python reads `row.keys`:
@@ -5362,9 +5371,8 @@ const moduleNamespace = (value) =>
 export function restOf(row, taken) {
     const $B = globalThis.__BRYTHON__;
     const out = _b_.dict.$factory();
-    const type = quietPyType(row);
 
-    if (type === undefined && row !== null && (typeof row === 'object' || typeof row === 'function')) {
+    if (javaScriptRow(row)) {
         const keys = new Set(
             Array.from(taken, (key) => {
                 const spelt = $B.pyobj2jsobj(key);
@@ -5388,13 +5396,33 @@ export function restOf(row, taken) {
     return out;
 }
 
+// Whether `**` reads a row as JavaScript's own `...` does: an object or a
+// function the engine does not own. Anything else is a Python value, a str, an
+// int, a bool and None among them, whose entries are `starredEntries`.
+const javaScriptRow = (row) =>
+    row !== null && (typeof row === 'object' || typeof row === 'function') && quietPyType(row) === undefined;
+
 // What `**` takes of a Python value in the markup, a rest or a spread alike: a
-// mapping's entries, and otherwise an instance's attributes, `vars(value)`,
-// which raises where `vars` raises.
+// mapping's entries, and otherwise an object's attributes, what `vars(value)`
+// holds, where Python's own `{**value}` refuses. A value with neither is
+// refused with the sentence `{**value}` raises, about the `**` the author
+// wrote: None, a str, an int, an instance of a class with `__slots__`.
 const starredEntries = (value) => {
+    const $B = globalThis.__BRYTHON__;
     const entries = mappingEntries(value);
 
-    return entries === MISSING ? pyEntries(globalThis.__BRYTHON__.$call(_b_.vars, value)) : entries;
+    if (entries !== MISSING) return entries;
+
+    const attributes = $B.get_dict(value);
+
+    if (!attributes) {
+        $B.RAISE(
+            _b_.TypeError,
+            `'${$B.class_name(value)}' object is not a mapping, and has no attributes for ** to take`
+        );
+    }
+
+    return pyEntries(attributes);
 };
 
 // The entries of a Python mapping as Python's own `{**row}` reads them, or

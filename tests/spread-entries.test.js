@@ -28,9 +28,12 @@ const read = (Component, props) => {
     }
 };
 
+// A symbol key arrives as itself, as JavaScript's `{first: 10, [token]: 20}`
+// spreads it.
 test.for([
     ['dict', 'a,b|undefined'],
     ['int', '1,b|undefined'],
+    ['symbol-dict', 'first,sym:tail|20'],
     ['mapping', 'first,tail|undefined']
 ])('a %s spread hands its child its entries and nothing else', ([kind, expected]) => {
     expect(read(SpreadEntries, { kind })).toBe(expected);
@@ -49,4 +52,47 @@ test('a mapping spread on an element gives its attributes', () => {
 // `**rest` takes of one too.
 test('an instance spreads its attributes, as its rest holds them', () => {
     expect(read(SpreadEntries, { kind: 'plain' })).toBe('first|undefined');
+});
+
+// A function was taken for a JavaScript one, the engine's own included, and a
+// Python function spread the engine's fields, `$function_infos`, `ob_type`,
+// `__annotate__`. A Python function spreads its attributes, `vars(f)` in
+// `python3`: `mark`. A JavaScript function its own properties, as
+// JavaScript's `{...counted}` takes them: `calls`.
+test.for([
+    ['function', 'mark|undefined'],
+    ['js-function', 'calls|undefined']
+])('a %s spreads what its language spreads of it', ([kind, expected]) => {
+    expect(read(SpreadEntries, { kind })).toBe(expected);
+});
+
+// A value with neither entries nor attributes raised a TypeError about
+// `vars()`, a function the author never wrote, and a str, an int or a bool
+// were spread as JavaScript spreads them, past the rule a rest keeps: a str
+// handed its child one prop per character, and on an element raised the DOM's
+// `"0" did not match the Name production`. Each raises what Python's own
+// `{**value}` raises, naming the class, on a component and on an element alike.
+// `python3`, `{**value}` on each: `'NoneType' object is not a mapping`,
+// `'list'`, `'str'`, `'int'`, `'bool'`, `'Slotted'`.
+test.for([
+    ['none', 'NoneType'],
+    ['list', 'list'],
+    ['str', 'str'],
+    ['number', 'int'],
+    ['bool', 'bool'],
+    ['slots', 'Slotted'],
+    ['element-none', 'NoneType'],
+    ['element-str', 'str']
+])('a %s spread raises as `{**value}` does', ([kind, type]) => {
+    expect(() => read(SpreadEntries, { kind })).toThrow(
+        `TypeError: '${type}' object is not a mapping, and has no attributes for ** to take`
+    );
+});
+
+// `{1: "a", "1": "b"}` handed its child one value and lost the other, and the
+// same dict written the other way round was refused: a string key was written
+// as it stood, so the check saw it only after its twin. Every key is written as
+// the copy writes it, and both orders are refused, as the copy refuses them.
+test.for(['int-first', 'str-first'])('a dict with %s twin keys is refused', (kind) => {
+    expect(() => read(SpreadEntries, { kind })).toThrow('two keys JavaScript cannot tell apart');
 });

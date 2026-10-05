@@ -47,8 +47,11 @@ const claimed = (globalThis[Symbol.for('svelthon.claimed')] ??= new Map());
 // The path is read from `root`, the project of the half that asks, the one its
 // generated modules are filed under: read from the directory of the moment, a
 // change of directory renamed every module, and an edit invalidated none.
-const mangle = (filename, root = process.cwd()) =>
-    relative(root, filename || 'Component').replace(/\W/g, '_');
+const mangle = (filename, root) => shownPath(filename, root).replace(/\W/g, '_');
+
+// A component's path as its project names it, and `Component` for one handed
+// over without a file, which no directory holds.
+const shownPath = (filename, root) => (filename ? relative(root, filename) : 'Component');
 
 // The name, claimed. Must be unique across the project *and* a valid JS
 // identifier, since Brython derives its namespace binding (`locals_<name>`) from
@@ -72,8 +75,8 @@ const mangle = (filename, root = process.cwd()) =>
 // last condition reads the disk: **a first claimant that is no longer there is
 // not a collision, it is a rename.** The refusal keeps the case it is for, two
 // files that both exist.
-export const nameFor = (filename, root = process.cwd()) => {
-    const path = relative(root, filename || 'Component');
+export const nameFor = (filename, root) => {
+    const path = shownPath(filename, root);
     const name = mangle(filename, root);
     const first = claimed.get(name);
 
@@ -87,7 +90,7 @@ export const nameFor = (filename, root = process.cwd()) => {
     }
 
     claimed.set(name, path);
-    if (path.endsWith('.py')) claimPython(path);
+    if (path.endsWith('.py')) claimPython(path, root);
 
     return name;
 };
@@ -103,13 +106,13 @@ export const nameFor = (filename, root = process.cwd()) => {
 const pythonClaimed = (globalThis[Symbol.for('svelthon.pythonClaimed')] ??= new Map());
 const IMPORTABLE = PY_NAME;
 
-function claimPython(path) {
+function claimPython(path, root) {
     const name = pythonModuleName(path);
     if (!IMPORTABLE.test(name)) return;
 
     const first = pythonClaimed.get(name);
 
-    if (first !== undefined && first !== path && existsSync(first)) {
+    if (first !== undefined && first !== path && existsSync(resolve(root, first))) {
         throw new SyntaxError(
             `svelthon — \`${path}\` and \`${first}\` are both imported as \`${name}\`, ` +
                 `so one would silently replace the other. Rename one of them: a module's ` +
@@ -150,7 +153,7 @@ function refuseSpacedClose(closing, filename, root) {
             `preprocessor only recognises \`</script>\`: the block never reaches it, so the ` +
             `Python is handed to the compiler as JavaScript and every name it declares is ` +
             `missing at run time. Close it with \`</script>\` ` +
-            `(${relative(root, filename || 'Component')})`
+            `(${shownPath(filename, root)})`
     );
 }
 
@@ -339,13 +342,17 @@ function tagged(code, key) {
 // to a sibling file, and a component that reached the module some other way
 // would appear to work purely by load order.
 export function python(options = {}) {
-    const searchPath = options.path || [];
     const calls = perCall();
 
     // The project the modules it files belong to, read as it is made, as the
     // plugin reads its own: the directory the process is in when it later
     // preprocesses a component may be another project's.
     const root = process.cwd();
+
+    // The project's too, `path: ['src/lib']` as the README writes it: resolved
+    // now, so a component of this project imports this project's modules
+    // whatever directory the process has moved to since.
+    const searchPath = (options.path || []).map((one) => resolve(root, one));
 
     // Shared with the plugin, which compiles the `.py` files themselves and has
     // to resolve their imports the same way. The two halves may not be the same
@@ -428,28 +435,27 @@ export function python(options = {}) {
                     `svelthon — a <script module> cannot hold Python; state shared ` +
                         `by every instance belongs in a .svelte.py module, which a ` +
                         `component imports like any other ` +
-                        `(${relative(root, filename || 'Component')})`
+                        `(${shownPath(filename, root)})`
                 );
             }
 
+            // Its own directory, where its imports are looked for first, and the
+            // project's for a component handed over without a file.
+            const directory = filename ? dirname(filename) : root;
+
             const name = nameFor(filename, root);
-            const { script, module, map, imports } = compile(
-                content,
-                name,
-                relative(root, filename || 'Component'),
-                {
-                    ...about,
-                    // The whole file, so a debugger opens the .svelte itself.
-                    sourceContent: filename ? readFileSync(filename, 'utf8') : content,
-                    resolves: (mod) => moduleKind(mod, dirname(filename || '.'), searchPath)
-                }
-            );
+            const { script, module, map, imports } = compile(content, name, shownPath(filename, root), {
+                ...about,
+                // The whole file, so a debugger opens the .svelte itself.
+                sourceContent: filename ? readFileSync(filename, 'utf8') : content,
+                resolves: (mod) => moduleKind(mod, directory, searchPath)
+            });
 
             // `import counter_store` in a component resolves to a .py file, its
             // own directory first, then `path`. The module has to be evaluated
             // before init() runs, so its namespace is registered by the time
             // Brython looks it up.
-            const prelude = pythonImports(imports, dirname(filename || '.'), searchPath);
+            const prelude = pythonImports(imports, directory, searchPath);
 
             generated.set(generatedKey(root, virtualId(name)), withPrelude(module, map, prelude));
 
@@ -580,11 +586,11 @@ const compiledStores = new Map();
 // imports resolve to are part of the key: a module deleted or renamed beside it
 // compiles, and checks, this one again.
 //
-// So is the path the file is reached by, from the directory the process is in,
+// So is the path the file is reached by, from the root of the project asking,
 // which its module name and the import of that module are made of: one file
 // shared by two projects is `../shared/x.py` from one and `../../shared/x.py`
 // from the other, and each project imports the module of its own path.
-function compilePython(file, path, root = process.cwd()) {
+function compilePython(file, path, root) {
     const stamp = statSync(file).mtimeMs;
     const shown = relative(root, file);
     const cached = compiledStores.get(file);
@@ -610,21 +616,24 @@ function compilePython(file, path, root = process.cwd()) {
     return result;
 }
 
-// Zero where there is nothing to count, which is every project but this one.
-// `readdirSync('tests')` resolves against `process.cwd()`, so without this the
-// demo's stats module took the dev server down with `ENOENT` in any tree with no
-// `tests/`, or whenever the process was started from another directory. The
-// demo reads the number and shows it; showing none is what zero is for.
-const countTests = () =>
-    (existsSync('tests') ? readdirSync('tests') : [])
+// Zero where there is nothing to count, which is every project but this one:
+// without it the demo's stats module took the dev server down with `ENOENT` in
+// any tree with no `tests/`. The demo reads the number and shows it; showing
+// none is what zero is for. The `tests/` of the project the plugin serves, not
+// of the directory the process is in.
+const countTests = (root) => {
+    const tests = resolve(root, 'tests');
+
+    return (existsSync(tests) ? readdirSync(tests) : [])
         .filter((name) => name.endsWith('.test.js'))
         .reduce(
             (total, name) =>
                 // Anchored: a `/re/.test(x)` elsewhere in a file is not a test,
                 // and `test.fails()`, the failures we expect, is one.
-                total + (readFileSync(`tests/${name}`, 'utf8').match(/^\s*test(\.fails)?\(/gm) || []).length,
+                total + (readFileSync(resolve(tests, name), 'utf8').match(/^\s*test(\.fails)?\(/gm) || []).length,
             0
         );
+};
 
 // The generated module, behind the imports it needs evaluated first.
 //
@@ -716,12 +725,12 @@ export function svelthon(options = {}) {
     // configurations apart, so it takes the path when it is given one and falls
     // back to the value `python(options)` left on the global otherwise, which is
     // right for the ordinary case of one configuration per process.
-    const searchPath = options.path;
-
     // The project this plugin serves, read as it is made, the way Vite reads its
     // configuration in the project's directory: what the process is in when it
-    // later asks for a module may be another project.
+    // later asks for a module may be another project. Its path is resolved
+    // against it now, as the preprocessor resolves its own.
     const root = process.cwd();
+    const searchPath = options.path?.map((one) => resolve(root, one));
     const key = (id) => generatedKey(root, id);
 
     // Where an id with no importer is rooted, SvelteKit's route entries among
@@ -766,7 +775,7 @@ export function svelthon(options = {}) {
             }
         },
         load(id) {
-            if (id === '\0' + STATS_ID) return `export const tests = ${countTests()};`;
+            if (id === '\0' + STATS_ID) return `export const tests = ${countTests(root)};`;
 
             if (id.startsWith('\0')) {
                 const entry = generated.get(key(id.slice(1)));

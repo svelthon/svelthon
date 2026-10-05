@@ -178,14 +178,22 @@ test('a key taken is left out of the rest as the row compares its keys', () => {
 
 // A Python row with no `__dict__`, an instance of a class with `__slots__`
 // among them, came out as an empty rest, its fields silently gone. The rest of
-// a Python row that is not a mapping is `vars(row)`, and it raises what `vars`
-// raises; a subclass that adds a `__dict__` gives what is in it. `python3` on
-// the same rows: the four raise this TypeError, and `Mixed()` gives `extra`.
-test.for(['slots', 'str', 'int', 'none'])('the rest of a %s row raises as `vars` does', (kind) => {
+// a Python row that is not a mapping is its attributes, what `vars(row)` holds;
+// a row with none raises what `{**row}` raises, about the `**` the author wrote
+// and not about a `vars()` they never called. A subclass that adds a `__dict__`
+// gives what is in it. `python3`, `{**row}` on the same rows: `'Slotted' object
+// is not a mapping`, `'str'`, `'int'`, `'NoneType'`; `vars(Mixed())` gives
+// `extra`.
+test.for([
+    ['slots', 'Slotted'],
+    ['str', 'str'],
+    ['int', 'int'],
+    ['none', 'NoneType']
+])('the rest of a %s row raises as `{**row}` does', ([kind, type]) => {
     const target = document.body.appendChild(document.createElement('div'));
 
     expect(() => mount(RestWithoutDict, { target, props: { kind } })).toThrow(
-        /TypeError: vars\(\) argument must have __dict__ attribute/
+        `TypeError: '${type}' object is not a mapping, and has no attributes for ** to take`
     );
     target.remove();
 });
@@ -196,6 +204,18 @@ test('the rest of an instance with slots and a `__dict__` is what `vars` holds',
     flushSync();
 
     expect(target.querySelector('[data-k="mixed"]').textContent).toBe('extra');
+    target.remove();
+});
+
+// A Python function was taken for a JavaScript one, and its rest held the
+// engine's fields, `$function_infos`, `ob_type`, `__annotate__`. `python3`,
+// `vars(marked)`: `mark`.
+test('the rest of a function is what `vars` holds', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+    mount(RestWithoutDict, { target, props: { kind: 'function' } });
+    flushSync();
+
+    expect(target.querySelector('[data-k="function"]').textContent).toBe('mark');
     target.remove();
 });
 

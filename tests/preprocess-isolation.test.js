@@ -253,6 +253,125 @@ describe('an edit reaches its module, whatever the process is in', () => {
     });
 });
 
+// A relative path the package reads is the project's, not the directory's the
+// process is in when it reads it. Four of them asked the directory of the
+// moment without naming it: the search path, `python({ path: ['src/lib'] })` as
+// the README writes it, and the plugin's own; the directory of a component
+// handed over without a file; the first claimant of a Python name; and the
+// demo's `tests/`. After a change of directory a component of A ran B's
+// Python, without an error. Witness: the same work without the change.
+describe('a relative path is the project’s, whatever the process is in', () => {
+    const project = (name, answer) => {
+        const root = join(temporary, name);
+
+        mkdirSync(join(root, 'src', 'lib'), { recursive: true });
+        mkdirSync(join(root, 'src', 'routes'), { recursive: true });
+        writeFileSync(join(root, 'src', 'lib', 'peps.py'), `__all__ = ["answer"]\nanswer = ${answer}\n`);
+        writeFileSync(join(root, 'peps.py'), `__all__ = ["answer"]\nanswer = ${answer}\n`);
+        writeFileSync(join(root, 'src', 'routes', 'data.py'), 'import peps\n__all__ = ["peps"]\n');
+        return root;
+    };
+    const imported = (body) => body.match(/import "([^"]*peps\.py)"/)?.[1];
+    const source = '<script lang="python">\nimport peps\n</script>\n<p>{peps.answer}</p>\n';
+
+    test.for([[false], [true]])('the preprocessor’s search path, moved: %s', async ([moved]) => {
+        const original = process.cwd();
+        const [first, second] = [project(`path-a-${moved}`, 1), project(`path-b-${moved}`, 2)];
+        const filename = join(first, 'src', 'routes', 'Page.svelte');
+
+        writeFileSync(filename, source);
+
+        try {
+            process.chdir(first);
+            const plugin = svelthon();
+            const pre = python({ path: ['src/lib'] });
+
+            if (moved) process.chdir(second);
+            const { code } = await preprocess(source, [pre], { filename });
+
+            expect(imported(served(plugin, code))).toBe(join(first, 'src', 'lib', 'peps.py'));
+        } finally {
+            process.chdir(original);
+        }
+    });
+
+    test.for([[false], [true]])('the plugin’s search path, moved: %s', ([moved]) => {
+        const original = process.cwd();
+        const [first, second] = [project(`plugin-path-a-${moved}`, 1), project(`plugin-path-b-${moved}`, 2)];
+
+        try {
+            process.chdir(first);
+            const plugin = svelthon({ path: ['src/lib'] });
+
+            if (moved) process.chdir(second);
+            const script = plugin.load.call({ addWatchFile() {} }, join(first, 'src', 'routes', 'data.py'));
+            const id = String(script).match(/virtual:svelthon\/\w+/)[0];
+
+            expect(imported(plugin.load('\0' + id).code)).toBe(join(first, 'src', 'lib', 'peps.py'));
+        } finally {
+            process.chdir(original);
+        }
+    });
+
+    test.for([[false], [true]])('a component without a file, moved: %s', async ([moved]) => {
+        const original = process.cwd();
+        const [first, second] = [project(`nofile-a-${moved}`, 1), project(`nofile-b-${moved}`, 2)];
+
+        try {
+            process.chdir(first);
+            const plugin = svelthon();
+            const pre = python();
+
+            if (moved) process.chdir(second);
+            const { code } = await preprocess(source, [pre]);
+
+            expect(code).toContain('virtual:svelthon/Component');
+            expect(imported(served(plugin, code))).toBe(join(first, 'peps.py'));
+        } finally {
+            process.chdir(original);
+        }
+    });
+
+    test.for([[false], [true]])('two .py of one stem in one project, moved: %s', ([moved]) => {
+        const original = process.cwd();
+        const first = join(temporary, `claim-a-${moved}`);
+        const stem = `conf_${moved}`;
+
+        for (const directory of ['a', 'b']) {
+            mkdirSync(join(first, directory), { recursive: true });
+            writeFileSync(join(first, directory, `${stem}.py`), 'x = 1\n');
+        }
+
+        try {
+            process.chdir(first);
+            const plugin = svelthon();
+            plugin.load.call({ addWatchFile() {} }, join(first, 'a', `${stem}.py`));
+
+            if (moved) process.chdir(temporary);
+            expect(() => plugin.load.call({ addWatchFile() {} }, join(first, 'b', `${stem}.py`))).toThrow(
+                `are both imported as \`${stem}\``
+            );
+        } finally {
+            process.chdir(original);
+        }
+    });
+
+    test('the demo counts the tests of its project', () => {
+        const original = process.cwd();
+        const plugin = svelthon();
+        const alone = plugin.load('\0virtual:svelthon/stats');
+
+        try {
+            process.chdir(temporary);
+
+            expect(plugin.load('\0virtual:svelthon/stats')).toBe(alone);
+            expect(alone).not.toBe('export const tests = 0;');
+        } finally {
+            process.chdir(original);
+        }
+    });
+});
+
 describe('two versions of one file preprocessed at once', () => {
     const filename = join(temporary, 'Same.svelte');
     const first = '<script lang="python">\nalpha = 1\n</script>\n<p>{alpha + 1}</p>\n';

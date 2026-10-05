@@ -1,5 +1,5 @@
 <script lang="python">
-# `**rest` of a Python row that is not a mapping is `vars(row)`, which a row
+# `**rest` of a Python row that is not a mapping is its attributes, which a row
 # without a `__dict__` does not have: an instance of a class with `__slots__`,
 # a str, an int, None. `kind` picks the row, since each raises.
 class Slotted:
@@ -16,9 +16,15 @@ class Mixed(Slotted):
         self.extra = 30
 
 
+def marked():
+    return 0
+
+
+marked.mark = 1
+
 kind: str = ""
 
-ROWS = {"slots": Slotted(), "mixed": Mixed(), "str": "ab", "int": 3, "none": None}
+ROWS = {"slots": Slotted(), "mixed": Mixed(), "str": "ab", "int": 3, "none": None, "function": marked}
 rows = [ROWS[kind]] if kind in ROWS else []
 </script>
 
