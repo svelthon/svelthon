@@ -2267,12 +2267,13 @@ function walk(markup, collect, onPython, seed, record, where) {
                 // The awaited expression is Python like any other, a coroutine
                 // included, since the wrapper hands one back as a promise. What
                 // follows it is a name the block declares, never an expression:
-                // `{#await f() then row}`. The split is made at depth zero so
+                // `{#await f() then row}`, or no name at all, `{#await f()
+                // then}`, as Svelte takes it. The split is made at depth zero so
                 // that `{#await f("then")}` is not cut inside its own string.
                 const rest = opened.rest;
-                const at = atTopLevel(rest, (i) => /^\s(?:then|catch)\s/.test(rest.slice(i)));
+                const at = atTopLevel(rest, (i) => /^\s(?:then|catch)(?:\s|$)/.test(rest.slice(i)));
                 const awaited = at === -1 ? rest : rest.slice(0, at);
-                const tail = at === -1 ? null : rest.slice(at).match(/^\s*(then|catch)\s+([\s\S]*)$/);
+                const tail = at === -1 ? null : rest.slice(at).match(/^\s*(then|catch)(?:\s+([\s\S]*))?$/);
 
                 // The promise is evaluated outside the block, so it is compiled
                 // before the block's names exist: `{#await f(value) then value}`
@@ -2280,9 +2281,9 @@ function walk(markup, collect, onPython, seed, record, where) {
                 // declaration like any other, a pattern with its defaults.
                 const promise = call(awaited, '');
 
-                if (tail === null) {
+                if (tail === null || !tail[2]?.trim()) {
                     push([]);
-                    out += `{#await ${promise}}`;
+                    out += `{#await ${promise}${tail === null ? '' : ` ${tail[1]}`}}`;
                 } else {
                     const { pattern, consts } = destructured(tail[2], push, call, false);
 

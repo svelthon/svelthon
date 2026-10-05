@@ -1,5 +1,5 @@
 import { test, expect, describe } from 'vitest';
-import { mount, flushSync, rendered } from './mounted.js';
+import { mount, flushSync, rendered, settled } from './mounted.js';
 import AwaitCoroutine from './fixtures/AwaitCoroutine.svelte';
 import AwaitShorthand from './fixtures/AwaitShorthand.svelte';
 
@@ -73,5 +73,17 @@ describe('the {#await … then name} shorthand', () => {
     // parameter that does not exist yet.
     test('the awaited expression reads the outer scope', async () => {
         expect((await setup())('outer')).toBe('42');
+    });
+
+    // With no name after it, as Svelte takes `{#await p then}` and `{#await p
+    // catch}`: the word was read as the end of the Python expression, `later()
+    // then`, and refused as invalid syntax.
+    test.for([
+        ['bare', 'resolved'],
+        ['caught', 'failed']
+    ])('and `%s`, with no name, waits for its branch', async ([key, shown]) => {
+        const read = await setup();
+
+        await settled(() => expect(read(key)).toBe(shown));
     });
 });
