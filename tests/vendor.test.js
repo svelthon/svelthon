@@ -646,3 +646,14 @@ test('t-strings as CPython has them: tstring-nested-in-fstring', async () => {
 
     expect(nested()).toBe("<Template(strings=('a',), interpolations=())>");
 });
+
+// A row too short for a starred target says how many values it needs: the
+// names beside the star, wherever it stands. `python3` on the same two rows.
+test('a starred target says the values it needs as CPython does: starred-unpack-expected-count', async () => {
+    const { around, leading } = await import('./fixtures/starred_unpack.py');
+
+    expect([around([1]), leading([1])]).toEqual([
+        'not enough values to unpack (expected at least 2, got 1)',
+        'not enough values to unpack (expected at least 2, got 1)'
+    ]);
+});

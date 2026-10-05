@@ -75,7 +75,7 @@ reste de cette configuration et ce que chaque ligne apporte.
 npm install
 npm run dev
 
-npm test             # 1 603 tests : sémantique, props, réactivité, surface Svelte
+npm test             # 1 606 tests : sémantique, props, réactivité, surface Svelte
 npm run test:quiet   # la sortie de la suite : un run vert ne doit rien dire
 npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
@@ -537,11 +537,16 @@ moins coûteuse que le walrus d'à côté :
 
 Chaque clé est lue par la règle du point : un dict et une instance se dépaquettent
 de la même façon, et une clé que la ligne n'a pas lève l'`AttributeError` que
-lève `{cat.nmae}` ; `name="anon"` lui donne plutôt un défaut, et `...rest` est le
-dict des clés non nommées : les autres entrées d'un mapping, comme `{**row}` les
-lit, les autres attributs d'une instance, comme `vars(row)` les lit, les autres
-propriétés propres d'un objet JavaScript, comme Svelte les lit. L'alternative
-épelle deux fois la même chose : `{cat.id}`, `{cat.name}`.
+lève `{cat.nmae}` ; `name="anon"` lui donne plutôt un défaut, et `**rest` est le
+dict des clés non nommées, comme dans un motif de mapping d'un `match` : les
+autres entrées d'un mapping, comme `{**row}` les lit, les autres attributs d'une
+instance, comme `vars(row)` les lit, les autres propriétés propres d'un objet
+JavaScript, comme Svelte les lit. L'alternative épelle deux fois la même chose :
+`{cat.id}`, `{cat.name}`.
+
+Par position aussi, une cible est celle de Python : `[first, *others]` fait
+d'`others` une liste, où que soit l'étoile, comme `first, *others = row`. `...`
+est l'Ellipsis de Python, à laquelle rien ne s'affecte : `...rest` est refusé.
 
 ## Composition
 
@@ -1497,7 +1502,7 @@ part jamais.
 
 ## État
 
-Validé par `npm test`, 1 603 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 1 606 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;

@@ -5360,6 +5360,23 @@ export function restOf(row, taken) {
     return out;
 }
 
+// `[first, *others, last]` in a pattern: the row unpacked as Python unpacks a
+// starred target, by the engine's own unpacking, `before` names, the starred
+// one, `after` names. The starred name is a list, and a row too short or not
+// iterable raises what Python raises. What comes back is the values in order,
+// which the block's brackets take apart.
+export function unpackStarred(row, before, after) {
+    const $B = globalThis.__BRYTHON__;
+    const values = $B.unpacker(row, before + 1 + after, true, after);
+    const out = [];
+
+    for (let i = 0; i < before; i++) out.push(values.read_one());
+    out.push(values.read_rest());
+    for (let i = 0; i < after; i++) out.push(values.read_one());
+
+    return $B.$list(out);
+}
+
 // `otherwise`, when given, is a callable whose result stands for a name that is
 // neither: the default of a key in a pattern, `{#each rows as {id=0}}`.
 export function readAttr(target, name, otherwise) {

@@ -852,6 +852,10 @@ function parameterPattern(part, call, names, tuple, unpack) {
     // stays, which JavaScript reads the same way.
     if (trimmed === '') return part;
 
+    // A rest where none can stand, or Python's Ellipsis, which is no target:
+    // the brackets and the braces that unpack a row take their rest themselves.
+    if (trimmed.startsWith('*') || trimmed.startsWith('...')) unpack.refuse(misplaced(trimmed));
+
     const close = CLOSES[trimmed[0]] === undefined ? -1 : closingPair(trimmed, 0);
 
     // A pattern: the same question, one level down, for each of its elements.
@@ -864,9 +868,14 @@ function parameterPattern(part, call, names, tuple, unpack) {
     }
 
     if (close === trimmed.length - 1) {
-        const inside = arguments_(trimmed.slice(1, close))
-            .map((one) => parameterPattern(one, call, names, tuple, unpack))
-            .join(',');
+        const parts = arguments_(trimmed.slice(1, close));
+        const positional = trimmed[0] === '[' || (tuple && trimmed[0] === '(');
+
+        if (positional && parts.some((one) => one.trim().startsWith('*'))) {
+            return `${lead}${unpackStarred(parts, call, names, tuple, unpack)}${tail}`;
+        }
+
+        const inside = parts.map((one) => parameterPattern(one, call, names, tuple, unpack)).join(',');
 
         const [opened, closed] =
             tuple && trimmed[0] === '(' ? ['[', ']'] : [trimmed[0], trimmed[close]];
@@ -882,14 +891,75 @@ function parameterPattern(part, call, names, tuple, unpack) {
 // The name a row unpacked by key stands under, inside the block that unpacks it.
 const UNPACKED = '__unpacked_';
 
-// What one declaration list unpacks by key, gathered while its patterns are
-// walked: the aliases standing where the braces stood, in order, and for each
-// key the `{@const}` that reads it.
-const unpacker = () => {
+// What one declaration list unpacks by key or around a starred name, gathered
+// while its patterns are walked: the aliases standing where the braces or the
+// brackets stood, in order, and the `{@const}` lines that read them. `refuse`
+// throws a pattern's refusal at the block that declares it.
+const unpacker = (refuse) => {
     let next = 0;
 
-    return { alias: () => `${UNPACKED}${next++}`, aliases: [], consts: [], bound: new Set() };
+    return { alias: () => `${UNPACKED}${next++}`, aliases: [], consts: [], bound: new Set(), refuse };
 };
+
+// A target is Python's: `**rest` takes the rest of a row by key, `*rest` the
+// rest by position, and `...` is the Ellipsis, which nothing is assigned to.
+const ELLIPSIS =
+    "cannot assign to Ellipsis: `...` is Python's Ellipsis, not a rest. The rest of a row " +
+    'is `**rest` by key and `*rest` by position';
+
+// What a rest written where none can stand is told, in Python's words where
+// Python has some.
+const misplaced = (text) =>
+    text.startsWith('...')
+        ? ELLIPSIS
+        : text.startsWith('**')
+          ? `\`${text}\` takes the rest of a row by key, last inside the braces that unpack it: \`{id, ${text}}\``
+          : `starred assignment target must be in a list or tuple: \`[first, ${text}]\``;
+
+// `[first, *others, last]`: a row unpacked by position around a starred name,
+// which Python's unpacking does and JavaScript's cannot, its rest being last or
+// nowhere, and an array. So the brackets become one name, the row, and the
+// targets one `{@const}` reading `__unpack(row, before, after)`: the engine's
+// own unpacking of a starred target, the starred name a list, and its errors
+// for a row too short or not iterable.
+function unpackStarred(parts, call, names, tuple, unpack) {
+    const alias = unpack.alias();
+    const before = names.length;
+    const elements = parts.filter((one) => one.trim() !== '');
+    const starred = elements.filter((one) => one.trim().startsWith('*'));
+    const at = elements.findIndex((one) => one.trim().startsWith('*'));
+    const rest = elements[at].trim().slice(1).trim();
+
+    const double = starred.find((one) => one.trim().startsWith('**'));
+
+    if (double !== undefined) {
+        const name = double.trim().slice(2).trim();
+
+        unpack.refuse(`\`**${name}\` takes the rest of a row by key; by position the rest is \`*${name}\``);
+    }
+    if (starred.length > 1) unpack.refuse('multiple starred expressions in assignment');
+    if (atTopLevel(rest, (i) => rest[i] === '=') !== -1) unpack.refuse(`a rest takes no default: \`*${rest}\``);
+
+    unpack.aliases.push(alias);
+
+    // The slot is taken before the targets are walked, since a pattern there
+    // reads the value this one binds.
+    const slot = unpack.consts.length;
+    unpack.consts.push(null);
+
+    const targets = elements.map((one, i) => parameterPattern(i === at ? rest : one, call, names, tuple, unpack).trim());
+
+    unpack.consts[slot] = {
+        target: `[${targets.join(', ')}]`,
+        read: `__unpack(${alias}, ${at}, ${elements.length - at - 1})`,
+        source: '',
+        lazy: false
+    };
+
+    for (const one of names.slice(before)) unpack.bound.add(one);
+
+    return alias;
+}
 
 // `{id, name}` in a pattern: a row unpacked by key, which is the dialect's
 // shorter spelling of `{row.id}` and `{row.name}`, so each key is read by the
@@ -902,21 +972,28 @@ const unpacker = () => {
 // block reading `__getattr(row, key)`. A default is read only when the key is
 // missing, as Svelte reads it on `undefined`; a key may be computed,
 // `{[field.upper()]: value}`; the target may be a pattern itself; and
-// `...rest` is the dict of the keys not named, as `**rest` is in a `match`.
+// `**rest` is the dict of the keys not named, as it is in a `match`, a name and
+// last.
 function unpackByKey(inside, call, names, tuple, unpack) {
     const alias = unpack.alias();
     const before = names.length;
     const keys = [];
+    const entries = arguments_(inside)
+        .map((one) => one.trim())
+        .filter((one) => one !== '');
 
     unpack.aliases.push(alias);
 
-    for (const entry of arguments_(inside)) {
-        const text = entry.trim();
+    for (const [index, text] of entries.entries()) {
+        if (text.startsWith('**')) {
+            const target = text.slice(2).trim();
 
-        if (text === '') continue;
-
-        if (text.startsWith('...')) {
-            const target = text.slice(3).trim();
+            if (!new RegExp(`^${NAME}$`, 'u').test(target)) {
+                unpack.refuse(`\`**\` takes a name, the dict of the keys not named: \`**rest\`, not \`${text}\``);
+            }
+            if (index !== entries.length - 1) {
+                unpack.refuse(`\`${text}\` stands last, as in a mapping pattern: \`{id, ${text}}\``);
+            }
 
             unpack.consts.push({
                 target,
@@ -926,6 +1003,10 @@ function unpackByKey(inside, call, names, tuple, unpack) {
             });
             names.push(...identifiers(target));
             continue;
+        }
+
+        if (text.startsWith('*')) {
+            unpack.refuse(`\`${text}\` takes the rest of a row by position; by key the rest is \`*${text}\``);
         }
 
         // `id`, `id=0`, `id: target` or `id: target=0`: the default belongs to
@@ -940,7 +1021,7 @@ function unpackByKey(inside, call, names, tuple, unpack) {
 
         // A computed key is evaluated once, into a name of its own beside the
         // row's, and that value is both the key the field is read by and the
-        // one `...rest` leaves out: evaluated twice, a key that answers
+        // one `**rest` leaves out: evaluated twice, a key that answers
         // otherwise the second time read one field and left out another.
         const held = computed ? unpack.alias() : null;
 
@@ -1004,13 +1085,14 @@ const boundBy = (parts, tuple, unpack) => {
 // inside that scope. Every construct that binds names in the markup goes
 // through here: a snippet's parameters, an `{#each}` target, and the value an
 // `{#await}` hands to `then` or `catch`. `consts` is what the block opens with.
-const destructured = (text, declare, call, tuple) => {
+// `refuse` throws a refusal at the block.
+const destructured = (text, declare, call, tuple, refuse) => {
     const parts = arguments_(text.trim());
-    const first = unpacker();
+    const first = unpacker(refuse);
 
     declare(boundBy(parts, tuple, first), first.aliases);
 
-    const unpack = unpacker();
+    const unpack = unpacker(refuse);
     const pattern = parts.map((part) => parameterPattern(part, call, [], tuple, unpack)).join(',');
 
     return { pattern, unpack, consts: unpacked(unpack, call) };
@@ -1021,7 +1103,7 @@ const destructured = (text, declare, call, tuple) => {
 // rewritten with each default compiled as the Python expression it is. The
 // split is at top level, so a comma or an `=` inside a string or a call belongs
 // to the default and not to the list.
-function snippetParameters(trimmed, declare, call) {
+function snippetParameters(trimmed, declare, call, refuse) {
     const open = trimmed.indexOf('(');
     const head = open === -1 ? trimmed : trimmed.slice(0, open);
     const close = open === -1 ? -1 : closingPair(trimmed, open);
@@ -1036,7 +1118,7 @@ function snippetParameters(trimmed, declare, call) {
         return `${trimmed.replace(/^#snippet\s*/, '')}}`;
     }
 
-    const { pattern, consts } = destructured(trimmed.slice(open + 1, close), declare, call, false);
+    const { pattern, consts } = destructured(trimmed.slice(open + 1, close), declare, call, false, refuse);
 
     return `${name}(${pattern})${trimmed.slice(close + 1)}}${consts}`;
 }
@@ -1086,7 +1168,7 @@ function trailingKey(text) {
     return null;
 }
 
-function eachBlock(trimmed, declare, call) {
+function eachBlock(trimmed, declare, call, refuse) {
     const head = trimmed.match(/^#each\s+([\s\S]+)$/);
 
     if (!head) return `{${trimmed}}`;
@@ -1133,7 +1215,7 @@ function eachBlock(trimmed, declare, call) {
     // expressions. Converted, it would be a fresh list each render, its floats
     // numbers, and a row would have no identity left to key by.
     const iterable = call(body.slice(0, at), '__seq', undefined, 'python');
-    const { pattern, unpack, consts } = destructured(keyed ? keyed[0] : named, declare, call, true);
+    const { pattern, unpack, consts } = destructured(keyed ? keyed[0] : named, declare, call, true, refuse);
 
     return `{#each ${iterable} as ${pattern}` + (keyed ? ` (${eachKey(keyed[1], unpack, call)})` : '') + `}${consts}`;
 }
@@ -1492,6 +1574,11 @@ function walk(markup, collect, onPython, seed, record, where) {
         }
 
         return error;
+    };
+
+    // A pattern a block declares and nothing can bind, told at the block.
+    const refusePattern = (message) => {
+        throw refuse(new SyntaxError(`svelthon — ${message}${said()}`));
     };
 
     // The block names an expression actually reads, rather than every name in
@@ -2217,7 +2304,7 @@ function walk(markup, collect, onPython, seed, record, where) {
                 push([]);
                 out += `{#if ${condition}}`;
             } else if (opens('each')) {
-                out += eachBlock(trimmed, push, call);
+                out += eachBlock(trimmed, push, call, refusePattern);
             } else if (opens('key')) {
                 // Svelte re-creates the block when the value changes, by
                 // identity: `__key` keeps it for a container and an instance,
@@ -2248,7 +2335,7 @@ function walk(markup, collect, onPython, seed, record, where) {
                     push([]);
                     out += `{#await ${promise}${tail === null ? '' : ` ${tail[1]}`}}`;
                 } else {
-                    const { pattern, consts } = destructured(tail[2], push, call, false);
+                    const { pattern, consts } = destructured(tail[2], push, call, false, refusePattern);
 
                     out += `{#await ${promise} ${tail[1]} ${pattern}}${consts}`;
                 }
@@ -2285,7 +2372,8 @@ function walk(markup, collect, onPython, seed, record, where) {
                         push(names, aliases);
                         scopes[scopes.length - 1].parameters = new Set([...names, ...aliases]);
                     },
-                    call
+                    call,
+                    refusePattern
                 )}`;
             } else {
                 throw refuse(unknownTag(trimmed, 'block', BLOCKS, said()));
@@ -2319,7 +2407,7 @@ function walk(markup, collect, onPython, seed, record, where) {
             if (elseIf) {
                 out += `{:else if ${condition}}`;
             } else if (clause !== null && ['then', 'catch'].includes(clause.name) && clause.rest.trim()) {
-                const { pattern, consts } = destructured(clause.rest, rebind, call, false);
+                const { pattern, consts } = destructured(clause.rest, rebind, call, false, refusePattern);
 
                 out += `{:${clause.name} ${pattern}}${consts}`;
             } else if (clause !== null && CLAUSES.includes(clause.name)) {

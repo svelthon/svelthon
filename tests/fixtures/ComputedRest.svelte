@@ -8,7 +8,7 @@
 rows = [{"first": 1, "second": 2, "third": 3}]
 </script>
 
-{#each rows as {[key()]: selected, ...rest}}
+{#each rows as {[key()]: selected, **rest}}
     <p data-k="selected">{selected}</p>
     <p data-k="rest">{",".join(rest)}</p>
 {/each}

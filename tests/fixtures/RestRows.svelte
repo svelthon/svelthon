@@ -1,5 +1,5 @@
 <script lang="python">
-# `...rest` over every row the fields are read from: a dict, a Python instance,
+# `**rest` over every row the fields are read from: a dict, a Python instance,
 # a mapping by protocol, and the two rows a JavaScript library hands over.
 importjs {records} from './rest_rows.js'
 
@@ -28,7 +28,7 @@ rows = [
 </script>
 
 {#each rows as [kind, row]}
-    {#each [row] as {first: selected, ...rest}}
+    {#each [row] as {first: selected, **rest}}
         <p data-k={kind}>{selected}|{",".join(rest)}</p>
     {/each}
 {/each}

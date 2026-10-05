@@ -136,6 +136,7 @@ than by a build-time check, and going upstream retires none of them:
 | the label of a debug field followed by a conversion, `f"before:{x=!s}"`, starts at the field and not at the f-string's second character (branch `fstring-debug-conversion-label`) | `tests/vendor.test.js` |
 | the label of a debug field holding an f-string, `f"{f'{x=}'=}"`, is the whole field: the inner f-string no longer leaves the start of its own field behind (branch `fstring-debug-nested-label`) | the same |
 | the label's node ends where its text does, past the `=` and the spaces after it, as CPython places it, where it ran a character into the `!`, the `:` or the `}` (branch `fstring-debug-label-end`) | the same |
+| a row too short for a starred target says it needs as many values as the names beside the star, `first, *middle, last = [1]` at least 2, where it counted the names after the star twice (branch `starred-unpack-expected-count`) | the same, and `tests/rest-targets.test.js`, whose template unpacks with the engine's own routine |
 
 `scripts/browser-check.sh` covers the DOM node path as well, which is where
 identity across the boundary is observable.

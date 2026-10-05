@@ -30,7 +30,7 @@ rows = [
 </script>
 
 {#each rows as [kind, row]}
-    {#each [row] as {first: selected, ...rest}}
+    {#each [row] as {first: selected, **rest}}
         <p data-k={kind}>{selected}|{",".join(sorted(rest))}</p>
     {/each}
 {/each}

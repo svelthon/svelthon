@@ -78,7 +78,7 @@ test('the rest of a JavaScript row reads each property once, as JavaScript does'
     }
 });
 
-// `...rest` called `items()` on every row, so a Python instance or a JavaScript
+// `**rest` called `items()` on every row, so a Python instance or a JavaScript
 // object, whose fields the pattern reads, stopped the mount with an
 // AttributeError as soon as a rest was added. It reads every row the fields are
 // read from: a mapping by `keys()` and `__getitem__`, as Python's `{**row}`
@@ -146,7 +146,7 @@ test('the rest of an instance with slots and a `__dict__` is what `vars` holds',
 });
 
 // A computed key was evaluated twice, once to read the field and once to leave
-// it out of `...rest`: a key that answers otherwise the second time read
+// it out of `**rest`: a key that answers otherwise the second time read
 // `first` and left out `second`, so one field was in both and one in neither.
 // Svelte's own unpacking calls the key as often, and its field and its rest
 // still split the row; so must ours.

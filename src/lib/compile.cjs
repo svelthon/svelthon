@@ -1419,6 +1419,7 @@ const RUNTIME = {
     group: '__group',
     readAttr: '__getattr',
     restOf: '__rest',
+    unpackStarred: '__unpack',
     writeAttr: '__setattr',
     writeItem: '__setitem'
 };
@@ -2842,7 +2843,7 @@ function preamble(c) {
             ...(c.effects.length || c.lifecycle('on_mount') ? ['pyTeardown'] : []),
             // Three that keep the spelling the markup pass emits, and the read
             // half of the dot, which `templateDots` writes.
-            'group', 'readAttr', 'restOf', 'writeAttr', 'writeItem',
+            'group', 'readAttr', 'restOf', 'unpackStarred', 'writeAttr', 'writeItem',
             ...(c.templateLine === undefined ? [] : ['templateFrom']),
             ...(c.jsImported.length ? ['readOnlyImport'] : [])
         ])} } from 'svelthon/runtime';`,
@@ -3159,6 +3160,7 @@ function injectedBindings(c) {
                   `__bind(__proto, '__assign', () => __assign);`,
                   `__bind(__proto, '__getattr', () => __getattr);`,
                   `__bind(__proto, '__rest', () => __rest);`,
+                  `__bind(__proto, '__unpack', () => __unpack);`,
                   `__bind(__proto, '__setattr', () => __setattr);`,
                   `__bind(__proto, '__setitem', () => __setitem);`
               ]),
