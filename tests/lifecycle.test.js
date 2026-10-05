@@ -4,6 +4,7 @@ import Lifecycle from './fixtures/Lifecycle.svelte';
 import ConditionalLifecycleHost from './fixtures/ConditionalLifecycleHost.svelte';
 import BranchedLifecycle from './fixtures/BranchedLifecycle.svelte';
 import UnboundLifecycle from './fixtures/UnboundLifecycle.svelte';
+import AssignedLifecycle from './fixtures/AssignedLifecycle.svelte';
 
 // on_mount / on_destroy by naming convention, backed by a single $effect: the
 // body runs once the DOM is in place, the cleanup when the component goes away.
@@ -105,6 +106,17 @@ describe('a hook is the value its name holds', () => {
         await unmount(app);
 
         expect(log).toEqual(gone);
+    });
+
+    // Bound by `=`, the hook was never called: only a `def` was read as one.
+    test('bound by `=`: runs once, its cleanup before on_destroy', async () => {
+        const { app, log } = mounted(AssignedLifecycle);
+
+        expect(log).toEqual(['mount']);
+
+        await unmount(app);
+
+        expect(log).toEqual(['mount', 'cleanup', 'destroy']);
     });
 
     test('a hook bound to None is called, and says so', () => {

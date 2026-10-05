@@ -8,6 +8,14 @@ import { mount, unmount, flushSync } from './mounted.js';
 import ImportedMarkers from './fixtures/ImportedMarkers.svelte';
 import ImportedMarkersNative from './fixtures/ImportedMarkersNative.svelte';
 import { seen } from './fixtures/imported_markers.js';
+import './fixtures/ImportedInspectElement.svelte';
+
+// The props a custom element observes are read by a second pass over the
+// script, which did not know the imports: it took `start: int = inspect(41)`
+// for an inspection where the compile took it for a prop.
+test('an element observes a prop whose default calls an imported inspect', () => {
+    expect(customElements.get('imported-inspect-element').observedAttributes).toEqual(['start']);
+});
 
 beforeEach(() => {
     seen.length = 0;

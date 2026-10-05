@@ -2174,12 +2174,22 @@ function surface(body, theirs = new Set()) {
         return true;
     };
 
+    // `total: int = derived(lambda: …)`, a marker under an annotation: what
+    // TypeScript's `let total: number = $derived(…)` is to Svelte, a derived
+    // with a type. The annotation describes the value and the marker says what
+    // the name is, so it is read as the assignment it annotates, and not as a
+    // prop whose default would be the lambda itself.
+    const annotatedMarker = (node) =>
+        node instanceof $B.ast.AnnAssign &&
+        node.target instanceof $B.ast.Name &&
+        MARKERS.some((one) => marked(node, one));
+
     const visit = (statements) => {
         for (const node of statements) {
             statement = node.lineno;
 
-            if (node instanceof $B.ast.Assign) {
-                for (const target of node.targets) {
+            if (node instanceof $B.ast.Assign || annotatedMarker(node)) {
+                for (const target of node.targets ?? [node.target]) {
                     // `__all__` and `__js__` are read off the AST by
                     // `declaredExports` and `declaredJsImports`, and read is all
                     // they are for. Left in the buckets they became module
@@ -3871,10 +3881,14 @@ const ELEMENT_TYPES = {
 // does not parse declares nothing here: the compile says why.
 function elementProps(src) {
     let tree;
+    let theirs;
 
     try {
-        const body = takeArrows(takeImportJs($B.unindent(src), '<props>', 0, true).source, '<props>', 0, true);
+        const lifted = takeImportJs($B.unindent(src), '<props>', 0, true);
+        theirs = new Set(lifted.imports.flatMap((one) => one.entries.map((e) => e.local)));
+        const body = takeArrows(lifted.source, '<props>', 0, true, theirs);
         tree = $B._PyPegen.run_parser(new $B.Parser(body, '<props>', 'file'));
+        for (const one of declaredJsImports(tree.body, '<props>')) for (const name of one.names) theirs.add(name);
     } catch {
         return [];
     }
@@ -3900,7 +3914,7 @@ function elementProps(src) {
 
     annotations(tree.body);
 
-    const { props, bindables } = surface(tree.body);
+    const { props, bindables } = surface(tree.body, theirs);
 
     return [...props, ...bindables].map((name) => ({ name, type: types.get(name) }));
 }
