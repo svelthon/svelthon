@@ -912,16 +912,20 @@ const newlines = (text) => text.split('\n').length - 1;
 // hold one too. A text that does not parse is handed back whole, and the
 // module's own parse then says what is wrong with it, at its line.
 function firstArgument(text) {
+    const call = `f(${text})`;
     let first;
 
     try {
-        first = $B._PyPegen.run_parser(new $B.Parser(`f(${text})`, '<arguments>', 'file')).body[0].value.args[0];
+        first = $B._PyPegen.run_parser(new $B.Parser(call, '<arguments>', 'file')).body[0].value.args[0];
     } catch {
         return [text.trim(), ''];
     }
 
-    // The columns are counted in characters on the one line, past `f(`.
-    const end = first.end_col_offset - 2;
+    // Where the first argument ends, by its line and its column, since a call
+    // laid out by a formatter puts it on a line of its own; past `f(`.
+    const starts = [0];
+    for (let i = 0; i < call.length; i++) if (call[i] === '\n') starts.push(i + 1);
+    const end = starts[first.end_lineno - 1] + first.end_col_offset - 2;
 
     return [text.slice(0, end).trim(), text.slice(end).replace(/^\s*,/, '').trim()];
 }
