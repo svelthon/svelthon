@@ -187,6 +187,72 @@ describe('each half keeps its own project', () => {
     });
 });
 
+// And a module's name was read from the directory of the moment: after a change
+// of directory, editing a file of the plugin's project invalidated nothing, and
+// the page went on serving the Python it had. The name is read from the
+// project of the half that asks, as the key it is filed under. Witness: the same
+// edit without the change of directory.
+describe('an edit reaches its module, whatever the process is in', () => {
+    const graph = () => {
+        const invalidated = [];
+
+        return {
+            invalidated,
+            moduleGraph: { getModuleById: (id) => ({ id }), invalidateModule: (mod) => invalidated.push(mod.id) }
+        };
+    };
+    const project = (name) => {
+        const root = join(temporary, name);
+        const filename = join(root, 'src', 'Card.svelte');
+        const source = `<script lang="python">\nword = "${name}"\n</script>\n<p>{word}</p>\n`;
+
+        mkdirSync(join(root, 'src'), { recursive: true });
+        writeFileSync(filename, source);
+        writeFileSync(join(root, 'src', 'store.py'), `__all__ = ["n"]\nn = 1\n`);
+        return { root, filename, source };
+    };
+
+    test.for([[false], [true]])('a component, moved: %s', async ([moved]) => {
+        const original = process.cwd();
+        const [first, second] = [project(`edit-a-${moved}`), project(`edit-b-${moved}`)];
+
+        try {
+            process.chdir(first.root);
+            const plugin = svelthon();
+            const { code } = await preprocess(first.source, [python()], { filename: first.filename });
+            const id = code.match(/virtual:svelthon\/\w+/)[0];
+
+            if (moved) process.chdir(second.root);
+            const environment = graph();
+            plugin.hotUpdate.call({ environment }, { file: first.filename, modules: [] });
+
+            expect(environment.invalidated).toContain('\0' + id);
+        } finally {
+            process.chdir(original);
+        }
+    });
+
+    test.for([[false], [true]])('a .py, moved: %s', ([moved]) => {
+        const original = process.cwd();
+        const [first, second] = [project(`store-a-${moved}`), project(`store-b-${moved}`)];
+        const file = join(first.root, 'src', 'store.py');
+
+        try {
+            process.chdir(first.root);
+            const plugin = svelthon();
+            const id = String(plugin.load.call({ addWatchFile() {} }, file)).match(/virtual:svelthon\/\w+/)[0];
+
+            if (moved) process.chdir(second.root);
+            const environment = graph();
+            plugin.hotUpdate.call({ environment }, { file, modules: [] });
+
+            expect(environment.invalidated).toContain('\0' + id);
+        } finally {
+            process.chdir(original);
+        }
+    });
+});
+
 describe('two versions of one file preprocessed at once', () => {
     const filename = join(temporary, 'Same.svelte');
     const first = '<script lang="python">\nalpha = 1\n</script>\n<p>{alpha + 1}</p>\n';

@@ -61,11 +61,14 @@ describe('a record as an object and as a dict', () => {
     });
 
     test('a dict spreads into a child as props', () => {
-        // An object does not: its attributes live under a private symbol, so
-        // `{...record}` finds no enumerable property and the child falls back on
-        // its defaults. `py.spread` could read the instance dict — the runtime
-        // already does exactly that in `plainData` — and this is the debt.
         expect(setup().text('spread-dic')).toBe('703 Making the GIL Optional 2023');
+    });
+
+    // And an object: its attributes lived under a private symbol, so the spread
+    // found none and the child fell back on its defaults. A spread takes what
+    // `**rest` takes of an instance, its attributes.
+    test('and so does an object', () => {
+        expect(setup().text('spread-obj')).toBe(setup().text('spread-dic'));
     });
 });
 

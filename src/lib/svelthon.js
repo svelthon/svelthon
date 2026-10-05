@@ -43,8 +43,12 @@ const claimed = (globalThis[Symbol.for('svelthon.claimed')] ??= new Map());
 // The name alone, for a caller that is only asking a question. `hotUpdate` runs
 // for every file the dev server sees change, component or not, and all it wants
 // to know is whether a module of that name exists. Asking must not claim.
-const mangle = (filename) =>
-    relative(process.cwd(), filename || 'Component').replace(/\W/g, '_');
+//
+// The path is read from `root`, the project of the half that asks, the one its
+// generated modules are filed under: read from the directory of the moment, a
+// change of directory renamed every module, and an edit invalidated none.
+const mangle = (filename, root = process.cwd()) =>
+    relative(root, filename || 'Component').replace(/\W/g, '_');
 
 // The name, claimed. Must be unique across the project *and* a valid JS
 // identifier, since Brython derives its namespace binding (`locals_<name>`) from
@@ -68,12 +72,12 @@ const mangle = (filename) =>
 // last condition reads the disk: **a first claimant that is no longer there is
 // not a collision, it is a rename.** The refusal keeps the case it is for, two
 // files that both exist.
-export const nameFor = (filename) => {
-    const path = relative(process.cwd(), filename || 'Component');
-    const name = mangle(filename);
+export const nameFor = (filename, root = process.cwd()) => {
+    const path = relative(root, filename || 'Component');
+    const name = mangle(filename, root);
     const first = claimed.get(name);
 
-    if (first !== undefined && first !== path && existsSync(first)) {
+    if (first !== undefined && first !== path && existsSync(resolve(root, first))) {
         throw new SyntaxError(
             `svelthon — \`${path}\` and \`${first}\` both compile to the module name ` +
                 `\`${name}\`, so one would silently run the other's Python. Rename ` +
@@ -138,7 +142,7 @@ function claimPython(path) {
 // Refused here, where both facts are known. The rule this project already holds
 // is that a construct it cannot handle is refused rather than passed through as
 // JavaScript, and this is one: the cause is upstream, the silence would be ours.
-function refuseSpacedClose(closing, filename) {
+function refuseSpacedClose(closing, filename, root) {
     if (closing === '</script>') return;
 
     throw new SyntaxError(
@@ -146,7 +150,7 @@ function refuseSpacedClose(closing, filename) {
             `preprocessor only recognises \`</script>\`: the block never reaches it, so the ` +
             `Python is handed to the compiler as JavaScript and every name it declares is ` +
             `missing at run time. Close it with \`</script>\` ` +
-            `(${relative(process.cwd(), filename || 'Component')})`
+            `(${relative(root, filename || 'Component')})`
     );
 }
 
@@ -367,7 +371,7 @@ export function python(options = {}) {
 
             if (declaring === null) return;
 
-            refuseSpacedClose(declaring.closing, filename);
+            refuseSpacedClose(declaring.closing, filename, root);
 
             // The body starts after the tag's `>`, which a tag written over two
             // lines puts on the second line, and which a quoted value may hold
@@ -424,15 +428,15 @@ export function python(options = {}) {
                     `svelthon — a <script module> cannot hold Python; state shared ` +
                         `by every instance belongs in a .svelte.py module, which a ` +
                         `component imports like any other ` +
-                        `(${relative(process.cwd(), filename || 'Component')})`
+                        `(${relative(root, filename || 'Component')})`
                 );
             }
 
-            const name = nameFor(filename);
+            const name = nameFor(filename, root);
             const { script, module, map, imports } = compile(
                 content,
                 name,
-                relative(process.cwd(), filename || 'Component'),
+                relative(root, filename || 'Component'),
                 {
                     ...about,
                     // The whole file, so a debugger opens the .svelte itself.
@@ -580,9 +584,9 @@ const compiledStores = new Map();
 // which its module name and the import of that module are made of: one file
 // shared by two projects is `../shared/x.py` from one and `../../shared/x.py`
 // from the other, and each project imports the module of its own path.
-function compilePython(file, path) {
+function compilePython(file, path, root = process.cwd()) {
     const stamp = statSync(file).mtimeMs;
-    const shown = relative(process.cwd(), file);
+    const shown = relative(root, file);
     const cached = compiledStores.get(file);
     const found = (imports) => imports.map((mod) => moduleFile(mod, dirname(file), path) ?? '').join('\n');
     if (
@@ -596,7 +600,7 @@ function compilePython(file, path) {
 
     const source = readFileSync(file, 'utf8');
     const mode = isReactive(file) ? { store: true } : { plain: true };
-    const result = compile(source, nameFor(file), shown, {
+    const result = compile(source, nameFor(file, root), shown, {
         ...mode,
         sourceContent: source,
         resolves: (mod) => moduleKind(mod, dirname(file), path)
@@ -771,8 +775,8 @@ export function svelthon(options = {}) {
             if (!id.endsWith('.py')) return;
 
             const file = id;
-            const name = nameFor(file);
-            const { script, module, map, imports } = compilePython(file, searchPath);
+            const name = nameFor(file, root);
+            const { script, module, map, imports } = compilePython(file, searchPath, root);
 
             // A `.py` may import another one, a route module reaching for its
             // data layer. Same prelude a component gets.
@@ -820,7 +824,7 @@ export function svelthon(options = {}) {
 
             // `mangle` and not `nameFor`: this hook sees every changed file in
             // the project and is only asking whether one of them is ours.
-            const name = mangle(file);
+            const name = mangle(file, root);
             if (!generated.has(key(virtualId(name)))) return;
 
             forget('\0' + virtualId(name));

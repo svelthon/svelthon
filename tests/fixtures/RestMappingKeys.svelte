@@ -58,7 +58,21 @@ class FieldKeys:
         return DATA[key]
 
 
+class Bag(dict):
+    pass
+
+
+class KeyedBag(dict):
+    def keys(self):
+        return ["first"]
+
+
+shadowed = Bag(first=10, tail=20)
+shadowed.keys = 3
+
 rows = [
+    ("dict, keys shadowed", shadowed),
+    ("dict, keys redefined", KeyedBag(first=10, tail=20)),
     ("method", Normal()),
     ("classmethod", ClassKeys()),
     ("staticmethod", StaticKeys()),

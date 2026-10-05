@@ -108,7 +108,9 @@ test('the rest of a row holds its other fields, for every kind of row', () => {
 // staticmethod or a property handing back a function, which `{**row}` calls
 // as a method, made the row an instance and its rest came out empty. It is
 // read as Python reads `row.keys` now. `python3`'s `{**row}` gives `10|tail`
-// for the five; a field `keys = 3` is the row's data, its attributes.
+// for the five; a field `keys = 3` is the row's data, its attributes. And a
+// dict keeping the dict's own iteration is its items, whatever `keys` says, as
+// CPython's `{**row}` reads it: `10|tail` for both subclasses.
 test('a mapping is known by its keys as Python reads them, descriptor bound', () => {
     const target = document.body.appendChild(document.createElement('div'));
     mount(RestMappingKeys, { target });
@@ -117,6 +119,8 @@ test('a mapping is known by its keys as Python reads them, descriptor bound', ()
     const found = Object.fromEntries([...target.querySelectorAll('p')].map((one) => [one.dataset.k, one.textContent]));
 
     expect(found).toEqual({
+        'dict, keys shadowed': '10|tail',
+        'dict, keys redefined': '10|tail',
         method: '10|tail',
         classmethod: '10|tail',
         staticmethod: '10|tail',

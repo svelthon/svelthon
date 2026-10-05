@@ -35,3 +35,18 @@ test.skipIf(!canSpawn)('a dropped callback bound to a string is collected', () =
     expect(out.same).toBe(true);
     expect(out.answer).toBe('HELD');
 });
+
+// A symbol's hash was kept in a Map that nobody emptied (branch `symbol-hash`),
+// so every symbol that once was the key of a dict, the rest of a JavaScript row
+// among them, stayed alive. Kept in a WeakMap now; the plain objects, which
+// carry their hash on themselves, are the control.
+test.skipIf(!canSpawn)('a symbol hashed as the key of a dropped dict is collected', () => {
+    const out = JSON.parse(
+        execFileSync(process.execPath, ['--expose-gc', 'tests/fixtures/symbol-retention.mjs'], { encoding: 'utf8' })
+    );
+
+    // The control keeps its last one, which the loop still reaches: the
+    // symbols are held to the same count, not to zero.
+    expect(out.objects).toBeLessThan(5);
+    expect(out.symbols).toBe(out.objects);
+});

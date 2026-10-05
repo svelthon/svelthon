@@ -77,7 +77,7 @@ rest of that configuration and what each line buys.
 npm install
 npm run dev
 
-npm test             # 1 618 tests: semantics, props, reactivity, Svelte surface
+npm test             # 1 622 tests: semantics, props, reactivity, Svelte surface
 npm run test:quiet   # the suite's own output: a green run must say nothing
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
@@ -526,8 +526,10 @@ key the row lacks raises the `AttributeError` that `{cat.nmae}` raises; `name="a
 gives it a default instead, and `**rest` is the dict of the keys not named, as
 in a mapping pattern of a `match`: a mapping's other entries, as `{**row}` reads
 them, an instance's other attributes, as `vars(row)` reads them, a JavaScript
-object's other own properties, as Svelte reads them. The alternative spells the
-same thing twice: `{cat.id}`, `{cat.name}`.
+object's other own properties, symbols included, as JavaScript's own rest reads
+them. One departure from Svelte follows: a symbol taken by a computed key is
+left out of the rest, where Svelte's unpacking, which leaves out `String(key)`,
+keeps it. The alternative spells the same thing twice: `{cat.id}`, `{cat.name}`.
 
 By position, a starred name is Python's: `[first, *others]` makes `others` a
 list, wherever the star stands, as `first, *others = row` does, and a row too
@@ -1490,7 +1492,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 1 618 tests as written (vitest reports more, one per
+Validated by `npm test`, 1 622 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;

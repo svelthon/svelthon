@@ -545,7 +545,7 @@ export const __pybridge = {
     spreadElement(value, event = (one) => pyEvent(one)) {
         if (value === null || value === undefined || typeof value !== 'object') return value;
 
-        const read = { ...value };
+        const read = spreadOf(value, (one) => one);
         const out = spreadOf(read, __pybridge.bound);
 
         for (const key of Object.keys(out)) {
@@ -562,12 +562,32 @@ export const __pybridge = {
 
 // A spread's copy, each value converted: a fresh object, as a JavaScript spread
 // of a `$state` proxy is, so Svelte's diff sees a dict mutated in place.
+//
+// **What is spread is the entries, each language's own.** A Python value is
+// what `**` takes of it in the markup (`starredEntries`), the rest of a row's
+// own rule: a mapping's entries as `{**value}` reads them, an instance's
+// attributes; each key written as the copy writes it (`propertyName`) and a
+// symbol kept as itself. A JavaScript object is its own enumerable properties,
+// symbols included, as JavaScript's `...` takes them. Copied as a JavaScript
+// object, a dict handed its child the engine's storage beside its keys, a key
+// that is not a string never arrived, and a mapping that is not a dict or an
+// instance arrived empty.
 function spreadOf(value, convert) {
     if (value === null || value === undefined || typeof value !== 'object') return value;
 
-    const out = { ...value };
+    const out = {};
 
-    for (const key of Object.keys(out)) out[key] = convert(out[key]);
+    if (quietPyType(value) === undefined) {
+        for (const key of Reflect.ownKeys(value)) {
+            if (Object.prototype.propertyIsEnumerable.call(value, key)) define(out, key, convert(value[key]));
+        }
+
+        return out;
+    }
+
+    for (const [key, one] of starredEntries(value)) {
+        define(out, typeof key === 'string' || typeof key === 'symbol' ? key : propertyName(key, out), convert(one));
+    }
 
     return out;
 }
@@ -5361,17 +5381,45 @@ export function restOf(row, taken) {
         return out;
     }
 
-    const cls = type ?? $B.get_class(row);
-    const keys =
-        $B.is_dict(row) || declares(cls, '__getitem__') !== $B.NULL ? $B.$getattr(row, 'keys', MISSING) : MISSING;
-    const mapping = keys !== MISSING && callable(keys);
-    const entries = mapping ? row : $B.$call(_b_.vars, row);
-
-    for (const key of $B.$call(_b_.list, $B.$call(mapping ? keys : $B.$getattr(entries, 'keys')))) {
-        if (!$B.$is_member(key, taken)) $B.$setitem(out, key, $B.$getitem(entries, key));
+    for (const [key, value] of starredEntries(row)) {
+        if (!$B.$is_member(key, taken)) $B.$setitem(out, key, value);
     }
 
     return out;
+}
+
+// What `**` takes of a Python value in the markup, a rest or a spread alike: a
+// mapping's entries, and otherwise an instance's attributes, `vars(value)`,
+// which raises where `vars` raises.
+const starredEntries = (value) => {
+    const entries = mappingEntries(value);
+
+    return entries === MISSING ? pyEntries(globalThis.__BRYTHON__.$call(_b_.vars, value)) : entries;
+};
+
+// The entries of a Python mapping as Python's own `{**row}` reads them, or
+// MISSING for a value that is no mapping: the one answer `**rest` and a spread
+// both ask for.
+//
+// A dict that keeps the dict's own iteration is its items, whatever a `keys`
+// written on it or on its class says, which is CPython's fast path. Any other
+// mapping is `row.keys()`, then `row[key]`: `keys` read once, as Python reads
+// `row.keys`, its descriptor bound, so a classmethod or a property handing back
+// a function counts as a method does. Asked only of a class declaring
+// `__getitem__`, so a field or a property called `keys` on any other object
+// stays its data and is never run.
+function mappingEntries(row) {
+    const $B = globalThis.__BRYTHON__;
+    const cls = quietPyType(row) ?? $B.get_class(row);
+
+    if ($B.is_dict(row) && declares(cls, '__iter__') === declares(_b_.dict, '__iter__')) return pyEntries(row);
+    if (declares(cls, '__getitem__') === $B.NULL) return MISSING;
+
+    const keys = $B.$getattr(row, 'keys', MISSING);
+
+    if (keys === MISSING || !callable(keys)) return MISSING;
+
+    return $B.$call(_b_.list, $B.$call(keys)).map((key) => [key, $B.$getitem(row, key)]);
 }
 
 // `[first, *others, last]` in a pattern: the row unpacked as Python unpacks a
