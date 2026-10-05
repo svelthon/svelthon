@@ -2162,39 +2162,40 @@ export function follow(value) {
     return value;
 }
 
-// A Python line as a line of the file. `lineOffset` is a number, the count of
-// lines before the `<script>` body, or that number with the ranges of Python
-// lines the template's functions occupy, since those are generated after the
-// body: a line in one of them is reported at the markup it stands for, and any
-// other line is the author's own.
-const inFile = (line, lineOffset) => {
-    if (typeof lineOffset === 'number') return line + lineOffset;
+// A Python line as a line of the file. `lines` is a number, the count of lines
+// before the `<script>` body, or that number with the ranges of Python lines
+// the template's functions occupy, since those are generated after the body: a
+// line in one of them is reported at the markup it stands for, and any other
+// line is the author's own.
+const inFile = (line, lines) => {
+    if (typeof lines === 'number') return line + lines;
 
-    const range = lineOffset.ranges.find(([from, to]) => line >= from && line <= to);
+    const range = lines.ranges.find(([from, to]) => line >= from && line <= to);
 
-    return range === undefined ? line + lineOffset.offset : range[2];
+    return range === undefined ? line + lines.offset : range[2];
 };
 
 // That offset, per file, as each component registers its own when its module
-// runs. A line belongs to the file its frame is in, and the caller does not
-// always know that file: a callback a library keeps is called with no
-// component around it, and published once for every caller, so it handed
-// `pyError` an offset of 0 and a component with markup above its `<script>`
-// reported its `raise` that many lines too high. A `.py` has no offset, and no
-// entry.
+// runs, and the one place a frame's line is placed from. A line belongs to the
+// file its frame is in, and the caller does not know that file: a callback a
+// library keeps is called with no component around it, and a handler a
+// component sets may be a `.py`'s function, which has no offset and no entry.
+// An offset handed in by the caller placed the first in its Python block and
+// the second as if it were the component's.
+//
+// Keyed by the path a component is shown by, relative to its project: one
+// project runs per runtime, whose Brython modules are named by that same path.
 const FILE_LINES = new Map();
 
 export const fileLines = (file, lines) => {
     FILE_LINES.set(file, lines);
-
-    return lines;
 };
 
 // A Brython exception reaching JavaScript carries no `message` and no `stack`,
 // so devtools and Vite's overlay show nothing at all: the text sits in the
 // Python object, where nothing JS looks. Fill both in, keeping the original
 // object so Python semantics upstream are untouched.
-export function pyError(error, where, lineOffset = 0) {
+export function pyError(error, where) {
     const $B = globalThis.__BRYTHON__;
 
     // One of ours, thrown by a template helper rather than by Python. It carries
@@ -2255,7 +2256,7 @@ export function pyError(error, where, lineOffset = 0) {
     const own = frames.filter((frame) => frame.file === home).at(-1);
     const deepest = frames.at(-1);
 
-    let at = own === undefined ? where : `${where}:${inFile(own.line, FILE_LINES.get(home) ?? lineOffset)}`;
+    let at = own === undefined ? where : `${where}:${inFile(own.line, FILE_LINES.get(home) ?? 0)}`;
     if (deepest !== undefined && deepest.file !== home) {
         at += `; raised in ${deepest.name}(), ${deepest.file}:${inFile(deepest.line, FILE_LINES.get(deepest.file) ?? 0)}`;
     }
@@ -2673,7 +2674,7 @@ const awaited = (value) => {
 // the handler appears to do nothing at all, silently. Brython has its own event
 // loop, so hand it over. `convert`, when given, is applied to the value the
 // coroutine returns, the conversion a synchronous result gets at the same site.
-export function schedule(result, where, lineOffset = 0, convert = undefined) {
+export function schedule(result, where, convert = undefined) {
     const $B = globalThis.__BRYTHON__;
     const aio = $B.imported['browser.aio'];
 
@@ -2701,7 +2702,7 @@ export function schedule(result, where, lineOffset = 0, convert = undefined) {
         (convert === undefined ? started(result) : started(result).then(convert)).then(
             resolve,
             (error) => {
-                const failure = pyError(error, where, lineOffset);
+                const failure = pyError(error, where);
                 reject(failure);
 
                 // An event handler's return value is dropped on the floor, so
@@ -3580,7 +3581,7 @@ function started(coroutine) {
     return run;
 }
 
-export function scheduleAsync(result, where, lineOffset = 0) {
+export function scheduleAsync(result, where) {
     const $B = globalThis.__BRYTHON__;
     const aio = $B.imported['browser.aio'];
 
@@ -3588,7 +3589,7 @@ export function scheduleAsync(result, where, lineOffset = 0) {
     if (!pyCoroutine(result)) return result;
 
     return started(result).catch((error) => {
-        throw pyError(error, where, lineOffset);
+        throw pyError(error, where);
     });
 }
 
@@ -3825,11 +3826,11 @@ const identified = (wrapper, name, arity) =>
 // And a `def` whose name no longer holds a Python callable once the module has
 // run, replaced by what a decorator returned or by a later assignment, is
 // published as that value, as `pyExport` publishes any other.
-export function pyDef(read, where, lineOffset = 0) {
+export function pyDef(read, where) {
     const value = read();
     const first = declared(value);
 
-    if (first === null) return pyExport(value, where, lineOffset);
+    if (first === null) return pyExport(value, where);
 
     return identified(
         (...args) => pyHandler(read())(...args),
@@ -3838,11 +3839,11 @@ export function pyDef(read, where, lineOffset = 0) {
     );
 }
 
-export function pyCall(fn, where, lineOffset = 0, arity = Infinity, named, convert = pyArg) {
+export function pyCall(fn, where, arity = Infinity, named, convert = pyArg) {
     const wrapper = (...args) => {
         try {
             const given = taken(args, arity, convert);
-            const result = scheduleAsync(fn(...given), where, lineOffset);
+            const result = scheduleAsync(fn(...given), where);
 
             // The result crosses under the same rule as an export, callbacks
             // included: a callable *returned by* an exported function is adapted
@@ -3867,11 +3868,11 @@ export function pyCall(fn, where, lineOffset = 0, arity = Infinity, named, conve
                 try {
                     return plainData(one, undefined, pyHandler);
                 } catch (error) {
-                    throw pyError(error, where, lineOffset);
+                    throw pyError(error, where);
                 }
             })();
         } catch (error) {
-            throw pyError(error, where, lineOffset);
+            throw pyError(error, where);
         }
     };
 
@@ -4191,7 +4192,7 @@ export const pyName = (value) => {
 // return value is dropped on the floor, so it goes through `schedule`, which
 // runs the coroutine and reports a failure nobody observed by throwing it rather
 // than leaving a rejected promise nobody will ever look at.
-export function pyEvent(value, lineOffset = 0) {
+export function pyEvent(value) {
     const found = declared(value);
 
     // Not a Python function, so there is nothing to wrap, and the value is on
@@ -4203,14 +4204,14 @@ export function pyEvent(value, lineOffset = 0) {
 
     const { fn: called, where, arity } = found;
 
-    // The offset is the number of lines before `<script lang="python">`, known
-    // only to the generated script: without it an error in a handler names a
-    // line counted from the tag rather than from the top of the file.
+    // The line of an error is placed by the file its frame is in (`fileLines`),
+    // which is not always the component setting the handler: `onclick={store.boom}`
+    // runs a `.py`'s function.
     return (...args) => {
         try {
-            return schedule(called(...taken(args, arity)), where, lineOffset);
+            return schedule(called(...taken(args, arity)), where);
         } catch (error) {
-            throw thrown(pyError(error, where, lineOffset));
+            throw thrown(pyError(error, where));
         }
     };
 }
@@ -4264,38 +4265,34 @@ export const invoke = (fn) => (typeof fn === 'function' ? fn() : globalThis.__BR
 // held weakly.
 const ATTACHED = new WeakMap();
 
-export function pyAttach(value, lineOffset = 0) {
+export function pyAttach(value) {
     const found = declared(value);
 
     if (found === null) return __pybridge.bound(value);
 
     const identity = pyHandler(value);
-    let byOffset = ATTACHED.get(identity);
-
-    if (byOffset === undefined) ATTACHED.set(identity, (byOffset = new Map()));
-
-    let attach = byOffset.get(lineOffset);
+    let attach = ATTACHED.get(identity);
 
     if (attach === undefined) {
         const { fn: called, where, arity } = found;
 
         attach = (...args) => {
             try {
-                return pyTeardown(called(...taken(args, arity)), where, lineOffset);
+                return pyTeardown(called(...taken(args, arity)), where);
             } catch (error) {
-                throw thrown(pyError(error, where, lineOffset));
+                throw thrown(pyError(error, where));
             }
         };
 
-        byOffset.set(lineOffset, attach);
+        ATTACHED.set(identity, attach);
     }
 
     return attach;
 }
 
-export function pyTeardown(value, where, lineOffset = 0) {
+export function pyTeardown(value, where) {
     if (pyCoroutine(value)) {
-        schedule(value, where, lineOffset);
+        schedule(value, where);
         return undefined;
     }
 
@@ -4371,7 +4368,7 @@ export function pyHandler(value) {
     // The arguments a JavaScript caller hands are converted the whole way, which
     // a framework calling with raw numbers needs beyond the scalars `pyArg`
     // converts, and only once trimmed to what the callable takes.
-    const wrapped = pyCall(found.fn, found.where, 0, found.arity, found.named ?? undefined, (one) =>
+    const wrapped = pyCall(found.fn, found.where, found.arity, found.named ?? undefined, (one) =>
         pyArg(inbound(one))
     );
 
@@ -4695,7 +4692,7 @@ export function liveExport(namespace, name, update) {
 // A value a module exports. A dict of functions, which is what SvelteKit's
 // `actions` is, becomes an object of *wrapped* functions, so a form action gets
 // the same boundary treatment as a `load()`. Anything else is plain data.
-export function pyExport(value, where, lineOffset = 0) {
+export function pyExport(value, where) {
     // A function published under a second name. The compiler hands the module's
     // `def`s over itself and its *values* here, and `alias = original` is a
     // value, which crosses as the function it is, an `async def` started.
@@ -4861,16 +4858,16 @@ export function pyBoundary(fn) {
 // `convert` null is for a value that goes back into Python rather than out to
 // the framework, and is handed back as it is: made a JavaScript number, a float
 // would come back to Python a `JSObject`.
-const running = (call, where, lineOffset, convert = pyNumbers) => {
+const running = (call, where, convert = pyNumbers) => {
     try {
         const result = call();
-        const value = schedule(result, where, lineOffset, convert ?? undefined);
+        const value = schedule(result, where, convert ?? undefined);
 
         // A coroutine's promise converts what it resolves to, above; the
         // promise itself is handed back as it is.
         return convert === null || value !== result ? value : convert(value);
     } catch (error) {
-        throw pyError(error, where, lineOffset);
+        throw pyError(error, where);
     }
 };
 
@@ -4896,7 +4893,7 @@ const returned = (value) => (callable(value) ? pyHandler(value) : pyNumbers(valu
 // reader follows and writes, rather than the Brython object with its internals.
 const published = (value) => pyNumbers(__pybridge.bound(value));
 
-export const pyComponent = (read, where, lineOffset, exported = false) => {
+export const pyComponent = (read, where, exported = false) => {
     const first = declared(read());
 
     return identified(
@@ -4908,7 +4905,6 @@ export const pyComponent = (read, where, lineOffset, exported = false) => {
             return running(
                 () => (found === null ? value(...given) : found.fn(...given)),
                 where,
-                lineOffset,
                 exported ? published : returned
             );
         },
@@ -4924,12 +4920,12 @@ export const pyComponent = (read, where, lineOffset, exported = false) => {
 // anything else as `plainScalar` hands it.
 const STORE_CALLS = new WeakMap();
 
-export function storeMember(value, where, lineOffset, call) {
+export function storeMember(value, where, call) {
     if (declared(value) === null) return plainScalar(value);
     if (call !== undefined) return call;
 
     let wrapped = STORE_CALLS.get(value);
-    if (wrapped === undefined) STORE_CALLS.set(value, (wrapped = pyComponent(() => value, where, lineOffset)));
+    if (wrapped === undefined) STORE_CALLS.set(value, (wrapped = pyComponent(() => value, where)));
 
     return wrapped;
 }
@@ -4971,7 +4967,7 @@ const COMPARED = {
 // renders, and a handler a click calls later does not.
 let rendering = 0;
 
-export const pyExpression = (call, where, lineOffset, arity, kept = false) =>
+export const pyExpression = (call, where, arity, kept = false) =>
     identified(
         (...args) =>
             running(
@@ -4984,7 +4980,6 @@ export const pyExpression = (call, where, lineOffset, arity, kept = false) =>
                     }
                 },
                 where,
-                lineOffset,
                 kept === true ? null : (COMPARED[kept] ?? pyNumbers)
             ),
         nameOf(where),
@@ -5246,7 +5241,7 @@ function directiveCallable(member, path) {
         // `async def` is started, and an error placed.
         wrapped = identified(
             (...args) =>
-                running(() => called(...taken(args, arity)), where, undefined, (value) => directiveResult(value, where)),
+                running(() => called(...taken(args, arity)), where, (value) => directiveResult(value, where)),
             nameOf(where),
             arityNow(arity)
         );

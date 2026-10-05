@@ -51,7 +51,7 @@ describe('and the mark is what makes that possible', () => {
     test('an unmarked JavaScript error is still left alone', () => {
         const foreign = new Error('from a library');
 
-        expect(pyError(foreign, 'f() — src/App.svelte', 0).message).toBe('from a library');
+        expect(pyError(foreign, 'f() — src/App.svelte').message).toBe('from a library');
     });
 
     test('a marked one is completed with where it was called', () => {
@@ -64,7 +64,7 @@ describe('and the mark is what makes that possible', () => {
         }
 
         expect(thrown.message).not.toMatch(/src\/App\.svelte/);
-        expect(pyError(thrown, 'label() — src/App.svelte', 0).message).toMatch(
+        expect(pyError(thrown, 'label() — src/App.svelte').message).toMatch(
             /\(label\(\) — src\/App\.svelte\)$/
         );
     });
@@ -80,8 +80,8 @@ describe('and the mark is what makes that possible', () => {
             thrown = error;
         }
 
-        pyError(thrown, 'inner() — src/App.svelte', 0);
-        const twice = pyError(thrown, 'outer() — src/App.svelte', 0);
+        pyError(thrown, 'inner() — src/App.svelte');
+        const twice = pyError(thrown, 'outer() — src/App.svelte');
 
         expect(twice.message.match(/src\/App\.svelte/g)).toHaveLength(1);
         expect(twice.message).toMatch(/\(inner\(\) — src\/App\.svelte\)$/);

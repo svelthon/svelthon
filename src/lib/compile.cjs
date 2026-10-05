@@ -2954,10 +2954,10 @@ function declarations(c) {
         ...(!c.store && SUBSCRIBING(c) ? [`const ${SUBS} = [];`] : []),
         // How an error's Python line becomes a line of this file; see `inFile`
         // in the runtime. Only a component has template functions to place.
-        // Registered under the file, so a frame of this file is placed by it
-        // whoever called the function: a callback a library keeps, or a
-        // function another file's code reached.
-        ...(c.store ? [] : [`const __lines = __fileLines(${JSON.stringify(c.source)}, ${JSON.stringify(c.lines)});`]),
+        // Registered under the file, the one place a frame's line is placed
+        // from, whoever called the function: a callback a library keeps, a
+        // handler another component set, a function another file reached.
+        ...(c.store ? [] : [`__fileLines(${JSON.stringify(c.source)}, ${JSON.stringify(c.lines)});`]),
         // Where the template's own code begins in the module's source, so that
         // a read made there is the template's however deep it is written.
         ...(c.templateLine === undefined
@@ -2974,8 +2974,8 @@ function templateBridge(c) {
     if (c.store) return [];
 
     return [
-        `const __event = (fn) => __pyEvent(fn, __lines);`,
-        `const __attach = (fn) => __pyAttach(fn, __lines);`,
+        `const __event = (fn) => __pyEvent(fn);`,
+        `const __attach = (fn) => __pyAttach(fn);`,
         // What `(name := value)` in a handler compiles to. The write goes
         // through the namespace, so through the accessor, so the signal fires:
         // the whole reason the walrus can mean this here.
@@ -3180,7 +3180,7 @@ function injectedBindings(c) {
 // A store's name as JavaScript reads it, from `value`, the expression that reads
 // what it holds now; `call` is a `def`'s own wrapper.
 const storeRead = (c, name, value, call) =>
-    `${RUNTIME.storeMember}(${value}, ${JSON.stringify(`${name}() — ${c.source}`)}, ${c.lineOffset}${call === undefined ? '' : `, ${call}`})`;
+    `${RUNTIME.storeMember}(${value}, ${JSON.stringify(`${name}() — ${c.source}`)}${call === undefined ? '' : `, ${call}`})`;
 
 // The sentence for a name `__all__` lists and the module does not bind, said by
 // the compiler when nothing in the source can bind it, and by the module once
@@ -3224,10 +3224,10 @@ function instanceExports(c) {
         ...c.funcs.map((f) =>
             componentWrapper(f) === RUNTIME.pyExpression
                 ? `const ${wrapperName(f.name)} = ${RUNTIME.pyExpression}((a) => ${fn(f.name)}(...a), ` +
-                  `${JSON.stringify(`${f.name}() — ${c.source}`)}, __lines, ${f.arity}, ` +
+                  `${JSON.stringify(`${f.name}() — ${c.source}`)}, ${f.arity}, ` +
                   `${KEPT_PYTHON.test(f.name) ? 'true' : COMPARED.test(f.name) ? `'${f.name.match(COMPARED)[1]}'` : 'false'});`
                 : `const ${wrapperName(f.name)} = ${RUNTIME.pyComponent}(() => ${fn(f.name)}, ` +
-                  `${JSON.stringify(`${f.name}() — ${c.source}`)}, ${c.lineOffset}${f.exported && !c.store ? ', true' : ''});`
+                  `${JSON.stringify(`${f.name}() — ${c.source}`)}${f.exported && !c.store ? ', true' : ''});`
         ),
         // What a parent holding `bind:this` can call. Svelte gathers whatever an
         // instance script exports into `$$exports` and hands that object back,
@@ -3372,7 +3372,7 @@ function effectBlocks(c) {
                 : `$effect${e.pre ? '.pre' : ''}(() => {`,
             `    let teardown;`,
             `    try { teardown = __invoke(${fn(e.name)}); }` +
-                ` catch (err) { throw __pyError(err,${JSON.stringify(`${e.name}() — ${c.source}`)}, ${c.lineOffset}); }`,
+                ` catch (err) { throw __pyError(err,${JSON.stringify(`${e.name}() — ${c.source}`)}); }`,
             // What an effect hands back is a *Python* value, so the question is
             // whether Python can call it, not whether JavaScript can. A bound
             // method, `resource.close`, the plainest teardown there is, is a
@@ -3380,7 +3380,7 @@ function effectBlocks(c) {
             // instance. `pyTeardown` answers the wide question and hands back
             // something JavaScript can call, receiver included, or nothing. An
             // `async def` hands back a coroutine, which it starts instead.
-            `    const __cleanup = ${RUNTIME.pyTeardown}(teardown, ${JSON.stringify(`${e.name}() — ${c.source}`)}, ${c.lineOffset});`,
+            `    const __cleanup = ${RUNTIME.pyTeardown}(teardown, ${JSON.stringify(`${e.name}() — ${c.source}`)});`,
             `    if (__cleanup) return () => { __cleanup(); };`,
             e.root ? (holders(c) ? `}); return __release; });` : `}); });`) : `});`
         ]),
@@ -3417,7 +3417,7 @@ function effectBlocks(c) {
                   ...(c.lifecycle('on_destroy')
                       ? [
                             `    const __teardown = __untrack(() => { const held = ${c.hook('on_destroy')};` +
-                                ` return held === undefined ? undefined : __pyComponent(() => held, ${JSON.stringify(`on_destroy() — ${c.source}`)}, ${c.lineOffset}); });`
+                                ` return held === undefined ? undefined : __pyComponent(() => held, ${JSON.stringify(`on_destroy() — ${c.source}`)}); });`
                         ]
                       : []),
                   // What `on_mount` hands back is its cleanup, as with Svelte's
@@ -3426,8 +3426,8 @@ function effectBlocks(c) {
                       ? [
                             `    const __mounted = __untrack(() => ${c.hook('on_mount')});`,
                             `    const __unmounted = __mounted === undefined ? undefined :` +
-                                ` ${RUNTIME.pyTeardown}(__untrack(() => __pyComponent(() => __mounted, ${JSON.stringify(`on_mount() — ${c.source}`)}, ${c.lineOffset})()),` +
-                                ` ${JSON.stringify(`on_mount() — ${c.source}`)}, ${c.lineOffset});`
+                                ` ${RUNTIME.pyTeardown}(__untrack(() => __pyComponent(() => __mounted, ${JSON.stringify(`on_mount() — ${c.source}`)})()),` +
+                                ` ${JSON.stringify(`on_mount() — ${c.source}`)});`
                         ]
                       : []),
                   `    return () => {`,
@@ -3529,7 +3529,7 @@ function plainExports(c) {
         ...[...c.funcs, ...c.plainDeriveds].map(
             (f) =>
                 `const ${f.name} = __pyDef(() => ${fn(f.name)}, ` +
-                `${JSON.stringify(`${f.name}() — ${c.source}`)}, ${c.lineOffset});`
+                `${JSON.stringify(`${f.name}() — ${c.source}`)});`
         ),
         ``,
         // SvelteKit reads `load`, `actions`, `GET`, `prerender` by name off the
@@ -3561,7 +3561,7 @@ function plainExports(c) {
             .flatMap((n) => [
                 `let __export_${n};`,
                 `__liveExport(${NS}, ${JSON.stringify(n)}, (__value) => { __export_${n} = ` +
-                    `__pyExport(__value, ${JSON.stringify(`${n} — ${c.source}`)}, ${c.lineOffset}); });`
+                    `__pyExport(__value, ${JSON.stringify(`${n} — ${c.source}`)}); });`
             ]),
         ...(c.exported.length
             ? [
@@ -3850,7 +3850,7 @@ function compile(
         `    return __withNamespace(${JSON.stringify(namespace)}, ${NS}, () => {`,
         js,
         `    });`,
-        `  } catch (err) { throw __pyError(err,${JSON.stringify(source)}, ${lineOffset}); }`,
+        `  } catch (err) { throw __pyError(err,${JSON.stringify(source)}); }`,
         `}`
     ].join('\n');
 
