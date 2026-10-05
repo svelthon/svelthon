@@ -4634,6 +4634,44 @@ function exported(one, made) {
     return plainData(one, made, pyHandler);
 }
 
+// A value a plain module exports is a live binding, as a JavaScript module's
+// `export let` is: `update` is the module's own assignment to its exported
+// name, made now and again on every write Python makes to the name, through the
+// module's functions or from another module.
+//
+// On the namespace's prototype, where `bind` puts the accessor of every
+// reactive name: the engine deletes the namespace's own property of a name
+// before it assigns it again in a function (`delete_for_reassign`), and a hook
+// placed there went with it. A reactive name's accessor is wrapped where it is;
+// a class, which has none, is moved there beside them.
+export function liveExport(namespace, name, update) {
+    const prototype = Object.getPrototypeOf(namespace);
+    let holder = namespace;
+    let found;
+
+    while (holder !== null && (found = Object.getOwnPropertyDescriptor(holder, name)) === undefined) {
+        holder = Object.getPrototypeOf(holder);
+    }
+
+    let stored = found?.value;
+    const read = found?.get ? () => found.get.call(namespace) : () => stored;
+    const write = found?.set ? (next) => found.set.call(namespace, next) : (next) => (stored = next);
+
+    if (holder === namespace) delete namespace[name];
+
+    Object.defineProperty(prototype, name, {
+        configurable: true,
+        enumerable: found?.enumerable ?? true,
+        get: read,
+        set(next) {
+            write(next);
+            update(read());
+        }
+    });
+
+    update(read());
+}
+
 // A value a module exports. A dict of functions, which is what SvelteKit's
 // `actions` is, becomes an object of *wrapped* functions, so a form action gets
 // the same boundary treatment as a `load()`. Anything else is plain data.

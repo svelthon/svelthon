@@ -965,7 +965,20 @@ function unpackByKey(inside, call, names, tuple, unpack) {
         const fallback = equals === -1 ? null : value.slice(equals + 1).trim();
         const key = colon === -1 ? target.trim() : text.slice(0, colon).trim();
         const computed = key.startsWith('[') && closingPair(key, 0) === key.length - 1;
-        const named = computed ? `(${key.slice(1, -1)})` : /^['"]/.test(key) ? key : JSON.stringify(key);
+
+        // A computed key is evaluated once, into a name of its own beside the
+        // row's, and that value is both the key the field is read by and the
+        // one `...rest` leaves out: evaluated twice, a key that answers
+        // otherwise the second time read one field and left out another.
+        const held = computed ? unpack.alias() : null;
+
+        if (computed) {
+            unpack.aliases.push(held);
+            unpack.bound.add(held);
+            unpack.consts.push({ target: held, read: `(${key.slice(1, -1)})`, source: key.slice(1, -1), lazy: false });
+        }
+
+        const named = computed ? held : /^['"]/.test(key) ? key : JSON.stringify(key);
 
         keys.push(named);
 

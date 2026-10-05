@@ -1342,6 +1342,7 @@ const RUNTIME = {
     pyExpression: '__pyExpression',
     invoke: '__invoke',
     pyExport: '__pyExport',
+    liveExport: '__liveExport',
     jsCall: '__jsCall',
     ticking: '__ticking',
     pyBind: '__pyBind',
@@ -3306,7 +3307,7 @@ function plainPreamble(c) {
         `import { ${runtimeAliases([
             'bind', '__pybridge', 'pyCall', 'pyDef', 'pyError', 'plainData', 'pyArg',
             'pyData', 'pyExport', 'pyBoundary', 'jsCall', 'ticking', 'pyBind', 'NONE', 'helpers',
-            'registerModule', 'group', 'invoke'
+            'registerModule', 'group', 'invoke', 'liveExport'
         ])} } from 'svelthon/runtime';`,
         ...c.jsImports.map(jsImportLine),
         ``
@@ -3402,12 +3403,17 @@ function plainExports(c) {
         // `__py` is where the module body put every one of them, and reading it
         // through the accessor gives the reactive ones the same value their
         // binding holds. One shape for all of them.
+        //
+        // And a live one, as `export let` is in JavaScript: captured once, the
+        // export went on reading `0` after `bump()` made the name `1`, where
+        // `module.read()` and another Python module both read `1`.
         ...c.exported
             .filter((n) => !c.isFunction(n))
-            .map(
-                (n) =>
-                    `const __export_${n} = __pyExport(${NS}.${n}, ${JSON.stringify(`${n} — ${c.source}`)}, ${c.lineOffset});`
-            ),
+            .flatMap((n) => [
+                `let __export_${n};`,
+                `__liveExport(${NS}, ${JSON.stringify(n)}, (__value) => { __export_${n} = ` +
+                    `__pyExport(__value, ${JSON.stringify(`${n} — ${c.source}`)}, ${c.lineOffset}); });`
+            ]),
         ...(c.exported.length
             ? [
                   `export { ${c.exported

@@ -12,6 +12,33 @@ import { mount, flushSync } from './mounted.js';
 import UnpackByKey from './fixtures/UnpackByKey.svelte';
 import UnpackByKeyNative from './fixtures/UnpackByKeyNative.svelte';
 import UnpackByKeyTypo from './fixtures/UnpackByKeyTypo.svelte';
+import ComputedRest from './fixtures/ComputedRest.svelte';
+import ComputedRestNative from './fixtures/ComputedRestNative.svelte';
+import { restart } from './fixtures/computed_rest_keys.js';
+
+// A computed key was evaluated twice, once to read the field and once to leave
+// it out of `...rest`: a key that answers otherwise the second time read
+// `first` and left out `second`, so one field was in both and one in neither.
+// Svelte's own unpacking calls the key as often, and its field and its rest
+// still split the row; so must ours.
+test.for([
+    ['Python', ComputedRest],
+    ['native Svelte', ComputedRestNative]
+])('%s: the field read by a computed key is the one left out of the rest', ([, Component]) => {
+    restart();
+    const target = document.body.appendChild(document.createElement('div'));
+    mount(Component, { target });
+    flushSync();
+
+    const row = { first: '1', second: '2', third: '3' };
+    const selected = target.querySelector('[data-k="selected"]').textContent;
+    const rest = target.querySelector('[data-k="rest"]').textContent.split(',');
+    const taken = Object.keys(row).find((one) => row[one] === selected);
+
+    expect(rest).not.toContain(taken);
+    expect([...rest, taken].sort()).toEqual(Object.keys(row));
+    target.remove();
+});
 
 const mounted = (Component) => {
     const target = document.body.appendChild(document.createElement('div'));
