@@ -13,8 +13,18 @@ import './fixtures/ImportedInspectElement.svelte';
 // The props a custom element observes are read by a second pass over the
 // script, which did not know the imports: it took `start: int = inspect(41)`
 // for an inspection where the compile took it for a prop.
-test('an element observes a prop whose default calls an imported inspect', () => {
-    expect(customElements.get('imported-inspect-element').observedAttributes).toEqual(['start']);
+test('an element reads a prop whose default calls an imported inspect as the type it declares', async () => {
+    const element = document.createElement('imported-inspect-element');
+    element.setAttribute('start', '5');
+    document.body.appendChild(element);
+    await Promise.resolve();
+    flushSync();
+
+    try {
+        expect(typeof element.start).toBe('number');
+    } finally {
+        element.remove();
+    }
 });
 
 beforeEach(() => {

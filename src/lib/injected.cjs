@@ -94,9 +94,8 @@ const INJECTED = [
     //
     // A list of lists, not a lazy iterator: an `{#each}` reads its rows again on
     // every update, and an iterator would come back empty the second time,
-    // silently, with the table simply gone. The third argument pads the last
-    // row, which is what aligns one; positional, because a keyword argument does
-    // not survive the call into JavaScript.
+    // silently, with the table simply gone. The third argument, `fill`, pads the
+    // last row, which is what aligns one, given by position or by name.
     //
     // `None` there means *no padding*, not "pad with None", the rule every
     // helper here follows, since None is an object and would otherwise sail
