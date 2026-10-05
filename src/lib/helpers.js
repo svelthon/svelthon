@@ -197,9 +197,9 @@ function outOfMonth(text) {
     return days === undefined || day < 1 || day > days;
 }
 
-// Jinja's `|tojson`. A non-numeric indent is dropped rather than passed on:
-// Python's None is an object, and `JSON.stringify(v, null, None)` would quietly
-// indent with it.
+// Jinja's `|tojson`, laid out as `json.dumps` lays it out: `indent` is a number
+// of spaces or a string repeated at each level, `0` breaks the lines without
+// indenting them, and None writes one line.
 // A class has no JSON, and since `plainData` stopped flattening one it reaches
 // here whole. A Brython class carries its own `__mro__`, which contains itself,
 // so `JSON.stringify` answers `Converting circular structure to JSON`: V8's
@@ -369,8 +369,19 @@ export function tojson(value, indent) {
     // `class Width(int)` reads as an object here and the output came out on one
     // line, which is a difference nobody sees in a page.
     const spaces = written(indent);
+    const level =
+        typeof spaces === 'number' || typeof spaces === 'boolean'
+            ? ' '.repeat(Math.max(0, Number(spaces)))
+            : typeof spaces === 'string'
+              ? spaces
+              : undefined;
 
-    return JSON.stringify(
+    // `JSON.stringify` takes ten characters of indent at most, and breaks no
+    // line for an empty one, where Python takes any string and breaks lines
+    // for `0`. So each level is laid out with a character no JSON text holds
+    // raw, every control character inside a string being escaped, and then
+    // replaced by the level Python writes.
+    const text = JSON.stringify(
         // The JSON rule, asked for by name. JSON has neither identity nor
         // cycles, so a shared reference comes out twice and a loop comes out
         // `null`, the only thing a serialiser can do. It is not the default: the
@@ -378,8 +389,10 @@ export function tojson(value, indent) {
         // which has identity.
         plainData(value, new Set(), noCall),
         (_, one) => serialisable(one),
-        typeof spaces === 'number' ? spaces : undefined
+        level === undefined ? undefined : '\u0001'
     );
+
+    return level === undefined || text === undefined ? text : text.replaceAll('\u0001', level);
 }
 
 // Python's `javascript.JSON.parse`, not the `JSON.parse` of the language this

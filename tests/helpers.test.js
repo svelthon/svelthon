@@ -17,7 +17,7 @@
 import { test, expect, describe } from 'vitest';
 
 import { runInNewContext } from 'node:vm';
-import { NONE, __pybridge } from '../src/lib/runtime.js';
+import { NONE, __pybridge, pyData } from '../src/lib/runtime.js';
 import {
     batch,
     date,
@@ -91,10 +91,24 @@ describe('tojson', () => {
     });
 
     // Python's None is an object, and `JSON.stringify(v, null, None)` would
-    // quietly indent with it. Anything that is not a number is dropped.
+    // quietly indent with it: None writes one line.
     test('None as the indent means no indent, not indent-with-None', () => {
         expect(tojson(__pybridge.list([1]), NONE)).toBe('[1]');
-        expect(tojson(__pybridge.list([1]), 'two')).toBe('[1]');
+    });
+
+    // Every other indent as `json.dumps` takes it, and so Jinja's `tojson`: a
+    // string repeated at each level, `0` and below breaking the lines without
+    // indenting, a boolean as the number it is. A string was dropped and `0`
+    // wrote one line. The answers are CPython's.
+    test.for([
+        ['a tab', '\t', '{\n\t"a": [\n\t\t1,\n\t\t"x"\n\t]\n}'],
+        ['zero', 0, '{\n"a": [\n1,\n"x"\n]\n}'],
+        ['two', 2, '{\n  "a": [\n    1,\n    "x"\n  ]\n}'],
+        ['minus one', -1, '{\n"a": [\n1,\n"x"\n]\n}'],
+        ['a string', '--', '{\n--"a": [\n----1,\n----"x"\n--]\n}'],
+        ['True', true, '{\n "a": [\n  1,\n  "x"\n ]\n}']
+    ])('an indent of %s is laid out as json.dumps lays it out', ([, indent, cpython]) => {
+        expect(tojson(pyData({ a: [1, 'x'] }), indent)).toBe(cpython);
     });
 
     // A Python int above 2^53 is a JavaScript BigInt, which `JSON.stringify`
