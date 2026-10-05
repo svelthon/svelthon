@@ -424,7 +424,9 @@ export const attributesOf = (text) => {
 const declaresPython = (text) => attributesOf(text).get('lang') === 'python';
 
 // Where a file's Python script block begins, where its body does, past the
-// tag's own `>`, and how it is closed, or `null` for a file that declares none.
+// tag's own `>`, where the body ends, at the tag that really closes it and not
+// at a `"</scriptx>"` the Python holds, and how it is closed, or `null` for a
+// file that declares none.
 //
 // Read from the blocks themselves, never from the text of the whole file: a
 // JavaScript component holding `const example = '<script lang="python">'`, a
@@ -436,8 +438,9 @@ export function pythonScript(content) {
     for (const found = blocks(); (block = found.exec(content)); ) {
         if (block[1].toLowerCase() === 'script' && declaresPython(block[2])) {
             const body = block.index + `<${block[1]}${block[2]}>`.length;
+            const end = block.index + block[0].length - block[3].length;
 
-            return { index: block.index, body, closing: block[3] };
+            return { index: block.index, body, end, closing: block[3] };
         }
     }
 

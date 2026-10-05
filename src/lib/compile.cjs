@@ -970,9 +970,10 @@ function opened(expr) {
     return depth;
 }
 // The name the first `:=` of an expression binds in the expression's own scope,
-// or null, read off its AST: one in an f-string's field counts, one in a lambda
-// of its own binds there and does not. A text the parser refuses answers null,
-// and the compile that follows reports it.
+// or null, read off its AST: one in an f-string's field counts, one in the body
+// of a lambda of its own binds there and does not, and one in that lambda's
+// defaults counts, since a default is evaluated where the lambda is written. A
+// text the parser refuses answers null, and the compile that follows reports it.
 function walrusIn(expr) {
     let tree;
     try {
@@ -982,9 +983,11 @@ function walrusIn(expr) {
     }
 
     const find = (node) => {
-        if (node instanceof $B.ast.Lambda) return null;
         if (node instanceof $B.ast.NamedExpr) return node.target.id;
-        for (const one of children(node)) {
+        const inside = node instanceof $B.ast.Lambda
+            ? [...node.args.defaults, ...node.args.kw_defaults].filter(Boolean)
+            : children(node);
+        for (const one of inside) {
             const found = find(one);
             if (found !== null) return found;
         }

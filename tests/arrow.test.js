@@ -69,6 +69,20 @@ describe('an arrow whose right-hand side holds a comma', () => {
             compile('count = 1\nwrapped => (lambda: (inner := count))()\n', 'Probe', 'src/Probe.svelte')
         ).not.toThrow();
     });
+
+    // But an inner lambda's defaults are evaluated where it is written, in the
+    // lambda the arrow becomes: CPython binds `half` there, positional,
+    // keyword-only or in an f-string field of a default. The guard skipped the
+    // whole inner lambda, and `half` was left unbound in the module.
+    test.for([
+        ['positional', 'result => (lambda value=(half := count): value)()'],
+        ['keyword-only', 'result => (lambda *, value=(half := count): value)()'],
+        ['in an f-string', 'result => (lambda value=f"{(half := count)}": value)()']
+    ])('and so is one in an inner lambda default, %s', ([, arrow]) => {
+        expect(() => compile(`count = 1\n${arrow}\n`, 'Probe', 'src/Probe.svelte')).toThrow(
+            /`half :=` inside `=>` would bind `half`.*\(src\/Probe\.svelte:2\)/
+        );
+    });
 });
 
 // `doubled => count * 2` — a derived, written the way the state beside it is

@@ -386,7 +386,7 @@ export function python(options = {}) {
                 pythonExpressions(markup, collect, undefined, { filename, content, offset })
             );
 
-            const python = content.slice(open, content.indexOf('</script', open));
+            const python = content.slice(open, declaring.end);
 
             return { code: tagged(elementOptions(code, python), calls.open(file)) };
         },

@@ -9,6 +9,26 @@ import { mount, unmount, flushSync } from './mounted.js';
 import QuotedHeader from './fixtures/QuotedHeader.svelte';
 import QuotedHeaderLines from './fixtures/QuotedHeaderLines.svelte';
 import './fixtures/QuotedHeaderElement.svelte';
+import './fixtures/ClosingPrefixElement.svelte';
+
+// The body ended at the first `</script` in the file, so a string or a comment
+// beginning like the closing tag cut the props' source short: the element
+// still observed `start`, read back off the exports, but not as the `int` it
+// declares, and `start + 1` on the string raised.
+test('a string beginning like the closing tag leaves the props their types', async () => {
+    const element = document.createElement('closing-prefix-element');
+    element.setAttribute('start', '5');
+    document.body.appendChild(element);
+    await Promise.resolve();
+    flushSync();
+
+    try {
+        expect(element.querySelector('.closing-prefix').textContent).toBe('6|int');
+        expect(typeof element.start).toBe('number');
+    } finally {
+        element.remove();
+    }
+});
 
 // The written-out `customElement={{…}}` is read by Svelte's parser over the file
 // with the script's body blanked, and the body was taken to start inside the
