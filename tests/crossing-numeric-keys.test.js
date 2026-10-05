@@ -101,9 +101,6 @@ describe('a dict whose keys are not strings', () => {
         );
     });
 
-    // A Brython float is an object, so this is the half that coercion could not
-    // spell at all: `[object Object]`. An int key survived it by luck, which is
-    // why the bypass stayed invisible.
     // A JavaScript symbol is a key like any other since `symbol-hash`, and the
     // copy and the export wrote it as its description, `"Symbol(tail)"`: the key
     // the dict was asked by never arrived, and two symbols of one name folded
@@ -122,6 +119,9 @@ describe('a dict whose keys are not strings', () => {
         expect(() => tojson(dict([[token, 1]]))).toThrow('tojson(): Symbol(tail) is a symbol, and a symbol has no JSON');
     });
 
+    // A Brython float is an object, so this is the half that coercion could not
+    // spell at all: `[object Object]`. An int key survived it by luck, which is
+    // why the bypass stayed invisible.
     test('and a float key crosses as the name it reads as, not as an object', () => {
         const out = pyExport(dict(withFunction([[1, 'one'], [_b_.float.$factory(2.5), 'half']])), 'm');
 

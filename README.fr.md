@@ -398,8 +398,9 @@ et l'étalement `{**attrs}`, développés pour que la lecture passe par le
 namespace au lieu de le contourner, sans plus aucune exception. L'étalement
 prend ce que prend le `{**attrs}` de Python, les entrées d'un mapping, et une
 chose de plus : une instance, que Python refuse, donne ses attributs, comme
-`vars()` les lit. Toute autre valeur, None ou une str entre autres, lève la
-`TypeError` de Python.
+`vars()` les lit. Toute autre valeur Python, None ou une str entre autres, lève
+la `TypeError` de Python ; un objet JavaScript s'étale par ses propriétés
+propres, comme en JavaScript.
 
 `bind:group` était la dernière, et elle a pris une autre forme qu'une paire :
 Svelte n'y accepte pas de lecteur et d'écrivain, parce qu'il détermine quels

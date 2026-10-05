@@ -390,8 +390,9 @@ included, every directive's value, and the shorthand `{name}` and the spread
 `{**attrs}`, which are expanded so that the read goes through the namespace
 rather than around it, with no exception left. The spread takes what Python's
 `{**attrs}` takes, a mapping's entries, and one thing more: an instance, which
-Python refuses, gives its attributes, as `vars()` reads them. Anything else,
-None or a str among them, raises Python's `TypeError`.
+Python refuses, gives its attributes, as `vars()` reads them. Any other Python
+value, None or a str among them, raises Python's `TypeError`; a JavaScript
+object spreads its own properties, as in JavaScript.
 
 `bind:group` was the last one, and it took a different shape rather than a pair:
 Svelte will not accept a getter and a setter there, because it works out which
