@@ -122,11 +122,12 @@ const identityOf = (value, name) => {
 // A number as Python compares it: `1 == 1.0 == True`, `0.0 == -0.0`,
 // `complex(2, 0) == 2`, and a subclass of int, float or str equal to its value.
 // So a value equal to a number is that number, as JavaScript holds it: an
-// integral one exact, a BigInt past 2 ** 53, and any other the double it is.
+// integral one exact, a Number up to 2 ** 53 and a BigInt past it, whichever
+// it arrived as, and any other the double it is.
 // Null for a value that is not one, and for a NaN, which equals nothing.
 function numeric(value) {
     if (typeof value === 'boolean') return Number(value);
-    if (typeof value === 'bigint') return value;
+    if (typeof value === 'bigint') return Number.isSafeInteger(Number(value)) ? Number(value) : value;
     if (typeof value === 'number') {
         if (Number.isNaN(value)) return null;
         return Number.isInteger(value) && !Number.isSafeInteger(value) ? BigInt(value) : value + 0;
@@ -239,6 +240,11 @@ export const __pybridge = {
             for (const [key, one] of pyEntries(value)) define(out, __pybridge.str(key), __pybridge.truthy(one));
             return out;
         }
+
+        // An object a JavaScript parent handed over, `{active: true}`, is what
+        // Svelte reads as a set of conditional classes, and is handed to it as
+        // it is, read the way it reads it.
+        if (!pyClass(value.ob_type) && !VIEWED.has(value) && plainObject(value)) return value;
 
         // The names the list yields, which for a subclass with its own
         // `__iter__` are not the ones it stores: the loop beside it reads the

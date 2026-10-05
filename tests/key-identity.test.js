@@ -6,6 +6,7 @@ import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import KeyIdentity from './fixtures/KeyIdentity.svelte';
 import NumericKey from './fixtures/NumericKey.svelte';
+import BigintKey from './fixtures/BigintKey.svelte';
 import NanKey from './fixtures/NanKey.svelte';
 import SignedZeroKey from './fixtures/SignedZeroKey.svelte';
 import FunctionKey from './fixtures/FunctionKey.svelte';
@@ -156,6 +157,32 @@ describe('a numeric key follows Python equality', () => {
         expect(at('tuple')).not.toBe(tuple);
         expect(at('number')).not.toBe(number);
     });
+});
+
+// And an int that arrives as a BigInt is the int it equals. A key was a Number
+// up to 2 ** 53 and a BigInt kept as it came, so `1` and `1n`, equal in Python,
+// were two keys: the field was rebuilt and the context not found. Past 2 ** 53
+// both were BigInts already.
+test.for([
+    [1, 1n],
+    [0, 0n],
+    [-1, -1n],
+    [Number.MAX_SAFE_INTEGER, BigInt(Number.MAX_SAFE_INTEGER)],
+    [2n ** 53n, 2n ** 53n]
+])('%s and the BigInt %s are one key, as Python finds them equal', ([start, incoming]) => {
+    const target = document.body.appendChild(document.createElement('div'));
+    const instance = mount(BigintKey, { target, props: { start, incoming } });
+    flushSync();
+    const field = target.querySelector('input');
+    field.value = 'unsaved';
+
+    expect(instance.equal()).toBe(true);
+    instance.change();
+    flushSync();
+
+    expect(target.querySelector('input')).toBe(field);
+    expect(field.value).toBe('unsaved');
+    expect(target.querySelector('p').textContent).toBe('kept');
 });
 
 // A complex is equal to another when both parts are, as numbers: the sign of a
