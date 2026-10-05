@@ -5418,15 +5418,21 @@ export const pyBind = (value) => {
 // it is about to set, and a getter that counts or refuses would see a read the
 // assignment never makes. The class
 // dictionaries and the instance's own say where an attribute lives, and they
-// are asked first, whatever protocol the class adds. Only a name found in
-// neither, on a foreign object or a class with its own `__getattr__` or
-// `__getattribute__`, is left to the protocol, the one thing that can answer
-// for an attribute nothing declares.
+// are asked first, whatever protocol the class adds. A JavaScript object
+// answers through `in`, its own properties and inherited ones, which runs no
+// getter, as an assignment in JavaScript reads none. Only a name found in
+// neither, on a class with its own `__getattr__` or `__getattribute__`, is left
+// to the protocol, the one thing that can answer for an attribute nothing
+// declares.
 function attributed(target, name) {
     const $B = globalThis.__BRYTHON__;
     const type = pyType(target);
 
-    if (type === undefined) return $B.$getattr(target, name, MISSING) !== MISSING;
+    if (type === undefined) {
+        const object = target !== null && (typeof target === 'object' || typeof target === 'function');
+
+        return object ? name in target : $B.$getattr(target, name, MISSING) !== MISSING;
+    }
     if (declares(type, name) !== $B.NULL) return true;
 
     const own = ownAttributes(target);

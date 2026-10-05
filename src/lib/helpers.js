@@ -180,7 +180,11 @@ function instant(value) {
 // Python's `datetime.fromisoformat` answers `day 30 must be in range 1..28`. The
 // written year, month and day are checked, not the instant: a time zone moves
 // the instant to another day.
-const CALENDAR_DAY = /^\s*([+-]\d{6}|\d{4})-(\d{2})-(\d{2})(?!\d)/;
+//
+// The written day, in the two year forms the specification has, four digits
+// and a signed six: one shape, read here and by `date`'s calendar day.
+const DAY = /([+-]\d{6}|\d{4})-(\d{2})-(\d{2})/;
+const CALENDAR_DAY = new RegExp(`^\\s*${DAY.source}(?!\\d)`);
 
 function outOfMonth(text) {
     const found = CALENDAR_DAY.exec(text);
@@ -436,7 +440,8 @@ export function batch(xs, size, fill) {
 // *its* language and the browser reformats in the visitor's, which Svelte
 // reports as a hydration mismatch.
 // A date and nothing else: the one shape that is a day rather than an instant.
-const DAY_ONLY = (value) => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
+const DAY_ALONE = new RegExp(`^${DAY.source}$`);
+const DAY_ONLY = (value) => typeof value === 'string' && DAY_ALONE.test(value);
 
 export function date(value, dateStyle, timeStyle, locale) {
     const at = instant(value);

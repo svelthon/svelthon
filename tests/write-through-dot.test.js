@@ -8,6 +8,65 @@ import { test, expect } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import WriteSetter from './fixtures/WriteSetter.svelte';
 import WriteSetterNative from './fixtures/WriteSetterNative.svelte';
+import ForeignSetter from './fixtures/ForeignSetter.svelte';
+
+// The same on a JavaScript object a parent hands over, whose property is an
+// accessor of its own, inherited from its prototype, or answered by a proxy:
+// the dot asked Brython for the attribute, which ran the getter. Each is
+// measured against the assignment JavaScript itself makes, which is the one
+// Svelte's binding makes.
+const accessed = (shape) => {
+    const log = { reads: 0, before: null, value: 'before', blocked: false };
+    const accessor = {
+        enumerable: true,
+        configurable: true,
+        get() {
+            log.reads += 1;
+            if (log.blocked) throw new Error('getter blocked, setter allowed');
+            return log.value;
+        },
+        set(value) {
+            log.before = log.reads;
+            log.value = value;
+            log.blocked = false;
+        }
+    };
+    const own = () => Object.defineProperty({}, 'value', accessor);
+    const model =
+        shape === 'own'
+            ? own()
+            : shape === 'inherited'
+              ? Object.create(own())
+              : new Proxy(own(), {});
+
+    return { log, model };
+};
+
+test.for([
+    ['own', false],
+    ['own', true],
+    ['inherited', false],
+    ['inherited', true],
+    ['proxied', true]
+])('a JavaScript accessor, %s, blocked %s: the setter alone, as JavaScript assigns', ([shape, blocked]) => {
+    const witness = accessed(shape);
+    witness.log.blocked = blocked;
+    witness.model.value = 'after';
+
+    const { log, model } = accessed(shape);
+    const target = document.body.appendChild(document.createElement('div'));
+    mount(ForeignSetter, { target, props: { model } });
+    flushSync();
+    Object.assign(log, { reads: 0, blocked });
+
+    const field = target.querySelector('input');
+    field.value = 'after';
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+
+    expect([log.before, log.value]).toEqual([witness.log.before, witness.log.value]);
+    expect(log.before).toBe(0);
+    target.remove();
+});
 
 const typed = (Component, block, props = {}) => {
     const target = document.body.appendChild(document.createElement('div'));

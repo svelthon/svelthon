@@ -859,6 +859,16 @@ describe('date', () => {
             );
         });
 
+        // With its year in the signed six-digit form the specification also
+        // has, the same day: the calendar check read that form and the zone
+        // did not, so Los Angeles was shown the 9th.
+        test.for([
+            ['+002026-09-10', '10 Sept 2026'],
+            ['+010000-09-10', '10 Sept 10000']
+        ])('and so is %s', ([day, shown]) => {
+            expect(inZone(() => date(day, 'medium', undefined, 'en-GB'))).toBe(shown);
+        });
+
         test('and an instant is still read where the reader is', () => {
             const east = zone === 'Pacific/Auckland' || zone === 'Pacific/Kiritimati';
 
