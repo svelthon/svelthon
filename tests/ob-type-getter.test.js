@@ -1,0 +1,79 @@
+// `ob_type` is the mark Brython puts on its own values, and a field name any
+// JavaScript object may hold, a getter of its author's among them. Every site
+// asking "is this the engine's?" read it through that getter: `to_py` ran it
+// where no copy would have, ran it twice where the copy reads it too, and a
+// getter that throws refused the whole record, and `to_js` and `tojson` asked
+// the same way. It is read off the descriptors now (`ownType`), where Brython
+// only ever writes it as data.
+//
+// The witness is JavaScript's own copy, `Object.fromEntries(Object.entries(row))`:
+// each conversion runs the getter as many times as it does, and no more.
+import { test, expect } from 'vitest';
+import { plainData, pyData } from '../src/lib/runtime.js';
+import { tojson, urlencode } from '../src/lib/helpers.js';
+
+// A record with a getter `ob_type` that counts its runs, hidden or enumerable,
+// and one that throws.
+const record = ({ enumerable = false, throwing = false } = {}) => {
+    const counted = { reads: 0 };
+    const row = { answer: 42 };
+
+    Object.defineProperty(row, 'ob_type', {
+        enumerable,
+        get() {
+            counted.reads++;
+            if (throwing) throw new Error('the business getter ran');
+            return 'business';
+        }
+    });
+
+    return { row, counted };
+};
+
+const native = (options) => {
+    const { row, counted } = record(options);
+
+    return { copy: Object.fromEntries(Object.entries(row)), reads: counted.reads };
+};
+
+test.for([
+    ['hidden', {}],
+    ['enumerable', { enumerable: true }],
+    ['throwing and hidden', { throwing: true }]
+])('to_py reads a %s getter as the copy does', ([, options]) => {
+    const { row, counted } = record(options);
+    const witness = native(options);
+
+    expect(plainData(pyData(row))).toEqual(witness.copy);
+    expect(counted.reads).toBe(witness.reads);
+});
+
+test.for([
+    ['hidden', {}],
+    ['enumerable', { enumerable: true }]
+])('to_js, tojson and urlencode read a %s getter as the copy does', ([, options]) => {
+    const copied = record(options);
+    const serialised = record(options);
+    const encoded = record(options);
+    const witness = native(options);
+
+    expect(plainData(copied.row)).toEqual(witness.copy);
+    expect(copied.counted.reads).toBe(witness.reads);
+    expect(JSON.parse(tojson(serialised.row))).toEqual(witness.copy);
+    expect(serialised.counted.reads).toBe(witness.reads);
+    expect(urlencode(encoded.row)).toBe(new URLSearchParams(witness.copy).toString());
+    expect(encoded.counted.reads).toBe(witness.reads);
+});
+
+// What a `toJSON` hands back is asked the walk's refusals again, a set among
+// them, and `JSON.stringify` runs a hidden getter of it no more than it runs
+// one of the record itself.
+test('tojson reads what a toJSON hands back as JSON.stringify does', () => {
+    const python = record();
+    const witness = record();
+
+    expect(JSON.parse(tojson({ toJSON: () => python.row }))).toEqual(
+        JSON.parse(JSON.stringify({ toJSON: () => witness.row }))
+    );
+    expect(python.counted.reads).toBe(witness.counted.reads);
+});

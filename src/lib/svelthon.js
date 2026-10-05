@@ -37,7 +37,9 @@ const generatedKey = (root, id) => `${root}\n${id}`;
 
 // Which file claimed each generated name, on the same global registry and for
 // the same reason: the preprocessor and the plugin are not always the same
-// module instance.
+// module instance. Keyed by project as `generated` is, since a name is unique
+// within one: a claim of project A, a path relative to A, was looked for in B,
+// and a file B holds and never compiled refused B's own module.
 const claimed = (globalThis[Symbol.for('svelthon.claimed')] ??= new Map());
 
 // The name alone, for a caller that is only asking a question. `hotUpdate` runs
@@ -78,7 +80,7 @@ const shownPath = (filename, root) => (filename ? relative(root, filename) : 'Co
 export const nameFor = (filename, root) => {
     const path = shownPath(filename, root);
     const name = mangle(filename, root);
-    const first = claimed.get(name);
+    const first = claimed.get(generatedKey(root, name));
 
     if (first !== undefined && first !== path && existsSync(resolve(root, first))) {
         throw new SyntaxError(
@@ -89,7 +91,7 @@ export const nameFor = (filename, root) => {
         );
     }
 
-    claimed.set(name, path);
+    claimed.set(generatedKey(root, name), path);
     if (path.endsWith('.py')) claimPython(path, root);
 
     return name;
@@ -110,7 +112,7 @@ function claimPython(path, root) {
     const name = pythonModuleName(path);
     if (!IMPORTABLE.test(name)) return;
 
-    const first = pythonClaimed.get(name);
+    const first = pythonClaimed.get(generatedKey(root, name));
 
     if (first !== undefined && first !== path && existsSync(resolve(root, first))) {
         throw new SyntaxError(
@@ -121,7 +123,7 @@ function claimPython(path, root) {
         );
     }
 
-    pythonClaimed.set(name, path);
+    pythonClaimed.set(generatedKey(root, name), path);
 }
 
 // The tag that decides a file is Python is read by `pythonScript`, in markup.js,

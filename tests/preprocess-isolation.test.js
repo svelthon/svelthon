@@ -69,21 +69,77 @@ describe('two projects in one process', () => {
     });
 });
 
+// The registries that refuse two files of one name held every project's claims
+// under the name alone, as a path relative to the project that made it: B,
+// holding a file at the path A claimed and never compiling it, was refused its
+// own module, `both compile to …` or `both imported as …`. Each project claims
+// its own names, as `generated` keeps its own modules; two files of one name in
+// one project are still refused (`two .py of one stem in one project`).
+describe('a claim of one project does not refuse another', () => {
+    test('a module', () => {
+        const original = process.cwd();
+        const [first, second] = [join(temporary, 'claims-a'), join(temporary, 'claims-b')];
+
+        for (const one of [join(first, 'src', 'lib'), join(second, 'src', 'lib'), join(second, 'lib')]) {
+            mkdirSync(one, { recursive: true });
+            writeFileSync(join(one, 'claimed_stem.py'), 'x = 1\n');
+        }
+
+        try {
+            process.chdir(first);
+            svelthon().load.call({ addWatchFile() {} }, join(first, 'src', 'lib', 'claimed_stem.py'));
+
+            process.chdir(second);
+            const plugin = svelthon();
+
+            expect(() => plugin.load.call({ addWatchFile() {} }, join(second, 'lib', 'claimed_stem.py'))).not.toThrow();
+        } finally {
+            process.chdir(original);
+        }
+    });
+
+    test('a component', async () => {
+        const original = process.cwd();
+        const [first, second] = [join(temporary, 'names-a'), join(temporary, 'names-b')];
+        const source = '<script lang="python">\nword = "x"\n</script>\n<p>{word}</p>\n';
+
+        for (const one of [join(first, 'src'), join(second, 'src', 'card')]) mkdirSync(one, { recursive: true });
+        for (const file of [join(first, 'src', 'card-part.svelte'), join(second, 'src', 'card-part.svelte')]) {
+            writeFileSync(file, source);
+        }
+        writeFileSync(join(second, 'src', 'card', 'part.svelte'), source);
+
+        try {
+            process.chdir(first);
+            await preprocess(source, [python()], { filename: join(first, 'src', 'card-part.svelte') });
+
+            process.chdir(second);
+            const done = preprocess(source, [python()], { filename: join(second, 'src', 'card', 'part.svelte') });
+
+            await expect(done).resolves.toBeDefined();
+        } finally {
+            process.chdir(original);
+        }
+    });
+});
+
 // One `.py` both projects import, reached by a different path from each: the
 // module name is made of that path, and the compiled file was cached under the
 // file alone, so the second project was handed a script importing the first
 // project's module, which its plugin does not serve.
 describe('one Python file shared by two projects', () => {
+    // Each stem in projects of its own: `shared.py` and `shared.svelte.py` side
+    // by side in one project are both imported as `shared`, and refused.
     test.for([['shared.py'], ['shared.svelte.py']])('%s is served to each under its own name', ([stem]) => {
         const original = process.cwd();
-        const file = join(temporary, 'common', stem);
+        const file = join(temporary, `common-${stem}`, stem);
         const loads = [];
 
-        mkdirSync(join(temporary, 'common'), { recursive: true });
+        mkdirSync(join(temporary, `common-${stem}`), { recursive: true });
         writeFileSync(file, 'answer = 42\n');
 
         try {
-            for (const root of [join(temporary, 'one'), join(temporary, 'two', 'nested')]) {
+            for (const root of [join(temporary, `one-${stem}`), join(temporary, `two-${stem}`, 'nested')]) {
                 mkdirSync(root, { recursive: true });
                 process.chdir(root);
 

@@ -1399,6 +1399,7 @@ const RUNTIME = {
     liveExport: '__liveExport',
     readOnlyImport: '__readOnlyImport',
     templateFrom: '__templateFrom',
+    fileLines: '__fileLines',
     jsCall: '__jsCall',
     ticking: '__ticking',
     pyBind: '__pyBind',
@@ -2845,6 +2846,7 @@ function preamble(c) {
             // half of the dot, which `templateDots` writes.
             'group', 'readAttr', 'restOf', 'unpackStarred', 'writeAttr', 'writeItem',
             ...(c.templateLine === undefined ? [] : ['templateFrom']),
+            ...(c.store ? [] : ['fileLines']),
             ...(c.jsImported.length ? ['readOnlyImport'] : [])
         ])} } from 'svelthon/runtime';`,
         ...c.jsImports.map(jsImportLine),
@@ -2952,7 +2954,10 @@ function declarations(c) {
         ...(!c.store && SUBSCRIBING(c) ? [`const ${SUBS} = [];`] : []),
         // How an error's Python line becomes a line of this file; see `inFile`
         // in the runtime. Only a component has template functions to place.
-        ...(c.store ? [] : [`const __lines = ${JSON.stringify(c.lines)};`]),
+        // Registered under the file, so a frame of this file is placed by it
+        // whoever called the function: a callback a library keeps, or a
+        // function another file's code reached.
+        ...(c.store ? [] : [`const __lines = __fileLines(${JSON.stringify(c.source)}, ${JSON.stringify(c.lines)});`]),
         // Where the template's own code begins in the module's source, so that
         // a read made there is the template's however deep it is written.
         ...(c.templateLine === undefined

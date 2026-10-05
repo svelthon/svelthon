@@ -12,6 +12,7 @@ import {
     NONE,
     __pybridge,
     callable,
+    ownType,
     plainData,
     plainObject,
     pyClass,
@@ -338,7 +339,7 @@ const noCall = (one) => {
     // their way out is known; this one says what CPython says, *Object of type
     // range is not JSON serializable*, naming the class of the value rather
     // than accusing it of being one.
-    if (pyClass(one.ob_type)) {
+    if (pyClass(ownType(one))) {
         const named = globalThis.__BRYTHON__.class_name(one);
 
         throw refuse(
@@ -623,7 +624,7 @@ function mapping(value) {
     // same, `{ob_type: "business", value: 42}`, which encodes as the identical
     // Python dict does. The question is *is this a Python object*, and `pyClass`
     // is what the rest of the project asks.
-    return !pyClass(value.ob_type) && plainObject(value);
+    return !pyClass(ownType(value)) && plainObject(value);
 }
 
 // Jinja's shape: a string, or a mapping or a sequence of pairs that becomes a

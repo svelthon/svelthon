@@ -53,7 +53,7 @@ const _b_ = globalThis.__BRYTHON__.builtins;
 const raised = (error) =>
     error !== null &&
     typeof error === 'object' &&
-    pyClass(error.ob_type) &&
+    pyClass(ownType(error)) &&
     error.__traceback__ !== undefined;
 
 // An array-shaped Python value, as *its class* says it iterates.
@@ -89,9 +89,9 @@ function iterated(value) {
     // name, and a JavaScript array is as free to carry one as an object is,
     // `{ob_type: "business"}` among them. The loop, `batch`, the export,
     // `tojson`, the argument boundary and `plainData` all ask it this way.
-    if (!pyClass(value.ob_type) || value.ob_type === _b_.list || value.ob_type === _b_.tuple) {
-        return value;
-    }
+    const type = ownType(value);
+
+    if (!pyClass(type) || type === _b_.list || type === _b_.tuple) return value;
 
     const $B = globalThis.__BRYTHON__;
 
@@ -134,7 +134,7 @@ function numeric(value) {
     if (typeof scalar === 'number' || typeof scalar === 'bigint') return numeric(scalar);
 
     // A complex with no imaginary part is its real one.
-    const mro = value?.ob_type?.tp_mro;
+    const mro = ownType(value)?.tp_mro;
     if (Array.isArray(mro) && mro.includes(_b_.complex) && value.imag?.value === 0) return numeric(value.real.value);
 
     return null;
@@ -241,7 +241,7 @@ export const __pybridge = {
         // An object a JavaScript parent handed over, `{active: true}`, is what
         // Svelte reads as a set of conditional classes, and is handed to it as
         // it is, read the way it reads it.
-        if (!pyClass(quietly(value, 'ob_type')) && !VIEWED.has(value) && plainObject(value)) return value;
+        if (!pyClass(ownType(value)) && !VIEWED.has(value) && plainObject(value)) return value;
 
         // The names the list yields, which for a subclass with its own
         // `__iter__` are not the ones it stores: the loop beside it reads the
@@ -783,7 +783,7 @@ function installMutationTracking($B) {
 
         // `super().append(value)`: the method is looked up on a `super`
         // object, and the container it changes is that object's `__self__`.
-        if (!followed && obj !== null && typeof obj === 'object' && obj.ob_type === _b_.super && FOLLOWED.has(attr)) {
+        if (!followed && FOLLOWED.has(attr) && obj !== null && typeof obj === 'object' && ownType(obj) === _b_.super) {
             target = obj.obj;
             followed = target !== null && typeof target === 'object' && MARKS.has(target);
         }
@@ -792,14 +792,15 @@ function installMutationTracking($B) {
         // through the type. The receiver is a class, which carries no marker, so
         // the object being changed is the first argument, known only here.
         //
-        // The class test is a property miss before the set lookup, which keeps
-        // an ordinary unwatched call cheap.
+        // The name is asked first, a set lookup, so a method that changes no
+        // container never reads the receiver: a JavaScript object's `ob_type`,
+        // a getter of its author's among them, is read for none of its calls.
         //
         // `pyClass`, the predicate the other half of this interception asks
         // too, in `$getattr`: a JavaScript object carrying a `tp_bases` of its
         // own is no class.
         if (!followed) {
-            if (pyClass(obj) && FOLLOWED.has(attr)) {
+            if (FOLLOWED.has(attr) && pyClass(obj)) {
                 return onFirst(obj, attr, rest, callAttr);
             }
 
@@ -872,7 +873,7 @@ function installMutationTracking($B) {
         if (FOLLOWED.has(attr)) {
             // The container a method changes: the object itself, or the
             // `__self__` of a `super` it was read through.
-            const owner = obj.ob_type === _b_.super ? obj.obj : obj;
+            const owner = ownType(obj) === _b_.super ? obj.obj : obj;
 
             // Four shapes reach here and only the first is a function. A
             // special method read off a builtin is a `method-wrapper`
@@ -885,9 +886,7 @@ function installMutationTracking($B) {
                     ? result
                     : result !== null &&
                         typeof result === 'object' &&
-                        (result.ob_type === $B.method_wrapper ||
-                            result.ob_type === $B.method_descriptor ||
-                            result.ob_type === $B.wrapper_descriptor)
+                        [$B.method_wrapper, $B.method_descriptor, $B.wrapper_descriptor].includes(ownType(result))
                       ? (...args) => $B.$call(result, ...args)
                       : null;
 
@@ -1236,7 +1235,7 @@ function keeps(value) {
 export const pyClass = (value) =>
     value !== null &&
     typeof value === 'object' &&
-    value.ob_type !== undefined &&
+    ownType(value) !== undefined &&
     value.tp_name !== undefined &&
     value.tp_bases !== undefined;
 
@@ -1244,14 +1243,9 @@ export const pyClass = (value) =>
 // it in two places: `ob_type` on most objects, and `Symbol(OB_TYPE)` on a dict
 // and every subclass of one, which has no `ob_type` at all. A site that looks a
 // protocol up on the class asks here, so `class Bag(dict)` defining `__call__`
-// is callable like any other class that defines it.
-const pyType = (value) => {
-    if (value === null || typeof value !== 'object') return undefined;
-
-    const type = value.ob_type ?? value[globalThis.__BRYTHON__.OB_TYPE];
-
-    return pyClass(type) ? type : undefined;
-};
+// is callable like any other class that defines it. Of an object only; a
+// function is asked through `quietPyType`.
+const pyType = (value) => (value !== null && typeof value === 'object' ? quietPyType(value) : undefined);
 
 // What an object holds under a name, read off the descriptors along its chain
 // without running a getter: undefined for an accessor, which the serialiser
@@ -1266,6 +1260,24 @@ const quietly = (value, name) => {
     return undefined;
 };
 
+// What a value holds as `ob_type`, the mark Brython puts on its own values,
+// read off the descriptors: every site asking "is this the engine's?" asks
+// here. Brython only ever writes it as data, and a JavaScript object is free to
+// hold a field or a getter of that name, its author's: read through the getter,
+// the question ran their code where no copy would have, ran it twice where the
+// copy reads it too, and a getter that throws refused the whole value. A
+// proxy's `get` trap is its author's code too, and is not asked either.
+//
+// What it costs is a descriptor per value asked, measured on 5 000 rows: `to_js`
+// 13 ms → 16 ms, `tojson` 31 ms → 35 ms, `to_py` unchanged. A primitive is no
+// object Brython marks, and is not asked.
+//
+// Python operating on a JavaScript object is the engine's own business:
+// `$B.get_class` and `$getattr` read `obj.ob_type` themselves, the limit
+// `pyScalar` states.
+export const ownType = (value) =>
+    value !== null && (typeof value === 'object' || typeof value === 'function') ? quietly(value, 'ob_type') : undefined;
+
 // `pyType`, asked that way: an `ob_type` getter of a JavaScript object is the
 // author's code, and a data field of that name is read once, by the serialiser.
 // A function too, which the engine's own carry as a field: a Python function
@@ -1273,7 +1285,7 @@ const quietly = (value, name) => {
 const quietPyType = (value) => {
     if (value === null || (typeof value !== 'object' && typeof value !== 'function')) return undefined;
 
-    const type = quietly(value, 'ob_type') ?? quietly(value, globalThis.__BRYTHON__.OB_TYPE);
+    const type = ownType(value) ?? quietly(value, globalThis.__BRYTHON__.OB_TYPE);
 
     return pyClass(type) ? type : undefined;
 };
@@ -1624,7 +1636,7 @@ const redefinesItems = (cls) => {
 // the end, and a mutation that moves the others indexes the list again, at a
 // cost no larger than its own.
 function indexed(list, from) {
-    if (!Array.isArray(list) || storedAs(list.ob_type) !== _b_.list) return;
+    if (!Array.isArray(list) || storedAs(ownType(list)) !== _b_.list) return;
 
     for (let i = Math.max(0, from); i < list.length; i++) {
         const own = MARKS.get(list[i]);
@@ -1796,7 +1808,7 @@ const declaresSlots = (value) => {
 // Asked of the MRO rather than of the class by identity, so a subclass answers
 // too, as in `pyScalar` and `isSet`.
 export const pyBytes = (value) => {
-    const cls = value.ob_type;
+    const cls = ownType(value);
     const mro = pyClass(cls) ? cls.tp_mro : undefined;
 
     if (!Array.isArray(mro)) return false;
@@ -1805,7 +1817,7 @@ export const pyBytes = (value) => {
 };
 
 export const isSet = (value) => {
-    const cls = globalThis.__BRYTHON__.get_class(value);
+    const cls = quietPyType(value);
 
     if (cls === undefined || value.$store === undefined) return false;
     if (cls === _b_.set || cls === _b_.frozenset) return true;
@@ -1981,7 +1993,7 @@ function adoptOne(value) {
 // dictionary behind a `type.__dict__` being no data of the author's.
 const viewed = (value) => {
     const $B = globalThis.__BRYTHON__;
-    const type = value.ob_type;
+    const type = ownType(value);
 
     if (type === $B.dict_keys || type === $B.dict_values || type === $B.dict_items) return value.dict_obj;
     if (type === $B.mappingproxy && $B.is_dict(value.mapping)) return value.mapping;
@@ -2163,6 +2175,21 @@ const inFile = (line, lineOffset) => {
     return range === undefined ? line + lineOffset.offset : range[2];
 };
 
+// That offset, per file, as each component registers its own when its module
+// runs. A line belongs to the file its frame is in, and the caller does not
+// always know that file: a callback a library keeps is called with no
+// component around it, and published once for every caller, so it handed
+// `pyError` an offset of 0 and a component with markup above its `<script>`
+// reported its `raise` that many lines too high. A `.py` has no offset, and no
+// entry.
+const FILE_LINES = new Map();
+
+export const fileLines = (file, lines) => {
+    FILE_LINES.set(file, lines);
+
+    return lines;
+};
+
 // A Brython exception reaching JavaScript carries no `message` and no `stack`,
 // so devtools and Vite's overlay show nothing at all: the text sits in the
 // Python object, where nothing JS looks. Fill both in, keeping the original
@@ -2205,9 +2232,9 @@ export function pyError(error, where, lineOffset = 0) {
     // `where` names, and its line is the deepest one still in that file: line
     // numbers count from the start of the Python source, which for a component
     // begins after its opening <script> tag, hence `inFile` back to the file's
-    // own numbering. A deeper frame in another file is where it actually broke,
-    // and it is named with its own file and its own line, which `inFile` knows
-    // nothing about.
+    // own numbering, by the offset that file registered. A deeper frame in
+    // another file is where it actually broke, and it is named with its own
+    // file and its own line, placed by that file's offset.
     const frames = [];
     try {
         let tb = $B.$getattr(error, '__traceback__');
@@ -2228,9 +2255,9 @@ export function pyError(error, where, lineOffset = 0) {
     const own = frames.filter((frame) => frame.file === home).at(-1);
     const deepest = frames.at(-1);
 
-    let at = own === undefined ? where : `${where}:${inFile(own.line, lineOffset)}`;
+    let at = own === undefined ? where : `${where}:${inFile(own.line, FILE_LINES.get(home) ?? lineOffset)}`;
     if (deepest !== undefined && deepest.file !== home) {
-        at += `; raised in ${deepest.name}(), ${deepest.file}:${deepest.line}`;
+        at += `; raised in ${deepest.name}(), ${deepest.file}:${inFile(deepest.line, FILE_LINES.get(deepest.file) ?? 0)}`;
     }
 
     try {
@@ -2249,11 +2276,11 @@ export function pyError(error, where, lineOffset = 0) {
 // shared. Compared in JavaScript rather than
 // through `aio.iscoroutine()`: this runs on every call into Python, template
 // expressions included, and a Brython call here costs more than the check saves.
-export const pyCoroutine = (value) => {
-    const $B = globalThis.__BRYTHON__;
-
-    return value !== null && typeof value === 'object' && $B.get_class(value) === $B.coroutine;
-};
+//
+// Asked of the class the value carries as data (`pyType`), not through
+// `$B.get_class`, which reads an `ob_type` getter of a JavaScript object, and
+// every value a conversion walks is asked.
+export const pyCoroutine = (value) => pyType(value) === globalThis.__BRYTHON__.coroutine;
 
 // A Python scalar held as an object, and the number or the string inside it.
 //
@@ -2273,7 +2300,9 @@ export const pyCoroutine = (value) => {
 // crosses as its number, and its fields stay in Python, which is the same
 // sentence as the one a callable gets.
 export const pyScalar = (value) => {
-    if (value === null || typeof value !== 'object' || !pyClass(value.ob_type)) return undefined;
+    const type = value !== null && typeof value === 'object' ? ownType(value) : undefined;
+
+    if (!pyClass(type)) return undefined;
 
     // **A limit.** `ob_type` is a public key, so a JavaScript object can carry
     // one, and a field holding a real Brython class walks past the check meant
@@ -2288,9 +2317,9 @@ export const pyScalar = (value) => {
     // So the contract: a value carrying a Brython class under `ob_type` **is**
     // that value here, and `tests/helpers.test.js` pins it.
 
-    const mro = value.ob_type.tp_mro;
+    const mro = type.tp_mro;
 
-    if (!Array.isArray(mro)) return value.ob_type === _b_.float ? value.value : undefined;
+    if (!Array.isArray(mro)) return type === _b_.float ? value.value : undefined;
     if (mro.includes(_b_.float) || mro.includes(_b_.int)) return value.value;
 
     // A str is stored three ways: a JavaScript string; a `String` object, which
@@ -2392,7 +2421,7 @@ const entering = (given) =>
     given !== null &&
     typeof given === 'object' &&
     !VIEWED.has(given) &&
-    !pyClass(given.ob_type) &&
+    !pyClass(ownType(given)) &&
     (Array.isArray(given) || plainObject(given))
         ? pyData(given)
         : pyBind(given);
@@ -3145,10 +3174,11 @@ function branch(value, seen, shell, adapt) {
     // out as its attributes, the number gone. Asked against Brython's own table
     // rather than a list of type names written here, and `object` is excluded
     // because every class descends from it.
+    const type = ownType(value);
     const owned =
-        pyClass(value.ob_type) &&
-        Array.isArray(value.ob_type.tp_mro) &&
-        value.ob_type.tp_mro.some((one) => one !== _b_.object && _b_[one.tp_name] === one);
+        pyClass(type) &&
+        Array.isArray(type.tp_mro) &&
+        type.tp_mro.some((one) => one !== _b_.object && _b_[one.tp_name] === one);
 
     if (!mapping && !owned && (holder !== undefined || declaresSlots(value))) {
         const fields = shell ?? {};
@@ -3196,7 +3226,7 @@ function branch(value, seen, shell, adapt) {
     // A question rather than a list of type names. `set` and `bytes` keep their
     // own arms because their sentences name the way out; this one names the
     // class.
-    if (adapt !== undefined && seen instanceof Set && !mapping && pyClass(value.ob_type)) {
+    if (adapt !== undefined && seen instanceof Set && !mapping && pyClass(type)) {
         return adapt(value);
     }
 
@@ -3304,7 +3334,7 @@ export function pyData(value, made) {
         // reason: `ob_type` is a field name, and an array is as free to carry
         // one as an object is: a JavaScript array with a business field of that
         // name is no Brython list, and `to_py(rows)` gives a `list`.
-        if (pyClass(value.ob_type)) return value;
+        if (pyClass(ownType(value))) return value;
 
         made ??= new WeakMap();
 
@@ -3338,8 +3368,9 @@ export function pyData(value, made) {
     // "Is this already a Python object" is not `ob_type === undefined`: that is
     // a *field name*, which data is allowed to carry, `{"ob_type": "business",
     // "value": 42}` being ordinary JSON. A real Python object carries a class
-    // there, so the question is asked of the class.
-    if (!pyClass(value.ob_type) && plainObject(value)) {
+    // there, so the question is asked of the class, read without running a
+    // getter of that name (`ownType`): each property is read once, by the copy.
+    if (!pyClass(ownType(value)) && plainObject(value)) {
         made ??= new WeakMap();
 
         const known = made.get(value);
@@ -3954,7 +3985,7 @@ const slotDeclared = (value) => {
 const wrapperMethod = (value) =>
     value !== null &&
     typeof value === 'object' &&
-    value.ob_type === globalThis.__BRYTHON__.method_wrapper &&
+    ownType(value) === globalThis.__BRYTHON__.method_wrapper &&
     typeof value.wrapped === 'function';
 
 // A method read off an instance: `{ob_type: method, im_func, im_self}`, which
@@ -3964,7 +3995,7 @@ const wrapperMethod = (value) =>
 const boundMethod = (value) =>
     value !== null &&
     typeof value === 'object' &&
-    value.ob_type === globalThis.__BRYTHON__.method &&
+    ownType(value) === globalThis.__BRYTHON__.method &&
     typeof value.im_func === 'function';
 
 function declared(value) {
@@ -5161,7 +5192,7 @@ function directiveResult(value, where) {
         value !== null &&
         typeof value === 'object' &&
         !Array.isArray(value) &&
-        pyClass(value.ob_type) &&
+        pyClass(ownType(value)) &&
         pyScalar(value) === undefined &&
         !globalThis.__BRYTHON__.is_dict(value);
 
