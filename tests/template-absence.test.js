@@ -9,6 +9,7 @@
 import { test, expect } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import TemplateAbsence from './fixtures/TemplateAbsence.svelte';
+import TemplateAbsenceSum from './fixtures/TemplateAbsenceSum.svelte';
 
 const mounted = () => {
     const target = document.body.appendChild(document.createElement('div'));
@@ -50,5 +51,42 @@ test.for([
     ['lambda-call', 'no total']
 ])('as does a template %s', ([key, shown]) => {
     expect(mounted().read(key)).toBe(shown);
+});
+
+// What the template reads is None, what JavaScript's `undefined` becomes
+// wherever it enters Python, and no longer `undefined` itself: an f-string
+// wrote `<Javascript undefined>`, `total is None` was false, and `total + 1`
+// failed inside the engine, with no position, and the component did not mount.
+test.for([
+    ['fstring', '[None]'],
+    ['str', 'None'],
+    ['is-none', 'True'],
+    ['joined', 'aNone, bNone'],
+    ['rendered', '']
+])('read in a composed expression, the absence is None: %s', ([key, shown]) => {
+    expect(mounted().read(key)).toBe(shown);
+});
+
+test('and an operation on it raises the TypeError Python raises, at its line', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+
+    expect(() => mount(TemplateAbsenceSum, { target })).toThrow(/unsupported operand.*NoneType.*TemplateAbsenceSum\.svelte:7/s);
+    target.remove();
+});
+
+// The rule holds while the template renders. A handler written in the template
+// runs on a click, and reads the name as Python does: the same `lambda: total`
+// is None while rendering and `NameError` in a handler.
+test('a handler written in the template reads an unbound name as Python does', () => {
+    globalThis.templateAbsenceLog = [];
+    const target = document.body.appendChild(document.createElement('div'));
+    mount(TemplateAbsence, { target });
+    flushSync();
+
+    target.querySelector('[data-k="handler"]').click();
+    flushSync();
+
+    expect(globalThis.templateAbsenceLog).toEqual(['NameError']);
+    target.remove();
 });
 

@@ -4901,11 +4901,24 @@ const COMPARED = {
     selection: (value) => (Array.isArray(value) ? value.map(scalarOnly) : scalarOnly(value))
 };
 
+//
+// `rendering` counts the template expressions running: whatever Python runs
+// inside one, a lambda or a generator it drives, runs while the template
+// renders, and a handler a click calls later does not.
+let rendering = 0;
+
 export const pyExpression = (call, where, lineOffset, arity, kept = false) =>
     identified(
         (...args) =>
             running(
-                () => call(args.slice(0, arity).map(pyBind)),
+                () => {
+                    rendering += 1;
+                    try {
+                        return call(args.slice(0, arity).map(pyBind));
+                    } finally {
+                        rendering -= 1;
+                    }
+                },
                 where,
                 lineOffset,
                 kept === true ? null : (COMPARED[kept] ?? pyNumbers)
@@ -4922,11 +4935,18 @@ export const pyExpression = (call, where, lineOffset, arity, kept = false) =>
 //
 // The template is the text between its braces, the way the dot is: a read is
 // the template's when the code making it is written there, a lambda or a
-// generator written between the braces included. The functions the markup pass
-// compiles follow the script in the module's source, so the line being run
-// says it: from the first of them on, `templateFrom` registers per file. A
-// function the expression calls is Python and reads as Python does, so its
-// `except NameError` is taken whoever called it.
+// generator written between the braces included, and runs while the template
+// renders. The functions the markup pass compiles follow the script in the
+// module's source, so the line being run says where it is written: from the
+// first of them on, `templateFrom` registers per file. And `rendering` says
+// whether the template is rendering: a handler written in the template runs on
+// a click, outside it, and reads as Python does, as does a function of the
+// script the expression calls, whose `except NameError` is taken whoever called
+// it.
+//
+// What the template reads is None, what JavaScript's `undefined` becomes
+// wherever it enters Python: rendered empty, `None` in an f-string, and the
+// `TypeError` Python raises for `total + 1`, at its line.
 const TEMPLATE_LINES = new Map();
 
 export const templateFrom = (file, line) => {
@@ -4940,14 +4960,14 @@ export const templateFrom = (file, line) => {
     const templates = () => {
         const frame = $B.frame_obj?.frame;
         const from = frame === undefined ? undefined : TEMPLATE_LINES.get(frame.__file__);
-        return from !== undefined && frame.$lineno >= from;
+        return rendering > 0 && from !== undefined && frame.$lineno >= from;
     };
 
     $B.resolve_in_scopes = function (name, namespaces, inum) {
         try {
             return resolve.call(this, name, namespaces, inum);
         } catch (error) {
-            if (templates() && namespaces.some((one) => declares(one, name))) return undefined;
+            if (templates() && namespaces.some((one) => declares(one, name))) return NONE;
 
             throw error;
         }
