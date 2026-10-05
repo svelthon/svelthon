@@ -2723,8 +2723,11 @@ function preamble(c) {
             'group', 'readAttr', 'writeAttr', 'writeItem'
         ])} } from 'svelthon/runtime';`,
         ...c.jsImports.map(jsImportLine),
-        `import { ${['getContext', 'setContext']
-            .concat(c.lifecycle('on_mount') || c.lifecycle('on_destroy') ? ['untrack'] : [])
+        // Under the engine's prefix like every other name it lends: the
+        // author's names live in the same scope, and an `importjs { untrack }`
+        // or a `def getContext()` of theirs is theirs.
+        `import { ${['getContext as __getContext', 'setContext as __setContext']
+            .concat(c.lifecycle('on_mount') || c.lifecycle('on_destroy') ? ['untrack as __untrack'] : [])
             .join(', ')} } from 'svelte';`,
         ``
     ];
@@ -3271,7 +3274,7 @@ function effectBlocks(c) {
                   // error.
                   ...(c.lifecycle('on_destroy')
                       ? [
-                            `    const __teardown = untrack(() => { const held = ${fn('on_destroy')};` +
+                            `    const __teardown = __untrack(() => { const held = ${c.hook('on_destroy')};` +
                                 ` return held === undefined ? undefined : __pyComponent(() => held, ${JSON.stringify(`on_destroy() — ${c.source}`)}, ${c.lineOffset}); });`
                         ]
                       : []),
@@ -3279,8 +3282,9 @@ function effectBlocks(c) {
                   // `onMount`, and it runs before `on_destroy`.
                   ...(c.lifecycle('on_mount')
                       ? [
-                            `    const __unmounted = untrack(() => ${fn('on_mount')}) === undefined ? undefined :` +
-                                ` ${RUNTIME.pyTeardown}(untrack(() => on_mount()),` +
+                            `    const __mounted = __untrack(() => ${c.hook('on_mount')});`,
+                            `    const __unmounted = __mounted === undefined ? undefined :` +
+                                ` ${RUNTIME.pyTeardown}(__untrack(() => __pyComponent(() => __mounted, ${JSON.stringify(`on_mount() — ${c.source}`)}, ${c.lineOffset})()),` +
                                 ` ${JSON.stringify(`on_mount() — ${c.source}`)}, ${c.lineOffset});`
                         ]
                       : []),
@@ -3705,7 +3709,13 @@ function compile(
     // Lifecycle by convention, mapped onto a single $effect: its body runs once
     // after the DOM exists, its teardown when the component goes away. Both
     // names stay ordinary functions, nothing stops Python calling them too.
-    const lifecycle = (hook) => !store && funcs.some((f) => f.name === hook);
+    //
+    // A hook is whatever the name holds once the script has run, a `def` or a
+    // value bound by `=`, `on_mount = lambda: …`: read off the `def`'s own
+    // binding, or off the name's.
+    const defined = (hook) => funcs.some((f) => f.name === hook);
+    const lifecycle = (hook) => !store && (defined(hook) || state.includes(hook));
+    const hook = (name) => (defined(name) ? fn(name) : name);
 
     // A component free to define its own `publish` or `derived` keeps it.
     // Two lists, and they answer two different questions.
@@ -3822,7 +3832,8 @@ function compile(
         jsNames,
         exported,
         isFunction,
-        lifecycle
+        lifecycle,
+        hook
     };
 
     const script = (plain ? PLAIN_SECTIONS : COMPONENT_SECTIONS)

@@ -3,6 +3,21 @@ import { createRequire } from 'node:module';
 import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import NameV from './fixtures/NameV.svelte';
+import SvelteNamesTaken from './fixtures/SvelteNamesTaken.svelte';
+
+// The same question for the names the engine imports from Svelte: `getContext`,
+// `setContext` and `untrack` were imported under their own names, so an
+// `importjs { untrack } from "svelte"` or a `def getContext()` beside a hook
+// made Svelte refuse the script, `Identifier 'untrack' has already been
+// declared`, on a line the author never wrote.
+test('names the engine takes from Svelte are left to the author', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+    mount(SvelteNamesTaken, { target });
+    flushSync();
+
+    expect(target.querySelector('p').textContent).toBe('1|1|own|value|True');
+    target.remove();
+});
 
 const { compile } = createRequire(import.meta.url)('../src/lib/compile.cjs');
 
