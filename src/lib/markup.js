@@ -453,23 +453,17 @@ const DIRECTIVE = /^bind:/;
 // does not become a pair, it becomes an action, and the group stops needing an
 // identity at all: each input computes its own `checked` from the same target.
 //
-// That is also what fixes it. Svelte's own version writes the value with a plain
-// JavaScript assignment, which lands on the object but never reaches
-// `$B.$setitem`, so nothing re-renders, not even Svelte's effect that unfills
-// the others. Going through the pair puts the write back on Python's path.
+// And it keeps the write on Python's path: Svelte's own version writes the value
+// with a plain JavaScript assignment, which lands on the object but never
+// reaches `$B.$setitem`, so nothing would re-render.
 const GROUP_DIRECTIVE = /^bind:group\b/;
 
 // The shorthand: `bind:value` with no `={…}` is Svelte's way of writing
-// `bind:value={value}`. Written that way it never reaches the pair above, since
-// the scanner looks for an `=` and finds none, so Svelte binds its own `let` for
-// the name instead, which is the raw signal cell rather than Python's. Reads
-// then miss the namespace and writes never come back, and the first symptom is
-// worse than either: `bind:files` with nothing chosen hands Python's `None`
-// straight to a DOM property, which fails with `Failed to convert value to
-// FileList`.
-//
-// So the shorthand is expanded before anything else looks at the tag, and the
-// long form is the only one the rest of this pass has to know about. The same
+// `bind:value={value}`. Left as written, Svelte would bind its own `let` for the
+// name, the raw signal cell rather than Python's, since the scanner looks for an
+// `=` and finds none. So the shorthand is expanded before anything else looks
+// at the tag, and the long form is the only one the rest of this pass has to
+// know about. The same
 // holds for `class:active` and `style:color`, whose unexpanded read is
 // JavaScript's truth of the raw cell: None and `[]` are objects, so both set
 // the class.
@@ -555,21 +549,14 @@ const wrapperFor = (name, tag) => (onElement(tag) ? attributeWrapper(name) : nul
 
 // Svelte 4 slot syntax, which `{#snippet}` replaced. Neither spelling is an
 // expression: `let:item={row}` takes a binding pattern the way `bind:` does, and
-// `let:item` on its own declares a name for the slot's body. Compiled as a value
-// it made Svelte die inside itself on `Cannot read properties of undefined`,
-// which is the outcome this pass refuses things to prevent.
+// `let:item` on its own declares a name for the slot's body. Neither can be
+// compiled as a value, so both are refused with what replaces them.
 const LET_DIRECTIVE = /^let:/;
 
 // Whether an attribute name is one the ladder below has a rule for. Svelte 5
 // reads `bind:value={x}` and `bind:value="{x}"` as the same thing, and its own
-// fixtures write the quoted form; to this scanner they were two doors, and every
-// rule lived behind one of them. A binding skipped its read/write pair, so the
-// `__bound` that turns Python's None into undefined never ran and a field
-// displayed the word "None"; `class:on` was read as text rather than for
-// truthiness, so an empty Python list was true through the quotes and false
-// without them.
-//
-// So the question is asked once, here, before either branch runs.
+// fixtures write the quoted form, so both spellings reach the same rules: the
+// question is asked once, here, before either branch runs.
 
 // What an attribute's name is made of, one answer for every site that asks.
 //
@@ -2313,9 +2300,7 @@ function walk(markup, collect, onPython, seed, record, where) {
             // sibling.** The `row` of `{#each rows as row}` does not exist in
             // its `{:else}`, nor a declaration or a snippet written in the
             // `{#if}` branch in the `{:else}` one, so a script name of the same
-            // spelling is the one read there. Keeping the block's scope across
-            // the clause handed the expression a JavaScript argument that did
-            // not exist, and the component died at mount.
+            // spelling is the one read there.
             //
             // So the branch gets an id of its own, which is what the snippets
             // of the first pass are recorded under, and a scope holding those

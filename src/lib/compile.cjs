@@ -3033,9 +3033,7 @@ function namespaceObject(c) {
         `${NS}.$proxy = true;`,
         // Every namespace Brython makes for itself carries the module's own
         // name, and `from x import y` reads it off the *importing* module to
-        // work out what package it sits in. Ours had none, so the lookup asked
-        // for a module called `undefined`, and said so, in a component where
-        // `import x` on the line above had worked perfectly.
+        // work out what package it sits in, so ours carries one too.
         `${NS}.__name__ = ${JSON.stringify(c.namespace)};`
     ];
 }

@@ -75,7 +75,7 @@ reste de cette configuration et ce que chaque ligne apporte.
 npm install
 npm run dev
 
-npm test             # 1 594 tests : sémantique, props, réactivité, surface Svelte
+npm test             # 1 597 tests : sémantique, props, réactivité, surface Svelte
 npm run test:quiet   # la sortie de la suite : un run vert ne doit rien dire
 npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
@@ -435,6 +435,15 @@ texte reste du Python nu et lève : c'est une règle de gabarit, pas un changeme
 de langage. Elle suit le texte : une fonction du script reste du Python nu quand
 le balisage l'appelle, et une lambda écrite dans le balisage garde la règle
 quand elle s'exécute plus tard, en gestionnaire d'événement.
+
+**Un nom que rien n'a lié est absent, pas une erreur, pendant que le gabarit se
+rend.** Un nom du module affecté dans une branche qui n'a pas tourné, ou
+supprimé, se lit `None` dans le balisage, comme le `undefined` de JavaScript
+devient `None` partout où il entre en Python : `{total}` ne rend rien,
+`{f"[{total}]"}` rend `[None]`, et `{total + 1}` lève la `TypeError` de Python à
+sa ligne. Le code Python le lit comme Python, `NameError` : une fonction du
+script, et un gestionnaire écrit dans le balisage, qui s'exécute au clic et non
+pendant le rendu.
 
 **Le morse affecte.** `onclick={() => (open = !open)}` est la ligne la plus
 courante d'un gabarit Svelte, et Python n'en a pas d'équivalent court : un
@@ -1480,7 +1489,7 @@ part jamais.
 
 ## État
 
-Validé par `npm test`, 1 594 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 1 597 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;

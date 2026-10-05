@@ -4,6 +4,23 @@ import { mount, flushSync } from './mounted.js';
 import Inspect from './fixtures/Inspect.svelte';
 import InspectWithCounts from './fixtures/InspectWithCounts.svelte';
 import InspectLines from './fixtures/InspectLines.svelte';
+import InspectWithLines from './fixtures/InspectWithLines.svelte';
+
+// The logger of `inspect_with` was cut off the values by its end column alone,
+// counted as if on one line: on a line of its own, the cut fell elsewhere and the
+// call was refused as invalid syntax, or read another name.
+test('inspect_with laid out by a formatter hands its logger the values', () => {
+    globalThis.inspectWithLines = [];
+    const target = document.body.appendChild(document.createElement('div'));
+    mount(InspectWithLines, { target });
+    flushSync();
+
+    target.querySelector('button').click();
+    flushSync();
+
+    expect(Array.from(globalThis.inspectWithLines)).toEqual(['init 0', 'update 1']);
+    target.remove();
+});
 
 // The call was recognised on one line only: laid out over three, as a
 // formatter writes it, it stayed a call to the injected identity, wired to

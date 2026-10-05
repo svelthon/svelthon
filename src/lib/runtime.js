@@ -4136,11 +4136,9 @@ export function pyEvent(value, lineOffset = 0) {
 
     // Not a Python function, so there is nothing to wrap, and the value is on
     // its way to a DOM boundary like any other: `bound` is what turns None into
-    // undefined there. Returning it untouched leaked the None object into every
-    // attribute the handler test claims, and it claims more than handlers:
-    // `on` followed by a lowercase letter also catches `once`, `only` and
-    // `onboarding`, which Svelte 5 makes defensible for a component prop and
-    // which was the one place `__bound` did not reach.
+    // undefined there. The handler test claims more than handlers: `on`
+    // followed by a lowercase letter also catches `once`, `only` and
+    // `onboarding`, which Svelte 5 makes defensible for a component prop.
     if (found === null) return __pybridge.bound(value);
 
     const { fn: called, where, arity } = found;
@@ -4443,12 +4441,9 @@ const outbound = (value, made) => {
     return converted;
 };
 
-// And what comes *back*. Only the outbound half existed, and the asymmetry was
-// silent for as long as nobody looked at the answer: a value returned by an
-// `importjs` function arrived as a raw JavaScript one, so `cubicOut(0.5)` could
-// not be rounded, formatted, or even multiplied: `x * 2` raised
-// JavascriptError. The same call written `js.Math.sqrt(2)` gives a Python float,
-// because Brython's own JSObject machinery converts and this proxy did not.
+// And what comes *back*: a value returned by an `importjs` function is Python's,
+// as the same call written `js.Math.sqrt(2)` gives a Python float, so
+// `cubicOut(0.5)` can be rounded, formatted and multiplied.
 //
 // `jsobj2pyobj` is that machinery: a number becomes an int or a float, a string
 // a Python string, a DOM node a DOMNode, and plain objects and Promises are
@@ -4522,12 +4517,9 @@ const crossing = (target, self, args) => {
 };
 
 export function jsCall(value) {
-    // An imported constant crosses here too, and it crosses once: `export const
-    // half = 0.5` reached Python as a raw JavaScript number, where `half * 2`
-    // worked and `format(half, ".2f")` answered *non-empty format string passed
-    // to object.__format__*. The same 0.5 returned by an imported *function*
-    // came back a float, because the call goes through `inbound`. One value, two
-    // capabilities, decided by the way it entered.
+    // An imported constant crosses here too, and it crosses once, as the same
+    // value returned by an imported *function* crosses through `inbound`:
+    // `export const half = 0.5` is a float, which `format(half, ".2f")` takes.
     // A namespace, a default export or an object crosses as it is: the
     // functions reached through it are the engine's to call, and the engine
     // hands Python callables over through `pyobj2jsobj_hook`, above `pyHandler`.

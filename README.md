@@ -77,7 +77,7 @@ rest of that configuration and what each line buys.
 npm install
 npm run dev
 
-npm test             # 1 594 tests: semantics, props, reactivity, Svelte surface
+npm test             # 1 597 tests: semantics, props, reactivity, Svelte surface
 npm run test:quiet   # the suite's own output: a green run must say nothing
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
@@ -426,6 +426,14 @@ plain Python and raises: this is a template rule, not a language change. It
 follows the text: a function of the script keeps plain Python when the markup
 calls it, and a lambda written in the markup keeps the rule when it runs later,
 as an event handler.
+
+**A name nothing bound is absent, not an error, while the template renders.**
+A module name assigned in a branch that did not run, or deleted, reads as
+`None` in the markup, as JavaScript's `undefined` becomes `None` wherever it
+enters Python: `{total}` renders nothing, `{f"[{total}]"}` renders `[None]`, and
+`{total + 1}` raises Python's `TypeError` at its line. Python code reads it as
+Python does, `NameError`: a function of the script, and a handler written in the
+markup, which runs on a click and not while the template renders.
 
 **The walrus assigns.** `onclick={() => (open = !open)}` is the commonest line in
 a Svelte template, and Python has no short twin: a `lambda` holds an expression,
@@ -1467,7 +1475,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 1 594 tests as written (vitest reports more, one per
+Validated by `npm test`, 1 597 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;
