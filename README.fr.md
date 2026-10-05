@@ -157,7 +157,7 @@ noms sur ce préfixe, dans la même portée.
 | `to_py(valeur)` | *aucun*, l'autre sens : une valeur JavaScript lue comme du Python |
 | `tojson(valeur, indent=None)` | *aucun*, `to_js` avec la sérialisation attachée, sous le mot de Jinja |
 | `from_json(texte)` | *aucun*, `to_py` avec l'analyse attachée |
-| `batch(xs, n)` | *aucun*, une liste plate groupée en lignes de `n`, comme le `\|batch` de Jinja |
+| `batch(xs, n, fill)` | *aucun*, une liste plate groupée en lignes de `n`, la dernière complétée par `fill`, comme le `\|batch` de Jinja |
 | `date(valeur, style)` | *aucun*, une date lue dans la langue du visiteur, comme le `\|date` de Django |
 | `fromnow(valeur)` | *aucun*, « il y a 3 jours » ou « dans 2 heures », et ça reste juste |
 | `slugify(texte)` | *aucun*, un titre transformé en segment d'URL, comme le `\|slugify` de Django |
@@ -492,10 +492,8 @@ Python veut dire.
 | `value: str <=>` | script | une prop qui remonte aussi | la quatrième liaison, et la seule qui devait s'écrire par un mot |
 
 Un nom déclaré dans le gabarit est à la portée du bloc qui le contient, et
-`bind:` l'écrit :
-
-`{brouillon = …}` déclare de l'état à la portée du bloc, et `{salut => …}` un
-dérivé qui le suit — les deux signes que le script emploie déjà.
+`bind:` l'écrit. `{brouillon = …}` déclare de l'état, et `{salut => …}` un
+dérivé qui le suit, les deux signes que le script emploie déjà :
 
 ```svelte
 {#if edition}
@@ -731,7 +729,7 @@ pareil, ce que `tests/parity.test.js` démontre en faisant tourner le même
 composant dans les deux langages, ligne pour ligne.
 
 Le second est la frontière du mécanisme. Le suivi enveloppe les points d'entrée
-de Brython — `call_attr`, `$setitem`, `$delitem` — donc une mutation écrite en
+de Brython, `call_attr`, `$setitem` et `$delitem`, donc une mutation écrite en
 Python notifie où qu'elle soit écrite, et `Array.prototype.push` appelé depuis
 JavaScript passe à côté des trois. Remplacer le conteneur notifie, puisque ça
 passe par le setter du store ; la mutation Python suivante rattrape la vraie
@@ -1367,8 +1365,8 @@ JavaScript garde son appel.
 | `handler.length` | non : `length` est l'arité que l'appel déclare |
 
 Les deux exceptions sont les deux mots qu'une fonction JavaScript possède déjà.
-`name` prend celui de l'auteur quand il y en a un — `on_save` dit plus dans un
-log que `Handler.__call__` — et `length` est ce qu'une bibliothèque lit pour
+`name` prend celui de l'auteur quand il y en a un (`on_save` dit plus dans un
+log que `Handler.__call__`), et `length` est ce qu'une bibliothèque lit pour
 savoir ce qu'un callback prend. Les deux décrivent l'**appel**, aucun n'est le
 champ d'à côté. `tests/callable-matrix.test.js` tient chaque ligne, sur **8 formes** et **14
 positions**, et chaque forme encore appelée par une directive.

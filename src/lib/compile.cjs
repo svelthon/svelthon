@@ -48,7 +48,7 @@ const NS = '__py';
 // instead of producing a component with no reactivity at all.
 // The literal is Brython's own spelling, since this is both what is written
 // beside its code and the needle the check below looks for in it. A path may
-// hold a quote — `src/O'Brien.svelte` is a legal filename — so it is escaped
+// hold a quote (`src/O'Brien.svelte` is a legal filename), so it is escaped
 // rather than pasted, on both sides of the bridge: unescaped, the generated
 // module stopped parsing, and the Python it came from was perfectly valid.
 const namespaceCall = (name) => `$B.namespace(${JSON.stringify(name)})`;
@@ -1337,7 +1337,7 @@ const pythonModuleName = (source) => source.split('/').pop().replace(/(\.svelte)
 // Python identifiers that JavaScript will not accept as bindings.
 //
 // Half of them are Python keywords too and can never be written; the rest are
-// ordinary Python names an author reaches for without a thought — `default`,
+// ordinary Python names an author reaches for without a thought: `default`,
 // `new`, `enum`, `interface`, `package`, `static`, `case`. At module level they
 // are refused by `refuseReserved`, which says why and what to rename to. They
 // stay perfectly usable *inside* a `def`, where the generated module binds
@@ -1674,8 +1674,8 @@ const injectable = (one, declared, component, names) =>
 // component-only word is free in a plain `.py`.
 // The compiler's own prefix, and the one rule that keeps it.
 //
-// Seven families of name are built out of the author's — `__fn_go`, `__rev_c`,
-// `__bump_c`, `__read_c`, `__local_n`, `__js_mount`, `__root_loop` — and
+// Seven families of name are built out of the author's (`__fn_go`, `__rev_c`,
+// `__bump_c`, `__read_c`, `__local_n`, `__js_mount`, `__root_loop`) and
 // declared in the same scope as the author's names, beside `__proto`: an
 // author's name of that shape collides with the construct that emits it,
 // `Identifier '__fn_go' has already been declared`, inside the emitted script.
@@ -1718,8 +1718,8 @@ function refuseGeneratedSpelling(src, source, lineOffset) {
 
 function refuseLocked(declared, component, source, lines, lineOffset = 0) {
     // Three shapes the compiler writes into the author's source before it is
-    // parsed — the markup pass's expressions, and the two the arrow rewrites
-    // give a name to — so they arrive here among the declared names. They are
+    // parsed, the markup pass's expressions and the two the arrow rewrites give
+    // a name to, so they arrive here among the declared names. They are
     // the only ones this rule lets through, and they are ours.
     const reserved = declared.find(
         (name) => COMPILER_PREFIX.test(name) && !GENERATED.test(name)
@@ -1733,8 +1733,8 @@ function refuseLocked(declared, component, source, lines, lineOffset = 0) {
                 `prefix (${at === undefined ? source : `${source}:${at + lineOffset}`}). It ` +
                 `builds names like \`__fn_${reserved}\` and \`__rev_${reserved}\` out of ` +
                 `yours, in the same scope, so a name of that shape collides with one of ` +
-                `them. Python's own names end with \`__\` as well — \`__all__\`, \`__doc__\` ` +
-                `— and those are free.`,
+                `them. Python's own names end with \`__\` as well, \`__all__\` or \`__doc__\`, ` +
+                `and those are free.`,
             source,
             at === undefined ? undefined : at + lineOffset
         );
@@ -1788,7 +1788,7 @@ function refuseReserved(reserved, source, lines, lineOffset = 0) {
             `module cannot bind one (${at}). It is good Python and nothing else is ` +
             `wrong with it, but nothing reactive can be built on the name: the page ` +
             `would show its first value and never follow it, and a module cannot ` +
-            `publish it. Rename it — Python's own convention for a name that collides ` +
+            `publish it. Rename it: Python's own convention for a name that collides ` +
             `with a keyword is a trailing underscore, \`${name}_\`.`,
         source,
         line === undefined ? undefined : line + lineOffset

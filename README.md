@@ -121,13 +121,13 @@ the same line by reserving the `$` prefix. The refusal happens at compile time
 and names the culprit.
 
 A third list belongs to JavaScript rather than to us. A module-level name it
-reserves — `default`, `new`, `static`, `enum`, `interface`, `case` and the rest —
+reserves (`default`, `new`, `static`, `enum`, `interface`, `case` and the rest)
 cannot be given a binding in the generated module, so it is refused at its line
 with the rename Python has for the collision: `new_`. Inside a `def` the same
 word is an ordinary local and nothing objects.
 
 A fourth is the compiler's own: a name that starts with `__` and does not end
-with one — `__cache`, not `__all__` — is refused wherever it is declared, in the
+with one (`__cache`, not `__all__`) is refused wherever it is declared, in the
 script and in the markup alike, because the generated code builds its names out
 of that prefix in the same scope.
 
@@ -156,7 +156,7 @@ of that prefix in the same scope.
 | `to_py(value)` | *none*, the other way: a JavaScript value read as Python |
 | `tojson(value, indent=None)` | *none*, `to_js` with the dump attached, under Jinja's own word |
 | `from_json(text)` | *none*, `to_py` with the parse attached |
-| `batch(xs, n)` | *none*, a flat list grouped into rows of `n`, as Jinja's `\|batch` |
+| `batch(xs, n, fill)` | *none*, a flat list grouped into rows of `n`, the last padded with `fill`, as Jinja's `\|batch` |
 | `date(value, style)` | *none*, a date read in the visitor's language, as Django's `\|date` |
 | `fromnow(value)` | *none*, "3 days ago" or "in 2 hours", kept right as time passes |
 | `slugify(text)` | *none*, a title made into a URL segment, as Django's `\|slugify` |
@@ -480,10 +480,8 @@ everything else in a component is Python that means what Python means.
 | `value: str <=>` | script | a prop that also travels back up | the fourth binding, and the only one that had to be a word |
 
 A name declared in the markup is scoped to the block that holds it, and `bind:`
-writes it:
-
-`{draft = …}` declares state scoped to the block, and `{greeting => …}` a
-derived that follows it — the same two signs the script uses.
+writes it. `{draft = …}` declares state, and `{greeting => …}` a derived that
+follows it, the same two signs the script uses:
 
 ```svelte
 {#if editing}
@@ -710,7 +708,7 @@ idiomatic Svelte component with `$state` behaves exactly the same, which
 line for line.
 
 The second is the boundary of the mechanism. The tracking wraps Brython's own
-entry points — `call_attr`, `$setitem`, `$delitem` — so a mutation written in
+entry points, `call_attr`, `$setitem` and `$delitem`, so a mutation written in
 Python notifies wherever it is written, and `Array.prototype.push` called from
 JavaScript goes around all three. Replacing the container notifies, since that
 goes through the store's setter; the next Python mutation catches up to the true
@@ -1305,7 +1303,7 @@ a `Promise` or an `ActionFailure`, is passed through untouched.
 
 **A callable crosses as its call, and not as its fields.** A function, a bound
 method and an instance whose class defines `__call__` all arrive as JavaScript
-functions, wherever they were written — under a name, in a list, in a mapping, in
+functions, wherever they were written: under a name, in a list, in a mapping, in
 what another function returned. What does *not* arrive is the object's own
 attributes: they stay in Python, where the call still reaches them, so a strategy
 object keeps its state and JavaScript keeps its call.
@@ -1317,8 +1315,8 @@ object keeps its state and JavaScript keeps its call.
 | `handler.length` | no: `length` is the arity the call declares |
 
 The two exceptions are the two words a JavaScript function already owns. `name`
-takes the author's own when there is one — `on_save` says more in a log than
-`Handler.__call__` — and `length` is what a library reads to learn what a
+takes the author's own when there is one (`on_save` says more in a log than
+`Handler.__call__`), and `length` is what a library reads to learn what a
 callback takes. Both describe the *call*; neither is the field beside it.
 `tests/callable-matrix.test.js` holds every line, across **8 shapes** and **14
 positions**, and each shape again as the callee of a directive.
