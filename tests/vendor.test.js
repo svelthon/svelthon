@@ -647,6 +647,20 @@ test('t-strings as CPython has them: tstring-nested-in-fstring', async () => {
     expect(nested()).toBe("<Template(strings=('a',), interpolations=())>");
 });
 
+// A list, set or dict comprehension binds its names in a scope of its own:
+// never in the module's namespace, where a name's accessor took the write; kept
+// by a function made in it; and a class body's names are not its own. `python3`
+// on the same module.
+test('a comprehension has a scope of its own: comprehension-own-scope', async () => {
+    const { module_level, late, class_level } = await import('./fixtures/comprehension_scope.py');
+
+    expect([module_level(), late(), class_level()]).toEqual([
+        ['absent', 'absent'],
+        [2, 2, 2],
+        "name 'factor' is not defined"
+    ]);
+});
+
 // A row too short for a starred target says how many values it needs: the
 // names beside the star, wherever it stands. `python3` on the same two rows.
 test('a starred target says the values it needs as CPython does: starred-unpack-expected-count', async () => {
