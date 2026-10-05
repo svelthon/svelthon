@@ -106,7 +106,8 @@ describe('inspect', () => {
         // call keeps its number: an error below it names its own line.
         test.for([
             ['inspect', 'count = 0\n\ninspect(\n    count,\n)\nboom = 1 / 0\n'],
-            ['inspect_with', 'count = 0\n\ninspect_with(print,\n    count)\n\nboom = 1 / 0\n']
+            ['inspect_with', 'count = 0\n\ninspect_with(print,\n    count)\n\nboom = 1 / 0\n'],
+            ['inspect_with as a formatter lays it out', 'count = 0\ninspect_with(\n    print,\n    count,\n)\nboom = 1 / 0\n']
         ])('hands Svelte a call to %s laid out over lines', ([, src]) => {
             const out = compile(src, 'Probe', 'probe.svelte', {});
 

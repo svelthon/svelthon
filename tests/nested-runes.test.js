@@ -82,6 +82,7 @@ describe('a rune written below the top level', () => {
         ['inside an expression', 'count = 0\nprint(effect(lambda: count))\n', /`effect\(…\)` is read only as the whole value of an assignment.*:2\)/],
         ['assigned inspect', 'count = 0\nwatch = inspect(count)\n', /`inspect\(…\)` is a statement of its own.*:2\)/],
         ['inspect sharing its line', 'count = 0\ninspect(count); count = 1\n', /`inspect\(…\)` is read as a statement on lines of its own.*:2\)/],
+        ['inspect sharing its line with a call', 'count = 0\ninspect(count); print(count)\n', /`inspect\(…\)` is read as a statement on lines of its own.*:2\)/],
         ['annotated and assigned inspect', 'count = 0\nwatch: object = inspect(count)\n', /`inspect\(…\)` is a statement of its own.*:2\)/],
         ['an annotated derived handed a value', 'count = 0\ntwice: int = derived(count * 2)\n', /`derived\(…\)` takes a function.*:2\)/],
         ['a derived handed a value', 'count = 0\ntwice = derived(count * 2)\n', /`derived\(…\)` takes a function.*`name => expression`.*:2\)/],

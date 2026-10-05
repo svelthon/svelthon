@@ -955,8 +955,10 @@ const BINDABLE = /^([\p{XID_Start}_]\p{XID_Continue}*\s*:\s*[^=<>]+?)\s*<=>\s*(\
 const balanced = (expr) => opened(expr) === 0;
 
 // Brackets the line leaves open, ignoring those inside a string: what makes the
-// next line a continuation rather than a statement.
-function opened(expr) {
+// next line a continuation rather than a statement. `lowest` is the depth the
+// text went down to: below zero, it closed a bracket it did not open, as the
+// arguments of `inspect(count); print(count)` read to the last `)` do.
+function opened(expr, lowest = { depth: 0 }) {
     let depth = 0;
 
     for (let i = 0; i < expr.length; i++) {
@@ -970,11 +972,18 @@ function opened(expr) {
         const c = expr[i];
 
         if (c === '(' || c === '[' || c === '{') depth++;
-        else if (c === ')' || c === ']' || c === '}') depth--;
+        else if (c === ')' || c === ']' || c === '}') lowest.depth = Math.min(lowest.depth, --depth);
     }
 
     return depth;
 }
+
+// The arguments of one call, and not the tail of one and the head of another.
+const enclosed = (expr) => {
+    const lowest = { depth: 0 };
+
+    return opened(expr, lowest) === 0 && lowest.depth === 0;
+};
 // The name the first `:=` of an expression binds in the expression's own scope,
 // or null, read off its AST: one in an f-string's field counts, one in the body
 // of a lambda of its own binds there and does not, and one in that lambda's
@@ -1118,7 +1127,8 @@ function takeArrows(src, where, lineOffset, allowed, theirs = new Set()) {
             call = gathered.join('\n');
         }
 
-        const inspected = statement && !found && allowed ? call.match(INSPECT) : null;
+        const matched = statement && !found && allowed ? call.match(INSPECT) : null;
+        const inspected = matched && enclosed(matched[2]) ? matched : null;
         const watched = inspected && !theirs.has(inspected[1] ? 'inspect_with' : 'inspect') ? inspected : null;
 
         if (last > n && !watched) {
