@@ -614,6 +614,31 @@ test.for([
     expect(() => compile(source, 'Probe', 'probe.py', { plain: true })).toThrow(`SyntaxError: ${message}`);
 });
 
+// The label of a debug field, `{x=}`, is the field's own text: it started at the
+// f-string's second character when a conversion followed, and an f-string
+// inside the field left the label of its own field behind. The answers are
+// CPython's.
+test.for([
+    ['fstring-debug-conversion-label', 'converted', ['before:row.name=ok', "before:row.name='ok'"]],
+    ['fstring-debug-nested-label', 'nested', `f'{row.name=}'="row.name='ok'"`]
+])('debug f-strings as CPython labels them: %s', async ([, read, expected]) => {
+    const labels = await import('./fixtures/debug_labels.py');
+
+    expect(labels[read]()).toEqual(expected);
+});
+
+// And the label's node ends where its text does, past the `=` and the spaces
+// after it, a character short of the `!`, the `:` or the `}`: CPython's
+// positions for `f"{x = !s}"`, which the template reads the label by.
+test('debug f-strings as CPython places them: fstring-debug-label-end', () => {
+    createRequire(import.meta.url)('../src/lib/compile.cjs');
+    const $B = globalThis.__BRYTHON__;
+    const tree = $B._PyPegen.run_parser(new $B.Parser('f"{x = !s}"\n', '<guard>', 'file'));
+    const [label] = tree.body[0].value.values[0].values;
+
+    expect([label.col_offset, label.end_col_offset]).toEqual([3, 7]);
+});
+
 // Imported here and not at the top: the module does not compile without the
 // repair, and that has to fail this test alone.
 test('t-strings as CPython has them: tstring-nested-in-fstring', async () => {

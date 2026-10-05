@@ -536,16 +536,21 @@ export const __pybridge = {
     // the page as an `Error` and a coroutine is run and its failure reported,
     // where a callback's contract handed the host the Brython exception and a
     // rejected promise nobody looks at.
+    //
+    // Each property is read once, as a JavaScript spread reads it: a getter
+    // asked again may answer otherwise, or refuse.
     spreadElement(value, event = (one) => pyEvent(one)) {
-        const out = spreadOf(value, __pybridge.bound);
-        if (out === null || typeof out !== 'object') return out;
+        if (value === null || value === undefined || typeof value !== 'object') return value;
+
+        const read = { ...value };
+        const out = spreadOf(read, __pybridge.bound);
 
         for (const key of Object.keys(out)) {
             const wrapper = attributeWrapper(key);
-            if (key[0] + key[1] === 'on') out[key] = event(value[key]);
-            else if (wrapper === '__class') out[key] = __pybridge.klass(value[key]);
-            else if (wrapper === '__truthy') out[key] = __pybridge.truthy(value[key]);
-            else if (wrapper === '__hidden') out[key] = __pybridge.hidden(value[key]);
+            if (key[0] + key[1] === 'on') out[key] = event(read[key]);
+            else if (wrapper === '__class') out[key] = __pybridge.klass(read[key]);
+            else if (wrapper === '__truthy') out[key] = __pybridge.truthy(read[key]);
+            else if (wrapper === '__hidden') out[key] = __pybridge.hidden(read[key]);
         }
 
         return out;

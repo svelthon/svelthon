@@ -1,7 +1,7 @@
 # Patches applied to the vendored Brython
 
 `brython_runtime.js` and `brython_compiler.js` are cut from one bundle, built
-from Brython's master plus forty-eight proposed commits, with **four** edits
+from Brython's master plus fifty-one proposed commits, with **four** edits
 made in the file itself afterwards. The wrapper, the integer format and the
 `__call__` binding carry a `/* SVELTHON patch, see BRYTHON_FIX.md */` comment,
 the only way to find them again in 1.4 MB; the other edit *is* a comment, so
@@ -133,6 +133,9 @@ than by a build-time check, and going upstream retires none of them:
 | bytes concatenated with a string, `b"a" "b"`, raises `cannot mix bytes and nonbytes literals`: its location was read off token fields the AST nodes do not have (branch `bytes-str-concat-message`) | the same |
 | `from __future__ import braces` and an unknown future feature raise their `SyntaxError`, through `$B.raise_error_known_location`, where a local function of that name no longer exists (branch `future-import-errors`) | the same |
 | more than 200 nested brackets raise `too many nested parentheses` in the tokenizer, before the parser recurses past the stack (branch `too-many-nested-parentheses`) | the same |
+| the label of a debug field followed by a conversion, `f"before:{x=!s}"`, starts at the field and not at the f-string's second character (branch `fstring-debug-conversion-label`) | `tests/vendor.test.js` |
+| the label of a debug field holding an f-string, `f"{f'{x=}'=}"`, is the whole field: the inner f-string no longer leaves the start of its own field behind (branch `fstring-debug-nested-label`) | the same |
+| the label's node ends where its text does, past the `=` and the spaces after it, as CPython places it, where it ran a character into the `!`, the `:` or the `}` (branch `fstring-debug-label-end`) | the same |
 
 `scripts/browser-check.sh` covers the DOM node path as well, which is where
 identity across the boundary is observable.

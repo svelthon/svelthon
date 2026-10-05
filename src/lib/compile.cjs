@@ -1559,7 +1559,11 @@ function templateDots(def) {
         // that text is about to be rewritten: the label goes ahead as a field
         // of its own, and the `=` becomes the `!r` it stands for when nothing
         // else follows. The parser hands the label over as a constant
-        // starting just inside the field's brace.
+        // starting just inside the field's brace and ending past the `=` and
+        // the spaces after it, the parentheses around the expression included,
+        // `{(row.name)=}`, which the expression's own node leaves out. Its text
+        // is read off the source at those places: the engine keeps a string
+        // constant's value escaped for JavaScript, `\'` for `'`.
         if (node instanceof $B.ast.JoinedStr) {
             node.values.forEach((label, at) => {
                 const field = node.values[at + 1];
@@ -1567,13 +1571,11 @@ function templateDots(def) {
                 if (!(label instanceof $B.ast.Constant && field instanceof $B.ast.FormattedValue)) return;
                 if (begin(label) !== begin(field) + 1) return;
 
-                let past = end(field.value);
-                while (/\s/.test(def[past])) past += 1;
-                past += 1;
-                while (/\s/.test(def[past])) past += 1;
+                const text = def.slice(begin(label), end(label));
+                const sign = begin(label) + text.trimEnd().length - 1;
 
-                insert(begin(field), `{${JSON.stringify(label.value)}}`, field);
-                replace(end(field.value), past, def[past] === '}' ? '!r' : '');
+                insert(begin(field), `{${JSON.stringify(text)}}`, field);
+                replace(sign, end(label), def[end(label)] === '}' ? '!r' : '');
             });
         }
 

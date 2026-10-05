@@ -17,3 +17,9 @@ count = 3
 <p>{f"{count + row.size = }"}</p>
 <p>{(lambda: f"{row.name=}")()}</p>
 <p>{f"[{row.name=}]"}</p>
+<p>{f"{(row.name)=}"}</p>
+<p>{f"{((row.name))=}"}</p>
+<p>{f"{(row.name + 'x')=}"}</p>
+<p>{f"{(count + 1)=}"}</p>
+<p>{f"before:{row.name=!s}"}</p>
+<p>{f"{f'{row.name=}'=}"}</p>
