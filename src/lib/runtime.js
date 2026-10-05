@@ -4582,14 +4582,14 @@ function exported(one, made) {
     return plainData(one, made, pyHandler);
 }
 
-// A write from Python to a name a `.py` re-exports from JavaScript: refused, as
-// JavaScript refuses an assignment to an import, with the name and the module.
+// A write from Python to a name `__js__` or `importjs` brings: refused, as
+// JavaScript refuses an assignment to an import, with the name and the file.
 export function readOnlyImport(name, where) {
     const $B = globalThis.__BRYTHON__;
 
     $B.RAISE(
         _b_.TypeError,
-        `'${name}' is the JavaScript binding ${where} re-exports, and an import is read-only; ` +
+        `'${name}' is a JavaScript import of ${where}, and an import is read-only; ` +
             `bind another name to hold a value of your own`
     );
 }
@@ -5317,43 +5317,45 @@ const moduleNamespace = (value) =>
 
 // `...rest` in a pattern read by key, `{#each rows as {id, ...rest}}`: what the
 // row holds beyond the keys the pattern took, a dict, for every row the fields
-// themselves are read from. A mapping is its entries, through `keys()` and
-// `__getitem__`, which is what Python's own `{**row}` asks of one; a Python
-// instance is its attributes, `vars(row)`; a JavaScript object is its own
-// enumerable properties, which is what JavaScript's own `...rest` takes.
+// themselves are read from, each row answering as its own language does.
 //
-// Which of the three is asked of the class, never by reading the row: a mapping
-// is a dict, or a class declaring `__getitem__` and a `keys` it can call, where
-// a field or a property called `keys` is the row's data; and a JavaScript
+// A JavaScript object is its own enumerable properties, which is what
+// JavaScript's own `...rest` takes, and a key taken is compared as JavaScript
+// compares a property's key, as a string: `{[year]: v, ...rest}` with `year`
+// the int `2024` leaves out the property "2024", as Svelte does.
+//
+// A Python value is its entries when its class is a mapping, through `keys()`
+// and `__getitem__`, which is what Python's own `{**row}` asks of one, and
+// `vars(row)` otherwise, Python's own: an instance of a class with
+// `__slots__`, which has no `__dict__`, raises the TypeError `vars` raises
+// rather than coming out empty.
+//
+// Which of these is asked of the class, never by reading the row: a mapping is
+// a dict, or a class declaring `__getitem__` and a `keys` it can call, where a
+// field or a property called `keys` is the row's data; and a JavaScript
 // object's `ob_type`, which the engine reads to tell its own objects, is read
 // without running a getter (`quietPyType`), so each property is read once, by
 // the copy, as JavaScript's own rest reads it.
 export function restOf(row, taken) {
     const $B = globalThis.__BRYTHON__;
     const out = _b_.dict.$factory();
-    const left = (key) => !$B.$is_member(key, taken);
     const type = quietPyType(row);
 
-    if (type !== undefined) {
-        const mapping =
-            $B.is_dict(row) || (declares(type, '__getitem__') !== $B.NULL && callable(declares(type, 'keys')));
+    if (type === undefined && row !== null && (typeof row === 'object' || typeof row === 'function')) {
+        const keys = new Set(Array.from(taken, (key) => String($B.pyobj2jsobj(key))));
 
-        if (mapping) {
-            for (const key of $B.$call(_b_.list, $B.$call($B.$getattr(row, 'keys')))) {
-                if (left(key)) $B.$setitem(out, key, $B.$getitem(row, key));
-            }
-            return out;
-        }
+        for (const key of Object.keys(row)) if (!keys.has(key)) $B.$setitem(out, key, $B.jsobj2pyobj(row[key], row));
 
-        const own = ownAttributes(row);
-
-        if (own !== undefined && $B.is_dict(own)) {
-            for (const [key, value] of pyEntries(own)) if (left(key)) $B.$setitem(out, key, value);
-        }
         return out;
     }
 
-    for (const key of Object.keys(row)) if (left(key)) $B.$setitem(out, key, $B.jsobj2pyobj(row[key], row));
+    const cls = type ?? $B.get_class(row);
+    const mapping = $B.is_dict(row) || (declares(cls, '__getitem__') !== $B.NULL && callable(declares(cls, 'keys')));
+    const entries = mapping ? row : $B.$call(_b_.vars, row);
+
+    for (const key of $B.$call(_b_.list, $B.$call($B.$getattr(entries, 'keys')))) {
+        if (!$B.$is_member(key, taken)) $B.$setitem(out, key, $B.$getitem(entries, key));
+    }
 
     return out;
 }

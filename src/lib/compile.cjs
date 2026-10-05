@@ -1680,6 +1680,51 @@ function globalReads(table) {
     return found;
 }
 
+// The names a node binds where it stands: a name stored or deleted, a `def`, a
+// `class`, an import alias, an `except … as` and a `match` capture. What the
+// symbol table counts as a binding, read back off the tree to say where.
+const bindsHere = (node) => {
+    if (node instanceof $B.ast.Name) return node.ctx instanceof $B.ast.Load ? [] : [node.id];
+    if (node instanceof $B.ast.alias) return node.name === '*' ? [] : [node.asname ?? node.name.split('.')[0]];
+    if (node instanceof $B.ast.MatchMapping) return node.rest ? [node.rest] : [];
+
+    const named = ['FunctionDef', 'AsyncFunctionDef', 'ClassDef', 'ExceptHandler', 'MatchAs', 'MatchStar'];
+
+    return named.some((one) => node instanceof $B.ast[one]) && node.name ? [node.name] : [];
+};
+
+// A name `__js__` or `importjs` brings is JavaScript's import, which Python
+// reads live and never binds, as JavaScript never assigns one: an engine
+// refuses a module that declares an import and a `let` of the same name. So
+// a binding of one is refused here, with its line, as a write at run time is
+// (`readOnlyImport`).
+//
+// A node binds the module's name where it stands in the module, or in a scope
+// that declares the name `global`, which Python's symbol table answers for the
+// scope. Asked node by node and not of the module's block, where Python also
+// files the variable of a comprehension it inlines, which binds nothing of the
+// module's.
+function refuseBoundImports(ast, table, imported, source, lineOffset) {
+    const names = new Set(imported);
+
+    walkScoped(ast.body, (node, scope, line) => {
+        const block = scope === null ? null : table.blockOf(scope);
+        const module = (name) =>
+            scope === null || (block !== undefined && scopeIn(block, name) === $B.SYMBOL_FLAGS.GLOBAL_EXPLICIT);
+        const name = bindsHere(node).find((one) => names.has(one) && module(one));
+
+        if (name === undefined) return;
+
+        throw refuse(
+            `svelthon — \`${name}\` is a JavaScript import, which Python reads and never binds, as ` +
+                `JavaScript never assigns one (${source}:${line + lineOffset}). Bind another name to hold ` +
+                `a value of your own.`,
+            source,
+            line + lineOffset
+        );
+    });
+}
+
 const injectable = (one, declared, component, names) =>
     (component || !one.component) &&
     !declared.includes(one.name) &&
@@ -2401,12 +2446,17 @@ function surface(body, theirs = new Set()) {
     // statement at module level declares, and a name of the module is state.
     // Walked over the whole tree, since the point of `global` is that it is
     // written where the descent above stops.
+    //
+    // Except a name JavaScript imports, which the `global` only reads: it stays
+    // the import, and a binding of it is refused (`refuseBoundImports`).
     const globals = (statements) => {
         for (const node of statements) {
             if (node instanceof $B.ast.Global) {
                 statement = node.lineno;
 
                 for (const name of node.names || []) {
+                    if (theirs.has(name)) continue;
+
                     bind(name);
                     if (take(name)) state.push(name);
                 }
@@ -2793,7 +2843,8 @@ function preamble(c) {
             // Three that keep the spelling the markup pass emits, and the read
             // half of the dot, which `templateDots` writes.
             'group', 'readAttr', 'restOf', 'writeAttr', 'writeItem',
-            ...(c.templateLine === undefined ? [] : ['templateFrom'])
+            ...(c.templateLine === undefined ? [] : ['templateFrom']),
+            ...(c.jsImported.length ? ['readOnlyImport'] : [])
         ])} } from 'svelthon/runtime';`,
         ...c.jsImports.map(jsImportLine),
         // Under the engine's prefix like every other name it lends: the
@@ -3043,13 +3094,15 @@ function namespaceObject(c) {
 //
 // Wrapped once and not on every read: a name Python compares by identity,
 // `handler is on_click`, has to answer the same object twice. And a name Python
-// declares itself wins, which is what the filter is for.
+// declares itself wins over a name of the `<script module>`, which is what the
+// filter is for; a name `__js__` or `importjs` brings, Python never binds
+// (`refuseBoundImports`).
 //
 // `extra` is what a component has and a plain `.py` cannot: the names its
 // `<script module>` imported. They are wrapped like the rest and bound like the
 // rest, so the only difference between the two paths is that list, which is why
 // this is one function rather than the same six lines twice.
-function jsNameBindings(c, extra = [], plain = false) {
+function jsNameBindings(c, extra = []) {
     // Once each. The two lists overlap whenever a component names the same
     // import in its `<script module>` and in an `importjs`, and the two loops
     // this replaces then bound it twice: the same line, emitted after itself.
@@ -3066,13 +3119,14 @@ function jsNameBindings(c, extra = [], plain = false) {
     // (`ADAPTED` in runtime.js): the same function gives the same proxy, so a
     // callback registered from Python can still be taken back.
     //
-    // A name a `.py` re-exports is JavaScript's own binding (`plainExports`),
-    // which follows its module and which only its module writes: an import is
-    // read-only in JavaScript, and a write from Python, through `globals()` or
-    // from another module, is refused as JavaScript refuses it, rather than
-    // taken by Python's reader and missed by JavaScript's.
+    // A name `__js__` or `importjs` brings is JavaScript's import, which only
+    // its module writes, and which a `.py` re-exports as JavaScript's own
+    // binding (`plainExports`): an import is read-only in JavaScript, and a
+    // write from Python, through `globals()` or from another module, is refused
+    // as JavaScript refuses it, rather than taken by Python's reader and missed
+    // by JavaScript's.
     return names.map((n) =>
-        plain && c.exported.includes(n) && jsOnly(c, n)
+        c.jsImported.includes(n)
             ? `__bind(__proto, '${n}', () => __jsCall(${n}), () => __readOnlyImport(${JSON.stringify(n)}, ${JSON.stringify(c.source)}));`
             : `__bind(__proto, '${n}', () => __jsCall(${n}));`
     );
@@ -3424,7 +3478,7 @@ function plainBindings(c) {
         ...injections(c.declared, false, c.names),
 
         // A module has no `<script module>`, so nothing joins its own imports.
-        ...jsNameBindings(c, [], true),
+        ...jsNameBindings(c),
         ``
     ];
 }
@@ -3451,8 +3505,8 @@ function plainInit(c) {
     ];
 }
 
-// A name `__js__` brought that Python never binds itself.
-const jsOnly = (c, name) => c.jsImported.includes(name) && !c.declared.includes(name);
+// A name `__js__` brought, which Python never binds (`refuseBoundImports`).
+const jsOnly = (c, name) => c.jsImported.includes(name);
 
 function plainExports(c) {
     return [

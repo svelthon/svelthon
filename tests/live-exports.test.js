@@ -23,7 +23,7 @@ test.for([
 ])('a write %s to a re-exported JavaScript name is refused', ([, write]) => {
     Source.reset();
 
-    expect(write).toThrow(/'counter' is the JavaScript binding .*js_reexport\.py re-exports, and an import is read-only/);
+    expect(write).toThrow(/'counter' is a JavaScript import of .*js_reexport\.py, and an import is read-only/);
     expect(Reexport.counter).toBe(0);
     expect(Reexport.read()).toBe(0);
 });

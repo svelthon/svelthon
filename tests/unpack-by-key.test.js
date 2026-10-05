@@ -21,6 +21,9 @@ import RestRowsNative from './fixtures/RestRowsNative.svelte';
 import RestProtocols from './fixtures/RestProtocols.svelte';
 import RestProtocolsNative from './fixtures/RestProtocolsNative.svelte';
 import { reads } from './fixtures/rest_protocols.js';
+import RestKeys from './fixtures/RestKeys.svelte';
+import RestKeysNative from './fixtures/RestKeysNative.svelte';
+import RestWithoutDict from './fixtures/RestWithoutDict.svelte';
 
 // Which rule a row takes was read off the row: a field `keys = 3` was called,
 // a property `keys` was run, and a JavaScript object's `ob_type` getter ran
@@ -95,6 +98,51 @@ test('the rest of a row holds its other fields, for every kind of row', () => {
 
     expect(python).toEqual({ dict: '10|tail', instance: '10|tail', mapping: '10|tail', record: '10|tail', class: '10|tail' });
     expect([python.record, python.class]).toEqual([native.record, native.class]);
+});
+
+// The rest of a JavaScript row compared the keys taken as Python compares them,
+// so the int `2024` did not leave out the property "2024", which JavaScript
+// spells as a string: the field was read and kept in the rest too. A key is
+// compared as the row compares it, and Svelte's own unpacking is the witness;
+// on a dict, Python's (`python3`: `then|2025,label`).
+test('a key taken is left out of the rest as the row compares its keys', () => {
+    const read = (Component) => {
+        const target = document.body.appendChild(document.createElement('div'));
+        mount(Component, { target });
+        flushSync();
+        const found = Object.fromEntries([...target.querySelectorAll('p')].map((one) => [one.dataset.k, one.textContent]));
+        target.remove();
+        return found;
+    };
+    const { dict, ...python } = read(RestKeys);
+    const native = read(RestKeysNative);
+
+    expect(python).toEqual(native);
+    expect(python.year).toBe('then|2025,label');
+    expect(dict).toBe('then|2025,label');
+});
+
+// A Python row with no `__dict__`, an instance of a class with `__slots__`
+// among them, came out as an empty rest, its fields silently gone. The rest of
+// a Python row that is not a mapping is `vars(row)`, and it raises what `vars`
+// raises; a subclass that adds a `__dict__` gives what is in it. `python3` on
+// the same rows: the four raise this TypeError, and `Mixed()` gives `extra`.
+test.for(['slots', 'str', 'int', 'none'])('the rest of a %s row raises as `vars` does', (kind) => {
+    const target = document.body.appendChild(document.createElement('div'));
+
+    expect(() => mount(RestWithoutDict, { target, props: { kind } })).toThrow(
+        /TypeError: vars\(\) argument must have __dict__ attribute/
+    );
+    target.remove();
+});
+
+test('the rest of an instance with slots and a `__dict__` is what `vars` holds', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+    mount(RestWithoutDict, { target, props: { kind: 'mixed' } });
+    flushSync();
+
+    expect(target.querySelector('[data-k="mixed"]').textContent).toBe('extra');
+    target.remove();
 });
 
 // A computed key was evaluated twice, once to read the field and once to leave

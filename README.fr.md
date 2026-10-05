@@ -75,7 +75,7 @@ reste de cette configuration et ce que chaque ligne apporte.
 npm install
 npm run dev
 
-npm test             # 1 600 tests : sémantique, props, réactivité, surface Svelte
+npm test             # 1 603 tests : sémantique, props, réactivité, surface Svelte
 npm run test:quiet   # la sortie de la suite : un run vert ne doit rien dire
 npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
@@ -539,8 +539,9 @@ Chaque clé est lue par la règle du point : un dict et une instance se dépaque
 de la même façon, et une clé que la ligne n'a pas lève l'`AttributeError` que
 lève `{cat.nmae}` ; `name="anon"` lui donne plutôt un défaut, et `...rest` est le
 dict des clés non nommées : les autres entrées d'un mapping, comme `{**row}` les
-lit, les autres attributs d'une instance, les autres propriétés propres d'un objet
-JavaScript. L'alternative épelle deux fois la même chose : `{cat.id}`, `{cat.name}`.
+lit, les autres attributs d'une instance, comme `vars(row)` les lit, les autres
+propriétés propres d'un objet JavaScript, comme Svelte les lit. L'alternative
+épelle deux fois la même chose : `{cat.id}`, `{cat.name}`.
 
 ## Composition
 
@@ -1311,6 +1312,13 @@ __all__ = ["load", "actions"]
 Une règle, en une phrase : **un fichier qui a un gabarit a le dialecte ; un
 module est du Python.**
 
+Dans les deux cas, le nom est l'import de JavaScript, et Python le lit comme
+JavaScript, vivant : ce que son module écrit ensuite, Python le lit ensuite. Il
+ne le lie jamais, puisque JavaScript n'affecte jamais un import : `counter = 0`
+ou un `global counter` suivi d'une affectation est refusé à la compilation, avec
+sa ligne, et une écriture à l'exécution, `globals()["counter"] = 0`, lève
+`TypeError`. Une valeur à vous prend un autre nom.
+
 Pour la plateforme elle-même, `js` donne les globales JavaScript et `to_js()`
 convertit un conteneur Python en quelque chose qu'une API Web acceptera :
 
@@ -1489,7 +1497,7 @@ part jamais.
 
 ## État
 
-Validé par `npm test`, 1 600 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 1 603 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;

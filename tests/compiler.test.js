@@ -189,7 +189,7 @@ def increment():
             { plain: true }
         );
 
-        expect(script).toContain("bind(__proto, 'error', () => __jsCall(error))");
+        expect(script).toContain("bind(__proto, 'error', () => __jsCall(error), ");
         expect(script).not.toContain('const __js_error =');
     });
 
