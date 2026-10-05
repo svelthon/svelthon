@@ -1403,6 +1403,7 @@ const RUNTIME = {
     __pybridge: '__pybridge',
     group: '__group',
     readAttr: '__getattr',
+    restOf: '__rest',
     writeAttr: '__setattr',
     writeItem: '__setitem'
 };
@@ -2773,7 +2774,7 @@ function preamble(c) {
             ...(c.effects.length || c.lifecycle('on_mount') ? ['pyTeardown'] : []),
             // Three that keep the spelling the markup pass emits, and the read
             // half of the dot, which `templateDots` writes.
-            'group', 'readAttr', 'writeAttr', 'writeItem',
+            'group', 'readAttr', 'restOf', 'writeAttr', 'writeItem',
             ...(c.templateLine === undefined ? [] : ['templateFrom'])
         ])} } from 'svelthon/runtime';`,
         ...c.jsImports.map(jsImportLine),
@@ -3077,6 +3078,7 @@ function injectedBindings(c) {
                   `__bind(__proto, '__bound', () => __pybridge.bound);`,
                   `__bind(__proto, '__assign', () => __assign);`,
                   `__bind(__proto, '__getattr', () => __getattr);`,
+                  `__bind(__proto, '__rest', () => __rest);`,
                   `__bind(__proto, '__setattr', () => __setattr);`,
                   `__bind(__proto, '__setitem', () => __setitem);`
               ]),
@@ -3423,6 +3425,9 @@ function plainInit(c) {
     ];
 }
 
+// A name `__js__` brought that Python never binds itself.
+const jsOnly = (c, name) => c.jsImported.includes(name) && !c.declared.includes(name);
+
 function plainExports(c) {
     return [
         // `pyCall`, and not a copy of it written out here.
@@ -3459,8 +3464,13 @@ function plainExports(c) {
         // And a live one, as `export let` is in JavaScript: captured once, the
         // export went on reading `0` after `bump()` made the name `1`, where
         // `module.read()` and another Python module both read `1`.
+        //
+        // A name only `__js__` brings is JavaScript's own binding, imported at
+        // the top of this module, and it is re-exported as that binding: it
+        // follows the writes its own module makes, which never pass through
+        // Python's namespace.
         ...c.exported
-            .filter((n) => !c.isFunction(n))
+            .filter((n) => !c.isFunction(n) && !jsOnly(c, n))
             .flatMap((n) => [
                 `let __export_${n};`,
                 `__liveExport(${NS}, ${JSON.stringify(n)}, (__value) => { __export_${n} = ` +
@@ -3469,7 +3479,7 @@ function plainExports(c) {
         ...(c.exported.length
             ? [
                   `export { ${c.exported
-                      .map((n) => (c.isFunction(n) ? n : `__export_${n} as ${n}`))
+                      .map((n) => (c.isFunction(n) || jsOnly(c, n) ? n : `__export_${n} as ${n}`))
                       .join(', ')} };`
               ]
             : [])
@@ -3809,7 +3819,9 @@ function compile(
     // A `from m import *` binds names the source does not spell, so with one
     // the question waits until the module has run (`unboundRefusals`).
     const binds = moduleBinds(table);
-    const unbound = (listed ?? []).filter((n) => !declared.includes(n) && !binds.has(n));
+    // A name `__js__` brings is bound too: the module reads it, and so does
+    // `globals()`.
+    const unbound = (listed ?? []).filter((n) => !declared.includes(n) && !binds.has(n) && !jsImported.includes(n));
     // The name is bound nowhere, so the line is the one `__all__` is on.
     const line = declaration?.line;
     const listedAt = line === undefined ? source : `${source}:${line}`;

@@ -5291,6 +5291,40 @@ const moduleNamespace = (value) =>
     Object.getPrototypeOf(value) === null &&
     Object.getOwnPropertyDescriptor(value, Symbol.toStringTag)?.value === 'Module';
 
+// `...rest` in a pattern read by key, `{#each rows as {id, ...rest}}`: what the
+// row holds beyond the keys the pattern took, a dict, for every row the fields
+// themselves are read from. A mapping is its entries, through `keys()` and
+// `__getitem__`, which is what Python's own `{**row}` asks of one; a Python
+// instance is its attributes, `vars(row)`; a JavaScript object is its own
+// enumerable properties, which is what JavaScript's own `...rest` takes.
+export function restOf(row, taken) {
+    const $B = globalThis.__BRYTHON__;
+    const out = _b_.dict.$factory();
+    const left = (key) => !$B.$is_member(key, taken);
+
+    if (pyType(row) !== undefined) {
+        const keys = $B.$getattr(row, 'keys', MISSING);
+
+        if (keys !== MISSING) {
+            for (const key of $B.$call(_b_.list, $B.$call(keys))) {
+                if (left(key)) $B.$setitem(out, key, $B.$getitem(row, key));
+            }
+            return out;
+        }
+
+        const own = ownAttributes(row);
+
+        if (own !== undefined && $B.is_dict(own)) {
+            for (const [key, value] of pyEntries(own)) if (left(key)) $B.$setitem(out, key, value);
+        }
+        return out;
+    }
+
+    for (const key of Object.keys(row)) if (left(key)) $B.$setitem(out, key, $B.jsobj2pyobj(row[key], row));
+
+    return out;
+}
+
 // `otherwise`, when given, is a callable whose result stands for a name that is
 // neither: the default of a key in a pattern, `{#each rows as {id=0}}`.
 export function readAttr(target, name, otherwise) {

@@ -77,7 +77,7 @@ rest of that configuration and what each line buys.
 npm install
 npm run dev
 
-npm test             # 1 592 tests: semantics, props, reactivity, Svelte surface
+npm test             # 1 594 tests: semantics, props, reactivity, Svelte surface
 npm run test:quiet   # the suite's own output: a green run must say nothing
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
@@ -515,8 +515,10 @@ covering a meaning, which is why it costs less than the walrus beside it:
 
 Each key is read by the dot's rule, so a dict and an instance unpack alike, and a
 key the row lacks raises the `AttributeError` that `{cat.nmae}` raises; `name="anon"`
-gives it a default instead, and `...rest` is the dict of the keys not named. The
-alternative spells the same thing twice: `{cat.id}`, `{cat.name}`.
+gives it a default instead, and `...rest` is the dict of the keys not named: a
+mapping's other entries, as `{**row}` reads them, an instance's other
+attributes, a JavaScript object's other own properties. The alternative spells
+the same thing twice: `{cat.id}`, `{cat.name}`.
 
 ## Composition
 
@@ -1465,7 +1467,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 1 592 tests as written (vitest reports more, one per
+Validated by `npm test`, 1 594 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;

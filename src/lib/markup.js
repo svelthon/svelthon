@@ -933,7 +933,7 @@ function unpackByKey(inside, call, names, tuple, unpack) {
 
             unpack.consts.push({
                 target,
-                read: `{k: v for k, v in __getattr(${alias}, "items")() if k not in (${keys.map((one) => `${one}, `).join('')})}`,
+                read: `__rest(${alias}, (${keys.map((one) => `${one}, `).join('')}))`,
                 source: '',
                 lazy: false
             });

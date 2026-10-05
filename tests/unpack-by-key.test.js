@@ -15,6 +15,30 @@ import UnpackByKeyTypo from './fixtures/UnpackByKeyTypo.svelte';
 import ComputedRest from './fixtures/ComputedRest.svelte';
 import ComputedRestNative from './fixtures/ComputedRestNative.svelte';
 import { restart } from './fixtures/computed_rest_keys.js';
+import RestRows from './fixtures/RestRows.svelte';
+import RestRowsNative from './fixtures/RestRowsNative.svelte';
+
+// `...rest` called `items()` on every row, so a Python instance or a JavaScript
+// object, whose fields the pattern reads, stopped the mount with an
+// AttributeError as soon as a rest was added. It reads every row the fields are
+// read from: a mapping by `keys()` and `__getitem__`, as Python's `{**row}`
+// does, an instance by its attributes, `vars(row)`, and a JavaScript object by
+// its own enumerable properties, as Svelte's own unpacking does, measured.
+test('the rest of a row holds its other fields, for every kind of row', () => {
+    const read = (Component) => {
+        const target = document.body.appendChild(document.createElement('div'));
+        mount(Component, { target });
+        flushSync();
+        const found = Object.fromEntries([...target.querySelectorAll('p')].map((one) => [one.dataset.k, one.textContent]));
+        target.remove();
+        return found;
+    };
+    const python = read(RestRows);
+    const native = read(RestRowsNative);
+
+    expect(python).toEqual({ dict: '10|tail', instance: '10|tail', mapping: '10|tail', record: '10|tail', class: '10|tail' });
+    expect([python.record, python.class]).toEqual([native.record, native.class]);
+});
 
 // A computed key was evaluated twice, once to read the field and once to leave
 // it out of `...rest`: a key that answers otherwise the second time read
