@@ -7,6 +7,7 @@ import { test, expect, describe, vi } from 'vitest';
 import '../src/lib/runtime.js';
 import { mount, flushSync, settled } from './mounted.js';
 import CoroutineAwaited from './fixtures/CoroutineAwaited.svelte';
+import ComprehensionAwait from './fixtures/ComprehensionAwait.svelte';
 import * as deleteOrder from './fixtures/delete_order.py';
 import * as strKeywords from './fixtures/str_keywords.py';
 import * as jsonText from './fixtures/json_text.py';
@@ -659,6 +660,36 @@ test('a comprehension has a scope of its own: comprehension-own-scope', async ()
         [2, 2, 2],
         "name 'factor' is not defined"
     ]);
+});
+
+// A comprehension holding an `await` was an async function nobody awaited: it
+// handed back a Promise where a list was written, and an `await` in one written
+// in a block of the function did not compile once the comprehension had a
+// scope of its own. `python3` on the same module: `([0, 2, 4], {0: 0, 1: 2})`
+// and `2`.
+test('a comprehension holding an await is awaited: comprehension-await', async () => {
+    const { doubled, in_block } = await import('./fixtures/comprehension_await.py');
+
+    expect([await doubled(), await in_block()]).toEqual([[[0, 2, 4], { 0: 0, 1: 2 }], 2]);
+});
+
+// And in `on_mount`, where a page awaits its data.
+test('and in on_mount', async () => {
+    const target = document.body.appendChild(document.createElement('div'));
+    mount(ComprehensionAwait, { target });
+
+    await settled(() => expect(target.textContent.trim()).toBe('[0, 2, 4]'));
+    target.remove();
+});
+
+// A JavaScript symbol hashed by a property set on it, which a symbol cannot
+// hold: as a key of a dict or a member of a set it raised an error of the
+// engine's. `python3`, two distinct objects in their place: `[2, True, 2]`.
+test('a JavaScript symbol is a key like any other: symbol-hash', async () => {
+    const { keyed } = await import('./fixtures/symbol_keys.py');
+    const token = Symbol('token');
+
+    expect(keyed(token, Symbol('token'))).toEqual([2, true, 2]);
 });
 
 // A row too short for a starred target says how many values it needs: the

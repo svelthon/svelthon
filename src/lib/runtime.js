@@ -5315,24 +5315,27 @@ const moduleNamespace = (value) =>
     Object.getPrototypeOf(value) === null &&
     Object.getOwnPropertyDescriptor(value, Symbol.toStringTag)?.value === 'Module';
 
-// `...rest` in a pattern read by key, `{#each rows as {id, ...rest}}`: what the
+// `**rest` in a pattern read by key, `{#each rows as {id, **rest}}`: what the
 // row holds beyond the keys the pattern took, a dict, for every row the fields
 // themselves are read from, each row answering as its own language does.
 //
-// A JavaScript object is its own enumerable properties, which is what
-// JavaScript's own `...rest` takes, and a key taken is compared as JavaScript
-// compares a property's key, as a string: `{[year]: v, ...rest}` with `year`
-// the int `2024` leaves out the property "2024", as Svelte does.
+// A JavaScript object is its own enumerable properties, its symbols included,
+// which is what JavaScript's own `...rest` takes, and a key taken is compared
+// as JavaScript compares a property's key: a symbol as itself, anything else as
+// a string, so `{[year]: v, **rest}` with `year` the int `2024` leaves out the
+// property "2024", as Svelte does.
 //
-// A Python value is its entries when its class is a mapping, through `keys()`
-// and `__getitem__`, which is what Python's own `{**row}` asks of one, and
+// A Python value is its entries when it is a mapping, through `keys()` and
+// `__getitem__`, which is what Python's own `{**row}` asks of one, and
 // `vars(row)` otherwise, Python's own: an instance of a class with
 // `__slots__`, which has no `__dict__`, raises the TypeError `vars` raises
 // rather than coming out empty.
 //
-// Which of these is asked of the class, never by reading the row: a mapping is
-// a dict, or a class declaring `__getitem__` and a `keys` it can call, where a
-// field or a property called `keys` is the row's data; and a JavaScript
+// A mapping is a dict, or a row whose class declares `__getitem__` and whose
+// `keys` answers with something callable, read as Python reads `row.keys`:
+// once, its descriptor bound, so a classmethod or a property handing back a
+// function counts as a method does. Of any other row `keys` is never read, and
+// a field or a property of that name stays the row's data. A JavaScript
 // object's `ob_type`, which the engine reads to tell its own objects, is read
 // without running a getter (`quietPyType`), so each property is read once, by
 // the copy, as JavaScript's own rest reads it.
@@ -5342,18 +5345,29 @@ export function restOf(row, taken) {
     const type = quietPyType(row);
 
     if (type === undefined && row !== null && (typeof row === 'object' || typeof row === 'function')) {
-        const keys = new Set(Array.from(taken, (key) => String($B.pyobj2jsobj(key))));
+        const keys = new Set(
+            Array.from(taken, (key) => {
+                const spelt = $B.pyobj2jsobj(key);
+                return typeof spelt === 'symbol' ? spelt : String(spelt);
+            })
+        );
 
-        for (const key of Object.keys(row)) if (!keys.has(key)) $B.$setitem(out, key, $B.jsobj2pyobj(row[key], row));
+        for (const key of Reflect.ownKeys(row)) {
+            if (keys.has(key) || !Object.prototype.propertyIsEnumerable.call(row, key)) continue;
+
+            $B.$setitem(out, key, $B.jsobj2pyobj(row[key], row));
+        }
 
         return out;
     }
 
     const cls = type ?? $B.get_class(row);
-    const mapping = $B.is_dict(row) || (declares(cls, '__getitem__') !== $B.NULL && callable(declares(cls, 'keys')));
+    const keys =
+        $B.is_dict(row) || declares(cls, '__getitem__') !== $B.NULL ? $B.$getattr(row, 'keys', MISSING) : MISSING;
+    const mapping = keys !== MISSING && callable(keys);
     const entries = mapping ? row : $B.$call(_b_.vars, row);
 
-    for (const key of $B.$call(_b_.list, $B.$call($B.$getattr(entries, 'keys')))) {
+    for (const key of $B.$call(_b_.list, $B.$call(mapping ? keys : $B.$getattr(entries, 'keys')))) {
         if (!$B.$is_member(key, taken)) $B.$setitem(out, key, $B.$getitem(entries, key));
     }
 

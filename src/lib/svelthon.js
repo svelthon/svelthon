@@ -28,9 +28,10 @@ const { compile, VIRTUAL_PREFIX, virtualId, pythonModuleName, elementProps, PY_N
 // is then evaluated twice, and a module-level Map would leave the plugin
 // looking in an empty one.
 //
-// The key holds the project as well as the id: the directory the process is in,
-// which every name is relative to. Two projects built in one process, each with
-// a `src/Card.svelte`, give the same id, and each plugin serves its own.
+// The key holds the project as well as the id: the directory the process was
+// in when each half was made, which every name is relative to. Two projects
+// built in one process, each with a `src/Card.svelte`, give the same id, and
+// each plugin serves its own.
 const generated = (globalThis[Symbol.for('svelthon.generated')] ??= new Map());
 const generatedKey = (root, id) => `${root}\n${id}`;
 
@@ -337,6 +338,11 @@ export function python(options = {}) {
     const searchPath = options.path || [];
     const calls = perCall();
 
+    // The project the modules it files belong to, read as it is made, as the
+    // plugin reads its own: the directory the process is in when it later
+    // preprocesses a component may be another project's.
+    const root = process.cwd();
+
     // Shared with the plugin, which compiles the `.py` files themselves and has
     // to resolve their imports the same way. The two halves may not be the same
     // module instance, so a value on the global is the only channel between
@@ -441,7 +447,7 @@ export function python(options = {}) {
             // Brython looks it up.
             const prelude = pythonImports(imports, dirname(filename || '.'), searchPath);
 
-            generated.set(generatedKey(process.cwd(), virtualId(name)), withPrelude(module, map, prelude));
+            generated.set(generatedKey(root, virtualId(name)), withPrelude(module, map, prelude));
 
             // The content is JavaScript now, so the tag must stop claiming
             // otherwise. Leaving `lang="python"` in place is invisible to the
@@ -714,11 +720,20 @@ export function svelthon(options = {}) {
     const root = process.cwd();
     const key = (id) => generatedKey(root, id);
 
+    // Where an id with no importer is rooted, SvelteKit's route entries among
+    // them, `/src/routes/+page.server.py`: Vite's own root once Vite has
+    // resolved its configuration, and until then the project this plugin was
+    // made in. Never the directory the process happens to be in when it asks.
+    let routes = root;
+
     return {
         name: 'svelthon:modules',
         // 'pre', or Vite's own resolver claims `./store.py` as a plain file and
         // hands its Python straight to the JS parser.
         enforce: 'pre',
+        configResolved(config) {
+            routes = config.root;
+        },
         resolveId(id, importer) {
             if (isVirtual(id)) return '\0' + id;
             // Without an importer either: SvelteKit hands its route modules to
@@ -727,7 +742,7 @@ export function svelthon(options = {}) {
             // such as `#lib/peps.py` belongs to whoever defined the alias, and
             // reaches load() as an absolute path once they have.
             if (id.endsWith('.py') && (id.startsWith('.') || id.startsWith('/'))) {
-                const direct = importer ? resolve(dirname(importer), id) : resolve(id);
+                const direct = importer ? resolve(dirname(importer), id) : resolve(routes, id);
                 if (existsSync(direct)) return direct;
 
                 // A leading slash means two different things. An alias has
@@ -739,7 +754,7 @@ export function svelthon(options = {}) {
                 // two apart, and getting it wrong reads as
                 // `ENOENT: stat '/src/routes/+page.server.py'`.
                 if (id.startsWith('/')) {
-                    const fromRoot = resolve(process.cwd(), `.${id}`);
+                    const fromRoot = resolve(routes, `.${id}`);
                     if (existsSync(fromRoot)) return fromRoot;
                 }
 

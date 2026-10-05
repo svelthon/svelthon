@@ -24,6 +24,10 @@ import { reads } from './fixtures/rest_protocols.js';
 import RestKeys from './fixtures/RestKeys.svelte';
 import RestKeysNative from './fixtures/RestKeysNative.svelte';
 import RestWithoutDict from './fixtures/RestWithoutDict.svelte';
+import RestMappingKeys from './fixtures/RestMappingKeys.svelte';
+import RestSymbols from './fixtures/RestSymbols.svelte';
+import RestSymbolsNative from './fixtures/RestSymbolsNative.svelte';
+import { rows as symbolRows, token as symbolToken } from './fixtures/rest_symbols.js';
 
 // Which rule a row takes was read off the row: a field `keys = 3` was called,
 // a property `keys` was run, and a JavaScript object's `ob_type` getter ran
@@ -98,6 +102,52 @@ test('the rest of a row holds its other fields, for every kind of row', () => {
 
     expect(python).toEqual({ dict: '10|tail', instance: '10|tail', mapping: '10|tail', record: '10|tail', class: '10|tail' });
     expect([python.record, python.class]).toEqual([native.record, native.class]);
+});
+
+// A mapping's `keys` was looked up raw on its class, so a classmethod, a
+// staticmethod or a property handing back a function, which `{**row}` calls
+// as a method, made the row an instance and its rest came out empty. It is
+// read as Python reads `row.keys` now. `python3`'s `{**row}` gives `10|tail`
+// for the five; a field `keys = 3` is the row's data, its attributes.
+test('a mapping is known by its keys as Python reads them, descriptor bound', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+    mount(RestMappingKeys, { target });
+    flushSync();
+
+    const found = Object.fromEntries([...target.querySelectorAll('p')].map((one) => [one.dataset.k, one.textContent]));
+
+    expect(found).toEqual({
+        method: '10|tail',
+        classmethod: '10|tail',
+        staticmethod: '10|tail',
+        property: '10|tail',
+        instance: '10|tail',
+        field: '10|keys'
+    });
+    target.remove();
+});
+
+// The rest of a JavaScript row read `Object.keys`, so a property kept under an
+// enumerable symbol was dropped, where JavaScript's own rest keeps it. It is
+// read as JavaScript reads it now, symbols included, and a symbol taken by a
+// computed key is left out as itself. Svelte is the witness of the symbol kept;
+// JavaScript itself of the one taken, which Svelte keeps (it excludes
+// `String(key)`).
+test('the rest of a JavaScript row keeps its symbols, as JavaScript does', () => {
+    const read = (Component) => {
+        const target = document.body.appendChild(document.createElement('div'));
+        mount(Component, { target });
+        flushSync();
+        const found = Object.fromEntries([...target.querySelectorAll('p')].map((one) => [one.dataset.k, one.textContent]));
+        target.remove();
+        return found;
+    };
+    const { [symbolToken]: selected, ...rest } = symbolRows[0];
+    const { kept, taken } = read(RestSymbols);
+
+    expect({ kept }).toEqual(read(RestSymbolsNative));
+    expect(taken).toBe(`${selected}|${Reflect.ownKeys(rest).length}`);
+    expect([kept, taken]).toEqual(['10|1|20', '20|1']);
 });
 
 // The rest of a JavaScript row compared the keys taken as Python compares them,

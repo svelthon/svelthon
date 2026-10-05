@@ -102,6 +102,91 @@ describe('one Python file shared by two projects', () => {
     });
 });
 
+// A route entry SvelteKit hands over, `/src/routes/+page.server.py`, was
+// resolved against the directory the process was in when it was asked, while
+// the plugin's modules belong to the project it was made in: after a change of
+// directory, the plugin returned another project's route, or a file that does
+// not exist. And the preprocessor filed its modules under the directory of the
+// moment too. Each half now keeps the project it was made in, and a route is
+// rooted where Vite roots it once Vite has said.
+describe('each half keeps its own project', () => {
+    const route = '/src/routes/+page.server.py';
+    const project = (name, answer) => {
+        const root = join(temporary, name);
+
+        mkdirSync(join(root, 'src', 'routes'), { recursive: true });
+        writeFileSync(join(root, 'src', 'routes', '+page.server.py'), `__all__ = ["answer"]\nanswer = ${answer}\n`);
+        return root;
+    };
+
+    test('a route is resolved in the plugin’s project, whatever the process is in', () => {
+        const original = process.cwd();
+        const [first, second] = [project('route-a', 1), project('route-b', 2)];
+
+        try {
+            process.chdir(first);
+            const plugin = svelthon();
+            const alone = plugin.resolveId(route);
+
+            process.chdir(second);
+            const moved = plugin.resolveId(route);
+
+            process.chdir(original);
+            expect([alone, moved, plugin.resolveId(route)]).toEqual(Array(3).fill(join(first, route)));
+        } finally {
+            process.chdir(original);
+        }
+    });
+
+    test('and in the root a real Vite server resolves', async () => {
+        const { createServer } = await import('vite');
+        const original = process.cwd();
+        const [first, second] = [project('vite-a', 1), project('vite-b', 2)];
+        const plugin = svelthon();
+        const server = await createServer({
+            configFile: false,
+            root: first,
+            plugins: [plugin],
+            logLevel: 'silent',
+            server: { middlewareMode: true },
+            optimizeDeps: { noDiscovery: true, include: [] }
+        });
+
+        try {
+            process.chdir(second);
+            const resolved = await server.environments.client.pluginContainer.resolveId(route);
+
+            expect(resolved?.id).toBe(join(first, route));
+        } finally {
+            process.chdir(original);
+            await server.close();
+        }
+    });
+
+    test('a component preprocessed after a change of directory is served by its project’s plugin', async () => {
+        const original = process.cwd();
+        const first = join(temporary, 'files-a');
+        const filename = join(first, 'src', 'Card.svelte');
+        const source = '<script lang="python">\nword = "MOVED"\n</script>\n<p>{word}</p>\n';
+
+        mkdirSync(join(first, 'src'), { recursive: true });
+        writeFileSync(filename, source);
+
+        try {
+            process.chdir(first);
+            const plugin = svelthon();
+            const pre = python();
+
+            process.chdir(temporary);
+            const { code } = await preprocess(source, [pre], { filename });
+
+            expect(served(plugin, code)).toContain('MOVED');
+        } finally {
+            process.chdir(original);
+        }
+    });
+});
+
 describe('two versions of one file preprocessed at once', () => {
     const filename = join(temporary, 'Same.svelte');
     const first = '<script lang="python">\nalpha = 1\n</script>\n<p>{alpha + 1}</p>\n';
