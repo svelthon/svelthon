@@ -392,8 +392,10 @@ export function overMarkup(content, transform) {
 
 // The blocks a component actually has: name, attributes, closing tag. A fresh
 // regex per call, because `lastIndex` on a shared `/g` is state and two walks of
-// one file would resume in each other's middle.
-const blocks = () => /<(script|style)\b([^>]*)>[\s\S]*?(<\/\1\s*>)/gi;
+// one file would resume in each other's middle. A quoted value is read whole,
+// as Svelte's parser reads it, so a `>` inside one does not end the tag.
+const BLOCK = /<(script|style)\b((?:[^>"']|"[^"]*"|'[^']*')*)>[\s\S]*?(<\/\1\s*>)/;
+const blocks = () => new RegExp(BLOCK.source, 'gi');
 
 // `lang="python"` as an attribute of its own, and not as three letters inside
 // another name: not `data-lang`, a hyphen being no word character. The value
@@ -421,8 +423,8 @@ export const attributesOf = (text) => {
 
 const declaresPython = (text) => attributesOf(text).get('lang') === 'python';
 
-// Where a file's Python script block begins and how it is closed, or `null` for
-// a file that declares none.
+// Where a file's Python script block begins, where its body does, past the
+// tag's own `>`, and how it is closed, or `null` for a file that declares none.
 //
 // Read from the blocks themselves, never from the text of the whole file: a
 // JavaScript component holding `const example = '<script lang="python">'`, a
@@ -433,7 +435,9 @@ export function pythonScript(content) {
 
     for (const found = blocks(); (block = found.exec(content)); ) {
         if (block[1].toLowerCase() === 'script' && declaresPython(block[2])) {
-            return { index: block.index, closing: block[3] };
+            const body = block.index + `<${block[1]}${block[2]}>`.length;
+
+            return { index: block.index, body, closing: block[3] };
         }
     }
 
@@ -2473,7 +2477,7 @@ export function pythonRanges(content) {
 // A comment is one only in the markup: inside a `<script>` or a `<style>`,
 // `'<!--'` is the author's text, and is left as written.
 export const withoutComments = (content) =>
-    content.replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>|<!--[\s\S]*?-->/gi, (found, element) =>
+    content.replace(new RegExp(`${BLOCK.source}|<!--[\\s\\S]*?-->`, 'gi'), (found, element) =>
         element === undefined ? found.replace(/[^\n]/g, ' ') : found
     );
 
@@ -2487,12 +2491,16 @@ export const withoutComments = (content) =>
 const blank = (text) => text.replace(/[^\n]/g, ' ');
 const QUOTED_TAG = /"[^"]*<[^"]*"|'[^']*<[^']*'/g;
 
+// Each script's and style's body blanked, its tags kept as written.
+export const blankBodies = (content) =>
+    content.replace(blocks(), (found, name, attributes, close) => {
+        const open = `<${name}${attributes}>`;
+
+        return open + blank(found.slice(open.length, found.length - close.length)) + close;
+    });
+
 export const markupOnly = (content) =>
-    withoutComments(content)
-        .replace(
-            /(<(script|style)\b[^>]*>)([\s\S]*?)(<\/\2\s*>)/gi,
-            (_, open, name, body, close) => open + blank(body) + close
-        )
+    blankBodies(withoutComments(content))
         .replace(
             /<\p{ID_Start}[^\s/>]*(?:\s+[^\s=/>"']+(?:\s*=\s*(?:"[^"]*"|'[^']*'|\{[^{}]*\}|[^\s>"']+))?)*\s*\/?>|\{[^{}]*\}/gu,
             (found) => found.replace(QUOTED_TAG, blank)

@@ -1555,6 +1555,28 @@ function templateDots(def) {
             replace(dot(node), end(node), `, ${JSON.stringify(node.attr)})`);
         }
 
+        // A debug field, `{row.name=}`, prints the text of its expression, and
+        // that text is about to be rewritten: the label goes ahead as a field
+        // of its own, and the `=` becomes the `!r` it stands for when nothing
+        // else follows. The parser hands the label over as a constant
+        // starting just inside the field's brace.
+        if (node instanceof $B.ast.JoinedStr) {
+            node.values.forEach((label, at) => {
+                const field = node.values[at + 1];
+
+                if (!(label instanceof $B.ast.Constant && field instanceof $B.ast.FormattedValue)) return;
+                if (begin(label) !== begin(field) + 1) return;
+
+                let past = end(field.value);
+                while (/\s/.test(def[past])) past += 1;
+                past += 1;
+                while (/\s/.test(def[past])) past += 1;
+
+                insert(begin(field), `{${JSON.stringify(label.value)}}`, field);
+                replace(end(field.value), past, def[past] === '}' ? '!r' : '');
+            });
+        }
+
         for (const key of Object.keys(node)) if (key !== 'parent') visit(node[key], shadowed);
     };
 

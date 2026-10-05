@@ -9,7 +9,8 @@ import {
     collector,
     moduleScript,
     withoutComments,
-    markupOnly
+    markupOnly,
+    blankBodies
 } from './markup.js';
 import { parse } from 'svelte/compiler';
 
@@ -363,8 +364,9 @@ export function python(options = {}) {
             refuseSpacedClose(declaring.closing, filename);
 
             // The body starts after the tag's `>`, which a tag written over two
-            // lines puts on the second line.
-            const open = content.indexOf('>', declaring.index) + 1;
+            // lines puts on the second line, and which a quoted value may hold
+            // before it.
+            const open = declaring.body;
 
             const file = {
                 jsNames: moduleImports(content),
@@ -475,11 +477,8 @@ const ELEMENT_OBJECT = /<svelte:options\b[^>]*?\bcustomElement\s*=\s*\{/;
 // body of `extend`. The scripts and styles are blanked first, lines and
 // offsets kept, since the Python one is not JavaScript and a style may not be
 // CSS yet.
-const BLOCK = /(<(script|style)\b[^>]*>)([\s\S]*?)(<\/\2\s*>)/g;
-
 function elementObject(code) {
-    const blanked = code.replace(BLOCK, (_, open, name, body, close) => open + body.replace(/[^\n]/g, ' ') + close);
-    const expression = parse(blanked, { modern: true })
+    const expression = parse(blankBodies(code), { modern: true })
         .options?.attributes.find((one) => one.name === 'customElement')?.value?.expression;
 
     return expression?.type === 'ObjectExpression' ? expression : null;
