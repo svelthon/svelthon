@@ -40,7 +40,7 @@ import {
 // a Python scalar comes back untouched.
 const written = (value) => pyScalar(value) ?? value;
 
-// The instant a Date holds, whichever JavaScript context built it — and
+// The instant a Date holds, whichever JavaScript context built it, and
 // `undefined` for anything that is not a Date at all.
 //
 // `instanceof Date` asks about *our* Date constructor, and an iframe, a worker,
@@ -51,7 +51,7 @@ const written = (value) => pyScalar(value) ?? value;
 //
 // `getTime` called against the value is the brand itself: the internal slot a
 // Date carries is per-object, not per-realm, so this accepts every context's
-// Date and throws for everything else — including an object that sets
+// Date and throws for everything else, including an object that sets
 // `Symbol.toStringTag` to 'Date', which `Object.prototype.toString` would
 // believe. An invalid Date answers NaN, which is a number and therefore an
 // answer; the caller's own domain decides what to do with it.
@@ -92,7 +92,7 @@ function shown(value) {
     // A function is the one shape with neither a JSON notation nor a useful
     // `String()`, which would be its whole source text. Three things may know
     // its name and they are asked in the order they are trustworthy: what Python
-    // recorded, then the name JavaScript gave it — which is what names a
+    // recorded, then the name JavaScript gave it, which is what names a
     // function an author imported through `__js__`, where Python knows nothing
     // and `str()` answers `<JavascriptFunction object>` for every one of them.
     //
@@ -108,7 +108,7 @@ function shown(value) {
     try {
         // `undefined` rather than a throw is what `JSON.stringify` answers for
         // the values it has no notation for, a function among them, and
-        // `String(fn)` is then the whole source text of it — a refusal printing
+        // `String(fn)` is then the whole source text of it, a refusal printing
         // a page of generated JavaScript at an author who wrote `tojson(save)`.
         // Python's own repr is what names it.
         //
@@ -157,9 +157,9 @@ const moment = (value) => (typeof value === 'bigint' ? Number(value) : value);
 function instant(value) {
     const held = instantOf(value);
 
-    // A Date of any context, rebuilt as one of ours so everything downstream —
-    // `getTime`, `Intl.DateTimeFormat.format` — is handed a value from the realm
-    // that will read it.
+    // A Date of any context, rebuilt as one of ours so everything downstream,
+    // `getTime` and `Intl.DateTimeFormat.format`, is handed a value from the
+    // realm that will read it.
     if (held !== undefined) return new Date(held);
 
     // `written` first, then this helper's own domain: what is shared is the
@@ -234,9 +234,9 @@ const serialisable = (one) => {
     // page should say.
     if (typeof one === 'number' && !Number.isFinite(one)) {
         throw refuse(
-            `tojson(): ${one} has no JSON — JSON has no notation for it and ` +
+            `tojson(): ${one} has no JSON: JSON has no notation for it and ` +
                 `JSON.stringify writes \`null\` instead, which is a different value. ` +
-                `Decide what the page should hold — None, 0, or a string — and write that.`
+                `Decide what the page should hold (None, 0, or a string) and write that.`
         );
     }
 
@@ -271,12 +271,11 @@ const serialisable = (one) => {
 // this is a rule and not a fourth branch above. `plainData` asks it of a
 // callable at any depth, before anything is flattened; by the time a replacer
 // runs, an instance whose class defines `__call__` has already become its
-// fields — `{"on_save": Handler(db)}` was written out as `{"on_save": {}}`, a
-// page saying the registry is empty.
+// fields, and `{"on_save": Handler(db)}` would read as an empty registry.
 //
 // It is the boundary's own predicate, so the three shapes answer together: a
 // function, a bound method, and a callable instance. The fields of that instance
-// are not what it is — the export hands it to JavaScript as its call.
+// are not what it is: the export hands it to JavaScript as its call.
 const noCall = (one) => {
     // The walk hands this rule five shapes, and the name it carries is the first
     // of them. What they share is the sentence: *there is no JSON for this*,
@@ -306,10 +305,9 @@ const noCall = (one) => {
     }
 
     // **A Python set**, named as itself. It is a plain object holding `$store`
-    // and `ob_type`, so the walk reached its class first and the refusal that
-    // came out said `<class 'set'> is a class` — about an instance. Python's own
-    // answer is `Object of type set is not JSON serializable`, and the way out
-    // is the one a Python author already knows.
+    // and `ob_type`, so a walk would reach its class first and call an instance
+    // a class. Python's own answer is `Object of type set is not JSON
+    // serializable`, and the way out is the one a Python author already knows.
     if (isSet(one)) {
         throw refuse(
             `tojson(): ${__pybridge.str(one)} is a set, and a set has no JSON. ` +
@@ -317,10 +315,9 @@ const noCall = (one) => {
         );
     }
 
-    // **Bytes**, which got the set's wrong accusation at the neighbouring type,
-    // for the same reason: `{ob_type, source}`, walked, class reached first.
-    // CPython refuses them too, and the two ways out are the ones a Python
-    // author reaches for depending on what the bytes hold.
+    // **Bytes**, for the same reason: `{ob_type, source}`, walked, reaches its
+    // class first. CPython refuses them too, and the two ways out are the ones a
+    // Python author reaches for depending on what the bytes hold.
     if (pyBytes(one)) {
         throw refuse(
             `tojson(): ${__pybridge.str(one)} is bytes, and bytes have no JSON. ` +
@@ -329,17 +326,17 @@ const noCall = (one) => {
     }
 
     // **A symbol**, the last of the shapes `JSON.stringify` drops in silence: as
-    // a value it wrote nothing at all, under a key it wrote `{}`. `shown` cannot
-    // name one — `JSON.stringify` answers undefined for it too — so it says its
-    // own description.
+    // a value it writes nothing at all, under a key `{}`. `shown` cannot name
+    // one (`JSON.stringify` answers undefined for it too), so it says its own
+    // description.
     if (typeof one === 'symbol') {
         throw refuse(`tojson(): ${String(one)} is a symbol, and a symbol has no JSON`);
     }
 
     // **Any other Python value with nothing to write**: a range, a complex, and
     // whatever the standard library adds. The two arms above say more because
-    // their way out is known; this one says what CPython says — *Object of type
-    // range is not JSON serializable* — naming the class of the value rather
+    // their way out is known; this one says what CPython says, *Object of type
+    // range is not JSON serializable*, naming the class of the value rather
     // than accusing it of being one.
     if (pyClass(one.ob_type)) {
         const named = globalThis.__BRYTHON__.class_name(one);
@@ -350,11 +347,10 @@ const noCall = (one) => {
     }
 
     // **A native object the serialiser has nothing to write of.** A Map and a Set
-    // keep their entries where no enumerable property reaches, so
-    // `tojson(new Map([["answer", 42]]))` answered `{}` — and `{"map":{}}` one
-    // level down, where the shape around it makes the empty object look like an
-    // answer. Naming it is the whole repair: choosing a JSON shape for a Map
-    // whose keys are not strings would be inventing one.
+    // keep their entries where no enumerable property reaches, so the serialiser
+    // would write `{}`, and one level down the shape around it makes the empty
+    // object look like an answer. It is named instead: choosing a JSON shape for
+    // a Map whose keys are not strings would be inventing one.
     // Named by its class, which is what an author recognises. The tag alone
     // answers `Object` for every class anyone writes, so the constructor is
     // asked first and the tag is the fallback for a value that has none.
@@ -377,9 +373,9 @@ export function tojson(value, indent) {
     return JSON.stringify(
         // The JSON rule, asked for by name. JSON has neither identity nor
         // cycles, so a shared reference comes out twice and a loop comes out
-        // `null` — the only thing a serialiser can do, and the reason that rule
-        // was written. It is not the default any more: the other five callers of
-        // `plainData` hand their result to JavaScript, which has identity.
+        // `null`, the only thing a serialiser can do. It is not the default: the
+        // other five callers of `plainData` hand their result to JavaScript,
+        // which has identity.
         plainData(value, new Set(), noCall),
         (_, one) => serialisable(one),
         typeof spaces === 'number' ? spaces : undefined
@@ -473,7 +469,7 @@ export function date(value, dateStyle, timeStyle, locale) {
     // was shown the day before, so `date("2026-08-24")` answered 23 August in
     // Los Angeles and nothing said so.
     //
-    // Python answers this without ambiguity — `datetime.date(2026, 8, 24)`
+    // Python answers this without ambiguity: `datetime.date(2026, 8, 24)`
     // carries no zone, and Django's `|date`, which is this helper's word,
     // renders that day wherever it is read. The standard library is not
     // available to a component either, so a string is all an author has to say
@@ -525,8 +521,8 @@ export function fromnow(value, locale) {
     // unit would wait 29.9.
     //
     // Two boundaries, and the nearer one wins. The shown number turns over half
-    // a unit from here — `Math.round` ties towards +∞, and the gap only ever
-    // decreases, so the next tie is the one below. And the unit itself changes
+    // a unit from here (`Math.round` ties towards +∞, and the gap only ever
+    // decreases, so the next tie is the one below). And the unit itself changes
     // when the gap leaves its band: "in 1 hour" becomes "in 60 minutes" a second
     // later, which no half-minute calculation would have caught.
     const rounding = gap - (count - 0.5) * span;
@@ -637,7 +633,7 @@ export function urlencode(value) {
 
     if (held !== undefined) {
         // An invalid Date is still a Date, and `toISOString` answers it with
-        // `RangeError: Invalid time value` — a JavaScript accident out of a
+        // `RangeError: Invalid time value`, a JavaScript accident out of a
         // template filter, where the two date helpers next door say which helper
         // refused and what it was handed. The refusal is the same sentence they
         // use, since it is the same fact about the same value.
@@ -674,8 +670,8 @@ export function urlencode(value) {
 }
 
 // **Called by name as well as by position.** The README writes these signatures
-// the way Python writes them — `tojson(value, indent=None)`, `batch(xs, n)` —
-// and an author writes what the documentation shows.
+// the way Python writes them, `tojson(value, indent=None)` or `batch(xs, n,
+// fill)`, and an author writes what the documentation shows.
 //
 // Brython hands a keyword call a trailing object carrying, under its symbol
 // `$B.KW`, an array whose first entry holds the literal keywords and whose rest
@@ -751,10 +747,9 @@ const byName = (fn, signature) => {
             throw refuse(`${fn.name}() takes ${counted} but ${given.length} were given. ${takes}`);
         }
 
-        // Which positions the call has already filled. Without this a keyword
-        // **overwrote** what position had put there — `batch(rows, 2, n=3)`
-        // grouped by three and said nothing, which is a wrong answer out of a
-        // call the author got wrong and was never told about. Python raises.
+        // Which positions the call has already filled: a keyword naming one,
+        // `batch(rows, 2, n=3)`, is refused as Python refuses it, rather than
+        // overwriting what position put there.
         const filled = new Set(given.keys());
 
         // The engine's own reading of the keywords, which is what a Python
@@ -783,16 +778,14 @@ const byName = (fn, signature) => {
             given[at] = value;
         }
 
-        // **What the table could not say before.** It named the parameters and
-        // not which of them a call has to fill, so an omission reached the
-        // helper as `undefined` and was read there as absence: `slugify()`
-        // answered the empty string and `tojson(indent=2)` wrote `null`, both
-        // without a word, out of a call whose missing argument is the only
-        // thing wrong with it.
+        // **Which parameters a call has to fill**, so that an omission is
+        // refused rather than reaching the helper as `undefined` and being read
+        // there as absence: `slugify()` would answer the empty string and
+        // `tojson(indent=2)` write `null`.
         //
         // The *positions*, never the values: `None`, `False`, `0` and the empty
         // string are arguments that were given, and two of them are what an
-        // author writes on purpose — `tojson(None)` is `null` and means it.
+        // author writes on purpose: `tojson(None)` is `null` and means it.
         const missing = names.slice(0, needed).filter((_, at) => !filled.has(at));
 
         if (missing.length) {

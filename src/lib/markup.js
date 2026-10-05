@@ -29,7 +29,7 @@ function closingBrace(source, start) {
     for (let i = start; i < source.length; i++) {
         // Svelte's own sigils open a block: `{#each`, `{:else`, `{/if`, `{@html`.
         // The `#` of a block is not the `#` of a Python comment, and only the
-        // opening brace of *this* block can carry one — a `{` further in belongs
+        // opening brace of *this* block can carry one: a `{` further in belongs
         // to a dict literal, where `#` means what Python says it means.
         if (i === start && '#:/@'.includes(source[start + 1])) {
             depth++;
@@ -135,7 +135,7 @@ function arguments_(text) {
 const NAME_CHAR = '\\p{XID_Continue}';
 
 // The keywords themselves, and the boundary in front of one is the same class as
-// the rest of a name — not `\w`, which is ASCII. `énot` is a perfectly good
+// the rest of a name, not `\w`, which is ASCII. `énot` is a perfectly good
 // Python name ending in four letters that spell a keyword: with an ASCII
 // boundary, `é` would end the word before it and `énot(x := 1)` would read as a
 // grouping. The class is a constant, and the three readers share it.
@@ -299,24 +299,18 @@ export function walrus(expression) {
         const char = expression[index];
 
         // Only a *grouping* parenthesis, which is the form Python's grammar
-        // forces in a lambda. One that opens a call belongs to the callee, and
-        // consuming it rewrote `f(x := 1)` as `f__assign("x", 1)`, a call to a
-        // name that does not exist, so the handler did nothing at all and said
-        // nothing either. `f((x := 1))` is the form that assigns.
+        // forces in a lambda. One that opens a call belongs to the callee:
+        // `f(x := 1)` is a call with an argument, and `f((x := 1))` is the form
+        // that assigns.
         //
         // The space is why this is two lines rather than one. `f (x := 1)` is a
-        // call in Python, and reading only the last character took the space for
-        // "nothing callable here" and rewrote the line into `f __assign(…)`, a
-        // syntax error on a line the author never wrote. And `not (x := 1)` is
-        // the opposite case: a word before the space, and still a grouping,
-        // because `not` cannot be called. So the trailing whitespace is skipped
-        // and the word that remains is checked against the keywords.
-        // The end of a name is read with the same Unicode classes as `NAME` a
-        // few hundred lines up, and not with `\w`: `café(x := 1)` ends on a
-        // letter `\w` does not know, so the call was taken for a grouping and
-        // the handler was rewritten into `café__assign("x", 1)` — a name that
-        // does not exist, an error event at the click, and a page that never
-        // changed. `cafe` beside it worked.
+        // call in Python, whatever space stands before the parenthesis, and
+        // `not (x := 1)` is the opposite case: a word before the space, and
+        // still a grouping, because `not` cannot be called. So the trailing
+        // whitespace is skipped and the word that remains is checked against
+        // the keywords. The end of a name is read with the same Unicode classes
+        // as `NAME` a few hundred lines up, and not with `\w`, so `café(x := 1)`
+        // is a call as `cafe(x := 1)` is.
         const before = out.replace(/\s+$/, '');
         const grouping =
             !NAME_END.test(before) || KEYWORD_BEFORE.test(before);
@@ -372,11 +366,7 @@ export function walrus(expression) {
 // what it finds back onto the original file rather than only rewrite it.
 //
 // `\s*` before the closing `>`, because HTML allows it there and Svelte parses
-// it. Without it `</script >` did not close anything: the block stayed open, its
-// body was read as markup, and the word above — catastrophic — is what happened.
-// A CSS rule lost its declaration, a JavaScript object literal became a call,
-// and a Python block closed that way was never handed to the script hook at all,
-// so the component failed with `n is not defined`, naming nothing.
+// it: `</script >` closes its block, whose body is then not markup.
 export function overMarkup(content, transform) {
     let out = '';
     let cut = 0;
@@ -594,10 +584,8 @@ const LET_DIRECTIVE = /^let:/;
 const ATTRIBUTE_CHAR = '[^\\s=/>"\']';
 
 // The trailing `\s*` is load-bearing too: Svelte accepts `on:click= {foo}`, and
-// its own parser fixture `attribute-with-whitespace` is that line. Without it
-// nothing matched, so every rule was skipped and the value fell through to the
-// shorthand expansion, which turned `title= {x}` into `title= x={…}` — not
-// markup, and Svelte answered `Expected token >` about a token nobody typed.
+// its own parser fixture `attribute-with-whitespace` is that line, so
+// `title= {x}` is the attribute `title` and not a shorthand to expand.
 const ATTRIBUTE_NAME = new RegExp(`(${ATTRIBUTE_CHAR}+)=\\s*$`);
 
 // The same, to cut the name back out of what has been written.
@@ -637,7 +625,7 @@ function loneInterpolation(markup, at, closing) {
 // the spelling of the author's value rather than the value: `value={1}` comes
 // back as "1". The typed one is not on the node either. Svelte keeps it on the
 // hidden `__value` property, but only for an element it sees a group binding on
-// — `needs_special_value_handling` in its RegularElement visitor — and ours
+// (`needs_special_value_handling` in its RegularElement visitor), and ours
 // carries an action instead. So the value is read from the source here and
 // handed to the action.
 //
@@ -772,8 +760,8 @@ const VOID = new Set([
 // Every word of the argument for that rewrite is about `<input>`: Svelte works
 // out which inputs form one group from the *text* of the expression, so a
 // getter/setter pair has nothing to compare. A component has no group machinery
-// at all — Svelte reads `bind:group={x}` there as the prop of that name — and it
-// refuses `use:` outright, so the component did not compile.
+// at all (Svelte reads `bind:group={x}` there as the prop of that name), and it
+// refuses `use:` outright.
 const COMPONENT = /^(?:\p{Lu}|svelte:(?:component|self)\b)|\./u;
 
 const isComponent = (tag) => tag !== null && COMPONENT.test(tag.name);
@@ -782,19 +770,17 @@ const identifiers = (text) => [...text.matchAll(new RegExp(NAME, 'gu'))].map((m)
 
 // The names an expression **reads**, which is not every word in its text.
 //
-// `identifiers` above answers the other question — which names a *declaration*
-// binds — and a pattern holds no strings and no attributes, so one regular
+// `identifiers` above answers the other question, which names a *declaration*
+// binds, and a pattern holds no strings and no attributes, so one regular
 // expression is the whole of it there. An expression is not that: two kinds of
-// word in one are not a reference, and both were being handed to `follow`.
+// word in one are not a reference.
 //
 //   a **string** or a comment   `greet("count")` does not read `count`
 //   an **attribute**            `row.label` reads `row`; `label` is the object's
 //
-// Subscribing to a name an expression never reads was noise until a name could
-// be in the temporal dead zone of the declaration it sits in. Then it is fatal:
-// `{#each rows as [label="total", total=0]}` cannot mount, because the argument
-// prepared for `total` is evaluated before `total` exists — out of a default
-// that is a plain string.
+// A name an expression does not read may be in the temporal dead zone of the
+// declaration it sits in: in `{#each rows as [label="total", total=0]}`,
+// reading `total` for the first default would read it before it exists.
 //
 // **An f-string is code, in its fields and nowhere else.** `f"{count} left"`
 // reads `count`, so skipping the literal whole would cost the block the very
@@ -884,9 +870,8 @@ function parameterPattern(part, call, names, tuple, unpack) {
     // A pattern: the same question, one level down, for each of its elements.
     //
     // **And only when the group is the whole entry.** A computed key opens with
-    // a bracket too — `[field.upper()]: value` — so a group with anything after
-    // it is not a pattern, and reading one as a pattern took the key apart as
-    // if its expression were a list of targets.
+    // a bracket too, `[field.upper()]: value`, so a group with anything after
+    // it is not a pattern: its expression is a key, not a list of targets.
     if (close === trimmed.length - 1 && trimmed[0] === '{') {
         return `${lead}${unpackByKey(trimmed.slice(1, close), call, names, tuple, unpack)}${tail}`;
     }
@@ -1146,13 +1131,13 @@ function eachBlock(trimmed, declare, call) {
     // of the block.
     //
     // Split at the top level first, because the target is a comma list of its
-    // own — `as (a, b), i` is a pattern and then Svelte's index — and each
+    // own (`as (a, b), i` is a pattern and then Svelte's index), and each
     // entry is a pattern in its own right.
     //
     // **Three scopes, in three steps, and the order is the whole rule.** The
     // iterable is evaluated where the loop is written, so it is compiled before
     // the block's names exist: `{#each rows as rows}` reads the outer list. The
-    // target's own names then open the scope — every one of them, the index
+    // target's own names then open the scope, every one of them, the index
     // included, which is what `[a, b = a]` and `[f = i], i` need and what
     // `[g = h, h]` needs in order to throw where JavaScript throws. Only then
     // are the defaults compiled, and the key last, since it is evaluated inside
@@ -1235,8 +1220,8 @@ const keyword = (trimmed, sigil) => {
 const DECLARED_NAME = new RegExp(`^${NAME}$`, 'u');
 
 // The compiler's own prefix, written the same way `compile.cjs` writes it: a
-// name that begins with `__` and does not end with one, so Python's own dunders
-// — `__all__`, `__doc__` — stay free.
+// name that begins with `__` and does not end with one, so Python's own dunders,
+// `__all__` and `__doc__`, stay free.
 //
 // The script half has refused a module-level name of this shape since the
 // beginning; the markup half declares names too and refused nothing. A
@@ -1289,9 +1274,7 @@ function declaration(inner) {
 // JavaScript's declaration keywords, which Svelte 5 takes inside a block:
 // `{const a = n}` is its own spelling of `{@const}`. Svelthon's answer is the
 // template rune, `{a = n}`, so the keyword is a JavaScript word in a place that
-// reads Python. Left alone it fell through to the generic interpolation and
-// became `__text(const a = n)`, which is not Python, so the author got Brython's
-// `invalid syntax` on a line they never wrote.
+// reads Python, and it is refused with the spelling that replaces it.
 const DECLARATION_KEYWORD = new RegExp(`^(const|let|var)\\s+(${NAME})\\s*=\\s*(.+)$`, 'su');
 
 const declarationKeyword = (trimmed, at) =>
@@ -1342,13 +1325,9 @@ const unknownTag = (trimmed, kind, known, at) =>
             `cross as JavaScript, so it is refused rather than passed through.`
     );
 
-// Where a refusal happened, in the file the author is looking at.
-//
-// The compiler names a position on all sixteen of its refusals and the markup
-// pass named one on none of them, because it never received a filename: the
-// message said what was wrong and left the reader to grep. `walk()` was already
-// holding the answer, since it keeps `region` on every `{…}` it reads, and threw
-// it away one line later.
+// Where a refusal happened, in the file the author is looking at, as every
+// refusal of the compiler names one: `walk()` keeps `region` on every `{…}` it
+// reads, and that is the place.
 //
 // `filename` and `start` go on the error object too, in Svelte's own shape, so
 // vite-plugin-svelte and an editor can put the squiggle under the character
@@ -1732,13 +1711,13 @@ function walk(markup, collect, onPython, seed, record, where) {
         region = outer;
 
         // And the binding itself, as the author wrote it. The action needs to
-        // know which inputs belong together. Two bindings may hold one list —
-        // `left = shared`, `right = shared` — and sharing a value is not sharing
+        // know which inputs belong together. Two bindings may hold one list
+        // (`left = shared`, `right = shared`), and sharing a value is not sharing
         // a binding, so the list they hold is not what identifies a group.
         //
         // And the instance, as its namespace. Two *instances* of one component
-        // have the same binding text and may have been handed the same list —
-        // `selected = initial`, with one empty list passed to both — so neither
+        // have the same binding text and may have been handed the same list
+        // (`selected = initial`, with one empty list passed to both), so neither
         // of the two halves above tells them apart. The namespace is the thing
         // every element of one instance shares and no other instance has.
         //
@@ -1774,7 +1753,7 @@ function walk(markup, collect, onPython, seed, record, where) {
 
     // `bind:group` on a component, where `group` is an ordinary prop and none of
     // the group machinery applies. Svelte still refuses the read/write pair
-    // there — its check is on the *name* of the binding, wherever it is written,
+    // there: its check is on the *name* of the binding, wherever it is written,
     // and answers `bind:group can only bind to an Identifier or MemberExpression`.
     //
     // The namespace is a member expression, which it accepts, and reading or
@@ -1884,8 +1863,8 @@ function walk(markup, collect, onPython, seed, record, where) {
         // the bindings use: the boundary is the same one, and a prop passed to a
         // child is read back as None on the other side regardless.
         //
-        // A `value` is what a binding compares by identity — an `<option>`
-        // against its `<select>` — so a container keeps its own, and a scalar
+        // A `value` is what a binding compares by identity, an `<option>`
+        // against its `<select>`, so a container keeps its own, and a scalar
         // is still compared by value.
         return `{${call(inner, '__bound', undefined, name === 'value' ? 'scalar' : '')}}`;
     };
@@ -2161,11 +2140,8 @@ function walk(markup, collect, onPython, seed, record, where) {
                     const name = short[3];
 
                     // The same test the long form makes, against the same
-                    // pattern. `bind:group` refuses the pair for the reason
-                    // written above `GROUP_DIRECTIVE`, and that rule was wired
-                    // into one of its two spellings: written bare, it emitted
-                    // the pair, and Svelte answered that `bind:group` can only
-                    // bind to an identifier.
+                    // pattern: `bind:group` refuses the pair for the reason
+                    // written above `GROUP_DIRECTIVE`, in both its spellings.
                     if (GROUP_DIRECTIVE.test(short[1]) && !isComponent(tag)) {
                         out = out.slice(0, out.length - short[1].length) + groupAction(name);
                     } else if (GROUP_DIRECTIVE.test(short[1])) {
@@ -2314,7 +2290,7 @@ function walk(markup, collect, onPython, seed, record, where) {
                 // block.
                 //
                 // `push` goes *into* the function rather than after it, because
-                // a default reads the parameters beside it — `(j, k = j)` is
+                // a default reads the parameters beside it: `(j, k = j)` is
                 // ordinary JavaScript and Svelte compiles it as one.
                 out += `{#snippet ${snippetParameters(
                     trimmed,

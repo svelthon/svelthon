@@ -49,8 +49,8 @@ const NS = '__py';
 // The literal is Brython's own spelling, since this is both what is written
 // beside its code and the needle the check below looks for in it. A path may
 // hold a quote (`src/O'Brien.svelte` is a legal filename), so it is escaped
-// rather than pasted, on both sides of the bridge: unescaped, the generated
-// module stopped parsing, and the Python it came from was perfectly valid.
+// rather than pasted, on both sides of the bridge, for the generated module to
+// parse whatever the path.
 const namespaceCall = (name) => `$B.namespace(${JSON.stringify(name)})`;
 
 // The module id Brython derives from a filename: only '.' becomes '_'. It ends
@@ -2090,15 +2090,12 @@ function surface(body, theirs = new Set()) {
     // "is it reactive", it is "did the author take this word":
     //
     //   1. an injected helper is skipped where the author has a name of that
-    //      spelling. Missing from the list, `date` was injected over the author's
-    //      own, and their write went to the injection's no-op setter and was
-    //      discarded. `bind()` now writes an own property instead, so this is
-    //      belt as well as braces, but the list is the braces;
+    //      spelling, so the author's `date` is theirs (and `bind()` writes an
+    //      own property besides, belt as well as braces);
     //   2. a JavaScript name from `<script module>` is published the same way,
     //      with the same filter;
-    //   3. `refuseLocked` refuses the six words of the dialect. `effect = 0` was
-    //      refused and `for effect in …` was not, which is a rule that does not
-    //      apply rather than a rule with an exception.
+    //   3. `refuseLocked` refuses the six words of the dialect, `effect = 0` and
+    //      `for effect in …` alike, whatever binds the word.
     //
     // Recorded outside `seen`, so it never competes with a real declaration: a
     // name that is both a `def` and a loop target is still the `def`.
@@ -2277,11 +2274,9 @@ function surface(body, theirs = new Set()) {
                         inspects.push({ name: target.id, arity: 0, logger: true });
                     // `focus = export(lambda: field.focus())`, the call form of
                     // `@export`, and the shape their own `export const focus =
-                    // () => …` has. Every other marker here answers to both
-                    // spellings; this one answering to only the decorator was an
-                    // omission, not a rule. The arity comes off the lambda, since
-                    // unlike a derived or an effect an exported function is
-                    // called with arguments.
+                    // () => …` has: every marker answers to both spellings. The
+                    // arity comes off the lambda, since unlike a derived or an
+                    // effect an exported function is called with arguments.
                     else if (marked(node, 'export'))
                         funcs.push({
                             name: target.id,
@@ -2911,7 +2906,7 @@ function templateBridge(c) {
         `const __assign = (name, value) => { ${NS}[name] = value; return value; };`
         // The same walrus aimed at an attribute or a key rather than a name,
         // and `bind:group`'s action, are imported under the names the markup
-        // pass emits — `__setattr`, `__setitem`, `__group` — rather than
+        // pass emits (`__setattr`, `__setitem`, `__group`) rather than
         // assigned here from a bare one an author could have declared.
     ];
 }
@@ -3046,10 +3041,9 @@ function jsNameBindings(c, extra = []) {
     );
 
     // **Read at every access, because a name is a binding and not a value.**
-    // This took `__jsCall(n)` once into a `const` and handed that back for ever,
-    // so `let amount = 1` in a `<script module>` reached Python as `1` after the
-    // JavaScript had moved on — and not only where reactivity was in question:
-    // a Python function that *asked again* still read the old number.
+    // `let amount = 1` in a `<script module>` reaches Python as what the
+    // JavaScript holds now, wherever Python asks, a reactive read or a function
+    // asking again.
     //
     // Safe to read afresh because the adaptation is memoised per function
     // (`ADAPTED` in runtime.js): the same function gives the same proxy, so a
@@ -3171,12 +3165,9 @@ function instanceExports(c) {
                   // through getters because Svelte forbids exporting a reassigned
                   // $state binding directly, and a getter is what keeps the read
                   // reactive at the call site.
-                  // `__all__` says what a module exports, and it said it in a
-                  // `.py` and nothing at all here: the store published every
-                  // name it had, so the same declaration meant "this is the
-                  // contract" in one file kind and was ignored in the other.
-                  // `c.published` lets every name through when the module
-                  // wrote no `__all__`.
+                  // `__all__` says what a module exports, here as in a `.py`:
+                  // `c.published` lets every name through when the module wrote
+                  // no `__all__`, and only the listed ones when it did.
                   //
                   // What a getter hands JavaScript is a crossing too, the other
                   // way, decided by the value the name holds when it is read and
@@ -3257,7 +3248,7 @@ function effectBlocks(c) {
         //
         // The `.with(…)` argument is the exception to that: it is an ordinary
         // expression, evaluated once outside any tracking context, and reading
-        // the cell there is what `state_referenced_locally` reports — twice per
+        // the cell there is what `state_referenced_locally` reports, twice per
         // `inspect_with`, on every build, at a line past the end of the author's
         // file and about a name they cannot have. Reading it *inside* the
         // handler answers the warning and is the same call: the handler an
@@ -3295,10 +3286,8 @@ function effectBlocks(c) {
                 ` catch (err) { throw __pyError(err,${JSON.stringify(`${e.name}() — ${c.source}`)}, ${c.lineOffset}); }`,
             // What an effect hands back is a *Python* value, so the question is
             // whether Python can call it, not whether JavaScript can. A bound
-            // method is `resource.close`, the plainest teardown there is, and it
-            // is a Brython object: `typeof` calls it `object`, the line below
-            // dropped it, and the resource was never released — no error, no
-            // warning, the effect simply had no cleanup. Same for a callable
+            // method, `resource.close`, the plainest teardown there is, is a
+            // Brython object that `typeof` calls `object`, and so is a callable
             // instance. `pyTeardown` answers the wide question and hands back
             // something JavaScript can call, receiver included, or nothing. An
             // `async def` hands back a coroutine, which it starts instead.
@@ -3393,8 +3382,7 @@ function plainDeclarations(c) {
 function plainBindings(c) {
     return [
         // No markup here, so none of what a template expression calls (`__event`,
-        // `__assign`, `__group`, `__truthy` and the rest) is emitted. They were,
-        // and `__event` named a `pyEvent` this module never imported.
+        // `__assign`, `__group`, `__truthy` and the rest) is emitted.
         `const __proto = {};`,
         ...c.state.map((n) => `__bind(__proto, '${n}', () => ${n}, (${NEXT_VALUE}) => { ${n} = ${NEXT_VALUE}; });`),
         ...c.funcs.map(
@@ -3461,12 +3449,8 @@ function plainExports(c) {
         // Python module has no notion of a default anyway. Named exports are
         // the whole contract, and `__all__` is where it is written.
         // Read off the namespace and not off a JavaScript binding, because only
-        // the *reactive* names have one. A class, an import and a `for` target
-        // are the author's names and are correctly not signals, so `${n}` alone
-        // referenced something that was never declared: `__all__ = ["Widget"]`
-        // on a class emitted `pyExport(Widget, …)` and the module failed to
-        // evaluate with `ReferenceError: Widget is not defined`, taking every
-        // other export down with it.
+        // the *reactive* names have one: a class, `__all__ = ["Widget"]`, is the
+        // author's name and correctly not a signal.
         //
         // `__py` is where the module body put every one of them, and reading it
         // through the accessor gives the reactive ones the same value their
@@ -3875,7 +3859,7 @@ function compile(
         namespace,
         js,
         // Every name the module reads as a global. What decides whether `host`
-        // and `props_id` are bound at all — see `globalReads`.
+        // and `props_id` are bound at all: see `globalReads`.
         names: globalReads(table),
         declared,
         emitted,

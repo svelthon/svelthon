@@ -33,7 +33,7 @@ export function atomic(source, at, onField) {
     //
     //  - **text**, where `{{` and `}}` are an escaped brace;
     //  - a **field**, `{…}`, which is Python and may since 3.12 reuse the
-    //    delimiter of the string holding it — `f"{ "}" }"` is valid;
+    //    delimiter of the string holding it: `f"{ "}" }"` is valid;
     //  - a **format specification**, after the field's own `:`, where `#` is an
     //    option and `'` a fill character rather than a comment and a string,
     //    and where a `{…}` is a field again: `f"{3:{2}}"`.
@@ -52,7 +52,7 @@ export function atomic(source, at, onField) {
         const spec = here !== undefined && here.spec;
 
         // A backslash hides the character after it, so that `"\""` is one string
-        // and not two — **except a brace**, which it cannot hide: the escape for
+        // and not two, **except a brace**, which it cannot hide: the escape for
         // a brace is `{{`, and a backslash before one leaves it opening a field:
         // CPython 3.14 answers `\5` for `rf"\{ x }"` with `x = 5`, and the same,
         // with a warning about the escape, without the `r`.
@@ -108,7 +108,7 @@ export function atomic(source, at, onField) {
 }
 
 // Whether the quote at `at` opens an f-string, read from the prefix letters
-// before it. Two at most — `rf`, `fr` — and not the tail of a longer name, so
+// before it. Two at most (`rf`, `fr`), and not the tail of a longer name, so
 // the `f` of `def"` is not one.
 function interpolated(source, at) {
     let i = at - 1;

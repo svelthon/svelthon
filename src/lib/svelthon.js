@@ -117,13 +117,13 @@ function claimPython(path) {
 }
 
 // The tag that decides a file is Python is read by `pythonScript`, in markup.js,
-// off the real script blocks and their real attributes — the same grammar that
+// off the real script blocks and their real attributes, the same grammar that
 // pass uses to know what *not* to rewrite. One reading, because the `script`
 // hook below has a reading of its own that it cannot be talked out of
-// (`attributes.lang`), and every file the two disagreed about was broken.
+// (`attributes.lang`), and the two have to agree on every file.
 
 // HTML allows whitespace before the `>` of a closing tag, and Svelte's parser
-// reads it — its own fixture is named `whitespace-after-style-tag`. Svelte's
+// reads it (its own fixture is named `whitespace-after-style-tag`). Svelte's
 // *preprocessor* does not: its pattern ends in `<\/script>`, with no room for a
 // space, so a block closed that way is never handed to any script hook while the
 // compiler accepts the file anyway.

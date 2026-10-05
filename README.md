@@ -1075,9 +1075,7 @@ mount, mutable defaults included.
 
 ## Async
 
-An `async def` handler runs. Two things had to be true for that: `async def` is a
-distinct AST node, and missing it left async handlers **undefined**: a click did
-nothing at all, silently. And calling one from JavaScript returns a coroutine
+An `async def` handler runs. Calling one from JavaScript returns a coroutine
 nobody runs, so the wrapper hands it to Brython's own event loop.
 
 ```python

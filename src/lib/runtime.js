@@ -41,13 +41,13 @@ const _b_ = globalThis.__BRYTHON__.builtins;
 // could not be made.
 //
 // `truthy` and `str` try Python first and fall back to JavaScript, and the
-// fallback is there for a foreign value — a DOM node, a JavaScript object —
+// fallback is there for a foreign value (a DOM node, a JavaScript object),
 // which Brython's own classifier trips on, and not for the author's own error:
 // a `__bool__` or a `__str__` that raises goes on, rather than leaving a
 // plausible page.
 //
 // Told apart by the *error*, not by the value, which keeps the value itself
-// untouched — it may be a proxy that records every key read. A Brython exception
+// untouched: it may be a proxy that records every key read. A Brython exception
 // is a plain object carrying `ob_type` and a `__traceback__`; it is not an
 // `instanceof Error`, and it has no `__class__` either.
 const raised = (error) =>
@@ -85,13 +85,10 @@ const raised = (error) =>
 // mutation; `seq` asks instead, at the one moment the rows are about to be
 // rendered, which is where a row that only the iterator yields becomes visible.
 function iterated(value) {
-    // Asked of the *class*, which is the same repair the two converters took:
-    // `ob_type` is a field name, and a JavaScript array is as free to carry one
-    // as an object is. Read as a class, a business string was handed to Brython,
-    // which tried to write a slot on it — *Cannot create property 'tp_iter' on
-    // string 'business'*, a JavaScript accident where the author wrote
-    // `{#each rows}`. One cause, and it surfaced at six crossings: the loop,
-    // `batch`, the export, `tojson`, the argument boundary and `plainData`.
+    // Asked of the *class*, as the two converters ask it: `ob_type` is a field
+    // name, and a JavaScript array is as free to carry one as an object is,
+    // `{ob_type: "business"}` among them. The loop, `batch`, the export,
+    // `tojson`, the argument boundary and `plainData` all ask it this way.
     if (!pyClass(value.ob_type) || value.ob_type === _b_.list || value.ob_type === _b_.tuple) {
         return value;
     }
@@ -380,8 +377,8 @@ export const __pybridge = {
                 // second step would be handed back spent, and the author's
                 // message lost.
                 //
-                // No Python object carries `Symbol.iterator` — only a list, and
-                // a list took the branch above — so a Python generator that
+                // No Python object carries `Symbol.iterator` but a list, and a
+                // list took the branch above, so a Python generator that
                 // raises mid-iteration cannot reach this either.
                 if (!raised(error) || !(value && typeof value[Symbol.iterator] === 'function')) {
                     throw error;
@@ -580,7 +577,7 @@ function spreadOf(value, convert) {
 // `__setitem__` and `__delitem__` are here: Brython compiles `d[k] = v` and
 // `del d[k]` to their own calls, caught below, which is about the *statement*.
 // An author calling the method by name is ordinary Python and is what a generic
-// helper writes — `rows.__setitem__(0, 1)`, the same method kept as a value, or
+// helper writes: `rows.__setitem__(0, 1)`, the same method kept as a value, or
 // reached through the type. Those three reach the container and nothing else.
 // The in-place operators and `__init__` are the same case: `rows += [1]` goes
 // through `augm_assign`, and `rows.__iadd__([1])` or `list.__init__(rows, [2])`
@@ -713,7 +710,7 @@ function installMutationTracking($B) {
     // is what reading a method off a type gives: `list.append(xs, 2)`.
     //
     // `call_attr` takes a position marker before the arguments, so the object is
-    // `rest[1]` and what it was handed is everything after it — the same offset
+    // `rest[1]` and what it was handed is everything after it, the same offset
     // the bound path uses when it passes `rest.slice(1)`.
     // The same rule as `onFirst`, for an operation kept as a value rather than
     // called through `call_attr`: the target is the first argument, the rest are
@@ -774,7 +771,7 @@ function installMutationTracking($B) {
 
         // `list.append(xs, 2)`, the same mutation as `xs.append(2)` written
         // through the type. The receiver is a class, which carries no marker, so
-        // the object being changed is the first argument — known only here.
+        // the object being changed is the first argument, known only here.
         //
         // The class test is a property miss before the set lookup, which keeps
         // an ordinary unwatched call cheap.
@@ -988,7 +985,7 @@ function installMutationTracking($B) {
     // the storage in one hop and scans the slots, which is the same walk `mark`
     // does. That link alone is not enough: a storage dictionary walks its own
     // entries when it is *first* marked, so a second write into it reaches
-    // nobody — hence the walk of the storage itself. And the value that came in
+    // nobody; hence the walk of the storage itself. And the value that came in
     // stays linked, because an object may keep it somewhere neither of the two
     // can see.
     //
@@ -1213,13 +1210,10 @@ function keeps(value) {
 // The decision it serves is that **a class crosses as itself rather than
 // flattened**: refusing an accurate `__all__` because JavaScript would need
 // `$B.$call` to use one of its entries would be a JavaScript limit imposed on
-// Python. That decision was right and it lived at one site, `pyExport`, so every
-// other path that meets a class quietly decided the opposite — a class exported
-// directly survived and the same class inside a dict or a list came out as
-// `{__qualname__, __doc__, __module__}`, which is not callable. A `load()`
-// returning a registry of models is the ordinary way to write a route.
-//
-// So the decision lives in a predicate now, and the two sites ask it.
+// Python. A class exported directly and the same class inside a dict or a list
+// cross alike, since a `load()` returning a registry of models is the ordinary
+// way to write a route, so the decision lives in this predicate, which every
+// path that meets a class asks.
 export const pyClass = (value) =>
     value !== null &&
     typeof value === 'object' &&
@@ -1733,8 +1727,8 @@ const SLOT = 'slot_value_';
 // JavaScript with its fields.
 //
 // The loop is Brython's own: `super.__getattribute__` asks `search_in_dict` once
-// per class of the MRO. `tp_mro` begins at the class itself — `[cls, ...bases,
-// object]` — and ends at `object`, which declares neither of the two names asked
+// per class of the MRO. `tp_mro` begins at the class itself (`[cls, ...bases,
+// object]`) and ends at `object`, which declares neither of the two names asked
 // here, so nothing is dragged in by the chain being longer. `type` does carry
 // `__call__`, and a class is turned away before the question is asked.
 const declares = (cls, name) => {
@@ -1754,12 +1748,10 @@ const declares = (cls, name) => {
 // one.
 //
 // Read from the type, for two reasons that are the same reason. A plain
-// JavaScript object `{slot_value_price: 42, currency: "EUR"}` is data, and
-// asking its property names made the converter rename one key and drop the
-// other — foreign data losing fields on the way through a Python return.
-// And an instance whose slots are all still unassigned carries no storage at
-// all, so asking the object said "not an instance" and the engine's own view
-// went out instead, `{ob_type: …}`, circular through the class.
+// JavaScript object `{slot_value_price: 42, currency: "EUR"}` is data, whose
+// property names say nothing about slots. And an instance whose slots are all
+// still unassigned carries no storage at all, so the object alone would say
+// "not an instance" of what is one.
 //
 // A type answers both: it declares its slots before any of them is filled, and
 // no object of the author's declares anything.
@@ -1872,9 +1864,9 @@ function adoptOne(value) {
     const attributes = ownAttributes(value);
     if (attributes !== undefined) {
         // The storage itself, and not only what it holds. Setting an attribute
-        // usually goes through something this file intercepts — `$setattr` for
+        // usually goes through something this file intercepts (`$setattr` for
         // `box.value = 1`, and the `$getattr` that hands the watch to what it
-        // returns for `box.__dict__[...]` — but `vars(box)` asks the engine for
+        // returns for `box.__dict__[...]`), but `vars(box)` asks the engine for
         // the dictionary with `get_dict` and writes straight into it. The values
         // were children of the instance and the container that holds them was
         // not, so that write reached nobody.
@@ -2234,7 +2226,7 @@ export function pyError(error, where, lineOffset = 0) {
 //
 // Asked in four places, one of them in `helpers.js`, so it is written once and
 // shared. Compared in JavaScript rather than
-// through `aio.iscoroutine()` — this runs on every call into Python, template
+// through `aio.iscoroutine()`: this runs on every call into Python, template
 // expressions included, and a Brython call here costs more than the check saves.
 export const pyCoroutine = (value) => {
     const $B = globalThis.__BRYTHON__;
@@ -2560,7 +2552,7 @@ function thrown(error) {
 
     // `??` and not `||`, and a mutation sweep cannot tell: the difference is an
     // **empty** message, and the only caller runs `pyError` first, which
-    // describes the exception and hands back an `Error` — so the line above
+    // describes the exception and hands back an `Error`, so the line above
     // returns and this one is reached only for what `pyError` chose to leave
     // alone. Left as it is rather than pinned: a test would fix `''` as the
     // answer, and `''` is the less useful of the two.
@@ -2653,7 +2645,7 @@ export function schedule(result, where, lineOffset = 0, convert = undefined) {
 
     // The run comes from `started`, shared with `scheduleAsync`: one coroutine
     // object is one execution whoever asks, and a handler is an asker like any
-    // other. What stays local is everything below — the promise that knows
+    // other. What stays local is everything below: the promise that knows
     // whether anybody awaited it, and the rethrow for a failure nobody caught.
     const promise = new Waited((resolve, reject) => {
         (convert === undefined ? started(result) : started(result).then(convert)).then(
@@ -2699,7 +2691,7 @@ export function schedule(result, where, lineOffset = 0, convert = undefined) {
 //
 // A Brython dict has two halves: string keys are ordinary JavaScript properties,
 // which is what makes `d["a"]` as fast as a native read, and everything else
-// lives in a hash table under symbols — a property name is always a string, and
+// lives in a hash table under symbols: a property name is always a string, and
 // Python keeps `1` and `"1"` apart. Walking the properties would read the fast
 // half and drop the rest: a table indexed by id, and an entry whose key is
 // `__proto__`, which cannot be an ordinary property either and lives in the
@@ -2708,7 +2700,7 @@ export function schedule(result, where, lineOffset = 0, convert = undefined) {
 // Asked of Python, which is the only half that knows both.
 // `dict.$iter_items` rather than `items()`, and that is not an optimisation:
 // the reactive tracking intercepts `call_attr`, and `items` is one of the calls
-// it answers by handing the watch to the children — through this function. Going
+// it answers by handing the watch to the children, through this function. Going
 // through Python's own method would call it again, for ever.
 export function pyEntries(value) {
     const $B = globalThis.__BRYTHON__;
@@ -2884,8 +2876,8 @@ export function plainData(value, seen, adapt) {
         return { toJSON: (key) => turn(value, key, seen, adapt, chain) };
     }
 
-    // A callable that `typeof` calls an object — a bound method, an instance
-    // whose class defines `__call__` — and only when someone asked for
+    // A callable that `typeof` calls an object (a bound method, an instance
+    // whose class defines `__call__`), and only when someone asked for
     // adaptation: with no rule there is nothing to do with it, and the walk
     // below is what it has always had.
     if (adapt !== undefined && callable(value)) return adapt(value);
@@ -2909,31 +2901,19 @@ export function plainData(value, seen, adapt) {
     if (scalar !== undefined) return scalar;
 
 
-    // A promise, under the serialiser's rule only.
+    // The shapes with no JSON, asked before the walk and under the serialiser's
+    // rule only. Every other caller hands its result to JavaScript, where a
+    // promise is exactly what is wanted and a Map is a Map.
     //
-    // The coroutine below was given this arm and the shape it *becomes* was not,
-    // so `tojson` of a JavaScript promise answered `{}` — valid JSON that says
-    // nothing about what was asked, and `{"task":{}}` one level down, where the
-    // shape around it makes the empty object look like an answer. A promise
-    // keeps its result where nothing enumerable can reach it.
+    // A promise keeps its result where nothing enumerable can reach it, so it
+    // would serialise as `{}`, an empty object that looks like an answer. Here
+    // and not in the replacer, because the replacer sees a *bare* thenable only
+    // after the walk has met the `then` inside it: asked before the walk, a
+    // promise and a thenable get the same sentence, about promises.
     //
-    // Here and not in the serialiser's replacer, because the replacer sees a
-    // *bare* thenable only after the walk has already met the `then` inside it
-    // and refused that as a callable: one shape, two sentences, decided by
-    // whether the author's awaitable happened to be built by `Promise`. Asked
-    // before the walk, both get the sentence about promises.
-    //
-    // Every other caller hands its result to JavaScript, where a promise is
-    // exactly what is wanted, so the branch is the JSON rule's alone.
-    // Three shapes with no JSON, asked before the walk and under the
-    // serialiser's rule only. Every other caller hands its result to JavaScript,
-    // where a promise is exactly what is wanted and a Map is a Map.
-    //
-    // A **Python set** is here because the walk reached its internals first: it
-    // is a plain object holding `$store` and `ob_type`, so the refusal that came
-    // out named the *class* — `<class 'set'> is a class, and a class has no
-    // JSON` — about an instance. True of what the walk had in hand by then, and
-    // false about what the author passed.
+    // A **Python set** is here because the walk would reach its internals
+    // first: it is a plain object holding `$store` and `ob_type`, so its class
+    // would be named instead of what the author passed.
     if (
         adapt !== undefined &&
         seen instanceof Set &&
@@ -2948,23 +2928,18 @@ export function plainData(value, seen, adapt) {
     if (pyCoroutine(value)) {
         // A walk that cannot wait must not start one.
         //
-        // The JSON rule is a serialiser's, and a serialiser is synchronous: it
-        // met the branch below, scheduled the body, and handed `JSON.stringify`
-        // a promise, which has no enumerable property — so `tojson(work())`
-        // answered `{}` while **running the author's coroutine**. A valid string
-        // that says nothing, and a side effect nobody asked for.
-        //
-        // The caller's own rule decides, before anything is scheduled: the
+        // The JSON rule is a serialiser's, and a serialiser is synchronous: the
+        // branch below would schedule the body and hand `JSON.stringify` a
+        // promise, `{}`, while **running the author's coroutine**. So the
+        // caller's own rule decides, before anything is scheduled: the
         // serialiser refuses this shape the way it refuses a class and a call.
         // Every other caller hands its result to JavaScript, where a promise is
         // exactly what is wanted.
         if (adapt !== undefined && seen instanceof Set) return adapt(value);
 
-        // One coroutine object, one run. This branch sits before the graph memo
-        // and had none of its own, so a coroutine held under two keys was
-        // started twice: two promises, and the Python body executed twice —
-        // counted, not inferred. Whatever the body does on the way, it did
-        // twice.
+        // One coroutine object, one run. This branch sits before the graph memo,
+        // so it keeps one of its own: a coroutine held under two keys is one
+        // promise and one execution of the Python body.
         //
         // Memoised on the coroutine itself rather than inside a traversal,
         // because that is the truth being told: awaiting one coroutine twice is
@@ -3003,7 +2978,7 @@ export function plainData(value, seen, adapt) {
     // needs.
     //
     // **JavaScript**: keep the graph, the way `pyData` keeps it coming in. This
-    // is the default because five of the six consumers are on this side —
+    // is the default because five of the six consumers are on this side:
     // `to_js` *is* this function, and the emitted code puts it on the return
     // value of every Python function crossing over. JavaScript has identity, and
     // this framework updates by mutation, so a structure handed out with its
@@ -3038,15 +3013,11 @@ export function plainData(value, seen, adapt) {
     const out = branch(value, made, shell, adapt);
 
     // `branch` hands several kinds of value straight back rather than filling the
-    // shell: a Python class, and anything carrying a prototype of its own — a
-    // Date, a Map, a Promise, a Response. The shell registered above was then
-    // never filled, and the *second* reference to that same value met it:
-    // `[d, d]` crossed as `[Date, {}]`, and `{"a": d, "b": d}` gave a real date
-    // under one key and an empty object under the other.
-    //
-    // Registering before the walk is what answers a cycle, so it stays; what was
-    // missing is that the memo has to end up holding whatever `branch` decided,
-    // not what was guessed before it decided.
+    // shell: a Python class, and anything carrying a prototype of its own (a
+    // Date, a Map, a Promise, a Response). Registering before the walk is what
+    // answers a cycle; the memo then holds whatever `branch` decided, so the
+    // second reference to such a value, `[d, d]`, meets the value and not the
+    // empty shell.
     if (out !== shell) made.set(value, out);
 
     return out;
@@ -3118,12 +3089,9 @@ function branch(value, seen, shell, adapt) {
     // instance: the fields, not the getters on the prototype.
     //
     // And a class declaring `__slots__` keeps them somewhere else again: each
-    // slot is an own property named `slot_value_<name>`. So this walk found no
-    // `__dict__`, fell through to the mapping below, and handed JavaScript the
-    // engine's own view of the object — `{ob_type, slot_value_rows}`, which
-    // `JSON.stringify` then refuses as circular through the class. Adding
-    // `__slots__` to a model renamed its data and made the result
-    // unserialisable, for an object whose Python API had not changed.
+    // slot is an own property named `slot_value_<name>`, read here under its
+    // own name, so adding `__slots__` to a model changes nothing of what
+    // crosses.
     //
     // Both sources and not one: `__slots__` may name `__dict__`, and then an
     // instance has slots *and* a dict. A dict of the author's is stepped over,
@@ -3137,10 +3105,7 @@ function branch(value, seen, shell, adapt) {
     // A mapping is its entries, whatever else it also is.
     //
     // `class Mapping(dict): pass` gets an instance `__dict__` beside its items,
-    // so this branch answered first and returned before the mapping below was
-    // ever read: `Mapping({"answer": 42})` crossed as `{}`, and with one
-    // attribute set, as `{label: "metadata"}` — the data replaced by metadata
-    // about it, with no error and valid JSON on the other side.
+    // and `Mapping({"answer": 42})` crosses as its items, not as its attributes.
     //
     // Entries only, which is the rule CPython's own `json` follows for a dict
     // subclass: an attribute on the instance describes the mapping and is not an
@@ -3297,16 +3262,14 @@ export function pyData(value, made) {
     if (VIEWED.has(value)) return pyBind(value);
 
     // A Brython list and a Brython tuple are JavaScript arrays too, told apart
-    // from a foreign one by the `ob_type` they carry. Rebuilding one made a list
-    // of a tuple — the immutability went, and with it the right to be a dict key
-    // — and made a copy of a list, so a guard put on data that turned out to be
-    // Python's already quietly detached it from the name it came from.
+    // from a foreign one by the `ob_type` they carry, and kept as they are: a
+    // tuple stays immutable, and a list stays the object its name holds.
     //
     // A foreign array is rebuilt, and a JavaScript array belongs to a graph
-    // rather than to a tree: `xs.push(xs)` answered `RangeError: Maximum call
-    // stack size exceeded`, and `[shared, shared]` gave two lists where there
-    // was one. So each array is registered *before* its children are walked, and
-    // whatever the graph does afterwards finds the list already made.
+    // rather than to a tree: `xs.push(xs)` holds itself, and `[shared, shared]`
+    // holds one list twice. So each array is registered *before* its children
+    // are walked, and whatever the graph does afterwards finds the list already
+    // made.
     if (Array.isArray(value)) {
         // Asked of the *class*, like the object branch below and for the same
         // reason: `ob_type` is a field name, and an array is as free to carry
@@ -3375,8 +3338,8 @@ export function pyData(value, made) {
     if (python === value) return python;
 
     // **Not reachable from a component, and kept as a belt.** Everything a
-    // component can hand this — `js.JSON.parse(…)`, the answer of a `__js__`
-    // import — has already crossed `inbound`, so `jsobj2pyobj` gives the same
+    // component can hand this (`js.JSON.parse(…)`, the answer of a `__js__`
+    // import) has already crossed `inbound`, so `jsobj2pyobj` gives the same
     // object back and the line above returns first. A mutation sweep says so:
     // inverting the test below calls `null()` on every conversion and no test
     // can tell, because no reachable input gets here. `tests/to-py.test.js`
@@ -3386,7 +3349,7 @@ export function pyData(value, made) {
     return toDict === null ? python : toDict();
 }
 
-// Does it behave like a URL — asked somewhere a throw is expected rather than
+// Does it behave like a URL, asked somewhere a throw is expected rather than
 // fatal.
 //
 // A behaviour and not `instanceof URL`: a URL built in another JavaScript
@@ -3395,7 +3358,7 @@ export function pyData(value, made) {
 // `event['method']`. The same holds for `Request` below.
 //
 // The path and the scheme rather than the query, because those are the parts a
-// prerendered page necessarily has — it is rendered *for* a path. While
+// prerendered page necessarily has: it is rendered *for* a path. While
 // prerendering, SvelteKit hands over a **proxy** that refuses the one part a page
 // built ahead of time cannot have, `searchParams`, so no member it is known to
 // guard is read at all, and the `try` of the caller keeps whatever a guarded
@@ -3427,7 +3390,7 @@ const urlish = (value) =>
 // Request answers `headers.get` and carries a string method, and `fetch` is the
 // member SvelteKit puts on every event and no data structure has any reason to
 // hold. So four independent things have to be true at once, and an object that
-// is all four is a request event whatever it was built by — which is the point,
+// is all four is a request event whatever it was built by, which is the point,
 // since an adapter may hand over a `Request` from another realm, where
 // `instanceof` answers false for the genuine article.
 //
@@ -3469,8 +3432,8 @@ export function pyArg(value) {
     //
     // `href` rather than `String(url)`, here and below. The URL is a **proxy**
     // while prerendering, and `String()` calls `toString` with the proxy as the
-    // receiver, which Node refuses — *Receiver must be an instance of class
-    // URL*. A getter read goes through the trap with the real URL underneath it,
+    // receiver, which Node refuses (*Receiver must be an instance of class
+    // URL*). A getter read goes through the trap with the real URL underneath it,
     // which is what a proxy that forwards reads is built to do, and it answers
     // the same string.
     let query;
@@ -3484,11 +3447,9 @@ export function pyArg(value) {
         }
     }
 
-    // `?tag=a&tag=b` is one key twice, and a dict holds one value for it. Which
-    // one was decided by nothing: the pairs went in in order and the last
-    // overwrote the first, so `event["query"]["tag"]` answered `b` while
-    // `event["js"].url.searchParams.get("tag")` answered `a` — two views of one
-    // request, disagreeing, inside the same event.
+    // `?tag=a&tag=b` is one key twice, and a dict holds one value for it, so
+    // `event["query"]["tag"]` has to answer what
+    // `event["js"].url.searchParams.get("tag")` answers about the same request.
     //
     // The first wins, because that is what `searchParams.get` answers about the
     // very same URL. Django's `QueryDict` would say the last and Flask's
@@ -3750,11 +3711,9 @@ const nameOf = (where) => where.split(' — ')[0].replace(/\(\)$/, '');
 // What a caller may hand a Python function: trimmed to what the signature
 // declares, and converted.
 //
-// The trim is the boundary's contract — it is what lets a framework hand an
-// event to a callback that never asked for one — and `pyArg` is the conversion
-// every call boundary owes. The three wrappers below wrote both out, and two of
-// them were missing the second half until an action took a JavaScript number and
-// `format(value, ".2f")` refused it at mount.
+// The trim is the boundary's contract (it is what lets a framework hand an
+// event to a callback that never asked for one), and `pyArg` is the conversion
+// every call boundary owes, written here once for the three wrappers below.
 //
 // **Trimmed first, then converted, and only what is passed.** An argument the
 // callable does not take is never read: converting it means asking whether it is
@@ -3830,8 +3789,8 @@ export function pyCall(fn, where, lineOffset = 0, arity = Infinity, named, conve
             // as the same value exported directly is. One value, one contract,
             // whether it was published or returned.
             // `await` rather than `result.then`, because a bare thenable's
-            // `then` answers whatever its author wrote — `undefined` for the
-            // three-line shape everyone writes — and what a caller was handed
+            // `then` answers whatever its author wrote (`undefined` for the
+            // three-line shape everyone writes), and what a caller was handed
             // has to stay awaitable. The async function hands back one promise
             // of this realm for every shape.
             //
@@ -3927,7 +3886,7 @@ const callDescriptor = (value) => {
 // Exported for the one caller outside this file that has to ask the same
 // question: the serialiser. What crosses to JavaScript as a call has no JSON,
 // and a second predicate written in `helpers.js` would answer differently the
-// day this one learns another shape — which it has done twice.
+// day this one learns another shape.
 export const callable = (value) =>
     typeof value === 'function' ||
     boundMethod(value) ||
@@ -4024,11 +3983,9 @@ function declared(value) {
     // `["builtins", "round", "round"]` and no arity, because it is written in
     // JavaScript inside Brython rather than compiled from Python.
     //
-    // *No signature* was read as *not Python's*, so `rounded = round` published
-    // by a module was handed over untouched, exactly as a library's own function
-    // is — and then a JavaScript caller passing `0.25` got *type Javascript
-    // Number doesn't define __round__ method*. The two decisions are separate:
-    // not knowing what a function takes says nothing about what it *expects*,
+    // *No signature* is not *not Python's*: `rounded = round` published by a
+    // module is called by JavaScript with `0.25`, and has to receive a float.
+    // Not knowing what a function takes says nothing about what it *expects*,
     // and a builtin expects Python on both sides.
     //
     // `Infinity` is the honest arity: there is no number to trim to, so
@@ -4050,8 +4007,8 @@ function declared(value) {
         // Same identity as an ordinary bound method, one paragraph down: the
         // pair, receiver and operation. The operation is `$function_infos`
         // itself, which is a property of the native function the descriptor
-        // wraps, so it is one object per operation and shared by every receiver
-        // — `rows.append` and `other.append` name the same operation, and
+        // wraps, so it is one object per operation and shared by every receiver:
+        // `rows.append` and `other.append` name the same operation, and
         // `rows.clear` a different one, which is exactly the distinction a
         // registry holding two lists needs.
         // Whatever the receiver's representation: `"hello".upper` is bound to
@@ -4072,8 +4029,8 @@ function declared(value) {
     // The receiver is not one of the arguments a caller counts: `def tag(self,
     // suffix)` declares two and JavaScript passes one, and so does
     // `__call__(self, suffix)`. It is bound here rather than left to the call
-    // site, so everything downstream — the wrapper, the arity trim, the error
-    // position — reads a function of the caller's arity like any other.
+    // site, so everything downstream (the wrapper, the arity trim, the error
+    // position) reads a function of the caller's arity like any other.
     //
     // A bound method is called through the function Brython recorded; an
     // instance goes through `$B.$call`, which is Python's own call protocol and
@@ -4111,7 +4068,7 @@ function declared(value) {
         // the choice is which word to put there, not whether to. `Handler.__call__`
         // is the class's; `self.name` is the author's, and `on_save` says more in
         // a log than the qualname of the method that runs it. It is not a field
-        // crossing — no field crosses on a callable — it is the better of two
+        // crossing (no field crosses on a callable): it is the better of two
         // names for the same thing.
         //
         // Read off the instance's own storage, never through `$getattr`: a
@@ -4153,7 +4110,7 @@ function liveArity(value) {
 
 // What to call a Python function in a message, which neither `__name__` nor
 // `str()` can answer: a module's functions cross through `pyBoundary`, and its
-// wrapper answers `wrapped` and `<JavascriptFunction object>` — the name of a
+// wrapper answers `wrapped` and `<JavascriptFunction object>`, the name of a
 // local in this file, and a category. `$function_infos` travels with the
 // wrapper, which is why it is read here instead.
 //
@@ -4211,14 +4168,14 @@ export function pyEvent(value, lineOffset = 0) {
 // Keyed on `found.fn`, the function Brython recorded the signature of, and not
 // on the object that arrived: reading `helpers.click` twice gives two interop
 // wrappers around one function, and Python calls them the same name. Every
-// wrapper this site builds has the same contract — `pyCall(fn, where, 0,
-// arity)`, all three read from `fn` itself — so one per function is the whole
+// wrapper this site builds has the same contract (`pyCall(fn, where, 0,
+// arity)`, all three read from `fn` itself), so one per function is the whole
 // of it. A bound method rebuilt at each read is a different question and is not
 // answered here.
 const HANDLERS = new WeakMap();
 
 // And for a bound method, one level deeper: receiver, then function. Two maps
-// rather than a composite key, because both halves have to be weak — a receiver
+// rather than a composite key, because both halves have to be weak: a receiver
 // is an ordinary object of the author's and holding it would outlive the page.
 const RECEIVERS = new WeakMap();
 
@@ -4244,8 +4201,8 @@ export const invoke = (fn) => (typeof fn === 'function' ? fn() : globalThis.__BR
 // One function per callable, because Svelte compares the attachment's identity
 // each time the expression runs and tears down and reinstalls on a new one: a
 // fresh wrapper at every evaluation reinstalled an attachment whose function had
-// not changed. The identity is the one `pyHandler` settles — a function, a
-// receiver and its method, an instance — so the two cannot disagree, and it is
+// not changed. The identity is the one `pyHandler` settles (a function, a
+// receiver and its method, an instance), so the two cannot disagree, and it is
 // held weakly.
 const ATTACHED = new WeakMap();
 
@@ -4290,9 +4247,9 @@ export function pyTeardown(value, where, lineOffset = 0) {
 
 // **Every Python callable the engine hands to JavaScript goes through
 // `pyHandler`.** Brython converts the arguments of any JavaScript call it makes
-// — a method of a namespace or of an object a library returned or resolved, a
+// (a method of a namespace or of an object a library returned or resolved, a
 // constructor through `.new`, a property written, a global like
-// `setTimeout` — with its own `pyobj2jsobj`, whose callback trims nothing and
+// `setTimeout`) with its own `pyobj2jsobj`, whose callback trims nothing and
 // is not the function `pyHandler` publishes for the same callable. The engine
 // asks `$B.pyobj2jsobj_hook` first, an extension point proposed upstream and
 // vendored (see BRYTHON_FIX.md), so the conversion has one site and one
@@ -4331,17 +4288,16 @@ export function pyHandler(value) {
     //
     // A **bound method** is built fresh on every read, so `box.note` twice is two
     // objects and the wrapper it carries cannot be the cache key: an `off` would
-    // never match the `on` that preceded it. The pair is what has an identity —
-    // the function and its receiver — and keying on the pair is also what keeps
+    // never match the `on` that preceded it. The pair is what has an identity,
+    // the function and its receiver, and keying on the pair is also what keeps
     // two instances of one class apart.
     //
     // A **callable instance** is neither. It is one object for its whole life,
-    // and the function that performs its call is not part of who it is: keying
-    // it on the pair made `Strategy.__call__ = other` hand out a *second*
-    // wrapper, so the registry that had been given the first could not remove
-    // it, and made `handler` and `handler.__call__` — two Python values, two
-    // contracts — share whichever wrapper crossed first. Its own identity is the
-    // object, and that is the key.
+    // and the function that performs its call is not part of who it is: after
+    // `Strategy.__call__ = other` a registry given its wrapper can still remove
+    // it, and `handler` and `handler.__call__`, two Python values with two
+    // contracts, keep a wrapper each. Its own identity is the object, and that
+    // is the key.
     const cache = found.instance
         ? INSTANCES
         : found.self === undefined
@@ -4383,8 +4339,8 @@ export function pyHandler(value) {
 // the callable it handed over.
 const PUBLISHED = new WeakMap();
 
-// A receiver Brython keeps as a JavaScript primitive — a `str`, a small `int`,
-// a `bool` — cannot key a WeakMap, and `"hello".upper` read twice is two method
+// A receiver Brython keeps as a JavaScript primitive (a `str`, a small `int`,
+// a `bool`) cannot key a WeakMap, and `"hello".upper` read twice is two method
 // objects over one value. Two equal primitives are one receiver, so they are
 // keyed by value.
 //
@@ -4512,9 +4468,9 @@ const inbound = (value) =>
 
 // **Brython's own refusal, which this proxy was going around.**
 //
-// A keyword call to a JavaScript function is undecidable — `foo(y=1, x=2)` on
+// A keyword call to a JavaScript function is undecidable (`foo(y=1, x=2)` on
 // `function foo(x, y)` cannot be placed, because a JavaScript function carries
-// no parameter names — and Brython raises `TypeError: A Javascript function
+// no parameter names), and Brython raises `TypeError: A Javascript function
 // can't take keyword arguments` for exactly that reason, in `pyargs2jsargs`.
 //
 // A call through this proxy never reaches that path: the keywords arrive as one
@@ -4543,8 +4499,8 @@ const withoutKeywords = (target, args) => {
 
 // One adapter per function, for the life of the function.
 //
-// The binding is read afresh on every access now — a `let` in a `<script
-// module>` is a *binding* and not a value — and without this a name read twice
+// The binding is read afresh on every access (a `let` in a `<script module>`
+// is a *binding* and not a value), and without this a name read twice
 // would hand Python two different proxies for one function. A registry given
 // the first cannot remove the second: `off(handler)` after `on(handler)` is the
 // shape that breaks, and it is the same identity rule `pyHandler` keeps on the
@@ -4678,12 +4634,11 @@ export function liveExport(namespace, name, update) {
 export function pyExport(value, where, lineOffset = 0) {
     // A function published under a second name. The compiler hands the module's
     // `def`s over itself and its *values* here, and `alias = original` is a
-    // value: it left untouched, so calling it gave back a coroutine object and
-    // `await` on a non-thenable is the value itself — the body never ran.
+    // value, which crosses as the function it is, an `async def` started.
     //
     // Asked as `declared`, which reads the signature Python recorded, and not as
-    // `callable`: a function JavaScript built and a Python name published —
-    // `accepted = query(_accepted)` in a `.remote.py` — must cross as the object
+    // `callable`: a function JavaScript built and a Python name published,
+    // `accepted = query(_accepted)` in a `.remote.py`, must cross as the object
     // its library made, marks included. `declared` answers null for it, and
     // the adapter Python held it through gives it back.
     if (declared(value) !== null || ADAPTERS.has(value)) return exported(value);
@@ -4779,11 +4734,9 @@ export function pyExport(value, where, lineOffset = 0) {
 
     // A mapping holding no callable of its own still holds the rule, and the
     // branch above is only about *labels*: it exists to name `module.actions.save`
-    // in a diagnostic, which needs the key, and a walk cannot. What it is not is
-    // the place the adaptation lives — this line handed the whole dict to the
-    // bare walk, so `{"handlers": [Handler(db)]}`, a registry under a name, lost
-    // every call it held while `[Handler(db)]` beside it kept them. The condition
-    // read the top level to decide for everything underneath.
+    // in a diagnostic, which needs the key, and a walk cannot. The adaptation
+    // lives in the walk, at every depth, so `{"handlers": [Handler(db)]}`, a
+    // registry under a name, keeps its calls as `[Handler(db)]` does.
     return plainData(value, undefined, pyHandler);
 }
 
@@ -4834,8 +4787,8 @@ export function pyBoundary(fn) {
 // added to one, the argument conversion for one, reaches all three.
 //
 // `call` is handed the arguments rather than the wrapper reading them, because
-// what an expression function does with them differs — it takes its values
-// already Python — and that difference is the compiler's to write.
+// what an expression function does with them differs (it takes its values
+// already Python), and that difference is the compiler's to write.
 //
 // The result goes through `pyNumbers`, not `plainData`: what a component hands
 // the *framework* is a transition's options or an action's teardown, and a
@@ -4961,8 +4914,8 @@ export const pyExpression = (call, where, lineOffset, arity, kept = false) =>
         arity
     );
 
-// **A name of the module that nothing has bound yet** — assigned in a branch
-// that did not run, or deleted — is read by Python code as CPython reads it,
+// **A name of the module that nothing has bound yet**, assigned in a branch
+// that did not run, or deleted, is read by Python code as CPython reads it,
 // `NameError` (`$B.resolve_in_scopes`, where a read the namespace no longer
 // answers goes), and by the template as Svelte renders a value that is not
 // there: empty.
@@ -5533,9 +5486,8 @@ export function writeItem(target, key, value) {
 // wrong here for want of a notification.
 //
 // The element's `type` is read off the node. Its value cannot be: a DOM value is
-// text, so `value={1}` reads back as "1", and the group wrote that string into
-// the author's data — an initial number matched nothing, and a checkbox left
-// `[1, '1']` behind, the same choice under two types.
+// text, so `value={1}` reads back as "1", where the author's data holds the
+// number `1`.
 //
 // The typed value is nowhere on the node either. Svelte keeps it on the hidden
 // `__value` property only for an element it sees a group binding on, and this one
@@ -5630,9 +5582,9 @@ export function group(node, [current, write, chosen, binding, scope, where = []]
 
     node.$svelthonGroup = targetOf(token, where);
 
-    // `undefined` now means one thing only: the tag's value is static text, so
-    // the node holds it and nothing can move it. Everything an author wrote as
-    // an expression — braced, quoted, or quoted around text — is compiled and
+    // `undefined` means one thing only: the tag's value is static text, so the
+    // node holds it and nothing can move it. Everything an author wrote as an
+    // expression, braced, quoted, or quoted around text, is compiled and
     // handed over, because the node's text is not the value (`value="{n}"` binds
     // a number) and because reading it here is not ordered against Svelte
     // writing it.
@@ -5641,11 +5593,9 @@ export function group(node, [current, write, chosen, binding, scope, where = []]
     const value = () => (picked === undefined ? node.value : pyBind(picked));
 
     // **A checkbox group is the checked inputs, read in the order they sit in
-    // the document.** Svelte's own binding does exactly that —
-    // `get_binding_group_value` walks the group's inputs — and this built the
-    // list from the click history instead: the value clicked last went to the
-    // end, so ticking `b` then `a` gave `['b', 'a']` where Svelte gives
-    // `['a', 'b']`. The selection was right and its order was ours.
+    // the document**, as Svelte's own binding reads them
+    // (`get_binding_group_value` walks the group's inputs): ticking `b` then `a`
+    // gives `['a', 'b']`, not the click history.
     //
     // So each input registers on the token, which is what already says *these
     // inputs belong together* across instances and `{#each}` rows, and the
@@ -5694,19 +5644,17 @@ export function group(node, [current, write, chosen, binding, scope, where = []]
     // `in` are also what a Python author reads in a group.
     // Python's comparison, read as Python reads it. Asking `=== true` of the
     // answer is a narrower question than the one that was asked: `__eq__` may
-    // return anything, and `return int(self.n == other.n)` gives 1 — true to
-    // Python, and not the JavaScript boolean. A choice already present in the
-    // state then showed as unselected.
+    // return anything, and `return int(self.n == other.n)` gives 1, true to
+    // Python and not the JavaScript boolean.
     const alike = (one, mine) => {
         try {
             return __pybridge.truthy(globalThis.__BRYTHON__.rich_comp('__eq__', one, mine));
         } catch (error) {
             // An `__eq__` of the author's that raises is not a "no". The fall
-            // back to identity is for a value Python cannot compare at all — a
-            // foreign JavaScript one — and using it for a failed protocol
-            // answered *plausibly and wrongly*: two distinct instances, so the
-            // control showed nothing selected while the model had not managed to
-            // compare anything. Same rule as `__pybridge.truthy` one file up.
+            // back to identity is for a value Python cannot compare at all, a
+            // foreign JavaScript one; for a failed protocol it would answer
+            // *plausibly and wrongly*. Same rule as `__pybridge.truthy` one file
+            // up.
             if (raised(error)) throw pyError(error, `bind:group={${binding}}`);
 
             return one === mine;
@@ -5716,7 +5664,7 @@ export function group(node, [current, write, chosen, binding, scope, where = []]
     const same = (one) => alike(one, value());
 
     // **A value goes into a group's list once.** Two controls may stand for one
-    // choice — a form showing the same option in two sections — and Python
+    // choice (a form showing the same option in two sections), and Python
     // equality is what says they are one choice, since two Brython values that
     // are equal are rarely the same object.
     const include = (into, held) => {

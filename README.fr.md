@@ -1119,11 +1119,9 @@ ré-exécuté à chaque montage, défauts mutables compris.
 
 ## Asynchrone
 
-Un handler `async def` s'exécute. Il a fallu deux choses pour ça : `async def`
-est un nœud d'AST distinct, et l'ignorer laissait les handlers asynchrones
-**indéfinis** : un clic ne faisait rien, en silence. Et appeler une telle
-fonction depuis JavaScript rend une coroutine que personne n'exécute : l'enveloppe
-la confie donc à la boucle d'événements de Brython.
+Un handler `async def` s'exécute. Appeler une telle fonction depuis JavaScript
+rend une coroutine que personne n'exécute : l'enveloppe la confie donc à la
+boucle d'événements de Brython.
 
 ```python
 from browser import aio
