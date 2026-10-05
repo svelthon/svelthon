@@ -15,6 +15,13 @@ hidden = []
 tag = "div"
 flags = ["a", None]
 spread = {"hidden": [], "class": ["a", None]}
+toggled = [1]
+
+
+@export
+def clear():
+    global toggled
+    toggled = None
 
 
 class Mode(str):
@@ -32,6 +39,9 @@ subclassed = Mode("until-found")
 <input data-k="checked" type="checkbox" checked={empty} />
 <input data-k="required" required={nothing} />
 <details data-k="open" open={empty}><summary>x</summary></details>
+<input data-k="indeterminate" type="checkbox" indeterminate={empty} />
+<input data-k="indeterminate-spread" type="checkbox" {**{"indeterminate": nothing}} />
+<input data-k="indeterminate-cleared" type="checkbox" {**{"indeterminate": toggled}} />
 <button data-k="witness" disabled={chosen}>x</button>
 <div data-k="dict" class={{"on": zero, "full": empty, "shown": True}}></div>
 <div data-k="list" class={["base", None, "on" if zero else "", selection and "sel"]}></div>

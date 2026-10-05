@@ -18,9 +18,28 @@ test.for([
     ['disabled', 'disabled'],
     ['checked', 'checked'],
     ['required', 'required'],
-    ['open', 'open']
+    ['open', 'open'],
+    // One of the names Svelte reads as boolean that the table had left out,
+    // written directly, spread, and spread as None.
+    ['indeterminate', 'indeterminate'],
+    ['indeterminate-spread', 'indeterminate']
 ])('a boolean attribute given a false Python value is off: %s', ([key, property]) => {
     expect(at()(key)[property]).toBe(false);
+});
+
+// None spread after a true value reached Svelte as an absence, which leaves a
+// property as it was: the box stayed indeterminate. Svelte's own `{...{
+// indeterminate: null }}` turns it off, and so does Python's false.
+test('a boolean spread as None after a true value is off', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+    const instance = mount(PythonTruthAttributes, { target });
+    flushSync();
+    const box = target.querySelector('[data-k="indeterminate-cleared"]');
+
+    expect(box.indeterminate).toBe(true);
+    instance.clear();
+    flushSync();
+    expect(box.indeterminate).toBe(false);
 });
 
 test('control: a true Python value turns it on', () => {

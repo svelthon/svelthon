@@ -692,6 +692,18 @@ test('a JavaScript symbol is a key like any other: symbol-hash', async () => {
     expect(keyed(token, Symbol('token'))).toEqual([2, true, 2]);
 });
 
+// `ob_type` is the field Brython reads an object's class from, and a name any
+// Python code may write. A dict keeps its own class under a symbol and its
+// string keys as properties, so a global, a key or an attribute of that name
+// was taken for the dict's class: `globals()` raised a JavaScript error, and
+// `locals()` left the name out. `python3` on the same module:
+// `[5, 42, 'dict', 1, ['ob_type'], 3, 'dict', ['ob_type']]`.
+test('a name or key spelled ob_type is the author’s: ob-type-name', async () => {
+    const { spelled } = await import('./fixtures/ob_type_names.py');
+
+    expect(spelled()).toEqual([5, 42, 'dict', 1, ['ob_type'], 3, 'dict', ['ob_type']]);
+});
+
 // A row too short for a starred target says how many values it needs: the
 // names beside the star, wherever it stands. `python3` on the same two rows.
 test('a starred target says the values it needs as CPython does: starred-unpack-expected-count', async () => {
