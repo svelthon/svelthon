@@ -8,6 +8,21 @@ import { test, expect } from 'vitest';
 import { mount, unmount, flushSync } from './mounted.js';
 import ClassMap from './fixtures/ClassMap.svelte';
 import ClassMapNative from './fixtures/ClassMapNative.svelte';
+import { __pybridge } from '../src/lib/runtime.js';
+
+// Telling a JavaScript object from one of the engine's reads `ob_type` without
+// running a getter of that name, which is the author's and which Svelte never
+// reads.
+test('an object of classes whose ob_type is a getter is read without running it', () => {
+    const classes = Object.defineProperty({ active: true }, 'ob_type', {
+        enumerable: false,
+        get() {
+            throw new Error('ob_type getter executed');
+        }
+    });
+
+    expect(__pybridge.klass(classes)).toBe(classes);
+});
 
 const classesOf = async (Component, classes) => {
     const target = document.body.appendChild(document.createElement('div'));

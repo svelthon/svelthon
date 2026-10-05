@@ -9,6 +9,7 @@
 // there, `{id, name}` and `{row.id}` agree on every row, and so must ours.
 import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
+import { restOf, pyData } from '../src/lib/runtime.js';
 import UnpackByKey from './fixtures/UnpackByKey.svelte';
 import UnpackByKeyNative from './fixtures/UnpackByKeyNative.svelte';
 import UnpackByKeyTypo from './fixtures/UnpackByKeyTypo.svelte';
@@ -17,6 +18,62 @@ import ComputedRestNative from './fixtures/ComputedRestNative.svelte';
 import { restart } from './fixtures/computed_rest_keys.js';
 import RestRows from './fixtures/RestRows.svelte';
 import RestRowsNative from './fixtures/RestRowsNative.svelte';
+import RestProtocols from './fixtures/RestProtocols.svelte';
+import RestProtocolsNative from './fixtures/RestProtocolsNative.svelte';
+import { reads } from './fixtures/rest_protocols.js';
+
+// Which rule a row takes was read off the row: a field `keys = 3` was called,
+// a property `keys` was run, and a JavaScript object's `ob_type` getter ran
+// before any field was read, once more than the copy reads it, or refused the
+// mount. The class says whether a row is a mapping, and a JavaScript row is
+// read as JavaScript's own rest reads it: each property once, the field read
+// by the pattern included.
+test('a row is a mapping by its class, and a JavaScript row runs no getter twice', () => {
+    const read = (Component) => {
+        reads.counted = 0;
+        const target = document.body.appendChild(document.createElement('div'));
+        mount(Component, { target });
+        flushSync();
+        const found = Object.fromEntries([...target.querySelectorAll('p')].map((one) => [one.dataset.k, one.textContent]));
+        target.remove();
+        return [found, reads.counted];
+    };
+    const [python] = read(RestProtocols);
+    const [native] = read(RestProtocolsNative);
+
+    expect(python.field).toBe('10|keys,tail');
+    expect(python.property).toBe('10|tail');
+    expect([python.refusing, python.counting]).toEqual([native.refusing, native.counting]);
+});
+
+// The rest itself reads each property of a JavaScript row once, as
+// `{...rest} = row` does, its `ob_type` getter included, and runs none that is
+// not enumerable.
+test('the rest of a JavaScript row reads each property once, as JavaScript does', () => {
+    const counted = (enumerable) => {
+        const log = { reads: 0 };
+        const row = { first: 10, tail: 20 };
+        Object.defineProperty(row, 'ob_type', {
+            enumerable,
+            get() {
+                log.reads += 1;
+                return 'business';
+            }
+        });
+        return [row, log];
+    };
+
+    for (const enumerable of [false, true]) {
+        const [native, nativeLog] = counted(enumerable);
+        const [python, pythonLog] = counted(enumerable);
+        const { ...copy } = native;
+
+        restOf(python, pyData([]));
+
+        expect(Object.keys(copy).length).toBe(enumerable ? 3 : 2);
+        expect(pythonLog.reads).toBe(nativeLog.reads);
+    }
+});
 
 // `...rest` called `items()` on every row, so a Python instance or a JavaScript
 // object, whose fields the pattern reads, stopped the mount with an

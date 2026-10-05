@@ -10,6 +10,23 @@ import * as Reexport from './fixtures/js_reexport.py';
 import * as ReexportNative from './fixtures/js_reexport_native.js';
 import * as Source from './fixtures/js_reexport_source.js';
 import store from './fixtures/js_reexport_store.svelte.py';
+import { write as writeReexport } from './fixtures/js_reexport_writer.py';
+
+// And a write from Python to such a name, through `globals()` or from another
+// module, was taken by Python's reader and missed by JavaScript's, the export
+// staying at the source's value. JavaScript refuses an assignment to an import,
+// and so does the namespace now, with the name and the module, and the two
+// readers keep one value.
+test.for([
+    ['through globals()', () => Reexport.overwrite()],
+    ['from another module', () => writeReexport()]
+])('a write %s to a re-exported JavaScript name is refused', ([, write]) => {
+    Source.reset();
+
+    expect(write).toThrow(/'counter' is the JavaScript binding .*js_reexport\.py re-exports, and an import is read-only/);
+    expect(Reexport.counter).toBe(0);
+    expect(Reexport.read()).toBe(0);
+});
 
 // A name `__js__` brings, listed in `__all__`, was refused as one the module
 // "never binds", in a `.py` and in a `.svelte.py`. And exported, it followed

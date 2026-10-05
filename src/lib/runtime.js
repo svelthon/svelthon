@@ -241,7 +241,7 @@ export const __pybridge = {
         // An object a JavaScript parent handed over, `{active: true}`, is what
         // Svelte reads as a set of conditional classes, and is handed to it as
         // it is, read the way it reads it.
-        if (!pyClass(value.ob_type) && !VIEWED.has(value) && plainObject(value)) return value;
+        if (!pyClass(quietly(value, 'ob_type')) && !VIEWED.has(value) && plainObject(value)) return value;
 
         // The names the list yields, which for a subclass with its own
         // `__iter__` are not the ones it stores: the loop beside it reads the
@@ -4582,6 +4582,18 @@ function exported(one, made) {
     return plainData(one, made, pyHandler);
 }
 
+// A write from Python to a name a `.py` re-exports from JavaScript: refused, as
+// JavaScript refuses an assignment to an import, with the name and the module.
+export function readOnlyImport(name, where) {
+    const $B = globalThis.__BRYTHON__;
+
+    $B.RAISE(
+        _b_.TypeError,
+        `'${name}' is the JavaScript binding ${where} re-exports, and an import is read-only; ` +
+            `bind another name to hold a value of your own`
+    );
+}
+
 // A value a plain module exports is a live binding, as a JavaScript module's
 // `export let` is: `update` is the module's own assignment to its exported
 // name, made now and again on every write Python makes to the name, through the
@@ -5309,16 +5321,25 @@ const moduleNamespace = (value) =>
 // `__getitem__`, which is what Python's own `{**row}` asks of one; a Python
 // instance is its attributes, `vars(row)`; a JavaScript object is its own
 // enumerable properties, which is what JavaScript's own `...rest` takes.
+//
+// Which of the three is asked of the class, never by reading the row: a mapping
+// is a dict, or a class declaring `__getitem__` and a `keys` it can call, where
+// a field or a property called `keys` is the row's data; and a JavaScript
+// object's `ob_type`, which the engine reads to tell its own objects, is read
+// without running a getter (`quietPyType`), so each property is read once, by
+// the copy, as JavaScript's own rest reads it.
 export function restOf(row, taken) {
     const $B = globalThis.__BRYTHON__;
     const out = _b_.dict.$factory();
     const left = (key) => !$B.$is_member(key, taken);
+    const type = quietPyType(row);
 
-    if (pyType(row) !== undefined) {
-        const keys = $B.$getattr(row, 'keys', MISSING);
+    if (type !== undefined) {
+        const mapping =
+            $B.is_dict(row) || (declares(type, '__getitem__') !== $B.NULL && callable(declares(type, 'keys')));
 
-        if (keys !== MISSING) {
-            for (const key of $B.$call(_b_.list, $B.$call(keys))) {
+        if (mapping) {
+            for (const key of $B.$call(_b_.list, $B.$call($B.$getattr(row, 'keys')))) {
                 if (left(key)) $B.$setitem(out, key, $B.$getitem(row, key));
             }
             return out;
@@ -5351,7 +5372,7 @@ export function readAttr(target, name, otherwise) {
         target !== null &&
         typeof target === 'object' &&
         Object.hasOwn(target, 'ob_type') &&
-        !pyClass(target.ob_type) &&
+        !pyClass(quietly(target, 'ob_type')) &&
         !$B.is_dict(target)
     ) {
         if (name in target) return $B.jsobj2pyobj(target[name], target);

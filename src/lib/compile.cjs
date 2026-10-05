@@ -1397,6 +1397,7 @@ const RUNTIME = {
     invoke: '__invoke',
     pyExport: '__pyExport',
     liveExport: '__liveExport',
+    readOnlyImport: '__readOnlyImport',
     templateFrom: '__templateFrom',
     jsCall: '__jsCall',
     ticking: '__ticking',
@@ -3048,7 +3049,7 @@ function namespaceObject(c) {
 // `<script module>` imported. They are wrapped like the rest and bound like the
 // rest, so the only difference between the two paths is that list, which is why
 // this is one function rather than the same six lines twice.
-function jsNameBindings(c, extra = []) {
+function jsNameBindings(c, extra = [], plain = false) {
     // Once each. The two lists overlap whenever a component names the same
     // import in its `<script module>` and in an `importjs`, and the two loops
     // this replaces then bound it twice: the same line, emitted after itself.
@@ -3064,7 +3065,17 @@ function jsNameBindings(c, extra = []) {
     // Safe to read afresh because the adaptation is memoised per function
     // (`ADAPTED` in runtime.js): the same function gives the same proxy, so a
     // callback registered from Python can still be taken back.
-    return names.map((n) => `__bind(__proto, '${n}', () => __jsCall(${n}));`);
+    //
+    // A name a `.py` re-exports is JavaScript's own binding (`plainExports`),
+    // which follows its module and which only its module writes: an import is
+    // read-only in JavaScript, and a write from Python, through `globals()` or
+    // from another module, is refused as JavaScript refuses it, rather than
+    // taken by Python's reader and missed by JavaScript's.
+    return names.map((n) =>
+        plain && c.exported.includes(n) && jsOnly(c, n)
+            ? `__bind(__proto, '${n}', () => __jsCall(${n}), () => __readOnlyImport(${JSON.stringify(n)}, ${JSON.stringify(c.source)}));`
+            : `__bind(__proto, '${n}', () => __jsCall(${n}));`
+    );
 }
 
 // Everything the compiler adds: the injected helpers, the template bridge's
@@ -3381,7 +3392,7 @@ function plainPreamble(c) {
         `import { ${runtimeAliases([
             'bind', '__pybridge', 'pyCall', 'pyDef', 'pyError', 'plainData', 'pyArg',
             'pyData', 'pyExport', 'pyBoundary', 'jsCall', 'ticking', 'pyBind', 'NONE', 'helpers',
-            'registerModule', 'group', 'invoke', 'liveExport'
+            'registerModule', 'group', 'invoke', 'liveExport', 'readOnlyImport'
         ])} } from 'svelthon/runtime';`,
         ...c.jsImports.map(jsImportLine),
         ``
@@ -3413,7 +3424,7 @@ function plainBindings(c) {
         ...injections(c.declared, false, c.names),
 
         // A module has no `<script module>`, so nothing joins its own imports.
-        ...jsNameBindings(c),
+        ...jsNameBindings(c, [], true),
         ``
     ];
 }

@@ -89,4 +89,3 @@ test('a handler written in the template reads an unbound name as Python does', (
     expect(globalThis.templateAbsenceLog).toEqual(['NameError']);
     target.remove();
 });
-
