@@ -65,6 +65,29 @@ test.for([
     expect(encoded.counted.reads).toBe(witness.reads);
 });
 
+// `to_py` hands a value that is already Python back as itself. A dict keeps its
+// class under a symbol, which the question did not read, so it was copied: two
+// names stopped being one dict, and a key that is not a string, kept in the
+// dict's table, never arrived, `to_py({7: 42})` coming back empty. `python3`
+// has no `to_py`; the contract is the identity, at the root and inside a
+// JavaScript object, beside a JavaScript object it does convert.
+test.for([['answer'], [7]])('to_py keeps a Python dict keyed %s as itself', async ([key]) => {
+    const { kept } = await import('./fixtures/to_py_identity.py');
+
+    expect(kept(key)).toEqual([true, true, true]);
+});
+
+test('to_py keeps a Python dict inside a JavaScript object, and converts the object', async () => {
+    const { converted } = await import('./fixtures/to_py_identity.py');
+    const $B = globalThis.__BRYTHON__;
+    const original = $B.builtins.dict.$factory();
+
+    $B.$setitem(original, 'answer', 42);
+
+    expect($B.$getitem(pyData({ child: original }), 'child')).toBe(original);
+    expect(converted()).toEqual(['dict', 42]);
+});
+
 // What a `toJSON` hands back is asked the walk's refusals again, a set among
 // them, and `JSON.stringify` runs a hidden getter of it no more than it runs
 // one of the record itself.

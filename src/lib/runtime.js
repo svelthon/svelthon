@@ -2430,7 +2430,7 @@ const entering = (given) =>
     given !== null &&
     typeof given === 'object' &&
     !VIEWED.has(given) &&
-    !pyClass(ownType(given)) &&
+    quietPyType(given) === undefined &&
     (Array.isArray(given) || plainObject(given))
         ? pyData(given)
         : pyBind(given);
@@ -3343,7 +3343,7 @@ export function pyData(value, made) {
         // reason: `ob_type` is a field name, and an array is as free to carry
         // one as an object is: a JavaScript array with a business field of that
         // name is no Brython list, and `to_py(rows)` gives a `list`.
-        if (pyClass(ownType(value))) return value;
+        if (quietPyType(value) !== undefined) return value;
 
         made ??= new WeakMap();
 
@@ -3378,8 +3378,11 @@ export function pyData(value, made) {
     // a *field name*, which data is allowed to carry, `{"ob_type": "business",
     // "value": 42}` being ordinary JSON. A real Python object carries a class
     // there, so the question is asked of the class, read without running a
-    // getter of that name (`ownType`): each property is read once, by the copy.
-    if (!pyClass(ownType(value)) && plainObject(value)) {
+    // getter of that name: each property is read once, by the copy. Asked of
+    // both places the engine keeps it (`quietPyType`): a dict keeps its class
+    // under a symbol, and was copied, its identity and its non-string keys
+    // lost, `to_py({7: 42})` empty.
+    if (quietPyType(value) === undefined && plainObject(value)) {
         made ??= new WeakMap();
 
         const known = made.get(value);
