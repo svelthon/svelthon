@@ -81,6 +81,7 @@ describe('a rune written below the top level', () => {
     test.for([
         ['inside an expression', 'count = 0\nprint(effect(lambda: count))\n', /`effect\(…\)` is read only as the whole value of an assignment.*:2\)/],
         ['assigned inspect', 'count = 0\nwatch = inspect(count)\n', /`inspect\(…\)` is a statement of its own.*:2\)/],
+        ['inspect sharing its line', 'count = 0\ninspect(count); count = 1\n', /`inspect\(…\)` is read as a statement on lines of its own.*:2\)/],
         ['a derived handed a value', 'count = 0\ntwice = derived(count * 2)\n', /`derived\(…\)` takes a function.*`name => expression`.*:2\)/],
         ['an effect handed a value', 'count = 0\nrun = effect(count + 1)\n', /`effect\(…\)` takes a function.*`=> expression`/]
     ])('and a marker is refused %s', ([, body, message]) => {

@@ -903,6 +903,8 @@ const ARROW_EFFECT = /^=>\s*(\S[\s\S]*)$/;
 // where Python puts it whenever position stops being enough. The two are read by
 // the same rule and told apart by the name alone.
 const INSPECT = /^inspect(_with)?\s*\((\s*\S[\s\S]*)\)\s*$/;
+const INSPECT_OPENED = /^inspect(_with)?\s*\(/;
+const newlines = (text) => text.split('\n').length - 1;
 
 // The first argument of a call's text and the rest, where Python's parser ends
 // the first argument: a comma does not say it, since `lambda kind, *values: …`
@@ -1086,8 +1088,42 @@ function takeArrows(src, where, lineOffset, allowed, theirs = new Set()) {
         // `inspect(…)` at the top level of a component, whose arguments become a
         // lambda so that they are read again on every change. A call to an
         // `inspect` the author imported from JavaScript is theirs, as written.
-        const inspected = statement && !found && allowed ? text.match(INSPECT) : null;
+        //
+        // One left open on its line, as a formatter lays out a long call, is
+        // the lines up to the one that closes it, read as one statement and
+        // written back over as many lines, so every line keeps its number.
+        let call = text;
+        let last = n;
+
+        if (statement && !found && allowed && INSPECT_OPENED.test(text) && depth > 0) {
+            const gathered = [text];
+
+            while (depth > 0 && last + 1 < lines.length) {
+                last += 1;
+                const inCode = !continued[last];
+                const stop = inCode ? commentAt(lines[last]) : -1;
+                const kept = stop === -1 ? lines[last] : lines[last].slice(0, stop).trimEnd();
+
+                if (inCode) {
+                    depth = Math.max(0, depth + opened(kept));
+                    joined = kept.endsWith('\\');
+                }
+                gathered.push(kept);
+            }
+
+            call = gathered.join('\n');
+        }
+
+        const inspected = statement && !found && allowed ? call.match(INSPECT) : null;
         const watched = inspected && !theirs.has(inspected[1] ? 'inspect_with' : 'inspect') ? inspected : null;
+
+        if (last > n && !watched) {
+            out.push(...lines.slice(n, last + 1));
+            n = last;
+            continue;
+        }
+
+        n = last;
 
         // `value: str <=>`, with an optional fallback after the arrow.
         const both = statement && !found && !watched ? text.match(BINDABLE) : null;
@@ -1115,6 +1151,10 @@ function takeArrows(src, where, lineOffset, allowed, theirs = new Set()) {
             );
         }
 
+        // A call over several lines is written back over as many: what the
+        // rewrite trims off its arguments is given back as blank lines below.
+        const lined = (rewritten) => rewritten + '\n'.repeat(Math.max(0, newlines(call) - newlines(rewritten)));
+
         if (!found && !watched && !both) out.push(line);
         else if (watched && watched[1]) {
             // `inspect_with(logger, *values)`: two roles Svelte evaluates apart,
@@ -1122,10 +1162,10 @@ function takeArrows(src, where, lineOffset, allowed, theirs = new Set()) {
             // lambdas, handed over as a pair that costs nothing to build.
             const [logger, values] = firstArgument(watched[2]);
             out.push(
-                `__inspect_${anonymous++} = inspect_with(lambda: (lambda: [${values}], lambda: ${logger}))`
+                lined(`__inspect_${anonymous++} = inspect_with(lambda: (lambda: [${values}], lambda: ${logger}))`)
             );
         } else if (watched)
-            out.push(`__inspect_${anonymous++} = inspect(lambda: [${watched[2]}])`);
+            out.push(lined(`__inspect_${anonymous++} = inspect(lambda: [${watched[2]}])`));
         // The right-hand side in parentheses, as the `=` it stands for reads it:
         // `pair => a, b` is the tuple `(a, b)`, and `=> f(a), g(a)` makes both
         // calls in the effect, rather than a second argument of the marker.
@@ -1967,7 +2007,7 @@ const markerCalled = (node) => {
 };
 
 // `theirs` names what the author took, an `importjs {inspect}` among them.
-function refuseMisplacedMarkers(body, source, lineOffset, theirs) {
+function refuseMisplacedMarkers(body, source, lineOffset, theirs, component) {
     walkScoped(body, (node, scope, line, parent) => {
         const marker = markerCalled(node);
         if (marker === null || theirs.has(marker)) return;
@@ -1980,6 +2020,13 @@ function refuseMisplacedMarkers(body, source, lineOffset, theirs) {
 
         if (!assigned && !(parent instanceof $B.ast.Expr) && !(parent instanceof $B.ast.AnnAssign)) {
             fail(`\`${marker}(…)\` is read only as the whole value of an assignment; inside another expression it declares nothing`);
+        }
+
+        // Every `inspect(…)` of a component the rewrite read is an assignment
+        // by now, so one still standing as a statement is one it did not: a
+        // call sharing its line with another statement, wired to nothing.
+        if (component && parent instanceof $B.ast.Expr && (marker === 'inspect' || marker === 'inspect_with')) {
+            fail(`\`${marker}(…)\` is read as a statement on lines of its own; sharing one, it is wired to nothing`);
         }
 
         if (!assigned) return;
@@ -3749,7 +3796,7 @@ function compile(
     // What the author took, an `importjs {inspect}` among them, is no rune.
     const theirs = new Set([...declared, ...jsImported]);
     refuseNestedRunes(root._ast.body, source, lineOffset, theirs);
-    refuseMisplacedMarkers(root._ast.body, source, lineOffset, theirs);
+    refuseMisplacedMarkers(root._ast.body, source, lineOffset, theirs, component);
 
     // Functions by default, what a framework calls by name. A module that wants
     // to export values says so with `__all__`, exactly as it would to a Python

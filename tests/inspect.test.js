@@ -3,6 +3,26 @@ import { createRequire } from 'node:module';
 import { mount, flushSync } from './mounted.js';
 import Inspect from './fixtures/Inspect.svelte';
 import InspectWithCounts from './fixtures/InspectWithCounts.svelte';
+import InspectLines from './fixtures/InspectLines.svelte';
+
+// The call was recognised on one line only: laid out over three, as a
+// formatter writes it, it stayed a call to the injected identity, wired to
+// nothing and said nothing. The same logs as the one-line form.
+test('inspect over several lines logs as on one line', () => {
+    const logged = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const target = document.body.appendChild(document.createElement('div'));
+    mount(InspectLines, { target });
+    flushSync();
+
+    expect(logged).toHaveBeenCalledWith(0, 'hello');
+
+    target.querySelector('button').click();
+    flushSync();
+
+    expect(logged).toHaveBeenCalledWith(1, 'hello');
+    logged.mockRestore();
+    target.remove();
+});
 
 // The values and the logger are two roles Svelte evaluates apart:
 // `$inspect(read_value()).with(make_logger())` reads the value twice on mount
@@ -80,6 +100,18 @@ describe('inspect', () => {
         // its own, so the lambda is what gets re-run.
         test('hands Svelte the call', () => {
             expect(script('count = 0\n\ninspect(count)\n')).toContain('$inspect(...__invoke(__fn___inspect_0));');
+        });
+
+        // Over several lines, `inspect_with` as well, and every line after the
+        // call keeps its number: an error below it names its own line.
+        test.for([
+            ['inspect', 'count = 0\n\ninspect(\n    count,\n)\nboom = 1 / 0\n'],
+            ['inspect_with', 'count = 0\n\ninspect_with(print,\n    count)\n\nboom = 1 / 0\n']
+        ])('hands Svelte a call to %s laid out over lines', ([, src]) => {
+            const out = compile(src, 'Probe', 'probe.svelte', {});
+
+            expect(out.script).toContain('$inspect(');
+            expect(out.module.split('\n').some((line) => line.includes('set_lineno(frame, 6)'))).toBe(true);
         });
 
         test('and leaves a component that does not use it alone', () => {
