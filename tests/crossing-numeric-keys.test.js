@@ -119,6 +119,19 @@ describe('a dict whose keys are not strings', () => {
         expect(() => tojson(dict([[token, 1]]))).toThrow('tojson(): Symbol(tail) is a symbol, and a symbol has no JSON');
     });
 
+    // A key "ob_type" is the author's, whatever it holds. Holding a class, it
+    // was taken for the engine's mark: `{"ob_type": float, "value": 42, "label":
+    // "kept"}` crossed as the number 42, its label gone. `python3` keeps the
+    // three entries.
+    test('a key "ob_type" holding a class crosses as an entry', () => {
+        const classy = () => dict([['ob_type', _b_.float], ['value', 42], ['label', 'kept']]);
+        const copied = plainData(classy());
+        const exported = pyExport(classy(), 'm');
+
+        expect([Object.keys(copied), copied.label]).toEqual([['ob_type', 'value', 'label'], 'kept']);
+        expect([Object.keys(exported), exported.label]).toEqual([['ob_type', 'value', 'label'], 'kept']);
+    });
+
     // A Brython float is an object, so this is the half that coercion could not
     // spell at all: `[object Object]`. An int key survived it by luck, which is
     // why the bypass stayed invisible.

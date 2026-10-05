@@ -1275,8 +1275,16 @@ const quietly = (value, name) => {
 // Python operating on a JavaScript object is the engine's own business:
 // `$B.get_class` and `$getattr` read `obj.ob_type` themselves, the limit
 // `pyScalar` states.
+//
+// A dict holds its class under a symbol of its own and its string keys as
+// properties, so a key "ob_type" is the author's data and no mark: the engine's
+// `get_class` takes that symbol first, and this does not read the field there.
 export const ownType = (value) =>
-    value !== null && (typeof value === 'object' || typeof value === 'function') ? quietly(value, 'ob_type') : undefined;
+    value !== null &&
+    (typeof value === 'object' || typeof value === 'function') &&
+    !Object.hasOwn(value, globalThis.__BRYTHON__.OB_TYPE)
+        ? quietly(value, 'ob_type')
+        : undefined;
 
 // `pyType`, asked that way: an `ob_type` getter of a JavaScript object is the
 // author's code, and a data field of that name is read once, by the serialiser.

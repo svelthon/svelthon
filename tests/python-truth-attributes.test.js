@@ -28,8 +28,10 @@ test.for([
 });
 
 // None spread after a true value reached Svelte as an absence, which leaves a
-// property as it was: the box stayed indeterminate. Svelte's own `{...{
-// indeterminate: null }}` turns it off, and so does Python's false.
+// property as it was: the box stayed indeterminate. None is Python's false
+// wherever the attribute is written, so it turns the box off, spread as
+// written directly; Svelte's own spread of `null` leaves it on, and only its
+// `indeterminate={null}` written directly turns it off.
 test('a boolean spread as None after a true value is off', () => {
     const target = document.body.appendChild(document.createElement('div'));
     const instance = mount(PythonTruthAttributes, { target });

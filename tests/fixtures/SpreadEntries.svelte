@@ -43,6 +43,7 @@ VALUES = {
     "dict": {"a": 1, "b": 2},
     "int": {1: "one", "b": 2},
     "symbol-dict": {"first": 10, token: 20},
+    "ob-type-key": {"ob_type": "business", "x": 1},
     "mapping": Table(),
     "plain": Plain(),
     "function": marked,

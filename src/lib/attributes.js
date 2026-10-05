@@ -5,10 +5,9 @@
 // The boolean attributes, which the DOM reads for truth: on an element,
 // `disabled={[]}` has to be Python's false, as `{#if []}` is. Svelte's own list,
 // `DOM_BOOLEAN_ATTRIBUTES` in `svelte/src/utils.js`, the one its compiler and
-// its server renderer read, which no public path exports: a name written here
-// by hand, and not there, let an empty list through as JavaScript's true.
-// `tests/attributes.test.js` holds the two lists equal. Then `hidden`, which
-// Svelte reads as a plain value, below.
+// its server renderer read, which no public path exports, so it is copied here
+// and `tests/attributes.test.js` holds the two lists equal. Then `hidden`,
+// which Svelte reads as a plain value, below.
 export const BOOLEAN_ATTRIBUTES = [
     'allowfullscreen',
     'async',

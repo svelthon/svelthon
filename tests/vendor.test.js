@@ -695,13 +695,16 @@ test('a JavaScript symbol is a key like any other: symbol-hash', async () => {
 // `ob_type` is the field Brython reads an object's class from, and a name any
 // Python code may write. A dict keeps its own class under a symbol and its
 // string keys as properties, so a global, a key or an attribute of that name
-// was taken for the dict's class: `globals()` raised a JavaScript error, and
-// `locals()` left the name out. `python3` on the same module:
-// `[5, 42, 'dict', 1, ['ob_type'], 3, 'dict', ['ob_type']]`.
+// was taken for the dict's class: `globals()` raised a JavaScript error, a
+// class under the key broke the dict, and `locals()` left the name out. A
+// method's frame held its class under the same name, for `super()`, which now
+// reads it from `__class__`: `locals()`, `vars()` and `"x" in locals()` in a
+// method are the method's names. `python3` on the same module.
 test('a name or key spelled ob_type is the author’s: ob-type-name', async () => {
-    const { spelled } = await import('./fixtures/ob_type_names.py');
+    const { spelled, method } = await import('./fixtures/ob_type_names.py');
 
-    expect(spelled()).toEqual([5, 42, 'dict', 1, ['ob_type'], 3, 'dict', ['ob_type']]);
+    expect(spelled()).toEqual([5, 42, 'dict', 1, ['ob_type'], 3, 'dict', ['ob_type'], [2, 'dict']]);
+    expect(method()).toEqual([['self', 'x'], true, ['self', 'x'], 'base']);
 });
 
 // A row too short for a starred target says how many values it needs: the

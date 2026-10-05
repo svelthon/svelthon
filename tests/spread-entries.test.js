@@ -29,11 +29,14 @@ const read = (Component, props) => {
 };
 
 // A symbol key arrives as itself, as JavaScript's `{first: 10, [token]: 20}`
-// spreads it.
+// spreads it. A key "ob_type" is the author's, as it is to Python: taken for
+// the engine's mark, it made the dict a JavaScript object, and the child was
+// handed the engine's symbols beside its keys.
 test.for([
     ['dict', 'a,b|undefined'],
     ['int', '1,b|undefined'],
     ['symbol-dict', 'first,sym:tail|20'],
+    ['ob-type-key', 'ob_type,x|undefined'],
     ['mapping', 'first,tail|undefined']
 ])('a %s spread hands its child its entries and nothing else', ([kind, expected]) => {
     expect(read(SpreadEntries, { kind })).toBe(expected);
