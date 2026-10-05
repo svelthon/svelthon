@@ -1383,6 +1383,7 @@ const RUNTIME = {
     invoke: '__invoke',
     pyExport: '__pyExport',
     liveExport: '__liveExport',
+    templateFrom: '__templateFrom',
     jsCall: '__jsCall',
     ticking: '__ticking',
     pyBind: '__pyBind',
@@ -2777,7 +2778,8 @@ function preamble(c) {
             ...(c.effects.length || c.lifecycle('on_mount') ? ['pyTeardown'] : []),
             // Three that keep the spelling the markup pass emits, and the read
             // half of the dot, which `templateDots` writes.
-            'group', 'readAttr', 'writeAttr', 'writeItem'
+            'group', 'readAttr', 'writeAttr', 'writeItem',
+            ...(c.templateLine === undefined ? [] : ['templateFrom'])
         ])} } from 'svelthon/runtime';`,
         ...c.jsImports.map(jsImportLine),
         // Under the engine's prefix like every other name it lends: the
@@ -2885,6 +2887,11 @@ function declarations(c) {
         // How an error's Python line becomes a line of this file; see `inFile`
         // in the runtime. Only a component has template functions to place.
         ...(c.store ? [] : [`const __lines = ${JSON.stringify(c.lines)};`]),
+        // Where the template's own code begins in the module's source, so that
+        // a read made there is the template's however deep it is written.
+        ...(c.templateLine === undefined
+            ? []
+            : [`__templateFrom(${JSON.stringify(c.source)}, ${c.templateLine});`]),
         ``
     ];
 }
@@ -3593,6 +3600,7 @@ function compile(
     // inside one, or inside a lambda it made, is reported there rather than at a
     // line of the script that happens to share its number.
     const exprLines = [];
+    let templateLine;
 
     if (component) {
         const body = $B.unindent(src);
@@ -3601,6 +3609,8 @@ function compile(
         src = defs.length ? `${body}\n${defs.join('\n\n')}\n` : body;
 
         let from = body.split('\n').length + 1;
+
+        if (defs.length) templateLine = from;
 
         defs.forEach((def, index) => {
             const to = from + def.split('\n').length - 1;
@@ -3860,6 +3870,7 @@ function compile(
         // How a Python line becomes a file line, read by `pyError`: the offset
         // alone, or the offset with the template functions' ranges.
         lines: exprLines.length ? { offset: lineOffset, ranges: exprLines } : lineOffset,
+        templateLine,
         store,
         namespace,
         js,

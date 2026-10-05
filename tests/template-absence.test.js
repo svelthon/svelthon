@@ -40,3 +40,15 @@ test('while the template reading the name itself renders it empty', () => {
     expect(mounted().read('direct')).toBe('');
 });
 
+// And so does a lambda or a generator written between the braces: the rule
+// read the name of the frame, a lambda's frame is its own, and the component
+// did not mount. It reads where the code is written now, while a function of
+// the script the lambda calls is still Python.
+test.for([
+    ['lambda', ''],
+    ['genexp', ''],
+    ['lambda-call', 'no total']
+])('as does a template %s', ([key, shown]) => {
+    expect(mounted().read(key)).toBe(shown);
+});
+

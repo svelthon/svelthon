@@ -30,6 +30,9 @@ def summary():
 </script>
 
 <p data-k="direct">{total}</p>
+<p data-k="lambda">{(lambda: total)()}</p>
+<p data-k="genexp">{next(total for one in [1])}</p>
+<p data-k="lambda-call">{(lambda: describe())()}</p>
 <p data-k="call">{describe()}</p>
 <p data-k="deleted">{deleted()}</p>
 <p data-k="derived">{summary}</p>

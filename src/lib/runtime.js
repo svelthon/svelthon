@@ -4968,19 +4968,26 @@ export const pyExpression = (call, where, lineOffset, arity, kept = false) =>
 // there: empty.
 //
 // The template is the text between its braces, the way the dot is: a read is
-// the template's when the frame making it is one of the functions the markup
-// pass compiled, which carry the name `__expr_…` and nothing an author may
-// write. A function the expression calls is Python and reads as Python does,
-// so its `except NameError` is taken whoever called it.
-const TEMPLATE_FRAME = '__expr_';
+// the template's when the code making it is written there, a lambda or a
+// generator written between the braces included. The functions the markup pass
+// compiles follow the script in the module's source, so the line being run
+// says it: from the first of them on, `templateFrom` registers per file. A
+// function the expression calls is Python and reads as Python does, so its
+// `except NameError` is taken whoever called it.
+const TEMPLATE_LINES = new Map();
+
+export const templateFrom = (file, line) => {
+    TEMPLATE_LINES.set(file, line);
+};
 
 (function installTemplateAbsence($B) {
     const resolve = $B.resolve_in_scopes;
     const declares = (namespace, name) =>
         namespace !== null && typeof namespace === 'object' && namespace.$proxy === true && name in namespace;
     const templates = () => {
-        const code = $B.frame_obj?.frame?.[0];
-        return typeof code === 'string' && code.startsWith(TEMPLATE_FRAME);
+        const frame = $B.frame_obj?.frame;
+        const from = frame === undefined ? undefined : TEMPLATE_LINES.get(frame.__file__);
+        return from !== undefined && frame.$lineno >= from;
     };
 
     $B.resolve_in_scopes = function (name, namespaces, inum) {
