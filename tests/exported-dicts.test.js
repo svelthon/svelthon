@@ -47,24 +47,29 @@ describe('a module exporting dicts that hold functions', () => {
     // to keep it whichever branch it takes: a neighbouring function decided it,
     // because that branch asked `plainData` for the *JSON* policy with a
     // `new Set()`. A write to one key then never reached the other.
+    // The list is the module's own, which both dicts hold, so a push through
+    // one is in the other and in Python.
     test('a shared list is one list', async () => {
-        const { aliased } = await mod();
+        const { aliased, aliased_with_fn } = await mod();
+        const before = aliased.b.length;
 
         expect(aliased.a).toBe(aliased.b);
 
         aliased.a.push(2);
 
-        expect(aliased.b).toHaveLength(2);
+        expect(aliased.b).toHaveLength(before + 1);
+        expect(aliased_with_fn.b).toHaveLength(before + 1);
     });
 
     test('and a function beside it changes nothing for the data either', async () => {
         const { aliased_with_fn } = await mod();
+        const before = aliased_with_fn.b.length;
 
         expect(aliased_with_fn.a).toBe(aliased_with_fn.b);
 
         aliased_with_fn.a.push(2);
 
-        expect(aliased_with_fn.b).toHaveLength(2);
+        expect(aliased_with_fn.b).toHaveLength(before + 1);
         expect(aliased_with_fn.twice(21)).toBe(42);
     });
 

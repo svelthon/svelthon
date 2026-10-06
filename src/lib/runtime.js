@@ -1458,6 +1458,33 @@ function ownAttributes(value) {
     return dict === undefined ? undefined : value[dict];
 }
 
+// An instance of a class of the author's, which is its attributes: its
+// `__dict__`, its slots, or both. What the copy writes of it and what its view
+// reads.
+//
+// A value that **descends from a builtin** is not an instance of the author's.
+// A `complex` has an instance dictionary and it is empty, so its fields would
+// be `{}`, the arm meant for what an author put on their own object; a mapping
+// is its entries and a list its rows.
+//
+// Asked of the **MRO**, not of the class by identity: `class Money(complex)`
+// is not the entry in Brython's table, and asked by identity it would come out
+// as its attributes, the number gone. Asked against Brython's own table rather
+// than a list of type names written here, and `object` is excluded because
+// every class descends from it. A class is an instance of `type`, a builtin.
+function authoredInstance(value) {
+    const type = ownType(value);
+
+    if (!pyClass(type)) return false;
+    if (Array.isArray(type.tp_mro) && type.tp_mro.some((one) => one !== _b_.object && _b_[one.tp_name] === one)) {
+        return false;
+    }
+
+    const attributes = ownAttributes(value);
+
+    return (attributes !== null && typeof attributes === 'object') || declaresSlots(value);
+}
+
 // A watch runs from the object that was named to every container under it, and
 // a mutation anywhere under a name has to reach whoever is reading that name.
 //
@@ -2504,7 +2531,7 @@ function viewOf(value) {
 
     const sequence = Boolean($B.is_list(value) || $B.is_tuple(value));
 
-    if (!sequence && !$B.is_dict(value)) return value;
+    if (!sequence && !$B.is_dict(value)) return authoredInstance(value) ? instanceView(value) : value;
 
     const length = () => $B.builtins.len(value);
     // An array index is one below 2³² − 1; a larger number is an ordinary
@@ -2628,6 +2655,14 @@ function viewOf(value) {
     // symbols, a symbol being a Python key as itself, and a list's indices.
     const writable = (key) => typeof key === 'string' || (!sequence && typeof key === 'symbol');
 
+    // A walk of a sequence is Python's walk, its class's `__iter__`, as the
+    // loop and `tojson` take it, where an index is Python's index: a subclass
+    // whose `__iter__` reverses its rows is `[3, 2, 1]` to `[...rows]` and
+    // `rows[0]` is still 1, as in Python.
+    function* walk() {
+        for (const one of iterated(value)) yield forReader(one);
+    }
+
     const view = new Proxy(sequence ? [] : {}, {
         getPrototypeOf(shell) {
             return sequence ? LIST_VIEW : Object.getPrototypeOf(shell);
@@ -2636,6 +2671,7 @@ function viewOf(value) {
             follow(value);
 
             if (sequence && key === 'length') return length();
+            if (sequence && key === Symbol.iterator) return walk;
 
             return holds(key) ? read(key) : Reflect.get(shell, key, receiver);
         },
@@ -2690,6 +2726,107 @@ function viewOf(value) {
         },
         // The prototype is the view's shape, a list's methods among it, and
         // Svelte's state refuses the same request.
+        setPrototypeOf() {
+            throw new TypeError('Cannot set the prototype of a Python view');
+        }
+    });
+
+    VIEW_OF.set(value, view);
+    VIEWED.add(view);
+    $B.PYOBJ_MAP.set(view, value);
+
+    return view;
+}
+
+// An instance of the author's class, read through a view as a list or a dict
+// is. A field is its attribute, read by Python's attribute protocol at every
+// read, so a property runs and a method arrives as a function JavaScript can
+// call; a write is Python's `setattr` and a `delete` its `delattr`, which notify
+// as the same line written in Python does. Its own keys are its attributes, the
+// ones `vars()` and its slots hold, as the copy writes them. Handed over raw, a
+// JavaScript reader found none of them: Brython keeps them under a symbol.
+//
+// Its prototype is not `Object.prototype`, as a JavaScript class instance's is
+// not, so Svelte keeps it as it is in a `$state` rather than wrapping it in a
+// proxy of its own that keeps the writes to itself.
+const INSTANCE_VIEW = Object.create(Object.prototype);
+
+function instanceView(value) {
+    const $B = globalThis.__BRYTHON__;
+    const attribute = (key) => (typeof key === 'string' ? $B.$getattr(value, key, MISSING) : MISSING);
+    const slots = () =>
+        declaresSlots(value)
+            ? Object.keys(value)
+                  .filter((key) => key.startsWith(SLOT))
+                  .map((key) => key.slice(SLOT.length))
+            : [];
+    const fields = () => {
+        const attributes = ownAttributes(value);
+        const own = attributes !== null && typeof attributes === 'object' ? Object.keys(attributes) : [];
+
+        return [...new Set([...own, ...slots()])];
+    };
+    const owns = (key) => {
+        if (typeof key !== 'string') return false;
+
+        const attributes = ownAttributes(value);
+
+        return (
+            (attributes !== null && typeof attributes === 'object' && Object.hasOwn(attributes, key)) ||
+            (declaresSlots(value) && Object.hasOwn(value, SLOT + key))
+        );
+    };
+    const write = (key, given) => typeof key === 'string' && ($B.$setattr(value, key, entering(given)), true);
+
+    const view = new Proxy(Object.create(INSTANCE_VIEW), {
+        get(shell, key, receiver) {
+            follow(value);
+
+            const found = attribute(key);
+
+            return found === MISSING ? Reflect.get(shell, key, receiver) : forReader(found);
+        },
+        has(shell, key) {
+            follow(value);
+
+            return attribute(key) !== MISSING || Reflect.has(shell, key);
+        },
+        ownKeys() {
+            follow(value);
+
+            return fields();
+        },
+        getOwnPropertyDescriptor(shell, key) {
+            follow(value);
+
+            return owns(key) ? { value: forReader(attribute(key)), writable: true, enumerable: true, configurable: true } : undefined;
+        },
+        set(shell, key, given) {
+            return write(key, given);
+        },
+        // Svelte's rule for its own state, as the other views keep it.
+        defineProperty(shell, key, descriptor) {
+            if (
+                !('value' in descriptor) ||
+                descriptor.configurable === false ||
+                descriptor.enumerable === false ||
+                descriptor.writable === false
+            ) {
+                throw new TypeError(
+                    'Property descriptors defined on a Python view must contain `value` and always be `enumerable`, `configurable` and `writable`'
+                );
+            }
+
+            return write(key, descriptor.value);
+        },
+        deleteProperty(shell, key) {
+            if (owns(key)) $B.$delattr(value, key);
+
+            return true;
+        },
+        preventExtensions() {
+            return false;
+        },
         setPrototypeOf() {
             throw new TypeError('Cannot set the prototype of a Python view');
         }
@@ -3287,25 +3424,9 @@ function branch(value, seen, shell, adapt) {
     // entry of it, and merging the two would invent keys the mapping does not
     // have.
     const mapping = globalThis.__BRYTHON__.is_dict(value);
-
-    // A value that **descends from a builtin** is not an instance of the
-    // author's, and the difference decides which of the two rules below it gets.
-    // A `complex` has an instance dictionary and it is empty, so the fields path
-    // would write `{}` for it, the arm meant for what an author put on their own
-    // object.
-    //
-    // Asked of the **MRO**, not of the class by identity: `class Money(complex)`
-    // is not the entry in Brython's table, and asked by identity it would come
-    // out as its attributes, the number gone. Asked against Brython's own table
-    // rather than a list of type names written here, and `object` is excluded
-    // because every class descends from it.
     const type = ownType(value);
-    const owned =
-        pyClass(type) &&
-        Array.isArray(type.tp_mro) &&
-        type.tp_mro.some((one) => one !== _b_.object && _b_[one.tp_name] === one);
 
-    if (!mapping && !owned && (holder !== undefined || declaresSlots(value))) {
+    if (authoredInstance(value)) {
         const fields = shell ?? {};
 
         if (holder !== undefined) {
@@ -4806,18 +4927,16 @@ export function pyExport(value, where) {
     // was written.
     if (callable(value)) return exported(value);
 
-    // A callable inside a list is the same callable the mapping below adapts,
-    // and the container it was written in cannot decide whether JavaScript can
-    // call it: a registry of handlers is written as a list and as a dict.
-    //
-    // `adapt` is the third rule `plainData` takes and it reaches a callable at
-    // any depth, so a list of lists is this same line. What a wrapper does not
-    // carry is the instance's attributes: the state stays in Python, where the
-    // call still reaches it, which is what a bound method crossing as a
-    // function already means everywhere else in this file.
-    if (Array.isArray(value)) {
-        return plainData(value, undefined, pyHandler);
-    }
+    // A list, a tuple or a dict crosses as its view, the one a prop and a
+    // context hand a JavaScript reader (`viewOf`): the module's own container,
+    // so `items.append(2)` in Python is `[1, 2]` to the importer, as an
+    // `export let items` pushed to is in JavaScript and `m.items` is in Python.
+    // A copy followed only the name, and the container moved on without it. A
+    // callable inside is adapted where it is read, at any depth, so a registry
+    // of handlers, SvelteKit's `actions` among them, calls as it did.
+    const view = viewOf(value);
+
+    if (view !== value) return view;
 
     // A class crosses as itself. `plainData` walks whatever it is given and
     // hands back the attributes it found, which for a class is `__doc__`,
@@ -4840,44 +4959,10 @@ export function pyExport(value, where) {
     // `ob_type`, which no instance and no dict does.
     if (pyClass(value)) return value;
 
-    // Each value for what it is, rather than the whole dict for what its
-    // neighbours are: `"version": 1` beside a function does not change that
-    // function's calling contract.
-    //
-    // `define`, because the key is the author's: `{"__proto__": f}` written
-    // with `=` would reach the setter, as `plainData` knows too.
-    // **A mapping, and not anything that happens to hold a function**: a
-    // JavaScript object carrying a callback as a field, `this.callback = () =>
-    // …` or a literal of functions, is JavaScript's and crosses as itself, by
-    // the rule `plainData` follows (`javascriptOwn`), its accessors unread.
-    if (!globalThis.__BRYTHON__.is_dict(value)) return plainData(value, undefined, pyHandler);
-
-    if (pyEntries(value).some(([, one]) => callable(one))) {
-        const pairs = pyEntries(value);
-        const out = {};
-
-        // A WeakMap and not a `new Set()`, which is how the other rule, the
-        // *JSON* policy, is asked for by name: an export to JavaScript keeps a
-        // shared list one list, whatever its neighbouring keys hold.
-        //
-        // The dict itself goes in the memo, so a value that points back at it
-        // meets this object rather than a second copy.
-        const made = new WeakMap();
-
-        made.set(value, out);
-
-        for (const [key, one] of pairs) {
-            define(out, propertyName(key, out), exported(one, made));
-        }
-
-        return out;
-    }
-
-    // A mapping holding no callable of its own still holds the rule, and the
-    // branch above is only about *labels*: it exists to name `module.actions.save`
-    // in a diagnostic, which needs the key, and a walk cannot. The adaptation
-    // lives in the walk, at every depth, so `{"handlers": [Handler(db)]}`, a
-    // registry under a name, keeps its calls as `[Handler(db)]` does.
+    // Anything else is plain data. A JavaScript object carrying a callback as
+    // a field, `this.callback = () => …` or a literal of functions, is
+    // JavaScript's and crosses as itself, by the rule `plainData` follows
+    // (`javascriptOwn`), its accessors unread.
     return plainData(value, undefined, pyHandler);
 }
 

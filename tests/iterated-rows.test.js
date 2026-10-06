@@ -94,12 +94,15 @@ describe('and every other walk over the same object agrees', () => {
     // `[1, 2, 3]` for one list. CPython's `json.dumps` of a list subclass is its
     // `__iter__` too; `repr` is the storage, and stays so — `str(rows)` below is
     // Python's own and nothing of ours reads it.
+    // The module publishes the list itself, walked as Python walks it and
+    // indexed as Python indexes it.
     test('what the module publishes', () => {
-        expect(crossed).toEqual([3, 2, 1]);
+        expect([...crossed]).toEqual([3, 2, 1]);
+        expect(crossed[0]).toBe(1);
     });
 
     test('one level down, where a callable would also be adapted', () => {
-        expect(nested).toEqual([[3, 2, 1]]);
+        expect([...nested[0]]).toEqual([3, 2, 1]);
     });
 
     test('and what tojson writes', () => {

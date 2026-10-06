@@ -92,13 +92,14 @@ describe('a dict whose keys are not strings', () => {
     // what makes this a bypass rather than a limit.
     const withFunction = (entries) => [...entries, ['fn', () => 0]];
 
+    // The export is the dict's view, which refuses the name when it is read.
     test('a function in the dict does not buy a way past the refusal', () => {
         const entries = [[1, 'numeric'], ['1', 'text']];
 
-        expect(() => pyExport(dict(entries), 'm')).toThrow(/two keys JavaScript cannot tell apart/);
-        expect(() => pyExport(dict(withFunction(entries)), 'm')).toThrow(
-            /two keys JavaScript cannot tell apart/
-        );
+        for (const exported of [pyExport(dict(entries), 'm'), pyExport(dict(withFunction(entries)), 'm')]) {
+            expect(() => Object.keys(exported)).toThrow(/two keys JavaScript cannot tell apart/);
+            expect(() => exported['1']).toThrow(/two keys JavaScript cannot tell apart/);
+        }
     });
 
     // A JavaScript symbol is a key like any other since `symbol-hash`, and the
