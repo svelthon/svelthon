@@ -50,9 +50,9 @@ test('a child publishing a key again leaves its parent’s original', () => {
     const $B = globalThis.__BRYTHON__;
     const parent = new Map();
 
-    __pybridge.provide((k, v) => parent.set(k, v), (k) => parent.get(k), parent, 'size', $B.builtins.float.$factory(1));
+    __pybridge.provide((k, v) => parent.set(k, v), (k) => parent.get(k), () => parent, 'size', $B.builtins.float.$factory(1));
     const child = new Map(parent);
-    __pybridge.provide((k, v) => child.set(k, v), (k) => child.get(k), child, 'size', 1);
+    __pybridge.provide((k, v) => child.set(k, v), (k) => child.get(k), () => child, 'size', 1);
 
     expect($B.class_name(__pybridge.provided((k) => parent.get(k), 'size'))).toBe('float');
     expect($B.class_name(__pybridge.provided((k) => child.get(k), 'size'))).toBe('int');
@@ -69,7 +69,7 @@ test('a context of 16 000 keys published from Python is set whole', () => {
 
     for (let i = 0; i < 16000; i++) native.set(`key-${i}`, i);
     for (let i = 0; i < 16000; i++) {
-        __pybridge.provide((k, v) => contexts.set(k, v), (k) => contexts.get(k), contexts, `key-${i}`, $B.builtins.float.$factory(i));
+        __pybridge.provide((k, v) => contexts.set(k, v), (k) => contexts.get(k), () => contexts, `key-${i}`, $B.builtins.float.$factory(i));
     }
 
     expect(native.size).toBe(16000);
@@ -87,7 +87,7 @@ test.for([
     const contexts = new Map();
     const original = pyData({ answer: 42 });
 
-    __pybridge.provide((k, v) => contexts.set(k, v), (k) => contexts.get(k), contexts, key, original);
+    __pybridge.provide((k, v) => contexts.set(k, v), (k) => contexts.get(k), () => contexts, key, original);
 
     expect(__pybridge.provided((k) => contexts.get(k), key)).toBe(original);
 });

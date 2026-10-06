@@ -491,8 +491,10 @@ export const __pybridge = {
     //
     // Kept in a map of their own under one key of Svelthon's, which a
     // component copies from its parent's the first time it publishes, as
-    // Svelte copies the context map itself; `own` is that context map, what
-    // `getAllContexts` hands the component. An original lives as long as the
+    // Svelte copies the context map itself; `own` hands that context map,
+    // `getAllContexts`, asked only once the key is set, so that a call made
+    // outside initialisation is refused under the name Svelte gives the same
+    // call written in JavaScript, `setContext`. An original lives as long as the
     // context holding it, a child's never reaches its parent, and one key has
     // one entry, the latest, a value published again letting the one it
     // replaces go. The original is taken only while the key still holds the
@@ -502,12 +504,14 @@ export const __pybridge = {
     // it.
     provide(set, get, own, key, value) {
         const out = __pybridge.toContext(value);
-        let originals = get(ORIGINALS);
 
         set(key, out);
 
-        if (originals?.owner !== own) {
-            originals = { owner: own, byKey: new Map(originals?.byKey) };
+        let originals = get(ORIGINALS);
+        const owner = own();
+
+        if (originals?.owner !== owner) {
+            originals = { owner, byKey: new Map(originals?.byKey) };
             set(ORIGINALS, originals);
         }
 

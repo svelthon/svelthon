@@ -18,7 +18,7 @@ const once = (kind, key) => {
     const get = (k) => contexts.get(k);
 
     if (kind === 'native') set(key, 42);
-    if (kind === 'provide') __pybridge.provide(set, get, contexts, key, pyData({ answer: 42 }));
+    if (kind === 'provide') __pybridge.provide(set, get, () => contexts, key, pyData({ answer: 42 }));
     if (kind === 'provided') __pybridge.provided(get, key);
 
     kept[kind].push(new WeakRef(key));
@@ -51,7 +51,7 @@ const leftBy = async (write) => {
     for (let i = 0; i < 2000; i++) {
         const contexts = new Map();
 
-        write((k, v) => contexts.set(k, v), (k) => contexts.get(k), contexts, randomBytes(2048).toString('hex'));
+        write((k, v) => contexts.set(k, v), (k) => contexts.get(k), () => contexts, randomBytes(2048).toString('hex'));
     }
 
     await settle();
@@ -71,7 +71,7 @@ for (let i = 0; i < 64; i++) {
     const value = pyData({ answer: i });
 
     replaced.push(new WeakRef(value));
-    __pybridge.provide((k, v) => live.set(k, v), (k) => live.get(k), live, 'theme', value);
+    __pybridge.provide((k, v) => live.set(k, v), (k) => live.get(k), () => live, 'theme', value);
 }
 
 await settle();

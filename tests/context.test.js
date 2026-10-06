@@ -7,6 +7,8 @@ import ContextKeys from './fixtures/ContextKeys.svelte';
 import ContextCallbacks from './fixtures/ContextCallbacks.svelte';
 import ContextCallbacksFromJs from './fixtures/ContextCallbacksFromJs.svelte';
 import ContextScalars from './fixtures/ContextScalars.svelte';
+import ContextLate from './fixtures/ContextLate.svelte';
+import ContextLateNative from './fixtures/ContextLateNative.svelte';
 
 // A scalar a Python provider sets is both readers' own: a JavaScript child reads
 // a number and a string, and a Python one the value that was set, of its own
@@ -128,4 +130,27 @@ describe('context', () => {
         // still separates them.
         expect(setup()('a', 'is-none')).toBe('True');
     });
+});
+
+// Called once the component is mounted, from an event handler say, a context
+// call is refused, and under the name Svelte gives the same call written in
+// JavaScript: the author reads `setContext` or `getContext`, never a function
+// of Svelthon's own.
+test('a context call made after initialisation is refused as Svelte refuses it', () => {
+    const refusal = (Component, name) => {
+        const target = document.body.appendChild(document.createElement('div'));
+        const instance = mount(Component, { target });
+        flushSync();
+        try {
+            instance[name]();
+            return 'accepted';
+        } catch (error) {
+            return error.message;
+        }
+    };
+
+    for (const name of ['publish', 'read']) {
+        expect(refusal(ContextLate, name)).toBe(refusal(ContextLateNative, name));
+    }
+    expect(refusal(ContextLate, 'publish')).toMatch(/`setContext\(\.\.\.\)` can only be used/);
 });
