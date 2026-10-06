@@ -1416,8 +1416,8 @@ prend rien aussi, `rows.clear`, `rows.reverse` ou `"hi".upper` :
 de signature à lire : elle reçoit tout ce que JavaScript passe, et en fait ce
 que Python en ferait : `onclick={rows.pop}` lève, l'événement n'étant pas un
 indice, `onclick={rows.sort}` lève, `sort` ne prenant que des mots-clés, et
-`onclick={rows.append}` ajoute l'événement lui-même, sans un mot. On les
-enveloppe : `onclick={lambda: rows.sort()}`, ou un `def`.
+`onclick={rows.append}` ajoute l'événement, comme un `def ajoute(item)` le
+recevrait. On les enveloppe : `onclick={lambda: rows.sort()}`, ou un `def`.
 
 ### Le seul endroit où SvelteKit code en dur
 

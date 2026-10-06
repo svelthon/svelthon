@@ -1364,8 +1364,8 @@ method that takes nothing, `rows.clear`, `rows.reverse` or `"hi".upper`:
 signature to read, so it is handed everything JavaScript passes, and does with
 it what Python would: `onclick={rows.pop}` raises, since the event is no index,
 `onclick={rows.sort}` raises, since `sort` takes keywords only, and
-`onclick={rows.append}` appends the event itself, without a word. Wrap them:
-`onclick={lambda: rows.sort()}`, or a `def`.
+`onclick={rows.append}` appends the event, as a `def add(item)` would receive it.
+Wrap them: `onclick={lambda: rows.sort()}`, or a `def`.
 
 ### The one place SvelteKit is hard-coded
 
