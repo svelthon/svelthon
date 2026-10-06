@@ -29,6 +29,14 @@ export default defineConfig({
         entries: [],
         include: ['svelte']
     },
+
+    // The dev server watches the tree for the edits it reloads, and an audit
+    // archives thousands of files under `tests/scratch`, which no page serves:
+    // watched, they ran the system out of file watchers (`ENOSPC`) and the
+    // server died before the first edit.
+    server: {
+        watch: { ignored: ['**/tests/scratch/**'] }
+    },
     test: {
         environment: 'jsdom',
 
