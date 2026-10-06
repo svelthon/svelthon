@@ -9,6 +9,8 @@ import PrintedNative from './fixtures/PrintedNative.svelte';
 import * as sets from './fixtures/synced_sets.py';
 import * as nativeSets from './fixtures/synced_sets_native.js';
 import SetHost from './fixtures/SetHost.svelte';
+import StateViewHost from './fixtures/StateViewHost.svelte';
+import { stringify } from 'devalue';
 
 // What a module exports is its own object, as a JavaScript module's export is
 // and as `m.items` is in Python: changed in place by the module, it is changed
@@ -88,8 +90,14 @@ test('a set reads, follows and is written as a JavaScript Set', () => {
     expect([...pair]).toEqual([1, 2]);
     expect(sets.pairs.has(pair)).toBe(true);
 
-    // A frozenset refuses a write, as Python does.
-    expect(() => sets.frozen.add(3)).toThrow();
+    // A frozenset refuses a write with JavaScript's TypeError, in Python's
+    // words, as a tuple's view does.
+    expect(() => sets.frozen.add(3)).toThrow(new TypeError("'frozenset' object has no attribute 'add'"));
+
+    // A view is not cloned, a set's no more than a list's: a clone of the
+    // `Set`'s own storage would be an empty set, given in silence.
+    expect(() => structuredClone(sets.tags)).toThrow();
+    expect(() => structuredClone(nativeSets.tags)).not.toThrow();
 });
 
 test('a JavaScript child reads and follows a set it is given', () => {
@@ -104,6 +112,36 @@ test('a JavaScript child reads and follows a set it is given', () => {
     host.pick('b');
     flushSync();
     expect(shown()).toBe('a,b 2 true');
+});
+
+// A dict's or an instance's view is kept as it is in a JavaScript `$state`,
+// as a list's is, so a write from either side is seen by both: Svelte wrapped
+// a dict's view in its own proxy, which kept the JavaScript write to itself
+// and missed the next Python one. And SvelteKit's serialiser writes either out
+// as the object it reads as, where it refused an instance's view as an object
+// of a class of its own.
+test('a dict or an instance a JavaScript child keeps in its $state is synced both ways', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+    mount(StateViewHost, { target });
+    flushSync();
+
+    const read = () =>
+        ['python', 'javascript'].map((key) => target.querySelector(`[data-k="${key}"]`).textContent);
+
+    expect(read()).toEqual(['1|1', '1|1']);
+
+    target.querySelector('[data-k="js"]').click();
+    flushSync();
+    expect(read()).toEqual(['5|5', '5|5']);
+
+    target.querySelector('[data-k="py"]').click();
+    flushSync();
+    expect(read()).toEqual(['15|15', '15|15']);
+});
+
+test('SvelteKit’s serialiser writes a dict’s and an instance’s view out', () => {
+    expect(stringify(python.record)).toBe(stringify({ count: python.record.count }));
+    expect(stringify(python.thing)).toBe(stringify({ count: python.thing.count }));
 });
 
 // The same instance prints alike in the Python template and in a JavaScript

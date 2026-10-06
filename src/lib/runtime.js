@@ -2869,15 +2869,15 @@ function instanceView(value) {
 // A set or a frozenset, read by JavaScript as a `Set`, which is how JavaScript
 // holds one: a subclass of `Set`, as Svelte's own `SvelteSet` is, so
 // `instanceof Set` holds, whose every method asks the Python set at the call.
-// A proxy cannot stand in for a `Set`, whose methods refuse a receiver without
-// the set's own storage, which is why this view is a class. Its own storage
-// stays empty, so `Set.prototype.has.call(view, x)`, which reads that storage,
-// is the one spelling it does not answer.
+// A proxy alone cannot stand in for a `Set`, whose methods refuse a receiver
+// without the set's own storage, which is why this view is a class.
 //
 // A member reads as a list's does (`forReader`), a value looked up or added
 // crosses as a write into a view does, and a write is Python's `add`,
-// `discard` or `clear`, which notify; a frozenset has none of the three, and
-// refuses as Python does.
+// `discard` or `clear`, which notify. A frozenset has none of the three, and a
+// write refuses with a JavaScript `TypeError`, as a write to a tuple's view
+// does, in Python's words; anything else Python raises reaches the caller as
+// an `Error`.
 class SetView extends Set {
     #value;
 
@@ -2888,8 +2888,17 @@ class SetView extends Set {
 
     #call(name, ...args) {
         const $B = globalThis.__BRYTHON__;
+        const type = ownType(this.#value);
 
-        return $B.$call($B.$getattr(this.#value, name), ...args);
+        if (declares(type, name) === $B.NULL) {
+            throw new TypeError(`'${type.tp_name}' object has no attribute '${name}'`);
+        }
+
+        try {
+            return $B.$call($B.$getattr(this.#value, name), ...args);
+        } catch (error) {
+            throw thrown(pyError(error, `${type.tp_name}.${name}()`));
+        }
     }
 
     get size() {
@@ -2981,8 +2990,25 @@ class SetView extends Set {
     }
 }
 
+// Handed out behind a proxy of its own, as every other view is: the set's own
+// storage stays empty, so what reads that storage rather than the methods
+// would read nothing in silence. `structuredClone` refuses a proxy, as it does
+// a list's view, where it copied an empty `Set`, and `Set.prototype.has.call`
+// refuses its receiver. A method is read off the view and runs on it, its
+// fields being private; one function per name, so `view.has` is one value.
 function setView(value) {
-    const view = new SetView(value);
+    const target = new SetView(value);
+    const bound = new Map();
+    const view = new Proxy(target, {
+        get(shell, key) {
+            const found = Reflect.get(shell, key, shell);
+
+            if (typeof found !== 'function' || key === 'constructor') return found;
+            if (!bound.has(key)) bound.set(key, found.bind(shell));
+
+            return bound.get(key);
+        }
+    });
 
     VIEW_OF.set(value, view);
     VIEWED.add(view);

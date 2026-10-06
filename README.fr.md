@@ -75,7 +75,7 @@ reste de cette configuration et ce que chaque ligne apporte.
 npm install
 npm run dev
 
-npm test             # 1 683 tests : sémantique, props, réactivité, surface Svelte
+npm test             # 1 685 tests : sémantique, props, réactivité, surface Svelte
 npm run test:quiet   # la sortie de la suite : un run vert ne doit rien dire
 npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
@@ -200,8 +200,8 @@ raisons différentes.
 
 | Svelte | pourquoi non |
 |---|---|
-| `$state.raw` | Rien à refuser. Les deux existent pour défaire un proxy profond, et une valeur Python derrière un proxy échoue aux vérifications de type de Brython : tout nom de module est donc déjà brut ici, et un portage serait une fonction vide portant un nom. |
-| `$state.snapshot` | idem |
+| `$state.raw` | Rien à refuser côté Python : un nom n'est jamais un proxy, tout nom de module est donc déjà brut ici, et un portage serait une fonction vide portant un nom. Une valeur qui traverse vers JavaScript est sa vue, un proxy comme un `$state` l'est, et `to_js(value)` est là le moyen d'en sortir. |
+| `$state.snapshot` | `to_js(value)`, une copie de ce que JavaScript lit sinon à travers la vue : pour une API qui clone, une bibliothèque qui pose ses propres champs sur le tableau reçu, ou un gros jeu de données relu sans cesse. |
 | `$state.eager` | Au service des expressions `await`, que Svelte garde lui-même derrière `experimental.async` et qualifie d'expérimental. Rien à refléter tant que ce n'est pas stabilisé. |
 | `$effect.pending` | idem |
 | `$effect.tracking` | Indique à l'auteur d'une *bibliothèque* si le code s'exécute dans un contexte suivi. Différée : aucun des 88 exemples de svelte.dev n'utilise une variante de `$effect`, et quatre utilisent `$effect` tout court. |
@@ -1326,7 +1326,10 @@ instance qu'on lui passe est l'objet même de Python, comme un appelant
 JavaScript passe son tableau : une bibliothèque qui le garde lit ce que Python
 change ensuite, et ce qu'elle y écrit est à Python. Une API qui clone,
 `postMessage`, IndexedDB, `history.pushState`, prend `to_js(value)`, une copie,
-comme le `$state` de Svelte prend `$state.snapshot`.
+comme le `$state` de Svelte prend `$state.snapshot` ; de même une bibliothèque
+qui pose ses propres champs sur le tableau reçu, Chart.js parmi d'autres, et
+une qui relit sans cesse un gros jeu de données, qu'une vue sert lecture par
+lecture.
 
 Un mot-clé plutôt qu'une déclaration, pour une raison : un import est statique,
 et un mot-clé rend l'import calculé **inécrivable** au lieu de simplement faux.
@@ -1543,7 +1546,7 @@ part jamais.
 
 ## État
 
-Validé par `npm test`, 1 683 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 1 685 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;

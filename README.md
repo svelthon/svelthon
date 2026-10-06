@@ -77,7 +77,7 @@ rest of that configuration and what each line buys.
 npm install
 npm run dev
 
-npm test             # 1 683 tests: semantics, props, reactivity, Svelte surface
+npm test             # 1 685 tests: semantics, props, reactivity, Svelte surface
 npm run test:quiet   # the suite's own output: a green run must say nothing
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
@@ -198,8 +198,8 @@ than a rune of its own. Six are absent on purpose, and the reasons differ.
 
 | Svelte | why not |
 |---|---|
-| `$state.raw` | Nothing to opt out of. Both exist to undo a deep proxy, and a Python value behind one fails Brython's own type checks, so every module-level name here is already raw, and a port would be a no-op wearing a name. |
-| `$state.snapshot` | as above |
+| `$state.raw` | Nothing to opt out of in Python: a name is never a proxy, so every module-level name here is already raw, and a port would be a no-op wearing a name. A value crossing to JavaScript is its view, a proxy as a `$state` is, and `to_js(value)` is the opt-out there. |
+| `$state.snapshot` | `to_js(value)`, a copy of what JavaScript otherwise reads through the view: for an API that clones, a library that sets fields of its own on the array it is given, or a large set of data read over and over. |
 | `$state.eager` | Serves `await` expressions, which Svelte itself gates behind `experimental.async` and calls experimental. Nothing to mirror until that lands. |
 | `$effect.pending` | as above |
 | `$effect.tracking` | Tells a *library* author whether the code sits in a tracking context. Deferred: none of the 88 examples on svelte.dev uses any `$effect` variant, and four use `$effect` plain. |
@@ -1275,7 +1275,9 @@ awaits. A list, a dict, a set or an instance handed to it is Python's own, as a
 JavaScript caller hands its array: a library that keeps it reads what Python
 changes next, and what it writes is Python's. An API that clones, `postMessage`,
 IndexedDB, `history.pushState`, takes `to_js(value)`, a copy, as Svelte's
-`$state` takes `$state.snapshot`.
+`$state` takes `$state.snapshot`; so does a library that sets fields of its own
+on the array it is given, Chart.js among them, and one that reads a large set of
+data over and over, which a view answers one read at a time.
 
 It is a keyword rather than a declaration for one reason: an import is static,
 and a keyword makes a computed one **unwriteable** instead of merely wrong. It is
@@ -1526,7 +1528,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 1 683 tests as written (vitest reports more, one per
+Validated by `npm test`, 1 685 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;
