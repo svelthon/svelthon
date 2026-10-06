@@ -1360,11 +1360,12 @@ positions**, and each shape again as the callee of a directive.
 A Python function is handed only the arguments it declares, so `def clear_all():`
 serves as an `onclick` and the event is left out. So is a builtin type's own
 method that takes nothing, `rows.clear`, `rows.reverse` or `"hi".upper`:
-`onclick={rows.clear}` empties the list. Any other builtin method, `rows.append`
-or `rows.pop`, carries no signature to read, so it is handed everything
-JavaScript passes and refuses what it does not take, as Python would:
-`onclick={rows.pop}` raises, since the event is no index. Wrap it:
-`onclick={lambda: rows.pop()}`, or a `def`.
+`onclick={rows.clear}` empties the list. Any other builtin method carries no
+signature to read, so it is handed everything JavaScript passes, and does with
+it what Python would: `onclick={rows.pop}` raises, since the event is no index,
+`onclick={rows.sort}` raises, since `sort` takes keywords only, and
+`onclick={rows.append}` appends the event itself, without a word. Wrap them:
+`onclick={lambda: rows.sort()}`, or a `def`.
 
 ### The one place SvelteKit is hard-coded
 

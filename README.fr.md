@@ -1412,11 +1412,12 @@ positions**, et chaque forme encore appelée par une directive.
 Une fonction Python ne reçoit que les arguments qu'elle déclare : `def tout_vider():`
 sert d'`onclick` sans recevoir l'événement. Une méthode de type natif qui ne
 prend rien aussi, `rows.clear`, `rows.reverse` ou `"hi".upper` :
-`onclick={rows.clear}` vide la liste. Toute autre méthode native, `rows.append`
-ou `rows.pop`, ne porte pas de signature à lire : elle reçoit tout ce que
-JavaScript passe, et refuse ce qu'elle ne prend pas, comme Python le ferait :
-`onclick={rows.pop}` lève, l'événement n'étant pas un indice. On l'enveloppe :
-`onclick={lambda: rows.pop()}`, ou un `def`.
+`onclick={rows.clear}` vide la liste. Toute autre méthode native ne porte pas
+de signature à lire : elle reçoit tout ce que JavaScript passe, et en fait ce
+que Python en ferait : `onclick={rows.pop}` lève, l'événement n'étant pas un
+indice, `onclick={rows.sort}` lève, `sort` ne prenant que des mots-clés, et
+`onclick={rows.append}` ajoute l'événement lui-même, sans un mot. On les
+enveloppe : `onclick={lambda: rows.sort()}`, ou un `def`.
 
 ### Le seul endroit où SvelteKit code en dur
 
