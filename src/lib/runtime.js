@@ -264,6 +264,10 @@ export const __pybridge = {
     // own, since the float itself would reach Svelte as the number NaN, which
     // no comparison finds again.
     key(value) {
+        // `None` is JavaScript's `null`, so `set_context(None, …)` and
+        // `getContext(null)` name one entry, as every other door makes it.
+        if (value === NONE) return null;
+
         // Equal to a number, it is that number, which is what an `int` key
         // already is: `1`, `1.0`, `True` and `Score(1.0)` are one key, as they
         // are one key of a dict. Equal to a string, it is that string.
@@ -459,9 +463,12 @@ export const __pybridge = {
 
     // What a context holds, written by Python. Either end may be JavaScript's,
     // so a callable is published as at every other door (`pyHandler`) and a
-    // JavaScript reader can call it; a scalar is made JavaScript's; a container
-    // is the object it is.
+    // JavaScript reader can call it; a scalar is made JavaScript's, `None` its
+    // `null`, which a JavaScript reader takes for an absence; a container is
+    // the object it is.
     toContext(value) {
+        if (value === NONE) return null;
+
         return value !== null && (typeof value === 'object' || typeof value === 'function') && callable(value)
             ? pyHandler(value)
             : viewOf(plainScalar(value));
