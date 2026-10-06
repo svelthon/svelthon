@@ -1391,7 +1391,6 @@ const RUNTIME = {
     plainData: '__plainData',
     pyArg: '__pyArg',
     pyData: '__pyData',
-    pyBoundary: '__pyBoundary',
     pyCall: '__pyCall',
     pyTeardown: '__pyTeardown',
     pyComponent: '__pyComponent',
@@ -2834,7 +2833,7 @@ function preamble(c) {
         // name an author may want.
         `import { ${runtimeAliases([
             'bind', '__pybridge', 'track', 'follow', 'pyError',
-            'pyEvent', 'pyAttach', 'plainData', 'pyArg', 'pyData', 'pyBoundary', 'pyComponent', 'pyExpression',
+            'pyEvent', 'pyAttach', 'plainData', 'pyArg', 'pyData', 'pyComponent', 'pyExpression',
             'jsCall',
             'ticking', 'pyBind', 'NONE', 'helpers',
             'directiveAction', 'directiveTransition', 'directiveAnimate',
@@ -3053,13 +3052,10 @@ function authorBindings(c) {
             (n) =>
                 `__bind(__proto, '${n}', () => (${rev(n)}, ${n}), (${NEXT_VALUE}) => { ${n} = __track(${NEXT_VALUE}, ${bump(n)}, ${read(n)}${c.store ? '' : `, ${SUBS}`}); });`
         ),
-        // A store's function is read from another module, where the namespace is
-        // an ordinary JavaScript object and Brython converts what it is given.
-        // A component's is not, so it keeps the bare binding.
         ...c.funcs.map(
             (f) =>
                 `__bind(__proto, '${f.name}', () => ` +
-                `(${rev(f.name)}, ${c.store ? `__pyBoundary(${fn(f.name)})` : fn(f.name)}), ` +
+                `(${rev(f.name)}, ${fn(f.name)}), ` +
                 `(${NEXT_VALUE}) => { ${fn(f.name)} = __track(${NEXT_VALUE}, ${bump(f.name)}, ${read(f.name)}${c.store ? '' : `, ${SUBS}`}); }, () => ${fn(f.name)});`
         ),
         ...c.inspects.map(
@@ -3460,7 +3456,7 @@ function plainPreamble(c) {
         `import { init as __init } from ${JSON.stringify(virtualId(c.name))};`,
         `import { ${runtimeAliases([
             'bind', '__pybridge', 'pyCall', 'pyError', 'plainData', 'pyArg',
-            'pyData', 'pyExport', 'pyBoundary', 'jsCall', 'ticking', 'pyBind', 'NONE', 'helpers',
+            'pyData', 'pyExport', 'jsCall', 'ticking', 'pyBind', 'NONE', 'helpers',
             'registerModule', 'group', 'invoke', 'liveExport', 'readOnlyImport'
         ])} } from 'svelthon/runtime';`,
         ...c.jsImports.map(jsImportLine),
@@ -3484,7 +3480,7 @@ function plainBindings(c) {
         ...c.state.map((n) => `__bind(__proto, '${n}', () => ${n}, (${NEXT_VALUE}) => { ${n} = ${NEXT_VALUE}; });`),
         ...c.funcs.map(
             (f) =>
-                `__bind(__proto, '${f.name}', () => __pyBoundary(${fn(f.name)}), (${NEXT_VALUE}) => { ${fn(f.name)} = ${NEXT_VALUE}; }, () => ${fn(f.name)});`
+                `__bind(__proto, '${f.name}', () => ${fn(f.name)}, (${NEXT_VALUE}) => { ${fn(f.name)} = ${NEXT_VALUE}; }, () => ${fn(f.name)});`
         ),
         ...c.plainDeriveds.map(
             (d) =>

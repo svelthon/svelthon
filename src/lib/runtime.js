@@ -3825,19 +3825,18 @@ export function pyNumbers(value) {
 
 // The crossings, all of them, in one place.
 //
-// Eight functions below carry a value between Python and JavaScript, and each
+// Seven functions below carry a value between Python and JavaScript, and each
 // applies some part of the same five treatments. Every choice is argued beside
 // the function it belongs to, and that is the right place for a *reason*; it is
 // the wrong place for a *comparison*, because the choices are not independent.
 // Whether a `load()` converts its result and a DOM handler does not is one
-// decision taken eight times, and nobody could see it without this table.
+// decision taken seven times, and nobody could see it without this table.
 //
 //                | arity | args in  | coroutine | result out | memoised |
 //   pyCall       |  yes  | pyArg    | awaited   | plainData  |          |
 //   pyHandler    |  yes  | pyCall, with the arity read off the signature  |
 //   pyEvent      |  yes  | pyArg    | fired     |            |          |
-//   pyBoundary   |  (a)  | restored |           |            |   yes    |
-//   pyExport     |       |          |   (b)     | plainData  |   yes    |
+//   pyExport     |       |          |   (a)     | plainData  |   yes    |
 //   jsCall       |       | outbound |           | inbound    |          |
 //   pyComponent  |  yes  |          | scheduled | pyNumbers  |          |
 //   pyExpression |       | pyBind   | scheduled | pyNumbers  |          |
@@ -3856,10 +3855,7 @@ export function pyNumbers(value) {
 // `storeMember` is `plainScalar` for a value, and for a Python callable the
 // call `pyComponent` makes, whatever bound the name.
 //
-// (a) `pyBoundary` does not trim. It copies `$function_infos` onto its wrapper
-//     so that whoever calls it later still can: losing them would leave every
-//     caller downstream handing a Python signature more arguments than it takes.
-// (b) `pyExport` hands a coroutine to `plainData`, which schedules it and
+// (a) `pyExport` hands a coroutine to `plainData`, which schedules it and
 //     converts what it resolves to. A handler *fires* one and an exported
 //     function *awaits* one, and that is the difference between `schedule` and
 //     `scheduleAsync`: nobody is there to catch what a handler returns.
@@ -3963,8 +3959,8 @@ export function pyCall(fn, where, arity = Infinity, named, convert = pyArg) {
     // call rather than about the framework.
     //
     // **`name`**: what Python recorded, read off `$function_infos` rather than
-    // off `fn.name`, since a module's functions cross through `pyBoundary`,
-    // whose wrapper is named after a local of this file. `named` is what a
+    // off `fn.name`, since Brython names the JavaScript function it compiles
+    // after a counter, `f6084…`. `named` is what a
     // caller holding the `declared` answer passes: the callable's own label,
     // `Box.save` or `Handler.__call__`, where `where` is the *export's* label,
     // so a callable published inside a dict is named after itself and not after
@@ -3981,15 +3977,11 @@ export function pyCall(fn, where, arity = Infinity, named, convert = pyArg) {
 //
 // Anything that is not a Python function comes back as null.
 //
-// A function read off *another* module, `helpers.click` as a handler, does not
-// arrive as the accessor's own wrapper. `$B.imported` holds a plain JavaScript
-// object, so Brython's interop wraps the function again, and that wrapper
-// carries a `$function_infos` of its own with nothing in it but a name. It
-// passes an `Array.isArray` guard and would trim to `undefined`, which trims
-// nothing.
+// A function read off *another* module, `helpers.click` as a handler, arrives
+// as itself: `$B.imported` holds a plain JavaScript object, and Brython's
+// interop hands back a function that carries a class untouched, so its own
+// `$function_infos` answer.
 //
-// The original is kept on `$js_func`, and it is the one that answers for the
-// signature, which is why `pyBoundary` carries `$function_infos` too.
 // An instance whose class defines `__call__`, which is an ordinary way to write
 // a strategy object and the third shape of *callable in Python*. Answers with
 // the `__call__` it found, since that is what carries the signature.
@@ -4108,8 +4100,7 @@ function declared(value) {
     // `@classmethod def __call__` is the same shape under `cm_callable`, and its
     // receiver is the class, one parameter to drop like `self`.
     const stat = call !== null && call.sm_callable !== undefined ? call.sm_callable : null;
-    const held = method !== null ? method.im_func : (stat ?? call?.cm_callable ?? call ?? value);
-    const fn = typeof held.$js_func === 'function' ? held.$js_func : held;
+    const fn = method !== null ? method.im_func : (stat ?? call?.cm_callable ?? call ?? value);
     const infos = fn.$function_infos;
 
     // Nothing of Python's at all: a function JavaScript built, which crosses as
@@ -4242,8 +4233,7 @@ function liveArity(value) {
     if (call === null) return Infinity;
 
     const stat = call.sm_callable !== undefined ? call.sm_callable : null;
-    const held = stat ?? call.cm_callable ?? call;
-    const fn = typeof held.$js_func === 'function' ? held.$js_func : held;
+    const fn = stat ?? call.cm_callable ?? call;
     const infos = fn.$function_infos;
 
     if (!Array.isArray(infos) || (!infos[8] && typeof infos[10] !== 'number')) return Infinity;
@@ -4251,11 +4241,8 @@ function liveArity(value) {
     return infos[8] ? Infinity : infos[10] - (stat === null ? 1 : 0);
 }
 
-// What to call a Python function in a message, which neither `__name__` nor
-// `str()` can answer: a module's functions cross through `pyBoundary`, and its
-// wrapper answers `wrapped` and `<JavascriptFunction object>`, the name of a
-// local in this file, and a category. `$function_infos` travels with the
-// wrapper, which is why it is read here instead.
+// What to call a Python function in a message: its qualified name as
+// `$function_infos` records it, `Box.save` where `__name__` says `save`.
 //
 // Null for anything Python did not declare, so a caller keeps whatever it shows
 // of a value it cannot name.
@@ -4904,6 +4891,7 @@ const restored = (value) => {
 };
 
 export function pyBoundary(fn) {
+    if (globalThis.EXPERIMENT_RAW !== false) return fn;
     if (typeof fn !== 'function') return fn;
 
     // Memoised, because Python compares a function by identity: reading
@@ -5321,7 +5309,7 @@ function directiveCallable(member, path) {
         // calls a transition `fn(node, params, options)`, and `def
         // typewriter(node, params)` refuses the third.
         //
-        // `declared` reads the receiver, the signature through `$js_func`, and
+        // `declared` reads the receiver, the signature, and
         // leaves `self` out of the arguments, for every shape. It answers null
         // for a function JavaScript built, which keeps the reading it always
         // had: no signature, so no trim.

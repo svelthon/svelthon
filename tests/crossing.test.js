@@ -13,10 +13,9 @@ const read = (k) => {
     return target.querySelector(`p[data-k="${k}"]`).textContent;
 };
 
-// The module itself is a JavaScript object, which is the whole reason a call
-// into it converts what it is given. Its function is a Python `function`, as
-// CPython's `type(module.fn)` says: it was a `JavascriptFunction` called
-// `wrapped`, the boundary's stand-in seen without the class it stands for.
+// The module itself is a JavaScript object, and its function a Python
+// `function`, as CPython's `type(module.fn)` says: Brython's interop hands back
+// a function that carries a class untouched, so a call into it converts nothing.
 test('a module is reached through JavaScript, its function a function', () =>
     expect(read('module')).toBe('JSObject / function'));
 
@@ -27,9 +26,8 @@ describe.each([
 ])('a %s crossing a module boundary', (kind, intact) => {
     test('where it was made', () => expect(read(`${kind}-local`)).toBe(intact));
 
-    // The direction Brython converts on: `$B.imported` holds a plain JavaScript
-    // object, so the call takes its interop path and every argument goes
-    // through `pyobj2jsobj`. `pyBoundary` hands back what the WeakMap recorded.
+    // `$B.imported` holds a plain JavaScript object, and the function read off
+    // it is the Python function itself, so the argument arrives as it was made.
     test('handed to another module as an argument', () =>
         expect(read(`${kind}-argument`)).toBe(intact));
 

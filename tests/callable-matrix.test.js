@@ -175,9 +175,8 @@ describe('a callable instance', () => {
 // wrapper this file builds, since a function expression returned from a function
 // is nameless. Same function, different routes, different names.
 //
-// Read off `$function_infos` and not off `fn.name`: a module's functions cross
-// through `pyBoundary` first, whose wrapper is named after a local of
-// `runtime.js`, so the obvious source answered `wrapped` for all of them.
+// Read off `$function_infos` and not off `fn.name`: Brython names the function
+// it compiles after a counter, so the obvious source answers `f6084…`.
 // One Python callable is one JavaScript function, at every crossing and between
 // crossings.
 //

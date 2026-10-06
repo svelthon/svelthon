@@ -51,11 +51,9 @@ test('and a name a decorator made data becomes a function when the module says s
 });
 
 // The same function written again is the same function, to Python and to the
-// JavaScript reader that kept it: what a module reads of its own `def` is the
-// boundary's stand-in, and written back it was wrapped again, so `action is
-// original` turned false and the export changed identity, which an `off()`
-// after an `on()` cannot find. The stand-in is a Python `function` under its
-// own name too, where it read as a `JavascriptFunction` called `wrapped`.
+// JavaScript reader that kept it: written back, `action is original` stays
+// true and the export keeps its identity, which an `off()` after an `on()`
+// needs, and Python reads a `function` under its own name.
 // `python3` on the module: `[True, 'action', 'function']` both times.
 test('a `def` written back to its name keeps its identity and its name', async () => {
     const m = await import('./fixtures/rebound_def.py');
