@@ -75,7 +75,7 @@ reste de cette configuration et ce que chaque ligne apporte.
 npm install
 npm run dev
 
-npm test             # 1 649 tests : sémantique, props, réactivité, surface Svelte
+npm test             # 1 651 tests : sémantique, props, réactivité, surface Svelte
 npm run test:quiet   # la sortie de la suite : un run vert ne doit rien dire
 npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
@@ -1410,11 +1410,13 @@ champ d'à côté. `tests/callable-matrix.test.js` tient chaque ligne, sur **8 f
 positions**, et chaque forme encore appelée par une directive.
 
 Une fonction Python ne reçoit que les arguments qu'elle déclare : `def tout_vider():`
-sert d'`onclick` sans recevoir l'événement. La méthode d'un type natif,
-`rows.clear` ou `rows.append`, ne porte pas de signature à lire : elle reçoit tout
-ce que JavaScript passe, et refuse ce qu'elle ne prend pas, comme Python le
-ferait : `onclick={rows.clear}` lève `list.clear() takes no arguments (1
-given)`. On l'enveloppe : `onclick={lambda: rows.clear()}`, ou un `def`.
+sert d'`onclick` sans recevoir l'événement. Une méthode de type natif qui ne
+prend rien aussi, `rows.clear`, `rows.reverse` ou `"hi".upper` :
+`onclick={rows.clear}` vide la liste. Toute autre méthode native, `rows.append`
+ou `rows.pop`, ne porte pas de signature à lire : elle reçoit tout ce que
+JavaScript passe, et refuse ce qu'elle ne prend pas, comme Python le ferait :
+`onclick={rows.pop}` lève, l'événement n'étant pas un indice. On l'enveloppe :
+`onclick={lambda: rows.pop()}`, ou un `def`.
 
 ### Le seul endroit où SvelteKit code en dur
 
@@ -1525,7 +1527,7 @@ part jamais.
 
 ## État
 
-Validé par `npm test`, 1 649 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 1 651 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
