@@ -732,6 +732,19 @@ test('a method that takes no arguments refuses one in its type’s name: noargs-
     ]);
 });
 
+// `list.sort` takes keyword arguments only: a positional one counted the
+// instance in the message, and its text signature, which says so, was
+// `undefined`. `python3` on the same module.
+test('list.sort refuses a position and says it takes keywords only: list-sort-keyword-only', async () => {
+    const { sort_facts } = await import('./fixtures/sort_keywords.py');
+
+    expect(sort_facts()).toEqual([
+        'sort() takes no positional arguments',
+        '($self, /, *, key=None, reverse=False)',
+        '($self, /, *, key=None, reverse=False)'
+    ]);
+});
+
 // A module named with a quote, from a file such as `src/Jean's app/Page.svelte`,
 // had its name pasted between quotes in the code of every def, lambda, class
 // and comprehension, which then stopped parsing.

@@ -2,7 +2,8 @@
 // received whatever JavaScript passed and refused it: `onclick={rows.clear}`
 // raised `list.clear() takes no arguments (1 given)` on every click. It is
 // handed nothing, as a `def` that declares no parameter is, by the list its type
-// keeps of such methods. A builtin that takes arguments is still handed them all.
+// keeps of such methods; so is `rows.sort`, whose text signature has keywords
+// only. A builtin that takes arguments is still handed them all.
 import { test, expect } from 'vitest';
 import { flushSync } from 'svelte';
 import { mount } from './mounted.js';
@@ -20,7 +21,7 @@ test('a builtin method that takes nothing serves as an event handler', () => {
     window.addEventListener('error', listen);
     try {
         mount(NativeHandlers, { target });
-        for (const k of ['clear', 'reverse', 'dict', 'set', 'subclass']) {
+        for (const k of ['clear', 'reverse', 'dict', 'set', 'subclass', 'sort']) {
             target.querySelector(`[data-k="${k}"]`).click();
         }
         flushSync();
@@ -29,7 +30,7 @@ test('a builtin method that takes nothing serves as an event handler', () => {
     }
 
     expect(errors).toEqual([]);
-    expect(target.querySelector('p').textContent).toBe('0 [3, 2, 1] 0 0 0');
+    expect(target.querySelector('p').textContent).toBe('0 [3, 2, 1] 0 0 0 [1, 2, 3]');
 });
 
 test('and as a JavaScript callback, where a builtin that takes one is handed all', () => {

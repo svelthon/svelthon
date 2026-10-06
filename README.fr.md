@@ -75,7 +75,7 @@ reste de cette configuration et ce que chaque ligne apporte.
 npm install
 npm run dev
 
-npm test             # 1 651 tests : sémantique, props, réactivité, surface Svelte
+npm test             # 1 652 tests : sémantique, props, réactivité, surface Svelte
 npm run test:quiet   # la sortie de la suite : un run vert ne doit rien dire
 npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
@@ -1411,13 +1411,12 @@ positions**, et chaque forme encore appelée par une directive.
 
 Une fonction Python ne reçoit que les arguments qu'elle déclare : `def tout_vider():`
 sert d'`onclick` sans recevoir l'événement. Une méthode de type natif qui ne
-prend rien aussi, `rows.clear`, `rows.reverse` ou `"hi".upper` :
-`onclick={rows.clear}` vide la liste. Toute autre méthode native ne porte pas
-de signature à lire : elle reçoit tout ce que JavaScript passe, et en fait ce
-que Python en ferait : `onclick={rows.pop}` lève, l'événement n'étant pas un
-indice, `onclick={rows.sort}` lève, `sort` ne prenant que des mots-clés, et
+prend aucun argument positionnel aussi, `rows.clear`, `rows.reverse`,
+`rows.sort` ou `"hi".upper` : `onclick={rows.sort}` trie la liste. Toute autre
+méthode native reçoit tout ce que JavaScript passe, et en fait ce que Python en
+ferait : `onclick={rows.pop}` lève, l'événement n'étant pas un indice, et
 `onclick={rows.append}` ajoute l'événement, comme un `def ajoute(item)` le
-recevrait. On les enveloppe : `onclick={lambda: rows.sort()}`, ou un `def`.
+recevrait. On les enveloppe : `onclick={lambda: rows.pop()}`, ou un `def`.
 
 ### Le seul endroit où SvelteKit code en dur
 
@@ -1528,7 +1527,7 @@ part jamais.
 
 ## État
 
-Validé par `npm test`, 1 651 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 1 652 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;

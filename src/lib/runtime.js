@@ -1784,12 +1784,21 @@ const declares = (cls, name) => {
     return $B.NULL;
 };
 
-// Whether a builtin bound to its receiver takes nothing but the receiver:
-// `rows.clear`, which `list` lists in `noargs_methods`, the way CPython flags it
-// `METH_NOARGS`. The class of the MRO whose dictionary holds the name answers,
-// by its own list, so a subclass that rebinds the name answers for itself.
-const takesNothing = (value) => {
+// A text signature that declares no positional parameter but the receiver:
+// `($self, /, *, key=None, reverse=False)`, `list.sort`'s.
+const NO_POSITIONAL = /^\(\$self(?:,\s*\/)?(?:,\s*\*\s*(?:,.*)?)?\)$/s;
+
+// Whether a builtin bound to its receiver takes no positional argument but the
+// receiver, which is all JavaScript can pass: `rows.clear`, which `list` lists
+// in `noargs_methods`, the way CPython flags it `METH_NOARGS`, or `rows.sort`,
+// whose `__text_signature__` has keywords only. For the list, the class of the
+// MRO whose dictionary holds the name answers, so a subclass that rebinds the
+// name answers for itself.
+const takesNoPositional = (value) => {
     const $B = globalThis.__BRYTHON__;
+
+    if (typeof value.__text_signature__ === 'string' && NO_POSITIONAL.test(value.__text_signature__)) return true;
+
     const name = value.ml?.ml_name;
     // `"hello".upper` is bound to a JavaScript string, whose class no getter of
     // the author's can answer for.
@@ -4143,11 +4152,12 @@ function declared(value) {
         // Whatever the receiver's representation: `"hello".upper` is bound to
         // a JavaScript string, and `perReceiver` keys it by value.
         //
-        // One that takes nothing but its receiver is handed nothing, as a `def`
-        // that declares no parameter is: `onclick={rows.clear}` empties the
-        // list instead of receiving the event. Any other takes everything.
+        // One that takes no positional argument is handed none, as a `def` that
+        // declares no parameter is: `onclick={rows.clear}` empties the list and
+        // `onclick={rows.sort}` sorts it, instead of receiving the event. Any
+        // other takes everything.
         if (value.m_self !== null && value.m_self !== undefined) {
-            return { fn, where, arity: takesNothing(value) ? 0 : Infinity, origin: infos, self: value.m_self };
+            return { fn, where, arity: takesNoPositional(value) ? 0 : Infinity, origin: infos, self: value.m_self };
         }
 
         return { fn, where, arity: Infinity };

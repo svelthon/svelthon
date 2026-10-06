@@ -77,7 +77,7 @@ rest of that configuration and what each line buys.
 npm install
 npm run dev
 
-npm test             # 1 651 tests: semantics, props, reactivity, Svelte surface
+npm test             # 1 652 tests: semantics, props, reactivity, Svelte surface
 npm run test:quiet   # the suite's own output: a green run must say nothing
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
@@ -1359,13 +1359,12 @@ positions**, and each shape again as the callee of a directive.
 
 A Python function is handed only the arguments it declares, so `def clear_all():`
 serves as an `onclick` and the event is left out. So is a builtin type's own
-method that takes nothing, `rows.clear`, `rows.reverse` or `"hi".upper`:
-`onclick={rows.clear}` empties the list. Any other builtin method carries no
-signature to read, so it is handed everything JavaScript passes, and does with
-it what Python would: `onclick={rows.pop}` raises, since the event is no index,
-`onclick={rows.sort}` raises, since `sort` takes keywords only, and
+method that takes no positional argument, `rows.clear`, `rows.reverse`,
+`rows.sort` or `"hi".upper`: `onclick={rows.sort}` sorts the list. Any other
+builtin method is handed everything JavaScript passes, and does with it what
+Python would: `onclick={rows.pop}` raises, since the event is no index, and
 `onclick={rows.append}` appends the event, as a `def add(item)` would receive it.
-Wrap them: `onclick={lambda: rows.sort()}`, or a `def`.
+Wrap them: `onclick={lambda: rows.pop()}`, or a `def`.
 
 ### The one place SvelteKit is hard-coded
 
@@ -1512,7 +1511,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 1 651 tests as written (vitest reports more, one per
+Validated by `npm test`, 1 652 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;
