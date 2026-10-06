@@ -662,8 +662,10 @@ describe('tojson', () => {
     describe.for([
         ['a set', () => _b_.set.$factory(_b_.list.$factory([42])), /is a set/, /list\(\)/],
         ['a frozenset', () => shapes('frozenset'), /is a set/, /list\(\)/],
-        ['bytes', () => shapes('bytes'), /is bytes/, /decode\(\)/],
-        ['a bytearray', () => shapes('bytearray'), /is bytes/, /decode\(\)/],
+        // Built here as the set is, the Python value itself: returned by a
+        // function, bytes cross as the `Uint8Array` JavaScript holds bytes in.
+        ['bytes', () => _b_.bytes.$factory(_b_.list.$factory([104, 105])), /is bytes/, /decode\(\)/],
+        ['a bytearray', () => _b_.bytearray.$factory(_b_.list.$factory([104, 105])), /is bytes/, /decode\(\)/],
         ['a memoryview', () => shapes('memoryview'), /is a memoryview/, null],
         ['a range', () => shapes('range'), /is a range/, null],
         ['a complex', () => shapes('complex'), /is a complex/, null],

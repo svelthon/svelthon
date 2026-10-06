@@ -77,7 +77,7 @@ rest of that configuration and what each line buys.
 npm install
 npm run dev
 
-npm test             # 1 685 tests: semantics, props, reactivity, Svelte surface
+npm test             # 1 687 tests: semantics, props, reactivity, Svelte surface
 npm run test:quiet   # the suite's own output: a green run must say nothing
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
@@ -794,7 +794,9 @@ the same object. A list, a dict, a set or an instance is the module's own
 object, as `m.items` is in Python: changed in place by the module,
 `items.append(2)` or `thing.count = 1`, it is changed for the importer, and a
 write from JavaScript is the module's. A set reads as a JavaScript `Set`, as
-Svelte's own `SvelteSet` does. An instance reads as its attributes, calls its methods and prints
+Svelte's own `SvelteSet` does, and bytes as a `Uint8Array`, what a `Blob`, a
+`fetch` body or a `TextDecoder` takes; a `bytearray` as the bytes it holds when
+it crosses. An instance reads as its attributes, calls its methods and prints
 by its `__str__`, as a JavaScript class prints by its `toString`, from an import,
 from a JavaScript child it is handed as a prop, and from a JavaScript object
 Python wrote it into. A `.py`'s `@derived`
@@ -1528,7 +1530,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 1 685 tests as written (vitest reports more, one per
+Validated by `npm test`, 1 687 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;

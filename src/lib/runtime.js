@@ -1327,9 +1327,9 @@ const quietPyType = (value) => {
 // a JavaScript array or object crosses as it is written, through
 // `pyobj2jsobj_hook` and the engine behind it: a number, a str and None as
 // JavaScript's, a callable as its handler, a list, a tuple or a dict converted,
-// a set and an instance of the author's as their view. What stays itself is
-// what has no JavaScript face at any door, bytes, a complex, a range, and a
-// copy left those as they were too. So nothing in one is Python's to convert, and a
+// a set and an instance of the author's as their view, bytes as a
+// `Uint8Array`. What stays itself is what has no JavaScript face at any door,
+// a complex, a range, and a copy left those as they were too. So nothing in one is Python's to convert, and a
 // copy would lose its identity and run its getters before whoever reads it has
 // asked. The serialiser alone reads one, at its own turn.
 const javascriptOwn = (value) => quietPyType(value) === undefined;
@@ -1917,6 +1917,25 @@ export const pyBytes = (value) => {
     if (!Array.isArray(mro)) return false;
 
     return mro.includes(_b_.bytes) || mro.includes(_b_.bytearray);
+};
+
+// bytes as JavaScript holds bytes, a `Uint8Array` of them: what every Web API
+// that takes binary data accepts, a `Blob`, a `fetch` body, a `TextDecoder`,
+// where the Brython object was written out as "[object Object]". A copy, which
+// for `bytes` is exact for as long as it lives, since bytes never change, and
+// which hands the bytes back to Python as itself; for a `bytearray`, the bytes
+// it holds at that moment.
+const mutableBytes = (value) => ownType(value).tp_mro.includes(_b_.bytearray);
+
+const bytesOut = (value) => {
+    const out = Uint8Array.from(value.source);
+
+    if (!mutableBytes(value)) {
+        VIEWED.add(out);
+        globalThis.__BRYTHON__.PYOBJ_MAP.set(out, value);
+    }
+
+    return out;
 };
 
 export const isSet = (value) => {
@@ -2545,6 +2564,7 @@ function viewOf(value) {
 
     if (!sequence && !$B.is_dict(value)) {
         if (isSet(value)) return setView(value);
+        if (pyBytes(value) && !mutableBytes(value)) return bytesOut(value);
 
         return authoredInstance(value) ? instanceView(value) : value;
     }
@@ -3487,6 +3507,7 @@ export function plainData(value, seen, adapt) {
     }
 
     if (javascriptOwn(value)) return value;
+    if (pyBytes(value)) return bytesOut(value);
 
     const made = seen ?? new WeakMap();
     const known = made.get(value);
@@ -4715,6 +4736,7 @@ export function pyTeardown(value, where) {
 globalThis.__BRYTHON__.pyobj2jsobj_hook = (value) => {
     if (value === null || (typeof value !== 'object' && typeof value !== 'function')) return undefined;
     if (declared(value) !== null || ADAPTERS.has(value)) return pyHandler(value);
+    if (pyBytes(value)) return bytesOut(value);
 
     const view = viewOf(value);
 
