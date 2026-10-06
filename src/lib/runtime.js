@@ -2412,10 +2412,6 @@ const forReader = (one) => {
     return scalar === undefined ? viewOf(one) : scalar;
 };
 
-// A key as JavaScript spells it: a property name is a string, and a Python key
-// that is not one has no name a JavaScript reader could use.
-const keyName = (key) => (typeof key === 'string' ? key : key instanceof String ? key.valueOf() : undefined);
-
 const INDEX = /^(?:0|[1-9]\d*)$/;
 
 // What JavaScript writes into a view. A plain object or an array of its own is
@@ -2456,6 +2452,19 @@ function viewOf(value) {
 
         return at < 2 ** 32 - 1 ? at : undefined;
     };
+    // A dict's keys under the names the copy gives them (`propertyKey`), so a
+    // reader sees the entries `to_js` writes: `{7: 42}` is `{"7": 42}`, where it
+    // was `{}` and a child handed the dict read nothing. The key itself when it
+    // is the name, the one lookup most reads make; a key of another type only
+    // when the dict holds one, found by its name.
+    const keyFor = (name) => {
+        if ((typeof name === 'string' || typeof name === 'symbol') && $B.$is_member(name, value)) return name;
+        if (typeof name !== 'string' || $B.hasOnlyStringKeys(value)) return MISSING;
+
+        const found = pyEntries(value).find(([key]) => typeof key !== 'string' && propertyKey(key) === name);
+
+        return found === undefined ? MISSING : found[0];
+    };
     const holds = (key) => {
         if (sequence) {
             const at = index(key);
@@ -2463,16 +2472,29 @@ function viewOf(value) {
             return at !== undefined && at < length();
         }
 
-        return typeof key === 'string' && $B.$is_member(key, value);
+        return keyFor(key) !== MISSING;
     };
-    const read = (key) => forReader($B.$getitem(value, sequence ? index(key) : key));
-    const keys = () =>
-        sequence
-            ? Array.from({ length: length() }, (_, at) => String(at))
-            : pyEntries(value).map(([key]) => keyName(key)).filter((key) => key !== undefined);
+    const read = (key) => forReader($B.$getitem(value, sequence ? index(key) : keyFor(key)));
+
+    // Every name, as the copy writes them: two keys of one name, `7` and `"7"`,
+    // are refused as the copy refuses them, where the view showed one and
+    // dropped the other.
+    const keys = () => {
+        if (sequence) return Array.from({ length: length() }, (_, at) => String(at));
+
+        const names = {};
+
+        for (const [key] of pyEntries(value)) define(names, propertyName(key, names), true);
+
+        return Reflect.ownKeys(names);
+    };
 
     const write = (key, given) => {
-        if (!sequence) return $B.$setitem(value, key, entering(given)), true;
+        if (!sequence) {
+            const held = keyFor(key);
+
+            return $B.$setitem(value, held === MISSING ? key : held, entering(given)), true;
+        }
         if (!$B.is_list(value)) return false;
 
         if (key === 'length') {
@@ -2506,7 +2528,7 @@ function viewOf(value) {
     // the array by writing its `length` afterwards.
     const remove = (key) => {
         if (!holds(key)) return true;
-        if (!sequence) return $B.$call($B.$getattr(value, '__delitem__'), key), true;
+        if (!sequence) return $B.$call($B.$getattr(value, '__delitem__'), keyFor(key)), true;
         if (!$B.is_list(value)) return false;
 
         $B.$setitem(value, index(key), NONE);
@@ -3261,6 +3283,11 @@ function branch(value, seen, shell, adapt) {
 // held the key the dict was asked by. JSON has no notation for one, and under
 // the serialiser's rule it is refused as a symbol value is, where
 // `JSON.stringify` would drop it in silence.
+// The name alone, for a reader that looks a key up rather than writing a
+// mapping out: a JavaScript property name is a string, and a Brython float is an
+// object, so `{1.5: "x"}` would otherwise be keyed by `[object Object]`.
+const propertyKey = (key) => (typeof key === 'symbol' ? key : String(plainData(key)));
+
 function propertyName(key, out, seen, adapt) {
 
 
