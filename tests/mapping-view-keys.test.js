@@ -77,6 +77,32 @@ test('a view of a dict of 4 000 int keys reads whole in linear time', () => {
     expect(Object.hasOwn(view, '0')).toBe(false);
 });
 
+// A symbol key was read, listed and described as writable, and every write,
+// redefinition and delete of it refused. The same three, on the view and on a
+// JavaScript object holding the same key, land in the dict; a list view still
+// names its indices only.
+test('a symbol key is written, redefined and deleted as it is read', () => {
+    const key = Symbol('metadata');
+    const added = Symbol('added');
+    const original = dict([[key, 42]]);
+    const view = __pybridge.bound(original);
+    const witness = { [key]: 42 };
+    const steps = (target) => [
+        Reflect.set(target, key, 99),
+        target[key],
+        Reflect.defineProperty(target, key, { value: 7, writable: true, enumerable: true, configurable: true }),
+        target[key],
+        Reflect.set(target, added, 1),
+        Reflect.deleteProperty(target, key),
+        Reflect.ownKeys(target).length
+    ];
+
+    expect(steps(view)).toEqual(steps(witness));
+    expect($B.$is_member(key, original)).toBe(false);
+    expect($B.$getitem(original, added)).toBe(1);
+    expect(Reflect.set(__pybridge.bound($B.$list([1])), key, 2)).toBe(false);
+});
+
 test('a JavaScript child handed the dict reads its key', () => {
     const target = document.body.appendChild(document.createElement('div'));
     mount(MappingKeys, { target });

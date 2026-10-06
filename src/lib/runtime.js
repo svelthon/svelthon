@@ -2607,6 +2607,10 @@ function viewOf(value) {
         return true;
     };
 
+    // The keys a write may name, the ones a read finds: a dict's strings and
+    // symbols, a symbol being a Python key as itself, and a list's indices.
+    const writable = (key) => typeof key === 'string' || (!sequence && typeof key === 'symbol');
+
     const view = new Proxy(sequence ? [] : {}, {
         getPrototypeOf(shell) {
             return sequence ? LIST_VIEW : Object.getPrototypeOf(shell);
@@ -2638,7 +2642,7 @@ function viewOf(value) {
             return holds(key) ? { value: read(key), writable: true, enumerable: true, configurable: true } : undefined;
         },
         set(shell, key, given) {
-            return typeof key === 'string' && write(key, given);
+            return writable(key) && write(key, given);
         },
         // Svelte's rule for its own state, checked before anything is written: a
         // view holds values, so a descriptor carries one and leaves the
@@ -2655,10 +2659,10 @@ function viewOf(value) {
                 );
             }
 
-            return typeof key === 'string' && write(key, descriptor.value);
+            return writable(key) && write(key, descriptor.value);
         },
         deleteProperty(shell, key) {
-            return typeof key === 'string' && remove(key);
+            return writable(key) && remove(key);
         },
         // The keys are the container's, which Python may still add to, and a
         // shell that refused new ones could no longer announce them: refused,
