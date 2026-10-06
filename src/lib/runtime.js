@@ -1921,21 +1921,47 @@ export const pyBytes = (value) => {
 
 // bytes as JavaScript holds bytes, a `Uint8Array` of them: what every Web API
 // that takes binary data accepts, a `Blob`, a `fetch` body, a `TextDecoder`,
-// where the Brython object was written out as "[object Object]". A copy, which
-// for `bytes` is exact for as long as it lives, since bytes never change, and
-// which hands the bytes back to Python as itself; for a `bytearray`, the bytes
-// it holds at that moment.
+// where the Brython object was written out as "[object Object]". No live
+// object can be one: a view is refused by those APIs or written out as text,
+// and Chrome refuses a typed array over a buffer that grows. So a copy, of the
+// bytes held at the crossing: exact for `bytes`, which never change, and for a
+// `bytearray` the bytes of that moment, which an export takes again at each
+// change (`liveExport`) and a prop at each render.
 const mutableBytes = (value) => ownType(value).tp_mro.includes(_b_.bytearray);
+
+// The bytes each copy was made of, for the way back (`bytesIn`).
+const BYTES_OF = new WeakMap();
 
 const bytesOut = (value) => {
     const out = Uint8Array.from(value.source);
 
-    if (!mutableBytes(value)) {
-        VIEWED.add(out);
-        globalThis.__BRYTHON__.PYOBJ_MAP.set(out, value);
-    }
+    BYTES_OF.set(out, value);
+    if (!mutableBytes(value)) globalThis.__BRYTHON__.PYOBJ_MAP.set(out, value);
 
     return out;
+};
+
+// A copy of bytes handed back to Python: the object it was made of while the
+// two hold the same bytes, and a new one of the same kind, bytes or a
+// `bytearray`, of what the copy holds once either moved on: JavaScript writes
+// into a `Uint8Array`, and Python appends to a `bytearray`. Undefined for any
+// other value. The engine's own lookup (`PYOBJ_MAP`) follows the newest bytes.
+const bytesIn = (value) => {
+    const original = BYTES_OF.get(value);
+
+    if (original === undefined) return undefined;
+
+    const held = original.source;
+
+    if (held.length === value.length && held.every((one, at) => one === value[at])) return original;
+
+    const mutable = mutableBytes(original);
+    const fresh = (mutable ? _b_.bytearray : _b_.bytes).$factory(globalThis.__BRYTHON__.$list(Array.from(value)));
+
+    BYTES_OF.set(value, fresh);
+    if (!mutable) globalThis.__BRYTHON__.PYOBJ_MAP.set(value, fresh);
+
+    return fresh;
 };
 
 export const isSet = (value) => {
@@ -2564,7 +2590,7 @@ function viewOf(value) {
 
     if (!sequence && !$B.is_dict(value)) {
         if (isSet(value)) return setView(value);
-        if (pyBytes(value) && !mutableBytes(value)) return bytesOut(value);
+        if (pyBytes(value)) return bytesOut(value);
 
         return authoredInstance(value) ? instanceView(value) : value;
     }
@@ -4923,7 +4949,7 @@ const outbound = (value, made) => {
 // and `accepted = query(_accepted)` in a `.remote.py` exports the object
 // SvelteKit built.
 const inbound = (value) =>
-    typeof value === 'function' ? jsCall(value) : globalThis.__BRYTHON__.jsobj2pyobj(value);
+    typeof value === 'function' ? jsCall(value) : (bytesIn(value) ?? globalThis.__BRYTHON__.jsobj2pyobj(value));
 
 // **Brython's own refusal, which this proxy was going around.**
 //
@@ -5083,16 +5109,26 @@ export function liveExport(namespace, name, update) {
 
     if (holder === namespace) delete namespace[name];
 
+    // A `bytearray` crosses as the bytes it holds when it crosses (`bytesOut`),
+    // so a change Python makes to it is taken again as a write of the name is:
+    // the export is watched while it holds one, and let go when it is rebound.
+    const refresh = () => update(read());
+    const watch = (value) => {
+        if (refresh.held !== undefined || (pyBytes(value) && mutableBytes(value))) track(value, refresh, () => {});
+    };
+
     Object.defineProperty(prototype, name, {
         configurable: true,
         enumerable: found?.enumerable ?? true,
         get: read,
         set(next) {
             write(next);
+            watch(read());
             update(read());
         }
     });
 
+    watch(read());
     update(read());
 }
 
@@ -5927,8 +5963,9 @@ export const pyBind = (value) => {
     if (handed !== null && Object.is(value, handed.js)) return handed.py;
     if (typeof value === 'number') return globalThis.__BRYTHON__.jsobj2pyobj(value);
 
-    // A view a JavaScript reader was handed (`viewOf`) is its container again.
-    return VIEWED.has(value) ? globalThis.__BRYTHON__.PYOBJ_MAP.get(value) : value;
+    // A view a JavaScript reader was handed (`viewOf`) is its container again,
+    // and a copy of bytes the bytes it holds.
+    return VIEWED.has(value) ? globalThis.__BRYTHON__.PYOBJ_MAP.get(value) : (bytesIn(value) ?? value);
 };
 
 // Whether a read through the dot would find an attribute, answered without
