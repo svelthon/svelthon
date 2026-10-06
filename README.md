@@ -790,7 +790,10 @@ An exported name is live, as a JavaScript `export let` is: rebound by the
 module, it reads as its new value, a function made a number as that number, and
 deleted as `undefined`. A function a reader already took stays the one it took,
 as `from m import f` keeps it in CPython, and the same function written again is
-the same object.
+the same object. A `.py`'s `@derived` is not exported: it is a call made at every
+read, which an export would freeze at its first value. `__all__` naming one is
+refused, as Svelte refuses to export derived state from a module; export a
+function returning it.
 
 **It is the value the module ends with, as Python computes it.** Each statement
 at the top level of the module that writes it, spelled with literals, `__all__`

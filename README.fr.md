@@ -828,7 +828,10 @@ Un nom exporté est vivant, comme un `export let` de JavaScript : relié par le
 module, il se lit à sa nouvelle valeur, une fonction devenue nombre comme ce
 nombre, et supprimé comme `undefined`. Une fonction qu'un lecteur a déjà prise
 reste celle qu'il a prise, comme `from m import f` la garde dans CPython, et la
-même fonction réécrite reste le même objet.
+même fonction réécrite reste le même objet. Le `@derived` d'un `.py` ne s'exporte
+pas : c'est un appel fait à chaque lecture, qu'un export figerait à sa première
+valeur. Un `__all__` qui en nomme un est refusé, comme Svelte refuse d'exporter
+un état dérivé depuis un module ; on exporte une fonction qui le rend.
 
 **C'est la valeur sur laquelle le module s'arrête, telle que Python la
 calcule.** Chaque instruction du niveau du module qui l'écrit, avec des

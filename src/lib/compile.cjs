@@ -3904,7 +3904,7 @@ function compile(
     // anything but load/actions/prerender/… is refused, and rightly so.
     const declaration = declaredExports(root._ast, table, source, lineOffset, src);
     const listed = declaration === null ? null : declaration.names;
-    const exported = listed ?? [...funcs.map((f) => f.name), ...plainDeriveds.map((d) => d.name)];
+    const exported = listed ?? funcs.map((f) => f.name);
 
     // A name in `__all__` that the module never binds. Python raises on it at
     // `from m import *` and says nothing otherwise; here a reference to a name
@@ -3940,8 +3940,23 @@ function compile(
         );
     }
 
-    const isFunction = (name) =>
-        funcs.some((f) => f.name === name) || plainDeriveds.some((d) => d.name === name);
+    // A `@derived` of a plain module is a call made at every read, and an export
+    // is a value JavaScript keeps: it would go on reading what the call gave at
+    // import. Svelte refuses to export derived state from a module for that
+    // reason, `derived_invalid_export`, and so does this, with its advice.
+    const exportedDerived = (listed ?? []).find((n) => plainDeriveds.some((d) => d.name === n));
+
+    if (exportedDerived !== undefined) {
+        throw refuse(
+            `svelthon — \`__all__\` names \`${exportedDerived}\`, a \`@derived\`, which a module ` +
+                `cannot export: JavaScript would keep the value it had when it was read. To expose ` +
+                `the current value, export a function returning it (${listedAt}).`,
+            source,
+            line
+        );
+    }
+
+    const isFunction = (name) => funcs.some((f) => f.name === name);
 
     // What `__all__` lists and the compiler gave no signal: a class, or a name a
     // star import brought. A store reads it off the namespace, as a `.py` does.
