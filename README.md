@@ -77,7 +77,7 @@ rest of that configuration and what each line buys.
 npm install
 npm run dev
 
-npm test             # 1 677 tests: semantics, props, reactivity, Svelte surface
+npm test             # 1 679 tests: semantics, props, reactivity, Svelte surface
 npm run test:quiet   # the suite's own output: a green run must say nothing
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
@@ -793,8 +793,10 @@ as `from m import f` keeps it in CPython, and the same function written again is
 the same object. A list, a dict or an instance is the module's own object, as
 `m.items` is in Python: changed in place by the module, `items.append(2)` or
 `thing.count = 1`, it is changed for the importer, and a write from JavaScript is
-the module's. An instance reads as its attributes and calls its methods, from an
-import as from a JavaScript child it is handed as a prop. A `.py`'s `@derived`
+the module's. An instance reads as its attributes, calls its methods and prints
+by its `__str__`, as a JavaScript class prints by its `toString`, from an import,
+from a JavaScript child it is handed as a prop, and from a JavaScript object
+Python wrote it into. A `.py`'s `@derived`
 is not exported: it is a call made at every read, which an export would freeze
 at its first value. `__all__` naming one is
 refused, as Svelte refuses to export derived state from a module; export a
@@ -1519,7 +1521,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 1 677 tests as written (vitest reports more, one per
+Validated by `npm test`, 1 679 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;

@@ -1323,11 +1323,15 @@ const quietPyType = (value) => {
 };
 
 // An object no Python type marks is JavaScript's, and leaves Python as itself,
-// as it leaves a JavaScript function that returns it: Brython converts whatever
-// Python writes into a JavaScript array or object, so nothing in one is
-// Python's to convert, and a copy would lose its identity and run its getters
-// before whoever reads it has asked. The serialiser alone reads one, at its own
-// turn.
+// as it leaves a JavaScript function that returns it. What Python writes into
+// a JavaScript array or object crosses as it is written, through
+// `pyobj2jsobj_hook` and the engine behind it: a number, a str and None as
+// JavaScript's, a callable as its handler, a list, a tuple or a dict converted,
+// an instance of the author's as its view. What stays itself is what has no
+// JavaScript face at any door, a set, bytes, a complex, a range, and a copy
+// left those as they were too. So nothing in one is Python's to convert, and a
+// copy would lose its identity and run its getters before whoever reads it has
+// asked. The serialiser alone reads one, at its own turn.
 const javascriptOwn = (value) => quietPyType(value) === undefined;
 
 // A native object `JSON.stringify` has nothing to write of: a class of its own,
@@ -2778,11 +2782,26 @@ function instanceView(value) {
     };
     const write = (key, given) => typeof key === 'string' && ($B.$setattr(value, key, entering(given)), true);
 
+    // How the instance prints, when its class says: a `__str__` or a `__repr__`
+    // on it or on a base other than `object` is its `toString`, as a JavaScript
+    // class that defines one prints by it, in a template and in a `${}`. A class
+    // that says nothing prints as an object, as theirs does.
+    const prints = () => {
+        const type = ownType(value);
+
+        return (Array.isArray(type.tp_mro) ? type.tp_mro : [type]).some(
+            (one) => one !== _b_.object && ['__str__', '__repr__'].some((name) => $B.search_in_dict(one, name, $B.NULL) !== $B.NULL)
+        );
+    };
+    const printed = () => String($B.builtins.str.$factory(value));
+
     const view = new Proxy(Object.create(INSTANCE_VIEW), {
         get(shell, key, receiver) {
             follow(value);
 
             const found = attribute(key);
+
+            if (found === MISSING && key === 'toString' && prints()) return printed;
 
             return found === MISSING ? Reflect.get(shell, key, receiver) : forReader(found);
         },
@@ -4532,12 +4551,17 @@ export function pyTeardown(value, where) {
 // imported. The callable question comes first: a list subclass that
 // defines `__call__` is a callback.
 //
+// An instance of the author's class is answered by its view, as at a prop and
+// an export: written into a JavaScript object, `config.inst = Point()`, the
+// engine left the instance itself, whose attributes JavaScript cannot read.
+//
 // Anything else goes on to the engine.
 globalThis.__BRYTHON__.pyobj2jsobj_hook = (value, memo) => {
     const $B = globalThis.__BRYTHON__;
 
     if (value === null || (typeof value !== 'object' && typeof value !== 'function')) return undefined;
     if (declared(value) !== null || ADAPTERS.has(value)) return pyHandler(value);
+    if (authoredInstance(value)) return viewOf(value);
     if (!($B.is_list(value) || $B.is_tuple(value) || $B.is_dict(value))) return undefined;
 
     return outbound(value, memo);

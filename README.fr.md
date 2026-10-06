@@ -75,7 +75,7 @@ reste de cette configuration et ce que chaque ligne apporte.
 npm install
 npm run dev
 
-npm test             # 1 677 tests : sémantique, props, réactivité, surface Svelte
+npm test             # 1 679 tests : sémantique, props, réactivité, surface Svelte
 npm run test:quiet   # la sortie de la suite : un run vert ne doit rien dire
 npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
@@ -832,8 +832,10 @@ même fonction réécrite reste le même objet. Une liste, un dict ou une instan
 est l'objet même du module, comme `m.items` en Python : modifié sur place par le
 module, `items.append(2)` ou `thing.count = 1`, il l'est pour l'importateur, et
 une écriture depuis JavaScript est celle du module. Une instance se lit par ses
-attributs et appelle ses méthodes, depuis un import comme depuis un enfant
-JavaScript qui la reçoit en prop. Le `@derived` d'un `.py` ne s'exporte
+attributs, appelle ses méthodes et s'affiche par son `__str__`, comme une classe
+JavaScript s'affiche par son `toString`, depuis un import, depuis un enfant
+JavaScript qui la reçoit en prop et depuis un objet JavaScript où Python l'a
+écrite. Le `@derived` d'un `.py` ne s'exporte
 pas : c'est un appel fait à chaque lecture, qu'un export figerait à sa première
 valeur. Un `__all__` qui en nomme un est refusé, comme Svelte refuse d'exporter
 un état dérivé depuis un module ; on exporte une fonction qui le rend.
@@ -1535,7 +1537,7 @@ part jamais.
 
 ## État
 
-Validé par `npm test`, 1 677 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 1 679 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
