@@ -2855,7 +2855,7 @@ function preamble(c) {
         // Under the engine's prefix like every other name it lends: the
         // author's names live in the same scope, and an `importjs { untrack }`
         // or a `def getContext()` of theirs is theirs.
-        `import { ${['getContext as __getContext', 'setContext as __setContext']
+        `import { ${['getContext as __getContext', 'setContext as __setContext', 'getAllContexts as __getAllContexts']
             .concat(c.lifecycle('on_mount') || c.lifecycle('on_destroy') ? ['untrack as __untrack'] : [])
             .join(', ')} } from 'svelte';`,
         ``

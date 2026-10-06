@@ -489,30 +489,36 @@ export const __pybridge = {
     // Python one: `Price(0.5)` reads back a `Price` and `1.0` a float, where the
     // number alone would read back `0.5` and `1`.
     //
-    // Kept as a list under one key of Svelthon's, each component's context
-    // holding its own head, which Svelte copies from the parent's: an original
-    // lives as long as the context holding it, a child's never reaches its
-    // parent, and one key has one entry, the latest, a value published again
-    // letting the one it replaces go. The original is taken only while the key
-    // still holds the value it was made into: a JavaScript component between
-    // the two that sets the key again to another value is read as it set it,
-    // and to an equal one leaves the original standing, a number not saying
-    // who wrote it.
-    provide(set, get, key, value) {
+    // Kept in a map of their own under one key of Svelthon's, which a
+    // component copies from its parent's the first time it publishes, as
+    // Svelte copies the context map itself; `own` is that context map, what
+    // `getAllContexts` hands the component. An original lives as long as the
+    // context holding it, a child's never reaches its parent, and one key has
+    // one entry, the latest, a value published again letting the one it
+    // replaces go. The original is taken only while the key still holds the
+    // value it was made into: a JavaScript component between the two that
+    // sets the key again to another value is read as it set it, and to an
+    // equal one leaves the original standing, a number not saying who wrote
+    // it.
+    provide(set, get, own, key, value) {
         const out = __pybridge.toContext(value);
+        let originals = get(ORIGINALS);
 
         set(key, out);
-        set(ORIGINALS, { key, js: out, py: value, next: without(get(ORIGINALS), key) });
+
+        if (originals?.owner !== own) {
+            originals = { owner: own, byKey: new Map(originals?.byKey) };
+            set(ORIGINALS, originals);
+        }
+
+        originals.byKey.set(key, { js: out, py: value });
     },
 
     provided(get, key) {
         const value = get(key);
+        const original = get(ORIGINALS)?.byKey.get(key);
 
-        for (let at = get(ORIGINALS); at !== undefined; at = at.next) {
-            if (Object.is(at.key, key)) return Object.is(value, at.js) ? at.py : __pybridge.received(value);
-        }
-
-        return __pybridge.received(value);
+        return original !== undefined && Object.is(value, original.js) ? original.py : __pybridge.received(value);
     },
 
     // `{...attrs}`: Svelte diffs the spread object against the one from the
@@ -2425,18 +2431,6 @@ const VIEWED = new WeakSet();
 // The key the originals of a context's Python values are kept under, in the
 // context itself (`provide`).
 const ORIGINALS = Symbol('svelthon.context-originals');
-
-// The list without the entry of `key`, of which it holds one at most: the
-// entries before it are copied, so the list a parent's context holds is left as
-// it is, and the ones after it are shared.
-const without = (at, key) => {
-    if (at === undefined) return undefined;
-    if (Object.is(at.key, key)) return at.next;
-
-    const rest = without(at.next, key);
-
-    return rest === at.next ? at : { ...at, next: rest };
-};
 
 // A list's view is an array whose prototype is not `Array.prototype` itself,
 // only inherits from it: Svelte wraps a plain array put in a `$state` in a proxy

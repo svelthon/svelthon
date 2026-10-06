@@ -207,7 +207,7 @@ const INJECTED = [
     // are one key, while two NaN are two.
     {
         name: 'set_context',
-        value: '() => (key, value) => __pybridge.provide(__setContext, __getContext, __pybridge.key(key), value)',
+        value: '() => (key, value) => __pybridge.provide(__setContext, __getContext, __getAllContexts(), __pybridge.key(key), value)',
         component: true
     },
     {

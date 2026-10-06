@@ -18,7 +18,7 @@ const once = (kind, key) => {
     const get = (k) => contexts.get(k);
 
     if (kind === 'native') set(key, 42);
-    if (kind === 'provide') __pybridge.provide(set, get, key, pyData({ answer: 42 }));
+    if (kind === 'provide') __pybridge.provide(set, get, contexts, key, pyData({ answer: 42 }));
     if (kind === 'provided') __pybridge.provided(get, key);
 
     kept[kind].push(new WeakRef(key));
@@ -51,7 +51,7 @@ const leftBy = async (write) => {
     for (let i = 0; i < 2000; i++) {
         const contexts = new Map();
 
-        write((k, v) => contexts.set(k, v), (k) => contexts.get(k), randomBytes(2048).toString('hex'));
+        write((k, v) => contexts.set(k, v), (k) => contexts.get(k), contexts, randomBytes(2048).toString('hex'));
     }
 
     await settle();
@@ -59,8 +59,8 @@ const leftBy = async (write) => {
     return process.memoryUsage().heapUsed - before;
 };
 
-alive.nativeStrings = await leftBy((set, get, key) => set(key, 0.5));
-alive.provideStrings = await leftBy((set, get, key) => __pybridge.provide(set, get, key, pyData(0.5)));
+alive.nativeStrings = await leftBy((set, get, own, key) => set(key, 0.5));
+alive.provideStrings = await leftBy((set, get, own, key) => __pybridge.provide(set, get, own, key, pyData(0.5)));
 
 // And a value published again under one key of a context still alive: the 63
 // it replaced go, as `Map.set` lets them go.
@@ -71,7 +71,7 @@ for (let i = 0; i < 64; i++) {
     const value = pyData({ answer: i });
 
     replaced.push(new WeakRef(value));
-    __pybridge.provide((k, v) => live.set(k, v), (k) => live.get(k), 'theme', value);
+    __pybridge.provide((k, v) => live.set(k, v), (k) => live.get(k), live, 'theme', value);
 }
 
 await settle();
