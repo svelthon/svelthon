@@ -13,6 +13,8 @@ import StateViewHost from './fixtures/StateViewHost.svelte';
 import { stringify } from 'devalue';
 import * as presence from './fixtures/presence.py';
 import * as presenceNative from './fixtures/presence_native.js';
+import * as callables from './fixtures/held_callables.py';
+import { key as renamedKey } from './fixtures/renamed_key.js';
 
 // What a module exports is its own object, as a JavaScript module's export is
 // and as `m.items` is in Python: changed in place by the module, it is changed
@@ -134,6 +136,38 @@ test('in on an instance reads no property', () => {
     expect(asked(presence)).toEqual({ answers: [true, true, true, false], reads: 0 });
     expect(presence.config.counted).toBe(42);
     expect(['made' in presence.dynamic, 'other' in presence.dynamic]).toEqual([true, false]);
+});
+
+// A callable read out of a set is the function JavaScript calls, and handed
+// back it is the Python callable again, as a `Set` finds the member it handed
+// out: it was its wrapper, which the set did not hold, so `delete` kept it and
+// `add` made a second one.
+test('a set finds the callable it handed out', () => {
+    for (const set of [callables.functions, callables.runners]) {
+        const [member] = [...set];
+        const witness = new Set([member]);
+
+        expect(typeof member()).toBe('string');
+        expect(set.has(member)).toBe(witness.has(member));
+        expect(set.add(member).size).toBe(witness.add(member).size);
+        expect(set.delete(member)).toBe(witness.delete(member));
+        expect(set.size).toBe(0);
+    }
+});
+
+// A dict keyed by a JavaScript object names that key by its `toString`, which
+// answers anew once the object changes, with the dict unchanged: the view takes
+// the new name for every read, where a table kept from the first read named an
+// entry it could no longer find.
+test('a dict view follows the name a JavaScript key gives itself', () => {
+    expect(Object.keys(callables.mapping)).toEqual(['before']);
+    expect(callables.mapping.before).toBe(42);
+
+    renamedKey.label = 'after';
+
+    expect(Object.keys(callables.mapping)).toEqual(['after']);
+    expect(callables.mapping.after).toBe(42);
+    expect(JSON.stringify(callables.mapping)).toBe('{"after":42}');
 });
 
 test('a JavaScript child reads and follows a set it is given', () => {

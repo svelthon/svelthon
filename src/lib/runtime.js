@@ -2611,16 +2611,26 @@ function viewOf(value) {
     // version of the dict, so reading the whole view is linear in its size, as
     // copying it is. Two keys of one name are refused at any read of it, as the
     // copy refuses them.
+    //
+    // Unless a key is a JavaScript object: its name is what its own `toString`
+    // answers now, which can change while the dict does not, and a table kept
+    // across that change named an entry no read could find. A dict holding one
+    // takes its names afresh at each read; a Python key's name never moves.
     let named = null;
     let namedAt;
+    let volatile = false;
 
     const nonStringKeys = () => {
         const at = value[dictVersion()];
 
-        if (named === null || at === undefined || at !== namedAt) {
+        if (named === null || volatile || at === undefined || at !== namedAt) {
             named = new Map();
+            volatile = false;
             for (const [key] of pyEntries(value)) {
                 if (typeof key === 'string') continue;
+                if (key !== null && (typeof key === 'object' || typeof key === 'function') && javascriptOwn(key)) {
+                    volatile = true;
+                }
 
                 const name = propertyKey(key);
 
@@ -4843,13 +4853,16 @@ export function pyHandler(value) {
     // here and only here.
     cache.set(key, wrapped);
     PUBLISHED.set(wrapped, value);
+    globalThis.__BRYTHON__.PYOBJ_MAP.set(wrapped, value);
 
     return wrapped;
 }
 
 // The Python callable each function `pyHandler` published stands for, so that
-// what comes back to Python through a door that keeps values, a context, is
-// the callable it handed over.
+// what comes back to Python is the callable it handed over, through every door:
+// a context, a write into a view, a set asked whether it holds it, and the
+// engine's own conversion (`PYOBJ_MAP`). Back as its wrapper, a function read
+// out of a set was not in it, and added again was a second member.
 const PUBLISHED = new WeakMap();
 
 // A receiver Brython keeps as a JavaScript primitive (a `str`, a small `int`,
@@ -6020,8 +6033,11 @@ export const pyBind = (value) => {
     if (typeof value === 'number') return globalThis.__BRYTHON__.jsobj2pyobj(value);
 
     // A view a JavaScript reader was handed (`viewOf`) is its container again,
-    // and a copy of bytes the bytes it holds.
-    return VIEWED.has(value) ? globalThis.__BRYTHON__.PYOBJ_MAP.get(value) : (bytesIn(value) ?? value);
+    // a function `pyHandler` published its callable, and a copy of bytes the
+    // bytes it holds.
+    if (VIEWED.has(value)) return globalThis.__BRYTHON__.PYOBJ_MAP.get(value);
+
+    return PUBLISHED.get(value) ?? bytesIn(value) ?? value;
 };
 
 // Whether a read through the dot would find an attribute, answered without
