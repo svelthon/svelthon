@@ -259,6 +259,23 @@ test('a set’s algebra answers as Set.prototype does', () => {
     expect([...sets.walked.intersection(smaller)]).toEqual([3, 1]);
 });
 
+// A copy made by the constructor, `new data.constructor(data)` as lodash's
+// `cloneDeep` makes one, is a `Set` of the members, as of a `Set`.
+test('a set view is copied by its constructor', () => {
+    sets.refill();
+    const native = new Set([1, 2, 3]);
+    const copies = (set) => {
+        const byArgument = new set.constructor(set);
+        const byAdd = new set.constructor();
+
+        set.forEach((one) => byAdd.add(one));
+
+        return [[...byArgument], [...byAdd], byArgument instanceof Set];
+    };
+
+    expect(copies(sets.walked)).toEqual(copies(native));
+});
+
 test('a JavaScript child reads and follows a set it is given', () => {
     const target = document.body.appendChild(document.createElement('div'));
     const host = mount(SetHost, { target });

@@ -3174,9 +3174,15 @@ function setView(value) {
     const bound = new Map();
     const view = new Proxy(target, {
         get(shell, key) {
+            // Its constructor is `Set`, as a list's view's is `Array`: what a
+            // copy made by it is, `new data.constructor(data)` as lodash's
+            // `cloneDeep` writes it, where `SetView` took its argument for a
+            // Python set and raised from inside the engine.
+            if (key === 'constructor') return Set;
+
             const found = Reflect.get(shell, key, shell);
 
-            if (typeof found !== 'function' || key === 'constructor') return found;
+            if (typeof found !== 'function') return found;
             if (!bound.has(key)) bound.set(key, found.bind(shell));
 
             return bound.get(key);
