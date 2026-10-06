@@ -23,8 +23,8 @@ export class Plain {
 export const service = new Service();
 export const plain = new Plain();
 
-// A mapping of functions, which must still be adapted: this is the shape
-// SvelteKit's `actions` takes, and the reason the branch exists at all.
+// A literal of functions, JavaScript's and crossing as itself, beside the
+// Python mapping of functions the module adapts.
 export const actions = { save: () => 'saved' };
 
 // A binding that changes, read through the module scope rather than through an

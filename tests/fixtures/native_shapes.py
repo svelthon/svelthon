@@ -7,12 +7,20 @@ is the same object with the same prototype.
 
 __js__ = {"./native_shapes.js": ["service", "plain", "actions"]}
 
-__all__ = ["direct", "plain_direct", "actions_direct", "returned", "held", "keyed"]
+__all__ = ["direct", "plain_direct", "actions_direct", "python_actions", "returned", "held", "keyed"]
 
 # The value, published as itself.
 direct = service
 plain_direct = plain
 actions_direct = actions
+
+
+def save():
+    return "saved"
+
+
+# The shape SvelteKit's `actions` takes, a mapping of Python functions.
+python_actions = {"save": save}
 
 
 def returned():

@@ -3716,35 +3716,40 @@ function compile(
     // Brython's own message, which is CPython's.
     $B.file_cache[source] = src;
 
-    // Brython numbers the functions and lambdas it generates from a counter and
-    // a tag it draws at random, so that modules compiled apart are unlikely to
-    // share a name. Drawn from the file's path instead, they keep that and give
-    // one file the same code in every build. Both are given back afterwards,
-    // so a page that compiles leaves Brython's own sequence where it was.
-    const counter = $B.id_counter(counterStart(source));
-    const tag = $B.lambda_magic;
-    $B.lambda_magic = counterStart(`${source}#lambda`).toString(36).slice(0, 8);
-
     // Brython names a module after its file unless `$B.url2name` maps the file
     // to a name, which is how its own importer names what it imports. A module
     // is named as `import` finds it, so `__name__` and the `__module__` of what
     // it defines are that name, and `__file__` stays the path. A component is
     // imported by nobody and keeps its path.
     const named = component ? null : pythonModuleName(source);
-    const mapped = $B.url2name[source];
-    if (named !== null) $B.url2name[source] = named;
 
-    let root;
-    try {
-        root = $B.py2js({ src, filename: source }, name, [name]);
-    } catch (error) {
-        throw pythonError(error, source, lineOffset, authored, exprLines, src);
-    } finally {
-        $B.id_counter(counter);
-        $B.lambda_magic = tag;
-        if (mapped === undefined) delete $B.url2name[source];
-        else $B.url2name[source] = mapped;
-    }
+    const brython = (text) => {
+        // Brython numbers the functions and lambdas it generates from a counter
+        // and a tag it draws at random, so that modules compiled apart are
+        // unlikely to share a name. Drawn from the file's path instead, they
+        // keep that and give one file the same code in every build. Both are
+        // given back afterwards, so a page that compiles leaves Brython's own
+        // sequence where it was.
+        const counter = $B.id_counter(counterStart(source));
+        const tag = $B.lambda_magic;
+        $B.lambda_magic = counterStart(`${source}#lambda`).toString(36).slice(0, 8);
+
+        const mapped = $B.url2name[source];
+        if (named !== null) $B.url2name[source] = named;
+
+        try {
+            return $B.py2js({ src: text, filename: source }, name, [name]);
+        } catch (error) {
+            throw pythonError(error, source, lineOffset, authored, exprLines, src);
+        } finally {
+            $B.id_counter(counter);
+            $B.lambda_magic = tag;
+            if (mapped === undefined) delete $B.url2name[source];
+            else $B.url2name[source] = mapped;
+        }
+    };
+
+    const root = brython(src);
 
     // The two declarations meet here, in one shape: `__js__` is the module's and
     // only ever names, `importjs` is the component's and covers the four forms.
@@ -3815,7 +3820,18 @@ function compile(
     // read the name and get the result, minus the memoisation nothing observes.
     const plainDeriveds = plain ? deriveds : [];
     if (plain) deriveds = [];
-    const js = root.to_js();
+
+    // A JavaScript name spelled like a builtin, `importjs { max }` then
+    // `max(…)`, is the import, as `from m import max` is in Python. Brython
+    // takes a name nothing in the module binds for the builtin, at compile
+    // time, and the bindings below are not Python's. So the module is compiled
+    // again with a binding of those names that never runs, and reads each at
+    // run time, the module's first and the builtins after, as it reads any
+    // name the module binds. The analysis above stays on what the author wrote.
+    const shadowing = [...new Set([...jsImported, ...jsNames])].filter(
+        (n) => n in $B.builtins && /^[A-Za-z_]\w*$/.test(n) && !['None', 'True', 'False', '__debug__'].includes(n)
+    );
+    const js = (shadowing.length ? brython(`${src}\nif False:\n    ${shadowing.join(' = ')} = None\n`) : root).to_js();
 
     // Brython derives the namespace identifier from the filename, or from the
     // name `$B.url2name` gives it: `module` and `locals_id` are ignored by

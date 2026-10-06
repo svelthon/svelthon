@@ -1322,6 +1322,14 @@ const quietPyType = (value) => {
     return pyClass(type) ? type : undefined;
 };
 
+// An object no Python type marks is JavaScript's, and leaves Python as itself,
+// as it leaves a JavaScript function that returns it: Brython converts whatever
+// Python writes into a JavaScript array or object, so nothing in one is
+// Python's to convert, and a copy would lose its identity and run its getters
+// before whoever reads it has asked. The serialiser alone reads one, at its own
+// turn.
+const javascriptOwn = (value) => quietPyType(value) === undefined;
+
 // A native object `JSON.stringify` has nothing to write of: a class of its own,
 // no `toJSON` to ask, and no enumerable own property to copy. Its answer is
 // `{}`, valid JSON that drops everything the value held: `tojson(new
@@ -3163,6 +3171,8 @@ export function plainData(value, seen, adapt) {
         }
     }
 
+    if (javascriptOwn(value)) return value;
+
     const made = seen ?? new WeakMap();
     const known = made.get(value);
 
@@ -3769,6 +3779,7 @@ export function pyNumbers(value) {
     const alone = pyScalar(value);
 
     if (alone !== undefined) return alone;
+    if (javascriptOwn(value)) return value;
 
     let out = value;
 
@@ -4836,25 +4847,12 @@ export function pyExport(value, where) {
     // `define`, because the key is the author's: `{"__proto__": f}` written
     // with `=` would reach the setter, as `plainData` knows too.
     // **A mapping, and not anything that happens to hold a function**: a
-    // JavaScript instance carrying a callback as a field, `this.callback = () =>
-    // …`, keeps its prototype, by the rule `plainData` follows too: *anything of
-    // a class of its own is not ours to flatten*.
-    //
-    // Decided before anything is read: an object of a class of its own is
-    // handed over as it is, its accessors untouched, and a JavaScript literal
-    // shows whether it holds a callable in its descriptors, so its getters run
-    // once, in the walk that keeps what they give.
-    const isDict = globalThis.__BRYTHON__.is_dict(value);
+    // JavaScript object carrying a callback as a field, `this.callback = () =>
+    // …` or a literal of functions, is JavaScript's and crosses as itself, by
+    // the rule `plainData` follows (`javascriptOwn`), its accessors unread.
+    if (!globalThis.__BRYTHON__.is_dict(value)) return plainData(value, undefined, pyHandler);
 
-    if (!isDict && !plainObject(value)) return plainData(value, undefined, pyHandler);
-
-    const holdsCallable = isDict
-        ? pyEntries(value).some(([, one]) => callable(one))
-        : Object.values(Object.getOwnPropertyDescriptors(value)).some(
-              (one) => one.enumerable && 'value' in one && callable(one.value)
-          );
-
-    if (holdsCallable) {
+    if (pyEntries(value).some(([, one]) => callable(one))) {
         const pairs = pyEntries(value);
         const out = {};
 

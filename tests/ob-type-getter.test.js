@@ -51,14 +51,15 @@ test.for([
 test.for([
     ['hidden', {}],
     ['enumerable', { enumerable: true }]
-])('to_js, tojson and urlencode read a %s getter as the copy does', ([, options]) => {
+])('to_js hands a %s getter on unread, tojson and urlencode read it as the copy does', ([, options]) => {
     const copied = record(options);
     const serialised = record(options);
     const encoded = record(options);
     const witness = native(options);
 
-    expect(plainData(copied.row)).toEqual(witness.copy);
-    expect(copied.counted.reads).toBe(witness.reads);
+    // A JavaScript record is JavaScript's already, and `to_js` hands it on.
+    expect(plainData(copied.row)).toBe(copied.row);
+    expect(copied.counted.reads).toBe(0);
     expect(JSON.parse(tojson(serialised.row))).toEqual(witness.copy);
     expect(serialised.counted.reads).toBe(witness.reads);
     expect(urlencode(encoded.row)).toBe(new URLSearchParams(witness.copy).toString());

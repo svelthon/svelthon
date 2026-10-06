@@ -38,7 +38,7 @@ is absent, rather than shipping a component with no reactivity.
 
 | | |
 |---|---|
-| `$B.py2js(src, module, locals_id, parent)` | returns `{ _ast, imports, to_js() }` |
+| `$B.py2js(src, module, locals_id, parent)` | returns `{ _ast, imports, to_js() }`. A name nothing in the module binds and `$B.builtins` holds compiles to the builtin itself, `_b_.max`; a name the module binds, even in a branch that never runs, is read at run time, the module's namespace first. That is how a JavaScript import spelled like a builtin is read as the import: `compile()` compiles again with `if False:` binding those names |
 | `$B.js_from_root({ ast, symtable, filename, src })` | the code generator `py2js` ends with, given a tree: `declaredExports` hands it a module of one statement of `__all__` at a time, from a parse of its own, and runs what comes back, so the export list is what Python computes. The namespace is the one `$B.namespace(filename)` hands back |
 | `new $B.ast.Module(body, type_ignores)` | that one-statement module |
 | `$B.brython(options)` | boot |

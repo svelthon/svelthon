@@ -71,8 +71,13 @@ describe('the copy is built only when there is something to change', () => {
         expect(pyNumbers('x')).toBe('x');
     });
 
+    // A Python dict: a JavaScript object never holds a Brython float, since
+    // Brython converts whatever Python writes into one.
     test('but one that does need a change comes back as a different object', () => {
-        const held = { duration: float(300) };
+        const $B = globalThis.__BRYTHON__;
+        const held = $B.builtins.dict.$factory();
+
+        $B.$setitem(held, 'duration', float(300));
 
         expect(pyNumbers(held)).not.toBe(held);
         expect(pyNumbers(held).duration).toBe(300);

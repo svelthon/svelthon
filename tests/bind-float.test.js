@@ -96,11 +96,21 @@ describe('a float handed back to the framework', () => {
     // descriptors, and theirs.
     test('plainData unwraps it', () => expect(plainData(float(4300))).toBe(4300));
 
+    // A Python dict holds it: a JavaScript object never does, since Brython
+    // converts whatever Python writes into one.
+    const dict = (key, value) => {
+        const out = $B.builtins.dict.$factory();
+
+        $B.$setitem(out, key, value);
+
+        return out;
+    };
+
     test('plainData unwraps one inside a container', () =>
-        expect(plainData({ ratio: float(0.5) }).ratio).toBe(0.5));
+        expect(plainData(dict('ratio', float(0.5))).ratio).toBe(0.5));
 
     test('pyNumbers unwraps the values of a returned mapping', () =>
-        expect(pyNumbers({ duration: float(4300) }).duration).toBe(4300));
+        expect(pyNumbers(dict('duration', float(4300))).duration).toBe(4300));
 
     test('pyNumbers leaves everything else alone', () => {
         const kept = { name: 'x', n: 43 };

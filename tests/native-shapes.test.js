@@ -45,10 +45,12 @@ describe('a native object leaving a Python module', () => {
     });
 
     // And the shape the branch exists for, which must keep working: a mapping
-    // of functions is what SvelteKit's `actions` is, and its entries are
-    // adapted rather than handed over raw.
+    // of Python functions is what SvelteKit's `actions` is, and its entries are
+    // adapted rather than handed over raw. A literal of JavaScript functions is
+    // JavaScript's, and crosses as itself.
     test('while a mapping of functions is still adapted', () => {
-        expect(module.actions_direct).not.toBe(actions);
-        expect(module.actions_direct.save()).toBe('saved');
+        expect(typeof module.python_actions.save).toBe('function');
+        expect(module.python_actions.save()).toBe('saved');
+        expect(module.actions_direct).toBe(actions);
     });
 });
