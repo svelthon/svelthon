@@ -1327,9 +1327,9 @@ const quietPyType = (value) => {
 // a JavaScript array or object crosses as it is written, through
 // `pyobj2jsobj_hook` and the engine behind it: a number, a str and None as
 // JavaScript's, a callable as its handler, a list, a tuple or a dict converted,
-// an instance of the author's as its view. What stays itself is what has no
-// JavaScript face at any door, a set, bytes, a complex, a range, and a copy
-// left those as they were too. So nothing in one is Python's to convert, and a
+// a set and an instance of the author's as their view. What stays itself is
+// what has no JavaScript face at any door, bytes, a complex, a range, and a
+// copy left those as they were too. So nothing in one is Python's to convert, and a
 // copy would lose its identity and run its getters before whoever reads it has
 // asked. The serialiser alone reads one, at its own turn.
 const javascriptOwn = (value) => quietPyType(value) === undefined;
@@ -2475,13 +2475,21 @@ const VIEWED = new WeakSet();
 // context itself (`provide`).
 const ORIGINALS = Symbol('svelthon.context-originals');
 
-// A list's view is an array whose prototype is not `Array.prototype` itself,
-// only inherits from it: Svelte wraps a plain array put in a `$state` in a proxy
-// of its own, which keeps every write to itself, so a JavaScript parent that
-// binds a Python list would push into a copy Python never sees. Not being a
-// plain array is what tells Svelte to keep the view as it is. Every method, the
-// iterator and `Array.isArray` are the array's.
+// A view's prototype is not `Array.prototype` or `Object.prototype` itself, only
+// inherits from it: Svelte wraps a plain array or object put in a `$state` in a
+// proxy of its own, which keeps every write to itself, so a JavaScript parent
+// that binds a Python list would push into a copy Python never sees, and a
+// write to a dict stopped there as well. Not being one, by identity, is what
+// tells Svelte to keep the view as it is. Every method, the iterator and
+// `Array.isArray` are the array's.
 const LIST_VIEW = Object.create(Array.prototype);
+
+// And a dict's or an instance's carries `Object.prototype`'s own names, each
+// the same property: SvelteKit's serialiser (`devalue`) takes an object for a
+// plain one by those names, as it takes one from another realm, so a view in
+// a `load`'s data is written out as the object it reads as, where Svelte's
+// test by identity still keeps it.
+const PLAIN_VIEW = Object.defineProperties(Object.create(Object.prototype), Object.getOwnPropertyDescriptors(Object.prototype));
 
 const forReader = (one) => {
     if (one === NONE) return null;
@@ -2535,7 +2543,11 @@ function viewOf(value) {
 
     const sequence = Boolean($B.is_list(value) || $B.is_tuple(value));
 
-    if (!sequence && !$B.is_dict(value)) return authoredInstance(value) ? instanceView(value) : value;
+    if (!sequence && !$B.is_dict(value)) {
+        if (isSet(value)) return setView(value);
+
+        return authoredInstance(value) ? instanceView(value) : value;
+    }
 
     const length = () => $B.builtins.len(value);
     // An array index is one below 2³² − 1; a larger number is an ordinary
@@ -2667,7 +2679,7 @@ function viewOf(value) {
         for (const one of iterated(value)) yield forReader(one);
     }
 
-    const view = new Proxy(sequence ? [] : {}, {
+    const view = new Proxy(sequence ? [] : Object.create(PLAIN_VIEW), {
         getPrototypeOf(shell) {
             return sequence ? LIST_VIEW : Object.getPrototypeOf(shell);
         },
@@ -2748,12 +2760,8 @@ function viewOf(value) {
 // call; a write is Python's `setattr` and a `delete` its `delattr`, which notify
 // as the same line written in Python does. Its own keys are its attributes, the
 // ones `vars()` and its slots hold, as the copy writes them. Handed over raw, a
-// JavaScript reader found none of them: Brython keeps them under a symbol.
-//
-// Its prototype is not `Object.prototype`, as a JavaScript class instance's is
-// not, so Svelte keeps it as it is in a `$state` rather than wrapping it in a
-// proxy of its own that keeps the writes to itself.
-const INSTANCE_VIEW = Object.create(Object.prototype);
+// JavaScript reader found none of them: Brython keeps them under a symbol. Its
+// prototype is a dict view's (`PLAIN_VIEW`).
 
 function instanceView(value) {
     const $B = globalThis.__BRYTHON__;
@@ -2795,7 +2803,7 @@ function instanceView(value) {
     };
     const printed = () => String($B.builtins.str.$factory(value));
 
-    const view = new Proxy(Object.create(INSTANCE_VIEW), {
+    const view = new Proxy(Object.create(PLAIN_VIEW), {
         get(shell, key, receiver) {
             follow(value);
 
@@ -2854,6 +2862,131 @@ function instanceView(value) {
     VIEW_OF.set(value, view);
     VIEWED.add(view);
     $B.PYOBJ_MAP.set(view, value);
+
+    return view;
+}
+
+// A set or a frozenset, read by JavaScript as a `Set`, which is how JavaScript
+// holds one: a subclass of `Set`, as Svelte's own `SvelteSet` is, so
+// `instanceof Set` holds, whose every method asks the Python set at the call.
+// A proxy cannot stand in for a `Set`, whose methods refuse a receiver without
+// the set's own storage, which is why this view is a class. Its own storage
+// stays empty, so `Set.prototype.has.call(view, x)`, which reads that storage,
+// is the one spelling it does not answer.
+//
+// A member reads as a list's does (`forReader`), a value looked up or added
+// crosses as a write into a view does, and a write is Python's `add`,
+// `discard` or `clear`, which notify; a frozenset has none of the three, and
+// refuses as Python does.
+class SetView extends Set {
+    #value;
+
+    constructor(value) {
+        super();
+        this.#value = value;
+    }
+
+    #call(name, ...args) {
+        const $B = globalThis.__BRYTHON__;
+
+        return $B.$call($B.$getattr(this.#value, name), ...args);
+    }
+
+    get size() {
+        follow(this.#value);
+
+        return globalThis.__BRYTHON__.builtins.len(this.#value);
+    }
+
+    has(one) {
+        follow(this.#value);
+
+        // JavaScript's `has` answers any value, where Python's `in` refuses an
+        // unhashable one.
+        try {
+            return Boolean(globalThis.__BRYTHON__.$is_member(pyBind(one), this.#value));
+        } catch {
+            return false;
+        }
+    }
+
+    add(one) {
+        this.#call('add', entering(one));
+
+        return this;
+    }
+
+    delete(one) {
+        const held = this.has(one);
+
+        if (held) this.#call('discard', pyBind(one));
+
+        return held;
+    }
+
+    clear() {
+        this.#call('clear');
+    }
+
+    *values() {
+        follow(this.#value);
+
+        for (const one of iterated(this.#value)) yield forReader(one);
+    }
+
+    keys() {
+        return this.values();
+    }
+
+    *entries() {
+        for (const one of this.values()) yield [one, one];
+    }
+
+    [Symbol.iterator]() {
+        return this.values();
+    }
+
+    forEach(callback, receiver) {
+        for (const one of this.values()) callback.call(receiver, one, one, this);
+    }
+
+    // The set algebra `Set.prototype` gained reads its receiver's own storage,
+    // so it is answered from the members here, with a `Set` for a result.
+    union(other) {
+        return new Set([...this, ...other.keys()]);
+    }
+
+    intersection(other) {
+        return new Set([...this].filter((one) => other.has(one)));
+    }
+
+    difference(other) {
+        return new Set([...this].filter((one) => !other.has(one)));
+    }
+
+    symmetricDifference(other) {
+        return new Set([...[...this].filter((one) => !other.has(one)), ...[...other.keys()].filter((one) => !this.has(one))]);
+    }
+
+    isSubsetOf(other) {
+        return [...this].every((one) => other.has(one));
+    }
+
+    isSupersetOf(other) {
+        return [...other.keys()].every((one) => this.has(one));
+    }
+
+    isDisjointFrom(other) {
+        return [...this].every((one) => !other.has(one));
+    }
+}
+
+function setView(value) {
+    const view = new SetView(value);
+
+    VIEW_OF.set(value, view);
+    VIEWED.add(view);
+    globalThis.__BRYTHON__.PYOBJ_MAP.set(view, value);
 
     return view;
 }
@@ -4543,28 +4676,23 @@ export function pyTeardown(value, where) {
 // vendored (see BRYTHON_FIX.md), so the conversion has one site and one
 // contract.
 //
-// A Python list, tuple or dict is answered too, by `outbound`, the walk a named
-// import's arguments take, with the memo the engine keeps for the call. The
-// engine's own walk reuses the object a dict became on an earlier call, which
-// misses the mutations it does not mirror, `clear()` and a nested
-// `append()`, and one walk is one contract, whichever way a function was
-// imported. The callable question comes first: a list subclass that
-// defines `__call__` is a callback.
-//
-// An instance of the author's class is answered by its view, as at a prop and
-// an export: written into a JavaScript object, `config.inst = Point()`, the
-// engine left the instance itself, whose attributes JavaScript cannot read.
+// A Python list, tuple, dict or set and an instance of the author's class are
+// answered too, by their view, as a named import's arguments are (`outbound`)
+// and as at a prop and an export: handed to a JavaScript function or written
+// into a JavaScript object, `config.tags = tags`, they are Python's own, so a
+// later `tags.append(…)` is there and a write from JavaScript is Python's. The
+// engine's own walk made a copy, which missed every later mutation, or left
+// the value itself, which JavaScript cannot read. The callable question comes
+// first: a list subclass that defines `__call__` is a callback.
 //
 // Anything else goes on to the engine.
-globalThis.__BRYTHON__.pyobj2jsobj_hook = (value, memo) => {
-    const $B = globalThis.__BRYTHON__;
-
+globalThis.__BRYTHON__.pyobj2jsobj_hook = (value) => {
     if (value === null || (typeof value !== 'object' && typeof value !== 'function')) return undefined;
     if (declared(value) !== null || ADAPTERS.has(value)) return pyHandler(value);
-    if (authoredInstance(value)) return viewOf(value);
-    if (!($B.is_list(value) || $B.is_tuple(value) || $B.is_dict(value))) return undefined;
 
-    return outbound(value, memo);
+    const view = viewOf(value);
+
+    return view === value ? undefined : view;
 };
 
 export function pyHandler(value) {
@@ -4702,38 +4830,31 @@ function perReceiver(self) {
 // `new` all still reach the original. Only a call made through it is adapted.
 //
 // The two directions are the same crossing an exported function makes, in
-// reverse: a callable becomes JavaScript-callable, and everything else becomes
-// plain data: `fail(400, {"missing": True})` reaching JavaScript as an object
-// it can serialise, not as a Brython dict full of symbols.
+// reverse: a callable becomes JavaScript-callable, a list, a tuple, a dict, a
+// set and an instance of the author's cross as their view (`viewOf`), and a
+// scalar as JavaScript's own. `fail(400, {"missing": True})` reaches
+// JavaScript as an object it can read and serialise, not as a Brython dict
+// full of symbols, and `chart.update(rows)` hands the library the list Python
+// goes on appending to, as a JavaScript caller hands it its array. A view is a
+// proxy, which `structuredClone` refuses, as it refuses Svelte's `$state`:
+// `postMessage(to_js(rows))` hands it a copy, as `$state.snapshot` does.
 //
-// `made` is the call's own memo, shared by every argument of one call, so
-// `alias(shared, shared)` hands JavaScript one array for one Python list, as the
-// same graph inside a *single* argument is shared.
-// A callable at any depth, not only at the top of an argument: a library taking
-// its callbacks in an options object is the ordinary shape, and `pyHandler`
-// caches by function, so the same callback nested twice is one JavaScript
-// function and stays removable.
+// A callable at any depth is the view's to adapt when it is read, and
+// `pyHandler` caches by function, so the same callback nested twice is one
+// JavaScript function and stays removable. One view per container, so
+// `alias(shared, shared)` hands JavaScript one object for one Python list, and
+// a view handed back is its container again: `back(rows) is rows`.
+//
 // `None` as an argument is `undefined`, the engine's pairing, so a parameter
 // with a default takes it whichever way the function was imported; inside a
 // container it is `null`, which is what JSON writes for it.
-//
-// A list, a tuple or a dict converted is recorded in `$B.PYOBJ_MAP`, the three
-// the engine records, so a library handing it back hands back the Python
-// value: `back(rows) is rows`, and `restored` below reads the same map. Those
-// three and nothing else: a coroutine crosses as the promise of its one run,
-// and recorded, the promise handed back would be the coroutine, awaited a
-// second time.
 const outbound = (value, made) => {
-    const $B = globalThis.__BRYTHON__;
-
     if (value === NONE) return undefined;
     if (callable(value)) return pyHandler(value);
 
-    const converted = plainData(value, made, pyHandler);
+    const view = viewOf(value);
 
-    if ($B.is_list(value) || $B.is_tuple(value) || $B.is_dict(value)) $B.PYOBJ_MAP.set(converted, value);
-
-    return converted;
+    return view === value ? plainData(value, made, pyHandler) : view;
 };
 
 // And what comes *back*: a value returned by an `importjs` function is Python's,

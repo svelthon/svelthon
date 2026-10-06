@@ -94,7 +94,10 @@ describe('a module exporting dicts that hold functions', () => {
 
         expect(Object.hasOwn(special, '__proto__')).toBe(true);
         expect(Object.keys(special).sort()).toEqual(['__proto__', 'kept']);
-        expect(Object.getPrototypeOf(special)).toBe(Object.prototype);
+        // The view's own prototype, an object's, and not the function the key
+        // holds.
+        expect(Object.getPrototypeOf(special)).not.toBe(special['__proto__']);
+        expect(Object.getPrototypeOf(Object.getPrototypeOf(special))).toBe(Object.prototype);
         expect(special['__proto__'](21)).toBe(42);
     });
 });

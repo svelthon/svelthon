@@ -77,7 +77,7 @@ rest of that configuration and what each line buys.
 npm install
 npm run dev
 
-npm test             # 1 679 tests: semantics, props, reactivity, Svelte surface
+npm test             # 1 683 tests: semantics, props, reactivity, Svelte surface
 npm run test:quiet   # the suite's own output: a green run must say nothing
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
@@ -790,10 +790,11 @@ An exported name is live, as a JavaScript `export let` is: rebound by the
 module, it reads as its new value, a function made a number as that number, and
 deleted as `undefined`. A function a reader already took stays the one it took,
 as `from m import f` keeps it in CPython, and the same function written again is
-the same object. A list, a dict or an instance is the module's own object, as
-`m.items` is in Python: changed in place by the module, `items.append(2)` or
-`thing.count = 1`, it is changed for the importer, and a write from JavaScript is
-the module's. An instance reads as its attributes, calls its methods and prints
+the same object. A list, a dict, a set or an instance is the module's own
+object, as `m.items` is in Python: changed in place by the module,
+`items.append(2)` or `thing.count = 1`, it is changed for the importer, and a
+write from JavaScript is the module's. A set reads as a JavaScript `Set`, as
+Svelte's own `SvelteSet` does. An instance reads as its attributes, calls its methods and prints
 by its `__str__`, as a JavaScript class prints by its `toString`, from an import,
 from a JavaScript child it is handed as a prop, and from a JavaScript object
 Python wrote it into. A `.py`'s `@derived`
@@ -1270,7 +1271,11 @@ other way: `cubicOut(0.5)` is a Python `float` you can round and format, not a
 foreign number. The conversion is deliberately conservative, since a plain object,
 an array and a promise are returned untouched, so a value you hand straight back to
 JavaScript is not mangled on the way through, and an awaited promise still
-awaits.
+awaits. A list, a dict, a set or an instance handed to it is Python's own, as a
+JavaScript caller hands its array: a library that keeps it reads what Python
+changes next, and what it writes is Python's. An API that clones, `postMessage`,
+IndexedDB, `history.pushState`, takes `to_js(value)`, a copy, as Svelte's
+`$state` takes `$state.snapshot`.
 
 It is a keyword rather than a declaration for one reason: an import is static,
 and a keyword makes a computed one **unwriteable** instead of merely wrong. It is
@@ -1521,7 +1526,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 1 679 tests as written (vitest reports more, one per
+Validated by `npm test`, 1 683 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;

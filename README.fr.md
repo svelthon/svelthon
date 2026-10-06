@@ -75,7 +75,7 @@ reste de cette configuration et ce que chaque ligne apporte.
 npm install
 npm run dev
 
-npm test             # 1 679 tests : sémantique, props, réactivité, surface Svelte
+npm test             # 1 683 tests : sémantique, props, réactivité, surface Svelte
 npm run test:quiet   # la sortie de la suite : un run vert ne doit rien dire
 npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
@@ -828,10 +828,11 @@ Un nom exporté est vivant, comme un `export let` de JavaScript : relié par le
 module, il se lit à sa nouvelle valeur, une fonction devenue nombre comme ce
 nombre, et supprimé comme `undefined`. Une fonction qu'un lecteur a déjà prise
 reste celle qu'il a prise, comme `from m import f` la garde dans CPython, et la
-même fonction réécrite reste le même objet. Une liste, un dict ou une instance
-est l'objet même du module, comme `m.items` en Python : modifié sur place par le
-module, `items.append(2)` ou `thing.count = 1`, il l'est pour l'importateur, et
-une écriture depuis JavaScript est celle du module. Une instance se lit par ses
+même fonction réécrite reste le même objet. Une liste, un dict, un set ou une
+instance est l'objet même du module, comme `m.items` en Python : modifié sur
+place par le module, `items.append(2)` ou `thing.count = 1`, il l'est pour
+l'importateur, et une écriture depuis JavaScript est celle du module. Un set se
+lit comme un `Set` JavaScript, comme le `SvelteSet` de Svelte. Une instance se lit par ses
 attributs, appelle ses méthodes et s'affiche par son `__str__`, comme une classe
 JavaScript s'affiche par son `toString`, depuis un import, depuis un enfant
 JavaScript qui la reçoit en prop et depuis un objet JavaScript où Python l'a
@@ -1320,7 +1321,12 @@ en sens inverse : `cubicOut(0.5)` est un `float` Python qu'on arrondit et qu'on
 formate, pas un nombre étranger. La conversion est délibérément conservatrice :
 un objet ordinaire, un tableau et une promesse ressortent intacts, de sorte
 qu'une valeur qu'on repasse ensuite à JavaScript n'est pas abîmée au passage, et
-qu'une promesse attendue s'attend toujours.
+qu'une promesse attendue s'attend toujours. Une liste, un dict, un set ou une
+instance qu'on lui passe est l'objet même de Python, comme un appelant
+JavaScript passe son tableau : une bibliothèque qui le garde lit ce que Python
+change ensuite, et ce qu'elle y écrit est à Python. Une API qui clone,
+`postMessage`, IndexedDB, `history.pushState`, prend `to_js(value)`, une copie,
+comme le `$state` de Svelte prend `$state.snapshot`.
 
 Un mot-clé plutôt qu'une déclaration, pour une raison : un import est statique,
 et un mot-clé rend l'import calculé **inécrivable** au lieu de simplement faux.
@@ -1537,7 +1543,7 @@ part jamais.
 
 ## État
 
-Validé par `npm test`, 1 679 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 1 683 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
