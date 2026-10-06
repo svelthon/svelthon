@@ -75,7 +75,7 @@ reste de cette configuration et ce que chaque ligne apporte.
 npm install
 npm run dev
 
-npm test             # 1 643 tests : sémantique, props, réactivité, surface Svelte
+npm test             # 1 647 tests : sémantique, props, réactivité, surface Svelte
 npm run test:quiet   # la sortie de la suite : un run vert ne doit rien dire
 npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
@@ -1413,8 +1413,8 @@ Une fonction Python ne reçoit que les arguments qu'elle déclare : `def tout_vi
 sert d'`onclick` sans recevoir l'événement. La méthode d'un type natif,
 `rows.clear` ou `rows.append`, ne porte pas de signature à lire : elle reçoit tout
 ce que JavaScript passe, et refuse ce qu'elle ne prend pas, comme Python le
-ferait : `onclick={rows.clear}` lève `clear() takes 1 positional argument but 2
-were given`. On l'enveloppe : `onclick={lambda: rows.clear()}`, ou un `def`.
+ferait : `onclick={rows.clear}` lève `list.clear() takes no arguments (1
+given)`. On l'enveloppe : `onclick={lambda: rows.clear()}`, ou un `def`.
 
 ### Le seul endroit où SvelteKit code en dur
 
@@ -1525,7 +1525,7 @@ part jamais.
 
 ## État
 
-Validé par `npm test`, 1 643 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 1 647 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;

@@ -717,3 +717,28 @@ test('a starred target says the values it needs as CPython does: starred-unpack-
         'not enough values to unpack (expected at least 2, got 1)'
     ]);
 });
+
+// A builtin method that takes no arguments counted its instance among them,
+// took one in silence, or spoke in another method's name. `python3` on the
+// same calls.
+test('a method that takes no arguments refuses one in its type’s name: noargs-method-arity', async () => {
+    const { refused } = await import('./fixtures/noargs_methods.py');
+
+    expect(refused()).toEqual([
+        'list.clear() takes no arguments (1 given)',
+        'int.bit_length() takes no arguments (1 given)',
+        'str.casefold() takes no arguments (1 given)',
+        'dict.keys() takes no keyword arguments'
+    ]);
+});
+
+// A module named with a quote, from a file such as `src/Jean's app/Page.svelte`,
+// had its name pasted between quotes in the code of every def, lambda, class
+// and comprehension, which then stopped parsing.
+test('a quote in a module name leaves its functions parseable: module-name-quote-literals', () => {
+    const { compile } = createRequire(import.meta.url)('../src/lib/compile.cjs');
+    const body = 'def f():\n    return [x for x in (lambda: "ab")()]\n\nclass K:\n    y: int = 1\n';
+    const { module } = compile(body, 'Probe', "src/Jean's app/Page.svelte");
+
+    expect(() => new Function(module.replace(/^import .*$/gm, '').replace(/^export /gm, ''))).not.toThrow();
+});

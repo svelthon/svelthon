@@ -59,9 +59,10 @@ is absent, rather than shipping a component with no reactivity.
 | `$B.id_counter(n)` | sets the counter the code generator numbers functions with and returns its previous value; carried as a commit proposed upstream, since the counter is private there. `compile()` draws it from the file's path so one source compiles to one text, and gives it back after |
 | `$B.KW` | the symbol a call's keyword arguments travel under, as a trailing `{[$B.KW]: [named, ...unpacked]}`; carried as a commit proposed upstream. The helpers and the JavaScript call adapter read it to tell keywords from an argument, which no Python dict or JavaScript object can pass for |
 | `$B.lambda_magic` | the tag in every generated lambda's name, drawn at random per process; set and given back beside the counter |
+| `$B.url2name[filename]` | the module name Brython's importer gives a file, which the code generator writes as the module's `__name__` and the `__module__` of what it defines; set for a `.py` or `.svelte.py` to its import name while it compiles, and given back after |
 
-`py2js` derives the namespace identifier from **`filename` alone**: `module` and
-`locals_id` are ignored by `js_from_root`.
+`py2js` derives the namespace identifier from **`filename`**, or from the name
+`$B.url2name` gives it: `module` and `locals_id` are ignored by `js_from_root`.
 
 Token type codes read off the tokenizer: `NAME 1`, `NUMBER 2`, `STRING 3`,
 `NEWLINE 4`, `OP 55`, f-string parts `59/60/61`, `COMMENT 65`, `NL 66`,

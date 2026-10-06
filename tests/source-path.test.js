@@ -7,9 +7,10 @@
 // stopped parsing — `src/O'Brien.svelte` is a legal filename, and the Python
 // inside it was perfectly valid.
 //
-// Both sides had it: two literals here and four in Brython's own codegen, which
-// is why fixing only the wrapper would have left the body invalid. The vendored
-// build carries the upstream commit.
+// Both sides had it: two literals here and the module's own in Brython's
+// codegen, and every def, lambda, class and comprehension writes the name again
+// in its own. The body compiled below has one of each. The vendored build
+// carries the upstream commits.
 import { test, expect, describe } from 'vitest';
 import { createRequire } from 'node:module';
 
@@ -21,7 +22,7 @@ describe('a quote in the source path', () => {
     // `new Function`, which parses a module body but not its imports. The
     // control path goes through exactly the same treatment.
     const parses = (source) => {
-        const out = compile('x = 1\n', 'Probe', source);
+        const out = compile('def f():\n    return [x for x in (lambda: "ab")()]\n\nclass K:\n    y: int = 1\n', 'Probe', source);
 
         for (const half of ['script', 'module']) {
             const body = out[half].replace(/^import .*$/gm, '').replace(/^export /gm, '');

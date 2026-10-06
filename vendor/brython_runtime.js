@@ -17242,7 +17242,7 @@ anns=ann_items_values.length > 0}else{
 anns=false}
 var annotations=postponed ? anns_strings :'false'
 js+=prefix+`${name2}.$function_infos = [`+
-`'${gname}', `+
+`${JSON.stringify(gname)}, `+
 `'${this.$is_lambda ? '<lambda>': this.name}', `+
 `'${qualname}', `+
 `__file__, `+

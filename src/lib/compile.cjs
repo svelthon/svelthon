@@ -53,11 +53,14 @@ const NS = '__py';
 // parse whatever the path.
 const namespaceCall = (name) => `$B.namespace(${JSON.stringify(name)})`;
 
-// The module id Brython derives from a filename: only '.' becomes '_'. It ends
-// up as a *string*, the argument to $B.namespace and the frame name, so a '/'
-// is harmless there. The identifier built beside it is a different matter, and
-// the vendored build is patched so that one stays valid (see BRYTHON.md).
-const namespaceFor = (filename) => filename.replace(/\./g, '_');
+// The module id Brython derives for a file (`init_scopes`): the name
+// `$B.url2name` maps the file to, with '-' made '_', or else the filename with
+// '.' made '_'. It ends up as a *string*, the argument to $B.namespace and the
+// frame name, so a '/' is harmless there. The identifier built beside it is a
+// different matter, and the vendored build is patched so that one stays valid
+// (see BRYTHON.md).
+const namespaceFor = (filename, named = null) =>
+    named === null ? filename.replace(/\./g, '_') : named.replace(/-/g, '_');
 
 // A Brython exception carries neither `message` nor `stack`, so a Python syntax
 // error would reach Vite as an empty object and be reported as nothing at all.
@@ -3726,6 +3729,15 @@ function compile(
     const tag = $B.lambda_magic;
     $B.lambda_magic = counterStart(`${source}#lambda`).toString(36).slice(0, 8);
 
+    // Brython names a module after its file unless `$B.url2name` maps the file
+    // to a name, which is how its own importer names what it imports. A module
+    // is named as `import` finds it, so `__name__` and the `__module__` of what
+    // it defines are that name, and `__file__` stays the path. A component is
+    // imported by nobody and keeps its path.
+    const named = component ? null : pythonModuleName(source);
+    const mapped = $B.url2name[source];
+    if (named !== null) $B.url2name[source] = named;
+
     let root;
     try {
         root = $B.py2js({ src, filename: source }, name, [name]);
@@ -3734,6 +3746,8 @@ function compile(
     } finally {
         $B.id_counter(counter);
         $B.lambda_magic = tag;
+        if (mapped === undefined) delete $B.url2name[source];
+        else $B.url2name[source] = mapped;
     }
 
     // The two declarations meet here, in one shape: `__js__` is the module's and
@@ -3807,9 +3821,9 @@ function compile(
     if (plain) deriveds = [];
     const js = root.to_js();
 
-    // Brython derives the namespace identifier from the filename alone: `module`
-    // and `locals_id` are ignored by js_from_root, so the name to hook is a
-    // function of the file and not of `name`. Upstream maps only '.' to '_', so
+    // Brython derives the namespace identifier from the filename, or from the
+    // name `$B.url2name` gives it: `module` and `locals_id` are ignored by
+    // js_from_root, so the name to hook is not `name`. Upstream maps only '.' to '_', so
     // a real path emitted `locals_src/Counter_svelte`, which is not valid
     // JavaScript; the vendored build is patched to neutralise every character
     // that cannot appear in an identifier (see BRYTHON.md). That is what lets
@@ -3818,7 +3832,7 @@ function compile(
     //
     // The identifier Brython then derives is `nameFor()`'s own output, so the
     // namespace interception is unaffected.
-    const namespace = namespaceFor(source);
+    const namespace = namespaceFor(source, named);
 
     if (!js.includes(namespaceCall(namespace))) {
         throw new Error(
