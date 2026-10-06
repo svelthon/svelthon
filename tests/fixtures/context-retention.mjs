@@ -62,4 +62,20 @@ const leftBy = async (write) => {
 alive.nativeStrings = await leftBy((set, get, key) => set(key, 0.5));
 alive.provideStrings = await leftBy((set, get, key) => __pybridge.provide(set, get, key, pyData(0.5)));
 
+// And a value published again under one key of a context still alive: the 63
+// it replaced go, as `Map.set` lets them go.
+const live = new Map();
+const replaced = [];
+
+for (let i = 0; i < 64; i++) {
+    const value = pyData({ answer: i });
+
+    replaced.push(new WeakRef(value));
+    __pybridge.provide((k, v) => live.set(k, v), (k) => live.get(k), 'theme', value);
+}
+
+await settle();
+alive.replaced = replaced.filter((ref) => ref.deref() !== undefined).length;
+alive.contextSize = live.size;
+
 process.stdout.write(`${JSON.stringify(alive)}\n`);

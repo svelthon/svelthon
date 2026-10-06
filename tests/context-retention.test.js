@@ -38,6 +38,24 @@ test.skipIf(!canSpawn)('a context key set or read from Python is let go as Svelt
     });
     // The native writes are the witness of what the measurement itself leaves.
     expect(alive.provideStrings - alive.nativeStrings).toBeLessThan(1_000_000);
+    // A key published 64 times in a context still alive keeps the last value.
+    expect(alive.replaced).toBe(1);
+});
+
+// A child publishing a key again keeps its own original and leaves its
+// parent's: the parent's context is a map Svelte copies into the child's. A
+// float `1.0` and an int `1` are both the number 1 to JavaScript, so only the
+// original tells them apart.
+test('a child publishing a key again leaves its parent’s original', () => {
+    const $B = globalThis.__BRYTHON__;
+    const parent = new Map();
+
+    __pybridge.provide((k, v) => parent.set(k, v), (k) => parent.get(k), 'size', $B.builtins.float.$factory(1));
+    const child = new Map(parent);
+    __pybridge.provide((k, v) => child.set(k, v), (k) => child.get(k), 'size', 1);
+
+    expect($B.class_name(__pybridge.provided((k) => parent.get(k), 'size'))).toBe('float');
+    expect($B.class_name(__pybridge.provided((k) => child.get(k), 'size'))).toBe('int');
 });
 
 // While the key lives, the original comes back under every kind of key.

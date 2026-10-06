@@ -492,15 +492,17 @@ export const __pybridge = {
     // Kept as a list under one key of Svelthon's, each component's context
     // holding its own head, which Svelte copies from the parent's: an original
     // lives as long as the context holding it, a child's never reaches its
-    // parent, and the nearest one for a key shadows the others. The original is
-    // taken only while the key still holds the value it was made into, so a
-    // JavaScript component between the two that sets the key again is read as
-    // it set it.
+    // parent, and one key has one entry, the latest, a value published again
+    // letting the one it replaces go. The original is taken only while the key
+    // still holds the value it was made into: a JavaScript component between
+    // the two that sets the key again to another value is read as it set it,
+    // and to an equal one leaves the original standing, a number not saying
+    // who wrote it.
     provide(set, get, key, value) {
         const out = __pybridge.toContext(value);
 
         set(key, out);
-        set(ORIGINALS, { key, js: out, py: value, next: get(ORIGINALS) });
+        set(ORIGINALS, { key, js: out, py: value, next: without(get(ORIGINALS), key) });
     },
 
     provided(get, key) {
@@ -2424,6 +2426,18 @@ const VIEWED = new WeakSet();
 // context itself (`provide`).
 const ORIGINALS = Symbol('svelthon.context-originals');
 
+// The list without the entry of `key`, of which it holds one at most: the
+// entries before it are copied, so the list a parent's context holds is left as
+// it is, and the ones after it are shared.
+const without = (at, key) => {
+    if (at === undefined) return undefined;
+    if (Object.is(at.key, key)) return at.next;
+
+    const rest = without(at.next, key);
+
+    return rest === at.next ? at : { ...at, next: rest };
+};
+
 // A list's view is an array whose prototype is not `Array.prototype` itself,
 // only inherits from it: Svelte wraps a plain array put in a `$state` in a proxy
 // of its own, which keeps every write to itself, so a JavaScript parent that
@@ -3361,30 +3375,30 @@ function branch(value, seen, shell, adapt) {
 const propertyKey = (key) => (typeof key === 'symbol' ? key : String(plainData(key)));
 
 function propertyName(key, out, seen, adapt) {
+    if (typeof key === 'symbol' && adapt !== undefined && seen instanceof Set) adapt(key);
 
+    const name = propertyKey(key);
 
-    // A JavaScript property name is a string, and a Brython float is an object,
-    // so `{1.5: "x"}` would otherwise be keyed by `[object Object]`.
-    const name = typeof key === 'symbol' ? key : String(plainData(key));
-
-    // Two keys Python keeps apart that JavaScript can only spell one way. The
-    // narrowing is the destination's, but the silence would be ours, and this
-    // project's own rule for the moment is written one file over: a serialiser
-    // meeting something it cannot serialise owes the author a sentence.
-    if (Object.hasOwn(out, name)) {
-        const error = new Error(
-            `svelthon — this dict has two keys JavaScript cannot tell apart: ` +
-                `\`${name}\` is what both of them spell as a property name. A ` +
-                `JavaScript object has string keys only, so one would silently ` +
-                `replace the other on the way out.`
-        );
-
-        error.$svelthon = true;
-
-        throw error;
-    }
+    if (Object.hasOwn(out, name)) twoKeys(name);
 
     return name;
+}
+
+// Two keys Python keeps apart that JavaScript can only spell one way. The
+// narrowing is the destination's, but the silence would be ours, and this
+// project's own rule for the moment is written one file over: a serialiser
+// meeting something it cannot serialise owes the author a sentence.
+function twoKeys(name) {
+    const error = new Error(
+        `svelthon — this dict has two keys JavaScript cannot tell apart: ` +
+            `\`${String(name)}\` is what both of them spell as a property name. A ` +
+            `JavaScript object has string keys only, so one would silently ` +
+            `replace the other on the way out.`
+    );
+
+    error.$svelthon = true;
+
+    throw error;
 }
 
 // What the framework hands *in* to an exported function.
@@ -4870,61 +4884,6 @@ export function pyExport(value, where) {
     // registry under a name, keeps its calls as `[Handler(db)]` does.
     return plainData(value, undefined, pyHandler);
 }
-
-// A module's function, read from Python.
-//
-// `$B.imported` holds a plain JavaScript object, and the accessors live on its
-// prototype, where a module's attribute lookup does not reach, so Brython
-// reads it as a foreign object and converts the arguments on the way in. A
-// `dict` would arrive with only its subscript left.
-//
-// Undone rather than prevented: `pyobj2jsobj` records what it converted in
-// `$B.PYOBJ_MAP`, so the original is there to hand back. Anything not in it
-// passes through untouched.
-const boundaries = new WeakMap();
-
-const restored = (value) => {
-    if (value === null || typeof value !== 'object') return value;
-
-    const original = globalThis.__BRYTHON__.PYOBJ_MAP?.get(value);
-
-    return original === undefined ? value : original;
-};
-
-export function pyBoundary(fn) {
-    if (globalThis.EXPERIMENT_RAW !== false) return fn;
-    if (typeof fn !== 'function') return fn;
-
-    // Memoised, because Python compares a function by identity: reading
-    // `helpers.look` twice has to answer the same object. And a wrapper is
-    // its own: what Python read is what it writes back, `action = action`,
-    // and wrapped again it was another object, so `action is original` turned
-    // false after a write CPython keeps the identity through, and an export
-    // published again handed JavaScript another function.
-    if (WRAPPERS.has(fn)) return fn;
-
-    let wrapped = boundaries.get(fn);
-
-    if (wrapped === undefined) {
-        wrapped = (...args) => fn(...args.map(restored));
-
-        // The wrapper stands in for the Python function, so it answers for it
-        // too: `$function_infos` is where the name, the file and the declared
-        // arity are read from, and losing them leaves every caller downstream
-        // handing a Python signature more arguments than it takes. And the
-        // class beside them: without it the module's own code read its `def`
-        // as a `JavascriptFunction` called `wrapped`, where CPython reads a
-        // `function` under its own name.
-        wrapped.$function_infos = fn.$function_infos;
-
-        boundaries.set(fn, wrapped);
-        WRAPPERS.add(wrapped);
-    }
-
-    return wrapped;
-}
-
-const WRAPPERS = new WeakSet();
 
 // A component's own function, as Svelte and the DOM call it.
 //

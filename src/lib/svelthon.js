@@ -388,6 +388,9 @@ export function python(options = {}) {
             const open = declaring.body;
 
             const file = {
+                // The whole file as it was handed over, which may be in memory
+                // only, or differ from what the disk holds: a debugger opens it.
+                sourceContent: content,
                 jsNames: moduleImports(content),
                 element: compileOptionsFor(content) !== undefined,
                 lineOffset: content.slice(0, open).split('\n').length - 1,
@@ -447,9 +450,10 @@ export function python(options = {}) {
 
             const name = nameFor(filename, root);
             const { script, module, map, imports } = compile(content, name, shownPath(filename, root), {
+                // The block alone when no markup pass came first; the whole file
+                // the markup pass was handed when one did (`about`).
+                sourceContent: content,
                 ...about,
-                // The whole file, so a debugger opens the .svelte itself.
-                sourceContent: filename ? readFileSync(filename, 'utf8') : content,
                 resolves: (mod) => moduleKind(mod, directory, searchPath)
             });
 
