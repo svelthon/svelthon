@@ -4316,6 +4316,8 @@ export function pyCall(fn, where, arity = Infinity, named, convert = pyArg) {
             })();
         } catch (error) {
             throw pyError(error, where);
+        } finally {
+            flushExports();
         }
     };
 
@@ -4651,6 +4653,8 @@ export function pyEvent(value) {
             return schedule(called(...taken(args, arity)), where);
         } catch (error) {
             throw thrown(pyError(error, where));
+        } finally {
+            flushExports();
         }
     };
 }
@@ -5002,8 +5006,11 @@ const ADAPTERS = new WeakMap();
 const crossing = (target, self, args) => {
     const given = withoutKeywords(target, args);
     const made = new WeakMap();
+    const converted = given.map((one) => outbound(one, made));
 
-    return inbound(Reflect.apply(target, self, given.map((one) => outbound(one, made))));
+    flushExports();
+
+    return inbound(Reflect.apply(target, self, converted));
 };
 
 export function jsCall(value) {
@@ -5072,6 +5079,35 @@ function exported(one, made) {
     return plainData(one, made, pyHandler);
 }
 
+// The exports to take again before JavaScript reads them (`liveExport`), run
+// where Python hands JavaScript the hand: a call of a Python function returning
+// (`pyCall`, `pyEvent`, `running`), a JavaScript function Python calls
+// (`crossing`), and a microtask behind them, for a coroutine that hands it
+// over at an `await`.
+const STALE = new Set();
+let staleQueued = false;
+
+const flushExports = () => {
+    if (STALE.size === 0) return;
+
+    const due = [...STALE];
+
+    STALE.clear();
+    for (const one of due) one();
+};
+
+const markStale = (refresh) => {
+    STALE.add(refresh);
+
+    if (staleQueued) return;
+
+    staleQueued = true;
+    queueMicrotask(() => {
+        staleQueued = false;
+        flushExports();
+    });
+};
+
 // A write from Python to a name `__js__` or `importjs` brings: refused, as
 // JavaScript refuses an assignment to an import, with the name and the file.
 export function readOnlyImport(name, where) {
@@ -5112,9 +5148,13 @@ export function liveExport(namespace, name, update) {
     // A `bytearray` crosses as the bytes it holds when it crosses (`bytesOut`),
     // so a change Python makes to it is taken again as a write of the name is:
     // the export is watched while it holds one, and let go when it is rebound.
+    // Taken again once, when JavaScript next has the hand (`flushExports`), and
+    // not at each change: a copy per `append` made filling one byte by byte
+    // quadratic, where JavaScript reads only the last.
     const refresh = () => update(read());
+    const stale = () => markStale(refresh);
     const watch = (value) => {
-        if (refresh.held !== undefined || (pyBytes(value) && mutableBytes(value))) track(value, refresh, () => {});
+        if (stale.held !== undefined || (pyBytes(value) && mutableBytes(value))) track(value, stale, () => {});
     };
 
     Object.defineProperty(prototype, name, {
@@ -5221,6 +5261,8 @@ const running = (call, where, convert = pyNumbers) => {
         return convert === null || value !== result ? value : convert(value);
     } catch (error) {
         throw pyError(error, where);
+    } finally {
+        flushExports();
     }
 };
 

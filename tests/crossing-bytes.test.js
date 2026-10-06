@@ -34,6 +34,23 @@ test('and come back to Python as the bytes they hold', () => {
     expect(python.shown(python.give())).toBe("bytes:b'ab':True");
 });
 
+// Taken again once, when JavaScript has the hand back, and not at each change:
+// a copy per `append` made filling an exported buffer quadratic, 2.7 s for
+// 16 000 bytes where the same loop on a local one takes milliseconds.
+test('an exported bytearray filled byte by byte costs what a local one does', () => {
+    const time = (call) => {
+        const start = performance.now();
+        call();
+        return performance.now() - start;
+    };
+
+    const local = time(() => python.fill_local(16000));
+    const exported = time(() => python.fill(16000));
+
+    expect(python.stream.length).toBe(16000);
+    expect(exported).toBeLessThan(10 * local + 50);
+});
+
 // A bytearray's copy is taken again at each change Python makes: by the export,
 // as at a write of the name, and by a prop at the render the change causes. And
 // what JavaScript writes into its copy comes back as a bytearray of it.

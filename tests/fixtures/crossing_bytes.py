@@ -1,7 +1,7 @@
 # bytes and bytearray at every door: exported, handed to a JavaScript
 # function, written into a JavaScript object, returned, and handed back.
 __js__ = {"./crossing_bytes.js": ["blob_size", "decoded", "keep", "kept"]}
-__all__ = ["data", "buffer", "box", "handed", "give", "same", "back", "grow", "shown"]
+__all__ = ["data", "buffer", "box", "handed", "give", "same", "back", "grow", "shown", "stream", "fill", "fill_local"]
 
 data = b"ab"
 buffer = bytearray(b"cd")
@@ -30,6 +30,22 @@ def back():
 
 def grow():
     buffer.append(101)
+
+
+# A buffer built byte by byte, exported, and the same loop on one nothing
+# exports.
+stream = bytearray()
+
+
+def fill(n):
+    for i in range(n):
+        stream.append(i % 256)
+
+
+def fill_local(n):
+    local = bytearray()
+    for i in range(n):
+        local.append(i % 256)
 
 
 # What Python receives: its kind, its bytes, and whether it is `data` itself.
