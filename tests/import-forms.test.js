@@ -60,7 +60,7 @@ describe('a declaration the compiler cannot read', () => {
             plain: true
         }).script;
 
-        expect(out).toContain('export { load };');
+        expect(out).toContain('export { __export_load as load };');
     });
 
     test('and one holding something other than strings keeps the strings', () => {
@@ -68,7 +68,7 @@ describe('a declaration the compiler cannot read', () => {
             plain: true
         }).script;
 
-        expect(out).toContain('export { load };');
+        expect(out).toContain('export { __export_load as load };');
     });
 
     // `__js__` is a declaration to the compiler, never data, so a value it cannot

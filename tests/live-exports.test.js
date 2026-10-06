@@ -11,6 +11,60 @@ import * as ReexportNative from './fixtures/js_reexport_native.js';
 import * as Source from './fixtures/js_reexport_source.js';
 import store from './fixtures/js_reexport_store.svelte.py';
 import { write as writeReexport } from './fixtures/js_reexport_writer.py';
+import * as Defs from './fixtures/def_exports.py';
+import * as DefsNative from './fixtures/def_exports_native.js';
+import * as DefsStore from './fixtures/def_exports_store.svelte.py';
+
+// A name first bound by `def` was published once, as the wrapper it was then:
+// after the module made it a number the export was still a function, which
+// failed when called, and after `del` it still answered. A name a decorator
+// first made a number stayed that number once the module made it a function.
+// Every exported name is the value it holds now, against a JavaScript module
+// written the same way.
+const shape = (value) => (typeof value === 'function' ? `function ${value()}` : String(value));
+
+test('a name a `def` bound is exported as what it holds now', () => {
+    const seen = [];
+
+    for (const module of [Defs, DefsNative]) {
+        module.restore();
+        const steps = [shape(module.action)];
+
+        for (const step of ['scalar', 'function_', 'remove', 'restore']) {
+            module[step]();
+            steps.push(shape(module.action));
+        }
+        seen.push(steps);
+    }
+
+    expect(seen[0]).toEqual(seen[1]);
+    expect(seen[0]).toEqual(['function 7', '42', 'function 9', 'undefined', 'function 7']);
+});
+
+test('and a name a decorator made data becomes a function when the module says so', () => {
+    expect([shape(Defs.data), shape(DefsNative.data)]).toEqual(['42', '42']);
+
+    Defs.callable_data();
+    DefsNative.callable_data();
+
+    expect([shape(Defs.data), shape(DefsNative.data)]).toEqual(['function 7', 'function 7']);
+});
+
+// A reactive module's named exports were made once too, where its default
+// export read the name: the two now agree.
+test('a store’s named export follows the name as its default export does', () => {
+    DefsStore.restore();
+    const seen = [shape(DefsStore.action)];
+
+    DefsStore.scalar();
+    seen.push(shape(DefsStore.action), shape(DefsStore.default.action));
+    DefsStore.remove();
+    seen.push(shape(DefsStore.action), shape(DefsStore.default.action));
+    DefsStore.restore();
+    seen.push(shape(DefsStore.action));
+
+    expect(seen).toEqual(['function 7', '42', '42', 'undefined', 'undefined', 'function 7']);
+});
 
 // And a write from Python to such a name, through `globals()` or from another
 // module, was taken by Python's reader and missed by JavaScript's, the export

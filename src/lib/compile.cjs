@@ -2838,6 +2838,7 @@ function preamble(c) {
             'directiveAction', 'directiveTransition', 'directiveAnimate',
             'plainScalar', 'storeMember', 'invoke',
             ...(c.store ? ['registerModule'] : SUBSCRIBING(c) ? ['unsubscribe'] : []),
+            ...(c.store && c.funcs.some((f) => c.published(f.name)) ? ['liveExport'] : []),
             ...(c.bindables.length ? ['kept', 'unproxied', 'handOver'] : []),
             // Only an effect and `on_mount` hand a value back to be called
             // later, so only a component with one needs the name.
@@ -3298,17 +3299,22 @@ function instanceExports(c) {
                   `export default store;`,
                   // Named exports too: a `.py` is not only a store. SvelteKit
                   // looks for `load`, `actions`, `GET`, by name, on the module.
-                  // Read once the module has run, as a `.py` reads its own: a
-                  // `def` a decorator turned into data is published as data.
-                  // Through the namespace, as the getter above reads it: the
-                  // cell itself read at the top of the module is what Svelte
-                  // reports as `state_referenced_locally`.
+                  // Live, as a `.py` publishes its own: the value the name holds
+                  // now, a `def` a decorator turned into data published as data,
+                  // a number written over a `def` as that number, and nothing
+                  // after `del`, as the getter above reads it. Through the
+                  // namespace: the cell itself read at the top of the module is
+                  // what Svelte reports as `state_referenced_locally`.
                   ...(c.funcs.filter((f) => c.published(f.name)).length
                       ? [
                             ``,
                             ...c.funcs
                                 .filter((f) => c.published(f.name))
-                                .map((f) => `const __export_${f.name} = ${storeRead(c, f.name, `${NS}.${f.name}`, wrapperName(f.name))};`),
+                                .flatMap((f) => [
+                                    `let __export_${f.name};`,
+                                    `__liveExport(${NS}, ${JSON.stringify(f.name)}, (__value) => { __export_${f.name} = ` +
+                                        `${storeRead(c, f.name, '__value', wrapperName(f.name))}; });`
+                                ]),
                             `export { ${c.funcs
                                 .filter((f) => c.published(f.name))
                                 .map((f) => `__export_${f.name} as ${f.name}`)
@@ -3516,22 +3522,9 @@ function plainInit(c) {
 const jsOnly = (c, name) => c.jsImported.includes(name);
 
 function plainExports(c) {
+    const defined = new Set([...c.funcs, ...c.plainDeriveds].map((f) => f.name));
+
     return [
-        // `pyCall`, and not a copy of it written out here.
-        //
-        // One boundary, so a rule added to the runtime's wrapper, such as the
-        // callback policy a callable *returned* by a module's function crosses
-        // with, holds here too.
-        //
-        // The arrow is what keeps the late binding: `__fn_name` is a `let` the
-        // namespace writes into, so the function is read at the call and not
-        // captured here.
-        ...[...c.funcs, ...c.plainDeriveds].map(
-            (f) =>
-                `const ${f.name} = __pyDef(() => ${fn(f.name)}, ` +
-                `${JSON.stringify(`${f.name}() — ${c.source}`)});`
-        ),
-        ``,
         // SvelteKit reads `load`, `actions`, `GET`, `prerender` by name off the
         // module, so values are exported as well as functions, and a value goes
         // through the boundary too: `actions` is a dict of Python functions, each
@@ -3556,19 +3549,25 @@ function plainExports(c) {
         // the top of this module, and it is re-exported as that binding: it
         // follows the writes its own module makes, which never pass through
         // Python's namespace.
+        //
+        // A `def` is published the same way, as the value its name holds now:
+        // `pyDef` makes a function `pyCall`'s wrapper, one boundary for every
+        // callback rule, and anything else, a decorator's data, a `42` written
+        // over it, or nothing after `del`, what `pyExport` makes of it. Made
+        // once at import, it went on being a function a JavaScript reader
+        // called after Python had made the name a number, and stayed a number
+        // after Python had made it a function again.
         ...c.exported
-            .filter((n) => !c.isFunction(n) && !jsOnly(c, n))
+            .filter((n) => !jsOnly(c, n))
             .flatMap((n) => [
                 `let __export_${n};`,
                 `__liveExport(${NS}, ${JSON.stringify(n)}, (__value) => { __export_${n} = ` +
-                    `__pyExport(__value, ${JSON.stringify(`${n} — ${c.source}`)}); });`
+                    (defined.has(n)
+                        ? `__pyDef(() => __value, ${JSON.stringify(`${n}() — ${c.source}`)}); });`
+                        : `__pyExport(__value, ${JSON.stringify(`${n} — ${c.source}`)}); });`)
             ]),
         ...(c.exported.length
-            ? [
-                  `export { ${c.exported
-                      .map((n) => (c.isFunction(n) || jsOnly(c, n) ? n : `__export_${n} as ${n}`))
-                      .join(', ')} };`
-              ]
+            ? [`export { ${c.exported.map((n) => (jsOnly(c, n) ? n : `__export_${n} as ${n}`)).join(', ')} };`]
             : [])
     ];
 }

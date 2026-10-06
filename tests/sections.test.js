@@ -119,10 +119,9 @@ describe('and in a plain module', () => {
         // this route too. It was spelled out inline, and a callback returned by
         // one of these functions then crossed with no policy at all.
         //
-        // `__pyCall` stood here until a `def` behind a decorator proved that the
-        // name and the value are two things: what is emitted now reads the
-        // binding at the call and hands it to the same road an alias takes.
-        expect(script.indexOf('const load = __pyDef(')).toBeGreaterThan(init);
-        expect(script.indexOf('export { load };')).toBeGreaterThan(init);
+        // Published live, as every exported name is: the value the name holds
+        // now, made a wrapper by `__pyDef` while it is a function.
+        expect(script.indexOf('__export_load = __pyDef(')).toBeGreaterThan(init);
+        expect(script.indexOf('export { __export_load as load };')).toBeGreaterThan(init);
     });
 });

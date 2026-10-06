@@ -46,7 +46,7 @@ hidden = 1
     // The repair: read the value off the namespace, where the module body put
     // every one of them, rather than off a binding only some of them have, and
     // again on each write to it, which `live-exports.test.js` runs.
-    test.for([['Widget'], ['LIMIT'], ['brought']])('%s is read from the namespace', ([name]) => {
+    test.for([['Widget'], ['LIMIT'], ['make'], ['brought']])('%s is read from the namespace', ([name]) => {
         expect(plain(MODULE)).toContain(`__liveExport(__py, ${JSON.stringify(name)},`);
     });
 
@@ -58,11 +58,12 @@ hidden = 1
         }
     });
 
-    // A function keeps the wrapper the plain path declares for it, so it is
-    // exported under its own name while a value is exported through `__export_`.
-    test('a function is still exported as itself', () => {
+    // A function is exported live as a value is, the wrapper made of what its
+    // name holds now: a `def` Python later makes a number is that number to a
+    // JavaScript reader, as `live-exports.test.js` runs.
+    test('a function is exported live, as a value is', () => {
         expect(plain(MODULE)).toContain(
-            'export { __export_Widget as Widget, __export_LIMIT as LIMIT, make, __export_brought as brought };'
+            'export { __export_Widget as Widget, __export_LIMIT as LIMIT, __export_make as make, __export_brought as brought };'
         );
     });
 
@@ -128,7 +129,14 @@ describe('__all__ is read as the value the module ends with', () => {
             .split('\n')
             .find((one) => one.startsWith('export {'));
 
-        return line === undefined ? [] : line.replace(/export \{ | \};?/g, '').trim().split(', ');
+        // The names exported, whatever binding each is exported from.
+        return line === undefined
+            ? []
+            : line
+                  .replace(/export \{ | \};?/g, '')
+                  .trim()
+                  .split(', ')
+                  .map((one) => one.replace(/^__export_\w+ as /, ''));
     };
 
     test.for([
@@ -159,8 +167,8 @@ describe('__all__ is read as the value the module ends with', () => {
         ['insert from the end', '__all__ = ["a", "b"]\n__all__.insert(-1, "c")\n__all__.pop()', ['a', 'c']],
         // A name the module binds where a definition stands: a walrus in a
         // default, a base or a decorator is evaluated in the module.
-        ['a walrus in a default', '__all__ = ["answer"]\ndef take(value=(answer := 7)):\n    return value', ['__export_answer as answer']],
-        ['a walrus in a class base', '__all__ = ["answer"]\nclass Alias((answer := object)):\n    pass', ['__export_answer as answer']],
+        ['a walrus in a default', '__all__ = ["answer"]\ndef take(value=(answer := 7)):\n    return value', ['answer']],
+        ['a walrus in a class base', '__all__ = ["answer"]\nclass Alias((answer := object)):\n    pass', ['answer']],
         // A parameter, a closure or a lambda's own `__all__` is not the module's.
         ['a parameter of that name', 'def shrink(__all__):\n    __all__.clear()\n', ['shrink', 'a', 'b', 'c']],
         ['a closure over one', 'def outer():\n    __all__ = []\n    def shrink():\n        __all__.clear()\n    return shrink\n', ['outer', 'a', 'b', 'c']],

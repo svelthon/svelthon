@@ -77,7 +77,7 @@ rest of that configuration and what each line buys.
 npm install
 npm run dev
 
-npm test             # 1 635 tests: semantics, props, reactivity, Svelte surface
+npm test             # 1 641 tests: semantics, props, reactivity, Svelte surface
 npm run test:quiet   # the suite's own output: a green run must say nothing
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
@@ -1351,6 +1351,13 @@ callback takes. Both describe the *call*; neither is the field beside it.
 `tests/callable-matrix.test.js` holds every line, across **8 shapes** and **14
 positions**, and each shape again as the callee of a directive.
 
+A Python function is handed only the arguments it declares, so `def clear_all():`
+serves as an `onclick` and the event is left out. A builtin type's own method,
+`rows.clear` or `rows.append`, carries no signature to read, so it is handed
+everything JavaScript passes and refuses what it does not take, as Python
+would: `onclick={rows.clear}` raises `clear() takes 1 positional argument but 2
+were given`. Wrap it: `onclick={lambda: rows.clear()}`, or a `def`.
+
 ### The one place SvelteKit is hard-coded
 
 Hooks are found by `resolve_entry`, which matches `/\.(js|ts)$/` and ignores
@@ -1496,7 +1503,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 1 635 tests as written (vitest reports more, one per
+Validated by `npm test`, 1 641 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;
