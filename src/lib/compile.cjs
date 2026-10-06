@@ -1390,7 +1390,6 @@ const RUNTIME = {
     pyData: '__pyData',
     pyBoundary: '__pyBoundary',
     pyCall: '__pyCall',
-    pyDef: '__pyDef',
     pyTeardown: '__pyTeardown',
     pyComponent: '__pyComponent',
     pyExpression: '__pyExpression',
@@ -3457,7 +3456,7 @@ function plainPreamble(c) {
     return [
         `import { init as __init } from ${JSON.stringify(virtualId(c.name))};`,
         `import { ${runtimeAliases([
-            'bind', '__pybridge', 'pyCall', 'pyDef', 'pyError', 'plainData', 'pyArg',
+            'bind', '__pybridge', 'pyCall', 'pyError', 'plainData', 'pyArg',
             'pyData', 'pyExport', 'pyBoundary', 'jsCall', 'ticking', 'pyBind', 'NONE', 'helpers',
             'registerModule', 'group', 'invoke', 'liveExport', 'readOnlyImport'
         ])} } from 'svelthon/runtime';`,
@@ -3522,8 +3521,6 @@ function plainInit(c) {
 const jsOnly = (c, name) => c.jsImported.includes(name);
 
 function plainExports(c) {
-    const defined = new Set([...c.funcs, ...c.plainDeriveds].map((f) => f.name));
-
     return [
         // SvelteKit reads `load`, `actions`, `GET`, `prerender` by name off the
         // module, so values are exported as well as functions, and a value goes
@@ -3550,21 +3547,20 @@ function plainExports(c) {
         // follows the writes its own module makes, which never pass through
         // Python's namespace.
         //
-        // A `def` is published the same way, as the value its name holds now:
-        // `pyDef` makes a function `pyCall`'s wrapper, one boundary for every
-        // callback rule, and anything else, a decorator's data, a `42` written
-        // over it, or nothing after `del`, what `pyExport` makes of it. Made
-        // once at import, it went on being a function a JavaScript reader
-        // called after Python had made the name a number, and stayed a number
-        // after Python had made it a function again.
+        // A `def` is published the same way, as the value its name holds now,
+        // which is what a JavaScript module's `export let` does and what
+        // CPython's `from m import f` holds: a function as the one wrapper
+        // `pyHandler` keeps for it, so the same function written again is the
+        // same object to an `off()`; a decorator's data, a `42` written over
+        // it, or nothing after `del`, as data. Made once at import, it went on
+        // being a function after Python had made the name a number, and
+        // stayed a number after Python had made it a function again.
         ...c.exported
             .filter((n) => !jsOnly(c, n))
             .flatMap((n) => [
                 `let __export_${n};`,
                 `__liveExport(${NS}, ${JSON.stringify(n)}, (__value) => { __export_${n} = ` +
-                    (defined.has(n)
-                        ? `__pyDef(() => __value, ${JSON.stringify(`${n}() — ${c.source}`)}); });`
-                        : `__pyExport(__value, ${JSON.stringify(`${n} — ${c.source}`)}); });`)
+                    `__pyExport(__value, ${JSON.stringify(`${n} — ${c.source}`)}); });`
             ]),
         ...(c.exported.length
             ? [`export { ${c.exported.map((n) => (jsOnly(c, n) ? n : `__export_${n} as ${n}`)).join(', ')} };`]

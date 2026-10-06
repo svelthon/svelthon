@@ -75,7 +75,7 @@ reste de cette configuration et ce que chaque ligne apporte.
 npm install
 npm run dev
 
-npm test             # 1 641 tests : sémantique, props, réactivité, surface Svelte
+npm test             # 1 643 tests : sémantique, props, réactivité, surface Svelte
 npm run test:quiet   # la sortie de la suite : un run vert ne doit rien dire
 npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
@@ -824,6 +824,12 @@ classe, une constante, une fonction, un nom amené par un import. Et un nom qu'i
 invente est refusé à la compilation, puisqu'un module exporte ce qu'il définit,
 ou une fois le module exécuté quand un `from m import *` aurait pu l'amener.
 
+Un nom exporté est vivant, comme un `export let` de JavaScript : relié par le
+module, il se lit à sa nouvelle valeur, une fonction devenue nombre comme ce
+nombre, et supprimé comme `undefined`. Une fonction qu'un lecteur a déjà prise
+reste celle qu'il a prise, comme `from m import f` la garde dans CPython, et la
+même fonction réécrite reste le même objet.
+
 **C'est la valeur sur laquelle le module s'arrête, telle que Python la
 calcule.** Chaque instruction du niveau du module qui l'écrit, avec des
 littéraux, `__all__` lui-même et les builtins, est exécutée par Python avant le
@@ -1519,7 +1525,7 @@ part jamais.
 
 ## État
 
-Validé par `npm test`, 1 641 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 1 643 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;

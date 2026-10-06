@@ -114,14 +114,12 @@ describe('and in a plain module', () => {
         const init = script.indexOf('init(__py);');
 
         expect(init).toBeGreaterThan(script.lastIndexOf('bind(__proto, '));
-        // `__pyDef`, and not a boundary written out here: the wrapper a module's
-        // functions get is the runtime's own, so a rule added to it holds on
-        // this route too. It was spelled out inline, and a callback returned by
-        // one of these functions then crossed with no policy at all.
-        //
-        // Published live, as every exported name is: the value the name holds
-        // now, made a wrapper by `__pyDef` while it is a function.
-        expect(script.indexOf('__export_load = __pyDef(')).toBeGreaterThan(init);
+        // `__pyExport`, and not a boundary written out here: the wrapper a
+        // module's functions get is the runtime's own, `pyHandler`'s, so a rule
+        // added to it holds on this route too. It was spelled out inline, and a
+        // callback returned by one of these functions then crossed with no
+        // policy at all. Published live, as every exported name is.
+        expect(script.indexOf('__export_load = __pyExport(')).toBeGreaterThan(init);
         expect(script.indexOf('export { __export_load as load };')).toBeGreaterThan(init);
     });
 });

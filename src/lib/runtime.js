@@ -2431,6 +2431,19 @@ const entering = (given) =>
         ? pyData(given)
         : pyBind(given);
 
+// The counter Brython keeps on a dict and moves at each insertion and deletion
+// of a key, a symbol of its own (`py_dict.js`), found once by its description:
+// a table built from the keys holds until it moves. Not found, every read
+// builds the table again, which is slow and right.
+let DICT_VERSION;
+const dictVersion = () =>
+    (DICT_VERSION ??=
+        Object.getOwnPropertySymbols(globalThis.__BRYTHON__.empty_dict()).find((one) => one.description === 'VERSION') ??
+        Symbol('svelthon.noVersion'));
+
+// Where a dict view's table records a name two keys share.
+const TWO_KEYS = Symbol('svelthon.twoKeys');
+
 function viewOf(value) {
     const $B = globalThis.__BRYTHON__;
 
@@ -2456,14 +2469,40 @@ function viewOf(value) {
     // reader sees the entries `to_js` writes: `{7: 42}` is `{"7": 42}`, where it
     // was `{}` and a child handed the dict read nothing. The key itself when it
     // is the name, the one lookup most reads make; a key of another type only
-    // when the dict holds one, found by its name.
+    // when the dict holds one, found by its name in a table built once per
+    // version of the dict, so reading the whole view is linear in its size, as
+    // copying it is. Two keys of one name are refused at any read of it, as the
+    // copy refuses them.
+    let named = null;
+    let namedAt;
+
+    const nonStringKeys = () => {
+        const at = value[dictVersion()];
+
+        if (named === null || at === undefined || at !== namedAt) {
+            named = new Map();
+            for (const [key] of pyEntries(value)) {
+                if (typeof key === 'string') continue;
+
+                const name = propertyKey(key);
+
+                named.set(name, named.has(name) ? TWO_KEYS : key);
+            }
+            namedAt = at;
+        }
+
+        return named;
+    };
     const keyFor = (name) => {
-        if ((typeof name === 'string' || typeof name === 'symbol') && $B.$is_member(name, value)) return name;
-        if (typeof name !== 'string' || $B.hasOnlyStringKeys(value)) return MISSING;
+        const own = (typeof name === 'string' || typeof name === 'symbol') && $B.$is_member(name, value);
 
-        const found = pyEntries(value).find(([key]) => typeof key !== 'string' && propertyKey(key) === name);
+        if (typeof name !== 'string' || $B.hasOnlyStringKeys(value)) return own ? name : MISSING;
 
-        return found === undefined ? MISSING : found[0];
+        const other = nonStringKeys().get(name);
+
+        if (other === TWO_KEYS || (own && other !== undefined)) twoKeys(name);
+
+        return own ? name : other === undefined ? MISSING : other;
     };
     const holds = (key) => {
         if (sequence) {
@@ -3845,38 +3884,6 @@ const identified = (wrapper, name, arity) =>
         length: { value: Number.isFinite(arity) ? arity : 0, configurable: true }
     });
 
-// A module's own `def`, published under its name.
-//
-// Not `__fn_name` called straight with the arity read off the **AST of the
-// `def`**: both would bet that a name still holds what its `def` declared, and a
-// decorator makes that false. One answering a `*values` function takes every
-// argument, and one answering a **callable instance** is called as one.
-//
-// So this reads the binding at the call and takes the road an alias takes,
-// `pyHandler`, which asks the **value** what it is and what it takes: the name a
-// `def` was given is no claim about what is behind it.
-//
-// `length` is read once, here, because a JavaScript function's is a number and
-// not a question; what a caller actually gets is trimmed against the value at
-// the call. A name rebound afterwards therefore reports the old `length` and
-// behaves as the new value: the honest half is the behaviour.
-//
-// And a `def` whose name no longer holds a Python callable once the module has
-// run, replaced by what a decorator returned or by a later assignment, is
-// published as that value, as `pyExport` publishes any other.
-export function pyDef(read, where) {
-    const value = read();
-    const first = declared(value);
-
-    if (first === null) return pyExport(value, where);
-
-    return identified(
-        (...args) => pyHandler(read())(...args),
-        nameOf(where),
-        first === null ? 0 : arityNow(first.arity)
-    );
-}
-
 export function pyCall(fn, where, arity = Infinity, named, convert = pyArg) {
     const wrapper = (...args) => {
         try {
@@ -4863,7 +4870,13 @@ export function pyBoundary(fn) {
     if (typeof fn !== 'function') return fn;
 
     // Memoised, because Python compares a function by identity: reading
-    // `helpers.look` twice has to answer the same object.
+    // `helpers.look` twice has to answer the same object. And a wrapper is
+    // its own: what Python read is what it writes back, `action = action`,
+    // and wrapped again it was another object, so `action is original` turned
+    // false after a write CPython keeps the identity through, and an export
+    // published again handed JavaScript another function.
+    if (WRAPPERS.has(fn)) return fn;
+
     let wrapped = boundaries.get(fn);
 
     if (wrapped === undefined) {
@@ -4872,13 +4885,20 @@ export function pyBoundary(fn) {
         // The wrapper stands in for the Python function, so it answers for it
         // too: `$function_infos` is where the name, the file and the declared
         // arity are read from, and losing them leaves every caller downstream
-        // handing a Python signature more arguments than it takes.
+        // handing a Python signature more arguments than it takes. And the
+        // class beside them: without it the module's own code read its `def`
+        // as a `JavascriptFunction` called `wrapped`, where CPython reads a
+        // `function` under its own name.
         wrapped.$function_infos = fn.$function_infos;
+
         boundaries.set(fn, wrapped);
+        WRAPPERS.add(wrapped);
     }
 
     return wrapped;
 }
+
+const WRAPPERS = new WeakSet();
 
 // A component's own function, as Svelte and the DOM call it.
 //
@@ -4909,20 +4929,21 @@ const running = (call, where, convert = pyNumbers) => {
     }
 };
 
-// The arity is read at the call, from the value the name holds then, for the
-// reason `pyDef` is written: `@export` above another decorator publishes a name
-// whose value is not the `def`, and a `@collect` answering a `*values` function
-// takes every argument.
+// The arity is read at the call, from the value the name holds then: `@export`
+// above another decorator publishes a name whose value is not the `def`, and a
+// `@collect` answering a `*values` function takes every argument. The name a
+// `def` was given is no claim about what is behind it.
 //
 // The call goes through what `declared` hands back rather than through the name
 // directly, which is the other half: a decorator that answers a **callable
 // instance** is called perfectly well by Python and is not a JavaScript
 // function.
 //
-// What stays different from `pyDef` is the result: a component hands the
-// *framework* a transition's options or an action's teardown, so `pyNumbers`
-// and not `plainData`. That difference is why this wrapper exists at all. A
-// callable returned whole is a callback like one returned inside a config.
+// What stays different from a module's export is the result: a component hands
+// the *framework* a transition's options or an action's teardown, so
+// `pyNumbers` and not `plainData`. That difference is why this wrapper exists
+// at all. A callable returned whole is a callback like one returned inside a
+// config.
 const returned = (value) => (callable(value) ? pyHandler(value) : pyNumbers(value));
 
 // What an `@export` hands the parent that calls it through `bind:this` is data,

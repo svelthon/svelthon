@@ -13,10 +13,12 @@ const read = (k) => {
     return target.querySelector(`p[data-k="${k}"]`).textContent;
 };
 
-// The module itself is a JavaScript object — that is the whole reason a call
-// into it converts what it is given.
-test('a module is reached through JavaScript', () =>
-    expect(read('module')).toBe('JSObject / JavascriptFunction'));
+// The module itself is a JavaScript object, which is the whole reason a call
+// into it converts what it is given. Its function is a Python `function`, as
+// CPython's `type(module.fn)` says: it was a `JavascriptFunction` called
+// `wrapped`, the boundary's stand-in seen without the class it stands for.
+test('a module is reached through JavaScript, its function a function', () =>
+    expect(read('module')).toBe('JSObject / function'));
 
 describe.each([
     ['dict', 'dict len=1'],

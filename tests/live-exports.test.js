@@ -50,6 +50,23 @@ test('and a name a decorator made data becomes a function when the module says s
     expect([shape(Defs.data), shape(DefsNative.data)]).toEqual(['function 7', 'function 7']);
 });
 
+// The same function written again is the same function, to Python and to the
+// JavaScript reader that kept it: what a module reads of its own `def` is the
+// boundary's stand-in, and written back it was wrapped again, so `action is
+// original` turned false and the export changed identity, which an `off()`
+// after an `on()` cannot find. The stand-in is a Python `function` under its
+// own name too, where it read as a `JavascriptFunction` called `wrapped`.
+// `python3` on the module: `[True, 'action', 'function']` both times.
+test('a `def` written back to its name keeps its identity and its name', async () => {
+    const m = await import('./fixtures/rebound_def.py');
+    const kept = m.action;
+
+    expect(m.held()).toEqual([true, 'action', 'function']);
+    m.same_again();
+    expect(m.held()).toEqual([true, 'action', 'function']);
+    expect(m.action).toBe(kept);
+});
+
 // A reactive module's named exports were made once too, where its default
 // export read the name: the two now agree.
 test('a store’s named export follows the name as its default export does', () => {
