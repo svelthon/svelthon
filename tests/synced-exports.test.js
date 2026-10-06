@@ -11,6 +11,8 @@ import * as nativeSets from './fixtures/synced_sets_native.js';
 import SetHost from './fixtures/SetHost.svelte';
 import StateViewHost from './fixtures/StateViewHost.svelte';
 import { stringify } from 'devalue';
+import * as presence from './fixtures/presence.py';
+import * as presenceNative from './fixtures/presence_native.js';
 
 // What a module exports is its own object, as a JavaScript module's export is
 // and as `m.items` is in Python: changed in place by the module, it is changed
@@ -98,6 +100,40 @@ test('a set reads, follows and is written as a JavaScript Set', () => {
     // `Set`'s own storage would be an empty set, given in silence.
     expect(() => structuredClone(sets.tags)).toThrow();
     expect(() => structuredClone(nativeSets.tags)).not.toThrow();
+});
+
+// What a method hands back as the set, `add`'s result and `forEach`'s third
+// argument, is the view JavaScript holds, as a `Set`'s own method hands back
+// the `Set`: the object behind the view keeps its own storage empty, and a
+// clone of it was an empty set, given in silence.
+test('a set’s methods hand back the view itself', () => {
+    const returned = sets.tags.add('w');
+    const receivers = [];
+
+    sets.tags.forEach((one, same, set) => receivers.push(set));
+
+    expect(returned).toBe(sets.tags);
+    expect(receivers.every((one) => one === sets.tags)).toBe(true);
+    expect(() => structuredClone(returned)).toThrow();
+    expect(nativeSets.tags.add('w')).toBe(nativeSets.tags);
+});
+
+// `in` asks whether an attribute is there without reading it, as it does of a
+// JavaScript object with getters: a property is not run, and one that raises
+// does not make the question raise. A name a `__getattr__` makes is asked of
+// it, the one way to know it is there.
+test('in on an instance reads no property', () => {
+    const asked = (module) => {
+        const before = module.reads();
+        const answers = ['field', 'counted', 'raising', 'missing'].map((name) => name in module.config);
+
+        return { answers, reads: module.reads() - before };
+    };
+
+    expect(asked(presence)).toEqual(asked(presenceNative));
+    expect(asked(presence)).toEqual({ answers: [true, true, true, false], reads: 0 });
+    expect(presence.config.counted).toBe(42);
+    expect(['made' in presence.dynamic, 'other' in presence.dynamic]).toEqual([true, false]);
 });
 
 test('a JavaScript child reads and follows a set it is given', () => {

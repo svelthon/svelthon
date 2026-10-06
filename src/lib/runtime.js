@@ -2859,10 +2859,13 @@ function instanceView(value) {
 
             return found === MISSING ? Reflect.get(shell, key, receiver) : forReader(found);
         },
+        // Whether the attribute is there, asked without reading it, as `in`
+        // asks of a JavaScript object: a property is not run, nor a getter
+        // that raises (`attributed`).
         has(shell, key) {
             follow(value);
 
-            return attribute(key) !== MISSING || Reflect.has(shell, key);
+            return (typeof key === 'string' && attributed(value, key)) || Reflect.has(shell, key);
         },
         ownKeys() {
             follow(value);
@@ -2965,10 +2968,17 @@ class SetView extends Set {
         }
     }
 
+    // The set a method hands back, `add`'s result and `forEach`'s third
+    // argument, is the view JavaScript was given and not this object, whose
+    // own storage is empty: cloned, it would be an empty set, given in silence.
+    get #published() {
+        return PUBLISHED_SETS.get(this) ?? this;
+    }
+
     add(one) {
         this.#call('add', entering(one));
 
-        return this;
+        return this.#published;
     }
 
     delete(one) {
@@ -3002,7 +3012,7 @@ class SetView extends Set {
     }
 
     forEach(callback, receiver) {
-        for (const one of this.values()) callback.call(receiver, one, one, this);
+        for (const one of this.values()) callback.call(receiver, one, one, this.#published);
     }
 
     // The set algebra `Set.prototype` gained reads its receiver's own storage,
@@ -3042,6 +3052,9 @@ class SetView extends Set {
 // a list's view, where it copied an empty `Set`, and `Set.prototype.has.call`
 // refuses its receiver. A method is read off the view and runs on it, its
 // fields being private; one function per name, so `view.has` is one value.
+// Each set view's proxy, by the object behind it (`#published`).
+const PUBLISHED_SETS = new WeakMap();
+
 function setView(value) {
     const target = new SetView(value);
     const bound = new Map();
@@ -3056,6 +3069,7 @@ function setView(value) {
         }
     });
 
+    PUBLISHED_SETS.set(target, view);
     VIEW_OF.set(value, view);
     VIEWED.add(view);
     globalThis.__BRYTHON__.PYOBJ_MAP.set(view, value);
