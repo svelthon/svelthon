@@ -12,6 +12,7 @@ import { mount } from './mounted.js';
 import GroupSpellings from './fixtures/GroupSpellings.svelte';
 import GroupSpellingsNative from './fixtures/GroupSpellingsNative.svelte';
 import ParenthesizedTargets from './fixtures/ParenthesizedTargets.svelte';
+import GroupNumericKeys from './fixtures/GroupNumericKeys.svelte';
 
 const mounted = async (Component) => {
     const target = document.body.appendChild(document.createElement('div'));
@@ -41,6 +42,22 @@ test('three spellings of one target are one group, as in Svelte', async () => {
 
     expect(native.map(([model]) => model)).toEqual(['b', 'a,b', 'a,b,c', 'a,c']);
     expect(await clicks(GroupSpellings)).toEqual(native);
+});
+
+// `bag[1]`, `bag[1.0]` and `bag[True]` are one entry of the dict, Python
+// comparing numeric keys by value, so they are one group; `bag[one]` is another
+// expression, which Svelte keeps apart too.
+test('equal numeric keys are one target', async () => {
+    const target = await mounted(GroupNumericKeys);
+    const models = [];
+
+    for (const key of ['a', 'b', 'c', 'd']) {
+        target.querySelector(`[data-k="${key}"]`).click();
+        flushSync();
+        models.push(target.querySelector('p').textContent);
+    }
+
+    expect(models).toEqual(['a', 'a,b', 'a,b,c', 'd']);
 });
 
 test('a parenthesized name is the name it holds, in the script and in the markup', async () => {

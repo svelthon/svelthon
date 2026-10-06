@@ -1314,14 +1314,41 @@ const bareName = (expr) => {
     return node instanceof globalThis.__BRYTHON__.ast.Name ? node.id : null;
 };
 
+const NUMBERS = new Set(['bool', 'int', 'float', 'complex']);
+
+// A number as Python compares it as a key: `1`, `1.0` and `True` are one entry
+// of a dict, and so is `1+0j`.
+const numberKey = (value) => {
+    const $B = globalThis.__BRYTHON__;
+    const _b_ = $B.builtins;
+    let real = value;
+
+    if ($B.class_name(value) === 'complex') {
+        if (_b_.bool.$factory($B.$getattr(value, 'imag'))) return _b_.repr(value);
+        real = $B.$getattr(value, 'real');
+    }
+
+    // A float holding a whole number is that int's key; `nan` and `inf` hold none.
+    if ($B.class_name(real) === 'float' && !$B.$call($B.$getattr(real, 'is_integer'))) return _b_.repr(real);
+
+    return _b_.repr(_b_.int.$factory(real));
+};
+
 // What makes two targets one whatever their spelling: the tree, positions left
-// out, a constant by its class and its `repr`.
+// out, a number by its value as Python compares keys, any other constant by
+// its class and its `repr`.
 const targetKey = (expr) => {
     const $B = globalThis.__BRYTHON__;
     const key = (node) => {
         if (Array.isArray(node)) return `[${node.map(key).join(',')}]`;
         if (node === null || typeof node !== 'object') return JSON.stringify(node ?? null);
-        if (node instanceof $B.ast.Constant) return `Constant(${$B.class_name(node.value)}:${$B.builtins.repr(node.value)})`;
+        if (node instanceof $B.ast.Constant) {
+            const kind = $B.class_name(node.value);
+
+            return NUMBERS.has(kind)
+                ? `Number(${numberKey(node.value)})`
+                : `Constant(${kind}:${$B.builtins.repr(node.value)})`;
+        }
 
         return `${node.constructor.$name}(${node.constructor._fields.map((field) => key(node[field])).join(',')})`;
     };
