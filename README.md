@@ -77,7 +77,7 @@ rest of that configuration and what each line buys.
 npm install
 npm run dev
 
-npm test             # 1 701 tests: semantics, props, reactivity, Svelte surface
+npm test             # 1 702 tests: semantics, props, reactivity, Svelte surface
 npm run test:quiet   # the suite's own output: a green run must say nothing
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
@@ -794,7 +794,8 @@ the same object. A list, a dict, a set or an instance is the module's own
 object, as `m.items` is in Python: changed in place by the module,
 `items.append(2)` or `thing.count = 1`, it is changed for the importer, and a
 write from JavaScript is the module's. A set reads as a JavaScript `Set`, as
-Svelte's own `SvelteSet` does, and bytes as a `Uint8Array`, what a `Blob`, a
+Svelte's own `SvelteSet` does, a walk visiting each member once, since a Python
+set keeps no order of arrival to visit one added back again, and bytes as a `Uint8Array`, what a `Blob`, a
 `fetch` body or a `TextDecoder` takes. That one is a copy, since a Web API takes
 no live object for bytes: of a `bytearray`, the bytes it holds when it
 crosses, taken again when Python changes it; a byte JavaScript writes into the
@@ -1532,7 +1533,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 1 701 tests as written (vitest reports more, one per
+Validated by `npm test`, 1 702 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;

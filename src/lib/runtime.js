@@ -2612,14 +2612,22 @@ function viewOf(value) {
     // copying it is. Two keys of one name are refused at any read of it, as the
     // copy refuses them.
     //
-    // Named once for each change of the dict's keys, and read so by every
-    // operation, the walk, a read and a write alike: as JavaScript names an
-    // object key when it is written, `o[k] = 42`, and keeps that name when
-    // `k`'s `toString` answers otherwise later. A key holding a JavaScript
-    // object, or one itself, keeps the name it had when the keys last changed,
-    // and the next change names it again. Taken afresh at some reads and not
-    // others, a name moved under a reader that had just listed it, two keys met
-    // under one name between two reads, and each read paid the whole table.
+    // Each key named once, when the view first finds it in the dict, and read
+    // so by every operation, the walk, a read and a write alike, for as long as
+    // the view finds it there: as JavaScript names an object key when it is
+    // written, `o[k] = 42`, and keeps that name whatever `k`'s `toString`
+    // answers later. Only a key the view meets for the first time is named
+    // when the keys change, so a name another key came to answer meets no one,
+    // and two keys collide only when one arrives under a name taken.
+    //
+    // The view knows what it finds, not what happened between two of its
+    // reads: Python changes the dict without it, and a key deleted and put
+    // back in between, or renamed before the view first looked, is to the view
+    // a key that never left, or one it meets now. Knowing more would take a
+    // record of every change Python makes. Taken afresh at some reads and not
+    // others, a name moved under a reader that had just listed it and each read
+    // paid the whole table; taken afresh at each change, an unrelated key added
+    // made the whole view refuse to be read.
     let named = null;
     let nameOf = null;
     let namedAt;
@@ -2628,12 +2636,14 @@ function viewOf(value) {
         const at = value[dictVersion()];
 
         if (named === null || at === undefined || at !== namedAt) {
+            const kept = nameOf ?? new Map();
+
             named = new Map();
             nameOf = new Map();
             for (const [key] of pyEntries(value)) {
                 if (typeof key === 'string') continue;
 
-                const name = propertyKey(key);
+                const name = kept.has(key) ? kept.get(key) : propertyKey(key);
 
                 nameOf.set(key, name);
                 named.set(name, named.has(name) ? TWO_KEYS : key);
@@ -2948,12 +2958,6 @@ function instanceView(value) {
 class SetView extends Set {
     #value;
 
-    // When each member this view added last arrived, as a count of arrivals:
-    // a member deleted and added again during a walk arrives anew, and a walk
-    // of a `Set` visits it again.
-    #arrivals = 0;
-    #arrived = new Map();
-
     constructor(value) {
         super();
         this.#value = value;
@@ -3000,11 +3004,7 @@ class SetView extends Set {
     }
 
     add(one) {
-        const member = entering(one);
-        const arriving = !this.has(one);
-
-        this.#call('add', member);
-        if (arriving) this.#arrived.set(member, ++this.#arrivals);
+        this.#call('add', entering(one));
 
         return this.#published;
     }
@@ -3012,43 +3012,43 @@ class SetView extends Set {
     delete(one) {
         const held = this.has(one);
 
-        if (held) {
-            const member = pyBind(one);
-
-            this.#call('discard', member);
-            this.#arrived.delete(member);
-        }
+        if (held) this.#call('discard', pyBind(one));
 
         return held;
     }
 
     clear() {
         this.#call('clear');
-        this.#arrived.clear();
     }
 
-    // A walk of a `Set` is live: a member deleted before its turn is not
-    // visited, one added during the walk is, after the others, one deleted and
-    // added again is visited again, and `clear` ends it. So the members are
-    // taken once, each asked at its turn whether it is still there, and the
-    // set asked again at the end for what arrived since its visit.
+    // A walk is live as a `Set`'s is, as far as the members present at each
+    // step say: a member deleted before its turn is not visited, one that
+    // arrives during the walk is, after the others, and `clear` ends it. So
+    // the members are taken once, each asked at its turn whether it is still
+    // there, and the set asked again at the end for what arrived.
+    //
+    // Each member is visited once. A `Set` visits again one deleted and added
+    // back during the walk, by the order of arrival it keeps; a Python set
+    // keeps none, and Python changes it without the view, so "deleted and added
+    // back" and "never left" are one state to a walk. A record kept by the view
+    // saw only its own writes, and held every member it had added after the set
+    // let it go.
     *values() {
         const $B = globalThis.__BRYTHON__;
-        const visited = new Map();
-        const due = (one) => !visited.has(one) || (this.#arrived.get(one) ?? 0) > visited.get(one);
+        const visited = new Set();
         let members = iterated(this.#value);
 
         follow(this.#value);
 
         while (members.length > 0) {
             for (const one of members) {
-                if (!due(one) || !$B.$is_member(one, this.#value)) continue;
+                if (visited.has(one) || !$B.$is_member(one, this.#value)) continue;
 
-                visited.set(one, this.#arrivals);
+                visited.add(one);
                 yield forReader(one);
             }
 
-            members = [...iterated(this.#value)].filter(due);
+            members = [...iterated(this.#value)].filter((one) => !visited.has(one));
         }
     }
 
