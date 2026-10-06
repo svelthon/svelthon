@@ -467,8 +467,6 @@ export const __pybridge = {
     // `null`, which a JavaScript reader takes for an absence; a container is
     // the object it is.
     toContext(value) {
-        if (value === NONE) return null;
-
         return value !== null && (typeof value === 'object' || typeof value === 'function') && callable(value)
             ? pyHandler(value)
             : viewOf(plainScalar(value));
@@ -487,25 +485,32 @@ export const __pybridge = {
     },
 
     // `set_context` and `get_context`. A scalar is set as JavaScript's own, for
-    // a JavaScript reader, and its original beside it under a key of
-    // Svelthon's, for a Python one: `Price(0.5)` reads back a `Price` and
-    // `1.0` a float, where the number alone would read back `0.5` and `1`. The
-    // original is taken only while the key still holds the number it was made
-    // into, so a JavaScript component between the two that sets the key again
-    // is read as it set it.
-    provide(set, key, value) {
+    // a JavaScript reader, and its original kept in the context too, for a
+    // Python one: `Price(0.5)` reads back a `Price` and `1.0` a float, where the
+    // number alone would read back `0.5` and `1`.
+    //
+    // Kept as a list under one key of Svelthon's, each component's context
+    // holding its own head, which Svelte copies from the parent's: an original
+    // lives as long as the context holding it, a child's never reaches its
+    // parent, and the nearest one for a key shadows the others. The original is
+    // taken only while the key still holds the value it was made into, so a
+    // JavaScript component between the two that sets the key again is read as
+    // it set it.
+    provide(set, get, key, value) {
         const out = __pybridge.toContext(value);
 
         set(key, out);
-        set(beside(key, true), out === value ? undefined : { js: out, py: value });
+        set(ORIGINALS, { key, js: out, py: value, next: get(ORIGINALS) });
     },
 
     provided(get, key) {
         const value = get(key);
-        const side = beside(key);
-        const original = side === undefined ? undefined : get(side);
 
-        return original !== undefined && Object.is(value, original.js) ? original.py : __pybridge.received(value);
+        for (let at = get(ORIGINALS); at !== undefined; at = at.next) {
+            if (Object.is(at.key, key)) return Object.is(value, at.js) ? at.py : __pybridge.received(value);
+        }
+
+        return __pybridge.received(value);
     },
 
     // `{...attrs}`: Svelte diffs the spread object against the one from the
@@ -2384,9 +2389,13 @@ export const pyScalar = (value) => {
 };
 
 // A value read by JavaScript off a store: a scalar as JavaScript's own, a float
-// a number, and a container as itself, since its identity is what a mutation
-// is followed by. The read half of the store's setter, which takes `__pyArg`.
+// a number, `None` its `null`, which a JavaScript reader takes for an absence,
+// and a container as itself, since its identity is what a mutation is followed
+// by. The read half of the store's setter, which takes `__pyArg`, and the door
+// of a context and of a `bindable` handed back to a parent.
 export const plainScalar = (value) => {
+    if (value === NONE) return null;
+
     const scalar = pyScalar(value);
     return scalar === undefined ? value : scalar;
 };
@@ -2411,28 +2420,9 @@ export const plainScalar = (value) => {
 const VIEW_OF = new WeakMap();
 const VIEWED = new WeakSet();
 
-// The key a context's original Python value is kept under (`provide`), one per
-// context key, made by a write and only looked up by a read. Held no longer than
-// the key, as Svelte's own context map holds it: an object, a function or a
-// symbol of its own goes when nothing else holds it. A string, a number or a
-// `Symbol.for` cannot be held weakly, and is kept by value.
-const BESIDE = new WeakMap();
-const BESIDE_VALUES = new Map();
-
-const beside = (key, made = false) => {
-    let found = BESIDE.get(key) ?? BESIDE_VALUES.get(key);
-
-    if (found === undefined && made) {
-        found = Symbol('svelthon.context');
-        try {
-            BESIDE.set(key, found);
-        } catch {
-            BESIDE_VALUES.set(key, found);
-        }
-    }
-
-    return found;
-};
+// The key the originals of a context's Python values are kept under, in the
+// context itself (`provide`).
+const ORIGINALS = Symbol('svelthon.context-originals');
 
 // A list's view is an array whose prototype is not `Array.prototype` itself,
 // only inherits from it: Svelte wraps a plain array put in a `$state` in a proxy
@@ -4980,7 +4970,7 @@ const running = (call, where, convert = pyNumbers) => {
 // `pyNumbers` and not `plainData`. That difference is why this wrapper exists
 // at all. A callable returned whole is a callback like one returned inside a
 // config.
-const returned = (value) => (callable(value) ? pyHandler(value) : pyNumbers(value));
+const returned = (value) => (callable(value) ? pyHandler(value) : pyNumbers(plainScalar(value)));
 
 // What an `@export` hands the parent that calls it through `bind:this` is data,
 // the instance's API and not a framework's options, so it crosses as a prop's

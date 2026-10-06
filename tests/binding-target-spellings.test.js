@@ -46,8 +46,10 @@ test('three spellings of one target are one group, as in Svelte', async () => {
 
 // `bag[1]`, `bag[1.0]` and `bag[True]` are one entry of the dict, Python
 // comparing numeric keys by value, so they are one group; `bag[one]` is another
-// expression, which Svelte keeps apart too.
-test('equal numeric keys are one target', async () => {
+// expression, which Svelte keeps apart too. A number that is not the key keeps
+// its class: `str(1)` and `str(True)` are `'1'` and `'True'`, two entries, where
+// they were one group writing both. `python3` on the same dict.
+test('equal numeric keys are one target, and only the key is compared by value', async () => {
     const target = await mounted(GroupNumericKeys);
     const models = [];
 
@@ -56,8 +58,13 @@ test('equal numeric keys are one target', async () => {
         flushSync();
         models.push(target.querySelector('p').textContent);
     }
+    for (const key of ['e', 'f']) {
+        target.querySelector(`[data-k="${key}"]`).click();
+        flushSync();
+    }
 
     expect(models).toEqual(['a', 'a,b', 'a,b,c', 'd']);
+    expect(target.querySelector('output').textContent).toBe("{'1': ['e'], 'True': ['f']}");
 });
 
 test('a parenthesized name is the name it holds, in the script and in the markup', async () => {

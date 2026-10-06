@@ -1335,22 +1335,34 @@ const numberKey = (value) => {
 };
 
 // What makes two targets one whatever their spelling: the tree, positions left
-// out, a number by its value as Python compares keys, any other constant by
-// its class and its `repr`.
+// out, a constant by its class and its `repr`, and a number that is a key by its
+// value, as Python compares keys. A key is what a subscript holds, each member
+// of a tuple held there and the operand of a sign in front of it: `bag[1]`,
+// `bag[True]` and `bag[(1.0, -1)]` are entries a dict compares, while the `1`
+// of `bag[str(1)]` is an argument, and `str(1)` is not `str(True)`.
 const targetKey = (expr) => {
     const $B = globalThis.__BRYTHON__;
-    const key = (node) => {
-        if (Array.isArray(node)) return `[${node.map(key).join(',')}]`;
+    const signed = (node) => node.op instanceof $B.ast.USub || node.op instanceof $B.ast.UAdd;
+    const atKey = (node, field, held) =>
+        node instanceof $B.ast.Subscript
+            ? field === 'slice'
+            : held &&
+              ((node instanceof $B.ast.Tuple && field === 'elts') ||
+                  (node instanceof $B.ast.UnaryOp && field === 'operand' && signed(node)));
+    const key = (node, held = false) => {
+        if (Array.isArray(node)) return `[${node.map((one) => key(one, held)).join(',')}]`;
         if (node === null || typeof node !== 'object') return JSON.stringify(node ?? null);
         if (node instanceof $B.ast.Constant) {
             const kind = $B.class_name(node.value);
 
-            return NUMBERS.has(kind)
+            return held && NUMBERS.has(kind)
                 ? `Number(${numberKey(node.value)})`
                 : `Constant(${kind}:${$B.builtins.repr(node.value)})`;
         }
 
-        return `${node.constructor.$name}(${node.constructor._fields.map((field) => key(node[field])).join(',')})`;
+        const fields = node.constructor._fields.map((field) => key(node[field], atKey(node, field, held)));
+
+        return `${node.constructor.$name}(${fields.join(',')})`;
     };
     const node = targetTree(expr);
 
