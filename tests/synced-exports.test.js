@@ -16,7 +16,7 @@ import * as presenceNative from './fixtures/presence_native.js';
 import * as callables from './fixtures/held_callables.py';
 import { key as renamedKey } from './fixtures/renamed_key.js';
 import * as moving from './fixtures/moving_keys.py';
-import { inner, conversions, resetConversions } from './fixtures/moving_keys.js';
+import { inner, second, conversions, resetConversions } from './fixtures/moving_keys.js';
 
 // What a module exports is its own object, as a JavaScript module's export is
 // and as `m.items` is in Python: changed in place by the module, it is changed
@@ -157,38 +157,59 @@ test('a set finds the callable it handed out', () => {
     }
 });
 
-// A dict keyed by a JavaScript object names that key by its `toString`, which
-// answers anew once the object changes, with the dict unchanged: the view takes
-// the new name for every read, where a table kept from the first read named an
-// entry it could no longer find.
-test('a dict view follows the name a JavaScript key gives itself', () => {
+// A dict keyed by a JavaScript object names that key by its `toString`, once
+// for each change of the dict's keys and for every read alike, as JavaScript
+// names an object key when it is written and keeps the name: the object
+// written before the rename is the witness. The view stays one object: what
+// it lists, what it reads and what it writes out agree, where a name taken
+// afresh at some reads only listed an entry no read could find.
+test('a dict view names a JavaScript key as JavaScript does', () => {
+    const witness = {};
+
+    witness[renamedKey] = 42;
     expect(Object.keys(callables.mapping)).toEqual(['before']);
-    expect(callables.mapping.before).toBe(42);
 
     renamedKey.label = 'after';
 
-    expect(Object.keys(callables.mapping)).toEqual(['after']);
+    expect(Object.keys(callables.mapping)).toEqual(Object.keys(witness));
+    expect(callables.mapping.before).toBe(witness.before);
+    expect(JSON.stringify(callables.mapping)).toBe(JSON.stringify(witness));
+
+    // A change of the keys names them again, as writing the key again would.
+    callables.touch();
+    expect(Object.keys(callables.mapping)).toEqual(['after', 'other']);
     expect(callables.mapping.after).toBe(42);
-    expect(JSON.stringify(callables.mapping)).toBe('{"after":42}');
 });
 
-// And a key that only holds such an object, a tuple of it, whose name moves
-// with it: a name is checked against its key at each read, whatever the key.
-// Read whole, the view converts each key a bounded number of times, where
-// taking every name afresh at each read made it quadratic, 320 400 calls of
-// `toString` for 400 keys.
-test('a dict view follows a moved name inside a tuple, and stays linear', () => {
+// And a key that holds such an object, a tuple of it, the same way. Two keys
+// that come to answer one name keep the names they were given, so a write
+// under one of them reaches that key, until the keys change and the two are
+// refused as the copy refuses them. Read whole, the view names each key once,
+// a dict of strings beside one such key included: taking names afresh at
+// each read was quadratic, 320 400 calls of `toString` for 400 keys.
+test('a dict view keeps the names it gave, and names them once', () => {
     expect(moving.by_tuple.before).toBe(42);
+    expect([moving.pair.first, moving.pair.second]).toEqual([1, 2]);
 
     inner.label = 'after';
+    second.label = 'first';
 
-    expect(Object.keys(moving.by_tuple)).toEqual(['after']);
-    expect(moving.by_tuple.after).toBe(42);
-    expect(moving.by_tuple.before).toBeUndefined();
+    expect(Object.keys(moving.by_tuple)).toEqual(['before']);
+    expect(moving.by_tuple.before).toBe(42);
+    expect(Object.keys(moving.pair)).toEqual(['first', 'second']);
 
-    resetConversions();
-    expect(Object.keys(moving.large)).toHaveLength(400);
-    expect(conversions()).toBeLessThanOrEqual(5 * 400);
+    moving.pair.first = 7;
+    expect(moving.values_of_pair()).toEqual([7, 2]);
+
+    moving.touch();
+    expect(Object.keys(moving.by_tuple)).toEqual(['after', 'other']);
+    expect(() => moving.pair.first).toThrow(/two keys JavaScript cannot tell apart/);
+
+    for (const dict of [moving.large, moving.mixed]) {
+        resetConversions();
+        expect(Object.keys(dict).length).toBeGreaterThan(0);
+        expect(conversions()).toBeLessThanOrEqual(400);
+    }
 });
 
 // A walk of a set is live, as a `Set`'s is: a member deleted before its turn
@@ -227,6 +248,100 @@ test('a walk of a set sees the changes made during it', () => {
                 [1, 2, 3].forEach((one) => native.add(one));
             }
         )
+    );
+});
+
+// A member deleted and added again during a walk arrives anew, and is visited
+// again, once, as a `Set` visits it; the walk took a value it had seen for one
+// it would never see again.
+test('a walk of a set visits a member added back during it', () => {
+    const walks = (make, refill) =>
+        [
+            (set) => (set.delete(1), set.add(1)),
+            (set) => (set.clear(), set.add(1))
+        ].flatMap((change) =>
+            [true, false].map((byForOf) => {
+                const set = make();
+                const visited = [];
+                let changed = false;
+                const visit = (one) => {
+                    visited.push(one);
+                    if (one === 1 && !changed) {
+                        changed = true;
+                        change(set);
+                    }
+                };
+
+                refill();
+                if (byForOf) for (const one of set) visit(one);
+                else set.forEach(visit);
+
+                return visited;
+            })
+        );
+    const native = new Set();
+
+    expect(walks(() => sets.walked, sets.refill)).toEqual(
+        walks(
+            () => native,
+            () => {
+                native.clear();
+                [1, 2, 3].forEach((one) => native.add(one));
+            }
+        )
+    );
+});
+
+// `difference` asks of the members as they were, as the specification walks
+// its copy: a `has` that changes the set did not change what was asked, and a
+// member it excludes stayed in the result. And the argument's `has` is read
+// and refused before its `keys` is read.
+test('a set’s difference and its argument follow the specification', () => {
+    const outcome = (set, refill) => {
+        refill();
+        const asked = [];
+        const result = set.difference({
+            size: 10,
+            has(one) {
+                asked.push(one);
+                if (one === 1) set.delete(3);
+                return one === 3;
+            },
+            *keys() {
+                yield 3;
+            }
+        });
+        const read = [];
+        let refusal;
+
+        try {
+            set.union({
+                get size() {
+                    read.push('size');
+                    return 1;
+                },
+                get has() {
+                    read.push('has');
+                    return 42;
+                },
+                get keys() {
+                    read.push('keys');
+                    throw new Error('keys read');
+                }
+            });
+        } catch (error) {
+            refusal = error.constructor.name;
+        }
+
+        return { asked, result: [...result], read, refusal };
+    };
+    const native = new Set();
+
+    expect(outcome(sets.walked, sets.refill)).toEqual(
+        outcome(native, () => {
+            native.clear();
+            [1, 2, 3].forEach((one) => native.add(one));
+        })
     );
 });
 

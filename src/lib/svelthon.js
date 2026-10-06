@@ -283,8 +283,26 @@ export function moduleImports(content) {
 // Read on the markup alone, like every other reading of an option: a
 // declaration quoted in `<!-- -->` is documentation, and one in a script's
 // string is the author's text.
-export const compileOptionsFor = (code) =>
-    /<svelte:options[^>]*\bcustomElement\b/.test(markupOnly(code)) ? { customElement: true } : undefined;
+//
+// Each language by its own rules. Markup whose expressions are JavaScript, a
+// JavaScript component and what the preprocessor makes of a Python one, is
+// read by Svelte's parser, which knows a tag from the text of an expression,
+// a `/* } */` or a nested template literal among it. Markup whose expressions
+// are Python does not parse as JavaScript, and is read by the scanner made for
+// it (`markupOnly`).
+export const compileOptionsFor = (code) => {
+    let declared;
+
+    try {
+        declared = parse(blankBodies(withoutComments(code)), { modern: true }).options?.attributes.some(
+            (one) => one.name === 'customElement'
+        );
+    } catch {
+        declared = /<svelte:options[^>]*\bcustomElement\b/.test(markupOnly(code));
+    }
+
+    return declared ? { customElement: true } : undefined;
+};
 
 // What the `markup` hook works out about a file and the `script` hook then needs:
 //

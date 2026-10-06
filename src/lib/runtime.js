@@ -2612,31 +2612,30 @@ function viewOf(value) {
     // copying it is. Two keys of one name are refused at any read of it, as the
     // copy refuses them.
     //
-    // A name can move while the dict does not: one taken from an object, a
-    // JavaScript key or a tuple holding one, is what its `toString` answers
-    // now. A number's name never moves. So when the dict holds a key that is
-    // not one, an entry found is asked its name again, one conversion, and a
-    // name not found, or found under a name it no longer answers, is looked for
-    // in a table made afresh: a read of the whole view stays linear, and a key
-    // that moved is found under its new name and not under its old one.
+    // Named once for each change of the dict's keys, and read so by every
+    // operation, the walk, a read and a write alike: as JavaScript names an
+    // object key when it is written, `o[k] = 42`, and keeps that name when
+    // `k`'s `toString` answers otherwise later. A key holding a JavaScript
+    // object, or one itself, keeps the name it had when the keys last changed,
+    // and the next change names it again. Taken afresh at some reads and not
+    // others, a name moved under a reader that had just listed it, two keys met
+    // under one name between two reads, and each read paid the whole table.
     let named = null;
+    let nameOf = null;
     let namedAt;
-    let movable = false;
 
-    const nonStringKeys = (again = false) => {
+    const nonStringKeys = () => {
         const at = value[dictVersion()];
 
-        if (again || named === null || at === undefined || at !== namedAt) {
+        if (named === null || at === undefined || at !== namedAt) {
             named = new Map();
-            movable = false;
+            nameOf = new Map();
             for (const [key] of pyEntries(value)) {
                 if (typeof key === 'string') continue;
-                if (key !== null && (typeof key === 'object' || typeof key === 'function') && key !== NONE && pyScalar(key) === undefined) {
-                    movable = true;
-                }
 
                 const name = propertyKey(key);
 
+                nameOf.set(key, name);
                 named.set(name, named.has(name) ? TWO_KEYS : key);
             }
             namedAt = at;
@@ -2649,11 +2648,7 @@ function viewOf(value) {
 
         if (typeof name !== 'string' || $B.hasOnlyStringKeys(value)) return own ? name : MISSING;
 
-        let other = nonStringKeys().get(name);
-
-        if (movable && (other === undefined || other === TWO_KEYS || propertyKey(other) !== name)) {
-            other = nonStringKeys(true).get(name);
-        }
+        const other = nonStringKeys().get(name);
 
         if (other === TWO_KEYS || (own && other !== undefined)) twoKeys(name);
 
@@ -2670,15 +2665,21 @@ function viewOf(value) {
     };
     const read = (key) => forReader($B.$getitem(value, sequence ? index(key) : keyFor(key)));
 
-    // Every name, as the copy writes them: two keys of one name, `7` and `"7"`,
-    // are refused as the copy refuses them, where the view showed one and
-    // dropped the other.
+    // Every name, as the copy writes them and from the table a read finds them
+    // in: two keys of one name, `7` and `"7"`, are refused as the copy refuses
+    // them, where the view showed one and dropped the other.
     const keys = () => {
         if (sequence) return Array.from({ length: length() }, (_, at) => String(at));
 
         const names = {};
 
-        for (const [key] of pyEntries(value)) define(names, propertyName(key, names), true);
+        nonStringKeys();
+        for (const [key] of pyEntries(value)) {
+            const name = typeof key === 'string' ? key : nameOf.get(key);
+
+            if (Object.hasOwn(names, name)) twoKeys(name);
+            define(names, name, true);
+        }
 
         return Reflect.ownKeys(names);
     };
@@ -2947,6 +2948,12 @@ function instanceView(value) {
 class SetView extends Set {
     #value;
 
+    // When each member this view added last arrived, as a count of arrivals:
+    // a member deleted and added again during a walk arrives anew, and a walk
+    // of a `Set` visits it again.
+    #arrivals = 0;
+    #arrived = new Map();
+
     constructor(value) {
         super();
         this.#value = value;
@@ -2993,7 +3000,11 @@ class SetView extends Set {
     }
 
     add(one) {
-        this.#call('add', entering(one));
+        const member = entering(one);
+        const arriving = !this.has(one);
+
+        this.#call('add', member);
+        if (arriving) this.#arrived.set(member, ++this.#arrivals);
 
         return this.#published;
     }
@@ -3001,35 +3012,43 @@ class SetView extends Set {
     delete(one) {
         const held = this.has(one);
 
-        if (held) this.#call('discard', pyBind(one));
+        if (held) {
+            const member = pyBind(one);
+
+            this.#call('discard', member);
+            this.#arrived.delete(member);
+        }
 
         return held;
     }
 
     clear() {
         this.#call('clear');
+        this.#arrived.clear();
     }
 
     // A walk of a `Set` is live: a member deleted before its turn is not
-    // visited, one added during the walk is, after the others, and `clear`
-    // ends it. So the members are taken once, each asked at its turn whether
-    // it is still there, and the set asked again at the end for what arrived.
+    // visited, one added during the walk is, after the others, one deleted and
+    // added again is visited again, and `clear` ends it. So the members are
+    // taken once, each asked at its turn whether it is still there, and the
+    // set asked again at the end for what arrived since its visit.
     *values() {
         const $B = globalThis.__BRYTHON__;
-        const visited = new Set();
+        const visited = new Map();
+        const due = (one) => !visited.has(one) || (this.#arrived.get(one) ?? 0) > visited.get(one);
         let members = iterated(this.#value);
 
         follow(this.#value);
 
         while (members.length > 0) {
             for (const one of members) {
-                if (visited.has(one) || !$B.$is_member(one, this.#value)) continue;
+                if (!due(one) || !$B.$is_member(one, this.#value)) continue;
 
-                visited.add(one);
+                visited.set(one, this.#arrivals);
                 yield forReader(one);
             }
 
-            members = [...iterated(this.#value)].filter((one) => !visited.has(one));
+            members = [...iterated(this.#value)].filter(due);
         }
     }
 
@@ -3080,8 +3099,10 @@ class SetView extends Set {
         const record = setRecord(other);
         const result = new Set(this.values());
 
+        // The members as they were, as the specification walks its copy: a
+        // `has` that changes this set does not change what is asked.
         if (this.size <= record.size) {
-            for (const one of this.values()) if (record.has(one)) result.delete(one);
+            for (const one of [...result]) if (record.has(one)) result.delete(one);
         } else {
             for (const one of walk(record.keys())) result.delete(one);
         }
@@ -3149,9 +3170,14 @@ const setRecord = (other) => {
 
     if (whole < 0) throw new RangeError("The 'size' of a set-like object must not be negative");
 
-    const { has, keys } = other;
+    // Each read and refused before the next is read, in the specification's
+    // order: a getter of `keys` does not run for a `has` already refused.
+    const has = other.has;
 
     if (typeof has !== 'function') throw new TypeError("The 'has' of a set-like object must be a function");
+
+    const keys = other.keys;
+
     if (typeof keys !== 'function') throw new TypeError("The 'keys' of a set-like object must be a function");
 
     return { size: whole, has: (one) => Boolean(has.call(other, one)), keys: () => keys.call(other) };

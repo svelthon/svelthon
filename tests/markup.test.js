@@ -29,6 +29,7 @@ const directiveHeads = (content) => {
 // Moved out of markup.js: what a `<script module>` declares is a JavaScript
 // question, and Svelte's parser is the thing that owns that grammar.
 import { moduleImports, compileOptionsFor } from '../src/lib/svelthon.js';
+import { parse } from 'svelte/compiler';
 
 // `(x := 1)` in a template writes the component's name through the namespace,
 // which is what makes it reach the signal. Python's own grammar forces the
@@ -490,6 +491,22 @@ describe('a declaration in a string of a script', () => {
         expect(
             compileOptionsFor('<svelte:options customElement={{ tag: "my-tag", props: { size: { type: "Number" } } }} />')
         ).toEqual({ customElement: true });
+    });
+
+    // A JavaScript expression by JavaScript's rules, as Svelte's parser reads
+    // it: a brace in a comment, or in a template literal inside another, ended
+    // the expression for the scanner made for Python.
+    test('nor one beside a brace in a JavaScript comment or a nested template literal', () => {
+        const option = '<svelte:options customElement="fake-name" />';
+
+        for (const source of [
+            `<p>{/* } */ '${option}'}</p>`,
+            `<p>{// }\n '${option}'}</p>`,
+            `<p>{\`\${\`}\`} ${option}\`}</p>`
+        ]) {
+            expect(parse(source, { modern: true }).options).toBeNull();
+            expect(compileOptionsFor(source)).toBeUndefined();
+        }
     });
 });
 
