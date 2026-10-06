@@ -1288,6 +1288,48 @@ const keyword = (trimmed, sigil) => {
 // behind a JavaScript proxy fails its own type checks.
 const DECLARED_NAME = new RegExp(`^${NAME}$`, 'u');
 
+// A binding's target as Python reads it, by the parser of the Brython the
+// compiler has loaded before any markup is read: `(amount)` is the `Name`
+// `amount`, and `bag["selected"]`, `bag[ "selected" ]` and `bag['selected']`
+// are one `Subscript`. Null for text that does not parse, which the compiler
+// refuses where it is written once it compiles it.
+function targetTree(expr) {
+    const $B = globalThis.__BRYTHON__;
+
+    if (typeof $B?.Parser !== 'function') {
+        throw new Error("svelthon: reading a binding's target needs Brython's parser, which `compile.cjs` loads");
+    }
+
+    try {
+        return $B._PyPegen.run_parser(new $B.Parser(expr.trim(), '<target>', 'eval')).body;
+    } catch {
+        return null;
+    }
+}
+
+// The name a target is, when it is one.
+const bareName = (expr) => {
+    const node = targetTree(expr);
+
+    return node instanceof globalThis.__BRYTHON__.ast.Name ? node.id : null;
+};
+
+// What makes two targets one whatever their spelling: the tree, positions left
+// out, a constant by its class and its `repr`.
+const targetKey = (expr) => {
+    const $B = globalThis.__BRYTHON__;
+    const key = (node) => {
+        if (Array.isArray(node)) return `[${node.map(key).join(',')}]`;
+        if (node === null || typeof node !== 'object') return JSON.stringify(node ?? null);
+        if (node instanceof $B.ast.Constant) return `Constant(${$B.class_name(node.value)}:${$B.builtins.repr(node.value)})`;
+
+        return `${node.constructor.$name}(${node.constructor._fields.map((field) => key(node[field])).join(',')})`;
+    };
+    const node = targetTree(expr);
+
+    return node === null ? expr.trim() : key(node);
+};
+
 // The compiler's own prefix, written the same way `compile.cjs` writes it: a
 // name that begins with `__` and does not end with one, so Python's own dunders,
 // `__all__` and `__doc__`, stay free.
@@ -1750,8 +1792,7 @@ function walk(markup, collect, onPython, seed, record, where) {
     const boundPair = (directive, expr) => {
         const multiple = directive === 'bind:value' && tag?.name === 'select' && tagNames(markup, tag.start).has('multiple');
         const crossing = multiple ? SELECTED_VALUE : BIND_VALUE;
-        const target = expr.trim();
-        const write = declaredHere(target) ? `${target} = ${crossing}(${BOUND_VALUE})` : assign(expr, crossing);
+        const write = declaredHere(expr) ? `${bareName(expr)} = ${crossing}(${BOUND_VALUE})` : assign(expr, crossing);
 
         return `() => ${call(expr, '__bound', undefined, multiple ? 'selection' : 'scalar')}, (${BOUND_VALUE}) => ${write}`;
     };
@@ -1764,9 +1805,8 @@ function walk(markup, collect, onPython, seed, record, where) {
         // A name the markup declared is Svelte's cell, which Svelte writes
         // itself: `assign` would hand it to a `def` as a parameter and write
         // that. The value still crosses into Python on the way.
-        const target = expr.trim();
-        const own = declaredHere(target);
-        const write = own ? `${target} = ${BIND_VALUE}(${BOUND_VALUE})` : assign(expr);
+        const own = declaredHere(expr);
+        const write = own ? `${bareName(expr)} = ${BIND_VALUE}(${BOUND_VALUE})` : assign(expr);
         const found = tag === null ? null : tagValue(markup, tag.start);
         const outer = region;
 
@@ -1784,8 +1824,10 @@ function walk(markup, collect, onPython, seed, record, where) {
 
         region = outer;
 
-        // And the binding itself, as the author wrote it. The action needs to
-        // know which inputs belong together. Two bindings may hold one list
+        // And the binding itself, as Python reads it rather than as it is
+        // spelled (`targetKey`): `bag["selected"]` and `bag[ 'selected' ]` are
+        // one target. The action needs to know which inputs belong together.
+        // Two bindings may hold one list
         // (`left = shared`, `right = shared`), and sharing a value is not sharing
         // a binding, so the list they hold is not what identifies a group.
         //
@@ -1800,7 +1842,8 @@ function walk(markup, collect, onPython, seed, record, where) {
         // The list the row holds cannot stand in for them, since two rows may
         // be handed one default list and are still two targets. A cell the
         // markup declared is its own target, told by its token.
-        const where = own && inScope().includes(`${CELL}${target}`) ? [`${CELL}${target}`] : mentioned(target);
+        const cell = own ? `${CELL}${bareName(expr)}` : null;
+        const where = cell !== null && inScope().includes(cell) ? [cell] : mentioned(expr.trim());
 
         // And `checked` for the server, which runs no action: Svelte's server
         // writes it for its own group, from the model, when the tag has a value,
@@ -1821,7 +1864,7 @@ function walk(markup, collect, onPython, seed, record, where) {
 
         return (
             `use:${GROUP_ACTION}={[${read}, (${BOUND_VALUE}) => ${write}, ${value}, ` +
-            `${JSON.stringify(expr.trim())}, ${NAMESPACE}, [${where.join(', ')}]]}${checked}`
+            `${JSON.stringify(targetKey(expr))}, ${NAMESPACE}, [${where.join(', ')}]]}${checked}`
         );
     };
 
@@ -1838,8 +1881,10 @@ function walk(markup, collect, onPython, seed, record, where) {
     // JavaScript member access on a Python object, which finds a property and
     // not a key, so the write would land nowhere and say nothing.
     const componentGroup = (target) => {
-        if (declaredHere(target)) return target;
-        if (DECLARED_NAME.test(target)) return `${NAMESPACE}.${target}`;
+        const name = bareName(target);
+
+        if (declaredHere(target)) return name;
+        if (name !== null) return `${NAMESPACE}.${name}`;
 
         throw refuse(
             new SyntaxError(
@@ -1865,9 +1910,9 @@ function walk(markup, collect, onPython, seed, record, where) {
     // The read still goes through Python: the cell holds a Python value, which
     // the DOM reads only once made its own, a float a number and `None` empty.
     const declaredHere = (expr) => {
-        const name = expr.trim();
+        const name = bareName(expr);
 
-        return DECLARED_NAME.test(name) && inScope().includes(name);
+        return name !== null && inScope().includes(name);
     };
 
     // `(x := …)` writes through the namespace, which holds the module's names
@@ -2644,12 +2689,14 @@ export function collector(defs, lines, columns) {
             // A module name assigned inside a function is local unless declared
             // by Python's rule, and the binding would otherwise write into a
             // frame nobody reads. A block's own name is already a parameter.
-            const bare = DECLARED_NAME.test(expression) && !args.includes(expression);
+            // `(amount)` is the name `amount`, parentheses being grouping alone.
+            const named = bareName(expression);
+            const bare = named !== null && !args.includes(named);
 
             defs.push(
                 [
                     `def ${name}(${[BOUND_VALUE, ...args].join(', ')}):`,
-                    ...(bare ? [`    global ${expression}`] : []),
+                    ...(bare ? [`    global ${named}`] : []),
                     `    (${expression}) = ${BOUND_VALUE}`
                 ].join('\n')
             );

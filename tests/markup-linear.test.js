@@ -13,6 +13,9 @@
 // linear walk and tens of seconds on a quadratic one.
 import { test, expect } from 'vitest';
 import { pythonExpressions, collector } from '../src/lib/markup.js';
+// The parser a binding's target is read with, which the plugin has loaded
+// before any markup is read.
+import '../src/lib/compile.cjs';
 
 const ROW =
     '<li class="row" data-id="{item.id}" title="{item.title}" ' +
