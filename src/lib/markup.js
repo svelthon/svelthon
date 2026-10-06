@@ -2649,8 +2649,30 @@ export const blankBodies = (content) =>
         return open + blank(found.slice(open.length, found.length - close.length)) + close;
     });
 
+// Every expression's content blanked, its braces kept, found as Svelte finds
+// it: a `{` opens one wherever it stands, and its end is the brace that closes
+// it, strings and nested braces stepped over (`closingBrace`). A tag spelled in
+// a template literal, `` {`<svelte:options customElement="x" />`} ``, or in an
+// expression holding a dict, is text, where the walk below read it as a tag:
+// the component was compiled as a custom element and its props made bindable.
+const blankExpressions = (text) => {
+    let out = '';
+    let at = 0;
+
+    for (let open = text.indexOf('{'); open !== -1; open = text.indexOf('{', at)) {
+        const close = closingBrace(text, open);
+
+        if (close === -1) break;
+
+        out += text.slice(at, open + 1) + blank(text.slice(open + 1, close)) + '}';
+        at = close + 1;
+    }
+
+    return out + text.slice(at);
+};
+
 export const markupOnly = (content) =>
-    blankBodies(withoutComments(content))
+    blankExpressions(blankBodies(withoutComments(content)))
         .replace(
             /<\p{ID_Start}[^\s/>]*(?:\s+[^\s=/>"']+(?:\s*=\s*(?:"[^"]*"|'[^']*'|\{[^{}]*\}|[^\s>"']+))?)*\s*\/?>|\{[^{}]*\}/gu,
             (found) => found.replace(QUOTED_TAG, blank)

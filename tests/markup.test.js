@@ -478,6 +478,19 @@ describe('a declaration in a string of a script', () => {
         // On a tag whose name starts past ASCII, which is a tag to Svelte.
         expect(compileOptionsFor(`<Étiquette title='${option}' />`)).toBeUndefined();
     });
+
+    // An expression ends where its brace closes, strings and nested braces
+    // stepped over: a template literal and a Python expression holding a dict
+    // made a custom element of a component that only displays the tag.
+    test('nor one in a template literal or beside a dict, where the real one still does', () => {
+        const option = "<svelte:options customElement='fake-name' />";
+
+        expect(compileOptionsFor(`<p>{\`${option}\`}</p>`)).toBeUndefined();
+        expect(compileOptionsFor(`<p>{"${option}" if {"x": 1} else ""}</p>`)).toBeUndefined();
+        expect(
+            compileOptionsFor('<svelte:options customElement={{ tag: "my-tag", props: { size: { type: "Number" } } }} />')
+        ).toEqual({ customElement: true });
+    });
 });
 
 // A script's attributes are read as names and values: a value is not a name.

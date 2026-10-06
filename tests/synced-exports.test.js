@@ -15,6 +15,8 @@ import * as presence from './fixtures/presence.py';
 import * as presenceNative from './fixtures/presence_native.js';
 import * as callables from './fixtures/held_callables.py';
 import { key as renamedKey } from './fixtures/renamed_key.js';
+import * as moving from './fixtures/moving_keys.py';
+import { inner, conversions, resetConversions } from './fixtures/moving_keys.js';
 
 // What a module exports is its own object, as a JavaScript module's export is
 // and as `m.items` is in Python: changed in place by the module, it is changed
@@ -168,6 +170,93 @@ test('a dict view follows the name a JavaScript key gives itself', () => {
     expect(Object.keys(callables.mapping)).toEqual(['after']);
     expect(callables.mapping.after).toBe(42);
     expect(JSON.stringify(callables.mapping)).toBe('{"after":42}');
+});
+
+// And a key that only holds such an object, a tuple of it, whose name moves
+// with it: a name is checked against its key at each read, whatever the key.
+// Read whole, the view converts each key a bounded number of times, where
+// taking every name afresh at each read made it quadratic, 320 400 calls of
+// `toString` for 400 keys.
+test('a dict view follows a moved name inside a tuple, and stays linear', () => {
+    expect(moving.by_tuple.before).toBe(42);
+
+    inner.label = 'after';
+
+    expect(Object.keys(moving.by_tuple)).toEqual(['after']);
+    expect(moving.by_tuple.after).toBe(42);
+    expect(moving.by_tuple.before).toBeUndefined();
+
+    resetConversions();
+    expect(Object.keys(moving.large)).toHaveLength(400);
+    expect(conversions()).toBeLessThanOrEqual(5 * 400);
+});
+
+// A walk of a set is live, as a `Set`'s is: a member deleted before its turn
+// is not visited, one added during the walk is, and `clear` ends it. The walk
+// went over a copy taken before the first member, and visited what was gone.
+test('a walk of a set sees the changes made during it', () => {
+    const walks = (make, refill) =>
+        [(set) => set.clear(), (set) => set.delete(3), (set) => set.add(4)].map((change) => {
+            const set = make();
+            const visited = [];
+
+            refill();
+            for (const one of set) {
+                visited.push(one);
+                if (one === 1) change(set);
+            }
+
+            const viaForEach = [];
+
+            refill();
+            set.forEach((one) => {
+                viaForEach.push(one);
+                if (one === 1) change(set);
+            });
+
+            return [visited, viaForEach];
+        });
+
+    const native = new Set();
+
+    expect(walks(() => sets.walked, sets.refill)).toEqual(
+        walks(
+            () => native,
+            () => {
+                native.clear();
+                [1, 2, 3].forEach((one) => native.add(one));
+            }
+        )
+    );
+});
+
+// The set algebra is the specification's: the argument is refused as
+// `Set.prototype` refuses it, and an intersection keeps the order of the
+// smaller side.
+test('a set’s algebra answers as Set.prototype does', () => {
+    sets.refill();
+    const native = new Set([1, 2, 3]);
+    const smaller = new Set([3, 1]);
+    const invalid = { size: Number.NaN, has: () => true, *keys() {} };
+    const methods = ['union', 'intersection', 'difference', 'symmetricDifference', 'isSubsetOf', 'isSupersetOf', 'isDisjointFrom'];
+    const answers = (set) =>
+        methods.map((name) => {
+            const answer = set[name](smaller);
+            return typeof answer === 'boolean' ? answer : [...answer];
+        });
+    const refusals = (set) =>
+        methods.map((name) => {
+            try {
+                set[name](invalid);
+                return 'accepted';
+            } catch (error) {
+                return error.constructor.name;
+            }
+        });
+
+    expect(answers(sets.walked)).toEqual(answers(native));
+    expect(refusals(sets.walked)).toEqual(refusals(native));
+    expect([...sets.walked.intersection(smaller)]).toEqual([3, 1]);
 });
 
 test('a JavaScript child reads and follows a set it is given', () => {

@@ -2612,24 +2612,27 @@ function viewOf(value) {
     // copying it is. Two keys of one name are refused at any read of it, as the
     // copy refuses them.
     //
-    // Unless a key is a JavaScript object: its name is what its own `toString`
-    // answers now, which can change while the dict does not, and a table kept
-    // across that change named an entry no read could find. A dict holding one
-    // takes its names afresh at each read; a Python key's name never moves.
+    // A name can move while the dict does not: one taken from an object, a
+    // JavaScript key or a tuple holding one, is what its `toString` answers
+    // now. A number's name never moves. So when the dict holds a key that is
+    // not one, an entry found is asked its name again, one conversion, and a
+    // name not found, or found under a name it no longer answers, is looked for
+    // in a table made afresh: a read of the whole view stays linear, and a key
+    // that moved is found under its new name and not under its old one.
     let named = null;
     let namedAt;
-    let volatile = false;
+    let movable = false;
 
-    const nonStringKeys = () => {
+    const nonStringKeys = (again = false) => {
         const at = value[dictVersion()];
 
-        if (named === null || volatile || at === undefined || at !== namedAt) {
+        if (again || named === null || at === undefined || at !== namedAt) {
             named = new Map();
-            volatile = false;
+            movable = false;
             for (const [key] of pyEntries(value)) {
                 if (typeof key === 'string') continue;
-                if (key !== null && (typeof key === 'object' || typeof key === 'function') && javascriptOwn(key)) {
-                    volatile = true;
+                if (key !== null && (typeof key === 'object' || typeof key === 'function') && key !== NONE && pyScalar(key) === undefined) {
+                    movable = true;
                 }
 
                 const name = propertyKey(key);
@@ -2646,7 +2649,11 @@ function viewOf(value) {
 
         if (typeof name !== 'string' || $B.hasOnlyStringKeys(value)) return own ? name : MISSING;
 
-        const other = nonStringKeys().get(name);
+        let other = nonStringKeys().get(name);
+
+        if (movable && (other === undefined || other === TWO_KEYS || propertyKey(other) !== name)) {
+            other = nonStringKeys(true).get(name);
+        }
 
         if (other === TWO_KEYS || (own && other !== undefined)) twoKeys(name);
 
@@ -3003,10 +3010,27 @@ class SetView extends Set {
         this.#call('clear');
     }
 
+    // A walk of a `Set` is live: a member deleted before its turn is not
+    // visited, one added during the walk is, after the others, and `clear`
+    // ends it. So the members are taken once, each asked at its turn whether
+    // it is still there, and the set asked again at the end for what arrived.
     *values() {
+        const $B = globalThis.__BRYTHON__;
+        const visited = new Set();
+        let members = iterated(this.#value);
+
         follow(this.#value);
 
-        for (const one of iterated(this.#value)) yield forReader(one);
+        while (members.length > 0) {
+            for (const one of members) {
+                if (visited.has(one) || !$B.$is_member(one, this.#value)) continue;
+
+                visited.add(one);
+                yield forReader(one);
+            }
+
+            members = [...iterated(this.#value)].filter((one) => !visited.has(one));
+        }
     }
 
     keys() {
@@ -3026,35 +3050,115 @@ class SetView extends Set {
     }
 
     // The set algebra `Set.prototype` gained reads its receiver's own storage,
-    // so it is answered from the members here, with a `Set` for a result.
+    // so it is answered from the members here, with a `Set` for a result, step
+    // for step as the specification writes it: the argument taken and refused
+    // as there (`setRecord`), and the smaller side walked, which decides the
+    // order of an intersection.
     union(other) {
-        return new Set([...this, ...other.keys()]);
+        const record = setRecord(other);
+        const result = new Set(this.values());
+
+        for (const one of walk(record.keys())) result.add(one);
+
+        return result;
     }
 
     intersection(other) {
-        return new Set([...this].filter((one) => other.has(one)));
+        const record = setRecord(other);
+        const result = new Set();
+
+        if (this.size <= record.size) {
+            for (const one of this.values()) if (record.has(one)) result.add(one);
+        } else {
+            for (const one of walk(record.keys())) if (this.has(one)) result.add(one);
+        }
+
+        return result;
     }
 
     difference(other) {
-        return new Set([...this].filter((one) => !other.has(one)));
+        const record = setRecord(other);
+        const result = new Set(this.values());
+
+        if (this.size <= record.size) {
+            for (const one of this.values()) if (record.has(one)) result.delete(one);
+        } else {
+            for (const one of walk(record.keys())) result.delete(one);
+        }
+
+        return result;
     }
 
     symmetricDifference(other) {
-        return new Set([...[...this].filter((one) => !other.has(one)), ...[...other.keys()].filter((one) => !this.has(one))]);
+        const record = setRecord(other);
+        const result = new Set(this.values());
+
+        for (const one of walk(record.keys())) {
+            if (this.has(one)) result.delete(one);
+            else result.add(one);
+        }
+
+        return result;
     }
 
     isSubsetOf(other) {
-        return [...this].every((one) => other.has(one));
+        const record = setRecord(other);
+
+        if (this.size > record.size) return false;
+        for (const one of this.values()) if (!record.has(one)) return false;
+
+        return true;
     }
 
     isSupersetOf(other) {
-        return [...other.keys()].every((one) => this.has(one));
+        const record = setRecord(other);
+
+        if (this.size < record.size) return false;
+        for (const one of walk(record.keys())) if (!this.has(one)) return false;
+
+        return true;
     }
 
     isDisjointFrom(other) {
-        return [...this].every((one) => !other.has(one));
+        const record = setRecord(other);
+
+        if (this.size <= record.size) {
+            for (const one of this.values()) if (record.has(one)) return false;
+        } else {
+            for (const one of walk(record.keys())) if (this.has(one)) return false;
+        }
+
+        return true;
     }
 }
+
+// What a set method takes of its argument, `size`, `has` and `keys`, read and
+// refused as `Set.prototype` refuses them (GetSetRecord): something that is not
+// an object, a size that is not a number or is negative, a `has` or a `keys`
+// that cannot be called.
+const setRecord = (other) => {
+    if (other === null || (typeof other !== 'object' && typeof other !== 'function')) {
+        throw new TypeError('The argument of a Set method must be a set-like object');
+    }
+
+    const size = +other.size;
+
+    if (Number.isNaN(size)) throw new TypeError("The 'size' of a set-like object must be a number");
+
+    const whole = Math.trunc(size);
+
+    if (whole < 0) throw new RangeError("The 'size' of a set-like object must not be negative");
+
+    const { has, keys } = other;
+
+    if (typeof has !== 'function') throw new TypeError("The 'has' of a set-like object must be a function");
+    if (typeof keys !== 'function') throw new TypeError("The 'keys' of a set-like object must be a function");
+
+    return { size: whole, has: (one) => Boolean(has.call(other, one)), keys: () => keys.call(other) };
+};
+
+// An iterator walked with `for…of`, which closes it on an early return.
+const walk = (iterator) => ({ [Symbol.iterator]: () => iterator });
 
 // Handed out behind a proxy of its own, as every other view is: the set's own
 // storage stays empty, so what reads that storage rather than the methods
