@@ -2012,6 +2012,16 @@ export const isSet = (value) => {
     return Array.isArray(cls.tp_mro) && (cls.tp_mro.includes(_b_.set) || cls.tp_mro.includes(_b_.frozenset));
 };
 
+// Whether a value's class has a hash, asked of the class as `hash()` asks it,
+// with nothing of the value's run: a list's, a dict's, a set's, and a class's
+// that sets `__hash__ = None` or defines `__eq__` alone, has none.
+const hashable = (value) => {
+    const $B = globalThis.__BRYTHON__;
+    const slot = $B.search_slot($B.get_class(value), 'tp_hash', $B.NULL);
+
+    return slot !== $B.NULL && slot !== _b_.None;
+};
+
 // Whether a set's class walks it as `set` does, its members being its sequence:
 // the `__iter__` its ancestry finds first is the builtin's. A subclass that
 // redefines it says what a walk yields, as a list's subclass does (`iterated`).
@@ -2977,7 +2987,15 @@ function instanceView(value) {
             (one) => one !== _b_.object && ['__str__', '__repr__'].some((name) => $B.search_in_dict(one, name, $B.NULL) !== $B.NULL)
         );
     };
-    const printed = () => String($B.builtins.str.$factory(value));
+    // Called after the trap that handed it out has returned, so it relays what
+    // `str()` raises itself, as the traps do (`relayed`).
+    const printed = () => {
+        try {
+            return String($B.builtins.str.$factory(value));
+        } catch (error) {
+            throw pyError(error, `${$B.class_name(value)}.__str__()`);
+        }
+    };
 
     const view = new Proxy(Object.create(PLAIN_VIEW), relayed({
         get(shell, key, receiver) {
@@ -3097,17 +3115,20 @@ class SetView extends Set {
 
     has(one) {
         const $B = globalThis.__BRYTHON__;
+        const bound = pyBind(one);
 
         follow(this.#value);
 
-        // JavaScript's `has` answers any value, where Python's `in` refuses an
-        // unhashable one with a `TypeError`: that refusal is a no, and anything
-        // else the class raises reaches the caller.
-        try {
-            return Boolean($B.$is_member(pyBind(one), this.#value));
-        } catch (error) {
-            if ($B.is_exc(error, [_b_.TypeError])) return false;
+        // JavaScript's `has` answers any value, where Python's `in` refuses one
+        // whose class has no hash: that refusal is a no, told by the class
+        // before anything runs. A set is asked as Python asks it, as the
+        // frozenset of its members. Anything the set raises reaches the caller,
+        // a `TypeError` of its `__contains__` as much as any other.
+        if (!isSet(bound) && !hashable(bound)) return false;
 
+        try {
+            return Boolean($B.$is_member(bound, this.#value));
+        } catch (error) {
             throw pyError(error, `${ownType(this.#value).tp_name}.__contains__()`);
         }
     }
@@ -3164,7 +3185,29 @@ class SetView extends Set {
             return;
         }
 
+        const $B = globalThis.__BRYTHON__;
         const present = (one, hash) => value.$store[hash]?.includes(one) === true;
+        // What the set holds for a member: the member itself, or one equal to
+        // it, Python keeping one member per value. `intersection_update` may
+        // keep the other set's object for it, a float rebuilt where `0.5`
+        // stayed. An `__eq__` that raises tells nothing here: the set's own
+        // call has already answered.
+        const kept = (one, hash) => {
+            const bucket = value.$store[hash];
+
+            if (bucket === undefined) return MISSING;
+            if (bucket.includes(one)) return one;
+
+            for (const other of bucket) {
+                try {
+                    if ($B.is_or_equals(other, one)) return other;
+                } catch {
+                    /* not this one */
+                }
+            }
+
+            return MISSING;
+        };
         const walk = {
             // Each member visited, by the hash it is filed under.
             visited: new Map(),
@@ -3176,7 +3219,16 @@ class SetView extends Set {
                 const named = name === 'pop' ? result : name === 'discard' || name === 'remove' ? args[0] : undefined;
                 const only = this.visited.has(named) ? [[named, this.visited.get(named)]] : this.visited;
 
-                for (const [one, hash] of only) if (!present(one, hash)) this.visited.delete(one);
+                // A member that left is forgotten; one the set now holds as
+                // another object stayed, and its visit goes to that object.
+                for (const [one, hash] of only) {
+                    const same = kept(one, hash);
+
+                    if (same === one) continue;
+
+                    this.visited.delete(one);
+                    if (same !== MISSING) this.visited.set(same, hash);
+                }
             }
         };
         const marker = MARKS.get(value) ?? mark(value);

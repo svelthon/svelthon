@@ -35,6 +35,14 @@ def put_back(clear, member):
     walked.add(member)
 
 
-# The members kept, the others removed, in one call that rebuilds the buckets.
-def keep_only(members):
-    walked.intersection_update(members)
+# The members kept, the others removed, in one call that rebuilds the buckets
+# and may keep the other set's object for a member, written three ways.
+def keep_only(members, how="method"):
+    global walked
+    other = set(float(str(one)) if isinstance(one, float) else one for one in members)
+    if how == "method":
+        walked.intersection_update(other)
+    elif how == "dunder":
+        walked.__iand__(other)
+    else:
+        walked &= other

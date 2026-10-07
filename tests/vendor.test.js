@@ -785,6 +785,15 @@ test('an unhashable value is refused in its type’s name: unhashable-type-name,
     ]);
 });
 
+// `set()`, `frozenset()` and `set.update()` read any array's storage, so a
+// JavaScript array's floats went in unconverted, `0.5 in set(values)` was
+// False, and a list subclass's `__iter__` was not asked.
+test('a set made from a JavaScript array holds its floats: set-update-iterates', async () => {
+    const { made } = await import('./fixtures/set_from_js.py');
+
+    expect(made([0.5, 1.5])).toEqual([true, true, true, [9]]);
+});
+
 // A module named with a quote, from a file such as `src/Jean's app/Page.svelte`,
 // had its name pasted between quotes in the code of every def, lambda, class
 // and comprehension, which then stopped parsing.

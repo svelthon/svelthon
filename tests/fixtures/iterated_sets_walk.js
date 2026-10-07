@@ -8,6 +8,8 @@ export const size = (set) => set.size;
 
 export const holds = (set, one) => set.has(one);
 
+export const text = (value) => String(value);
+
 export const each = (value) => {
     const rows = [];
 

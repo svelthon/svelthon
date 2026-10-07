@@ -1,7 +1,7 @@
 # Patches applied to the vendored Brython
 
 `brython_runtime.js` and `brython_compiler.js` are cut from one bundle, built
-from Brython's master plus sixty-four proposed commits, with **four** edits
+from Brython's master plus sixty-five proposed commits, with **four** edits
 made in the file itself afterwards. The wrapper, the integer format and the
 `__call__` binding carry a `/* SVELTHON patch, see BRYTHON_FIX.md */` comment,
 the only way to find them again in 1.4 MB; the other edit *is* a comment, so
@@ -34,6 +34,7 @@ wait, which is what this project has always done rather than hold a fix back:
 | `iter-non-iterator-message` | an `__iter__` that returns something with no `__next__` raises `iter() returned non-iterator of type 'list'`, where it said `non-iterable` of a list, which is iterable |
 | `unhashable-type-name` | `hash()` of an unhashable value names its type, `unhashable type: 'list'`, where it wrote the value, `unhashable type: '[1]'` |
 | `unhashable-element-context` | a set element or a dict key refused by `hash()` says what it was refused as, `cannot use 'list' as a set element (unhashable type: 'list')`, at every site that hashes one, through `$B.hash_for`, with the class named by its module and qualified name (`$B.class_full_name`). Only a set lookup said it, and it dressed up a `ValueError` of an author's `__hash__` too; `[1] in {"a": 2}` raised `descr.wrapped is not a function`. Vendored as one commit; proposed upstream as two, `unhashable-element-context` for a set and `unhashable-dict-key-context` for a dict, the qualified name waiting for master's `__qualname__` of a nested class |
+| `set-update-iterates` | `set()`, `frozenset()` and `set.update()` read the storage of an exact list or tuple only, and iterate anything else. They read any array's storage, so a JavaScript array's floats went in unconverted, as `JSObject`s, and `0.5 in set(values)` was False; a list subclass's `__iter__` was not asked |
 | `int-format-large` | `int.__format__` converts with `nb_float` before handing a float specification to `float.__format__`. `fast_float` wraps without converting, so an int of 2^53 or more arrived as a `BigInt` and `format(2 ** 53, '.2f')` raised `JavascriptError: Cannot convert a BigInt value to a number`; an int no double holds now raises CPython's `OverflowError` |
 | `remove-iter-debug-log` | the two unguarded `console.log` calls on the path where `iter()` refuses an `__iter__` that returns a non-iterator are removed. They dumped the object and its class to the console before the `TypeError`, once per refusal; the function's three other traces are behind its `test` flag |
 | `coroutine-returned-is-not-dropped` | a coroutine is reported as never awaited when it is reclaimed without having started, through a `FinalizationRegistry`, and no longer when the frame that made it is left. One kept, returned to its caller or handed to `{#await}` and awaited later says nothing, as in CPython; one thrown away, or left in a local that dies, is told once the garbage collector takes it. Only the coroutines not started when the turn ends are registered |
@@ -154,6 +155,7 @@ than by a build-time check, and going upstream retires none of them:
 | a module name holding a quote leaves its defs, lambdas, classes and comprehensions parseable (branch `module-name-quote-literals`) | the same, and `tests/source-path.test.js`, four paths with a quote, a double quote or a backslash |
 | a generator function called from JavaScript while no Python frame runs, an async one too, runs (branch `generator-called-from-javascript`) | `tests/vendor.test.js`, and `tests/synced-exports.test.js`, a set subclass whose `__iter__` yields, walked by JavaScript |
 | an `__iter__` returning no iterator is refused as a `non-iterator` (branch `iter-non-iterator-message`) | `tests/vendor.test.js`, and `tests/synced-exports.test.js`, the same refusal reaching JavaScript |
+| a set made from a JavaScript array holds Python floats, and one made from a list subclass holds what its `__iter__` yields (branch `set-update-iterates`) | `tests/vendor.test.js`, and `tests/synced-exports.test.js`, a set's walk over floats a JavaScript caller handed in |
 | an unhashable value is named by its type, and a set element or a dict key says what it was refused as (branches `unhashable-type-name`, `unhashable-element-context`) | `tests/vendor.test.js`, and `tests/synced-exports.test.js`, a write into a set's view refused and caught by the Python caller |
 
 `scripts/browser-check.sh` covers the DOM node path as well, which is where

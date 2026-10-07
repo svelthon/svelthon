@@ -451,23 +451,31 @@ test('what Python raises under a view reaches the reader, in Python’s words', 
             () => viewErrors.box.value,
             () => viewErrors.bag.size,
             () => viewErrors.bag.has(1),
-            () => viewErrors.table.a
+            () => viewErrors.table.a,
+            () => viewErrors.type_bag.has(1),
+            () => String(viewErrors.text_box)
         ].map(read)
     ).toEqual([
         expect.stringContaining('ValueError: no row'),
         expect.stringContaining('ValueError: no value'),
         expect.stringContaining('ValueError: no size'),
         expect.stringContaining('ValueError: no answer'),
-        expect.stringContaining('ValueError: no entry')
+        expect.stringContaining('ValueError: no entry'),
+        expect.stringContaining('TypeError: membership failed'),
+        expect.stringContaining('ValueError: no text')
     ]);
+    // A value whose class has no hash is a no, decided by the class.
     expect(iteratedSets.SETS.named.has([])).toBe(false);
+    expect(iteratedSets.SETS.named.has(viewErrors.compared)).toBe(false);
     expect(viewErrors.caught()).toEqual([
         'ValueError: no row',
         'ValueError: no value',
         'ValueError: no size',
         'ValueError: no answer',
         'ValueError: no entry',
-        false
+        false,
+        'TypeError: membership failed',
+        'ValueError: no text'
     ]);
 });
 
@@ -494,6 +502,35 @@ test('a walk of a set visits once a member that stayed', () => {
 
     expect(walk(sets.walked, sets.refill, sets.keep_only)).toEqual(walk(native, nativeRefill, () => native.delete(2)));
     expect(walk(native, nativeRefill, () => native.delete(2))).toEqual([1, 3]);
+});
+
+// The same, where the intersection keeps every member but holds them as other
+// objects: the other set's floats, equal and rebuilt. A member is the value
+// Python keeps, whatever object holds it; told by identity, `0.5` was visited
+// again, and an intersection made at every step kept the walk on it.
+test('a walk of a set visits once a member held anew by an equal one', () => {
+    const walk = (members, how, everyStep) => {
+        const visited = [];
+
+        sets.refill(members);
+        for (const one of sets.walked) {
+            visited.push(one);
+            if (visited.length > 2 * members.length) break;
+            if (everyStep || visited.length === 1) sets.keep_only(members, how);
+        }
+
+        return visited;
+    };
+
+    for (const members of [
+        [0.5, 1.5, 2.5],
+        [1, 2, 3]
+    ]) {
+        for (const how of ['method', 'dunder', 'augmented']) {
+            expect(walk(members, how, false)).toEqual(members);
+            expect(walk(members, how, true)).toEqual(members);
+        }
+    }
 });
 
 // `difference` asks of the members as they were, as the specification walks
