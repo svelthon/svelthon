@@ -98,6 +98,37 @@ function iterated(value) {
     return $B.$list(Array.from($B.make_js_iterator(value, $B.NULL)));
 }
 
+// The same rows, for a JavaScript walk of a view. What the class raises, or a
+// protocol it breaks, crosses as everything Python raises under a view does
+// (`relayed`).
+function walkedRows(value) {
+    try {
+        return iterated(value);
+    } catch (error) {
+        throw pyError(error, `${ownType(value).tp_name}.__iter__()`);
+    }
+}
+
+// The traps of a view, each relaying what Python raises under it as a call
+// does (`pyCall`): the exception itself, its message filled in, so JavaScript
+// reads what went wrong and a Python caller that handed the value over still
+// catches its own `ValueError`. Thrown as it came, a JavaScript reader found
+// no message on it. An error of JavaScript's, a refusal of the view's own,
+// passes as it is.
+const relayed = (handler, where) => {
+    for (const [trap, run] of Object.entries(handler)) {
+        handler[trap] = function (...args) {
+            try {
+                return run.apply(this, args);
+            } catch (error) {
+                throw pyError(error, where);
+            }
+        };
+    }
+
+    return handler;
+};
+
 // The values a key compares by value: rebuilt on every computation, so `(1, 2)`
 // is another object each time and only its repr() stays the same.
 const BY_VALUE = [_b_.tuple, _b_.frozenset, _b_.float, _b_.complex, _b_.bytes];
@@ -730,7 +761,7 @@ function installMutationTracking($B) {
             // added this way was searched for, through every entry of the dict,
             // the first time it changed.
             if (attr === 'setdefault') inherit(obj, result, args[0]);
-            MARKS.get(obj)();
+            MARKS.get(obj)(attr, args, result);
         } else if (VIEWS.has(attr)) {
             // `.items()` and `.values()` hand out the children without ever
             // indexing them, so the watch is handed over here rather than on a
@@ -1981,11 +2012,33 @@ export const isSet = (value) => {
     return Array.isArray(cls.tp_mro) && (cls.tp_mro.includes(_b_.set) || cls.tp_mro.includes(_b_.frozenset));
 };
 
+// Whether a set's class walks it as `set` does, its members being its sequence:
+// the `__iter__` its ancestry finds first is the builtin's. A subclass that
+// redefines it says what a walk yields, as a list's subclass does (`iterated`).
+const iteratesAsSet = (value) => {
+    const own = declares(ownType(value), '__iter__');
+
+    return own === declares(_b_.set, '__iter__') || own === declares(_b_.frozenset, '__iter__');
+};
+
 function mark(value) {
     // `stamp` moves each time the container itself changes, which is what
     // `upwards` needs to know whether a link it checked is still to check.
-    const marker = () => {
+    //
+    // `change` is the call that changed it, its name, arguments and result,
+    // when the caller knows them: what a walk of a set in flight reads
+    // (`SetView`), each walk held weakly, so one left suspended goes when its
+    // iterator does.
+    const marker = (...change) => {
         marker.stamp = ++changes;
+
+        for (const ref of marker.walks ?? []) {
+            const walk = ref.deref();
+
+            if (walk === undefined) marker.walks.delete(ref);
+            else walk.changed(...change);
+        }
+
         upwards(marker, ++walked, 'bumps');
     };
 
@@ -2799,10 +2852,10 @@ function viewOf(value) {
     // whose `__iter__` reverses its rows is `[3, 2, 1]` to `[...rows]` and
     // `rows[0]` is still 1, as in Python.
     function* walk() {
-        for (const one of iterated(value)) yield forReader(one);
+        for (const one of walkedRows(value)) yield forReader(one);
     }
 
-    const view = new Proxy(sequence ? [] : Object.create(PLAIN_VIEW), {
+    const view = new Proxy(sequence ? [] : Object.create(PLAIN_VIEW), relayed({
         getPrototypeOf(shell) {
             return sequence ? LIST_VIEW : Object.getPrototypeOf(shell);
         },
@@ -2868,7 +2921,7 @@ function viewOf(value) {
         setPrototypeOf() {
             throw new TypeError('Cannot set the prototype of a Python view');
         }
-    });
+    }, $B.class_name(value)));
 
     VIEW_OF.set(value, view);
     VIEWED.add(view);
@@ -2926,7 +2979,7 @@ function instanceView(value) {
     };
     const printed = () => String($B.builtins.str.$factory(value));
 
-    const view = new Proxy(Object.create(PLAIN_VIEW), {
+    const view = new Proxy(Object.create(PLAIN_VIEW), relayed({
         get(shell, key, receiver) {
             follow(value);
 
@@ -2983,7 +3036,7 @@ function instanceView(value) {
         setPrototypeOf() {
             throw new TypeError('Cannot set the prototype of a Python view');
         }
-    });
+    }, $B.class_name(value)));
 
     VIEW_OF.set(value, view);
     VIEWED.add(view);
@@ -3002,8 +3055,13 @@ function instanceView(value) {
 // crosses as a write into a view does, and a write is Python's `add`,
 // `discard` or `clear`, which notify. A frozenset has none of the three, and a
 // write refuses with a JavaScript `TypeError`, as a write to a tuple's view
-// does, in Python's words; anything else Python raises reaches the caller as
-// an `Error`.
+// does, in Python's words. Anything else Python raises reaches the caller as
+// under every view (`relayed`).
+//
+// The calls that only add to a set, which no walk has to look into: what one
+// of them removes, in a class that redefines it, goes through a call of its own.
+const ARRIVING = new Set(['add', 'update', '__ior__']);
+
 class SetView extends Set {
     #value;
 
@@ -3023,25 +3081,34 @@ class SetView extends Set {
         try {
             return $B.$call($B.$getattr(this.#value, name), ...args);
         } catch (error) {
-            throw thrown(pyError(error, `${type.tp_name}.${name}()`));
+            throw pyError(error, `${type.tp_name}.${name}()`);
         }
     }
 
     get size() {
         follow(this.#value);
 
-        return globalThis.__BRYTHON__.builtins.len(this.#value);
+        try {
+            return globalThis.__BRYTHON__.builtins.len(this.#value);
+        } catch (error) {
+            throw pyError(error, `${ownType(this.#value).tp_name}.__len__()`);
+        }
     }
 
     has(one) {
+        const $B = globalThis.__BRYTHON__;
+
         follow(this.#value);
 
         // JavaScript's `has` answers any value, where Python's `in` refuses an
-        // unhashable one.
+        // unhashable one with a `TypeError`: that refusal is a no, and anything
+        // else the class raises reaches the caller.
         try {
-            return Boolean(globalThis.__BRYTHON__.$is_member(pyBind(one), this.#value));
-        } catch {
-            return false;
+            return Boolean($B.$is_member(pyBind(one), this.#value));
+        } catch (error) {
+            if ($B.is_exc(error, [_b_.TypeError])) return false;
+
+            throw pyError(error, `${ownType(this.#value).tp_name}.__contains__()`);
         }
     }
 
@@ -3070,51 +3137,73 @@ class SetView extends Set {
         this.#call('clear');
     }
 
-    // A walk is live as a `Set`'s is: a member deleted before its turn is not
-    // visited, one that arrives during the walk is, after the others, one
-    // deleted and added back is visited again, and `clear` ends it.
+    // A walk is the class's own: a subclass that redefines `__iter__` is walked
+    // by it, as a list's view is, its rows as the walk begins and what it
+    // raises reaching the caller as a write's refusal does.
     //
-    // Python keeps where a member arrived, and the walk reads it there: a set
-    // keeps its members in buckets by hash (`$store`), a member added back
-    // goes into a new bucket or at the end of its own, and a member that stays
-    // keeps its bucket and never moves up in it. So the walk takes the members
-    // with their bucket and place, visits one at its turn only if it is still
-    // there, and notes each visit, for the walk alone: a member is due again
-    // when its bucket changed or its place went up, whichever language wrote.
-    // The one return missed is the last member of a bucket two members share,
-    // put back where it was. A record the view kept of its own writes saw only
-    // those, and held the members after the set let them go.
+    // Any other walk is live as a `Set`'s is: a member deleted before its turn
+    // is not visited, one that arrives during the walk is, after the others,
+    // one deleted and added back is visited again, and `clear` ends it.
+    //
+    // A member's place says nothing of its history: a set keeps its members in
+    // buckets by hash (`$store`), a member put back may land where it was, and
+    // `intersection_update` rebuilds the buckets of members that never left.
+    // So the walk learns each departure as it happens, from the set's marker,
+    // which every call that changes the set goes through, whichever language
+    // made it: the set comes under watch for that, and the walk signs on for
+    // as long as it lasts. A member visited is due again once it has left, and
+    // the walk forgets it then, so it holds no member the set let go.
     *values() {
-        const store = () => this.#value.$store;
-        const visited = new Map();
-        const taken = () => {
+        const value = this.#value;
+
+        follow(value);
+
+        if (!iteratesAsSet(value)) {
+            for (const one of walkedRows(value)) yield forReader(one);
+
+            return;
+        }
+
+        const present = (one, hash) => value.$store[hash]?.includes(one) === true;
+        const walk = {
+            // Each member visited, by the hash it is filed under.
+            visited: new Map(),
+            changed(name, args, result) {
+                if (ARRIVING.has(name)) return;
+
+                // The one member a single removal names, when the set holds
+                // that very object; any other change is asked of every member.
+                const named = name === 'pop' ? result : name === 'discard' || name === 'remove' ? args[0] : undefined;
+                const only = this.visited.has(named) ? [[named, this.visited.get(named)]] : this.visited;
+
+                for (const [one, hash] of only) if (!present(one, hash)) this.visited.delete(one);
+            }
+        };
+        const marker = MARKS.get(value) ?? mark(value);
+        const ref = new WeakRef(walk);
+        const members = () => {
             const entries = [];
 
-            for (const [hash, bucket] of Object.entries(store())) {
-                bucket.forEach((one, at) => entries.push({ one, hash, bucket, at }));
+            for (const [hash, bucket] of Object.entries(value.$store)) {
+                for (const one of bucket) if (!walk.visited.has(one)) entries.push([one, hash]);
             }
 
             return entries;
         };
-        const due = ({ one, bucket, at }) => {
-            const seen = visited.get(one);
 
-            return seen === undefined || seen.bucket !== bucket || at > seen.at;
-        };
-        const there = ({ one, hash, bucket, at }) => store()[hash] === bucket && bucket[at] === one;
-        let entries = taken();
+        (marker.walks ??= new Set()).add(ref);
 
-        follow(this.#value);
+        try {
+            for (let entries = members(); entries.length > 0; entries = members()) {
+                for (const [one, hash] of entries) {
+                    if (walk.visited.has(one) || !present(one, hash)) continue;
 
-        while (entries.length > 0) {
-            for (const entry of entries) {
-                if (!due(entry) || !there(entry)) continue;
-
-                visited.set(entry.one, entry);
-                yield forReader(entry.one);
+                    walk.visited.set(one, hash);
+                    yield forReader(one);
+                }
             }
-
-            entries = taken().filter(due);
+        } finally {
+            marker.walks.delete(ref);
         }
     }
 

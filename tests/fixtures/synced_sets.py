@@ -1,5 +1,5 @@
 # Sets a module exports and writes into a JavaScript object, changed in place.
-__all__ = ["tags", "frozen", "pairs", "box", "mutate", "seen", "walked", "refill", "put_back"]
+__all__ = ["tags", "frozen", "pairs", "box", "mutate", "seen", "walked", "refill", "put_back", "keep_only"]
 
 tags = {"a"}
 frozen = frozenset({1, 2})
@@ -33,3 +33,8 @@ def put_back(clear, member):
     else:
         walked.discard(member)
     walked.add(member)
+
+
+# The members kept, the others removed, in one call that rebuilds the buckets.
+def keep_only(members):
+    walked.intersection_update(members)

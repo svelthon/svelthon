@@ -297,7 +297,7 @@ describe('the vendored Brython carries its repairs', () => {
     test('no debug print where iter() refuses a non-iterator', () => {
         const source = String($B.$iter);
 
-        expect(source).toContain('returned non-iterable of type');
+        expect(source).toContain('returned non-iterator of type');
         expect(source).not.toContain("console.log('iter, obj'");
         expect(source).not.toContain('no tp_iternext in');
     });
@@ -742,6 +742,46 @@ test('list.sort refuses a position and says it takes keywords only: list-sort-ke
         'sort() takes no positional arguments',
         '($self, /, *, key=None, reverse=False)',
         '($self, /, *, key=None, reverse=False)'
+    ]);
+});
+
+// A generator function marked the frame of its caller as holding a generator,
+// and called by JavaScript while no Python frame runs there was none:
+// `TypeError: Cannot read properties of null (reading 'frame')`.
+test('a generator function called from JavaScript runs: generator-called-from-javascript', async () => {
+    const { numbers, later } = await import('./fixtures/generator_from_js.py');
+    const $B = globalThis.__BRYTHON__;
+
+    expect($B.frame_obj).toBeNull();
+    expect([...$B.make_js_iterator($B.$call($B.PYOBJ_MAP.get(numbers) ?? numbers), $B.NULL)]).toEqual([1, 2]);
+    expect($B.class_name($B.$call($B.PYOBJ_MAP.get(later) ?? later))).toBe('async_generator');
+});
+
+// An `__iter__` that returns a list, iterable and no iterator, was said to have
+// returned a "non-iterable". `python3` on the same class.
+test('iter() names what it refused a non-iterator: iter-non-iterator-message', async () => {
+    const { walked } = await import('./fixtures/iterated_sets.py');
+
+    expect(walked('plain')).toBe("TypeError: iter() returned non-iterator of type 'list'");
+});
+
+// An unhashable value was named by its value, `unhashable type: '[1]'`, and a
+// set or a dict did not say what it was refused as, except when looked up in a
+// set, where an error other than a TypeError was dressed up too.
+// `python3` on the same module, its name aside.
+test('an unhashable value is refused in its type’s name: unhashable-type-name, unhashable-element-context', async () => {
+    const { refusals } = await import('./fixtures/unhashable_messages.py');
+    const [name, ...lines] = refusals();
+
+    expect(lines).toEqual([
+        "TypeError: unhashable type: 'list'",
+        "TypeError: cannot use 'list' as a set element (unhashable type: 'list')",
+        "TypeError: cannot use 'list' as a set element (unhashable type: 'list')",
+        "TypeError: cannot use 'list' as a set element (unhashable type: 'list')",
+        "TypeError: cannot use 'list' as a dict key (unhashable type: 'list')",
+        "TypeError: cannot use 'list' as a dict key (unhashable type: 'list')",
+        `TypeError: cannot use '${name}.Outer.Refuses' as a set element (mine)`,
+        'ValueError: mine'
     ]);
 });
 

@@ -8,6 +8,8 @@ import PrintedHost from './fixtures/PrintedHost.svelte';
 import PrintedNative from './fixtures/PrintedNative.svelte';
 import * as sets from './fixtures/synced_sets.py';
 import * as nativeSets from './fixtures/synced_sets_native.js';
+import * as iteratedSets from './fixtures/iterated_sets.py';
+import * as viewErrors from './fixtures/view_errors.py';
 import SetHost from './fixtures/SetHost.svelte';
 import StateViewHost from './fixtures/StateViewHost.svelte';
 import { stringify } from 'devalue';
@@ -316,35 +318,39 @@ test('a walk of a set sees the changes made during it', () => {
 });
 
 // A member deleted and added back during a walk is visited again, as a `Set`
-// visits it, whatever the member and whichever language wrote: the walk reads
-// where Python put it, a new bucket or a later place. Telling it by identity
-// visited a float or a tuple again and an int never, and a record the view kept
-// of its own writes missed Python's and held the members it recorded
-// (`set-view-retention.test.js`).
+// visits it, whatever the member, wherever it stood and whichever language
+// wrote. `-1` and `-2` share a hash, and `-2`, the last of their bucket, is put
+// back where it was: its place said nothing, and the walk missed it. Telling it
+// by identity visited a float or a tuple again and an int never, and a record
+// the view kept of its own writes missed Python's and held the members it
+// recorded (`set-view-retention.test.js`).
 test('a walk of a set visits a member added back, whoever adds it', () => {
     const walks = (set, refill, changes) =>
         [
             [1, 2, 3],
-            [0.5, 1.5, 2.5]
+            [0.5, 1.5, 2.5],
+            [-1, -2]
         ].flatMap((members) =>
-            changes.flatMap((change) =>
-                [true, false].map((byForOf) => {
-                    const visited = [];
-                    let changed = false;
-                    const visit = (one) => {
-                        visited.push(one);
-                        if (one === members[0] && !changed) {
-                            changed = true;
-                            change(members[0]);
-                        }
-                    };
+            [members[0], members.at(-1)].flatMap((target) =>
+                changes.flatMap((change) =>
+                    [true, false].map((byForOf) => {
+                        const visited = [];
+                        let changed = false;
+                        const visit = (one) => {
+                            visited.push(one);
+                            if (one === target && !changed) {
+                                changed = true;
+                                change(target);
+                            }
+                        };
 
-                    refill(members);
-                    if (byForOf) for (const one of set) visit(one);
-                    else set.forEach(visit);
+                        refill(members);
+                        if (byForOf) for (const one of set) visit(one);
+                        else set.forEach(visit);
 
-                    return visited;
-                })
+                        return visited;
+                    })
+                )
             )
         );
     const native = new Set();
@@ -360,6 +366,134 @@ test('a walk of a set visits a member added back, whoever adds it', () => {
     expect(walks(sets.walked, sets.refill, [(one) => sets.put_back(false, one), (one) => sets.put_back(true, one)])).toEqual(
         walks(native, nativeRefill, byJavaScript(native))
     );
+});
+
+// A subclass that redefines `__iter__` is walked by it, as a list's view is:
+// every walk of the view yields what Python's own loop yields, and what the
+// class raises, or a protocol it breaks, reaches JavaScript in Python's words.
+// The walk read the storage, so a filter of the author's let every member
+// through and a refusal went unheard. A subclass that leaves iteration alone,
+// and a frozenset, are their members.
+test('a set walks as its class says', () => {
+    const walks = (set) => {
+        const read = (walk) => {
+            try {
+                return walk();
+            } catch (error) {
+                return typeof error?.message === 'string' ? error.message : 'no message';
+            }
+        };
+
+        return [
+            read(() => [...set]),
+            read(() => [...set.values()]),
+            read(() => [...set.keys()]),
+            read(() => [...set.entries()].map(([one]) => one)),
+            read(() => {
+                const rows = [];
+                set.forEach((one) => rows.push(one));
+                return rows;
+            })
+        ];
+    };
+    const answers = Object.fromEntries(Object.keys(iteratedSets.SETS).map((name) => [name, walks(iteratedSets.SETS[name])]));
+    const python = Object.fromEntries(Object.keys(iteratedSets.SETS).map((name) => [name, iteratedSets.walked(name)]));
+
+    expect(python).toEqual({
+        filtered: [3],
+        ordered: [3, 2, 1],
+        refuses: 'ValueError: not today',
+        plain: "TypeError: iter() returned non-iterator of type 'list'",
+        named: [1, 2, 3],
+        frozen: [1, 2, 3]
+    });
+
+    for (const [name, walked] of Object.entries(python)) {
+        const expected = Array.isArray(walked) ? walked : expect.stringContaining(walked);
+
+        expect(answers[name]).toEqual(Array(5).fill(expected));
+    }
+});
+
+// And what Python raised there is still Python's when it comes back: the
+// module that handed a set or a list to JavaScript catches its own
+// `ValueError` from the walk, and its `TypeError` from a write, as it catches
+// what a call raises. Made a JavaScript `Error`, it came back a
+// `JavascriptError`, and the `except` missed it.
+test('an error raised in Python while JavaScript walks a view is still Python’s', () => {
+    expect(iteratedSets.caught()).toEqual([
+        'ValueError: not today',
+        'ValueError: not today',
+        'ValueError: not today',
+        "TypeError: cannot use 'list' as a set element (unhashable type: 'list')"
+    ]);
+});
+
+// Every read of a view relays what Python raises the same way: an index, a
+// property, a size, a membership and an entry reach JavaScript with Python's
+// message, and come back to the module that handed the value over as its own
+// `ValueError`. Thrown as it came, the exception carried no message for
+// JavaScript; caught by `has`, a refusal of the class's went unheard, where an
+// unhashable value is still a no, as `Set.prototype.has` answers any value.
+test('what Python raises under a view reaches the reader, in Python’s words', () => {
+    const read = (run) => {
+        try {
+            run();
+            return 'no error';
+        } catch (error) {
+            return error.message;
+        }
+    };
+
+    expect(
+        [
+            () => viewErrors.rows[0],
+            () => viewErrors.box.value,
+            () => viewErrors.bag.size,
+            () => viewErrors.bag.has(1),
+            () => viewErrors.table.a
+        ].map(read)
+    ).toEqual([
+        expect.stringContaining('ValueError: no row'),
+        expect.stringContaining('ValueError: no value'),
+        expect.stringContaining('ValueError: no size'),
+        expect.stringContaining('ValueError: no answer'),
+        expect.stringContaining('ValueError: no entry')
+    ]);
+    expect(iteratedSets.SETS.named.has([])).toBe(false);
+    expect(viewErrors.caught()).toEqual([
+        'ValueError: no row',
+        'ValueError: no value',
+        'ValueError: no size',
+        'ValueError: no answer',
+        'ValueError: no entry',
+        false
+    ]);
+});
+
+// A member that never left is not visited again, whatever became of its
+// bucket: `intersection_update` builds the buckets anew for the members it
+// keeps, and a walk telling arrivals by bucket visited them twice.
+test('a walk of a set visits once a member that stayed', () => {
+    const walk = (set, refill, keep) => {
+        const visited = [];
+
+        refill([1, 2, 3]);
+        for (const one of set) {
+            visited.push(one);
+            if (visited.length === 1) keep([1, 3]);
+        }
+
+        return visited;
+    };
+    const native = new Set();
+    const nativeRefill = (members) => {
+        native.clear();
+        members.forEach((one) => native.add(one));
+    };
+
+    expect(walk(sets.walked, sets.refill, sets.keep_only)).toEqual(walk(native, nativeRefill, () => native.delete(2)));
+    expect(walk(native, nativeRefill, () => native.delete(2))).toEqual([1, 3]);
 });
 
 // `difference` asks of the members as they were, as the specification walks

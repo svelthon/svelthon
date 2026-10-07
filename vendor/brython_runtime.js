@@ -4996,9 +4996,7 @@ if(hash_func !==$B.NULL && hash_func !==_b_.None){res=hash_func(obj)
 if(! $B.is_int(res)){$B.RAISE(_b_.TypeError,'__hash__ method should return an integer')}
 if(typeof res=='object'){
 res=_b_.int.tp_hash(res)}}else{
-$B.RAISE(_b_.TypeError,"unhashable type: '"+
-_b_.str.$factory($B.jsobj2pyobj(obj))+"'"
-)}}
+$B.RAISE(_b_.TypeError,`unhashable type: '${$B.class_name(obj)}'`)}}
 if(res===-1){res=-2 }
 return res}
 var help=_b_.help=function(obj){if(obj===undefined){obj='help'}
@@ -5120,7 +5118,7 @@ if(iter_func !==$B.NULL){var getter=$B.get_class(iter_func).tp_descr_get
 if(getter===$B.NULL){var in_dict=$B.search_in_dict(obj,'__iter__',$B.NULL)
 if(in_dict===iter_func){var res=$B.$call(in_dict)}}else{
 var res=$B.$call(iter_func,obj)}
-if($B.search_slot($B.get_class(res),'tp_iternext',$B.NULL)===$B.NULL){$B.RAISE(_b_.TypeError,`iter() returned non-iterable of type '${$B.class_name(res)}'`)}
+if($B.search_slot($B.get_class(res),'tp_iternext',$B.NULL)===$B.NULL){$B.RAISE(_b_.TypeError,`iter() returned non-iterator of type '${$B.class_name(res)}'`)}
 return res}
 var getitem_func=$B.search_in_mro(klass,'__getitem__',$B.NULL)
 if(test){console.log('getitem_func',getitem_func)}
@@ -8292,7 +8290,7 @@ return res}
 function make_new_set_base_type(so){return $B.$isinstance(so,set)?
 set.$factory():
 frozenset.$factory()}
-function set_add(so,item,hash){hash=hash ?? $B.$hash(item)
+function set_add(so,item,hash){hash=hash ?? $B.hash_for(item,'a set element')
 var stored=so.$store[hash]
 if(stored){
 if(set_contains(so,item,hash)){return}
@@ -17125,7 +17123,7 @@ if(vararg===_b_.None && kwarg===_b_.None){js+=`function ${name2}(${positional.ma
 js+=`function ${name2}() {\n`}
 indent()
 if(is_generator){
-js+=prefix+'$B.frame_obj.frame.$has_generators = true\n'}
+js+=prefix+'if ($B.frame_obj) { $B.frame_obj.frame.$has_generators = true }\n'}
 var locals_name=make_scope_name(scopes,func_scope)
 js+=prefix+`var locals\n`
 parse_args.push('arguments')
