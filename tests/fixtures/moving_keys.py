@@ -1,10 +1,10 @@
 # A dict keyed by a tuple holding a JavaScript object whose name moves, two
 # JavaScript keys one of which takes the other's name, a dict of 400
 # JavaScript keys, and one of many strings beside a single JavaScript key.
-__js__ = {"./moving_keys.js": ["inner", "first", "second", "third", "unseen", "seen", "late", "many"]}
+__js__ = {"./moving_keys.js": ["inner", "first", "second", "third", "unseen", "seen", "late", "cleared", "many"]}
 __all__ = [
     "by_tuple", "pair", "large", "mixed", "touch", "enter_third", "values_of_pair",
-    "while_unseen", "while_seen", "first_read_late", "take_out", "put_in",
+    "while_unseen", "while_seen", "first_read_late", "through_clear", "take_out", "put_in", "empty",
 ]
 
 by_tuple = {(inner,): 42}
@@ -34,10 +34,15 @@ def values_of_pair():
 while_unseen = {unseen: 42}
 while_seen = {seen: 42}
 first_read_late = {late: 42}
+through_clear = {cleared: 42}
 
 
 def take_out(mapping, key):
     del mapping[key]
+
+
+def empty(mapping):
+    mapping.clear()
 
 
 def put_in(mapping, key):

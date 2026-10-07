@@ -16,7 +16,18 @@ import * as presenceNative from './fixtures/presence_native.js';
 import * as callables from './fixtures/held_callables.py';
 import { key as renamedKey } from './fixtures/renamed_key.js';
 import * as moving from './fixtures/moving_keys.py';
-import { inner, first, second, unseen, seen, late, conversions, resetConversions } from './fixtures/moving_keys.js';
+import {
+    inner,
+    first,
+    second,
+    unseen,
+    seen,
+    late,
+    cleared,
+    named,
+    conversions,
+    resetConversions
+} from './fixtures/moving_keys.js';
 
 // What a module exports is its own object, as a JavaScript module's export is
 // and as `m.items` is in Python: changed in place by the module, it is changed
@@ -219,22 +230,34 @@ test('a dict view keeps the names it gave, and names them once', () => {
     }
 });
 
-// The view names a key when it first finds it, and keeps the name for as long
-// as it finds the key there: it knows what it reads, not what Python did
-// between two of its reads. A key taken out and put back unseen is one that
-// never left; seen gone, it is met anew; renamed before the first look, it is
-// met under the name it has then.
-test('a dict view names what it finds, when it first finds it', () => {
+// A key that leaves the dict and comes back is named again, as a JavaScript
+// object names a key written again after a `delete`, whoever read the dict
+// while it was out: the place it takes in the dict's array of keys is new, and
+// the name goes with the place. Kept by key, the name depended on whether a
+// reader had looked at the dict while it was out. The one name the view cannot
+// have is the one a key answered before the view first looked, Python writing
+// a key without asking its name.
+test('a dict view names a key that came back as JavaScript does', () => {
     const rename = (key) => {
         key.label = 'after';
+    };
+    const witness = (key) => {
+        const object = {};
+
+        object[key] = 42;
+        delete object[key];
+        rename(key);
+        object[key] = 43;
+
+        return Object.keys(object);
     };
 
     expect(Object.keys(moving.while_unseen)).toEqual(['before']);
     moving.take_out(moving.while_unseen, unseen);
     rename(unseen);
     moving.put_in(moving.while_unseen, unseen);
-    expect(Object.keys(moving.while_unseen)).toEqual(['before']);
-    expect(moving.while_unseen.before).toBe(43);
+    expect(Object.keys(moving.while_unseen)).toEqual(witness(named('before')));
+    expect(moving.while_unseen.after).toBe(43);
 
     expect(Object.keys(moving.while_seen)).toEqual(['before']);
     moving.take_out(moving.while_seen, seen);
@@ -242,6 +265,12 @@ test('a dict view names what it finds, when it first finds it', () => {
     rename(seen);
     moving.put_in(moving.while_seen, seen);
     expect(Object.keys(moving.while_seen)).toEqual(['after']);
+
+    expect(Object.keys(moving.through_clear)).toEqual(['before']);
+    moving.empty(moving.through_clear);
+    rename(cleared);
+    moving.put_in(moving.through_clear, cleared);
+    expect(Object.keys(moving.through_clear)).toEqual(['after']);
 
     rename(late);
     expect(Object.keys(moving.first_read_late)).toEqual(['after']);
@@ -286,40 +315,51 @@ test('a walk of a set sees the changes made during it', () => {
     );
 });
 
-// A walk visits each member once, whoever changes the set. A `Set` visits
-// again one deleted and added back, by the order of arrival it keeps; a Python
-// set keeps none and Python changes it without the view, so the walk cannot
-// tell such a member from one that never left. A record the view kept of its
-// own writes made the answer depend on which language wrote, and held the
-// members it recorded (`set-view-retention.test.js`).
-test('a walk of a set visits each member once, whoever changes it', () => {
-    const changes = [
-        () => (sets.walked.delete(1), sets.walked.add(1)),
-        () => (sets.walked.clear(), sets.walked.add(1)),
-        () => sets.put_back(false),
-        () => sets.put_back(true)
-    ];
-    const walks = changes.flatMap((change) =>
-        [true, false].map((byForOf) => {
-            const visited = [];
-            let changed = false;
-            const visit = (one) => {
-                visited.push(one);
-                if (one === 1 && !changed) {
-                    changed = true;
-                    change();
-                }
-            };
+// A member deleted and added back during a walk is visited again, as a `Set`
+// visits it, whatever the member and whichever language wrote: the walk reads
+// where Python put it, a new bucket or a later place. Telling it by identity
+// visited a float or a tuple again and an int never, and a record the view kept
+// of its own writes missed Python's and held the members it recorded
+// (`set-view-retention.test.js`).
+test('a walk of a set visits a member added back, whoever adds it', () => {
+    const walks = (set, refill, changes) =>
+        [
+            [1, 2, 3],
+            [0.5, 1.5, 2.5]
+        ].flatMap((members) =>
+            changes.flatMap((change) =>
+                [true, false].map((byForOf) => {
+                    const visited = [];
+                    let changed = false;
+                    const visit = (one) => {
+                        visited.push(one);
+                        if (one === members[0] && !changed) {
+                            changed = true;
+                            change(members[0]);
+                        }
+                    };
 
-            sets.refill();
-            if (byForOf) for (const one of sets.walked) visit(one);
-            else sets.walked.forEach(visit);
+                    refill(members);
+                    if (byForOf) for (const one of set) visit(one);
+                    else set.forEach(visit);
 
-            return visited;
-        })
+                    return visited;
+                })
+            )
+        );
+    const native = new Set();
+    const nativeRefill = (members) => {
+        native.clear();
+        members.forEach((one) => native.add(one));
+    };
+    const byJavaScript = (set) => [(one) => (set.delete(one), set.add(one)), (one) => (set.clear(), set.add(one))];
+
+    expect(walks(sets.walked, sets.refill, byJavaScript(sets.walked))).toEqual(
+        walks(native, nativeRefill, byJavaScript(native))
     );
-
-    expect(walks).toEqual([[1, 2, 3], [1, 2, 3], [1], [1], [1, 2, 3], [1, 2, 3], [1], [1]]);
+    expect(walks(sets.walked, sets.refill, [(one) => sets.put_back(false, one), (one) => sets.put_back(true, one)])).toEqual(
+        walks(native, nativeRefill, byJavaScript(native))
+    );
 });
 
 // `difference` asks of the members as they were, as the specification walks

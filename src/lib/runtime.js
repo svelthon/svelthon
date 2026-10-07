@@ -2574,6 +2574,29 @@ const dictVersion = () =>
         Object.getOwnPropertySymbols(globalThis.__BRYTHON__.empty_dict()).find((one) => one.description === 'VERSION') ??
         Symbol('svelthon.noVersion'));
 
+// The array a dict holding a key that is not a string keeps its keys in, in the
+// order they entered (`py_dict.js`): a deletion leaves a hole and an insertion
+// always goes at the end, so a key that left and came back is at another
+// place, and `clear` drops the array. Found once by its description, as the
+// counter above, on a dict made to hold one such key.
+let DICT_KEYS;
+const dictKeys = () => {
+    if (DICT_KEYS === undefined) {
+        const $B = globalThis.__BRYTHON__;
+        const probe = $B.empty_dict();
+
+        $B.$setitem(probe, 0, 0);
+        DICT_KEYS = Object.getOwnPropertySymbols(probe).find((one) => one.description === 'KEYS') ?? Symbol('svelthon.noKeys');
+    }
+
+    return DICT_KEYS;
+};
+
+// The names a dict view gave the keys at each place of a dict's array of keys,
+// by the array: what a place holds never changes, so its name is taken once,
+// and a dropped array takes its names with it.
+const PLACE_NAMES = new WeakMap();
+
 // Where a dict view's table records a name two keys share.
 const TWO_KEYS = Symbol('svelthon.twoKeys');
 
@@ -2612,41 +2635,58 @@ function viewOf(value) {
     // copying it is. Two keys of one name are refused at any read of it, as the
     // copy refuses them.
     //
-    // Each key named once, when the view first finds it in the dict, and read
-    // so by every operation, the walk, a read and a write alike, for as long as
-    // the view finds it there: as JavaScript names an object key when it is
-    // written, `o[k] = 42`, and keeps that name whatever `k`'s `toString`
-    // answers later. Only a key the view meets for the first time is named
-    // when the keys change, so a name another key came to answer meets no one,
-    // and two keys collide only when one arrives under a name taken.
+    // Each key named once, by the place it takes in the dict's array of keys
+    // (`dictKeys`), and read so by every operation, the walk, a read and a
+    // write alike: as JavaScript names an object key when it is written, `o[k]
+    // = 42`, and keeps that name whatever `k`'s `toString` answers later. A key
+    // that leaves and comes back takes another place, and is named then, as
+    // writing it again names it again; a key that stays keeps its place and
+    // its name, whoever read the dict in between. The one name the view cannot
+    // have is the one a key answered before the view first looked: Python
+    // writes a key without asking its name.
     //
-    // The view knows what it finds, not what happened between two of its
-    // reads: Python changes the dict without it, and a key deleted and put
-    // back in between, or renamed before the view first looked, is to the view
-    // a key that never left, or one it meets now. Knowing more would take a
-    // record of every change Python makes. Taken afresh at some reads and not
-    // others, a name moved under a reader that had just listed it and each read
-    // paid the whole table; taken afresh at each change, an unrelated key added
-    // made the whole view refuse to be read.
+    // The table holds places and not keys, and the names are kept by the array
+    // (`PLACE_NAMES`), so a key gone from the dict is not the view's to hold.
+    // Taken afresh at some reads and not others, a name moved under a reader
+    // that had just listed it and each read paid the whole table; taken afresh
+    // at each change, an unrelated key added made the whole view refuse to be
+    // read; kept by key, a key's name depended on who had read the dict while
+    // it was out.
     let named = null;
-    let nameOf = null;
     let namedAt;
+
+    const placeNames = (places) => {
+        let names = PLACE_NAMES.get(places);
+
+        if (names === undefined) PLACE_NAMES.set(places, (names = new Map()));
+
+        return names;
+    };
+    const nameAt = (places, names, at) => {
+        if (!names.has(at)) names.set(at, propertyKey(places[at]));
+
+        return names.get(at);
+    };
 
     const nonStringKeys = () => {
         const at = value[dictVersion()];
 
         if (named === null || at === undefined || at !== namedAt) {
-            const kept = nameOf ?? new Map();
+            const places = value[dictKeys()];
 
             named = new Map();
-            nameOf = new Map();
-            for (const [key] of pyEntries(value)) {
-                if (typeof key === 'string') continue;
+            if (places !== undefined) {
+                const names = placeNames(places);
 
-                const name = kept.has(key) ? kept.get(key) : propertyKey(key);
+                for (let place = 0; place < places.length; place++) {
+                    const key = places[place];
 
-                nameOf.set(key, name);
-                named.set(name, named.has(name) ? TWO_KEYS : key);
+                    if (key === undefined || typeof key === 'string') continue;
+
+                    const name = nameAt(places, names, place);
+
+                    named.set(name, named.has(name) ? TWO_KEYS : place);
+                }
             }
             namedAt = at;
         }
@@ -2662,7 +2702,7 @@ function viewOf(value) {
 
         if (other === TWO_KEYS || (own && other !== undefined)) twoKeys(name);
 
-        return own ? name : other === undefined ? MISSING : other;
+        return own ? name : other === undefined ? MISSING : value[dictKeys()][other];
     };
     const holds = (key) => {
         if (sequence) {
@@ -2682,13 +2722,22 @@ function viewOf(value) {
         if (sequence) return Array.from({ length: length() }, (_, at) => String(at));
 
         const names = {};
-
-        nonStringKeys();
-        for (const [key] of pyEntries(value)) {
-            const name = typeof key === 'string' ? key : nameOf.get(key);
-
+        const places = value[dictKeys()];
+        const add = (name) => {
             if (Object.hasOwn(names, name)) twoKeys(name);
             define(names, name, true);
+        };
+
+        if (places === undefined) {
+            for (const [key] of pyEntries(value)) add(propertyKey(key));
+        } else {
+            const given = placeNames(places);
+
+            for (let place = 0; place < places.length; place++) {
+                const key = places[place];
+
+                if (key !== undefined) add(typeof key === 'string' ? key : nameAt(places, given, place));
+            }
         }
 
         return Reflect.ownKeys(names);
@@ -3021,34 +3070,51 @@ class SetView extends Set {
         this.#call('clear');
     }
 
-    // A walk is live as a `Set`'s is, as far as the members present at each
-    // step say: a member deleted before its turn is not visited, one that
-    // arrives during the walk is, after the others, and `clear` ends it. So
-    // the members are taken once, each asked at its turn whether it is still
-    // there, and the set asked again at the end for what arrived.
+    // A walk is live as a `Set`'s is: a member deleted before its turn is not
+    // visited, one that arrives during the walk is, after the others, one
+    // deleted and added back is visited again, and `clear` ends it.
     //
-    // Each member is visited once. A `Set` visits again one deleted and added
-    // back during the walk, by the order of arrival it keeps; a Python set
-    // keeps none, and Python changes it without the view, so "deleted and added
-    // back" and "never left" are one state to a walk. A record kept by the view
-    // saw only its own writes, and held every member it had added after the set
-    // let it go.
+    // Python keeps where a member arrived, and the walk reads it there: a set
+    // keeps its members in buckets by hash (`$store`), a member added back
+    // goes into a new bucket or at the end of its own, and a member that stays
+    // keeps its bucket and never moves up in it. So the walk takes the members
+    // with their bucket and place, visits one at its turn only if it is still
+    // there, and notes each visit, for the walk alone: a member is due again
+    // when its bucket changed or its place went up, whichever language wrote.
+    // The one return missed is the last member of a bucket two members share,
+    // put back where it was. A record the view kept of its own writes saw only
+    // those, and held the members after the set let them go.
     *values() {
-        const $B = globalThis.__BRYTHON__;
-        const visited = new Set();
-        let members = iterated(this.#value);
+        const store = () => this.#value.$store;
+        const visited = new Map();
+        const taken = () => {
+            const entries = [];
+
+            for (const [hash, bucket] of Object.entries(store())) {
+                bucket.forEach((one, at) => entries.push({ one, hash, bucket, at }));
+            }
+
+            return entries;
+        };
+        const due = ({ one, bucket, at }) => {
+            const seen = visited.get(one);
+
+            return seen === undefined || seen.bucket !== bucket || at > seen.at;
+        };
+        const there = ({ one, hash, bucket, at }) => store()[hash] === bucket && bucket[at] === one;
+        let entries = taken();
 
         follow(this.#value);
 
-        while (members.length > 0) {
-            for (const one of members) {
-                if (visited.has(one) || !$B.$is_member(one, this.#value)) continue;
+        while (entries.length > 0) {
+            for (const entry of entries) {
+                if (!due(entry) || !there(entry)) continue;
 
-                visited.add(one);
-                yield forReader(one);
+                visited.set(entry.one, entry);
+                yield forReader(entry.one);
             }
 
-            members = [...iterated(this.#value)].filter((one) => !visited.has(one));
+            entries = taken().filter(due);
         }
     }
 

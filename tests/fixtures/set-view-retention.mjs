@@ -41,8 +41,32 @@ const run = (kind) => {
     return weak;
 };
 
+// And a dict's view: 64 keys named by a read, then the dict cleared by Python.
+const dictRun = () => {
+    const raw = $B.builtins.dict.$factory();
+    const weak = [];
+
+    for (let i = 0; i < 64; i++) {
+        const key = { toString: () => `k${i}` };
+
+        weak.push(new WeakRef(key));
+        $B.$setitem(raw, key, i);
+    }
+
+    const view = $B.pyobj2jsobj_hook(raw);
+
+    views.push(view);
+    Object.keys(view);
+    $B.$call($B.$getattr(raw, 'clear'));
+
+    return weak;
+};
+
 const kinds = ['float deleted', 'object deleted', 'cleared by Python'];
 const weak = Object.fromEntries(kinds.map((kind) => [kind, run(kind)]));
+
+weak['dict cleared by Python'] = dictRun();
+kinds.push('dict cleared by Python');
 
 for (let round = 0; round < 10; round++) {
     await new Promise((resolve) => setTimeout(resolve, 10));

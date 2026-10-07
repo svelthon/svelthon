@@ -794,8 +794,10 @@ the same object. A list, a dict, a set or an instance is the module's own
 object, as `m.items` is in Python: changed in place by the module,
 `items.append(2)` or `thing.count = 1`, it is changed for the importer, and a
 write from JavaScript is the module's. A set reads as a JavaScript `Set`, as
-Svelte's own `SvelteSet` does, a walk visiting each member once, since a Python
-set keeps no order of arrival to visit one added back again, and bytes as a `Uint8Array`, what a `Blob`, a
+Svelte's own `SvelteSet` does, and a dict keyed by a JavaScript object names
+that key by its `toString` when it enters, as a JavaScript object names a key
+when it is written: the one name it cannot have is the one a key answered
+before the view first looked. Bytes read as a `Uint8Array`, what a `Blob`, a
 `fetch` body or a `TextDecoder` takes. That one is a copy, since a Web API takes
 no live object for bytes: of a `bytearray`, the bytes it holds when it
 crosses, taken again when Python changes it; a byte JavaScript writes into the

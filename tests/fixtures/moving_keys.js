@@ -21,4 +21,5 @@ export const third = named('first');
 export const unseen = named('before');
 export const seen = named('before');
 export const late = named('before');
+export const cleared = named('before');
 export const many = Array.from({ length: 400 }, (_, i) => named(`k${i}`));

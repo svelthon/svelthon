@@ -21,15 +21,15 @@ def seen():
 walked = {1, 2, 3}
 
 
-def refill():
+def refill(members=None):
     walked.clear()
-    walked.update([1, 2, 3])
+    walked.update([1, 2, 3] if members is None else members)
 
 
-# 1 deleted and added back by Python, or the set cleared and 1 added.
-def put_back(clear):
+# A member deleted and added back by Python, or the set cleared and it added.
+def put_back(clear, member):
     if clear:
         walked.clear()
     else:
-        walked.discard(1)
-    walked.add(1)
+        walked.discard(member)
+    walked.add(member)

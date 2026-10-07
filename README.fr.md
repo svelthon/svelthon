@@ -832,10 +832,11 @@ même fonction réécrite reste le même objet. Une liste, un dict, un set ou un
 instance est l'objet même du module, comme `m.items` en Python : modifié sur
 place par le module, `items.append(2)` ou `thing.count = 1`, il l'est pour
 l'importateur, et une écriture depuis JavaScript est celle du module. Un set se
-lit comme un `Set` JavaScript, comme le `SvelteSet` de Svelte, un parcours
-visitant chaque membre une fois, puisqu'un set Python ne garde aucun ordre
-d'arrivée pour revoir un membre rajouté, et des bytes
-comme un `Uint8Array`, ce que prennent un `Blob`, un corps de `fetch` ou un
+lit comme un `Set` JavaScript, comme le `SvelteSet` de Svelte, et un dict dont
+une clé est un objet JavaScript nomme cette clé par son `toString` à son entrée,
+comme un objet JavaScript nomme une clé quand on l'écrit : le seul nom qu'il ne
+peut pas avoir est celui qu'une clé donnait avant que la vue ne regarde. Des
+bytes se lisent comme un `Uint8Array`, ce que prennent un `Blob`, un corps de `fetch` ou un
 `TextDecoder`. Celui-là est une copie, puisqu'une API web ne prend aucun objet
 vivant pour des octets : d'un `bytearray`, les octets qu'il contient quand il
 traverse, repris quand Python le modifie ; un octet que JavaScript écrit dans la
