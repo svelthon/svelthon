@@ -806,6 +806,24 @@ test('a builtin taking no arguments refuses one as CPython words it: no-argument
     expect(inside()).toEqual(['globals() takes no arguments (1 given)', 'globals() takes no keyword arguments', ...locals]);
 });
 
+// A builtin that takes one argument said "takes exactly 1 argument", one that
+// takes several "takes exactly 2 arguments", and a method counted its
+// instance: `set().add()` said "takes exactly 2 arguments (1 given)".
+test('a wrong number of arguments is told in the count the caller wrote: nb-args-messages', async () => {
+    const { refusals } = await import('./fixtures/arity_messages.py');
+
+    expect(refusals()).toEqual([
+        'abs() takes exactly one argument (0 given)',
+        'len() takes exactly one argument (2 given)',
+        'divmod expected 2 arguments, got 1',
+        'isinstance expected 2 arguments, got 3',
+        'set.add() takes exactly one argument (0 given)',
+        'list.append() takes exactly one argument (2 given)',
+        'str.join() takes exactly one argument (0 given)',
+        'str.join() takes exactly one argument (0 given)',
+    ]);
+});
+
 // A module named with a quote, from a file such as `src/Jean's app/Page.svelte`,
 // had its name pasted between quotes in the code of every def, lambda, class
 // and comprehension, which then stopped parsing.

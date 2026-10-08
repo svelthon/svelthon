@@ -38,5 +38,5 @@ test('and as a JavaScript callback, where a builtin that takes one is handed all
 
     expect([...rows]).toEqual([]);
     expect([...upper]).toEqual(['AB']);
-    expect(appended).toMatch(/append\(\) takes exactly/);
+    expect(appended).toBe('list.append() takes exactly one argument (3 given)');
 });
