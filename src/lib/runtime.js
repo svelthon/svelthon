@@ -2604,6 +2604,23 @@ const LIST_VIEW = Object.create(Array.prototype);
 // test by identity still keeps it.
 const PLAIN_VIEW = Object.defineProperties(Object.create(Object.prototype), Object.getOwnPropertyDescriptors(Object.prototype));
 
+// A view's own property, described. One whose read runs the author's code, a
+// `__getitem__` or a `__getattribute__` of their class, is an accessor, as a
+// getter is in JavaScript: listing the keys reads nothing, and a copy reads it
+// once, through the view. Any other holds its value, read here, as Svelte's
+// state describes its own.
+const described = (view, key, authored, read) =>
+    authored
+        ? {
+              get: () => view[key],
+              set: (given) => {
+                  view[key] = given;
+              },
+              enumerable: true,
+              configurable: true
+          }
+        : { value: read(), writable: true, enumerable: true, configurable: true };
+
 const forReader = (one) => {
     if (one === NONE) return null;
     if (one !== null && (typeof one === 'object' || typeof one === 'function') && callable(one)) return pyHandler(one);
@@ -2782,6 +2799,9 @@ function viewOf(value) {
         return keyFor(key) !== MISSING;
     };
     const read = (key) => forReader($B.$getitem(value, sequence ? index(key) : keyFor(key)));
+    // Whether a read is the author's: a subclass's own `__getitem__`.
+    const base = sequence ? ($B.is_list(value) ? _b_.list : _b_.tuple) : _b_.dict;
+    const authored = () => declares(quietPyType(value), '__getitem__') !== declares(base, '__getitem__');
 
     // Every name, as the copy writes them and from the table a read finds them
     // in: two keys of one name, `7` and `"7"`, are refused as the copy refuses
@@ -2899,7 +2919,7 @@ function viewOf(value) {
                 return { value: length(), writable: true, enumerable: false, configurable: false };
             }
 
-            return holds(key) ? { value: read(key), writable: true, enumerable: true, configurable: true } : undefined;
+            return holds(key) ? described(view, key, authored(), () => read(key)) : undefined;
         },
         set(shell, key, given) {
             return writable(key) && write(key, given);
@@ -2980,6 +3000,8 @@ function instanceView(value) {
         );
     };
     const write = (key, given) => typeof key === 'string' && ($B.$setattr(value, key, entering(given)), true);
+    // Whether a read is the author's: a `__getattribute__` of their class.
+    const authored = () => declares(quietPyType(value), '__getattribute__') !== declares(_b_.object, '__getattribute__');
 
     // How the instance prints, when its class says: a `__str__` or a `__repr__`
     // on it or on a base other than `object` is its `toString`, as a JavaScript
@@ -3028,7 +3050,7 @@ function instanceView(value) {
         getOwnPropertyDescriptor(shell, key) {
             follow(value);
 
-            return owns(key) ? { value: forReader(attribute(key)), writable: true, enumerable: true, configurable: true } : undefined;
+            return owns(key) ? described(view, key, authored(), () => forReader(attribute(key))) : undefined;
         },
         set(shell, key, given) {
             return write(key, given);
