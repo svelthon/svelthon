@@ -1641,7 +1641,7 @@ $B.check_nb_args_no_kw=function(name,expected,args){
 var len=args.length,last=args[len-1]
 if(last && last[$B.KW]){len--
 if(! $B.keyword_is_empty(last[$B.KW])){$B.RAISE(_b_.TypeError,name+"() takes no keyword arguments")}}
-if(len !=expected){if(expected==0){$B.RAISE(_b_.TypeError,name+"() takes no argument"+
+if(len !=expected){if(expected==0){$B.RAISE(_b_.TypeError,name+"() takes no arguments"+
 " ("+len+" given)")}else{
 $B.RAISE(_b_.TypeError,name+"() takes exactly "+
 expected+" argument"+(expected < 2 ? '' :'s')+
@@ -5143,7 +5143,7 @@ if(!$B.is_int(res)){$B.RAISE(_b_.TypeError,`'${$B.class_name(res)}' object canno
 if(!$B.rich_comp('__ge__',res,0)){$B.RAISE(_b_.ValueError,'ValueError: __len__() should return >= 0')}
 return res}
 _b_.locals=function(){
-check_nb_args('locals',0,arguments)
+check_nb_args_no_kw('locals',0,arguments)
 var locals_obj=$B.frame_obj.frame[1]
 var class_locals=locals_obj.$target
 if(class_locals && $B.get_class(class_locals)===_b_.dict){return class_locals}

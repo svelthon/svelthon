@@ -7208,7 +7208,7 @@ function namespaceDict(namespace) {
 
         // The engine's own refusal of an argument, which a module's namespace
         // would otherwise skip: `locals(1)` raises at every level alike.
-        $B.check_nb_args('locals', 0, args);
+        $B.check_nb_args_no_kw('locals', 0, args);
 
         return namespaceDict(frame[1]);
     });

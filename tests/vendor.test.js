@@ -795,6 +795,17 @@ test('a set made from what is not a list, a tuple or a dict iterates it: set-upd
     expect(made([0.5, 1.5])).toEqual([true, true, true, [9], [1], [1], true]);
 });
 
+// A builtin that takes no arguments said "takes no argument", and `locals()`
+// refused a keyword with the same sentence. `python3` on the same module, at
+// its top and in a function.
+test('a builtin taking no arguments refuses one as CPython words it: no-arguments-message, locals-no-keyword-arguments', async () => {
+    const { top, inside } = await import('./fixtures/no_arguments.py');
+    const locals = ['locals() takes no arguments (1 given)', 'locals() takes no keyword arguments'];
+
+    expect(top).toEqual(locals);
+    expect(inside()).toEqual(['globals() takes no arguments (1 given)', 'globals() takes no keyword arguments', ...locals]);
+});
+
 // A module named with a quote, from a file such as `src/Jean's app/Page.svelte`,
 // had its name pasted between quotes in the code of every def, lambda, class
 // and comprehension, which then stopped parsing.
