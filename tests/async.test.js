@@ -203,6 +203,23 @@ describe('a value handed back behind a promise', () => {
         await expect(from_rejected()).rejects.toThrow(/gone/);
     });
 
+    // A Python exception that rejects what a `def` handed back, an
+    // `aio.Future` failed by Python, is described as the same exception is
+    // when raised: it reached the caller without a message or a stack.
+    test('and a rejection with a Python exception reads as one raised', async () => {
+        const { failed_future, awaited_future } = await import('./fixtures/failed_future.py');
+        const caught = async (run) => {
+            try {
+                await run();
+            } catch (error) {
+                return error.message;
+            }
+        };
+
+        expect(await caught(failed_future)).toMatch(/^ValueError: delayed failure \(/);
+        expect(await caught(awaited_future)).toMatch(/^ValueError: delayed failure \(/);
+    });
+
     // A `then` getter that raises rejects, as `await` rejects.
     test('and a then getter that raises rejects as await rejects', async () => {
         await expect((async () => await raising())()).rejects.toThrow(/no then/);

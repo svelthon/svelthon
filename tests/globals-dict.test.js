@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { test, expect, beforeEach } from 'vitest';
 import * as module from './fixtures/globals_dict.py';
+import * as moduleLocals from './fixtures/module_locals.py';
 
 // `globals()` is the module's own dict, as CPython hands it over: its class,
 // its keys, a write that makes a global and a deletion that removes one. The
@@ -25,4 +26,14 @@ test.each([
     ['popped_read', 'missing']
 ])('globals() answers %s as CPython does', (step, cpython) => {
     expect(module[step]()).toBe(cpython);
+});
+
+// `locals()` at the top of a module is the module's dict, and refuses an
+// argument as it does in a function: the module's answer skipped the check.
+// `python3` on the same file.
+test('locals() refuses an argument at the top of a module as in a function', () => {
+    const refusals = ['TypeError', 'TypeError', 'TypeError', 'TypeError', 'accepted'];
+
+    expect(moduleLocals.top).toEqual([...refusals, true]);
+    expect(moduleLocals.inside()).toEqual(refusals);
 });

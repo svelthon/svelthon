@@ -464,9 +464,16 @@ test('what Python raises under a view reaches the reader, in Python’s words', 
         expect.stringContaining('TypeError: membership failed'),
         expect.stringContaining('ValueError: no text')
     ]);
-    // A value whose class has no hash is a no, decided by the class.
+    // A value whose class has no hash is a no, decided by the class, for a
+    // set that answers membership as `set` does.
     expect(iteratedSets.SETS.named.has([])).toBe(false);
     expect(iteratedSets.SETS.named.has(viewErrors.compared)).toBe(false);
+    // A class that redefines `__contains__` is asked whatever the value: a row
+    // it reads a key from is found and deleted, and what it raises arrives.
+    expect(viewErrors.row_bag.has(viewErrors.query)).toBe(true);
+    expect(viewErrors.row_bag.delete(viewErrors.query)).toBe(true);
+    expect([...viewErrors.row_bag]).toEqual([2]);
+    expect(read(() => viewErrors.type_bag.has([]))).toEqual(expect.stringContaining('TypeError: membership failed'));
     expect(viewErrors.caught()).toEqual([
         'ValueError: no row',
         'ValueError: no value',
@@ -477,6 +484,43 @@ test('what Python raises under a view reaches the reader, in Python’s words', 
         'TypeError: membership failed',
         'ValueError: no text'
     ]);
+});
+
+// A walk that deletes members it has not reached yet, or that adds one at each
+// step as a worklist does, costs what it touches: four times the members take
+// about four times as long. Every change asked each member visited, and a set
+// read again at each arrival, made it sixteen.
+test('a walk of a set grows with its length when it deletes ahead or adds as it goes', () => {
+    const range = (n) => Array.from({ length: n }, (_, i) => i);
+    const sieve = (n) => {
+        sets.refill(range(n));
+        const start = performance.now();
+        let at = 0;
+
+        for (const one of sets.walked) {
+            void one;
+            if (at + 1 < n) sets.walked.delete(at + 1);
+            at += 2;
+        }
+
+        return performance.now() - start;
+    };
+    const worklist = (n) => {
+        sets.refill([0]);
+        const start = performance.now();
+
+        for (const one of sets.walked) if (one < n) sets.walked.add(one + 1);
+
+        return performance.now() - start;
+    };
+    const growth = (run) => {
+        run(1000);
+
+        return run(16000) / Math.max(run(4000), 1);
+    };
+
+    expect(growth(sieve)).toBeLessThan(8);
+    expect(growth(worklist)).toBeLessThan(8);
 });
 
 // A member that never left is not visited again, whatever became of its

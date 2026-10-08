@@ -3085,6 +3085,11 @@ function instanceView(value) {
 // of them removes, in a class that redefines it, goes through a call of its own.
 const ARRIVING = new Set(['add', 'update', '__ior__']);
 
+// The classes whose hash runs nothing of the author's, beside an object hashed
+// by its identity: a walk may ask them for the bucket a member is filed under.
+// A JavaScript object is hashed by its identity too, through a slot of its own.
+const BUILTIN_HASHED = [_b_.int, _b_.float, _b_.str, _b_.bool, globalThis.__BRYTHON__.JSObj];
+
 class SetView extends Set {
     #value;
 
@@ -3181,6 +3186,13 @@ class SetView extends Set {
     // made it: the set comes under watch for that, and the walk signs on for
     // as long as it lasts. A member visited is due again once it has left, and
     // the walk forgets it then, so it holds no member the set let go.
+    //
+    // Each change costs what it touches: a single removal asks only the members
+    // visited under its hash, a member added waits in a queue for its turn, and
+    // only a change of many, or of a value whose hash would run the author's
+    // code, reads the set again. Asked of every member, a walk that deleted the
+    // members it had not reached, or that added one at each step, as a worklist
+    // does, grew with the square of its length.
     *values() {
         const value = this.#value;
 
@@ -3215,26 +3227,83 @@ class SetView extends Set {
 
             return MISSING;
         };
+        // The hash a value is filed under, when hashing it runs nothing of the
+        // author's: a number, a string, a bool, a builtin int, float or str, or
+        // an object hashed by its identity. Undefined for anything else.
+        const filed = (one) => {
+            const kind = typeof one;
+
+            try {
+                if (kind !== 'number' && kind !== 'string' && kind !== 'boolean' && kind !== 'bigint') {
+                    const type = $B.get_class(one);
+                    const slot = $B.search_slot(type, 'tp_hash', $B.NULL);
+
+                    if (!BUILTIN_HASHED.includes(type) && slot !== $B.search_slot(_b_.object, 'tp_hash', $B.NULL)) {
+                        return undefined;
+                    }
+                }
+
+                return String($B.$hash(one));
+            } catch {
+                return undefined;
+            }
+        };
         const walk = {
-            // Each member visited, by the hash it is filed under.
+            // Each member visited, by the hash it is filed under, and the
+            // members visited under each hash.
             visited: new Map(),
+            filed: new Map(),
+            // What arrived since the last pass, and whether the set changed in
+            // a way that only reading it all again tells.
+            arrivals: [],
+            rescan: false,
+            visit(one, hash) {
+                this.visited.set(one, hash);
+                if (!this.filed.has(hash)) this.filed.set(hash, new Set());
+                this.filed.get(hash).add(one);
+            },
+            forget(one) {
+                const hash = this.visited.get(one);
+                const group = this.filed.get(hash);
+
+                this.visited.delete(one);
+                group.delete(one);
+                if (group.size === 0) this.filed.delete(hash);
+            },
             changed(name, args, result) {
+                // A member added is what the set now holds for it, met at its
+                // turn, after the others; anything else that may have added
+                // is read again, once per call.
+                if (name === 'add') {
+                    const hash = filed(args[0]);
+                    const one = hash === undefined ? MISSING : kept(args[0], hash);
+
+                    if (hash === undefined) this.rescan = true;
+                    else if (one !== MISSING && !this.visited.has(one)) this.arrivals.push([one, hash]);
+
+                    return;
+                }
+
+                if (name !== 'discard' && name !== 'remove' && name !== 'pop') this.rescan = true;
                 if (ARRIVING.has(name)) return;
 
-                // The one member a single removal names, when the set holds
-                // that very object; any other change is asked of every member.
-                const named = name === 'pop' ? result : name === 'discard' || name === 'remove' ? args[0] : undefined;
-                const only = this.visited.has(named) ? [[named, this.visited.get(named)]] : this.visited;
+                // A single removal takes a member equal to the one it names,
+                // filed under the same hash, so only those visited under it
+                // are asked; any other change asks every member visited.
+                const named = name === 'pop' ? result : name === 'discard' || name === 'remove' ? args[0] : MISSING;
+                const hash = named === MISSING ? undefined : this.visited.get(named) ?? filed(named);
+                const asked = hash === undefined ? [...this.visited.keys()] : [...(this.filed.get(hash) ?? [])];
 
                 // A member that left is forgotten; one the set now holds as
                 // another object stayed, and its visit goes to that object.
-                for (const [one, hash] of only) {
-                    const same = kept(one, hash);
+                for (const one of asked) {
+                    const filedUnder = this.visited.get(one);
+                    const same = kept(one, filedUnder);
 
                     if (same === one) continue;
 
-                    this.visited.delete(one);
-                    if (same !== MISSING) this.visited.set(same, hash);
+                    this.forget(one);
+                    if (same !== MISSING) this.visit(same, filedUnder);
                 }
             }
         };
@@ -3253,13 +3322,19 @@ class SetView extends Set {
         (marker.walks ??= new Set()).add(ref);
 
         try {
-            for (let entries = members(); entries.length > 0; entries = members()) {
+            let entries = members();
+
+            while (entries.length > 0) {
                 for (const [one, hash] of entries) {
                     if (walk.visited.has(one) || !present(one, hash)) continue;
 
-                    walk.visited.set(one, hash);
+                    walk.visit(one, hash);
                     yield forReader(one);
                 }
+
+                entries = walk.rescan ? members() : walk.arrivals;
+                walk.arrivals = [];
+                walk.rescan = false;
             }
         } finally {
             marker.walks.delete(ref);
