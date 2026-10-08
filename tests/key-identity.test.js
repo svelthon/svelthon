@@ -11,6 +11,7 @@ import NanKey from './fixtures/NanKey.svelte';
 import SignedZeroKey from './fixtures/SignedZeroKey.svelte';
 import FunctionKey from './fixtures/FunctionKey.svelte';
 import BoundMethodKey from './fixtures/BoundMethodKey.svelte';
+import { __pybridge } from '../src/lib/runtime.js';
 
 test.for([['alone'], ['tuple'], ['builtin']])('%s: an equal bound method keeps the block, another makes one', ([kind]) => {
     const target = document.body.appendChild(document.createElement('div'));
@@ -240,4 +241,24 @@ describe('a key holding a NaN', () => {
         expect(now()).toBe(field);
         expect(now().value).toBe('unsaved');
     });
+});
+
+// A JavaScript symbol in a tuple key is equal to itself alone, as the symbol
+// alone keys by itself: two made with one description print alike, and keyed
+// by that text they were one row of an `{#each}`, one `{#key}` block and one
+// context. One symbol is one key however often its tuple is rebuilt, and
+// `Symbol.for` gives back the one it registered.
+test('a symbol in a tuple key is itself alone', () => {
+    const $B = globalThis.__BRYTHON__;
+    const key = (...items) => __pybridge.key($B.fast_tuple(items));
+    const first = Symbol('row');
+    const second = Symbol('row');
+
+    expect(key(first)).not.toBe(key(second));
+    expect(key(Symbol())).not.toBe(key(Symbol()));
+    expect(key(first)).toBe(key(first));
+    expect(key($B.fast_tuple([first]))).not.toBe(key($B.fast_tuple([second])));
+    expect(key(Symbol.for('row'))).toBe(key(Symbol.for('row')));
+    expect(key(Symbol.for('row'))).not.toBe(key(first));
+    expect(key(first)).not.toBe(key('Symbol(row)'));
 });

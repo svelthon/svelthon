@@ -4672,18 +4672,18 @@ export function pyCall(fn, where, arity = Infinity, named, convert = pyArg) {
             // has to stay awaitable. The async function hands back one promise
             // of this realm for every shape.
             //
-            // The conversion of a resolved value runs after this `try` has
-            // returned, so it carries its own: a refusal there names the call
-            // the way the same refusal does for a value returned directly.
+            // What is awaited settles after this `try` has returned, so it
+            // carries its own: a rejection, an `aio.Future` failed by Python
+            // among them, and a refusal of the resolved value's conversion name
+            // the call the way the same error does when raised directly. A
+            // JavaScript error or value it rejects with passes as it is.
             const pending = awaited(result);
 
             if (pending === undefined) return plainData(result, undefined, pyHandler);
 
             return (async () => {
-                const one = await pending;
-
                 try {
-                    return plainData(one, undefined, pyHandler);
+                    return plainData(await pending, undefined, pyHandler);
                 } catch (error) {
                     throw pyError(error, where);
                 }
@@ -7067,9 +7067,13 @@ function namespaceDict(namespace) {
     wrap('locals', (original, self, args) => {
         const frame = $B.frame_obj?.frame;
 
-        return frame !== undefined && ours(frame[1]) && frame[1] === frame[3]
-            ? namespaceDict(frame[1])
-            : original.apply(self, args);
+        if (frame === undefined || !ours(frame[1]) || frame[1] !== frame[3]) return original.apply(self, args);
+
+        // The engine's own refusal of an argument, which a module's namespace
+        // would otherwise skip: `locals(1)` raises at every level alike.
+        $B.check_nb_args('locals', 0, args);
+
+        return namespaceDict(frame[1]);
     });
 })(globalThis.__BRYTHON__);
 
