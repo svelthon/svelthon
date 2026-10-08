@@ -1,7 +1,7 @@
 import { test, expect, describe } from 'vitest';
 import { mount, unmount, flushSync, settled } from './mounted.js';
 import { pythonExpressions, collector } from '../src/lib/markup.js';
-import { directiveTransition } from '../src/lib/runtime.js';
+import { directiveTransition, directiveAnimate, directiveAction } from '../src/lib/runtime.js';
 import DirectiveModule from './fixtures/DirectiveModule.svelte';
 import DirectiveLife from './fixtures/DirectiveLife.svelte';
 import DirectiveScope from './fixtures/DirectiveScope.svelte';
@@ -380,4 +380,32 @@ describe('what a module member becomes for Svelte', () => {
         config.tick(0.5, 0.5);
         expect(node.textContent).toBe('ab');
     });
+});
+
+// What a directive hands back is read by Svelte after the directive has
+// returned: a property of an instance that raises then is described as one
+// raised in the directive, where it reached the page with no message and no
+// stack.
+test('a property of what a directive hands back that raises is described', async () => {
+    const directives = await import('./fixtures/directive_errors.py');
+    const python = (one) => globalThis.__BRYTHON__.PYOBJ_MAP.get(one) ?? one;
+    const message = (read) => {
+        try {
+            read();
+            return 'no error';
+        } catch (error) {
+            return error.message;
+        }
+    };
+    const node = () => document.createElement('p');
+    const faded = directiveTransition(node(), ['fading', () => python(directives.fading)], { direction: 'in' });
+    const moved = directiveAnimate(node(), { from: {}, to: {} }, ['moving', () => python(directives.moving)]);
+
+    expect(message(() => faded.duration)).toMatch(/^ValueError: duration failed \(/);
+    expect(message(() => moved.duration)).toMatch(/^ValueError: duration failed \(/);
+    // An action's `update` is read as the action is installed.
+    expect(message(() => directiveAction(node(), ['acting', () => python(directives.acting)]))).toMatch(
+        /^ValueError: update failed \(/
+    );
+    expect(directiveTransition(node(), ['fine', () => python(directives.fine)], { direction: 'in' }).duration).toBe(0.5);
 });

@@ -1101,6 +1101,26 @@ describe('urlencode', () => {
         expect(urlencode(__pybridge.list([]))).toBe('');
     });
 
+    // The pairs are what Python's loop yields, of the sequence and of each
+    // pair: the storage carried filters the class no longer yields, and a
+    // refusal went unheard.
+    test('and the pairs are what the class yields', async () => {
+        const pairs = await import('./fixtures/query_pairs.py');
+
+        expect(urlencode(pairs.selected)).toBe('tag=selected&page=2');
+        expect(urlencode(pairs.empty)).toBe('');
+        expect(urlencode(pairs.rewritten)).toBe('tag=selected');
+        expect(urlencode(pairs.grown)).toBe('tag=selected&page=2');
+        expect(() => urlencode(pairs.refused)).toThrow(/query iterator failed/);
+
+        // And the Python object itself, which is what a template hands over.
+        const raw = (view) => globalThis.__BRYTHON__.PYOBJ_MAP.get(view);
+
+        expect(urlencode(raw(pairs.selected))).toBe('tag=selected&page=2');
+        expect(urlencode(raw(pairs.rewritten))).toBe('tag=selected');
+        expect(urlencode(raw(pairs.empty))).toBe('');
+    });
+
     test('while a list of anything but pairs is still a value', () => {
         expect(urlencode(__pybridge.list(['a', 'b']))).toBe(encodeURIComponent("['a', 'b']"));
     });

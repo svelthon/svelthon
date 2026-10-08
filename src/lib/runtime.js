@@ -6041,19 +6041,24 @@ function directiveResult(value, where) {
 
     if (!instance) return pyNumbers(value);
 
+    // Read when Svelte asks, after the directive has returned, so what a
+    // property raises is relayed here, as under a view (`relayed`).
     return new Proxy(
         {},
-        {
-            get(_, key) {
-                if (typeof key === 'symbol') return undefined;
+        relayed(
+            {
+                get(_, key) {
+                    if (typeof key === 'symbol') return undefined;
 
-                const found = globalThis.__BRYTHON__.$getattr(value, key, MISSING);
+                    const found = globalThis.__BRYTHON__.$getattr(value, key, MISSING);
 
-                if (found === MISSING || found === NONE) return undefined;
+                    if (found === MISSING || found === NONE) return undefined;
 
-                return callable(found) ? pyHandler(found) : pyNumbers(found);
-            }
-        }
+                    return callable(found) ? pyHandler(found) : pyNumbers(found);
+                }
+            },
+            `${where} result`
+        )
     );
 }
 

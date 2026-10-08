@@ -661,10 +661,18 @@ export function urlencode(value) {
     // A mapping, or a sequence of pairs, which Jinja's `|urlencode` and
     // CPython's `urlencode` both take, and which is the only way to write one
     // key twice: `dict(pairs)` keeps the last `tag`.
+    //
+    // The pairs are what Python's loop yields, of the sequence and of each
+    // pair, read once (`seq`): a subclass whose `__iter__` filters or rewrites
+    // its rows is read by it, and what it raises reaches the template. Read
+    // from the storage, the link carried the filters the class no longer
+    // yields.
+    const walked = (one) => Array.from(__pybridge.seq(one));
+    const rows = Array.isArray(value) ? walked(value).map((one) => (Array.isArray(one) ? walked(one) : one)) : null;
     const entries = mapping(value)
         ? pyEntries(value)
-        : Array.isArray(value) && value.every((one) => Array.isArray(one) && one.length === 2)
-          ? value
+        : rows !== null && rows.every((one) => Array.isArray(one) && one.length === 2)
+          ? rows
           : null;
 
     if (entries !== null) {
