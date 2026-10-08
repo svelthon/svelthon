@@ -8599,7 +8599,7 @@ return res}
 set_funcs.update=function(self){
 var $=$B.args("update",1,{self:null},arguments,null,"args")
 for(var iterable of $.args){var klass=$B.get_class(iterable)
-if(klass===_b_.list ||klass===_b_.tuple){for(let i=0;i < iterable.length;i++){set_add(self,iterable[i])}}else if($B.$isinstance(iterable,[set,frozenset])){for(let entry of set_iter_with_hash(iterable)){set_add(self,entry.item,entry.hash)}}else if($B.is_dict(iterable)){for(let entry of _b_.dict.$iter_items(iterable)){set_add(self,entry.key,entry.hash)}}else{
+if(klass===_b_.list ||klass===_b_.tuple){for(let i=0;i < iterable.length;i++){set_add(self,iterable[i])}}else if($B.$isinstance(iterable,[set,frozenset])){for(let entry of set_iter_with_hash(iterable)){set_add(self,entry.item,entry.hash)}}else if(klass===_b_.dict){for(let entry of _b_.dict.$iter_items(iterable)){set_add(self,entry.key,entry.hash)}}else{
 var iterator=$B.make_js_iterator(iterable)
 for(let item of iterator){set_add(self,item)}}}
 self.$version++

@@ -194,6 +194,10 @@ function keyText(value) {
         return boundText(value.m_self, value.ml.ml_name);
     }
     if (typeof value === 'function') return identityOf(value, 'function');
+    // A symbol is equal to itself alone, whatever it prints: two made with one
+    // description print alike and are two keys. Named by the hash the engine
+    // gives it, which is its identity and outlives it no more than it must.
+    if (typeof value === 'symbol') return `<symbol ${globalThis.__BRYTHON__.$hash(value)}>`;
     if (typeof value !== 'object') return String(value);
 
     const scalar = pyScalar(value);
@@ -2022,13 +2026,14 @@ const hashable = (value) => {
     return slot !== $B.NULL && slot !== _b_.None;
 };
 
-// Whether a set's class walks it as `set` does, its members being its sequence:
-// the `__iter__` its ancestry finds first is the builtin's. A subclass that
-// redefines it says what a walk yields, as a list's subclass does (`iterated`).
-const iteratesAsSet = (value) => {
-    const own = declares(ownType(value), '__iter__');
+// Whether a set's class answers a protocol as `set` does, `__iter__` or
+// `__contains__`: the one its ancestry finds first is the builtin's. A subclass
+// that redefines it decides what it answers, what a walk yields, as a list's
+// subclass does (`iterated`), or what is in it, whatever it is asked about.
+const asSet = (value, name) => {
+    const own = declares(ownType(value), name);
 
-    return own === declares(_b_.set, '__iter__') || own === declares(_b_.frozenset, '__iter__');
+    return own === declares(_b_.set, name) || own === declares(_b_.frozenset, name);
 };
 
 function mark(value) {
@@ -3119,12 +3124,14 @@ class SetView extends Set {
 
         follow(this.#value);
 
-        // JavaScript's `has` answers any value, where Python's `in` refuses one
+        // JavaScript's `has` answers any value, where `set`'s `in` refuses one
         // whose class has no hash: that refusal is a no, told by the class
         // before anything runs. A set is asked as Python asks it, as the
-        // frozenset of its members. Anything the set raises reaches the caller,
-        // a `TypeError` of its `__contains__` as much as any other.
-        if (!isSet(bound) && !hashable(bound)) return false;
+        // frozenset of its members. A class that redefines `__contains__` is
+        // asked whatever the value, a row it reads a key from among them.
+        // Anything the set raises reaches the caller, a `TypeError` of its
+        // `__contains__` as much as any other.
+        if (asSet(this.#value, '__contains__') && !isSet(bound) && !hashable(bound)) return false;
 
         try {
             return Boolean($B.$is_member(bound, this.#value));
@@ -3179,7 +3186,7 @@ class SetView extends Set {
 
         follow(value);
 
-        if (!iteratesAsSet(value)) {
+        if (!asSet(value, '__iter__')) {
             for (const one of walkedRows(value)) yield forReader(one);
 
             return;
