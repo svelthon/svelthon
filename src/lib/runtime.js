@@ -6544,15 +6544,16 @@ export function writeItem(target, key, value) {
 // `{#each}` keep their own answer, both of which Svelte's own machinery gets
 // wrong here for want of a notification.
 //
-// The element's `type` is read off the node. Its value cannot be: a DOM value is
-// text, so `value={1}` reads back as "1", where the author's data holds the
-// number `1`.
-//
-// The typed value is nowhere on the node either. Svelte keeps it on the hidden
-// `__value` property only for an element it sees a group binding on, and this one
-// carries an action instead. So the markup pass reads the tag's own `value` and
-// passes it here. It is absent when the tag has no braced value, and then the
-// node's text is exactly right: that is what a plain HTML form hands over.
+// The element's `type` is read off the node, and so is its value, as Svelte
+// last set it rather than as the DOM holds it: a DOM value is text, so
+// `value={1}` reads back as "1", where the author's data holds the number `1`.
+// Svelte keeps the value it was handed: on `__value` for a spread, in the cache
+// `set_value` writes for `value={x}` and `{value}`. A value written as text is
+// the node's own text, which is what a plain HTML form hands over. Read there,
+// the field and the group hold one value: Svelte has evaluated the expression
+// once, and resolved a shorthand, a spread and their order. Compiled again for
+// the group from the tag's text, an expression answering anew gave the group
+// another value, and the shorthand and the spread were not seen at all.
 // A form reset moves the controls without firing `change` on any of them, and a
 // group answers it as Svelte's own `bind:group` does: the selection is emptied,
 // `[]` for checkboxes and None for radios, and the controls follow the model.
@@ -6635,21 +6636,43 @@ function groupToken(scope, binding) {
     return token;
 }
 
-export function group(node, [current, write, chosen, binding, scope, where = []]) {
+// Svelte's cache of what `set_value` was handed, under a symbol it does not
+// export, found by its description on the first node that carries it.
+let ATTRIBUTES;
+
+const attributesOf = (node) => {
+    ATTRIBUTES ??= Object.getOwnPropertySymbols(node).find((one) => one.description === 'attributes');
+
+    return ATTRIBUTES === undefined ? undefined : node[ATTRIBUTES];
+};
+
+export function group(node, [current, write, chosen, fielded, binding, scope, where = []]) {
     const boxes = node.type === 'checkbox';
     const token = groupToken(scope, binding);
 
     node.$svelthonGroup = targetOf(token, where);
 
-    // `undefined` means one thing only: the tag's value is static text, so the
-    // node holds it and nothing can move it. Everything an author wrote as an
-    // expression, braced, quoted, or quoted around text, is compiled and
-    // handed over, because the node's text is not the value (`value="{n}"` binds
-    // a number) and because reading it here is not ordered against Svelte
-    // writing it.
+    // The value the markup pass compiled from the tag, and whether it was
+    // written braced or as the shorthand, which Svelte writes typed. It is
+    // also what makes the action update when the value changes, as Svelte's
+    // own group reads its value with the model. `undefined` for a value that
+    // is static text, which the node holds and nothing can move.
     let picked = chosen;
 
-    const value = () => (picked === undefined ? node.value : pyBind(picked));
+    // Read at each use, after Svelte has written the attributes of the turn: a
+    // spread's value, its own or an attribute's it overrides, then a braced
+    // value as the field evaluated it, then what the tag's text compiled to (a
+    // lone interpolation keeps its type there, as in Svelte, where the field
+    // holds its text).
+    const value = () => {
+        if ('__value' in node) return pyBind(node.__value);
+
+        const written = fielded ? attributesOf(node) : undefined;
+
+        if (written !== undefined && 'value' in written) return pyBind(written.value);
+
+        return picked === undefined ? node.value : pyBind(picked);
+    };
 
     // **A checkbox group is the checked inputs, read in the order they sit in
     // the document**, as Svelte's own binding reads them
@@ -6730,9 +6753,39 @@ export function group(node, [current, write, chosen, binding, scope, where = []]
         if (!into.some((already) => alike(already, held))) into.push(held);
     };
 
+    // The model last shown, which a new value of the field is shown against.
+    let model = current;
+
     const show = (held) => {
+        model = held;
         node.checked = boxes ? Array.from(held ?? []).some(same) : same(held);
     };
+
+    // Svelte writes a new value of the field in the same turn as the action
+    // updates, and after it: the control follows each write, as Svelte's own
+    // group follows its control's value. Read at the update, the field still
+    // held the value before, and the control kept a state its value no longer
+    // had.
+    const followed = [];
+    const follow = (owner, key) => {
+        if (owner === undefined || !Object.hasOwn(owner, key)) return;
+
+        let held = owner[key];
+
+        Object.defineProperty(owner, key, {
+            configurable: true,
+            enumerable: true,
+            get: () => held,
+            set(next) {
+                held = next;
+                show(model);
+            }
+        });
+        followed.push([owner, key]);
+    };
+
+    follow(node, '__value');
+    if (fielded) follow(attributesOf(node), 'value');
 
     const changed = () => {
         if (!boxes) return write(value());
@@ -6780,7 +6833,7 @@ export function group(node, [current, write, chosen, binding, scope, where = []]
     else queueMicrotask(() => (boxes || node.checked) && changed());
 
     return {
-        update([next, , given, , , moved = []]) {
+        update([next, , given, , , , moved = []]) {
             node.$svelthonGroup = targetOf(token, moved);
             picked = given;
             show(next);
@@ -6791,6 +6844,10 @@ export function group(node, [current, write, chosen, binding, scope, where = []]
 
             const at = inputs.indexOf(node);
             if (at !== -1) inputs.splice(at, 1);
+
+            for (const [owner, key] of followed) {
+                Object.defineProperty(owner, key, { value: owner[key], writable: true, configurable: true, enumerable: true });
+            }
         }
     };
 }

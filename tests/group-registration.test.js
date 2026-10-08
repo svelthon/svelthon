@@ -90,7 +90,7 @@ test.each([['one shared group', () => 0], ['a group per row', (at) => at]])(
             });
 
             node.type = 'checkbox';
-            actions.push(group(node, [[], (value) => written.push(value), 'yes', 'rows', scope, where]));
+            actions.push(group(node, [[], (value) => written.push(value), 'yes', false, 'rows', scope, where]));
         }
 
         await Promise.resolve();

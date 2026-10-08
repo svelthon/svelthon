@@ -901,10 +901,10 @@ describe('the attribute pass', () => {
     // the start, for the reason written above `GROUP_DIRECTIVE`, and the
     // shorthand went round it.
     test('bind:group refuses the pair in both spellings', () => {
-        // The fourth member is the binding as Python reads it, its tree, which
+        // The fifth member is the binding as Python reads it, its tree, which
         // the bare spelling gives as `group` — its own name.
         const action =
-            /use:__group=\{\[__expr_py_\d+\(\), \(__value\) => __expr_set_\d+\(__pyBind\(__value\)\), undefined, "Name\(\\"(choix|group)\\",Load\(\)\)", __py, \[\]\]\}/;
+            /use:__group=\{\[__expr_py_\d+\(\), \(__value\) => __expr_set_\d+\(__pyBind\(__value\)\), undefined, false, "Name\(\\"(choix|group)\\",Load\(\)\)", __py, \[\]\]\}/;
 
         expect(rewrite('<input bind:group={choix}>').out).toMatch(action);
         expect(rewrite('<input bind:group>').out).toMatch(action);
@@ -949,13 +949,28 @@ describe('the attribute pass', () => {
     // itself: a DOM value is text, so the action cannot ask the node for it. It
     // is passed on either side of the binding, and only in the braced spelling —
     // a quoted value is text, and the node's own is then exactly right.
+    // The tag's value goes with the binding, and to the server for `checked`,
+    // whether written longhand, as the shorthand or as a lone interpolation
+    // between quotes, each marked as the field's own, which the browser reads
+    // off the element; text between quotes is not, and static text is the
+    // node's.
     test('and takes the tag value with it', () => {
-        const value = /use:__group=\{\[.+, __expr_\d+\(\), "(?:[^"\\]|\\.)*", __py, \[\]\]\}/;
+        const served = /checked=\{__pybridge\.groupChecked\(\(\) => __expr_py_\d+\(\), \(\) => __expr_\d+\(\), (?:true|false)\)\}/;
+        const action = /use:__group=\{\[.+, __expr_\d+\(\), true, "(?:[^"\\]|\\.)*", __py, \[\]\]\}/;
 
-        expect(rewrite('<input bind:group={choix} value={n}>').out).toMatch(value);
-        expect(rewrite('<input value={n} bind:group={choix}>').out).toMatch(value);
-        expect(rewrite('<input bind:group value={n}>').out).toMatch(value);
-        expect(rewrite('<input bind:group={choix} value="a">').out).not.toMatch(value);
+        for (const tag of [
+            '<input bind:group={choix} value={n}>',
+            '<input value={n} bind:group={choix}>',
+            '<input bind:group value={n}>',
+            '<input {value} bind:group={choix}>',
+            '<input value="{n}" bind:group={choix}>'
+        ]) {
+            expect(rewrite(tag).out).toMatch(served);
+            expect(rewrite(tag).out).toMatch(action);
+        }
+
+        expect(rewrite('<input bind:group={choix} value="a">').out).toMatch(/, undefined, false, /);
+        expect(rewrite('<input bind:group={choix} value="a-{n}">').out).toMatch(/, "a-" \+ __expr_\d+\(\), false, /);
     });
 
     // Svelte reads `<svelte:options>` at compile time and requires literals, so

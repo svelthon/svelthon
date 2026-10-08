@@ -1,7 +1,7 @@
 <script lang="python">
 # `bind:group` over values that are not strings. An element's `value` property
-# is text, so the group action cannot read the author's value off the node: it
-# has to be handed the one the expression evaluated to.
+# is text, so the group action reads the author's value where Svelte wrote it,
+# not off the DOM.
 chosen = 2
 picked = [1]
 ratio = 0.5

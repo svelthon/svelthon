@@ -2,6 +2,42 @@ import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import GroupTypes from './fixtures/GroupTypes.svelte';
 import FloatForm from './fixtures/FloatForm.svelte';
+import GroupValueShapes from './fixtures/GroupValueShapes.svelte';
+import GroupValueShapesNative from './fixtures/GroupValueShapesNative.svelte';
+
+// The value a group binds is the one the field holds, however it was written:
+// longhand, shorthand, spread, a longhand a spread overrides, and an
+// expression that answers anew at each call, braced or alone between quotes.
+// Each checkbox, ticked, then
+// unticked, answers what Svelte's own answers. The group compiled the tag's
+// `value` text on its own: it saw neither the shorthand nor the spread, and
+// held "1" for 1, or the 0 the spread had replaced, and a counter called
+// again gave the group another value than the field's.
+test('a group binds the value its field holds, however written', () => {
+    const states = (Component) => {
+        let calls = 0;
+        const target = document.body.appendChild(document.createElement('div'));
+
+        mount(Component, { target, props: { next_value: () => ++calls } });
+        flushSync();
+
+        const at = (key) => target.querySelector(`[data-k="${key}"]`);
+
+        return ['long', 'short', 'spread', 'ordered', 'counted', 'quoted'].map((key) => {
+            const seen = [at(key).checked];
+
+            for (let click = 0; click < 2; click++) {
+                at(key).click();
+                flushSync();
+                seen.push(at(key).checked, at(`${key}-model`).textContent);
+            }
+
+            return [key, ...seen];
+        });
+    };
+
+    expect(states(GroupValueShapes)).toEqual(states(GroupValueShapesNative));
+});
 
 // A binding compares a container by identity: a dict holding a float keeps its
 // option selected, and a group of floats keeps the box already ticked.
@@ -34,11 +70,8 @@ describe('a form over floats', () => {
 // was written from, the initial button was empty, and clicking a checkbox left
 // `[1, '1']` behind — the same choice under two types.
 //
-// The typed value cannot be recovered from the node either. Svelte keeps it on
-// the hidden `__value` property only for an element it sees a group binding on
-// (`needs_special_value_handling` in its RegularElement visitor), and ours no
-// longer carries one. So the markup pass reads the tag's own `value` and hands
-// the action a third member: the value the expression evaluated to.
+// The typed value is read where Svelte wrote it on the node: `__value` for a
+// spread, the cache of `set_value` for a longhand or a shorthand (`group`).
 describe('a group keeps the type of the value it was given', () => {
     const setup = () => {
         const target = document.body.appendChild(document.createElement('div'));

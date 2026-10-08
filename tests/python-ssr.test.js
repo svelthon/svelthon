@@ -13,6 +13,8 @@ import ScalarProps from './fixtures/ScalarProps.svelte';
 import GroupHydrate from './fixtures/GroupHydrate.svelte';
 import GroupServer from './fixtures/GroupServer.svelte';
 import GroupServerNative from './fixtures/GroupServerNative.svelte';
+import GroupValueShapes from './fixtures/GroupValueShapes.svelte';
+import GroupValueShapesNative from './fixtures/GroupValueShapesNative.svelte';
 import * as html from './fixtures/python-ssr-html.js';
 
 test.for([
@@ -29,8 +31,8 @@ test.for([
 // server checks its own: the page shows it, and a form sent before the script
 // runs sends it.
 test('the server checks what a group holds, as Svelte does', () => {
-    const checked = (Component) =>
-        [...render(Component).body.matchAll(/<input data-k="([^"]+)"[^>]*>/g)]
+    const checked = (Component, props = {}) =>
+        [...render(Component, { props }).body.matchAll(/<input data-k="([^"]+)"[^>]*>/g)]
             .filter((one) => /\schecked(?:[\s=/>]|$)/.test(one[0]))
             .map((one) => one[1]);
 
@@ -38,4 +40,11 @@ test('the server checks what a group holds, as Svelte does', () => {
 
     expect(native).toEqual(['b', 'y', 'half']);
     expect(checked(GroupServer)).toEqual(native);
+
+    // And the value written as the shorthand, `{value}`, which the server
+    // was handed no value for and left unchecked.
+    const shapes = (Component) => checked(Component, { next_value: () => 1 });
+
+    expect(shapes(GroupValueShapesNative)).toEqual(['long', 'short']);
+    expect(shapes(GroupValueShapes)).toEqual(shapes(GroupValueShapesNative));
 });

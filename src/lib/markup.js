@@ -675,6 +675,11 @@ function tagValue(markup, from, name = 'value') {
             return { start: at + 1, end, braced: char === '{' };
         }
 
+        // The shorthand, `{value}`, which is `value={value}`.
+        if (char === '{' && ATTRIBUTE_START.test(markup[at - 1]) && markup.slice(at + 1, end).trim() === name) {
+            return { start: at + 1, end, braced: true };
+        }
+
         at = end + 1;
     }
 
@@ -1901,8 +1906,14 @@ function walk(markup, collect, onPython, seed, record, where) {
                 ? ''
                 : ` checked={__pybridge.groupChecked(() => ${read}, () => ${served}, ${boxes})}`;
 
+        // And whether the value is braced, the shorthand or a lone
+        // interpolation between quotes, all three compiled typed for the
+        // field: the browser then reads the one the field evaluated, where
+        // Svelte wrote it (`group`).
+        const fielded = found !== null && (found.braced || loneInterpolation(markup, found.start - 1, closingBrace) !== -1);
+
         return (
-            `use:${GROUP_ACTION}={[${read}, (${BOUND_VALUE}) => ${write}, ${value}, ` +
+            `use:${GROUP_ACTION}={[${read}, (${BOUND_VALUE}) => ${write}, ${value}, ${fielded}, ` +
             `${JSON.stringify(targetKey(expr))}, ${NAMESPACE}, [${where.join(', ')}]]}${checked}`
         );
     };
@@ -2135,10 +2146,14 @@ function walk(markup, collect, onPython, seed, record, where) {
             } else if (char === '"' || char === "'") {
                 const named = (tagText().match(ATTRIBUTE_NAME) || [])[1] || '';
                 // A lone interpolation between quotes is the value itself, as
-                // Svelte reads it, for a directive and for an attribute whose
-                // value is read for truth.
+                // Svelte reads it, for a directive, for an attribute whose
+                // value is read for truth, and for the `value` of a group's
+                // control, which the group reads typed off the field.
+                const grouped = named === 'value' && tag !== null && tagNames(markup, tag.start).has('bind:group');
                 const closing =
-                    directive(named) || wrapperFor(named, tag) ? loneInterpolation(markup, index, closingBrace) : -1;
+                    directive(named) || wrapperFor(named, tag) || grouped
+                        ? loneInterpolation(markup, index, closingBrace)
+                        : -1;
 
                 if (closing !== -1) {
                     unquoted = closing;
