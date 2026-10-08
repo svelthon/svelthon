@@ -1,5 +1,6 @@
 # Sets a module exports and writes into a JavaScript object, changed in place.
-__all__ = ["tags", "frozen", "pairs", "box", "mutate", "seen", "walked", "refill", "put_back", "keep_only"]
+__all__ = ["tags", "frozen", "pairs", "box", "mutate", "seen", "walked", "refill", "fill_cells", "drop_next",
+           "put_back", "keep_only"]
 
 tags = {"a"}
 frozen = frozenset({1, 2})
@@ -24,6 +25,17 @@ walked = {1, 2, 3}
 def refill(members=None):
     walked.clear()
     walked.update([1, 2, 3] if members is None else members)
+
+
+# Cells, as a program keeps a position and the tags it carries, and the one
+# after a cell deleted by Python, which a walk has not reached yet.
+def fill_cells(n):
+    walked.clear()
+    walked.update((i, frozenset()) for i in range(n))
+
+
+def drop_next(cell):
+    walked.discard((cell[0] + 1, frozenset()))
 
 
 # A member deleted and added back by Python, or the set cleared and it added.

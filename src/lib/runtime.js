@@ -3227,23 +3227,28 @@ class SetView extends Set {
 
             return MISSING;
         };
-        // The hash a value is filed under, when hashing it runs nothing of the
-        // author's: a number, a string, a bool, a builtin int, float or str, or
-        // an object hashed by its identity. Undefined for anything else.
-        const filed = (one) => {
+        // Whether hashing a value runs nothing of the author's: a number, a
+        // string, a bool, a builtin int, float or str, an object hashed by its
+        // identity, a frozenset, whose hash is made of the hashes its members
+        // are filed under, or a tuple of such values, whose hash hashes them.
+        const quiet = (one) => {
             const kind = typeof one;
 
+            if (kind === 'number' || kind === 'string' || kind === 'boolean' || kind === 'bigint') return true;
+
+            const type = $B.get_class(one);
+            const slot = $B.search_slot(type, 'tp_hash', $B.NULL);
+            const builtin = (cls) => slot === $B.search_slot(cls, 'tp_hash', $B.NULL);
+
+            if (BUILTIN_HASHED.includes(type) || builtin(_b_.object) || builtin(_b_.frozenset)) return true;
+
+            return builtin(_b_.tuple) && one.every(quiet);
+        };
+        // The hash a value is filed under, when hashing it runs nothing of the
+        // author's. Undefined for anything else.
+        const filed = (one) => {
             try {
-                if (kind !== 'number' && kind !== 'string' && kind !== 'boolean' && kind !== 'bigint') {
-                    const type = $B.get_class(one);
-                    const slot = $B.search_slot(type, 'tp_hash', $B.NULL);
-
-                    if (!BUILTIN_HASHED.includes(type) && slot !== $B.search_slot(_b_.object, 'tp_hash', $B.NULL)) {
-                        return undefined;
-                    }
-                }
-
-                return String($B.$hash(one));
+                return quiet(one) ? String($B.$hash(one)) : undefined;
             } catch {
                 return undefined;
             }

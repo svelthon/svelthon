@@ -486,10 +486,12 @@ test('what Python raises under a view reaches the reader, in Python’s words', 
     ]);
 });
 
-// A walk that deletes members it has not reached yet, or that adds one at each
-// step as a worklist does, costs what it touches: four times the members take
-// about four times as long. Every change asked each member visited, and a set
-// read again at each arrival, made it sixteen.
+// A walk that deletes members it has not reached yet, ints through the view or
+// tuples through Python, or that adds one at each step as a worklist does,
+// costs what it touches: four times the members take about four times as long.
+// Every change asked each member visited, and a set read again at each
+// arrival, made it sixteen; a tuple's hash was not asked, and made it sixteen
+// again.
 test('a walk of a set grows with its length when it deletes ahead or adds as it goes', () => {
     const range = (n) => Array.from({ length: n }, (_, i) => i);
     const sieve = (n) => {
@@ -505,6 +507,14 @@ test('a walk of a set grows with its length when it deletes ahead or adds as it 
 
         return performance.now() - start;
     };
+    const cells = (n) => {
+        sets.fill_cells(n);
+        const start = performance.now();
+
+        for (const cell of sets.walked) sets.drop_next(cell);
+
+        return performance.now() - start;
+    };
     const worklist = (n) => {
         sets.refill([0]);
         const start = performance.now();
@@ -513,15 +523,24 @@ test('a walk of a set grows with its length when it deletes ahead or adds as it 
 
         return performance.now() - start;
     };
+    // The better of two runs, so that a garbage collection left by the walk
+    // before does not count as this one's cost, from a size whose run lasts
+    // tens of milliseconds, beyond what a pause or a shared core adds: a
+    // tuple costs ten times what an int does.
+    const best = (run, n) => Math.min(run(n), run(n));
     const growth = (run) => {
-        run(1000);
+        let n = 2000;
 
-        return run(16000) / Math.max(run(4000), 1);
+        run(1000);
+        while (n < 64000 && best(run, n) < 30) n *= 2;
+
+        return best(run, 4 * n) / Math.max(best(run, n), 1);
     };
 
     expect(growth(sieve)).toBeLessThan(8);
+    expect(growth(cells)).toBeLessThan(8);
     expect(growth(worklist)).toBeLessThan(8);
-});
+}, 60000);
 
 // A member that never left is not visited again, whatever became of its
 // bucket: `intersection_update` builds the buckets anew for the members it
