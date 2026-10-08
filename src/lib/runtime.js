@@ -714,8 +714,10 @@ function installMutationTracking($B) {
     if ($B.$svelthonTracking) return;
     $B.$svelthonTracking = true;
 
+    // A WeakMap holds no key but an object or a function, so whether something
+    // is watched is one lookup, whatever it is.
     const notify = (obj) => {
-        if (obj !== null && typeof obj === 'object' && MARKS.has(obj)) MARKS.get(obj)();
+        if (MARKS.has(obj)) MARKS.get(obj)();
     };
 
     // What a call on a watched container leaves to do, wherever the call came
@@ -727,7 +729,7 @@ function installMutationTracking($B) {
         // never came under watch pays one lookup and nothing else. The target of
         // an operation taken off a type is the caller's first argument, which is
         // whatever the caller passed.
-        if (obj === null || typeof obj !== 'object' || !MARKS.has(obj)) return;
+        if (!MARKS.has(obj)) return;
 
         if (MUTATORS.has(attr)) {
             // A container handed to a mutator is now inside a watched one, so
@@ -824,7 +826,7 @@ function installMutationTracking($B) {
             result = call(obj, attr, ...rest);
             return result;
         } finally {
-            if (target !== null && typeof target === 'object' && MARKS.has(target)) {
+            if (MARKS.has(target)) {
                 afterCall(target, attr, result, rest.slice(2));
             }
         }
@@ -837,14 +839,14 @@ function installMutationTracking($B) {
         // The marker is checked first on purpose: this runs on every method
         // call in the program, and an unwatched object must pay one property
         // miss, not a set lookup.
-        let followed = obj !== null && typeof obj === 'object' && MARKS.has(obj) && FOLLOWED.has(attr);
+        let followed = MARKS.has(obj) && FOLLOWED.has(attr);
         let target = obj;
 
         // `super().append(value)`: the method is looked up on a `super`
         // object, and the container it changes is that object's `__self__`.
         if (!followed && FOLLOWED.has(attr) && obj !== null && typeof obj === 'object' && ownType(obj) === _b_.super) {
             target = obj.obj;
-            followed = target !== null && typeof target === 'object' && MARKS.has(target);
+            followed = MARKS.has(target);
         }
 
         // `list.append(xs, 2)`, the same mutation as `xs.append(2)` written
@@ -923,7 +925,7 @@ function installMutationTracking($B) {
     $B.$getattr = function (obj, attr, ...rest) {
         const result = getattr(obj, attr, ...rest);
 
-        if (obj === null || typeof obj !== 'object') return result;
+        if (!watchable(obj)) return result;
 
         // Wrapped whether or not the object is watched **yet**: a factory that
         // hands out its state and an operation on it, `values, add = make()`,
@@ -995,8 +997,8 @@ function installMutationTracking($B) {
         //
         // The read that already happened, and nothing more: no walk of the class
         // hierarchy, so no property of the author's is run by the act of
-        // watching, and `inherit` steps over a function, a string or a class on
-        // its own.
+        // watching, and `inherit` steps over a function of JavaScript's, a
+        // string or a class on its own.
         inherit(obj, result, undefined, true);
 
         return result;
@@ -1012,7 +1014,7 @@ function installMutationTracking($B) {
         try {
             return setitem(obj, key, value, ...rest);
         } finally {
-            if (obj !== null && typeof obj === 'object' && MARKS.has(obj)) {
+            if (MARKS.has(obj)) {
                 // `d["rows"] = rows` puts rows under watch too, and so does the
                 // key: the initial walk hands the watch to both halves of an
                 // entry, and an insertion has to keep that invariant rather
@@ -1032,9 +1034,7 @@ function installMutationTracking($B) {
     const getitem = $B.$getitem;
     $B.$getitem = function (obj, ...rest) {
         const result = getitem(obj, ...rest);
-        if (obj !== null && typeof obj === 'object' && MARKS.has(obj)) {
-            inherit(obj, result);
-        }
+        if (MARKS.has(obj)) inherit(obj, result);
         return result;
     };
 
@@ -1074,7 +1074,7 @@ function installMutationTracking($B) {
 
         const attributes = ownAttributes(obj);
 
-        if (attributes !== null && typeof attributes === 'object' && MARKS.has(attributes)) {
+        if (MARKS.has(attributes)) {
             adopt(attributes);
         }
 
@@ -1098,7 +1098,7 @@ function installMutationTracking($B) {
                 result = setattr(obj, attr, value, ...rest);
                 return result;
             } finally {
-                if (obj !== null && typeof obj === 'object' && MARKS.has(obj)) {
+                if (MARKS.has(obj)) {
                     // What the write *stored*, and not only what it was handed:
                     // a `__setattr__` of the author's may normalise, copy or wrap
                     // its argument, `object.__setattr__(self, name, list(value))`
@@ -1131,7 +1131,7 @@ function installMutationTracking($B) {
         try {
             return describe(self, obj, value);
         } finally {
-            if (obj !== null && typeof obj === 'object' && MARKS.has(obj)) {
+            if (MARKS.has(obj)) {
                 if (value !== $B.NULL) rewalk(obj, value);
                 MARKS.get(obj)();
             }
@@ -1168,7 +1168,7 @@ function installMutationTracking($B) {
     // is the case this tells apart.
     const augmAssign = $B.augm_assign;
     $B.augm_assign = function (left, op, right, ...rest) {
-        const watched = left !== null && typeof left === 'object' && MARKS.has(left);
+        const watched = MARKS.has(left);
         let result;
 
         // An exception is not proof that nothing changed. `d |= values()` keeps
@@ -1209,16 +1209,25 @@ function installMutationTracking($B) {
 
 installMutationTracking(globalThis.__BRYTHON__);
 
+// A Python function, which keeps its attributes in a dictionary as an instance
+// does, and may hold state there as one does: `counter.count += 1`. A function
+// of JavaScript's is `JSFunction` to Brython, and not ours to watch.
+const pyFunction = (value) => typeof value === 'function' && quietPyType(value) === globalThis.__BRYTHON__.function;
+
+// What a watch may reach: an object, or a Python function.
+const watchable = (value) => value !== null && (typeof value === 'object' || pyFunction(value));
+
 // Only a container can be mutated in place; a scalar propagates by rebinding,
 // which the accessor already handles.
 function mutable(value) {
+    if (pyFunction(value)) return true;
     if (value === null || value === undefined || typeof value !== 'object') return false;
     if (Array.isArray(value)) return true; // list, and a tuple is one too
     if (value === NONE) return false; // a singleton shared by the whole program
 
     try {
         const cls = globalThis.__BRYTHON__.get_class(value);
-        // A class object is not data, and a function is not an object here.
+        // A class object is not data.
         return cls !== undefined && cls !== _b_.type;
     } catch {
         return false; // a foreign JavaScript value is not ours to mark
@@ -1849,8 +1858,7 @@ const MARKS = new WeakMap();
 // reach; naming the door here is what keeps that measurement possible, and the
 // rule the project already follows for an internal it depends on: when the code
 // reads a name, a test names it too.
-export const marks = (value) =>
-    value !== null && typeof value === 'object' ? MARKS.get(value) : undefined;
+export const marks = (value) => MARKS.get(value);
 
 // Brython's own name for a slot's storage on an instance, from `set_slots` in
 // `py_type.js`. Part of the vendored contract, like `$store` and `$iter_items`.
@@ -2256,12 +2264,12 @@ export function track(value, bump, read, owner) {
     const previous = bump.held;
     bump.held = value;
 
-    if (previous !== value && previous !== null && typeof previous === 'object') {
+    if (previous !== value && watchable(previous)) {
         const old = MARKS.get(previous);
         if (old !== undefined) leave(old, bump, owner);
     }
 
-    if (value === null || typeof value !== 'object') return value;
+    if (!watchable(value)) return value;
 
     // Cheapest path first: a value already watched is the common case, and it
     // must not pay a type classification on every write.
@@ -2314,7 +2322,7 @@ export function unsubscribe(owner) {
 // `loose` says the link was made through an attribute, which no storage of the
 // parent's can confirm, so `holds` keeps it.
 function inherit(parent, child, key, loose = false) {
-    if (child === null || typeof child !== 'object') return child;
+    if (!watchable(child)) return child;
 
     let own = MARKS.get(child);
     let revived = false;
@@ -2370,7 +2378,7 @@ function inherit(parent, child, key, loose = false) {
 // there. Reading the marker re-establishes it at the far end, where the reader
 // is, rather than trying to defeat the memoisation.
 export function follow(value) {
-    if (value !== null && typeof value === 'object') {
+    if (watchable(value)) {
         const marker = MARKS.get(value);
         if (marker !== undefined) marker.follow();
     }
@@ -2609,7 +2617,7 @@ const PLAIN_VIEW = Object.defineProperties(Object.create(Object.prototype), Obje
 // getter is in JavaScript: listing the keys reads nothing, and a copy reads it
 // once, through the view. Any other holds its value, read here, as Svelte's
 // state describes its own.
-const described = (view, key, authored, read) =>
+const viewDescriptor = (view, key, authored, read) =>
     authored
         ? {
               get: () => view[key],
@@ -2919,7 +2927,7 @@ function viewOf(value) {
                 return { value: length(), writable: true, enumerable: false, configurable: false };
             }
 
-            return holds(key) ? described(view, key, authored(), () => read(key)) : undefined;
+            return holds(key) ? viewDescriptor(view, key, authored(), () => read(key)) : undefined;
         },
         set(shell, key, given) {
             return writable(key) && write(key, given);
@@ -3050,7 +3058,7 @@ function instanceView(value) {
         getOwnPropertyDescriptor(shell, key) {
             follow(value);
 
-            return owns(key) ? described(view, key, authored(), () => forReader(attribute(key))) : undefined;
+            return owns(key) ? viewDescriptor(view, key, authored(), () => forReader(attribute(key))) : undefined;
         },
         set(shell, key, given) {
             return write(key, given);

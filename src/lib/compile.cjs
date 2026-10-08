@@ -2777,9 +2777,9 @@ const local = (name) => `__local_${name}`;
 // declared by a rune and is not read that way. Exported under its own name.
 const SVELTE_RUNES = new Set(['state', 'derived', 'effect', 'props', 'bindable', 'inspect', 'host']);
 const wrapperName = (name) => (SVELTE_RUNES.has(name) ? `__def_${name}` : name);
-// A prop's override by the child, the default it falls back on, and the choice
-// between them and the parent's.
-const over = (name) => `__over_${name}`;
+// What the parent passes a prop, which a write of the child's overrides, the
+// default it falls back on, and the choice between them.
+const given = (name) => `__given_${name}`;
 const fallback = (name) => `__default_${name}`;
 const pick = (name) => `__pick_${name}`;
 // A `bindable` prop's last scalar written by Python, beside the number Svelte
@@ -2891,8 +2891,12 @@ function declarations(c) {
         // parent update flows into Python's namespace on the next read.
         //
         // A write of the child's own overrides a value the parent passed, as
-        // reassigning a prop does in Svelte, until the parent passes a new one.
-        // The default init() writes is not an override. A prop passed as
+        // reassigning a prop does in Svelte, until the parent passes one again.
+        // Svelte's own rule, read in `props.js`: the write lands on the derived
+        // that reads the parent's value, which runs again when the parent
+        // writes, even to come back to the value it held. So the override is a
+        // mark written on that derived, and a parent's write wipes it. The
+        // default init() writes is not an override. A prop passed as
         // `undefined` takes the default, as in Svelte; `null` is a value.
         //
         // Svelte's own rule for the absence, read in `props.js`: the default is
@@ -2900,19 +2904,19 @@ function declarations(c) {
         // child made while nothing was passed until then. So the default is
         // kept apart from the child's writes, and `due` says which one an
         // absence reads.
+        ...(c.props.length ? [`const __OVERRIDDEN = Symbol();`] : []),
         ...c.props.flatMap((n) => [
             `let ${local(n)} = $state.raw(undefined);`,
             `let ${rev(n)} = $state.raw(0);`,
-            `let ${over(n)};`,
             `const ${fallback(n)} = { value: undefined, due: false };`,
             `const ${bump(n)} = () => { ${rev(n)} += 1; };`,
             `const ${read(n)} = () => { ${rev(n)}; };`,
+            `let ${given(n)} = $derived(__props.${n});`,
             `const ${pick(n)} = () => {` +
-                ` const __passed = __props.${n};` +
+                ` const __passed = ${given(n)};` +
                 ` if (__passed === undefined) return ${fallback(n)}.due ? ${fallback(n)}.value : ${local(n)};` +
                 ` ${fallback(n)}.due = true;` +
-                ` if (${over(n)} !== undefined) { if (Object.is(__passed, ${over(n)}.at)) return ${local(n)}; ${over(n)} = undefined; }` +
-                ` return __passed; };`,
+                ` return __passed === __OVERRIDDEN ? ${local(n)} : __passed; };`,
             // Read by Svelte's own compiler and not by ours: a snippet is a
             // prop, and `{@render name(…)}` references the bare name. Python
             // reaches the same value through the namespace accessor below, and
@@ -3034,7 +3038,7 @@ function authorBindings(c) {
                 `__bind(__proto, '${n}', () => (${rev(n)}, __follow(__pyBind(${pick(n)}()))),` +
                 ` (${NEXT_VALUE}) => { const __written = __track(${NEXT_VALUE}, ${bump(n)}, ${read(n)}, ${SUBS});` +
                 ` if (__initialising) { ${fallback(n)}.value = __written; ${local(n)} = __written; return; }` +
-                ` if (__props.${n} !== undefined) ${over(n)} = { at: __props.${n} }; else ${fallback(n)}.due = false;` +
+                ` if (${given(n)} !== undefined) ${given(n)} = __OVERRIDDEN; else ${fallback(n)}.due = false;` +
                 ` ${local(n)} = __written; ${bump(n)}(); },` +
                 ` () => ${pick(n)}());`
         ),

@@ -16,9 +16,10 @@ const run = (child, steps) => {
 
     flushSync();
 
+    // A step that is a list is several writes of the parent's in one batch.
     for (const step of steps) {
         if (step === 'own') host.own();
-        else host.give(step);
+        else for (const one of Array.isArray(step) ? step : [step]) host.give(one);
         flushSync();
         seen.push([host.model(), target.querySelector('p').textContent]);
     }
@@ -31,7 +32,11 @@ test.for([
     ['the child writes, then the parent passes a value, then the child writes', ['own', 0.75, 'own']],
     ['the child writes, the parent passes a value, then nothing', ['own', 0.75, undefined]],
     ['the parent passes nothing, then the child writes', [undefined, 'own', undefined]],
-    ['the parent passes zero, then the child writes', [0, 'own']]
+    ['the parent passes zero, then the child writes', [0, 'own']],
+    ['the child writes, the parent passes its own value again', ['own', 0.25]],
+    ['the child writes, the parent passes a value and its own again in one batch', ['own', [0.75, 0.25]]],
+    ['the child writes, the parent passes nothing and its own again in one batch', ['own', [undefined, 0.25]]],
+    ['the parent passes zero, the child writes, the parent goes and comes back to zero', [0, 'own', [0.75, 0]]]
 ])('%s: the prop reads and shows what a Svelte child has', ([, steps]) => {
     const native = run(PropOverrideChildNative, steps);
 
