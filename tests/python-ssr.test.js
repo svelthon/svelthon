@@ -5,6 +5,8 @@
 // boolean attributes and on `class`, keys by identity, a JavaScript float read
 // as a Python one. The HTML is pinned because the hydration test reads it.
 import { test, expect } from 'vitest';
+import v8 from 'node:v8';
+import { runInNewContext } from 'node:vm';
 import { render } from 'svelte/server';
 import PythonTruthAttributes from './fixtures/PythonTruthAttributes.svelte';
 import KeyIdentity from './fixtures/KeyIdentity.svelte';
@@ -15,6 +17,12 @@ import GroupServer from './fixtures/GroupServer.svelte';
 import GroupServerNative from './fixtures/GroupServerNative.svelte';
 import GroupValueShapes from './fixtures/GroupValueShapes.svelte';
 import GroupValueShapesNative from './fixtures/GroupValueShapesNative.svelte';
+import ServerLifecycle from './fixtures/ServerLifecycle.svelte';
+import ServerLifecycleNative from './fixtures/ServerLifecycleNative.svelte';
+import ServerRowsImported from './fixtures/ServerRowsImported.svelte';
+import ServerRowsAssigned from './fixtures/ServerRowsAssigned.svelte';
+import ServerRowsRoot from './fixtures/ServerRowsRoot.svelte';
+import ServerRowsNative from './fixtures/ServerRowsNative.svelte';
 import * as html from './fixtures/python-ssr-html.js';
 
 test.for([
@@ -47,4 +55,60 @@ test('the server checks what a group holds, as Svelte does', () => {
 
     expect(shapes(GroupValueShapesNative)).toEqual(['long', 'short']);
     expect(shapes(GroupValueShapes)).toEqual(shapes(GroupValueShapesNative));
+});
+
+// `on_destroy` runs when the server's render closes, as Svelte's `onDestroy`
+// does, and what it raises fails the render; `on_mount` never runs there. The
+// hook defined, bound by `=`, raising, or never bound.
+test.for(['functions', 'destroy_only', 'assigned', 'raising', 'disabled'])(
+    'on_destroy runs when the server render closes: %s',
+    (mode) => {
+        const run = (Component) => {
+            const calls = [];
+            let failed = false;
+
+            // The render happens when its body is read.
+            try {
+                void render(Component, { props: { mode, enabled: mode !== 'disabled', notify: (one) => calls.push(one) } }).body;
+            } catch (error) {
+                failed = String(error.message ?? error).includes('destroy failed');
+            }
+
+            return { calls, failed };
+        };
+        const native = run(ServerLifecycleNative);
+
+        expect(native.calls).toEqual(mode === 'disabled' ? ['init'] : ['init', 'destroy']);
+        expect(run(ServerLifecycle)).toEqual(native);
+    }
+);
+
+// A component that reads a module's list, imported, assigned to a name, or
+// with a root effect beside it, is let go once its server render closes, as
+// Svelte's own is. The subscription its names make on the list was dropped by
+// an effect, which the server never runs: each of 200 renders stayed alive.
+test('a server render reading a module list is let go when it closes', async () => {
+    v8.setFlagsFromString('--expose-gc');
+    const gc = runInNewContext('gc');
+    const alive = async (Component) => {
+        const refs = [];
+
+        for (let i = 0; i < 200; i++) {
+            const token = { i };
+
+            void render(Component, { props: { token } }).body;
+            refs.push(new WeakRef(token));
+        }
+        for (let round = 0; round < 10; round++) {
+            await new Promise((resolve) => setTimeout(resolve, 10));
+            gc();
+        }
+
+        return refs.filter((ref) => ref.deref() !== undefined).length;
+    };
+
+    expect(await alive(ServerRowsNative)).toBeLessThan(10);
+    expect(await alive(ServerRowsImported)).toBeLessThan(10);
+    expect(await alive(ServerRowsAssigned)).toBeLessThan(10);
+    expect(await alive(ServerRowsRoot)).toBeLessThan(10);
 });

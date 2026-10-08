@@ -2792,7 +2792,8 @@ const destroyer = (name) => `__root_${name}`;
 
 // Whether the component's subscriptions have holders besides the component:
 // a root effect, which lives until its destructor is called.
-const holders = (c) => !c.store && SUBSCRIBING(c) && c.effects.some((e) => e.root);
+const releases = (c) => !c.store && SUBSCRIBING(c);
+const holders = (c) => releases(c) && c.effects.some((e) => e.root);
 // Second signal per name: a mutation bumps it without touching the value,
 // so nothing is copied and the object keeps its identity.
 // The instance's list of subscriptions, and whether it has any to make. A
@@ -2857,6 +2858,7 @@ function preamble(c) {
         // or a `def getContext()` of theirs is theirs.
         `import { ${['getContext as __getContext', 'setContext as __setContext', 'getAllContexts as __getAllContexts']
             .concat(c.lifecycle('on_mount') || c.lifecycle('on_destroy') ? ['untrack as __untrack'] : [])
+            .concat(c.lifecycle('on_destroy') || releases(c) ? ['onDestroy as __onDestroy'] : [])
             .join(', ')} } from 'svelte';`,
         ``
     ];
@@ -3355,11 +3357,11 @@ function effectBlocks(c) {
         // A root outlives the component and reads the same names, so the
         // subscriptions go when the last of them lets go: the component
         // unmounted and every root destroyed. Declared before the roots, which
-        // run as soon as they are created.
+        // count themselves in when they start: the server starts none.
         ...(holders(c)
             ? [
                   ``,
-                  `let __holders = ${1 + c.effects.filter((e) => e.root).length};`,
+                  `let __holders = 1;`,
                   `const __release = () => { if (--__holders === 0) __unsubscribe(${SUBS}); };`
               ]
             : []),
@@ -3386,59 +3388,58 @@ function effectBlocks(c) {
             // `async def` hands back a coroutine, which it starts instead.
             `    const __cleanup = ${RUNTIME.pyTeardown}(teardown, ${JSON.stringify(`${e.name}() — ${c.source}`)});`,
             `    if (__cleanup) return () => { __cleanup(); };`,
-            e.root ? (holders(c) ? `}); return __release; });` : `}); });`) : `});`
+            e.root ? (holders(c) ? `}); __holders += 1; return __release; });` : `}); });`) : `});`
         ]),
-        // The other end of `track`. Its own effect rather than a line in the one
-        // below, because that one exists only when the author wrote a lifecycle
-        // hook, and every instance that holds state has signed onto something.
+        // The other end of `track`, through Svelte's `onDestroy`, which the
+        // server's renderer calls when a render closes: an effect never runs
+        // there, and a module's list a component reads would keep every render
+        // the server ever made. Its own call rather than a line in the hooks
+        // below, because those exist only when the author wrote one, and every
+        // instance that holds state has signed onto something.
         ...(holders(c)
-            ? [``, `$effect(() => () => __release());`]
-            : !c.store && SUBSCRIBING(c)
-              ? [``, `$effect(() => () => __unsubscribe(${SUBS}));`]
+            ? [``, `__onDestroy(__release);`]
+            : releases(c)
+              ? [``, `__onDestroy(() => __unsubscribe(${SUBS}));`]
               : []),
-        ...(c.lifecycle('on_mount') || c.lifecycle('on_destroy')
+        // untrack, because a hook reads the component's names through the
+        // namespace accessors, and those reads are signal reads. `mounts += 1`
+        // inside on_mount would otherwise make the effect depend on state it
+        // also writes, and Svelte loops until it gives up with
+        // effect_update_depth_exceeded.
+        //
+        // A hook is the value its name holds once the script has run, not the
+        // `def` the compiler saw: a `def` under an `if` not taken leaves the
+        // name unbound, which here is `undefined`, as `del` leaves it, and a
+        // hook nobody bound is not called, as Svelte's `onMount` in a branch
+        // not taken is never registered. Any other value is called and reports
+        // its own error. Held in the wrapper a hook goes through, which starts
+        // an `async def` and places an error.
+        //
+        // What `on_mount` hands back is its cleanup, as with Svelte's
+        // `onMount`, and it runs before `on_destroy`: Svelte tears a
+        // component's effects down in the order they were made.
+        ...(c.lifecycle('on_mount')
             ? [
                   ``,
                   `$effect(() => {`,
-                  // untrack, because a hook reads the component's names through
-                  // the namespace accessors, and those reads are signal reads.
-                  // `mounts += 1` inside on_mount would otherwise make the effect
-                  // depend on state it also writes, and Svelte loops until it
-                  // gives up with effect_update_depth_exceeded.
-                  //
-                  // Captured while the component is alive, too: reading a signal
-                  // from a teardown, once destroyed, yields no function at all.
-                  // Held in the wrapper `on_mount` goes through, which starts
-                  // an `async def` and places an error.
-                  //
-                  // A hook is the value its name holds once the script has run,
-                  // not the `def` the compiler saw: a `def` under an `if` not
-                  // taken leaves the name unbound, which here is `undefined`, as
-                  // `del` leaves it, and a hook nobody bound is not called, as
-                  // Svelte's `onMount` in a branch not taken is never
-                  // registered. Any other value is called and reports its own
-                  // error.
-                  ...(c.lifecycle('on_destroy')
-                      ? [
-                            `    const __teardown = __untrack(() => { const held = ${c.hook('on_destroy')};` +
-                                ` return held === undefined ? undefined : __pyComponent(() => held, ${JSON.stringify(`on_destroy() — ${c.source}`)}); });`
-                        ]
-                      : []),
-                  // What `on_mount` hands back is its cleanup, as with Svelte's
-                  // `onMount`, and it runs before `on_destroy`.
-                  ...(c.lifecycle('on_mount')
-                      ? [
-                            `    const __mounted = __untrack(() => ${c.hook('on_mount')});`,
-                            `    const __unmounted = __mounted === undefined ? undefined :` +
-                                ` ${RUNTIME.pyTeardown}(__untrack(() => __pyComponent(() => __mounted, ${JSON.stringify(`on_mount() — ${c.source}`)})()),` +
-                                ` ${JSON.stringify(`on_mount() — ${c.source}`)});`
-                        ]
-                      : []),
-                  `    return () => {`,
-                  ...(c.lifecycle('on_mount') ? [`        __unmounted?.();`] : []),
-                  ...(c.lifecycle('on_destroy') ? [`        __teardown?.();`] : []),
-                  `    };`,
+                  `    const __mounted = __untrack(() => ${c.hook('on_mount')});`,
+                  `    const __unmounted = __mounted === undefined ? undefined :` +
+                      ` ${RUNTIME.pyTeardown}(__untrack(() => __pyComponent(() => __mounted, ${JSON.stringify(`on_mount() — ${c.source}`)})()),` +
+                      ` ${JSON.stringify(`on_mount() — ${c.source}`)});`,
+                  `    if (__unmounted) return () => { __unmounted(); };`,
                   `});`
+              ]
+            : []),
+        // Through Svelte's `onDestroy`, which the server's renderer calls when
+        // a render closes, as the client calls it when the component goes.
+        // Captured while the component is alive: read from a teardown, once
+        // destroyed, the name yields no function at all.
+        ...(c.lifecycle('on_destroy')
+            ? [
+                  ``,
+                  `const __teardown = __untrack(() => { const held = ${c.hook('on_destroy')};` +
+                      ` return held === undefined ? undefined : __pyComponent(() => held, ${JSON.stringify(`on_destroy() — ${c.source}`)}); });`,
+                  `if (__teardown !== undefined) __onDestroy(__teardown);`
               ]
             : [])
     ];
