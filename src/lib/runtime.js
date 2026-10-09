@@ -1226,9 +1226,15 @@ function mutable(value) {
     if (value === NONE) return false; // a singleton shared by the whole program
 
     try {
-        const cls = globalThis.__BRYTHON__.get_class(value);
-        // A class object is not data.
-        return cls !== undefined && cls !== _b_.type;
+        const $B = globalThis.__BRYTHON__;
+        const cls = $B.get_class(value);
+        // A class is data when the author wrote it: it keeps its attributes in
+        // a dictionary, as a function and an instance do, and `Counter.total +=
+        // 1` is state. CPython flags such a class a heap type, and so does
+        // Brython; the engine's own classes have nothing to watch.
+        if (cls === _b_.type) return (value.tp_flags & $B.TPFLAGS.HEAPTYPE) !== 0;
+
+        return cls !== undefined;
     } catch {
         return false; // a foreign JavaScript value is not ours to mark
     }

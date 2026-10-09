@@ -1,6 +1,7 @@
 <script lang="python">
-# State kept on a function's attributes, or on an instance's, the witness:
-# Python lets either hold it, and each mutation below is written in Python.
+# State kept on a function's attributes or a class's, or on an instance's, the
+# witness: Python lets each hold it, and each mutation below is written in
+# Python.
 kind: str = "function"
 
 
@@ -12,7 +13,11 @@ class Box:
     pass
 
 
-holder = counter if kind == "function" else Box()
+class Tally:
+    pass
+
+
+holder = counter if kind == "function" else Tally if kind == "class" else Box()
 holder.count = 0
 holder.rows = []
 
@@ -36,6 +41,12 @@ def change(how):
 @export
 def held():
     return f"{holder.count}|{len(holder.rows)}"
+
+
+# A class watched is still the class: it makes its instances, and is a type.
+@export
+def still_a_class():
+    return type(holder()) is holder and isinstance(holder, type)
 </script>
 
 <p>{holder.count}|{len(holder.rows)}</p>
