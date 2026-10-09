@@ -17,7 +17,25 @@ import DescriptorState from './fixtures/DescriptorState.svelte';
 // model answered 1 and the page showed 0 until something else repainted it.
 // Read before anything else invalidates: a page repainted by another write
 // would hide a read that was never rerun.
-test.for(['data', 'property', 'property to data', 'method', 'shadowing property', 'shadowing method', 'shadow deleted'])(
+// Every way Python writes or deletes a name: the statement, the builtin, and
+// the type's own method called by name. And a name read absent, which a class
+// gains later: `getattr(holder, "extra", 0)` turns 1.
+test.for([
+    'data',
+    'property',
+    'property to data',
+    'method',
+    'shadowing property',
+    'shadowing method',
+    'shadow deleted',
+    'shadow deleted by delattr()',
+    'shadow deleted by type.__delattr__',
+    'property set by type.__setattr__',
+    'instance attribute deleted by delattr()',
+    'name a class gains',
+    'property a class gains',
+    'method a class gains'
+])(
     'a %s replaced on a class repaints what reads it through an instance',
     (kind) => {
         const target = document.body.appendChild(document.createElement('div'));

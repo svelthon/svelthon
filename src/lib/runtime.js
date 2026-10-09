@@ -755,6 +755,12 @@ function installMutationTracking($B) {
         // never came under watch pays one lookup and nothing else. The target of
         // an operation taken off a type is the caller's first argument, which is
         // whatever the caller passed.
+        //
+        // `type.__setattr__(Base, "prop", …)` and `type.__delattr__` are the
+        // write `Base.prop = …` makes, and wake the readers of that name of a
+        // class, watched or not, as that write does.
+        if (attr === '__setattr__' || attr === '__delattr__') classNameChanged(obj, args[0]);
+
         if (!MARKS.has(obj)) return;
 
         if (MUTATORS.has(attr)) {
@@ -949,7 +955,14 @@ function installMutationTracking($B) {
 
     const getattr = $B.$getattr;
     $B.$getattr = function (obj, attr, ...rest) {
-        const result = getattr(obj, attr, ...rest);
+        let result;
+
+        try {
+            result = getattr(obj, attr, ...rest);
+        } catch (error) {
+            missing(obj, attr);
+            throw error;
+        }
 
         if (!watchable(obj)) return result;
 
@@ -1044,12 +1057,23 @@ function installMutationTracking($B) {
 
         if (found !== null) {
             for (const cls of found.through) {
-                if (found.descriptor) className(cls, attr).subscribe();
+                if (found.descriptor || found.absent) className(cls, attr).subscribe();
                 else inherit(obj, cls, undefined, true);
             }
         }
 
         return result;
+    };
+
+    // A read that found nothing and raised, `hasattr(box, "later")`, follows
+    // the name on the classes as a read that found nothing and answered a
+    // default does.
+    const missing = (obj, attr) => {
+        if (!MARKS.has(obj)) return;
+
+        const found = providers(obj, attr);
+
+        if (found?.absent) for (const cls of found.through) className(cls, attr).subscribe();
     };
 
     // A reader's dependency on one name of one class, and the write that
@@ -1123,7 +1147,9 @@ function installMutationTracking($B) {
             }
         }
 
-        return null;
+        // Held by none of them: what any of them gains under this name, later,
+        // is what the read finds then, `getattr(box, "extra", 0)` turning 1.
+        return { through, absent: true };
     };
 
     const setitem = $B.$setitem;
@@ -1269,19 +1295,26 @@ function installMutationTracking($B) {
         $B.wrapper_descriptor.$factory(member, '__delete__', (self, obj) => described(self, obj, $B.NULL))
     );
 
-    const delattr = $B.$delattr;
-    $B.$delattr = function (obj, ...rest) {
+    // The builtin `delattr`, which `del box.value` reaches too: the statement's
+    // entry point, `$B.$delattr`, calls it by name at each call, so the one
+    // wrapper answers both. Wrapping the statement's alone left `delattr(box,
+    // "value")` repainting nothing. The wrapper carries the builtin's own
+    // properties, its name and its signature.
+    const delattr = $B.builtins.delattr;
+    $B.builtins.delattr = function (obj, attr) {
         // In a `finally`, like the write beside it: a `__delattr__` of the
         // author's may remove the attribute and *then* raise, and the exception
         // does not put it back. The page showed `True` for a `hasattr` the model
         // answered `False` to.
         try {
-            return delattr(obj, ...rest);
+            return Reflect.apply(delattr, this, arguments);
         } finally {
-            classNameChanged(obj, rest[0]);
+            classNameChanged(obj, attr);
             notify(obj);
         }
     };
+
+    Object.defineProperties($B.builtins.delattr, Object.getOwnPropertyDescriptors(delattr));
 
     // `row += [1]`, `d |= other`, and every other operator with an `=` after
     // it: Brython compiles them all through here. They mutate the object and

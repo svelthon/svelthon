@@ -45,6 +45,15 @@ class Below(Shadowing):
 below = Below()
 
 
+# An attribute of an instance's own, deleted by the builtin.
+class Box:
+    pass
+
+
+box = Box()
+box.data = 1
+
+
 @export
 def change():
     if kind == "data":
@@ -59,15 +68,35 @@ def change():
         Middle.prop = property(lambda self: 1)
     elif kind == "shadowing method":
         Middle.method = lambda self: 1
-    else:
+    elif kind == "shadow deleted":
         del Shadowing.method
+    elif kind == "shadow deleted by delattr()":
+        delattr(Shadowing, "method")
+    elif kind == "shadow deleted by type.__delattr__":
+        type.__delattr__(Shadowing, "method")
+    elif kind == "property set by type.__setattr__":
+        type.__setattr__(Base, "prop", property(lambda self: 1))
+    elif kind == "instance attribute deleted by delattr()":
+        delattr(box, "data")
+    elif kind == "name a class gains":
+        Base.extra = 1
+    elif kind == "property a class gains":
+        Base.extra = property(lambda self: 1)
+    else:
+        Middle.later = lambda self: 1
 
 
 def read():
     if kind == "data":
         return holder.data
-    if kind == "shadow deleted":
+    if kind.startswith("shadow deleted"):
         return below.method()
+    if kind == "instance attribute deleted by delattr()":
+        return 0 if hasattr(box, "data") else 1
+    if kind in ("name a class gains", "property a class gains"):
+        return getattr(holder, "extra", 0)
+    if kind == "method a class gains":
+        return 1 if hasattr(holder, "later") else 0
     if "method" in kind:
         return holder.method()
     return holder.prop

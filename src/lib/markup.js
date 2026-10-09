@@ -2105,19 +2105,19 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     // one object, which the values the binding mentions cannot. A block whose
     // author wrote no index is noted for the second walk to give it one.
     const iterations = (expr) => {
-        const names = new Set(referenced(expr));
+        const names = new Set(referenced(expr).map(pythonName));
         const indexes = [];
 
         for (let at = scopes.length - 1; at > 0; at--) {
             const loop = loops.get(ids[at]);
 
-            if (loop === undefined || !scopes[at].some((one) => names.has(one))) continue;
+            if (loop === undefined || !scopes[at].some((one) => names.has(pythonName(one)))) continue;
 
             if (loop.index === null) indexed.add(ids[at]);
             else indexes.push(loop.index);
 
-            for (const one of scopes[at]) names.delete(one);
-            for (const one of loop.from) names.add(one);
+            for (const one of scopes[at]) names.delete(pythonName(one));
+            for (const one of loop.from) names.add(pythonName(one));
         }
 
         return indexes;

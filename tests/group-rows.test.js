@@ -14,6 +14,7 @@ import GroupSharedRowUnindexed from './fixtures/GroupSharedRowUnindexed.svelte';
 import GroupSharedRowNative from './fixtures/GroupSharedRowNative.svelte';
 import GroupSharedNested from './fixtures/GroupSharedNested.svelte';
 import GroupSharedNestedNative from './fixtures/GroupSharedNestedNative.svelte';
+import GroupSharedRowSpelled from './fixtures/GroupSharedRowSpelled.svelte';
 
 // **And two rows holding one object are two groups**, as Svelte keeps them: a
 // group per iteration, by its index. Told apart by the values the binding
@@ -22,11 +23,17 @@ import GroupSharedNestedNative from './fixtures/GroupSharedNestedNative.svelte';
 test.for([
     ['an index written', GroupSharedRow, GroupSharedRowNative],
     ['no index written', GroupSharedRowUnindexed, GroupSharedRowNative],
-    ['in a loop read from an outer one', GroupSharedNested, GroupSharedNestedNative]
-])('rows holding one object stay two groups, %s', ([, Python, Native]) => {
-    const steps = (component) => {
+    ['in a loop read from an outer one', GroupSharedNested, GroupSharedNestedNative],
+    // The row's name declared under one spelling and read under another Python
+    // takes for the same: the loop's index was looked for by spelling, and the
+    // two rows were one group again.
+    ['its name declared ﬁ', GroupSharedRowSpelled, GroupSharedRowNative, { way: 'declared ﬁ' }],
+    ['its name read ﬁ', GroupSharedRowSpelled, GroupSharedRowNative, { way: 'read ﬁ' }],
+    ['its name declared ﬁ, no index written', GroupSharedRowSpelled, GroupSharedRowNative, { way: 'unindexed' }]
+])('rows holding one object stay two groups, %s', ([, Python, Native, props = {}]) => {
+    const steps = (component, given = {}) => {
         const target = document.body.appendChild(document.createElement('div'));
-        const instance = mount(component, { target });
+        const instance = mount(component, { target, props: given });
         const boxes = () => [...target.querySelectorAll('input')].map((one) => one.checked);
         const seen = [];
 
@@ -47,7 +54,7 @@ test.for([
         ['0|0', [true, false]],
         ['1|1', [false, true]]
     ]);
-    expect(steps(Python)).toEqual(native);
+    expect(steps(Python, props)).toEqual(native);
 });
 
 describe('checkbox groups in separate rows', () => {

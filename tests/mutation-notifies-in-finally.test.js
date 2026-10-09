@@ -87,7 +87,7 @@ const install = block(code, code.indexOf('{', code.indexOf('function installMuta
 
 // Every interception: a function put onto the engine under one of its own names,
 // either directly or through the loop that covers `$setattr` and `$setattr1`.
-const ENTRY = /\$B(?:\.[A-Za-z_$][\w$]*|\[name\]) = function/g;
+const ENTRY = /\$B(?:(?:\.[A-Za-z_$][\w$]*)+|\[name\]) = function/g;
 
 // Telling a watched object it changed, in the three spellings this file uses:
 // the marker called on the spot, and the two helpers whose whole job is to call
@@ -110,7 +110,7 @@ describe('every interception that notifies, notifies on the raising path too', (
             '$B.$getitem',
             '$B.$delitem',
             '$B[name]',
-            '$B.$delattr',
+            '$B.builtins.delattr',
             '$B.augm_assign'
         ]);
     });
