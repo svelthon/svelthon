@@ -27,6 +27,24 @@ class Derived(Middle):
 holder = Derived()
 
 
+# A shadow deleted: the method of the class above shows through again.
+class Above:
+    def method(self):
+        return 1
+
+
+class Shadowing(Above):
+    def method(self):
+        return 0
+
+
+class Below(Shadowing):
+    pass
+
+
+below = Below()
+
+
 @export
 def change():
     if kind == "data":
@@ -39,13 +57,17 @@ def change():
         Base.method = lambda self: 1
     elif kind == "shadowing property":
         Middle.prop = property(lambda self: 1)
-    else:
+    elif kind == "shadowing method":
         Middle.method = lambda self: 1
+    else:
+        del Shadowing.method
 
 
 def read():
     if kind == "data":
         return holder.data
+    if kind == "shadow deleted":
+        return below.method()
     if "method" in kind:
         return holder.method()
     return holder.prop

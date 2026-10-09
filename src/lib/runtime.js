@@ -1033,32 +1033,78 @@ function installMutationTracking($B) {
         // one before it that now shadows it, reaches what read it through an
         // instance or a subclass. A scalar read that way carries no watch of
         // its own.
-        for (const cls of providers(obj, attr)) inherit(obj, cls, undefined, true);
+        //
+        // A method or a property is followed by its name rather than linked:
+        // replacing it, `Base.prop = property(...)`, or shadowing it from a
+        // class between, `Middle.method = ...`, changes what the instance
+        // reads; a class writing a counter or a cache of its own while one of
+        // its methods runs does not, and linked, it woke every reader of every
+        // instance, the method's own caller first, which read it again.
+        const found = providers(obj, attr);
+
+        if (found !== null) {
+            for (const cls of found.through) {
+                if (found.descriptor) className(cls, attr).subscribe();
+                else inherit(obj, cls, undefined, true);
+            }
+        }
 
         return result;
     };
 
+    // A reader's dependency on one name of one class, and the write that
+    // changes it: per name, so the readers of `prop` wake when it is replaced
+    // and not when the class writes `reads`.
+    const CLASS_NAMES = new WeakMap();
+
+    const className = (cls, attr) => {
+        let names = CLASS_NAMES.get(cls);
+
+        if (names === undefined) CLASS_NAMES.set(cls, (names = new Map()));
+
+        let entry = names.get(attr);
+
+        if (entry === undefined) {
+            const updates = new Set();
+
+            entry = {
+                updates,
+                subscribe: createSubscriber((update) => {
+                    updates.add(update);
+                    return () => updates.delete(update);
+                })
+            };
+            names.set(attr, entry);
+        }
+
+        return entry;
+    };
+
+    const classNameChanged = (cls, attr) => {
+        if (typeof attr !== 'string' || !pyClass(cls)) return;
+
+        for (const update of [...(CLASS_NAMES.get(cls)?.get(attr)?.updates ?? [])]) update();
+    };
+
     // The classes an attribute read off `obj` rather than off `obj` itself
     // was looked up through, up to the one whose dictionary holds it, asked of
-    // the dictionaries along the MRO, so no getter runs. A method or a property
-    // as much as data: `Base.prop = property(...)` or a `Middle.method` that
-    // now shadows `Base.method` changes what the instance reads, as
-    // `Base.count = 1` does. Linking costs a row calling a method what it costs
-    // a row reading a class constant, one presence test (`inherit`).
+    // the dictionaries along the MRO, so no getter runs, and whether what it
+    // holds is a descriptor, a method, a property or a slot: `{ through,
+    // descriptor }`, or null for a read nothing of a class answers.
     const providers = (obj, attr) => {
-        if (typeof attr !== 'string') return [];
+        if (typeof attr !== 'string') return null;
 
         const own = pyClass(obj) ? obj : undefined;
 
         if (own === undefined) {
             const attributes = ownAttributes(obj);
 
-            if (attributes !== null && typeof attributes === 'object' && Object.hasOwn(attributes, attr)) return [];
+            if (attributes !== null && typeof attributes === 'object' && Object.hasOwn(attributes, attr)) return null;
         }
 
         const mro = (own ?? quietPyType(obj))?.tp_mro;
 
-        if (!Array.isArray(mro)) return [];
+        if (!Array.isArray(mro)) return null;
 
         const through = [];
 
@@ -1066,16 +1112,18 @@ function installMutationTracking($B) {
             const found = $B.search_in_dict(cls, attr, $B.NULL);
 
             if (cls === own) {
-                if (found !== $B.NULL) return [];
+                if (found !== $B.NULL) return null;
                 continue;
             }
 
             through.push(cls);
 
-            if (found !== $B.NULL) return through;
+            if (found !== $B.NULL) {
+                return { through, descriptor: $B.search_slot($B.get_class(found), 'tp_descr_get', $B.NULL) !== $B.NULL };
+            }
         }
 
-        return [];
+        return null;
     };
 
     const setitem = $B.$setitem;
@@ -1172,6 +1220,8 @@ function installMutationTracking($B) {
                 result = setattr(obj, attr, value, ...rest);
                 return result;
             } finally {
+                classNameChanged(obj, attr);
+
                 if (MARKS.has(obj)) {
                     // What the write *stored*, and not only what it was handed:
                     // a `__setattr__` of the author's may normalise, copy or wrap
@@ -1228,6 +1278,7 @@ function installMutationTracking($B) {
         try {
             return delattr(obj, ...rest);
         } finally {
+            classNameChanged(obj, rest[0]);
             notify(obj);
         }
     };

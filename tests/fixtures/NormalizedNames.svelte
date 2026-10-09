@@ -20,6 +20,6 @@ count = 0
 {#snippet shown(ﬁeld)}<p data-k="snippet">{field}</p>{/snippet}
 {@render shown("OK")}
 {ﬂag = "OK"}<p data-k="declared">{flag}</p>
-{text = "a"}<input data-k="bind" bind:value={ｔｅｘｔ} /><p data-k="bound">{text}</p>
+{ｔｅｘｔ = "a"}<input data-k="bind" bind:value={text} /><p data-k="bound">{text}</p>
 <button onclick={lambda: (ｃｏｕｎｔ := count + 1)}>add</button>
 <output>{count}</output>

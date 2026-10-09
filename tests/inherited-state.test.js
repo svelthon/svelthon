@@ -17,7 +17,7 @@ import DescriptorState from './fixtures/DescriptorState.svelte';
 // model answered 1 and the page showed 0 until something else repainted it.
 // Read before anything else invalidates: a page repainted by another write
 // would hide a read that was never rerun.
-test.for(['data', 'property', 'property to data', 'method', 'shadowing property', 'shadowing method'])(
+test.for(['data', 'property', 'property to data', 'method', 'shadowing property', 'shadowing method', 'shadow deleted'])(
     'a %s replaced on a class repaints what reads it through an instance',
     (kind) => {
         const target = document.body.appendChild(document.createElement('div'));
