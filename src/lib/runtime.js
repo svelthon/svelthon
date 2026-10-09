@@ -5102,7 +5102,12 @@ function declared(value) {
     // `@classmethod def __call__` is the same shape under `cm_callable`, and its
     // receiver is the class, one parameter to drop like `self`.
     const stat = call !== null && call.sm_callable !== undefined ? call.sm_callable : null;
-    const fn = method !== null ? method.im_func : (stat ?? call?.cm_callable ?? call ?? value);
+
+    // A `__call__` that is itself a bound method, `__call__ = receiver.save`:
+    // Python calls it as it is, its own receiver already in it and the instance
+    // not handed to it, so its signature is its function's.
+    const delegated = call !== null && boundMethod(call) ? call : null;
+    const fn = method !== null ? method.im_func : (delegated?.im_func ?? stat ?? call?.cm_callable ?? call ?? value);
     const infos = fn.$function_infos;
 
     // Nothing of Python's at all: a function JavaScript built, which crosses as
@@ -5122,12 +5127,15 @@ function declared(value) {
     // `Infinity` is the honest arity: there is no number to trim to, so
     // everything is passed and the conversion does the rest.
     if (!infos[8] && typeof infos[10] !== 'number') {
-        // A builtin under a `__call__`, `staticmethod(abs)`, or under a bound
-        // method: the object is called through Python's own protocol, as a
-        // builtin type's descriptor is.
-        if (method !== null || call !== null) return slotDeclared(value);
-
         const where = `${infos[1]}() — ${infos[0]}`;
+
+        // A builtin bound to a receiver of its own under a `__call__`,
+        // `__call__ = rows.clear`, is an instance's call like any other, trimmed
+        // as the builtin is (`callArity`). Any other builtin under a `__call__`,
+        // `staticmethod(abs)`, or under a bound method: the object is called
+        // through Python's own protocol, as a builtin type's descriptor is.
+        if (call !== null && nativeBound(call)) return instanceCall(value, where, fn);
+        if (method !== null || call !== null) return slotDeclared(value);
 
         // A builtin **bound to a receiver**: `rows.append`, which Brython builds
         // fresh on every read as a `builtin_method` carrying `m_self`, the third
@@ -5183,21 +5191,25 @@ function declared(value) {
         return { fn: (...args) => fn(self, ...args), where, arity, origin: fn, self };
     }
 
-    // The instance, whose call is looked up **at every call** and whose contract
-    // was read once.
-    //
-    // A `__call__` reassigned on the class after this wrapper was built,
-    // `Strategy.__call__ = changed`, runs its new body with its new signature's
-    // trim. So the two halves move together: the arity goes upward as a question,
-    // asked at each call against whatever the class holds now, and the wrapper
-    // that trims asks it before converting anything. The wrapper's identity is
-    // untouched, which is what a registry that holds a callback needs.
+    return instanceCall(value, where, fn);
+}
+
+// The instance, whose call is looked up **at every call** and whose contract
+// was read once.
+//
+// A `__call__` reassigned on the class after this wrapper was built,
+// `Strategy.__call__ = changed`, runs its new body with its new signature's
+// trim. So the two halves move together: the arity goes upward as a question,
+// asked at each call against whatever the class holds now, and the wrapper
+// that trims asks it before converting anything. The wrapper's identity is
+// untouched, which is what a registry that holds a callback needs.
+function instanceCall(value, where, origin) {
     return {
         fn: (...args) => globalThis.__BRYTHON__.$call(value, ...args),
         where,
         arity: () => liveArity(value),
-        origin: fn,
-        self,
+        origin,
+        self: value,
         // What the author called it, when they called it anything.
         //
         // A JavaScript function has a `name` whether or not anyone chose one, so
@@ -5232,16 +5244,38 @@ const labelled = (value) => {
 function liveArity(value) {
     const call = callDescriptor(value);
 
-    if (call === null) return Infinity;
+    return call === null ? Infinity : callArity(call);
+}
 
-    const stat = call.sm_callable !== undefined ? call.sm_callable : null;
-    const fn = stat ?? call.cm_callable ?? call;
-    const infos = fn.$function_infos;
+// How many of its caller's arguments a class's `__call__` takes when the
+// instance is called, by what the class holds. A `def` takes its own count but
+// `self`; a static one its whole count; a class method its count but `cls`. A
+// method already bound, `__call__ = receiver.save` or `Receiver.by_class`, is
+// called as it is: its function's count but the receiver it holds, the
+// instance never handed to it. A builtin bound to a receiver of its own,
+// `__call__ = rows.clear`, takes none when it declares none, as `rows.clear`
+// handed over directly does.
+function callArity(call) {
+    if (boundMethod(call)) return signatureArity(call.im_func, 1);
+    if (nativeBound(call)) return takesNoPositional(call) ? 0 : Infinity;
+    if (call.sm_callable !== undefined) return signatureArity(call.sm_callable, 0);
+
+    return signatureArity(call.cm_callable ?? call, 1);
+}
+
+// A Python function's count of positional parameters but the `receiver` first
+// ones, or `Infinity` for one with `*args` or with no signature to read.
+const signatureArity = (fn, receiver) => {
+    const infos = fn?.$function_infos;
 
     if (!Array.isArray(infos) || (!infos[8] && typeof infos[10] !== 'number')) return Infinity;
 
-    return infos[8] ? Infinity : infos[10] - (stat === null ? 1 : 0);
-}
+    return infos[8] ? Infinity : infos[10] - receiver;
+};
+
+// A builtin bound to its receiver, `rows.clear`: a JavaScript function carrying
+// `m_self`, the third representation of a bound method in this engine.
+const nativeBound = (value) => typeof value === 'function' && value.m_self !== null && value.m_self !== undefined;
 
 // What to call a Python function in a message: its qualified name as
 // `$function_infos` records it, `Box.save` where `__name__` says `save`.
