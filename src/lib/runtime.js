@@ -5276,7 +5276,15 @@ const INSTANCES = new WeakMap();
 // it: a decorator may have made it a callable instance or a bound method, which
 // are Brython objects and not JavaScript functions. A function is called as it
 // is, which is the path every undecorated body takes.
-export const invoke = (fn) => (typeof fn === 'function' ? fn() : globalThis.__BRYTHON__.$call(fn));
+export const invoke = (fn) => {
+    // Exports flushed after it, as at every door Python hands control back
+    // through: a `bytearray` an effect changed is new to the effect after it.
+    try {
+        return typeof fn === 'function' ? fn() : globalThis.__BRYTHON__.$call(fn);
+    } finally {
+        flushExports();
+    }
+};
 
 // What an effect or `on_mount` hands back, made into what Svelte expects of it:
 // a cleanup it can call, or nothing. An `async def` hands back a coroutine,
