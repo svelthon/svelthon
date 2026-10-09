@@ -1489,8 +1489,13 @@ function templateDots(def) {
     // The dot of `value.name`: behind the name, across any space between them.
     // Bounded, so a position Brython stopped giving the way this reads it says
     // so rather than walking off the start of the text for ever.
+    //
+    // Behind the name as written, which a name never holds a dot of, and not
+    // `node.attr.length` back: the attribute is the name normalized, as Python
+    // reads an identifier, so `box.ﬁeld` reads `field`, one character longer
+    // than its text.
     const dot = (node) => {
-        let i = end(node) - node.attr.length - 1;
+        let i = end(node) - 1;
         while (i >= 0 && def[i] !== '.') i -= 1;
         if (i < 0) throw new Error(`svelthon — no dot found before \`${node.attr}\` in a template expression`);
         return i;
