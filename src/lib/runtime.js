@@ -1024,46 +1024,57 @@ function installMutationTracking($B) {
         // string or a class on its own.
         inherit(obj, result, undefined, true);
 
-        // And the class the value was read off, when it was not the object's
-        // own: linked under the object, so a write on that class, `Base.count
-        // += 1` or `Base.rows = [1]`, reaches what read it through an instance
-        // or a subclass. A scalar read that way carries no watch of its own.
-        const owner = provider(obj, attr);
-        if (owner !== undefined) inherit(obj, owner, undefined, true);
+        // And the classes the value was looked up through, when it was not the
+        // object's own: linked under the object, so a write on any of them,
+        // `Base.count += 1` on the one that holds it, `Middle.count = 9` on
+        // one before it that now shadows it, reaches what read it through an
+        // instance or a subclass. A scalar read that way carries no watch of
+        // its own.
+        for (const cls of providers(obj, attr)) inherit(obj, cls, undefined, true);
 
         return result;
     };
 
-    // The class whose dictionary holds an attribute read off `obj` rather than
-    // off `obj` itself, asked of the dictionaries along the MRO, so no getter
-    // runs. Only for data: a method, a property or a slot is a descriptor,
-    // which a write replacing it does not make state, and every row calling a
-    // method would otherwise link its class.
-    const provider = (obj, attr) => {
-        if (typeof attr !== 'string') return undefined;
+    // The classes an attribute read off `obj` rather than off `obj` itself
+    // was looked up through, up to the one whose dictionary holds it, asked of
+    // the dictionaries along the MRO, so no getter runs. Only for data: a
+    // method, a property or a slot is a descriptor, which a write replacing it
+    // does not make state, and every row calling a method would otherwise link
+    // its classes.
+    const providers = (obj, attr) => {
+        if (typeof attr !== 'string') return [];
 
         const own = pyClass(obj) ? obj : undefined;
 
         if (own === undefined) {
             const attributes = ownAttributes(obj);
 
-            if (attributes !== null && typeof attributes === 'object' && Object.hasOwn(attributes, attr)) return undefined;
+            if (attributes !== null && typeof attributes === 'object' && Object.hasOwn(attributes, attr)) return [];
         }
 
         const mro = (own ?? quietPyType(obj))?.tp_mro;
 
-        if (!Array.isArray(mro)) return undefined;
+        if (!Array.isArray(mro)) return [];
+
+        const through = [];
 
         for (const cls of mro) {
             const found = $B.search_in_dict(cls, attr, $B.NULL);
 
-            if (found === $B.NULL) continue;
-            if (cls === own || $B.search_slot($B.get_class(found), 'tp_descr_get', $B.NULL) !== $B.NULL) return undefined;
+            if (cls === own) {
+                if (found !== $B.NULL) return [];
+                continue;
+            }
 
-            return cls;
+            through.push(cls);
+
+            if (found === $B.NULL) continue;
+            if ($B.search_slot($B.get_class(found), 'tp_descr_get', $B.NULL) !== $B.NULL) return [];
+
+            return through;
         }
 
-        return undefined;
+        return [];
     };
 
     const setitem = $B.$setitem;

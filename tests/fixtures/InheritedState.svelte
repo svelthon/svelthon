@@ -1,6 +1,6 @@
 <script lang="python">
 # State on a base class, read through an instance, a subclass, or an instance
-# of the base itself, and written on the base.
+# of the base itself, written on the base or shadowed by a class between.
 kind: str = "instance"
 
 
@@ -9,7 +9,11 @@ class Base:
     rows = []
 
 
-class Derived(Base):
+class Middle(Base):
+    pass
+
+
+class Derived(Middle):
     pass
 
 
@@ -24,9 +28,17 @@ def change(how):
         Base.rows = [1]
     elif how == "append":
         Base.rows.append(1)
-    else:
+    elif how == "masked":
         holder.count = 5
         Base.count += 1
+    elif how == "shadowed":
+        Middle.count = 9
+    elif how == "shadowed rows":
+        Middle.rows = [1, 2]
+    elif how == "shadowed below":
+        Derived.count = 9
+    else:
+        del Middle.count
 
 
 @export
