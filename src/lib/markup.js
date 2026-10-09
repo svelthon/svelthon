@@ -340,7 +340,7 @@ export function walrus(expression) {
                     // signal fire. An attribute or a key is written where it
                     // lives, the attribute under the template's rule for a dot.
                     return found.name
-                        ? `__assign("${found.name}", ${value})`
+                        ? `__assign("${pythonName(found.name)}", ${value})`
                         : `${found.subscript ? '__setitem' : '__setattr'}(${found.object}, ${found.key}, ${value})`;
                 });
 
@@ -985,6 +985,13 @@ const identifiers = (text) => [...text.matchAll(new RegExp(NAME, 'gu'))].map((m)
 // character: `f"{value:#x}"` and `f"{value:'>4}"` read `value` and nothing else.
 // A conversion, `!r`, closes the expression as well.
 const CONVERSION = /![rsa]\s*$/;
+
+// A name as Python reads it: normalized to NFKC when it holds a character past
+// ASCII, as the engine reads every identifier, so `ﬁeld` and `field` are one
+// name. The markup compares names so and never rewrites one it emits: a name a
+// block declares is a JavaScript variable as well, and JavaScript knows it by
+// the spelling it was declared under.
+const pythonName = (name) => (/^[\x00-\x7f]*$/.test(name) ? name : name.normalize('NFKC'));
 
 const referenced = (text) => {
     const found = new Set();
@@ -1917,9 +1924,18 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     // It is the right shape anyway. `follow(x)` subscribes the reader to `x`,
     // and an expression that does not read `x` has no business depending on it.
     const mentioned = (expr) => {
-        const names = new Set(referenced(expr));
+        const names = new Set(referenced(expr).map(pythonName));
 
-        return inScope().filter((one) => names.has(one));
+        return inScope().filter((one) => names.has(pythonName(one)));
+    };
+
+    // The name in scope that `name` reads, as Python compares names, in the
+    // spelling it was declared under: what JavaScript knows the variable by.
+    // Null when no scope holds it.
+    const scoped = (name) => {
+        const key = pythonName(name);
+
+        return inScope().find((one) => pythonName(one) === key) ?? null;
     };
 
     // Where a template expression sits in the *source*, for a caller that needs
@@ -2078,7 +2094,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     const boundPair = (directive, expr) => {
         const multiple = directive === 'bind:value' && tag?.name === 'select' && tagNames(markup, tag.start).has('multiple');
         const crossing = multiple ? SELECTED_VALUE : BIND_VALUE;
-        const write = declaredHere(expr) ? `${bareName(expr)} = ${crossing}(${BOUND_VALUE})` : assign(expr, crossing);
+        const write = declaredHere(expr) ? `${scoped(bareName(expr))} = ${crossing}(${BOUND_VALUE})` : assign(expr, crossing);
 
         return `() => ${call(expr, '__bound', undefined, multiple ? 'selection' : 'scalar')}, (${BOUND_VALUE}) => ${write}`;
     };
@@ -2116,7 +2132,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         // itself: `assign` would hand it to a `def` as a parameter and write
         // that. The value still crosses into Python on the way.
         const own = declaredHere(expr);
-        const write = own ? `${bareName(expr)} = ${BIND_VALUE}(${BOUND_VALUE})` : assign(expr);
+        const write = own ? `${scoped(bareName(expr))} = ${BIND_VALUE}(${BOUND_VALUE})` : assign(expr);
         const found = tag === null ? null : tagValue(markup, tag.start);
         const outer = region;
 
@@ -2152,7 +2168,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         // The list the row holds cannot stand in for them, since two rows may
         // be handed one default list and are still two targets. A cell the
         // markup declared is its own target, told by its token.
-        const cell = own ? `${CELL}${bareName(expr)}` : null;
+        const cell = own ? `${CELL}${scoped(bareName(expr))}` : null;
         const where = cell !== null && inScope().includes(cell) ? [cell] : [...mentioned(expr.trim()), ...iterations(expr)];
 
         // And `checked` for the server, which runs no action: Svelte's server
@@ -2199,7 +2215,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     const componentGroup = (target) => {
         const name = bareName(target);
 
-        if (declaredHere(target)) return name;
+        if (declaredHere(target)) return scoped(name);
         if (name !== null) return `${NAMESPACE}.${name}`;
 
         throw refuse(
@@ -2228,7 +2244,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     const declaredHere = (expr) => {
         const name = bareName(expr);
 
-        return name !== null && inScope().includes(name);
+        return name !== null && scoped(name) !== null;
     };
 
     // `(x := …)` writes through the namespace, which holds the module's names
@@ -2242,7 +2258,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     // of the 889 components of the corpus asks for it.
     const refuseMarkupWalrus = (rewritten, source) => {
         for (const [, name] of rewritten.matchAll(ASSIGNED)) {
-            if (!inScope().includes(name)) continue;
+            if (scoped(name) === null) continue;
 
             throw refuse(
                 new SyntaxError(
@@ -3046,7 +3062,7 @@ export function collector(defs, lines, columns) {
             // frame nobody reads. A block's own name is already a parameter.
             // `(amount)` is the name `amount`, parentheses being grouping alone.
             const named = bareName(expression);
-            const bare = named !== null && !args.includes(named);
+            const bare = named !== null && !args.some((one) => pythonName(one) === named);
 
             defs.push(
                 [
