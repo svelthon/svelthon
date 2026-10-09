@@ -1153,6 +1153,14 @@ describe('urlencode', () => {
         expect(raised(() => tojson(raw('refusing')))).toBe('ValueError: query items failed');
         expect(JSON.parse(tojson(raw('keyed')))).toEqual({ tag: 'stale', page: 2 });
         expect(raised(() => tojson(raw('spelled')))).toBe('ValueError: items must return 2-tuples');
+
+        // The 2-tuple is the serialiser's rule alone: a copy for JavaScript,
+        // `to_js` or a function's result crossing over, reads a row as `for
+        // key, one in value.items()` does, and a pair written as a list is one.
+        expect(urlencode(raw('listed'))).toBe('tag=selected');
+        expect(raised(() => tojson(raw('listed')))).toBe('ValueError: items must return 2-tuples');
+        expect(query.copied()).toEqual({ tag: 'selected' });
+        expect(query.returned()).toEqual({ tag: 'selected' });
     });
 
     test('while a list of anything but pairs is still a value', () => {

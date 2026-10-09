@@ -11,7 +11,15 @@ class Refusing(dict):
         raise ValueError("query items failed")
 
 
+# Pairs written as lists, which a copy for JavaScript takes and JSON alone
+# refuses.
+class Listed(dict):
+    def items(self):
+        return [["tag", "selected"]]
+
+
 query = Selected({"tag": "stale", "page": 2})
+listed = Listed({"tag": "selected"})
 
 
 def refused():
@@ -29,3 +37,4 @@ def read():
 <p data-k="query">{urlencode(query)}</p>
 <p data-k="json">{tojson(query)}</p>
 <p data-k="refused">{refused()}</p>
+<p data-k="copied">{to_js(listed).tag}</p>

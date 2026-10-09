@@ -9,6 +9,46 @@
 import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import GroupRows from './fixtures/GroupRows.svelte';
+import GroupSharedRow from './fixtures/GroupSharedRow.svelte';
+import GroupSharedRowUnindexed from './fixtures/GroupSharedRowUnindexed.svelte';
+import GroupSharedRowNative from './fixtures/GroupSharedRowNative.svelte';
+import GroupSharedNested from './fixtures/GroupSharedNested.svelte';
+import GroupSharedNestedNative from './fixtures/GroupSharedNestedNative.svelte';
+
+// **And two rows holding one object are two groups**, as Svelte keeps them: a
+// group per iteration, by its index. Told apart by the values the binding
+// mentions alone, the two rows were one group, and the second click wrote the
+// first row's box into the shared field as well.
+test.for([
+    ['an index written', GroupSharedRow, GroupSharedRowNative],
+    ['no index written', GroupSharedRowUnindexed, GroupSharedRowNative],
+    ['in a loop read from an outer one', GroupSharedNested, GroupSharedNestedNative]
+])('rows holding one object stay two groups, %s', ([, Python, Native]) => {
+    const steps = (component) => {
+        const target = document.body.appendChild(document.createElement('div'));
+        const instance = mount(component, { target });
+        const boxes = () => [...target.querySelectorAll('input')].map((one) => one.checked);
+        const seen = [];
+
+        flushSync();
+
+        for (const k of ['0', '1']) {
+            target.querySelector(`input[data-k="${k}"]`).click();
+            flushSync();
+            seen.push([String(instance.read()), boxes()]);
+        }
+
+        return seen;
+    };
+
+    const native = steps(Native);
+
+    expect(native).toEqual([
+        ['0|0', [true, false]],
+        ['1|1', [false, true]]
+    ]);
+    expect(steps(Python)).toEqual(native);
+});
 
 describe('checkbox groups in separate rows', () => {
     const setup = () => {

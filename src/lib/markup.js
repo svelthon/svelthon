@@ -684,6 +684,12 @@ const BOUND_VALUE = '__value';
 // their groups apart and the token does. Svelte keeps such rows apart too.
 const CELL = '__cell_';
 
+// The index an `{#each}` is given when a `bind:group` inside it needs one and
+// the author wrote none, this prefix and the block's scope. Svelte keeps a
+// group per iteration, by index: two rows holding one object are two groups,
+// which the values they hold cannot tell apart.
+const EACH_INDEX = '__index_';
+
 // The names a `bind:group` writes as a whole, `bind:group={picked}` or the
 // shorthand `bind:group`, read off the markup before the walk: a declaration
 // comes before the binding that writes it, and has to know.
@@ -1370,7 +1376,11 @@ function trailingKey(text) {
     return null;
 }
 
-function eachBlock(trimmed, declare, call, refuse) {
+// `loop` is what the walk asks of the block for `bind:group`: `index()`, the
+// name to give the iteration's index when the author wrote none, and
+// `noted(index, from)`, told the index the block has and the names its
+// iterable reads.
+function eachBlock(trimmed, declare, call, refuse, loop) {
     const head = trimmed.match(/^#each\s+([\s\S]+)$/);
 
     if (!head) return `{${trimmed}}`;
@@ -1417,9 +1427,20 @@ function eachBlock(trimmed, declare, call, refuse) {
     // expressions. Converted, it would be a fresh list each render, its floats
     // numbers, and a row would have no identity left to key by.
     const iterable = call(body.slice(0, at), '__seq', undefined, 'python');
-    const { pattern, unpack, consts } = destructured(keyed ? keyed[0] : named, declare, call, true, refuse);
+    const target = keyed ? keyed[0] : named;
+    const { pattern, unpack, consts } = destructured(target, declare, call, true, refuse);
 
-    return `{#each ${iterable} as ${pattern}` + (keyed ? ` (${eachKey(keyed[1], unpack, call)})` : '') + `}${consts}`;
+    // Svelte's index is the second of two, `as row, at`; one the author did
+    // not write is added when a group needs it, under the walk's name.
+    const parts = arguments_(target.trim());
+    const written = parts.length === 2 ? parts[1].trim() : null;
+    const index = written ?? loop.index();
+
+    loop.noted(index, referenced(body.slice(0, at)));
+
+    const declared = written === null && index !== null ? `${pattern}, ${index}` : pattern;
+
+    return `{#each ${iterable} as ${declared}` + (keyed ? ` (${eachKey(keyed[1], unpack, call)})` : '') + `}${consts}`;
 }
 
 // The key of an `{#each}` is computed outside the block, from the pattern's own
@@ -1707,9 +1728,11 @@ function lineColumn(content, offset) {
 export function pythonExpressions(markup, collect, onPython, where) {
     const named = new Map();
 
-    walk(markup, () => '__probe', undefined, new Map(), named, where);
+    const indexed = new Set();
 
-    return walk(markup, collect, onPython, named, null, where);
+    walk(markup, () => '__probe', undefined, new Map(), named, where, indexed);
+
+    return walk(markup, collect, onPython, named, null, where, indexed);
 }
 
 // A tag's opening, read where the walk stands rather than on a copy of the rest
@@ -1717,7 +1740,10 @@ export function pythonExpressions(markup, collect, onPython, where) {
 // what Svelte's component names allow: an ASCII letter left `<Étiquette>` no tag.
 const TAG_OPEN = /<(\/?)\s*(\p{ID_Start}[\p{ID_Continue}$‌‍:.-]*)/uy;
 
-function walk(markup, collect, onPython, seed, record, where) {
+// `indexed` holds the `{#each}` blocks, by scope, that a group binding needs the
+// iteration index of and whose author wrote none: the first walk finds them,
+// the second gives them one.
+function walk(markup, collect, onPython, seed, record, where, indexed) {
     let out = '';
     let index = 0;
 
@@ -1794,6 +1820,11 @@ function walk(markup, collect, onPython, seed, record, where) {
     // closes too the elements whose closing tag was left out inside it, and at
     // a tag HTML closes it for (`CLOSED_BY`), a `<p>` at the `<div>` after it.
     const owners = [null];
+
+    // The `{#each}` blocks by scope: the index each iteration has, or `null`
+    // while the first walk has not asked for one, and the names its iterable
+    // reads.
+    const loops = new Map();
 
     const closeElement = (name) => {
         const at = closedAt(owners, name, null);
@@ -2052,6 +2083,30 @@ function walk(markup, collect, onPython, seed, record, where) {
         return `() => ${call(expr, '__bound', undefined, multiple ? 'selection' : 'scalar')}, (${BOUND_VALUE}) => ${write}`;
     };
 
+    // The iterations a group binding stands in, as Svelte finds them: every
+    // `{#each}` whose names the binding reads, and then those its iterable
+    // reads, from the innermost out. Their indexes keep apart two rows holding
+    // one object, which the values the binding mentions cannot. A block whose
+    // author wrote no index is noted for the second walk to give it one.
+    const iterations = (expr) => {
+        const names = new Set(referenced(expr));
+        const indexes = [];
+
+        for (let at = scopes.length - 1; at > 0; at--) {
+            const loop = loops.get(ids[at]);
+
+            if (loop === undefined || !scopes[at].some((one) => names.has(one))) continue;
+
+            if (loop.index === null) indexed.add(ids[at]);
+            else indexes.push(loop.index);
+
+            for (const one of scopes[at]) names.delete(one);
+            for (const one of loop.from) names.add(one);
+        }
+
+        return indexes;
+    };
+
     const groupAction = (expr) => {
         // The Python list itself: the group compares with Python's `==`, and
         // its inputs know each other by the list they share.
@@ -2098,7 +2153,7 @@ function walk(markup, collect, onPython, seed, record, where) {
         // be handed one default list and are still two targets. A cell the
         // markup declared is its own target, told by its token.
         const cell = own ? `${CELL}${bareName(expr)}` : null;
-        const where = cell !== null && inScope().includes(cell) ? [cell] : mentioned(expr.trim());
+        const where = cell !== null && inScope().includes(cell) ? [cell] : [...mentioned(expr.trim()), ...iterations(expr)];
 
         // And `checked` for the server, which runs no action: Svelte's server
         // writes it for its own group, from the model, when the tag has a value,
@@ -2617,7 +2672,17 @@ function walk(markup, collect, onPython, seed, record, where) {
                 push([]);
                 out += `{#if ${condition}}`;
             } else if (opens('each')) {
-                out += eachBlock(trimmed, push, call, refusePattern);
+                // The block's scope, known once its names are declared.
+                let id;
+                const declare = (names, generated) => {
+                    push(names, generated);
+                    id = ids.at(-1);
+                };
+
+                out += eachBlock(trimmed, declare, call, refusePattern, {
+                    index: () => (indexed.has(id) ? `${EACH_INDEX}${id}` : null),
+                    noted: (index, from) => loops.set(id, { index, from })
+                });
             } else if (opens('key')) {
                 // Svelte re-creates the block when the value changes, by
                 // identity: `__key` keeps it for a container and an instance,

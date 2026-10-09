@@ -64,5 +64,6 @@ test('a dict’s items() is what the page encodes', () => {
     expect(read('query')).toBe('tag=selected');
     expect(JSON.parse(read('json'))).toEqual({ tag: 'selected' });
     expect(read('refused')).toBe('raises: query items failed');
+    expect(read('copied')).toBe('selected');
     expect(instance.read()).toBe('tag=selected');
 });

@@ -85,6 +85,7 @@ test('the server encodes a dict through its items()', () => {
 
     expect(text('query')).toBe('tag=selected');
     expect(text('refused')).toBe('raises: query items failed');
+    expect(text('copied')).toBe('selected');
 });
 
 // `on_destroy` runs when the server's render closes, as Svelte's `onDestroy`

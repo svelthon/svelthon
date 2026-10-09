@@ -38,6 +38,9 @@ const MARKUP_LOCAL = new Set([
     '__cell_',
     // The row a pattern unpacks by key stands under, `{#each rows as {id}}`.
     '__unpacked_',
+    // The index an `{#each}` is given for a `bind:group` inside it, which
+    // Svelte declares.
+    '__index_',
     // A stand-in used by the first, throwaway walk that only collects snippet
     // names; nothing it returns is emitted.
     '__probe'
