@@ -77,7 +77,7 @@ rest of that configuration and what each line buys.
 npm install
 npm run dev
 
-npm test             # 1 745 tests: semantics, props, reactivity, Svelte surface
+npm test             # 1 748 tests: semantics, props, reactivity, Svelte surface
 npm run test:quiet   # the suite's own output: a green run must say nothing
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
@@ -1378,7 +1378,7 @@ The two exceptions are the two words a JavaScript function already owns. `name`
 takes the author's own when there is one (`on_save` says more in a log than
 `Handler.__call__`), and `length` is what a library reads to learn what a
 callback takes. Both describe the *call*; neither is the field beside it.
-`tests/callable-matrix.test.js` holds every line, across **11 shapes** and **14
+`tests/callable-matrix.test.js` holds every line, across **13 shapes** and **14
 positions**, and each shape again as the callee of a directive.
 
 A Python function is handed only the arguments it declares, so `def clear_all():`
@@ -1535,7 +1535,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 1 745 tests as written (vitest reports more, one per
+Validated by `npm test`, 1 748 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;

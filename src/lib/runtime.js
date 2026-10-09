@@ -3543,8 +3543,13 @@ class SetView extends Set {
         return this.values();
     }
 
+    // A callback refused before any row, an empty set included, in the words
+    // the engine's own `forEach` refuses it with, and called as itself:
+    // `callback.call` is a property, which the author may have set.
     forEach(callback, receiver) {
-        for (const one of this.values()) callback.call(receiver, one, one, this.#published);
+        if (typeof callback !== 'function') Reflect.apply(Set.prototype.forEach, new Set(), [callback]);
+
+        for (const one of this.values()) Reflect.apply(callback, receiver, [one, one, this.#published]);
     }
 
     // The set algebra `Set.prototype` gained reads its receiver's own storage,
@@ -3659,7 +3664,11 @@ const setRecord = (other) => {
 
     if (typeof keys !== 'function') throw new TypeError("The 'keys' of a set-like object must be a function");
 
-    return { size: whole, has: (one) => Boolean(has.call(other, one)), keys: () => keys.call(other) };
+    return {
+        size: whole,
+        has: (one) => Boolean(Reflect.apply(has, other, [one])),
+        keys: () => Reflect.apply(keys, other, [])
+    };
 };
 
 // An iterator walked with `for…of`, which closes it on an early return.
@@ -3789,7 +3798,7 @@ const awaited = (value) => {
 
     if (typeof then !== 'function' || globalThis.__BRYTHON__.is_dict(value)) return undefined;
 
-    return { then: (resolve, reject) => then.call(value, resolve, reject) };
+    return { then: (resolve, reject) => Reflect.apply(then, value, [resolve, reject]) };
 };
 
 // Calling an `async def` from JavaScript returns a coroutine that nobody runs:
@@ -3993,7 +4002,7 @@ const NO_KEY = Object.freeze([]);
 function turn(value, key, seen, adapt, chain) {
     const hook = value.toJSON;
     const hooked = typeof hook === 'function';
-    const result = hooked ? hook.call(value, key) : value;
+    const result = hooked ? Reflect.apply(hook, value, [key]) : value;
 
     if (result === null || typeof result !== 'object' || quietPyType(result) !== undefined) {
         return plainData(result, seen, adapt);

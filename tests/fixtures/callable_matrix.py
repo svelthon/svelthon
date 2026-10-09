@@ -17,6 +17,8 @@ __all__ = [
     "delegated",
     "delegated_class",
     "delegated_native",
+    "delegated_instance",
+    "delegated_twice",
     "doubling",
     "class_doubling",
     "doublers",
@@ -154,6 +156,25 @@ delegated = Delegated()
 delegated_class = DelegatedClass()
 delegated_native = DelegatedNative()
 
+
+# A `__call__` that is itself a callable instance, one level down and two:
+# Python calls the inner one's `__call__`, its own instance bound.
+class Inner:
+    def __call__(self):
+        return VALUE
+
+
+class Outer:
+    __call__ = Inner()
+
+
+class Outermost:
+    __call__ = Outer()
+
+
+delegated_instance = Outer()
+delegated_twice = Outermost()
+
 # Its own container, since every value of `mapped` is the trivial callable the
 # matrix loops over and this one takes an argument.
 doublers = {"inner": doubling, "by_class": class_doubling}
@@ -184,6 +205,8 @@ mapped = {
     "delegated": delegated,
     "delegated_class": delegated_class,
     "delegated_native": delegated_native,
+    "delegated_instance": delegated_instance,
+    "delegated_twice": delegated_twice,
 }
 
 
@@ -202,6 +225,8 @@ order = [
     "delegated",
     "delegated_class",
     "delegated_native",
+    "delegated_instance",
+    "delegated_twice",
 ]
 listed = [mapped[key] for key in order]
 tupled = tuple(listed)

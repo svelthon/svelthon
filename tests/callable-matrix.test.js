@@ -72,7 +72,11 @@ const SHAPES = [
     ['an instance whose __call__ is a method of a class', 'delegated_class'],
     // And a builtin bound to its value, which the engine handed the instance
     // as well, a receiver it already had.
-    ['an instance whose __call__ is a bound builtin', 'delegated_native']
+    ['an instance whose __call__ is a bound builtin', 'delegated_native'],
+    // And a callable instance, whose own class says what it takes, followed
+    // as far as the chain goes: read where it was held, it had no signature.
+    ['an instance whose __call__ is a callable instance', 'delegated_instance'],
+    ['an instance whose __call__ is one, two levels down', 'delegated_twice']
 ];
 
 const mounted = () => {
