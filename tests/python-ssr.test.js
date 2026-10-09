@@ -23,6 +23,13 @@ import ServerRowsImported from './fixtures/ServerRowsImported.svelte';
 import ServerRowsAssigned from './fixtures/ServerRowsAssigned.svelte';
 import ServerRowsRoot from './fixtures/ServerRowsRoot.svelte';
 import ServerRowsNative from './fixtures/ServerRowsNative.svelte';
+import ImplicitCloseDiv from './fixtures/warned/ImplicitCloseDiv.svelte';
+import ImplicitCloseDivNative from './fixtures/warned/ImplicitCloseDivNative.svelte';
+import ImplicitCloseSection from './fixtures/warned/ImplicitCloseSection.svelte';
+import ImplicitCloseSectionNative from './fixtures/warned/ImplicitCloseSectionNative.svelte';
+import ImplicitCloseHr from './fixtures/warned/ImplicitCloseHr.svelte';
+import ImplicitCloseHrNative from './fixtures/warned/ImplicitCloseHrNative.svelte';
+import QueryItems from './fixtures/QueryItems.svelte';
 import * as html from './fixtures/python-ssr-html.js';
 
 test.for([
@@ -55,6 +62,29 @@ test('the server checks what a group holds, as Svelte does', () => {
 
     expect(shapes(GroupValueShapesNative)).toEqual(['long', 'short']);
     expect(shapes(GroupValueShapes)).toEqual(shapes(GroupValueShapesNative));
+});
+
+// A script after a `<p>` Svelte closes at the next tag is the component's on the
+// server as well, and its markup Python: the render failed with `name.upper is
+// not a function`.
+test.for([
+    ['div', ImplicitCloseDiv, ImplicitCloseDivNative],
+    ['section', ImplicitCloseSection, ImplicitCloseSectionNative],
+    ['hr', ImplicitCloseHr, ImplicitCloseHrNative]
+])('the server renders a script after a <p> closed by <%s> as the component’s', ([, Python, Native]) => {
+    const output = (Component) => render(Component).body.match(/<output>(.*?)<\/output>/)[1];
+
+    expect(output(Python)).toBe(output(Native));
+    expect(output(Python)).toBe('ADA');
+});
+
+// And a dict's `items()` is what the server encodes, as CPython reads it.
+test('the server encodes a dict through its items()', () => {
+    const body = render(QueryItems).body;
+    const text = (k) => body.match(new RegExp(`data-k="${k}">(.*?)</p>`))[1];
+
+    expect(text('query')).toBe('tag=selected');
+    expect(text('refused')).toBe('raises: query items failed');
 });
 
 // `on_destroy` runs when the server's render closes, as Svelte's `onDestroy`

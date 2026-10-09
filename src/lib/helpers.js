@@ -18,7 +18,8 @@ import {
     pyClass,
     pyCoroutine,
     pyScalar,
-    pyEntries,
+    pyItems,
+    unpackedPair,
     pyName,
     isSet,
     opaque,
@@ -666,11 +667,12 @@ export function urlencode(value) {
     // pair, read once (`seq`): a subclass whose `__iter__` filters or rewrites
     // its rows is read by it, and what it raises reaches the template. Read
     // from the storage, the link carried the filters the class no longer
-    // yields.
+    // yields. A mapping's are its `items()`, which is what CPython asks of it
+    // (`pyItems`), for the same reason.
     const walked = (one) => Array.from(__pybridge.seq(one));
     const rows = Array.isArray(value) ? walked(value).map((one) => (Array.isArray(one) ? walked(one) : one)) : null;
     const entries = mapping(value)
-        ? pyEntries(value)
+        ? pyItems(value, unpackedPair)
         : rows !== null && rows.every((one) => Array.isArray(one) && one.length === 2)
           ? rows
           : null;

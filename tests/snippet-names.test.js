@@ -3,6 +3,8 @@ import { mount, flushSync } from './mounted.js';
 import { pythonExpressions, collector } from '../src/lib/markup.js';
 import SnippetNames from './fixtures/SnippetNames.svelte';
 import SnippetAcrossStyle from './fixtures/SnippetAcrossStyle.svelte';
+import SnippetAfterOmittedClose from './fixtures/warned/SnippetAfterOmittedClose.svelte';
+import SnippetAfterOmittedCloseNative from './fixtures/warned/SnippetAfterOmittedCloseNative.svelte';
 
 // A `<style>` between a snippet's use and its declaration does not cut the
 // scope: Svelte hoists the snippet across the component. The
@@ -16,6 +18,24 @@ test('a snippet declared below a <style> is the one used above it', () => {
 
     expect(target.querySelector('[data-k="handed"]').textContent).toBe('7');
     expect(target.querySelector('[data-k="local"]').textContent).toBe('Price');
+});
+
+// An element whose closing tag is left out closes where Svelte closes it, a
+// `<li>` at the `</ul>` around it, a `<p>` at the `<div>` after it, and the
+// scope it opened closes with it: the snippets declared below stood in a scope
+// left open, and the use above them raised `NameError: name 'row'`.
+test('a snippet declared after an element closed for it is the one used above it', () => {
+    const read = (component) => {
+        const target = document.body.appendChild(document.createElement('div'));
+
+        mount(component, { target });
+        flushSync();
+
+        return ['handed', 'local'].map((k) => target.querySelector(`[data-k="${k}"]`).textContent);
+    };
+
+    expect(read(SnippetAfterOmittedClose)).toEqual(['7', 'Price']);
+    expect(read(SnippetAfterOmittedCloseNative)).toEqual(['7', 'Price']);
 });
 
 // A snippet is a value, which is what makes it more than the slot it replaced:

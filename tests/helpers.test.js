@@ -1121,6 +1121,40 @@ describe('urlencode', () => {
         expect(urlencode(raw(pairs.empty))).toBe('');
     });
 
+    // A dict's pairs are its `items()`, which CPython's `urlencode` and
+    // `json.dumps` both ask: the storage carried the pairs the class no longer
+    // hands out, and a refusal went unheard. Each reads a row by its own rule.
+    test('and a dict’s pairs are what its items() hands out', async () => {
+        const query = await import('./fixtures/query_items.py');
+        const $B = globalThis.__BRYTHON__;
+        const raw = (name) => $B.PYOBJ_MAP.get(query[name]);
+
+        // What the template would catch, as Python prints it.
+        const raised = (call) => {
+            try {
+                call();
+            } catch (error) {
+                return `${$B.class_name(error)}: ${_b_.str.$factory(error)}`;
+            }
+
+            return 'nothing raised';
+        };
+
+        expect(urlencode(raw('selected'))).toBe('tag=selected');
+        expect(urlencode(raw('empty'))).toBe('');
+        expect(raised(() => urlencode(raw('refusing')))).toBe('ValueError: query items failed');
+        expect(urlencode(raw('keyed'))).toBe('tag=stale&page=2');
+        expect(urlencode(raw('iterated'))).toBe('tag=stale&page=2');
+        expect(urlencode(raw('spelled'))).toBe('a=b');
+        expect(raised(() => urlencode(raw('uneven')))).toBe('ValueError: too many values to unpack (expected 2, got 3)');
+
+        expect(JSON.parse(tojson(raw('selected')))).toEqual({ tag: 'selected' });
+        expect(tojson(raw('empty'))).toBe('{}');
+        expect(raised(() => tojson(raw('refusing')))).toBe('ValueError: query items failed');
+        expect(JSON.parse(tojson(raw('keyed')))).toEqual({ tag: 'stale', page: 2 });
+        expect(raised(() => tojson(raw('spelled')))).toBe('ValueError: items must return 2-tuples');
+    });
+
     test('while a list of anything but pairs is still a value', () => {
         expect(urlencode(__pybridge.list(['a', 'b']))).toBe(encodeURIComponent("['a', 'b']"));
     });

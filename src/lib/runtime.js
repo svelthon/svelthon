@@ -3834,6 +3834,43 @@ export function pyEntries(value) {
     return [...$B.builtins.dict.$iter_items(value)].map((entry) => [entry.key, entry.value]);
 }
 
+// The pairs of a mapping as Python code outside the dict reads them,
+// `value.items()`, which is what CPython's `urlencode` and `json.dumps` ask: an
+// exact dict's own, and a subclass's through its `items`, which may filter,
+// rewrite or refuse. Each row is read by `pair`, the caller's own rule.
+// `pyEntries` is the storage, which the tracking needs and which a subclass's
+// `items` is not.
+export function pyItems(value, pair) {
+    const $B = globalThis.__BRYTHON__;
+
+    if (!$B.is_dict(value) || (quietPyType(value) ?? $B.get_class(value)) === _b_.dict) return pyEntries(value);
+
+    return __pybridge.seq($B.$call($B.$getattr(value, 'items'))).map(pair);
+}
+
+// `for key, one in rows`, which is how `urlencode` reads a row: any iterable
+// of two.
+export function unpackedPair(row) {
+    const pair = __pybridge.seq(row);
+
+    if (pair.length !== 2) {
+        const told = pair.length > 2 ? 'too many' : 'not enough';
+
+        globalThis.__BRYTHON__.RAISE(_b_.ValueError, `${told} values to unpack (expected 2, got ${pair.length})`);
+    }
+
+    return pair;
+}
+
+// What `json.dumps` takes of a row: a tuple of two, and nothing else.
+function tuplePair(row) {
+    if (!Array.isArray(row) || !globalThis.__BRYTHON__.is_tuple(row) || row.length !== 2) {
+        globalThis.__BRYTHON__.RAISE(_b_.ValueError, 'items must return 2-tuples');
+    }
+
+    return [row[0], row[1]];
+}
+
 const define = (target, key, value) =>
     Object.defineProperty(target, key, {
         value,
@@ -4293,7 +4330,7 @@ function branch(value, seen, shell, adapt) {
 
     const out = shell ?? {};
 
-    for (const [key, one] of pyEntries(value)) {
+    for (const [key, one] of pyItems(value, tuplePair)) {
         define(out, propertyName(key, out, seen, adapt), plainData(one, seen, adapt));
     }
 

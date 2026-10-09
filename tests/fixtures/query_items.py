@@ -1,0 +1,49 @@
+# Dicts whose class says what its items are. `urllib.parse.urlencode` and
+# `json.dumps` under `python3` read them through `items()` and give what the
+# test expects; a `keys` or an `__iter__` of their own is not what they ask.
+__all__ = ["selected", "empty", "refusing", "keyed", "iterated", "spelled", "uneven"]
+
+
+class Selected(dict):
+    def items(self):
+        return [("tag", "selected")]
+
+
+class Empty(dict):
+    def items(self):
+        return []
+
+
+class Refusing(dict):
+    def items(self):
+        raise ValueError("query items failed")
+
+
+class Keyed(dict):
+    def keys(self):
+        return ["tag"]
+
+
+class Iterated(dict):
+    def __iter__(self):
+        return iter(["tag"])
+
+
+# A row `urlencode` unpacks and `json.dumps` refuses, and one neither takes.
+class Spelled(dict):
+    def items(self):
+        return ["ab"]
+
+
+class Uneven(dict):
+    def items(self):
+        return [("a", "b", "c")]
+
+
+selected = Selected({"tag": "stale", "page": 2})
+empty = Empty({"tag": "stale", "page": 2})
+refusing = Refusing({"tag": "stale", "page": 2})
+keyed = Keyed({"tag": "stale", "page": 2})
+iterated = Iterated({"tag": "stale", "page": 2})
+spelled = Spelled({"tag": "stale"})
+uneven = Uneven({"tag": "stale"})

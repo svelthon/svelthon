@@ -430,13 +430,13 @@ export function componentParts(content) {
         const [, closing, name] = tag;
 
         if (closing) {
-            const opened = open.lastIndexOf(name);
+            const opened = closedAt(open, name, LOGIC);
 
-            if (opened !== -1 && !open.slice(opened).includes(LOGIC)) open.length = opened;
+            if (opened !== -1) open.length = opened;
             return tagEnd(content, at);
         }
 
-        if (CLOSED_BY.get(open.at(-1))?.includes(name)) open.pop();
+        if (closedBy(open.at(-1), name)) open.pop();
 
         if (open.length === 0 && (name === 'script' || name === 'style')) {
             ROOT_BLOCK.lastIndex = at;
@@ -535,6 +535,20 @@ const CLOSED_BY = new Map([
     ['td', ['td', 'th', 'tr']],
     ['th', ['td', 'th', 'tr']]
 ]);
+
+// The two halves of where an element closes, as Svelte's parser closes it, for
+// the two readers that keep a stack of what is open (`componentParts`, `walk`).
+// An opening `name` closes the element `parent` it stands in when HTML says so.
+const closedBy = (parent, name) => CLOSED_BY.get(parent)?.includes(name) ?? false;
+
+// A closing `</name>` closes the element of that name and every one opened
+// inside it whose closing tag was left out, never past a block (`block`, the
+// stack's mark for one): where the stack is cut, or -1 when nothing closes.
+const closedAt = (stack, name, block) => {
+    const at = stack.lastIndexOf(name);
+
+    return at !== -1 && !stack.slice(at).includes(block) ? at : -1;
+};
 
 // Past the `{…}` that opens at `at`, or past its brace alone when nothing
 // closes it: an unclosed brace is the walk's to refuse, by name.
@@ -1771,7 +1785,20 @@ function walk(markup, collect, onPython, seed, record, where) {
     const push = (names, generated = []) => {
         opened += 1;
         ids.push(opened);
+        owners.push(null);
         scopes.push([...(seed.get(opened) || []), ...refuseCompilerName(names), ...generated]);
+    };
+
+    // What opened each scope, an element's name or `null` for a block, so an
+    // element closes where Svelte closes it: at the tag that closes it, which
+    // closes too the elements whose closing tag was left out inside it, and at
+    // a tag HTML closes it for (`CLOSED_BY`), a `<p>` at the `<div>` after it.
+    const owners = [null];
+
+    const closeElement = (name) => {
+        const at = closedAt(owners, name, null);
+
+        if (at > 0) while (owners.length > at) pop();
     };
 
     // A clause of the open block: a new branch, numbered like a block so the
@@ -1799,6 +1826,7 @@ function walk(markup, collect, onPython, seed, record, where) {
         if (scopes.length > 1) {
             scopes.pop();
             ids.pop();
+            owners.pop();
         }
     };
 
@@ -2468,13 +2496,14 @@ function walk(markup, collect, onPython, seed, record, where) {
                 // A void element has no body, and the list is HTML's: `<Input>`
                 // is a component, with a body, and its closing tag pops a scope
                 // its opening must have pushed.
-                if (tag && tag.closing) pop();
+                if (tag && tag.closing) closeElement(tag.name);
                 else if (
                     tag &&
                     (isComponent(tag) || !VOID.has(tag.name.toLowerCase())) &&
                     markup[index - 1] !== '/'
                 ) {
                     push([]);
+                    owners[owners.length - 1] = tag.name;
                 }
 
                 tag = null;
@@ -2534,6 +2563,8 @@ function walk(markup, collect, onPython, seed, record, where) {
             // which is the only rule that looks at an attribute other than its
             // own, and may find it on either side of the binding.
             tag = named ? { closing: named[1] === '/', name: named[2], start: index } : null;
+
+            if (tag && !tag.closing && closedBy(owners.at(-1), tag.name)) pop();
 
             inTag = true;
             tagIn = index;

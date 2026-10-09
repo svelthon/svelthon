@@ -92,6 +92,26 @@ describe('a markup refusal names a position', () => {
     });
 });
 
+// A Python script Svelte reads as an element of the page, and not as the
+// component's, is refused at its line: the markup would stay JavaScript, and its
+// first expression only Python can run would fail at run time.
+describe('a Python script that is not the component’s', () => {
+    test.for([
+        ['inside an element', '<div>\n<script lang="python">\nx = 1\n</script>\n</div>'],
+        ['inside a block', '{#if shown}\n<script lang="python">\nx = 1\n</script>\n{/if}'],
+        ['after a <p> left open', '<p>intro\n<script lang="python">\nx = 1\n</script>']
+    ])('%s is refused, with its line', ([, content]) => {
+        expect(() => python().markup({ content, filename: FILE })).toThrow(
+            `stands inside an element or a block, where Svelte reads it as an element of the page`
+        );
+        expect(() => python().markup({ content, filename: FILE })).toThrow(`(${FILE}:2)`);
+    });
+
+    test('control: a JavaScript component holding none is left alone', () => {
+        expect(python().markup({ content: '<div><script>let x = 1;</script></div>', filename: FILE })).toBeUndefined();
+    });
+});
+
 // The playground compiles a fragment that belongs to no file, and so does
 // `pythonRanges`. Nothing forces a caller to know where it is.
 describe('and says nothing when there is nothing to name', () => {

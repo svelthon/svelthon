@@ -7,10 +7,19 @@
 // in two, the second half read with a fresh scope: `NameError: name 'row' is
 // not defined`.
 import { test, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { mount, flushSync } from './mounted.js';
+import { pythonScript } from '../src/lib/markup.js';
+import { closing_tag_omitted } from '../node_modules/svelte/src/html-tree-validation.js';
 import QuotedBlocks from './fixtures/QuotedBlocks.svelte';
 import BlocksInLoops from './fixtures/BlocksInLoops.svelte';
 import BlocksInLoopsNative from './fixtures/BlocksInLoopsNative.svelte';
+import ImplicitCloseDiv from './fixtures/warned/ImplicitCloseDiv.svelte';
+import ImplicitCloseDivNative from './fixtures/warned/ImplicitCloseDivNative.svelte';
+import ImplicitCloseSection from './fixtures/warned/ImplicitCloseSection.svelte';
+import ImplicitCloseSectionNative from './fixtures/warned/ImplicitCloseSectionNative.svelte';
+import ImplicitCloseHr from './fixtures/warned/ImplicitCloseHr.svelte';
+import ImplicitCloseHrNative from './fixtures/warned/ImplicitCloseHrNative.svelte';
 
 const mounted = (component) => {
     const target = document.body.appendChild(document.createElement('div'));
@@ -48,6 +57,43 @@ test.for(['each', 'nested', 'script'])('a block inside a loop keeps its names, %
 
     expect(read(mounted(BlocksInLoops))).toBe(read(mounted(BlocksInLoopsNative)));
     expect(read(mounted(BlocksInLoops))).toBe('Ada:0');
+});
+
+// A `<p>` Svelte closes at the tag after it: the script that follows stands at
+// the top level, as Svelte reads it, and the markup is Python. Counted open, it
+// left the script nested and the markup JavaScript: `upper is not a function`.
+test.for([
+    ['div', ImplicitCloseDiv, ImplicitCloseDivNative],
+    ['section', ImplicitCloseSection, ImplicitCloseSectionNative],
+    ['hr', ImplicitCloseHr, ImplicitCloseHrNative]
+])('a script after a <p> closed by <%s> is the component’s', ([, Python, Native]) => {
+    const read = (component) => mounted(component).querySelector('output').textContent;
+
+    expect(read(Python)).toBe(read(Native));
+    expect(read(Python)).toBe('ADA');
+});
+
+// The copy of Svelte's rule held against Svelte's own, on every name its table
+// lists: a script after `<parent>x<next>y</next>` is the component's exactly
+// when Svelte closes the parent at `<next>`.
+test('an element closes where Svelte closes it', () => {
+    const source = readFileSync('node_modules/svelte/src/html-tree-validation.js', 'utf8');
+    const from = source.indexOf('const autoclosing_children');
+    const table = source.slice(from, source.indexOf('\n};', from)).replace(/\/\/.*$/gm, '');
+    const field = (one) => !['direct', 'descendant', 'reset_by'].includes(one);
+    const parents = [...table.matchAll(/(\w+):/g)].map((one) => one[1]).filter(field);
+    const names = [...new Set([...parents, ...[...table.matchAll(/'(\w+)'/g)].map((one) => one[1])])];
+
+    expect(parents.length).toBeGreaterThan(10);
+    expect(names.length).toBeGreaterThan(30);
+
+    for (const parent of parents) {
+        for (const next of names) {
+            const content = `<${parent}>x<${next}>y</${next}>\n<script lang="python">\nx = 1\n</script>`;
+
+            expect(pythonScript(content) !== null, `<${parent}> then <${next}>`).toBe(closing_tag_omitted(parent, next));
+        }
+    }
 });
 
 test('a style inside a loop is an element, its attributes markup', () => {
