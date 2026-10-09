@@ -133,6 +133,27 @@ const relayed = (handler, where) => {
 // is another object each time and only its repr() stays the same.
 const BY_VALUE = [_b_.tuple, _b_.frozenset, _b_.float, _b_.complex, _b_.bytes];
 
+// Whether a value's class defines its own equality, an `__eq__` or a `__hash__`
+// other than those of the builtin it descends from. Its equality is then the
+// author's code, and it keys by identity, as an instance of the author's does:
+// a tuple's stored members say nothing of what such a class calls equal.
+const ownEquality = (value) => {
+    if (value === null || typeof value !== 'object') return false;
+
+    const cls = quietPyType(value);
+    const mro = cls?.tp_mro;
+
+    if (!Array.isArray(mro)) return false;
+
+    const base = mro.find((one) => one !== _b_.object && _b_[one.tp_name] === one);
+
+    return (
+        base !== undefined &&
+        base !== cls &&
+        (declares(cls, '__eq__') !== declares(base, '__eq__') || declares(cls, '__hash__') !== declares(base, '__hash__'))
+    );
+};
+
 // The text two such values share exactly when Python finds them equal. A
 // tuple or a frozenset is equal when its members are, so its text is built
 // from theirs; anything else, an instance or a list, is equal to itself alone,
@@ -178,6 +199,7 @@ const boundText = (self, operation) => {
 
 function keyText(value) {
     if (value === null || value === undefined || value === NONE) return 'None';
+    if (ownEquality(value)) return identityOf(value, quietPyType(value).tp_name);
 
     const number = numeric(value);
     if (number !== null) return String(number);
@@ -302,6 +324,7 @@ export const __pybridge = {
         // `None` is JavaScript's `null`, so `set_context(None, …)` and
         // `getContext(null)` name one entry, as every other door makes it.
         if (value === NONE) return null;
+        if (ownEquality(value)) return value;
 
         // Equal to a number, it is that number, which is what an `int` key
         // already is: `1`, `1.0`, `True` and `Score(1.0)` are one key, as they
@@ -1001,7 +1024,46 @@ function installMutationTracking($B) {
         // string or a class on its own.
         inherit(obj, result, undefined, true);
 
+        // And the class the value was read off, when it was not the object's
+        // own: linked under the object, so a write on that class, `Base.count
+        // += 1` or `Base.rows = [1]`, reaches what read it through an instance
+        // or a subclass. A scalar read that way carries no watch of its own.
+        const owner = provider(obj, attr);
+        if (owner !== undefined) inherit(obj, owner, undefined, true);
+
         return result;
+    };
+
+    // The class whose dictionary holds an attribute read off `obj` rather than
+    // off `obj` itself, asked of the dictionaries along the MRO, so no getter
+    // runs. Only for data: a method, a property or a slot is a descriptor,
+    // which a write replacing it does not make state, and every row calling a
+    // method would otherwise link its class.
+    const provider = (obj, attr) => {
+        if (typeof attr !== 'string') return undefined;
+
+        const own = pyClass(obj) ? obj : undefined;
+
+        if (own === undefined) {
+            const attributes = ownAttributes(obj);
+
+            if (attributes !== null && typeof attributes === 'object' && Object.hasOwn(attributes, attr)) return undefined;
+        }
+
+        const mro = (own ?? quietPyType(obj))?.tp_mro;
+
+        if (!Array.isArray(mro)) return undefined;
+
+        for (const cls of mro) {
+            const found = $B.search_in_dict(cls, attr, $B.NULL);
+
+            if (found === $B.NULL) continue;
+            if (cls === own || $B.search_slot($B.get_class(found), 'tp_descr_get', $B.NULL) !== $B.NULL) return undefined;
+
+            return cls;
+        }
+
+        return undefined;
     };
 
     const setitem = $B.$setitem;
@@ -1589,7 +1651,10 @@ const upwards = (start, stamp, key) => {
         // seen. `track` links a container's children again if it is ever
         // subscribed to anew.
         if (frame.climbed !== null) {
-            if (dead(frame.climbed)) parents.splice(frame.at, 1);
+            if (dead(frame.climbed)) {
+                marker.linked.delete(frame.climbed);
+                parents.splice(frame.at, 1);
+            }
             frame.climbed = null;
         }
 
@@ -1603,6 +1668,7 @@ const upwards = (start, stamp, key) => {
         const known = verified.get(parent) === parent.stamp;
 
         if (holder === undefined || (child !== undefined && !known && !holds(holder, child, marker))) {
+            marker.linked.delete(parent);
             parents.splice(frame.at, 1);
             continue;
         }
@@ -2208,25 +2274,27 @@ function adoptOne(value) {
             for (const child of bucket) inherit(value, child, hash);
         }
     } else if (viewed(value) !== undefined) {
-        // `keys()`, `values()`, `items()` and the read-only `mappingproxy` a view
-        // hands out as `.mapping` are live: they hold no entry of their own,
-        // only the dict they read. So the dict is the view's child, and what
-        // changes the dict reaches what reads the view, as it reaches what
-        // reads the dict.
+        // `keys()`, `values()`, `items()`, the read-only `mappingproxy` a view
+        // hands out as `.mapping` and a `memoryview` are live: they hold
+        // nothing of their own, only what they read. So that is the view's
+        // child, and what changes it reaches what reads the view, as it
+        // reaches what reads it.
         inherit(value, viewed(value));
     }
 }
 
-// The dict a live view reads, or undefined: the three views of a dict, which
+// What a live view reads, or undefined: the three views of a dict, which
 // Python offers no way to subclass, keep it as `dict_obj`; a `mappingproxy`
 // keeps it as `mapping`, and is followed only when that is a dict, the class
-// dictionary behind a `type.__dict__` being no data of the author's.
+// dictionary behind a `type.__dict__` being no data of the author's; a
+// `memoryview` keeps its buffer as `obj`, a `bytearray` changing under it.
 const viewed = (value) => {
     const $B = globalThis.__BRYTHON__;
     const type = ownType(value);
 
     if (type === $B.dict_keys || type === $B.dict_values || type === $B.dict_items) return value.dict_obj;
     if (type === $B.mappingproxy && $B.is_dict(value.mapping)) return value.mapping;
+    if (type === _b_.memoryview) return value.obj;
 
     return undefined;
 };
@@ -2327,6 +2395,8 @@ export function unsubscribe(owner) {
 // link is then checked by reading that one entry rather than every entry.
 // `loose` says the link was made through an attribute, which no storage of the
 // parent's can confirm, so `holds` keeps it.
+const SWEEP_FROM = 8;
+
 function inherit(parent, child, key, loose = false) {
     if (!watchable(child)) return child;
 
@@ -2350,17 +2420,33 @@ function inherit(parent, child, key, loose = false) {
     // both, and a mutation reaches the readers of either.
     const marker = MARKS.get(parent);
 
-    if (own.parents === undefined) own.parents = [marker];
-    else if (!own.parents.includes(marker)) {
+    if (own.parents === undefined) {
+        own.parents = [marker];
+        own.linked = new WeakSet([marker]);
+        own.sweepAt = SWEEP_FROM;
+    } else if (!own.linked.has(marker)) {
         // The list grows here and only here, so it is swept here: a parent
         // whose container is gone leaves. `upwards` does the same when the
         // child changes, but a shared child may never change, and each mount
         // that wrapped it in a container of its own left one link behind.
-        for (let i = own.parents.length - 1; i >= 0; i--) {
-            if (own.parents[i].target.deref() === undefined) own.parents.splice(i, 1);
+        //
+        // Once the list has doubled since it was last swept, and in place,
+        // since a climb in progress reads it by index: swept at every growth,
+        // a child shared by n containers, a class read through each of its
+        // instances, paid for n² links.
+        if (own.parents.length >= own.sweepAt) {
+            let kept = 0;
+
+            for (const one of own.parents) {
+                if (one.target.deref() === undefined) own.linked.delete(one);
+                else own.parents[kept++] = one;
+            }
+            own.parents.length = kept;
+            own.sweepAt = Math.max(SWEEP_FROM, 2 * kept);
         }
 
         own.parents.push(marker);
+        own.linked.add(marker);
     }
 
     // Keyed on the container, not on its marker: the child holds the marker

@@ -4,6 +4,7 @@
 // which `tests/keys.test.js` holds.
 import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
+import * as ownEquality from './fixtures/own_equality_keys.py';
 import KeyIdentity from './fixtures/KeyIdentity.svelte';
 import NumericKey from './fixtures/NumericKey.svelte';
 import BigintKey from './fixtures/BigintKey.svelte';
@@ -73,6 +74,37 @@ test('a value keyed by repr() and its spelling are two keys', () => {
 
 test('two NaN are two keys', () => {
     expect(setup().at('nans').textContent).toBe('nannan');
+});
+
+// A tuple whose class defines its own `__eq__` or `__hash__` keys by identity,
+// as an instance does, alone or inside a tuple: its stored members say nothing
+// of what that class calls equal. Two `Distinct((1,))`, unequal to Python,
+// were one key, a context written twice and an `{#each}` refusing them as
+// duplicates. A class that only prints its own way keeps the tuple's equality,
+// and its value.
+test('a tuple or a float whose class defines its equality keys by identity', () => {
+    // The Python list's own members, which a view would hand over as views
+    // and numbers.
+    const members = (rows) => Array.from(globalThis.__BRYTHON__.PYOBJ_MAP.get(rows));
+    const keys = (rows) => members(rows).map((one) => __pybridge.key(one));
+
+    const [first, second] = keys(ownEquality.distinct);
+    expect(first).not.toBe(second);
+    expect(__pybridge.key(members(ownEquality.distinct)[0])).toBe(first);
+
+    const [one, two] = keys(ownEquality.joined);
+    expect(one).not.toBe(two);
+
+    const [a, b] = keys(ownEquality.spelled);
+    expect(a).toBe(b);
+
+    const [outer, other, again] = keys(ownEquality.nested);
+    expect(outer).not.toBe(other);
+    expect(outer).toBe(again);
+
+    // A number's class too, which a key otherwise reads as the number.
+    const [half, otherHalf] = keys(ownEquality.exact);
+    expect(half).not.toBe(otherHalf);
 });
 
 // A tuple keys by what makes it equal, its members: an instance in it by
