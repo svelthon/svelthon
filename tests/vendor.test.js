@@ -844,7 +844,7 @@ test('a memoryview reads and writes its buffer as CPython does: memoryview-index
 // did not take or already had, `list.clear() takes no arguments (1 given)`; and
 // `conjugate()` of an int answered nothing, of a float raised. `python3` on the
 // same module gives these lines.
-test('a builtin as __call__ is called as it is, and a number has its conjugate: call-builtin-unbound, number-conjugate', async () => {
+test('a builtin as __call__ is called as it is, and a number has its conjugate: call-builtin-unbound, int-conjugate, float-conjugate', async () => {
     const { answers } = await import('./fixtures/builtin_call.py');
 
     expect([...answers()]).toEqual(['(None, [])', '2', "{'a': None}", "'ABC'", '(3, 1, 0.25)']);
