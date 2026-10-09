@@ -370,40 +370,110 @@ export function walrus(expression) {
 export function overMarkup(content, transform) {
     let out = '';
     let cut = 0;
-    let block;
 
-    for (const found = blocks(); (block = found.exec(content)); ) {
-        out += transform(content.slice(cut, block.index), cut) + block[0];
-        cut = block.index + block[0].length;
+    for (const block of componentParts(content).blocks) {
+        out += transform(content.slice(cut, block.index), cut) + block.text;
+        cut = block.index + block.text.length;
     }
 
     return out + transform(content.slice(cut), cut);
 }
 
-// The template chunk by chunk, as `overMarkup` hands it, with the snippets
-// declared at its top level known to every chunk: Svelte hoists a `{#snippet}`
-// across the whole component, so a `<style>` between a use and its declaration
-// cuts the markup in two and not the scope. `where` is `{ filename, content }`
-// when there is a file to name a position in; each chunk adds its offset.
+// The whole template in one piece, every script and style in it made inert
+// text of its own length, its line breaks kept, so positions still count on
+// the file: a `<style>` inside an `{#each}` cuts nothing, the loop's names
+// reach the expressions after it, and a snippet declared below one is known
+// above it. The blocks go back in once `transform` has rewritten the rest.
+// `where` is `{ filename, content }` when there is a file to name a position
+// in.
 export function overTemplate(content, transform, where) {
-    const hoisted = new Set();
-    const at = (offset) => (where === undefined ? undefined : { ...where, offset });
+    const { blocks } = componentParts(content);
+    let masked = '';
+    let cut = 0;
 
-    overMarkup(content, (markup, offset) => {
-        for (const name of topSnippets(markup, at(offset))) hoisted.add(name);
+    for (const block of blocks) {
+        masked += content.slice(cut, block.index) + INERT + blank(block.text.slice(1, -1)) + INERT;
+        cut = block.index + block.text.length;
+    }
 
-        return markup;
-    });
+    const out = transform(masked + content.slice(cut), 0, where === undefined ? undefined : { ...where, offset: 0 });
+    let next = 0;
 
-    return overMarkup(content, (markup, offset) => transform(markup, offset, hoisted, at(offset)));
+    return out.replace(INERT_RUN, () => blocks[next++].text);
 }
 
-// The blocks a component actually has: name, attributes, closing tag. A fresh
-// regex per call, because `lastIndex` on a shared `/g` is state and two walks of
-// one file would resume in each other's middle. A quoted value is read whole,
-// as Svelte's parser reads it, so a `>` inside one does not end the tag.
-const BLOCK = /<(script|style)\b((?:[^>"']|"[^"]*"|'[^']*')*)>[\s\S]*?(<\/\1\s*>)/;
-const blocks = () => new RegExp(BLOCK.source, 'gi');
+const INERT = '\u0001';
+const INERT_RUN = /\u0001[^\u0001]*\u0001/g;
+
+// The blocks a component has, and its comments, found as Svelte's parser finds
+// them: walking the markup with a comment, an expression and a tag stepped over
+// whole. A `<style>` quoted in a Python string, `{f"<style>{x}</style>"}`, or
+// in an attribute's value is text, and so is a `<script lang="python">` there:
+// it declares no Python. A block's body is raw text up to the tag that closes
+// it, as the parser reads it.
+//
+// The block itself, name, attributes and closing tag, is read by `BLOCK` where
+// a tag opens. A quoted value is read whole, so a `>` inside one does not end
+// the tag.
+const BLOCK = /<(script|style)\b((?:[^>"']|"[^"]*"|'[^']*')*)>[\s\S]*?(<\/\1\s*>)/iy;
+const TAG_START = /<\/?\p{ID_Start}/uy;
+
+export function componentParts(content) {
+    const blocks = [];
+    const comments = [];
+    const past = (close) => (close === -1 ? content.length : close + 1);
+
+    for (let i = 0; i < content.length; ) {
+        if (content.startsWith('<!--', i)) {
+            const end = content.indexOf('-->', i + 4);
+            const stop = end === -1 ? content.length : end + 3;
+
+            comments.push({ index: i, text: content.slice(i, stop) });
+            i = stop;
+        } else if (content[i] === '{') {
+            i = past(closingBrace(content, i));
+        } else if (content[i] === '<') {
+            BLOCK.lastIndex = i;
+            const block = BLOCK.exec(content);
+
+            if (block !== null) {
+                blocks.push({ index: i, text: block[0], name: block[1], attributes: block[2], closing: block[3] });
+                i += block[0].length;
+            } else {
+                i = tagEnd(content, i, past);
+            }
+        } else {
+            i++;
+        }
+    }
+
+    return { blocks, comments };
+}
+
+// Past a tag that opens at `at`: its quoted values, which may hold a `{…}`, and
+// its `{…}` read whole. A `<` that opens no tag is one character of text.
+function tagEnd(content, at, past) {
+    TAG_START.lastIndex = at;
+    if (!TAG_START.test(content)) return at + 1;
+
+    for (let i = at + 1; i < content.length; ) {
+        const c = content[i];
+
+        if (c === '>') return i + 1;
+        if (c === '{') {
+            i = past(closingBrace(content, i));
+        } else if (c === '"' || c === "'") {
+            let j = i + 1;
+
+            while (j < content.length && content[j] !== c) j = content[j] === '{' ? past(closingBrace(content, j)) : j + 1;
+            i = j + 1;
+        } else {
+            i++;
+        }
+    }
+
+    return content.length;
+}
 
 // `lang="python"` as an attribute of its own, and not as three letters inside
 // another name: not `data-lang`, a hyphen being no word character. The value

@@ -686,13 +686,16 @@ function spreadOf(value, convert) {
 //
 // And an attribute written or deleted by name, `object.__setattr__(box, "value",
 // 1)`: the same write `box.value = 1` makes, reached through the type.
+//
+// And a view's life ending, `release()` or the exit of `with view:`: its
+// buffer does not change, the view does, and every read of it now raises.
 const MUTATORS = new Set([
     '__setitem__', '__delitem__', '__init__', '__setattr__', '__delattr__',
     '__iadd__', '__imul__', '__ior__', '__iand__', '__isub__', '__ixor__',
     'append', 'extend', 'insert', 'remove', 'pop', 'clear', 'sort', 'reverse',
     'add', 'discard', 'update', 'setdefault', 'popitem', 'appendleft',
     'extendleft', 'popleft', 'rotate', 'intersection_update',
-    'difference_update', 'symmetric_difference_update'
+    'difference_update', 'symmetric_difference_update', 'release', '__exit__'
 ]);
 
 // Methods that hand out a container the caller can then mutate, without any

@@ -9,6 +9,24 @@
 import { test, expect } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import BufferView from './fixtures/BufferView.svelte';
+import BufferRelease from './fixtures/BufferRelease.svelte';
+
+// A view released repaints what reads it, whichever way it was released: its
+// buffer does not change, the view does. The model read `released` and the page
+// went on showing `2` until something else it read changed.
+test.for(['called', 'kept', 'through its type', 'with'])('a memoryview released, %s, repaints', (how) => {
+    const target = document.body.appendChild(document.createElement('div'));
+    const instance = mount(BufferRelease, { target });
+
+    flushSync();
+    expect(target.querySelector('p').textContent).toBe('2');
+
+    instance.close(how);
+    flushSync();
+
+    expect(target.querySelector('p').textContent).toBe('released');
+    expect(instance.held()).toBe('released');
+});
 
 test.for([
     ['buffer', '120,98|98'],
