@@ -5136,7 +5136,7 @@ function declared(value) {
     }
 
     const method = boundMethod(value) ? value : null;
-    const call = method === null ? callDescriptor(value) : null;
+    const call = method === null ? finalCall(callDescriptor(value)) : null;
 
     if (method === null && call === null && typeof value !== 'function') return slotDeclared(value);
 
@@ -5304,7 +5304,9 @@ function liveArity(value) {
 // instance never handed to it. A builtin bound to a receiver of its own,
 // `__call__ = rows.clear`, takes none when it declares none, as `rows.clear`
 // handed over directly does.
-function callArity(call) {
+function callArity(held) {
+    const call = finalCall(held);
+
     if (boundMethod(call)) return signatureArity(call.im_func, 1);
     if (nativeBound(call)) return takesNoPositional(call) ? 0 : Infinity;
     if (call.sm_callable !== undefined) return signatureArity(call.sm_callable, 0);
@@ -5321,6 +5323,29 @@ const signatureArity = (fn, receiver) => {
 
     return infos[8] ? Infinity : infos[10] - receiver;
 };
+
+// Where a class's `__call__` lands when it is itself a callable instance,
+// `__call__ = zero`: the `__call__` of that instance's class, and so on, as
+// Python's call protocol follows it, a cycle stopping where it closes. A
+// method, a static or class method, a builtin or a function is where it lands.
+function finalCall(call) {
+    const seen = new Set();
+
+    while (callableInstance(call) && !seen.has(call)) {
+        seen.add(call);
+        call = callDescriptor(call);
+    }
+
+    return call;
+}
+
+const callableInstance = (value) =>
+    value !== null &&
+    typeof value === 'object' &&
+    value.sm_callable === undefined &&
+    value.cm_callable === undefined &&
+    !wrapperMethod(value) &&
+    callDescriptor(value) !== null;
 
 // A builtin bound to its receiver, `rows.clear`: a JavaScript function carrying
 // `m_self`, the third representation of a bound method in this engine.
