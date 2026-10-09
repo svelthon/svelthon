@@ -824,6 +824,22 @@ test('a wrong number of arguments is told in the count the caller wrote: nb-args
     ]);
 });
 
+// A memoryview's slice was a view of a copy, an item read from the end was
+// `undefined`, a write out of the view or of -1 was "read-only memory" or
+// wrote `-1` into the bytearray, and a released view read on. `python3` on the
+// same module gives these lines.
+test('a memoryview reads and writes its buffer as CPython does: memoryview-index-error, memoryview-released, memoryview-slice-shares', async () => {
+    const { answers } = await import('./fixtures/memoryview_contract.py');
+
+    expect([...answers()]).toEqual([
+        "([120, 122], b'axz', True)",
+        '99',
+        'IndexError: index out of bounds on dimension 1',
+        "ValueError: memoryview: invalid value for format 'B'",
+        'ValueError: operation forbidden on released memoryview object'
+    ]);
+});
+
 // A module named with a quote, from a file such as `src/Jean's app/Page.svelte`,
 // had its name pasted between quotes in the code of every def, lambda, class
 // and comprehension, which then stopped parsing.
