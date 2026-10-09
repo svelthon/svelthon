@@ -5306,11 +5306,15 @@ export function pyAttach(value) {
     if (attach === undefined) {
         const { fn: called, where, arity } = found;
 
+        // Exports flushed as the handler flushes them, before Svelte reads on:
+        // a `bytearray` the attachment changed is an export already copied.
         attach = (...args) => {
             try {
                 return pyTeardown(called(...taken(args, arity)), where);
             } catch (error) {
                 throw thrown(pyError(error, where));
+            } finally {
+                flushExports();
             }
         };
 

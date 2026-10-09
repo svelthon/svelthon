@@ -1,5 +1,6 @@
 import { test, expect } from 'vitest';
 import { mount, flushSync } from './mounted.js';
+import { pyAttach, pyEvent, pyHandler } from '../src/lib/runtime.js';
 import * as python from './fixtures/crossing_bytes.py';
 import BytesHost from './fixtures/BytesHost.svelte';
 
@@ -73,4 +74,20 @@ test('a bytearray is taken again when Python changes it', () => {
     host.grow();
     flushSync();
     expect(shown()).toBe('true 97,98,99');
+});
+
+// Every door that hands control back to JavaScript after Python ran, an event
+// handler, a callback and an attachment, leaves an exported bytearray as Python
+// left it: what JavaScript reads right after is the new bytes. An attachment
+// left the old copy until a microtask later, and a JavaScript attachment beside
+// it had read that one for good.
+test.for(['pyEvent', 'pyHandler', 'pyAttach'])('a bytearray changed through %s is read new at once', (door) => {
+    const $B = globalThis.__BRYTHON__;
+    const grow = $B.$getattr($B.imported.crossing_bytes, 'grow');
+    const doors = { pyEvent, pyHandler, pyAttach };
+    const before = python.buffer.length;
+
+    doors[door](grow)(document.createElement('div'));
+
+    expect(python.buffer.length).toBe(before + 1);
 });
