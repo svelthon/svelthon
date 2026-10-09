@@ -4330,7 +4330,10 @@ function branch(value, seen, shell, adapt) {
 
     const out = shell ?? {};
 
-    for (const [key, one] of pyItems(value, tuplePair)) {
+    // A row as the rule in force reads it: the serialiser's is `json.dumps`'s, a
+    // tuple of two; a copy for JavaScript reads it as `for key, one in
+    // value.items()` does, and a pair written as a list is a pair.
+    for (const [key, one] of pyItems(value, seen instanceof Set ? tuplePair : unpackedPair)) {
         define(out, propertyName(key, out, seen, adapt), plainData(one, seen, adapt));
     }
 
