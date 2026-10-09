@@ -2,6 +2,21 @@ import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import { pythonExpressions, collector } from '../src/lib/markup.js';
 import SnippetNames from './fixtures/SnippetNames.svelte';
+import SnippetAcrossStyle from './fixtures/SnippetAcrossStyle.svelte';
+
+// A `<style>` between a snippet's use and its declaration cuts the markup in
+// two and not the scope: Svelte hoists the snippet across the component. The
+// use above it found no `row` (`NameError`), or took the local snippet for a
+// foreign one and handed it a `Price` as a plain float.
+test('a snippet declared below a <style> is the one used above it', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+
+    mount(SnippetAcrossStyle, { target });
+    flushSync();
+
+    expect(target.querySelector('[data-k="handed"]').textContent).toBe('7');
+    expect(target.querySelector('[data-k="local"]').textContent).toBe('Price');
+});
 
 // A snippet is a value, which is what makes it more than the slot it replaced:
 // it can be written once and handed to a child, to two children, or chosen

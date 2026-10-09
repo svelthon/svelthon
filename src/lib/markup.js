@@ -380,6 +380,24 @@ export function overMarkup(content, transform) {
     return out + transform(content.slice(cut), cut);
 }
 
+// The template chunk by chunk, as `overMarkup` hands it, with the snippets
+// declared at its top level known to every chunk: Svelte hoists a `{#snippet}`
+// across the whole component, so a `<style>` between a use and its declaration
+// cuts the markup in two and not the scope. `where` is `{ filename, content }`
+// when there is a file to name a position in; each chunk adds its offset.
+export function overTemplate(content, transform, where) {
+    const hoisted = new Set();
+    const at = (offset) => (where === undefined ? undefined : { ...where, offset });
+
+    overMarkup(content, (markup, offset) => {
+        for (const name of topSnippets(markup, at(offset))) hoisted.add(name);
+
+        return markup;
+    });
+
+    return overMarkup(content, (markup, offset) => transform(markup, offset, hoisted, at(offset)));
+}
+
 // The blocks a component actually has: name, attributes, closing tag. A fresh
 // regex per call, because `lastIndex` on a shared `/g` is state and two walks of
 // one file would resume in each other's middle. A quoted value is read whole,
@@ -1507,12 +1525,25 @@ function lineColumn(content, offset) {
 // name a position: `markup` is one chunk of the file, `offset` is where that
 // chunk starts, and `content` is the whole of it. Optional, since the playground
 // and the range scan below compile a fragment that belongs to no file.
-export function pythonExpressions(markup, collect, onPython, where) {
+//
+// `hoisted` is what the chunks around this one declare at the top level
+// (`overTemplate`), which belongs to this one's base scope as well.
+export function pythonExpressions(markup, collect, onPython, where, hoisted = []) {
+    const named = new Map();
+
+    walk(markup, () => '__probe', undefined, new Map(), named, where);
+    named.set(0, [...new Set([...(named.get(0) ?? []), ...hoisted])]);
+
+    return walk(markup, collect, onPython, named, null, where);
+}
+
+// The snippet names a chunk declares at its top level, by the first walk alone.
+function topSnippets(markup, where) {
     const named = new Map();
 
     walk(markup, () => '__probe', undefined, new Map(), named, where);
 
-    return walk(markup, collect, onPython, named, null, where);
+    return named.get(0) ?? [];
 }
 
 // A tag's opening, read where the walk stands rather than on a copy of the rest
@@ -2616,11 +2647,13 @@ export function pythonRanges(content) {
     const ranges = [];
     let n = 0;
 
-    overMarkup(content, (markup, offset) => {
+    overTemplate(content, (markup, offset, hoisted) => {
         pythonExpressions(
             markup,
             () => `__range_${n++}`,
-            (from, to) => ranges.push({ from: offset + from, to: offset + to })
+            (from, to) => ranges.push({ from: offset + from, to: offset + to }),
+            undefined,
+            hoisted
         );
 
         return markup;

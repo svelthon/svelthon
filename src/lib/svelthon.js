@@ -3,7 +3,7 @@ import { relative, resolve, dirname } from 'node:path';
 import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 
 import {
-    overMarkup,
+    overTemplate,
     pythonScript,
     pythonExpressions,
     collector,
@@ -420,10 +420,12 @@ export function python(options = {}) {
             // The collector itself is in markup.js, which the browser can load.
             const collect = collector(file.defs, file.defLines, file.defColumns);
 
-            const code = overMarkup(content, (markup, offset) =>
+            const code = overTemplate(
+                content,
                 // The chunk, and where it starts, so a refusal can name a
                 // line and a column in the file the author is looking at.
-                pythonExpressions(markup, collect, undefined, { filename, content, offset })
+                (markup, offset, hoisted, where) => pythonExpressions(markup, collect, undefined, where, hoisted),
+                { filename, content }
             );
 
             const python = content.slice(open, declaring.end);
