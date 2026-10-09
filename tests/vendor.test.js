@@ -859,6 +859,20 @@ test('an identifier is read in its normalized form: identifier-nfkc', async () =
     expect([...answers()]).toEqual(['field', 'flag', '8', 'full', 'composed', 'missing']);
 });
 
+// A method descriptor called through its type checks its receiver: `list.append`
+// handed an object that is not a list answered `None`, and `str.upper` handed
+// an int raised a `JavascriptError`.
+test('a method descriptor refuses a receiver of another type: method-descriptor-receiver', async () => {
+    const { answers } = await import('./fixtures/method_receiver.py');
+
+    expect([...answers()]).toEqual([
+        "descriptor 'append' for 'list' objects doesn't apply to a 'K' object",
+        "descriptor 'get' for 'dict' objects doesn't apply to a 'K' object",
+        "descriptor 'upper' for 'str' objects doesn't apply to a 'int' object",
+        '[5]'
+    ]);
+});
+
 // A module named with a quote, from a file such as `src/Jean's app/Page.svelte`,
 // had its name pasted between quotes in the code of every def, lambda, class
 // and comprehension, which then stopped parsing.

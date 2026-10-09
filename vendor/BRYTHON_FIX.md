@@ -1,7 +1,7 @@
 # Patches applied to the vendored Brython
 
 `brython_runtime.js` and `brython_compiler.js` are cut from one bundle, built
-from Brython's master of 11 September 2026 plus seventy-five proposed commits
+from Brython's master of 11 September 2026 plus seventy-six proposed commits
 and one merged upstream since, with **four** edits
 made in the file itself afterwards. The wrapper, the integer format and the
 `__call__` binding carry a `/* SVELTHON patch, see BRYTHON_FIX.md */` comment,
@@ -47,6 +47,7 @@ written against:
 | `memoryview-slice-shares` | a slice of a view is a view of the same buffer, an offset, a stride and a length in it, where it was a view of a copy: `memoryview(source)[1:]` read old bytes after `source` changed and wrote into nothing. Reading, writing, iterating, `tobytes`, `bytes()`, `cast` of a contiguous slice and `toreadonly` read through it. Written for the merged state of `memoryview-index-error`, whose item write it extends |
 | `call-builtin-unbound` | a builtin held as a class's `__call__`, `len`, `dict.fromkeys` or one bound to its own receiver like `rows.clear`, is called as it is: a builtin has no `__get__`, and only what has one is handed the instance. `$B.$call` handed it to every JavaScript function, so `class Clearer: __call__ = rows.clear` raised `list.clear() takes no arguments (1 given)` when called with none |
 | `identifier-nfkc` | an identifier holding a character past ASCII is normalized to NFKC, in `name_from_token`, through a `new_identifier` that now works: `box.ﬁeld` reads `field`, `Ⅷ` is `VIII`, and an accent written in two code points names what the one written in one names, where each raised `AttributeError` or `NameError`. A string is not normalized: `getattr(box, "ﬁeld")` still misses |
+| `method-descriptor-receiver` | a method descriptor called through its type checks that its receiver is an instance of the type, as the getset descriptor beside it already does: `list.append(K(), 5)` and `dict.get(K(), 1)` answered `None` where they raise `TypeError: descriptor 'append' for 'list' objects doesn't apply to a 'K' object`, and `str.upper(1)` raised a `JavascriptError` |
 | `int-conjugate` | `int.conjugate()` returns the int, `True.conjugate()` included, where its body was empty and it returned nothing (#3053) |
 | `float-conjugate` | `float.conjugate()` returns the float, where it raised `NotImplementedError` (#3044) |
 | `int-format-large` | `int.__format__` converts with `nb_float` before handing a float specification to `float.__format__`. `fast_float` wraps without converting, so an int of 2^53 or more arrived as a `BigInt` and `format(2 ** 53, '.2f')` raised `JavascriptError: Cannot convert a BigInt value to a number`; an int no double holds now raises CPython's `OverflowError` |
@@ -174,6 +175,7 @@ than by a build-time check, and going upstream retires none of them:
 | a memoryview reads an item from the end, refuses a write out of it or of a value no byte holds, refuses all once released, and a slice of it reads and writes the same buffer (master's `18571ba0d`, branches `memoryview-index-error`, `memoryview-released`, `memoryview-slice-shares`) | `tests/vendor.test.js`, and `tests/buffer-view.test.js`, a slice repainted with what `python3` reads |
 | a builtin held as `__call__` is called without the instance, and a number has its `conjugate()` (branches `call-builtin-unbound`, `int-conjugate`, `float-conjugate`) | `tests/vendor.test.js`, and `tests/callable-matrix.test.js`, an instance whose `__call__` is a bound builtin crossing to JavaScript |
 | an identifier is read in its NFKC form, a string is not (branch `identifier-nfkc`) | `tests/vendor.test.js`, and `tests/normalized-names.test.js`, a ligature and a decomposed accent in the markup |
+| a method descriptor called through its type refuses a receiver of another type (branch `method-descriptor-receiver`) | `tests/vendor.test.js` |
 | a set made from a JavaScript array holds Python floats, and one made from a list subclass holds what its `__iter__` yields (branch `set-update-iterates`) | `tests/vendor.test.js`, and `tests/synced-exports.test.js`, a set's walk over floats a JavaScript caller handed in |
 | an unhashable value is named by its type, and a set element or a dict key says what it was refused as (branches `unhashable-type-name`, `unhashable-element-context`, `unhashable-dict-key-context`) | `tests/vendor.test.js`, and `tests/synced-exports.test.js`, a write into a set's view refused and caught by the Python caller |
 

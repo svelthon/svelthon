@@ -28,9 +28,11 @@ test('and so does a dict mutator', () => {
     expect(mod.table_value()).toBe('2.5');
 });
 
+// The receiver is the list the module published, handed back: a JavaScript
+// array is not a `list` to Python, which `list.__len__` refused already.
 test('a reader and a method taken off the type cross as functions', () => {
     expect(mod.length()).toBe(1);
-    expect(mod.index_of([7, 8], 8)).toBe(1);
+    expect(mod.index_of(mod.rows, mod.rows[0])).toBe(0);
 });
 
 // One operation on one list is one callback, however many times it is read.
