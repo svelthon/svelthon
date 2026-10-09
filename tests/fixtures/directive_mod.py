@@ -27,6 +27,12 @@ def with_params(node, params):
     return {"duration": 0}
 
 
+def moved(node, rects, params):
+    # An animation given no value: Svelte still hands it the payload's place.
+    node.textContent = str(params is None)
+    return {"duration": 0}
+
+
 def configuration(node):
     def tick(t, u):
         node.textContent = format(t, ".2f") + "/" + format(u, ".2f")

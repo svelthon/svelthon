@@ -312,6 +312,27 @@ describe("Svelte's protocol, kept around the payload", () => {
         expect(py.textContent).toBe('0.50');
     });
 
+    // `animate:` is called with `get_params?.()`, three arguments whether the
+    // directive gives a value or not, where an action given none is called
+    // with the node alone. A JavaScript animation counts them, a Python one
+    // reads the absence as None.
+    test('an animation given no value still gets its place', () => {
+        mount(DirectiveModule, { target: document.body.appendChild(document.createElement('div')) });
+
+        let given;
+        const counted = (...args) => {
+            given = args.length;
+            return { duration: 0 };
+        };
+
+        directiveAnimate(node(), { from: {}, to: {} }, ['counted', () => counted]);
+        expect(given).toBe(3);
+
+        const py = node();
+        directiveAnimate(py, { from: {}, to: {} }, ['moved', () => python().moved]);
+        expect(py.textContent).toBe('True');
+    });
+
     // An optional callback written as None is absent: Svelte asks `if (tick)`,
     // and `None` is an object, so it was a callback to call.
     test.for(['nullable', 'nullable_instance', 'nullable_deferred'])('None callbacks are absent, %s', (key) => {

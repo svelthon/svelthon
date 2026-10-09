@@ -6052,9 +6052,12 @@ export function directiveTransition(node, [where, head, ...value], options) {
     return directiveCall(where, fn, [node, params, options]).result;
 }
 
-// `animate:`, called `(node, { from, to }, payload)`.
+// `animate:`, called `(node, { from, to }, payload)`, the payload's place kept
+// when the directive gives none, as Svelte keeps it: `undefined` to JavaScript,
+// None to Python. An action's is not, and Svelte calls a bare one with the node
+// alone.
 export function directiveAnimate(node, rects, [where, head, ...value]) {
-    return directiveCall(where, head(), [node, rects, ...value]).result;
+    return directiveCall(where, head(), [node, rects, value.length ? value[0] : undefined]).result;
 }
 
 // What a directive hands back, read by Svelte: an action's `update` and
