@@ -409,11 +409,9 @@ const INERT_RUN = /\u0001[^\u0001]*\u0001|\u0002/g;
 // hold whitespace before its `>`. Anywhere else it is an element like any
 // other, whose attributes are markup and whose body alone is raw text, up to
 // `</style>` exactly. A `<textarea>`'s content is text and expressions, and no
-// tag in it opens anything.
-//
-// An element whose closing tag HTML lets an author omit, a `<p>` closed by the
-// `<div>` after it, is counted open here until its parent closes; Svelte warns
-// about it, `element_implicitly_closed`.
+// tag in it opens anything. An element whose closing tag HTML lets an author
+// omit is closed where Svelte closes it (`CLOSED_BY`): a `<p>` by the `<div>`
+// after it, a `<li>` by the next `<li>`.
 const ROOT_BLOCK = /<(script|style)((?:\s(?:[^>"']|"[^"]*"|'[^']*')*)?)>[\s\S]*?(<\/\1\s*>)/y;
 const TEXTAREA_CLOSE = /<\/textarea(\s[^>]*)?>/iy;
 const LOGIC = '{';
@@ -437,6 +435,8 @@ export function componentParts(content) {
             if (opened !== -1 && !open.slice(opened).includes(LOGIC)) open.length = opened;
             return tagEnd(content, at);
         }
+
+        if (CLOSED_BY.get(open.at(-1))?.includes(name)) open.pop();
 
         if (open.length === 0 && (name === 'script' || name === 'style')) {
             ROOT_BLOCK.lastIndex = at;
@@ -506,6 +506,35 @@ export function componentParts(content) {
 
     return { blocks, comments };
 }
+
+// The elements an opening tag closes when it stands directly inside them,
+// Svelte's `closing_tag_omitted`, from HTML's rules for omitting an end tag.
+// Svelte's package does not export it, so this is a copy, which
+// `tests/component-blocks.test.js` holds against Svelte's own on every name
+// Svelte lists.
+const CLOSED_BY = new Map([
+    ['li', ['li']],
+    ['dt', ['dt', 'dd']],
+    ['dd', ['dt', 'dd']],
+    [
+        'p',
+        [
+            'address', 'article', 'aside', 'blockquote', 'div', 'dl', 'fieldset', 'footer', 'form',
+            'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'header', 'hgroup', 'hr', 'main', 'menu', 'nav',
+            'ol', 'p', 'pre', 'section', 'table', 'ul'
+        ]
+    ],
+    ['rt', ['rt', 'rp']],
+    ['rp', ['rt', 'rp']],
+    ['optgroup', ['optgroup']],
+    ['option', ['option', 'optgroup']],
+    ['thead', ['tbody', 'tfoot']],
+    ['tbody', ['tbody', 'tfoot']],
+    ['tfoot', ['tbody']],
+    ['tr', ['tr', 'tbody']],
+    ['td', ['td', 'th', 'tr']],
+    ['th', ['td', 'th', 'tr']]
+]);
 
 // Past the `{…}` that opens at `at`, or past its brace alone when nothing
 // closes it: an unclosed brace is the walk's to refuse, by name.
@@ -584,6 +613,12 @@ export function pythonScript(content) {
 // The component's own `<script>` whose attributes `declares` accepts.
 const componentScript = (content, declares) =>
     componentParts(content).blocks.find(({ top, name, attributes }) => top && name === 'script' && declares(attributes));
+
+// Where a `<script lang="python">` stands that is not the component's, inside an
+// element or a block, or `-1`: Svelte reads it as an element of the page.
+export const strayPythonScript = (content) =>
+    componentParts(content).blocks.find(({ top, name, attributes }) => !top && name === 'script' && declaresPython(attributes))
+        ?.index ?? -1;
 
 // `bind:` needs to read *and* write, which no single expression can do. Svelte
 // takes a pair for exactly that, `bind:value={() => v, (n) => v = n}`, so the

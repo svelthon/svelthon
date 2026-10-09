@@ -5,6 +5,7 @@ import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 import {
     overMarkup,
     pythonScript,
+    strayPythonScript,
     pythonExpressions,
     collector,
     moduleScript,
@@ -156,6 +157,26 @@ function refuseSpacedClose(closing, filename, root) {
             `Python is handed to the compiler as JavaScript and every name it declares is ` +
             `missing at run time. Close it with \`</script>\` ` +
             `(${shownPath(filename, root)})`
+    );
+}
+
+// A Python script inside an element or a block, which Svelte reads as an element
+// of the page and not as the component's script: the markup would stay
+// JavaScript, and its first expression only Python can run would fail at run
+// time, far from the cause. An element whose closing tag is omitted counts, so
+// a `<p>` left open before the script is named.
+function refuseStrayPython(content, filename, root) {
+    const at = strayPythonScript(content);
+
+    if (at === -1) return;
+
+    throw new SyntaxError(
+        `svelthon — this \`<script lang="python">\` stands inside an element or a block, ` +
+            `where Svelte reads it as an element of the page and not as the component's ` +
+            `script, so the markup would stay JavaScript. Move it to the top level of the ` +
+            `file, outside every element and every block; an element whose closing tag is ` +
+            `left out, such as a \`<p>\`, is still open ` +
+            `(${shownPath(filename, root)}:${content.slice(0, at).split('\n').length})`
     );
 }
 
@@ -396,7 +417,7 @@ export function python(options = {}) {
             // Python, never injected behind an author's back.
             const declaring = pythonScript(content);
 
-            if (declaring === null) return;
+            if (declaring === null) return refuseStrayPython(content, filename, root);
 
             refuseSpacedClose(declaring.closing, filename, root);
 
