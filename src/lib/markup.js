@@ -359,69 +359,132 @@ export function walrus(expression) {
     return out;
 }
 
-// Only the markup, never a <script> or <style> body: Python is full of braces
-// (dict literals, f-strings) and rewriting them would be catastrophic.
+// The markup of a component, and nothing else: Python is full of braces (dict
+// literals, f-strings) and so is CSS, and rewriting a script's or a style's body
+// would be catastrophic.
 //
-// `transform` is given where its chunk starts, for a caller that needs to map
-// what it finds back onto the original file rather than only rewrite it.
-//
-// `\s*` before the closing `>`, because HTML allows it there and Svelte parses
-// it: `</script >` closes its block, whose body is then not markup.
+// In one piece, so the scopes it opens hold across every script and style in
+// it: a `<style>` inside an `{#each}` cuts nothing, the loop's names reach the
+// expressions after it, and a snippet declared below one is known above it.
+// What is not markup is made inert text of its own length, so a position in
+// what `transform` is handed counts on the file, which `offset` says the start
+// of. A script or a style of the component is inert whole; a nested one is an
+// element whose body alone is, its tag and its attributes being markup. Each
+// goes back in once `transform` has rewritten the rest.
 export function overMarkup(content, transform) {
-    let out = '';
-    let cut = 0;
-
-    for (const block of componentParts(content).blocks) {
-        out += transform(content.slice(cut, block.index), cut) + block.text;
-        cut = block.index + block.text.length;
-    }
-
-    return out + transform(content.slice(cut), cut);
-}
-
-// The whole template in one piece, every script and style in it made inert
-// text of its own length, its line breaks kept, so positions still count on
-// the file: a `<style>` inside an `{#each}` cuts nothing, the loop's names
-// reach the expressions after it, and a snippet declared below one is known
-// above it. The blocks go back in once `transform` has rewritten the rest.
-// `where` is `{ filename, content }` when there is a file to name a position
-// in.
-export function overTemplate(content, transform, where) {
-    const { blocks } = componentParts(content);
+    const inert = [];
     let masked = '';
     let cut = 0;
 
-    for (const block of blocks) {
-        masked += content.slice(cut, block.index) + INERT + blank(block.text.slice(1, -1)) + INERT;
-        cut = block.index + block.text.length;
+    for (const block of componentParts(content).blocks) {
+        const [from, to] = block.top ? [block.index, block.index + block.text.length] : block.body;
+        const text = content.slice(from, to);
+
+        if (text === '') continue;
+
+        inert.push(text);
+        masked += content.slice(cut, from) + (text.length === 1 ? INERT_ONE : INERT + blank(text.slice(1, -1)) + INERT);
+        cut = to;
     }
 
-    const out = transform(masked + content.slice(cut), 0, where === undefined ? undefined : { ...where, offset: 0 });
     let next = 0;
 
-    return out.replace(INERT_RUN, () => blocks[next++].text);
+    return transform(masked + content.slice(cut), 0).replace(INERT_RUN, () => inert[next++]);
 }
 
 const INERT = '\u0001';
-const INERT_RUN = /\u0001[^\u0001]*\u0001/g;
+const INERT_ONE = '\u0002';
+const INERT_RUN = /\u0001[^\u0001]*\u0001|\u0002/g;
 
 // The blocks a component has, and its comments, found as Svelte's parser finds
 // them: walking the markup with a comment, an expression and a tag stepped over
 // whole. A `<style>` quoted in a Python string, `{f"<style>{x}</style>"}`, or
 // in an attribute's value is text, and so is a `<script lang="python">` there:
-// it declares no Python. A block's body is raw text up to the tag that closes
-// it, as the parser reads it.
+// it declares no Python.
 //
-// The block itself, name, attributes and closing tag, is read by `BLOCK` where
-// a tag opens. A quoted value is read whole, so a `>` inside one does not end
-// the tag.
-const BLOCK = /<(script|style)\b((?:[^>"']|"[^"]*"|'[^']*')*)>[\s\S]*?(<\/\1\s*>)/iy;
-const TAG_START = /<\/?\p{ID_Start}/uy;
+// Where a block stands says what it is. At the root, outside every element and
+// every `{#…}`, a `<script>` or a `<style>` is the component's own (`top`): its
+// attributes are static text, a quoted value read whole so a `>` inside one
+// does not end the tag, and its body runs to the tag that closes it, which may
+// hold whitespace before its `>`. Anywhere else it is an element like any
+// other, whose attributes are markup and whose body alone is raw text, up to
+// `</style>` exactly. A `<textarea>`'s content is text and expressions, and no
+// tag in it opens anything.
+//
+// An element whose closing tag HTML lets an author omit, a `<p>` closed by the
+// `<div>` after it, is counted open here until its parent closes; Svelte warns
+// about it, `element_implicitly_closed`.
+const ROOT_BLOCK = /<(script|style)((?:\s(?:[^>"']|"[^"]*"|'[^']*')*)?)>[\s\S]*?(<\/\1\s*>)/y;
+const TEXTAREA_CLOSE = /<\/textarea(\s[^>]*)?>/iy;
+const LOGIC = '{';
 
 export function componentParts(content) {
     const blocks = [];
     const comments = [];
-    const past = (close) => (close === -1 ? content.length : close + 1);
+    const open = [];
+
+    const element = (at) => {
+        TAG_OPEN.lastIndex = at;
+        const tag = TAG_OPEN.exec(content);
+
+        if (tag === null) return at + 1;
+
+        const [, closing, name] = tag;
+
+        if (closing) {
+            const opened = open.lastIndexOf(name);
+
+            if (opened !== -1 && !open.slice(opened).includes(LOGIC)) open.length = opened;
+            return tagEnd(content, at);
+        }
+
+        if (open.length === 0 && (name === 'script' || name === 'style')) {
+            ROOT_BLOCK.lastIndex = at;
+            const block = ROOT_BLOCK.exec(content);
+
+            if (block !== null) {
+                const end = at + block[0].length;
+                const body = [at + `<${name}${block[2]}>`.length, end - block[3].length];
+
+                blocks.push({ top: true, index: at, text: block[0], name, attributes: block[2], closing: block[3], body });
+                return end;
+            }
+        }
+
+        const end = tagEnd(content, at);
+
+        if (content[end - 2] === '/') return end;
+
+        if (name === 'script' || name === 'style') {
+            const close = content.indexOf(`</${name}>`, end);
+            const stop = close === -1 ? content.length : close;
+            const after = close === -1 ? stop : close + name.length + 3;
+
+            blocks.push({
+                top: false,
+                index: at,
+                text: content.slice(at, after),
+                name,
+                attributes: content.slice(at + 1 + name.length, end - 1),
+                closing: content.slice(stop, after),
+                body: [end, stop]
+            });
+            return after;
+        }
+
+        if (name === 'textarea') {
+            for (let i = end; i < content.length; ) {
+                TEXTAREA_CLOSE.lastIndex = i;
+                if (TEXTAREA_CLOSE.test(content)) return TEXTAREA_CLOSE.lastIndex;
+                i = content[i] === '{' ? pastBrace(content, i) : i + 1;
+            }
+
+            return content.length;
+        }
+
+        if (isComponent({ name }) || !VOID.has(name.toLowerCase())) open.push(name);
+        return end;
+    };
 
     for (let i = 0; i < content.length; ) {
         if (content.startsWith('<!--', i)) {
@@ -431,17 +494,11 @@ export function componentParts(content) {
             comments.push({ index: i, text: content.slice(i, stop) });
             i = stop;
         } else if (content[i] === '{') {
-            i = past(closingBrace(content, i));
+            if (content[i + 1] === '#') open.push(LOGIC);
+            else if (content[i + 1] === '/' && open.includes(LOGIC)) open.length = open.lastIndexOf(LOGIC);
+            i = pastBrace(content, i);
         } else if (content[i] === '<') {
-            BLOCK.lastIndex = i;
-            const block = BLOCK.exec(content);
-
-            if (block !== null) {
-                blocks.push({ index: i, text: block[0], name: block[1], attributes: block[2], closing: block[3] });
-                i += block[0].length;
-            } else {
-                i = tagEnd(content, i, past);
-            }
+            i = element(i);
         } else {
             i++;
         }
@@ -450,22 +507,27 @@ export function componentParts(content) {
     return { blocks, comments };
 }
 
-// Past a tag that opens at `at`: its quoted values, which may hold a `{…}`, and
-// its `{…}` read whole. A `<` that opens no tag is one character of text.
-function tagEnd(content, at, past) {
-    TAG_START.lastIndex = at;
-    if (!TAG_START.test(content)) return at + 1;
+// Past the `{…}` that opens at `at`, or past its brace alone when nothing
+// closes it: an unclosed brace is the walk's to refuse, by name.
+const pastBrace = (content, at) => {
+    const close = closingBrace(content, at);
 
+    return close === -1 ? at + 1 : close + 1;
+};
+
+// Past the tag that opens at `at`: its quoted values, which may hold a `{…}`,
+// and its `{…}`, read whole.
+function tagEnd(content, at) {
     for (let i = at + 1; i < content.length; ) {
         const c = content[i];
 
         if (c === '>') return i + 1;
         if (c === '{') {
-            i = past(closingBrace(content, i));
+            i = pastBrace(content, i);
         } else if (c === '"' || c === "'") {
             let j = i + 1;
 
-            while (j < content.length && content[j] !== c) j = content[j] === '{' ? past(closingBrace(content, j)) : j + 1;
+            while (j < content.length && content[j] !== c) j = content[j] === '{' ? pastBrace(content, j) : j + 1;
             i = j + 1;
         } else {
             i++;
@@ -506,24 +568,22 @@ const declaresPython = (text) => attributesOf(text).get('lang') === 'python';
 // at a `"</scriptx>"` the Python holds, and how it is closed, or `null` for a
 // file that declares none.
 //
-// Read from the blocks themselves, never from the text of the whole file: a
-// JavaScript component holding `const example = '<script lang="python">'`, a
+// Read from the component's own blocks, never from the text of the whole file:
+// a JavaScript component holding `const example = '<script lang="python">'`, a
 // string, a doc page, a code sample, declares nothing, and neither does a tag
-// quoted in a `<style>` body.
+// quoted in a `<style>` body, in an expression or in a comment, nor a script
+// nested in an element, which is one.
 export function pythonScript(content) {
-    let block;
+    const block = componentScript(content, declaresPython);
 
-    for (const found = blocks(); (block = found.exec(content)); ) {
-        if (block[1].toLowerCase() === 'script' && declaresPython(block[2])) {
-            const body = block.index + `<${block[1]}${block[2]}>`.length;
-            const end = block.index + block[0].length - block[3].length;
+    if (block === undefined) return null;
 
-            return { index: block.index, body, end, closing: block[3] };
-        }
-    }
-
-    return null;
+    return { index: block.index, body: block.body[0], end: block.body[1], closing: block.closing };
 }
+
+// The component's own `<script>` whose attributes `declares` accepts.
+const componentScript = (content, declares) =>
+    componentParts(content).blocks.find(({ top, name, attributes }) => top && name === 'script' && declares(attributes));
 
 // `bind:` needs to read *and* write, which no single expression can do. Svelte
 // takes a pair for exactly that, `bind:value={() => v, (n) => v = n}`, so the
@@ -1592,28 +1652,15 @@ function lineColumn(content, offset) {
 // The parameters are the other half: `x` belongs *inside* the block, the name
 // belongs outside it.
 // `where` is `{ filename, content, offset }`, and it is what a refusal needs to
-// name a position: `markup` is one chunk of the file, `offset` is where that
-// chunk starts, and `content` is the whole of it. Optional, since the playground
-// and the range scan below compile a fragment that belongs to no file.
-//
-// `hoisted` is what the chunks around this one declare at the top level
-// (`overTemplate`), which belongs to this one's base scope as well.
-export function pythonExpressions(markup, collect, onPython, where, hoisted = []) {
+// name a position: `offset` is where `markup` starts in the file, and `content`
+// is the whole of it. Optional, since the playground and the range scan below
+// compile a fragment that belongs to no file.
+export function pythonExpressions(markup, collect, onPython, where) {
     const named = new Map();
 
     walk(markup, () => '__probe', undefined, new Map(), named, where);
-    named.set(0, [...new Set([...(named.get(0) ?? []), ...hoisted])]);
 
     return walk(markup, collect, onPython, named, null, where);
-}
-
-// The snippet names a chunk declares at its top level, by the first walk alone.
-function topSnippets(markup, where) {
-    const named = new Map();
-
-    walk(markup, () => '__probe', undefined, new Map(), named, where);
-
-    return named.get(0) ?? [];
 }
 
 // A tag's opening, read where the walk stands rather than on a copy of the rest
@@ -2717,13 +2764,11 @@ export function pythonRanges(content) {
     const ranges = [];
     let n = 0;
 
-    overTemplate(content, (markup, offset, hoisted) => {
+    overMarkup(content, (markup, offset) => {
         pythonExpressions(
             markup,
             () => `__range_${n++}`,
-            (from, to) => ranges.push({ from: offset + from, to: offset + to }),
-            undefined,
-            hoisted
+            (from, to) => ranges.push({ from: offset + from, to: offset + to })
         );
 
         return markup;
@@ -2742,12 +2787,24 @@ export function pythonRanges(content) {
 // `<script lang="python">` there turned a JavaScript component's expressions
 // into Python, a `<script module>` there hid the real one's imports. Replaced by
 // blanks rather than removed, so every offset still counts on the same string.
-// A comment is one only in the markup: inside a `<script>` or a `<style>`,
-// `'<!--'` is the author's text, and is left as written.
-export const withoutComments = (content) =>
-    content.replace(new RegExp(`${BLOCK.source}|<!--[\\s\\S]*?-->`, 'gi'), (found, element) =>
-        element === undefined ? found.replace(/[^\n]/g, ' ') : found
-    );
+// A comment is one only in the markup: inside a `<script>`, a `<style>` or an
+// expression, `'<!--'` is the author's text, and is left as written.
+export const withoutComments = (content) => blanked(content, componentParts(content).comments.map(span));
+
+// `content` with each of `spans`, in order, blanked.
+const blanked = (content, spans) => {
+    let out = '';
+    let cut = 0;
+
+    for (const [from, to] of spans) {
+        out += content.slice(cut, from) + blank(content.slice(from, to));
+        cut = to;
+    }
+
+    return out + content.slice(cut);
+};
+
+const span = (one) => [one.index, one.index + one.text.length];
 
 // The markup alone, for a reading of what only the markup holds: an option, a
 // directive. The comments go, and so do the bodies of scripts and styles, whose
@@ -2760,12 +2817,7 @@ const blank = (text) => text.replace(/[^\n]/g, ' ');
 const QUOTED_TAG = /"[^"]*<[^"]*"|'[^']*<[^']*'/g;
 
 // Each script's and style's body blanked, its tags kept as written.
-export const blankBodies = (content) =>
-    content.replace(blocks(), (found, name, attributes, close) => {
-        const open = `<${name}${attributes}>`;
-
-        return open + blank(found.slice(open.length, found.length - close.length)) + close;
-    });
+export const blankBodies = (content) => blanked(content, componentParts(content).blocks.map((one) => one.body));
 
 // Every expression's content blanked, its braces kept, found as Svelte finds
 // it: a `{` opens one wherever it stands, and its end is the brace that closes
@@ -2796,24 +2848,17 @@ export const markupOnly = (content) =>
             (found) => found.replace(QUOTED_TAG, blank)
         );
 
-// Found by `blocks()`, as the Python block is, which steps over a `<style>`
-// whole: a `<script module>` quoted in a stylesheet is not the module.
+// Found among the component's own blocks, as the Python block is: a `<script
+// module>` quoted in a stylesheet, an expression or a comment is not the module.
 const declaresModule = (text) => {
     const attributes = attributesOf(text);
     return attributes.has('module') || attributes.get('context') === 'module';
 };
 
+// The whole element, attributes included: `lang="ts"` says how its content
+// parses.
 export function moduleScript(content) {
-    const text = withoutComments(content);
-    let block;
-
-    for (const found = blocks(); (block = found.exec(text)); ) {
-        // The whole element, attributes included: `lang="ts"` says how its
-        // content parses.
-        if (block[1].toLowerCase() === 'script' && declaresModule(block[2])) return block[0];
-    }
-
-    return null;
+    return componentScript(content, declaresModule)?.text ?? null;
 }
 
 

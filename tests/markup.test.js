@@ -15,7 +15,7 @@ import {
 } from '../src/lib/markup.js';
 
 // The directive heads the markup pass compiles, read off the functions it
-// generates, through the chunks the preprocessor hands it: a script and a
+// generates, through the markup the preprocessor hands it: a script and a
 // comment are not markup.
 const directiveHeads = (content) => {
     const defs = [];
@@ -207,18 +207,21 @@ describe('overMarkup walks the markup and nothing else', () => {
         expect(seen.join('')).toContain('{label}');
     });
 
-    test('the transform is told where its chunk starts', () => {
-        const offsets = [];
+    // What a caller needs to map what it finds back onto the original rather
+    // than only rewrite it: a position in the markup handed over, plus the
+    // offset, is the same position in the file.
+    test('a position in the markup counts on the file', () => {
+        const seen = [];
         overMarkup(component, (part, offset) => {
-            offsets.push(offset);
+            seen.push([part, offset]);
             return part;
         });
 
-        // Increasing, and each one lands inside the file: what a caller needs to
-        // map a chunk back onto the original rather than only rewrite it.
-        expect(offsets).toEqual([...offsets].sort((a, b) => a - b));
-        for (const offset of offsets) expect(offset).toBeLessThanOrEqual(component.length);
-        expect(component.slice(offsets[0])).toContain('<p>{label}</p>');
+        expect(seen).toHaveLength(1);
+
+        const [[part, offset]] = seen;
+
+        expect(offset + part.indexOf('{label}')).toBe(component.indexOf('{label}'));
     });
 });
 
@@ -526,6 +529,33 @@ describe('the attributes that select a script', () => {
 
     test('control: context="module" still does', () => {
         expect(moduleImports("<script context=\"module\">\n    const shared = 'ok';\n</script>")).toEqual(['shared']);
+    });
+});
+
+// Where a script stands, as Svelte's parser decides it: at the root it is the
+// component's, inside an element or a block it is an element, and in a string,
+// an attribute's value or a comment it is text.
+describe('the script of a component', () => {
+    const PYTHON = "<script lang='python'> x = 1 </script>";
+    const MODULE = "<script module> const shared = 'ok'; </script>";
+
+    test.for([
+        ['an element', (block) => `<div>${block}</div>`],
+        ['a component named as a void element', (block) => `<Input>${block}</Input>`],
+        ['a block', (block) => `{#if shown}${block}{/if}`],
+        ['a Python string', (block) => `{"${block}"}`],
+        ['an attribute', (block) => `<input title="> ${block}">`],
+        ['a comment', (block) => `<!-- ${block} -->`]
+    ])('is not one in %s', ([, around]) => {
+        expect(pythonScript(around(PYTHON))).toBeNull();
+        expect(moduleImports(around(MODULE))).toEqual([]);
+    });
+
+    test('control: after the markup, once its elements close, it is', () => {
+        const before = '<div><p>a</p></div><br><span />{#if shown}<Input />{/if}\n';
+
+        expect(pythonScript(before + PYTHON)).not.toBeNull();
+        expect(moduleImports(before + MODULE)).toEqual(['shared']);
     });
 });
 

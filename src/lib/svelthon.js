@@ -3,7 +3,7 @@ import { relative, resolve, dirname } from 'node:path';
 import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 
 import {
-    overTemplate,
+    overMarkup,
     pythonScript,
     pythonExpressions,
     collector,
@@ -350,7 +350,7 @@ const perCall = () => {
 
 // `<script` and the attribute naming the call, on the tag `pythonScript` finds.
 function tagged(code, key) {
-    const at = pythonScript(withoutComments(code)).index + '<script'.length;
+    const at = pythonScript(code).index + '<script'.length;
 
     return `${code.slice(0, at)} ${CALL}="${key}"${code.slice(at)}`;
 }
@@ -394,7 +394,7 @@ export function python(options = {}) {
             // component and stays one, exactly as a .js file is untouched by
             // TypeScript. Python semantics are opt-in, per file, by declaring
             // Python, never injected behind an author's back.
-            const declaring = pythonScript(withoutComments(content));
+            const declaring = pythonScript(content);
 
             if (declaring === null) return;
 
@@ -420,12 +420,11 @@ export function python(options = {}) {
             // The collector itself is in markup.js, which the browser can load.
             const collect = collector(file.defs, file.defLines, file.defColumns);
 
-            const code = overTemplate(
+            const code = overMarkup(
                 content,
-                // The chunk, and where it starts, so a refusal can name a
+                // The markup, and where it starts, so a refusal can name a
                 // line and a column in the file the author is looking at.
-                (markup, offset, hoisted, where) => pythonExpressions(markup, collect, undefined, where, hoisted),
-                { filename, content }
+                (markup, offset) => pythonExpressions(markup, collect, undefined, { filename, content, offset })
             );
 
             const python = content.slice(open, declaring.end);

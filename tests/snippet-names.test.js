@@ -4,8 +4,8 @@ import { pythonExpressions, collector } from '../src/lib/markup.js';
 import SnippetNames from './fixtures/SnippetNames.svelte';
 import SnippetAcrossStyle from './fixtures/SnippetAcrossStyle.svelte';
 
-// A `<style>` between a snippet's use and its declaration cuts the markup in
-// two and not the scope: Svelte hoists the snippet across the component. The
+// A `<style>` between a snippet's use and its declaration does not cut the
+// scope: Svelte hoists the snippet across the component. The
 // use above it found no `row` (`NameError`), or took the local snippet for a
 // foreign one and handed it a `Price` as a plain float.
 test('a snippet declared below a <style> is the one used above it', () => {

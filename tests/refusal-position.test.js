@@ -9,7 +9,7 @@
 // reads, and threw it away one line later.
 //
 // Asserted through the real preprocessor rather than through `markup.js` alone,
-// because the plumbing is the part that broke: the chunk, its offset in the
+// because the plumbing is the part that broke: the markup, its offset in the
 // file, and the filename all have to arrive together.
 import { test, expect, describe } from 'vitest';
 
@@ -70,24 +70,25 @@ describe('a markup refusal names a position', () => {
         expect(content[error.start.character]).toBe('{');
     });
 
-    // A second chunk of markup, after a `<style>`, is walked with an offset of
-    // its own. Getting that wrong reports a line from the top of the chunk
-    // rather than from the top of the file, which is worse than saying nothing.
-    test('a refusal after a <style> block still counts from the top of the file', () => {
+    // A `<style>` is made inert text of its own length for the walk, the
+    // component's whole and a nested one's body. A shorter one reports a line
+    // above the one written, which is worse than saying nothing.
+    test.for([
+        ['the component’s', '<p>ok</p>\n\n<style>\n  p { color: red }\n</style>\n\n<p>{@nope y}</p>'],
+        ['in a loop', '{#each rows as row}\n<style>\n  p { color: red }\n</style>\n\n\n<p>{@nope y}</p>{/each}']
+    ])('a refusal after a <style> %s still counts from the top of the file', ([, markup]) => {
         let error;
 
         try {
             python().markup({
-                content:
-                    '<script lang="python">\nx = 1\n</script>\n\n<p>ok</p>\n\n' +
-                    '<style>\n  p { color: red }\n</style>\n\n<p>{@nope y}</p>\n',
+                content: '<script lang="python">\nx = 1\nrows = [1]\n</script>\n\n' + markup + '\n',
                 filename: FILE
             });
         } catch (thrown) {
             error = thrown;
         }
 
-        expect(error.start.line).toBe(11);
+        expect(error.start.line).toBe(12);
     });
 });
 
