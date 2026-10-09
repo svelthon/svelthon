@@ -63,7 +63,16 @@ const SHAPES = [
     // while Python called it perfectly well.
     ['an instance whose __call__ is a staticmethod', 'fixed'],
     // The same under `@classmethod`, whose receiver is the class.
-    ['an instance whose __call__ is a classmethod', 'classcall']
+    ['an instance whose __call__ is a classmethod', 'classcall'],
+    // A `__call__` that is itself bound elsewhere, whose signature is its
+    // function's but the receiver it holds: read as the class held it, it had
+    // none, and the event a caller hands over reached a method declaring no
+    // parameter.
+    ['an instance whose __call__ is a bound method', 'delegated'],
+    ['an instance whose __call__ is a method of a class', 'delegated_class'],
+    // And a builtin bound to its value, which the engine handed the instance
+    // as well, a receiver it already had.
+    ['an instance whose __call__ is a bound builtin', 'delegated_native']
 ];
 
 const mounted = () => {

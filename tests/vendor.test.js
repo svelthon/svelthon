@@ -840,6 +840,25 @@ test('a memoryview reads and writes its buffer as CPython does: memoryview-index
     ]);
 });
 
+// A builtin held as a class's `__call__` was handed the instance, a receiver it
+// did not take or already had, `list.clear() takes no arguments (1 given)`; and
+// `conjugate()` of an int answered nothing, of a float raised. `python3` on the
+// same module gives these lines.
+test('a builtin as __call__ is called as it is, and a number has its conjugate: call-builtin-unbound, number-conjugate', async () => {
+    const { answers } = await import('./fixtures/builtin_call.py');
+
+    expect([...answers()]).toEqual(['(None, [])', '2', "{'a': None}", "'ABC'", '(3, 1, 0.25)']);
+});
+
+// An identifier is normalized to NFKC, as Python reads one: `box.ﬁeld` raised
+// `AttributeError` where it reads `box.field`, and so did an accent written in
+// two code points. A string is not normalized.
+test('an identifier is read in its normalized form: identifier-nfkc', async () => {
+    const { answers } = await import('./fixtures/nfkc_names.py');
+
+    expect([...answers()]).toEqual(['field', 'flag', '8', 'full', 'composed', 'missing']);
+});
+
 // A module named with a quote, from a file such as `src/Jean's app/Page.svelte`,
 // had its name pasted between quotes in the code of every def, lambda, class
 // and comprehension, which then stopped parsing.

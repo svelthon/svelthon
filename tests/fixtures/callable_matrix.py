@@ -14,6 +14,9 @@ __all__ = [
     "inherited",
     "fixed",
     "classcall",
+    "delegated",
+    "delegated_class",
+    "delegated_native",
     "doubling",
     "class_doubling",
     "doublers",
@@ -131,6 +134,26 @@ doubling = Doubling()
 classcall = ByClass()
 class_doubling = ClassDoubling()
 
+
+# A `__call__` that is itself bound elsewhere: a method of an instance, a method
+# of a class, and a builtin bound to its value. Python calls each as it is, its
+# own receiver already in it and the instance not handed to it.
+class Delegated:
+    __call__ = holder.run
+
+
+class DelegatedClass:
+    __call__ = Holder.built
+
+
+class DelegatedNative:
+    __call__ = VALUE.conjugate
+
+
+delegated = Delegated()
+delegated_class = DelegatedClass()
+delegated_native = DelegatedNative()
+
 # Its own container, since every value of `mapped` is the trivial callable the
 # matrix loops over and this one takes an argument.
 doublers = {"inner": doubling, "by_class": class_doubling}
@@ -158,13 +181,28 @@ mapped = {
     "inherited": inherited,
     "fixed": fixed,
     "classcall": classcall,
+    "delegated": delegated,
+    "delegated_class": delegated_class,
+    "delegated_native": delegated_native,
 }
 
 
 # The same six in the other container a module publishes. The order is exported
 # beside the list so the test reads the index from here rather than from a second
 # copy of the list of shapes.
-order = ["fn", "bound", "classbound", "staticfn", "instance", "inherited", "fixed", "classcall"]
+order = [
+    "fn",
+    "bound",
+    "classbound",
+    "staticfn",
+    "instance",
+    "inherited",
+    "fixed",
+    "classcall",
+    "delegated",
+    "delegated_class",
+    "delegated_native",
+]
 listed = [mapped[key] for key in order]
 tupled = tuple(listed)
 
