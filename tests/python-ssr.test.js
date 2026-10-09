@@ -30,6 +30,7 @@ import ImplicitCloseSectionNative from './fixtures/warned/ImplicitCloseSectionNa
 import ImplicitCloseHr from './fixtures/warned/ImplicitCloseHr.svelte';
 import ImplicitCloseHrNative from './fixtures/warned/ImplicitCloseHrNative.svelte';
 import QueryItems from './fixtures/QueryItems.svelte';
+import NormalizedNames from './fixtures/NormalizedNames.svelte';
 import * as html from './fixtures/python-ssr-html.js';
 
 test.for([
@@ -76,6 +77,15 @@ test.for([
 
     expect(output(Python)).toBe(output(Native));
     expect(output(Python)).toBe('ADA');
+});
+
+// A name the markup declares, read under another spelling Python takes for the
+// same name, renders on the server too: the render raised `NameError`.
+test('the server reads a declared name under another spelling', () => {
+    const body = render(NormalizedNames).body;
+    const text = (k) => body.match(new RegExp(`data-k="${k}">(.*?)</p>`))[1];
+
+    expect(['each', 'each back', 'snippet', 'declared'].map(text)).toEqual(['OK', 'OK', 'OK', 'OK']);
 });
 
 // And a dict's `items()` is what the server encodes, as CPython reads it.

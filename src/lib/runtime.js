@@ -1040,10 +1040,11 @@ function installMutationTracking($B) {
 
     // The classes an attribute read off `obj` rather than off `obj` itself
     // was looked up through, up to the one whose dictionary holds it, asked of
-    // the dictionaries along the MRO, so no getter runs. Only for data: a
-    // method, a property or a slot is a descriptor, which a write replacing it
-    // does not make state, and every row calling a method would otherwise link
-    // its classes.
+    // the dictionaries along the MRO, so no getter runs. A method or a property
+    // as much as data: `Base.prop = property(...)` or a `Middle.method` that
+    // now shadows `Base.method` changes what the instance reads, as
+    // `Base.count = 1` does. Linking costs a row calling a method what it costs
+    // a row reading a class constant, one presence test (`inherit`).
     const providers = (obj, attr) => {
         if (typeof attr !== 'string') return [];
 
@@ -1071,10 +1072,7 @@ function installMutationTracking($B) {
 
             through.push(cls);
 
-            if (found === $B.NULL) continue;
-            if ($B.search_slot($B.get_class(found), 'tp_descr_get', $B.NULL) !== $B.NULL) return [];
-
-            return through;
+            if (found !== $B.NULL) return through;
         }
 
         return [];

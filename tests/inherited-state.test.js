@@ -9,6 +9,30 @@
 import { test, expect } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import InheritedState from './fixtures/InheritedState.svelte';
+import DescriptorState from './fixtures/DescriptorState.svelte';
+
+// A property or a method is looked up through the classes as a constant is, and
+// replacing it on one of them, or shadowing it from one between, changes what
+// the instance reads. Their classes were not linked under the instance, so the
+// model answered 1 and the page showed 0 until something else repainted it.
+// Read before anything else invalidates: a page repainted by another write
+// would hide a read that was never rerun.
+test.for(['data', 'property', 'property to data', 'method', 'shadowing property', 'shadowing method'])(
+    'a %s replaced on a class repaints what reads it through an instance',
+    (kind) => {
+        const target = document.body.appendChild(document.createElement('div'));
+        const instance = mount(DescriptorState, { target, props: { kind } });
+
+        flushSync();
+        expect(target.querySelector('output').textContent).toBe('0');
+
+        instance.change();
+        flushSync();
+
+        expect(instance.model()).toBe(1);
+        expect(target.querySelector('output').textContent).toBe('1');
+    }
+);
 
 const shown = (kind, steps) => {
     const target = document.body.appendChild(document.createElement('div'));

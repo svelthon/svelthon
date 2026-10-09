@@ -4,19 +4,54 @@
 // raised `AttributeError`; once it read the normalized name, the markup pass
 // looked for the dot `field`'s length behind the end of `ﬁeld`, one character
 // too far, and refused the component.
+//
+// And a name the markup declares is compared so too: `{#each … as ﬁeld}` then
+// `{field}` handed the expression nothing and raised `NameError`, and
+// `(ｃｏｕｎｔ := …)` wrote a namespace key no name reads, leaving `count` at 0.
+// The variable keeps the spelling it was declared under, which is the one
+// JavaScript knows it by.
 import { test, expect } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import NormalizedNames from './fixtures/NormalizedNames.svelte';
 
-test.for([
-    ['ligature', 'field'],
-    ['decomposed', 'composed'],
-    ['lambda', 'field']
-])('a name spelled %s reads the normalized attribute', ([k, expected]) => {
+const mounted = () => {
     const target = document.body.appendChild(document.createElement('div'));
 
     mount(NormalizedNames, { target });
     flushSync();
 
-    expect(target.querySelector(`[data-k="${k}"]`).textContent).toBe(expected);
+    return target;
+};
+
+test.for([
+    ['ligature', 'field'],
+    ['decomposed', 'composed'],
+    ['lambda', 'field'],
+    ['each', 'OK'],
+    ['each back', 'OK'],
+    ['snippet', 'OK'],
+    ['declared', 'OK'],
+    ['bound', 'a']
+])('a name spelled another way reads the same name: %s', ([k, expected]) => {
+    expect(mounted().querySelector(`[data-k="${k}"]`).textContent).toBe(expected);
+});
+
+test('a binding writes the declared name under another spelling', () => {
+    const target = mounted();
+    const field = target.querySelector('[data-k="bind"]');
+
+    field.value = 'typed';
+    field.dispatchEvent(new Event('input'));
+    flushSync();
+
+    expect(target.querySelector('[data-k="bound"]').textContent).toBe('typed');
+});
+
+test('a walrus writes the script name under another spelling', () => {
+    const target = mounted();
+
+    target.querySelector('button').click();
+    flushSync();
+
+    expect(target.querySelector('output').textContent).toBe('1');
 });
