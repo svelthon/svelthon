@@ -1,6 +1,5 @@
 import { test, expect } from 'vitest';
-import { execFileSync } from 'node:child_process';
-import { mount, flushSync } from './mounted.js';
+import { cpython, mounted } from './oracle.js';
 import OracleAttributes from './fixtures/OracleAttributes.svelte';
 
 // The differential oracle: the fixture's own Python, run by CPython case by
@@ -12,9 +11,7 @@ import OracleAttributes from './fixtures/OracleAttributes.svelte';
 // Two questions per case, kept apart because they are two defects: the model
 // against CPython, which is Python's semantics, and the page against the model,
 // which is what repaints.
-const expected = JSON.parse(
-    execFileSync('python3', ['tests/oracle.py', 'tests/fixtures/OracleAttributes.svelte'], { encoding: 'utf8' })
-);
+const expected = cpython('OracleAttributes.svelte');
 
 // CPython refuses some writes, `object.__setattr__` on a class say, and those
 // are no case. A driver that refused them all would leave nothing to compare.
@@ -23,29 +20,13 @@ test('the oracle has its cases', () => {
 });
 
 test.for(Object.keys(expected))('%s', (kind) => {
-    const target = document.body.appendChild(document.createElement('div'));
-    const instance = mount(OracleAttributes, { target, props: { kind } });
-    const binding = kind.endsWith('|binding');
-    const models = [];
-    const pages = [];
+    const { models, pages } = mounted(OracleAttributes, kind, (instance, target, step) => {
+        if (!kind.endsWith('|binding')) return instance.change(step);
 
-    const seen = () => {
-        flushSync();
-        models.push(instance.model());
-        pages.push(target.querySelector('output').textContent);
-    };
-
-    seen();
-    for (const step of [1, 2]) {
-        if (binding) {
-            const field = target.querySelector('input');
-            field.value = String(step);
-            field.dispatchEvent(new Event('input'));
-        } else {
-            instance.change(step);
-        }
-        seen();
-    }
+        const field = target.querySelector('input');
+        field.value = String(step);
+        field.dispatchEvent(new Event('input'));
+    });
 
     expect(models, 'the model, against CPython').toEqual(expected[kind]);
     expect(pages, 'the page, against the model').toEqual(models);
