@@ -21,11 +21,24 @@ def slotted(slots):
         return str(error)
 
 
+class E(A):
+    pass
+
+
+def bound(slots, namespace):
+    try:
+        return type("P", (), {"__slots__": slots, **namespace}).__name__
+    except ValueError as error:
+        return str(error)
+
+
 def answers():
     return [
         made((A, A)),
         made((list, dict)),
         made((A, list)),
+        made((A, E)),
+        bound(("x",), {"x": 1}),
         slotted(("x,y",)),
         slotted((1,)),
         slotted(("__dict__", "__dict__")),

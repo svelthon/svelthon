@@ -990,22 +990,54 @@ test('new bases bring their special methods: bases-set-resets-slots', async () =
     expect([...answers()]).toEqual(['B', 'B', 'B', 'B', 'B']);
 });
 
-// A base written twice is named, and builtins laid out apart cannot be bases
-// of one class, the one laid out apart being the class's `__base__`. And a slot
-// is an identifier, a `__dict__` declared once: `type()` took any name, and
+// A base written twice is named, builtins laid out apart cannot be bases of
+// one class, the one laid out apart being the class's `__base__`, and bases
+// with no consistent MRO are named. And a slot is an identifier, a `__dict__`
+// declared once, a name the class does not bind: `type()` took any name, and
 // raised a JavaScript error on a slot that is no string.
-test('a class refuses the bases and slots CPython refuses: mro-duplicate-base, solid-base-builtin-layout, slots-valid-identifiers', async () => {
+test('a class refuses the bases and slots CPython refuses: mro-duplicate-base, solid-base-builtin-layout, mro-error-message, slots-class-variable-conflict, slots-valid-identifiers', async () => {
     const { answers } = await import('./fixtures/class_bases.py');
 
     expect([...answers()]).toEqual([
         'duplicate base class A',
         'multiple bases have instance lay-out conflict',
         'list',
+        'Cannot create a consistent method resolution order (MRO) for bases A, E',
+        "'x' in __slots__ conflicts with class variable",
         '__slots__ must be identifiers',
         "__slots__ items must be strings, not 'int'",
         '__dict__ slot disallowed: we already got one',
         'P'
     ]);
+});
+
+// What `compile()` hands to `exec()` runs where its tree leaves a field out:
+// the field came back as None rather than empty, and a method, a bare
+// `return`, a slice, a `**` or a `with` with no `as` raised a JavaScript error.
+// A page's runtime has no parser, so this runs in the engine the compiler
+// loads; `python3` on the same lines prints the answers.
+test('code from compile() runs where its tree leaves a field out: compile-ast-optional-none', () => {
+    createRequire(import.meta.url)('../src/lib/compile.cjs');
+    const $B = globalThis.__BRYTHON__;
+    const program = [
+        'SOURCES = [',
+        '    "class A:\\n    def f(self):\\n        return 1\\nout = A().f()",',
+        '    "def f():\\n    return\\nout = f()",',
+        '    "a = [0, 1, 2, 3]\\nout = (a[1:], a[::2])",',
+        '    "def f(**k):\\n    return k\\nout = f(**{\'a\': 1})",',
+        '    "class C:\\n    def __enter__(self): return 1\\n    def __exit__(self, *a): return False\\nwith C():\\n    out = \'in\'",',
+        ']',
+        'seen = []',
+        'for source in SOURCES:',
+        '    space = {}',
+        '    exec(compile(source, "<string>", "exec"), space)',
+        '    seen.append(repr(space["out"]))',
+        ''
+    ].join('\n');
+    const js = $B.py2js({ src: program, filename: 'round_trip.py' }, 'round_trip', ['round_trip']).to_js();
+    const { seen } = new Function(`${js}\nreturn locals_round_trip_py;`)();
+
+    expect([...seen]).toEqual(['1', 'None', '([1, 2, 3], [0, 2])', "{'a': 1}", "'in'"]);
 });
 
 // A module named with a quote, from a file such as `src/Jean's app/Page.svelte`,
