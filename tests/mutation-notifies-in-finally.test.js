@@ -107,6 +107,7 @@ describe('every interception that notifies, notifies on the raising path too', (
     test('the wrappers are found where they live', () => {
         expect(wrappers.map((one) => one.name)).toEqual([
             'const sourced',
+            '$B.call_attr',
             '$B.$getattr',
             '$B.builtins.dir',
             '$B.$setitem',

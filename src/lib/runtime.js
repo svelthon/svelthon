@@ -907,6 +907,21 @@ function installMutationTracking($B) {
         }
     }
 
+    // A JavaScript object Python holds, a `js.Set.new()` or a `Map`, changed
+    // by its own method: nothing of the engine's runs, so the call is followed
+    // where it is made, by the name of one of JavaScript's mutators.
+    const JS_MUTATORS = new Set(['add', 'delete', 'clear', 'set', 'push', 'pop', 'shift', 'unshift', 'splice', 'sort', 'reverse', 'fill', 'copyWithin']);
+    const callAttr = $B.call_attr;
+    $B.call_attr = function (obj, attr, ...rest) {
+        if (!JS_MUTATORS.has(attr) || !MARKS.has(obj) || !javascriptOwn(obj)) return callAttr(obj, attr, ...rest);
+
+        try {
+            return callAttr(obj, attr, ...rest);
+        } finally {
+            MARKS.get(obj)();
+        }
+    };
+
     const getattr = $B.$getattr;
     $B.$getattr = function (obj, attr, ...rest) {
         let result;
