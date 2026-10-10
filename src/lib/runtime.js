@@ -849,7 +849,7 @@ function installMutationTracking($B) {
         // answers. A descriptor that is a function, `dict.get`, carries them
         // as its own properties, and the export boundary reads the same ones to
         // know it holds a Python callable whose arguments it converts.
-        return Object.assign(wrapper, descriptor);
+        return descriptor === undefined ? wrapper : Object.assign(wrapper, descriptor);
     };
 
     const onFirst = (obj, attr, rest, call) => {
@@ -998,7 +998,7 @@ function installMutationTracking($B) {
             // method kept as a value left that path, so `add(rows, 1)` mutated a
             // watched list and told nobody, while `list.append(rows, 1)` written
             // in place worked.
-            if (call !== null && pyClass(obj)) return onType(attr, call, result);
+            if (call !== null && pyClass(obj)) return onType(attr, call, typeof result === 'function' ? undefined : result);
 
             if (typeof result === 'function') return notifying(owner, attr, result);
 
@@ -4682,10 +4682,8 @@ export function pyArg(value) {
     // An absence is `None`, the rule `pyData` applies: `value is None` in the
     // function called has to be true for a `null` or an `undefined`.
     if (value === null || value === undefined) return NONE;
-
-    // A view handed back is its container again, as at every other door: a
-    // method taken off `dict` is given the dict, not a JavaScript object.
-    if (typeof value !== 'object' || !routeEvent(value)) return pyBind(value);
+    if (typeof value !== 'object') return pyBind(value);
+    if (!routeEvent(value)) return value;
 
     // Reading the framework's own searchParams is what registers the dependency,
     // so it is tried first, but it throws while prerendering, where a query
@@ -6763,7 +6761,7 @@ function lookup(target, name) {
     let cls;
     try {
         cls = $B.get_class(target);
-        if ($B.search_in_mro(cls, '__getitem__', $B.NULL) === $B.NULL) return MISSING;
+        if ($B.$getattr(cls, '__getitem__', MISSING) === MISSING) return MISSING;
     } catch {
         return MISSING; // a foreign JavaScript value has no Python protocol to ask
     }

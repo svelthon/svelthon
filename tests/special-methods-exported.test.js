@@ -35,6 +35,14 @@ test('a reader and a method taken off the type cross as functions', () => {
     expect(mod.index_of(mod.rows, mod.rows[0])).toBe(0);
 });
 
+// The dict the module published, handed back, is the dict again: to a method
+// taken off `dict`, which is a JavaScript function carrying its Python type, and
+// to a function of the module.
+test('a published dict handed back is the dict, to a method of its type and to a function', () => {
+    expect(mod.get_from(mod.scores, 'answer')).toBe(42);
+    expect(mod.kind_of(mod.scores)).toBe('dict');
+});
+
 // One operation on one list is one callback, however many times it is read.
 test('two reads of one operation are one function', () => {
     expect(mod.write).toBe(mod.second);

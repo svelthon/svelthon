@@ -3,7 +3,7 @@
 __js__ = {"./special_methods_calls.js": ["call_with"]}
 __all__ = [
     "write", "second", "length", "put", "index_of", "rows", "shape",
-    "read", "shown", "passed", "table_value"
+    "read", "shown", "passed", "table_value", "get_from", "scores", "kind_of"
 ]
 
 rows = [0]
@@ -13,6 +13,12 @@ second = rows.__setitem__
 length = rows.__len__
 put = table.__setitem__
 index_of = list.index
+get_from = dict.get
+scores = {"answer": 42}
+
+
+def kind_of(value):
+    return type(value).__name__
 
 
 def shape():
