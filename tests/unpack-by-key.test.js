@@ -13,6 +13,7 @@ import { restOf, pyData } from '../src/lib/runtime.js';
 import UnpackByKey from './fixtures/UnpackByKey.svelte';
 import UnpackByKeyNative from './fixtures/UnpackByKeyNative.svelte';
 import UnpackByKeyTypo from './fixtures/UnpackByKeyTypo.svelte';
+import UnpackByKeyUnicode from './fixtures/UnpackByKeyUnicode.svelte';
 import ComputedRest from './fixtures/ComputedRest.svelte';
 import ComputedRestNative from './fixtures/ComputedRestNative.svelte';
 import { restart } from './fixtures/computed_rest_keys.js';
@@ -319,5 +320,18 @@ describe('a row unpacked by key', () => {
             mount(UnpackByKeyTypo, { target });
             flushSync();
         }).toThrow("AttributeError: 'dict' object has no attribute 'nmae'");
+    });
+
+    // A bare key reads the field `row.ﬁeld` reads, on a dict, an instance and
+    // a slotted one, and `**rest` leaves that field out; a quoted key is the
+    // string as written, which no row has, so its default is taken.
+    test('reads a bare key as Python reads a name, normalized', () => {
+        const target = document.body.appendChild(document.createElement('div'));
+
+        mount(UnpackByKeyUnicode, { target });
+        flushSync();
+
+        expect([...target.querySelectorAll('p:not([data-k])')].map((one) => one.textContent)).toEqual(['1|2|3|7', '1|2|3|7', '1|2|3|7']);
+        expect(target.querySelector('p[data-k="rest"]').textContent).toBe("{'Key': 2, 'ex': 3}");
     });
 });

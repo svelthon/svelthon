@@ -1281,7 +1281,9 @@ function unpackByKey(inside, call, names, tuple, unpack) {
             unpack.consts.push({ target: held, read: `(${key.slice(1, -1)})`, source: key.slice(1, -1), lazy: false });
         }
 
-        const named = computed ? held : /^['"]/.test(key) ? key : JSON.stringify(key);
+        // A key written bare is a name, which Python reads normalized: `ﬁeld` is
+        // `field`, as in `row.ﬁeld`. A quoted one is a string, kept as written.
+        const named = computed ? held : /^['"]/.test(key) ? key : JSON.stringify(pythonName(key));
 
         keys.push(named);
 
