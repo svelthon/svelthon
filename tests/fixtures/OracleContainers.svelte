@@ -40,6 +40,8 @@ HOLDERS = {
     "module name": lambda at: [numbers, table, group][at],
     "instance attribute": lambda at: [box.numbers, box.table, box.group][at],
     "class attribute": lambda at: [Shelf.numbers, Shelf.table, Shelf.group][at],
+    # Read off the class through an instance no name holds.
+    "class attribute through an instance made in the expression": lambda at: [Shelf().numbers, Shelf().table, Shelf().group][at],
     "dict value": lambda at: [store["numbers"], store["table"], store["group"]][at],
     "list item": lambda at: nest[at],
     "tuple item": lambda at: pair[at],

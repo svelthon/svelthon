@@ -132,6 +132,8 @@ failure.x = 0
 TARGETS = {
     "instance": (lambda: box, lambda: box),
     "class through an instance": (lambda: shared, lambda: Shared),
+    # An instance no name holds, made where it is read.
+    "class through an instance made in the expression": (lambda: Shared(), lambda: Shared),
     "class": (lambda: Shared, lambda: Shared),
     "class bound by =": (lambda: Aliased, lambda: Aliased),
     "subclass": (lambda: Sub, lambda: Base),

@@ -1024,7 +1024,9 @@ function installMutationTracking($B) {
         // method kept as a value left that path, so `add(rows, 1)` mutated a
         // watched list and told nobody, while `list.append(rows, 1)` written in
         // place worked.
-        if (call !== null && pyClass(obj)) return onType(attr, call, typeof result === 'function' ? undefined : result);
+        if (call !== null && pyClass(obj)) {
+            return wrapperOf(result, ON_TYPE, attr, () => onType(attr, call, typeof result === 'function' ? undefined : result));
+        }
 
         if (typeof result === 'function') return notifying(owner, attr, result);
 
@@ -1033,25 +1035,54 @@ function installMutationTracking($B) {
         // function it calls is wrapped, and Brython's own call, `wrapped(self,
         // ...args)`, is what reaches it.
         if (call !== null) {
-            const wrapped = (target, ...args) => {
-                let out;
+            const wrapped = wrapperOf(result.wrapped, owner, attr, () => {
+                const made = (target, ...args) => {
+                    let out;
 
-                try {
-                    out = result.wrapped(target, ...args);
-                    return out;
-                } finally {
-                    afterCall(owner, attr, out, args);
-                }
-            };
+                    try {
+                        out = result.wrapped(target, ...args);
+                        return out;
+                    } finally {
+                        afterCall(owner, attr, out, args);
+                    }
+                };
 
-            // The operation it stands for, shared by every receiver: what an
-            // adapter is keyed by, so two reads are one callback.
-            wrapped.original = result.wrapped;
+                // The operation it stands for, shared by every receiver: what
+                // an adapter is keyed by, so two reads are one callback.
+                made.original = result.wrapped;
+
+                return made;
+            });
 
             return { ...result, wrapped };
         }
 
         return null;
+    };
+
+    // One wrapper per method, per receiver and per name, made the first time
+    // it is read: a method read twice is the same method, `Cart.add is
+    // Cart.add` and `Box.__setattr__ is object.__setattr__`, and two
+    // method-wrappers of one receiver compare equal, as they compare by the
+    // function they wrap. `ON_TYPE` stands for the receiver of a method read
+    // off a type, which has none until the call.
+    const WRAPPERS = new WeakMap();
+    const ON_TYPE = {};
+
+    const wrapperOf = (method, owner, attr, make) => {
+        let owners = WRAPPERS.get(method);
+
+        if (owners === undefined) WRAPPERS.set(method, (owners = new WeakMap()));
+
+        let names = owners.get(owner);
+
+        if (names === undefined) owners.set(owner, (names = new Map()));
+
+        let made = names.get(attr);
+
+        if (made === undefined) names.set(attr, (made = make()));
+
+        return made;
     };
 
     // A read that found its value, however it was written: `box.x`,
@@ -1061,7 +1092,9 @@ function installMutationTracking($B) {
     const read = (obj, attr, result) => {
         const holder = lookedUp(obj, attr);
 
-        if (holder !== undefined) linked(nameMarker(holder, attr), holder, result, undefined, true);
+        // Data, not a method: a method read is a new bound object each time,
+        // and what replaces it is a write of the name.
+        if (holder !== undefined && !callable(result)) linked(nameMarker(holder, attr), holder, result, undefined, true);
 
         if (!MARKS.has(obj)) return;
 
@@ -1140,6 +1173,16 @@ function installMutationTracking($B) {
             const mro = obj.obj_type?.tp_mro;
 
             if (Array.isArray(mro)) return namesRead(mro.slice(mro.indexOf(obj.type) + 1), attr);
+        }
+
+        // An instance of the author's that no name watches, `Tile()` made in
+        // the expression: what it finds on its classes is followed by name, as
+        // a read made on the class is. A watched one is followed through its
+        // watch.
+        const type = quietPyType(obj);
+
+        if (type !== undefined && (type.tp_flags & $B.TPFLAGS.HEAPTYPE) !== 0 && !MARKS.has(obj)) {
+            return namesRead(type.tp_mro, attr);
         }
 
         return undefined;
