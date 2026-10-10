@@ -1518,16 +1518,17 @@ const keyword = (trimmed, sigil) => {
 // behind a JavaScript proxy fails its own type checks.
 const DECLARED_NAME = new RegExp(`^${NAME}$`, 'u');
 
-// A binding's target as Python reads it, by the parser of the Brython the
-// compiler has loaded before any markup is read: `(amount)` is the `Name`
-// `amount`, and `bag["selected"]`, `bag[ "selected" ]` and `bag['selected']`
-// are one `Subscript`. Null for text that does not parse, which the compiler
-// refuses where it is written once it compiles it.
+// An expression as Python reads it, by the parser of the Brython the compiler
+// has loaded before any markup is read. A binding's target: `(amount)` is the
+// `Name` `amount`, and `bag["selected"]`, `bag[ "selected" ]` and
+// `bag['selected']` are one `Subscript`. And where an `{#await}` ends. Null for
+// text that does not parse, which the compiler refuses where it is written once
+// it compiles it.
 function targetTree(expr) {
     const $B = globalThis.__BRYTHON__;
 
     if (typeof $B?.Parser !== 'function') {
-        throw new Error("svelthon: reading a binding's target needs Brython's parser, which `compile.cjs` loads");
+        throw new Error("svelthon: reading a template expression needs Brython's parser, which `compile.cjs` loads");
     }
 
     try {
@@ -1886,7 +1887,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
 
         for (let at = scopes.length - 1; at >= 0; at--) {
             for (const one of scopes[at]) {
-                if (!visible.has(one)) visible.set(one, one);
+                if (!visible.has(pythonName(one))) visible.set(pythonName(one), one);
             }
         }
 
@@ -2736,9 +2737,16 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 // follows it is a name the block declares, never an expression:
                 // `{#await f() then row}`, or no name at all, `{#await f()
                 // then}`, as Svelte takes it. The split is made at depth zero so
-                // that `{#await f("then")}` is not cut inside its own string.
+                // that `{#await f("then")}` is not cut inside its own string,
+                // and only where what comes before is a whole expression, as
+                // Svelte's own parser reads the longest one it can: `then` is a
+                // name, and `{#await choice if then else other}` holds no
+                // clause.
                 const rest = opened.rest;
-                const at = atTopLevel(rest, (i) => /^\s(?:then|catch)(?:\s|$)/.test(rest.slice(i)));
+                const at = atTopLevel(
+                    rest,
+                    (i) => /^\s(?:then|catch)(?:\s|$)/.test(rest.slice(i)) && targetTree(rest.slice(0, i)) !== null
+                );
                 const awaited = at === -1 ? rest : rest.slice(0, at);
                 const tail = at === -1 ? null : rest.slice(at).match(/^\s*(then|catch)(?:\s+([\s\S]*))?$/);
 

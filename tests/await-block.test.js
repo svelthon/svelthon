@@ -86,4 +86,19 @@ describe('the {#await … then name} shorthand', () => {
 
         await settled(() => expect(read(key)).toBe(shown));
     });
+
+    // `then` and `catch` are names too. The clause starts at the first of them
+    // that a whole expression stands before, as Svelte's parser reads the
+    // longest expression it can: `later() if then else fail()` was cut before
+    // the name `then`, and `later() if` refused as invalid syntax.
+    test.for([
+        ['named then', 'done'],
+        ['named then long', 'done'],
+        ['leading then', 'inner'],
+        ['key catch', 'done']
+    ])('a name `then` or `catch` in the expression is not its clause: %s', async ([key, shown]) => {
+        const read = await setup();
+
+        await settled(() => expect(read(key)).toBe(shown));
+    });
 });
