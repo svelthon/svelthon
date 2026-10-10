@@ -9,6 +9,7 @@ import ContextCallbacksFromJs from './fixtures/ContextCallbacksFromJs.svelte';
 import ContextScalars from './fixtures/ContextScalars.svelte';
 import PropScalars from './fixtures/PropScalars.svelte';
 import PropScalarsModule from './fixtures/PropScalarsModule.svelte';
+import PropScalarsPaths from './fixtures/PropScalarsPaths.svelte';
 import ContextLate from './fixtures/ContextLate.svelte';
 import ContextLateNative from './fixtures/ContextLateNative.svelte';
 
@@ -50,6 +51,19 @@ test('and a child imported in the <script module> is handed the value itself too
     flushSync();
 
     expect(target.querySelector('[data-k="module"] p').textContent).toBe('Price|EUR|float|1.0|Label|HELLO!');
+});
+
+// Every other way a prop reaches a Python child hands it the value itself as
+// well: bound, under a name beginning with `on`, which took the callbacks' path,
+// and to a child imported as `{ default as Named }`, which was not recognised.
+test.for(['bound', 'online', 'named'])('a scalar reaches a Python child as itself: %s', (way) => {
+    const target = document.body.appendChild(document.createElement('div'));
+    mount(PropScalarsPaths, { target });
+    flushSync();
+
+    expect(target.querySelector(`[data-k="${way}"] p`).textContent).toBe(
+        'Price|EUR|float|1.0|Label|HELLO!|float|1.0'
+    );
 });
 
 // A context value crosses languages like any other value: a scalar becomes the

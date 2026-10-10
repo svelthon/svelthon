@@ -285,15 +285,19 @@ const moduleBody = (content) => {
 };
 
 // The components the `<script module>` imports by default from a `.svelte`
-// file, `import Child from "./Child.svelte"`: what each local name is, and
-// where it comes from. The other half of `componentImports`, which reads the
-// same of `importjs`.
+// file, `import Child from "./Child.svelte"` or `import { default as Child }
+// from …`: what each local name is, and where it comes from. The other half of
+// `componentImports`, which reads the same of `importjs`.
+const defaultImport = (one) =>
+    one.type === 'ImportDefaultSpecifier' ||
+    (one.type === 'ImportSpecifier' && (one.imported.name ?? one.imported.value) === 'default');
+
 const moduleComponents = (content) =>
     moduleBody(content)
         .filter((node) => node.type === 'ImportDeclaration' && String(node.source.value).endsWith('.svelte'))
         .flatMap((node) =>
             node.specifiers
-                .filter((one) => one.type === 'ImportDefaultSpecifier')
+                .filter(defaultImport)
                 .map((one) => ({ local: one.local.name, from: String(node.source.value) }))
         );
 

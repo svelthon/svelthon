@@ -2119,9 +2119,17 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         const multiple = directive === 'bind:value' && tag?.name === 'select' && tagNames(markup, tag.start).has('multiple');
         const crossing = multiple ? SELECTED_VALUE : BIND_VALUE;
         const write = declaredHere(expr) ? `${scoped(bareName(expr))} = ${crossing}(${BOUND_VALUE})` : assign(expr, crossing);
+        const read = multiple ? 'selection' : toPythonChild() ? 'python' : 'scalar';
 
-        return `() => ${call(expr, '__bound', undefined, multiple ? 'selection' : 'scalar')}, (${BOUND_VALUE}) => ${write}`;
+        return `() => ${call(expr, '__bound', undefined, read)}, (${BOUND_VALUE}) => ${write}`;
     };
+
+    // Whether the tag being read is a child written in Python, which is handed
+    // the Python value itself, a `Price(float)` with its class and a `15.0`
+    // still a float, by every way a prop is written: by name, short, spread,
+    // bound, and under a name beginning with `on`, which may be a callback or
+    // data. A JavaScript child is handed JavaScript's own.
+    const toPythonChild = () => isComponent(tag) && where?.pythonChildren?.has(tag.name) === true;
 
     // The iterations a group binding stands in, as Svelte finds them: every
     // `{#each}` whose names the binding reads, and then those its iterable
@@ -2319,7 +2327,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
             // where it warns about `undefined`, after `save()` and not after a
             // name holding an optional handler. `?? undefined` is a form
             // Svelte reads as no call, and changes no value.
-            if (isComponent(tag)) return `{${call(rewritten, '__bound', inner)}}`;
+            if (isComponent(tag)) return `{${call(rewritten, '__bound', inner, toPythonChild() ? 'python' : '')}}`;
 
             const adapted = `${EVENT_WRAPPER}(${call(rewritten, '', inner)})`;
 
@@ -2342,12 +2350,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         // against its `<select>`, so a container keeps its own, and a scalar
         // is still compared by value.
         //
-        // A prop handed to a child written in Python is the Python value itself,
-        // as the context hands it: a `Price(float)` keeps its class, and a
-        // `15.0` stays a float. A JavaScript child is handed JavaScript's own.
-        const pythonChild = isComponent(tag) && where?.pythonChildren?.has(tag.name);
-
-        return `{${call(inner, '__bound', undefined, pythonChild ? 'python' : name === 'value' ? 'scalar' : '')}}`;
+        return `{${call(inner, '__bound', undefined, toPythonChild() ? 'python' : name === 'value' ? 'scalar' : '')}}`;
     };
 
     const refuseLet = (name) => {
@@ -2550,9 +2553,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                         // attribute it becomes. On a child written in Python,
                         // each value is handed over as a prop written by name
                         // is, the Python value itself.
-                        const toPython = isComponent(tag) && where?.pythonChildren?.has(tag.name);
-
-                        out += toPython
+                        out += toPythonChild()
                             ? `{...${call(trimmed.slice(2), '__spreadPython', undefined, 'python')}}`
                             : `{...${call(trimmed.slice(2), onElement(tag) ? '__spreadElement' : '__spread')}}`;
                     } else if (trimmed.startsWith('...')) {
