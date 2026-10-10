@@ -75,7 +75,7 @@ reste de cette configuration et ce que chaque ligne apporte.
 npm install
 npm run dev
 
-npm test             # 1 781 tests : sémantique, props, réactivité, surface Svelte
+npm test             # 1 784 tests : sémantique, props, réactivité, surface Svelte
 npm run test:quiet   # la sortie de la suite : un run vert ne doit rien dire
 npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
@@ -1557,12 +1557,12 @@ instant.
 
 Le runtime entier, gzippé, fait **222 Ko**. C'est
 `vendor/brython_runtime.js`, la moitié sans la chaîne de parsing, celle qu'un
-navigateur reçoit ; le bundle complet dont elle est découpée en fait 273 et ne
+navigateur reçoit ; le bundle complet dont elle est découpée en fait 274 et ne
 part jamais.
 
 ## État
 
-Validé par `npm test`, 1 781 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 1 784 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;

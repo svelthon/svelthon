@@ -961,6 +961,37 @@ test('the subclasses of a class are held weakly: subclasses-held-weakly', () => 
     expect([...registry].length).toBeGreaterThan(0);
 });
 
+// New bases CPython refuses are refused before anything changes: an empty
+// tuple, a value that is no class, a cycle, and bases whose instances are not
+// laid out as the old ones were. All were taken, `(1,)` failing half way.
+test('new bases CPython refuses leave the class as it was: bases-set-validates', async () => {
+    const { answers } = await import('./fixtures/bases_refused.py');
+
+    expect([...answers()]).toEqual([
+        'can only assign non-empty tuple to C.__bases__, not () | A True',
+        "C.__bases__ must be tuple of classes, not 'int' | A True",
+        'a __bases__ item causes an inheritance cycle | A True',
+        "__bases__ assignment: 'object' deallocator differs from 'A' | A True",
+        "__bases__ assignment: 'M' object layout differs from 'A' | A True"
+    ]);
+});
+
+// What a class calls and iterates follows its new bases, its subclass's too:
+// both kept the old base's `__call__` and `__iter__`, and `__base__`.
+test('new bases bring their special methods: bases-set-resets-slots', async () => {
+    const { answers } = await import('./fixtures/bases_protocols.py');
+
+    expect([...answers()]).toEqual(['B', 'B', 'B', 'B', 'B']);
+});
+
+// A base written twice is named, and builtins laid out apart cannot be bases
+// of one class, the one laid out apart being the class's `__base__`.
+test('a class statement refuses the bases CPython refuses: mro-duplicate-base, solid-base-builtin-layout', async () => {
+    const { answers } = await import('./fixtures/class_bases.py');
+
+    expect([...answers()]).toEqual(['duplicate base class A', 'multiple bases have instance lay-out conflict', 'list']);
+});
+
 // A module named with a quote, from a file such as `src/Jean's app/Page.svelte`,
 // had its name pasted between quotes in the code of every def, lambda, class
 // and comprehension, which then stopped parsing.

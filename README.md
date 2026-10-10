@@ -77,7 +77,7 @@ rest of that configuration and what each line buys.
 npm install
 npm run dev
 
-npm test             # 1 781 tests: semantics, props, reactivity, Svelte surface
+npm test             # 1 784 tests: semantics, props, reactivity, Svelte surface
 npm run test:quiet   # the suite's own output: a green run must say nothing
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
@@ -1510,7 +1510,7 @@ rendered in the reader's own zone, which is what an instant is for.
 
 The whole runtime, gzipped, is **222 KB**. That is
 `vendor/brython_runtime.js`, the half without the parsing chain, which is what a
-browser gets; the full bundle it is cut from is 273 KB and never ships.
+browser gets; the full bundle it is cut from is 274 KB and never ships.
 
 ## Svelte surface covered
 
@@ -1542,7 +1542,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 1 781 tests as written (vitest reports more, one per
+Validated by `npm test`, 1 784 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;
