@@ -972,10 +972,7 @@ function installMutationTracking($B) {
             throw error;
         }
 
-        // A read made on a class itself, `Base.method`, follows the name on
-        // the classes it was looked up through, as one made through an
-        // instance does, whether the class was bound by `class` or by `=`.
-        if (pyClass(obj)) classRead(obj, attr);
+        lookedUp(obj, attr);
 
         if (!watchable(obj)) return result;
 
@@ -1076,17 +1073,35 @@ function installMutationTracking($B) {
         return result;
     };
 
-    // The name read on a class, on each class of its MRO up to the one whose
-    // dictionary holds it, that one included: a write to any of them is
-    // what the read finds next. On all of them when none holds it, since any
-    // may gain it.
-    const classRead = (cls, attr) => {
-        if (typeof attr !== 'string' || !Array.isArray(cls.tp_mro)) return;
+    // The name read along `classes`, on each up to the one whose dictionary
+    // holds it, that one included: a write to any of them is what the read
+    // finds next. On all of them when none holds it, since any may gain it.
+    const namesRead = (classes, attr) => {
+        if (!Array.isArray(classes)) return;
 
-        for (const one of cls.tp_mro) {
+        for (const one of classes) {
             className(one, attr).subscribe();
 
             if ($B.search_in_dict(one, attr, $B.NULL) !== $B.NULL) return;
+        }
+    };
+
+    // A read made on a class itself, `Base.method`, follows the name on the
+    // classes Python looks it up through, as one made through an instance
+    // does, whether the class was bound by `class` or by `=`: its MRO, and its
+    // metaclass's, whose descriptors and data `Subject.prop` finds. A read
+    // through `super()` follows it on the MRO of `__self_class__` after
+    // `__thisclass__`, where `super().value` looks.
+    const lookedUp = (obj, attr) => {
+        if (typeof attr !== 'string') return;
+
+        if (pyClass(obj)) {
+            namesRead(quietPyType(obj)?.tp_mro, attr);
+            namesRead(obj.tp_mro, attr);
+        } else if (ownType(obj) === _b_.super && obj.obj !== _b_.None) {
+            const mro = obj.obj_type?.tp_mro;
+
+            if (Array.isArray(mro)) namesRead(mro.slice(mro.indexOf(obj.type) + 1), attr);
         }
     };
 
@@ -1094,7 +1109,7 @@ function installMutationTracking($B) {
     // the name on the classes as a read that found nothing and answered a
     // default does.
     const missing = (obj, attr) => {
-        if (pyClass(obj)) classRead(obj, attr);
+        lookedUp(obj, attr);
         if (!MARKS.has(obj)) return;
 
         const found = providers(obj, attr);

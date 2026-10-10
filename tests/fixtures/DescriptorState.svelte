@@ -21,10 +21,34 @@ class Middle(Base):
 
 
 class Derived(Middle):
-    pass
+    # The same reads, made through `super()`.
+    def through_super(self):
+        if kind == "data read through super()":
+            return super().data
+        if kind == "property read through super()":
+            return super().prop
+        if kind == "method read through super()":
+            return super().method()
+        return getattr(super(), "extra", 0)
 
 
 holder = Derived()
+
+
+# A class reading what its metaclass provides.
+class Meta(type):
+    data = 0
+
+    @property
+    def prop(cls):
+        return 0
+
+    def method(cls):
+        return 0
+
+
+class Subject(metaclass=Meta):
+    pass
 
 
 # A shadow deleted: the method of the class above shows through again.
@@ -56,16 +80,26 @@ box.data = 1
 
 @export
 def change():
-    if kind == "data":
+    if kind in ("data", "data read through super()", "data read through super() of a class"):
         Base.data = 1
-    elif kind == "property":
+    elif kind in ("property", "property read through super()"):
         Base.prop = property(lambda self: 1)
     elif kind == "property to data":
         Base.prop = 1
-    elif kind in ("method", "method read on its class", "method read on a subclass"):
+    elif kind in ("method", "method read on its class", "method read on a subclass", "method read through super()"):
         Base.method = lambda self: 1
     elif kind == "data read on its class":
         Base.data = 1
+    elif kind == "data of its metaclass":
+        Meta.data = 1
+    elif kind == "property of its metaclass":
+        Meta.prop = property(lambda cls: 1)
+    elif kind == "method of its metaclass":
+        Meta.method = lambda cls: 1
+    elif kind == "name its metaclass gains":
+        Meta.extra = 1
+    elif kind == "name a class gains, read through super()":
+        Base.extra = 1
     elif kind == "shadowing property":
         Middle.prop = property(lambda self: 1)
     elif kind == "shadowing method":
@@ -91,6 +125,18 @@ def change():
 def read():
     if kind == "data":
         return holder.data
+    if kind == "data read through super() of a class":
+        return super(Derived, Derived).data
+    if "super()" in kind:
+        return holder.through_super()
+    if kind == "data of its metaclass":
+        return Subject.data
+    if kind == "property of its metaclass":
+        return Subject.prop
+    if kind == "method of its metaclass":
+        return Subject.method()
+    if kind == "name its metaclass gains":
+        return getattr(Subject, "extra", 0)
     # Read on the class itself, bound by `class` and not by `=`.
     if kind == "method read on its class":
         return Base.method(holder)

@@ -41,7 +41,20 @@ test.for([
     // model gave the new one.
     'method read on its class',
     'method read on a subclass',
-    'data read on its class'
+    'data read on its class',
+    // Read through `super()`, which looks on the classes after its own: the
+    // `super` object is neither the class nor the instance, and nothing
+    // followed the name on them.
+    'data read through super()',
+    'property read through super()',
+    'method read through super()',
+    'name a class gains, read through super()',
+    'data read through super() of a class',
+    // Read on a class, found on its metaclass, which its MRO does not hold.
+    'data of its metaclass',
+    'property of its metaclass',
+    'method of its metaclass',
+    'name its metaclass gains'
 ])(
     'a %s replaced on a class repaints what reads it through an instance',
     (kind) => {
