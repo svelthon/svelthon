@@ -6308,9 +6308,10 @@ const changed = (before, after) => {
 // given the value alone: Svelte passes the whole payload again, and the payload
 // is a new array on every run, so Svelte's own comparison always answers yes.
 // It is made here instead, on the value, and an action written without one is
-// never updated. Both are called on the result, as Svelte calls them, so a
-// method reading `this` finds it. A function is a result like an object, since
-// Svelte reads the two methods off whatever it is handed.
+// never updated, nor its `update` read, as Svelte reads it only when there is a
+// value. Both are called on the result, as Svelte calls them, so a method
+// reading `this` finds it. A function is a result like an object, since Svelte
+// reads the two methods off whatever it is handed.
 const actionPayload = (python, result, given) => {
     if (result === null || (typeof result !== 'object' && typeof result !== 'function')) return result;
 
@@ -6318,9 +6319,9 @@ const actionPayload = (python, result, given) => {
 
     return {
         update:
-            typeof result.update === 'function'
+            given.length && typeof result.update === 'function'
                 ? ([, , ...next]) => {
-                      if (!given.length || !changed(held, next[0])) return;
+                      if (!changed(held, next[0])) return;
 
                       held = next[0];
                       result.update(python ? held : forJavaScript([held])[0]);

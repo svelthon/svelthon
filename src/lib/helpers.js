@@ -424,19 +424,30 @@ export function from_json(text) {
 export function batch(xs, size, fill) {
     // The same recognition, for the same reason: `Number.isInteger` asked of the
     // object a Python `int` subclass is answers false, so the size is read
-    // through `written` first. The constraint below is this helper's own.
+    // through `written` first. An int past 2^53 is a `bigint` there, and an int
+    // all the same, and so is `True`, the int 1. The constraint below is this
+    // helper's own.
     size = written(size);
+    if (typeof size === 'boolean') size = Number(size);
 
-    if (!Number.isInteger(size) || size < 1) {
+    if (!(typeof size === 'bigint' || Number.isInteger(size)) || size < 1) {
         throw refuse('batch(): n must be an integer of at least one');
     }
 
     const items = __pybridge.seq(xs);
+    const padded = fill !== undefined && fill !== NONE;
+
+    // A padded row holds `size` items, which no JavaScript array can past this.
+    if (padded && size > 2 ** 32 - 1) throw refuse('batch(): n is too large to pad a row to');
+
+    // A row is never longer than the input when nothing pads it, so a larger
+    // size is that length, read without a `bigint` turned into a double.
+    const step = size > items.length ? Math.max(items.length, 1) : Number(size);
     const out = [];
 
-    for (let at = 0; at < items.length; at += size) {
-        const row = items.slice(at, at + size);
-        if (fill !== undefined && fill !== NONE) while (row.length < size) row.push(fill);
+    for (let at = 0; at < items.length; at += step) {
+        const row = items.slice(at, at + step);
+        if (padded) while (row.length < size) row.push(fill);
         out.push(__pybridge.list(row));
     }
 

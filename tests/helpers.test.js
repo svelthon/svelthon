@@ -822,6 +822,23 @@ describe('batch', () => {
     test('an empty input gives no rows rather than one empty row', () => {
         expect(rows(batch(__pybridge.list([]), 3))).toBe('[]');
     });
+
+    // A Python int past 2^53 is a `bigint` here, and an int all the same: it was
+    // refused as no integer. Without padding a size past the input is one row,
+    // as Jinja's `do_batch` answers; with padding, a row no array can hold is
+    // refused rather than built.
+    test('an int past 2**53 is a size like any other', () => {
+        expect(rows(batch(__pybridge.list([]), 2n ** 53n))).toBe('[]');
+        expect(rows(batch(__pybridge.list([1, 2, 3]), 2n ** 53n))).toBe('[[1, 2, 3]]');
+        expect(rows(batch(__pybridge.list([1, 2, 3]), 10n ** 30n))).toBe('[[1, 2, 3]]');
+        expect(() => batch(__pybridge.list([1]), 2n ** 53n, 0)).toThrow(/batch\(\): n is too large to pad a row to/);
+    });
+
+    // `True` is the int 1, as an `int` subclass holding 1 already was here.
+    test('True is a size of one, and False is refused like 0', () => {
+        expect(rows(batch(__pybridge.list([1, 2]), true))).toBe('[[1], [2]]');
+        expect(() => batch(__pybridge.list([1]), false)).toThrow(/batch\(\): n must be an integer of at least one/);
+    });
 });
 
 describe('date', () => {

@@ -424,9 +424,12 @@ test('a property of what a directive hands back that raises is described', async
 
     expect(message(() => faded.duration)).toMatch(/^ValueError: duration failed \(/);
     expect(message(() => moved.duration)).toMatch(/^ValueError: duration failed \(/);
-    // An action's `update` is read as the action is installed.
-    expect(message(() => directiveAction(node(), ['acting', () => python(directives.acting)]))).toMatch(
+    // An action's `update` is read as the action is installed, when the
+    // directive has a value; without one Svelte never reads it, and neither
+    // does the payload handed to Svelte.
+    expect(message(() => directiveAction(node(), ['acting', () => python(directives.acting), 1]))).toMatch(
         /^ValueError: update failed \(/
     );
+    expect(message(() => directiveAction(node(), ['acting', () => python(directives.acting)]))).toBe('no error');
     expect(directiveTransition(node(), ['fine', () => python(directives.fine)], { direction: 'in' }).duration).toBe(0.5);
 });
