@@ -963,7 +963,10 @@ test('the subclasses of a class are held weakly: subclasses-held-weakly', () => 
 
 // New bases CPython refuses are refused before anything changes: an empty
 // tuple, a value that is no class, a cycle, and bases whose instances are not
-// laid out as the old ones were. All were taken, `(1,)` failing half way.
+// laid out as the old ones were. All were taken, `(1,)` failing half way. The
+// layout is read off the slots a class has, whatever their order or spelling:
+// a text of the declaration refused two orders of the same slots and took two
+// dicts of different ones.
 test('new bases CPython refuses leave the class as it was: bases-set-validates', async () => {
     const { answers } = await import('./fixtures/bases_refused.py');
 
@@ -972,7 +975,10 @@ test('new bases CPython refuses leave the class as it was: bases-set-validates',
         "C.__bases__ must be tuple of classes, not 'int' | A True",
         'a __bases__ item causes an inheritance cycle | A True',
         "__bases__ assignment: 'object' deallocator differs from 'A' | A True",
-        "__bases__ assignment: 'M' object layout differs from 'A' | A True"
+        "__bases__ assignment: 'M' object layout differs from 'A' | A True",
+        'accepted',
+        'accepted',
+        "__bases__ assignment: 'B' object layout differs from 'A'"
     ]);
 });
 
@@ -985,11 +991,21 @@ test('new bases bring their special methods: bases-set-resets-slots', async () =
 });
 
 // A base written twice is named, and builtins laid out apart cannot be bases
-// of one class, the one laid out apart being the class's `__base__`.
-test('a class statement refuses the bases CPython refuses: mro-duplicate-base, solid-base-builtin-layout', async () => {
+// of one class, the one laid out apart being the class's `__base__`. And a slot
+// is an identifier, a `__dict__` declared once: `type()` took any name, and
+// raised a JavaScript error on a slot that is no string.
+test('a class refuses the bases and slots CPython refuses: mro-duplicate-base, solid-base-builtin-layout, slots-valid-identifiers', async () => {
     const { answers } = await import('./fixtures/class_bases.py');
 
-    expect([...answers()]).toEqual(['duplicate base class A', 'multiple bases have instance lay-out conflict', 'list']);
+    expect([...answers()]).toEqual([
+        'duplicate base class A',
+        'multiple bases have instance lay-out conflict',
+        'list',
+        '__slots__ must be identifiers',
+        "__slots__ items must be strings, not 'int'",
+        '__dict__ slot disallowed: we already got one',
+        'P'
+    ]);
 });
 
 // A module named with a quote, from a file such as `src/Jean's app/Page.svelte`,

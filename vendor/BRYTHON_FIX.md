@@ -1,7 +1,7 @@
 # Patches applied to the vendored Brython
 
 `brython_runtime.js` and `brython_compiler.js` are cut from one bundle, built
-from Brython's master of 11 September 2026 plus eighty-nine proposed commits
+from Brython's master of 11 September 2026 plus ninety proposed commits
 (`metaclass-getattribute-args` in two, as amended for its PR) and four merged
 upstream since (#3022, #2996, #2989, #2982), with **four** edits
 made in the file itself afterwards. The wrapper, the integer format and the
@@ -72,7 +72,8 @@ written against:
 | `bases-set-subclass-mro` | a class given new bases, `C.__bases__ = (B,)`, reorders its subclasses too, where only the class itself was: `D(C)` kept finding the name on `C`'s old base. An assignment a subclass's order refuses leaves every class as it was |
 | `bases-set-moves-subclass` | a class given new bases leaves its old bases' `__subclasses__()` for the new ones', where it stayed under the old: a second change higher up then missed it. Written for the merged state of `bases-set-subclass-mro` and `subclasses-held-weakly`, whose `remove` it calls |
 | `subclasses-held-weakly` | a class's subclasses are held weakly, so a class nobody refers to any more is collected: every base kept every subclass it ever had, a class a component makes once per mount among them. The registry pushes, removes, and yields the live ones, so its readers are unchanged |
-| `bases-set-validates` | new bases CPython refuses are refused before anything changes: an empty tuple, a value that is no class, a cycle, and bases whose instances are laid out otherwise (CPython's `compatible_for_assignment`, read from the GC flag, the builtins' sizes and offsets, and the classes' `__slots__`). All were taken, `(1,)` raising a JavaScript error half way |
+| `bases-set-validates` | new bases CPython refuses are refused before anything changes: an empty tuple, a value that is no class, a cycle, and bases whose instances are laid out otherwise (CPython's `compatible_for_assignment`, read from the GC flag, the builtins' sizes and offsets, and the slots a class declares, kept sorted at its creation as CPython's `ht_slots`). All were taken, `(1,)` raising a JavaScript error half way |
+| `slots-valid-identifiers` | a slot is an identifier given as a string, and `__dict__` or `__weakref__` is declared once, whether the class comes from a statement or from `type()`, which took any name and raised a JavaScript error on one that is no string. A marker a base already has is still taken: Brython's own stand-ins for CPython's C types, `_weakref.ref` and `_socket.socket`, are Python classes with a `__dict__` and a `__weakref__`, under which the standard library declares its own. Written for the merged state of `bases-set-validates`, whose `$slots` it reads |
 | `bases-set-resets-slots` | a class given new bases updates its `__base__` and what it, and its subclasses, resolved along the hierarchy: `__call__`, `__iter__`, `__init__`, `__new__`, `__setattr__`, `__getattr__`, `__get__`, `__set__`; they kept the old base's |
 | `mro-duplicate-base` | a base written twice is refused as `duplicate base class A`, where the MRO reported an inconsistent hierarchy |
 | `solid-base-builtin-layout` | a builtin laid out apart from its base is its own solid base, as by its size in CPython: `class X(list, dict)` is refused, and `class X(A, list)` lays out on `list` |
@@ -196,7 +197,7 @@ than by a build-time check, and going upstream retires none of them:
 | a class is listed under the bases it has, implicit `object` included, held weakly (master's `655352e85`, #2982, branches `bases-set-moves-subclass`, `subclasses-held-weakly`) | `tests/vendor.test.js` |
 | a class given new bases reorders its subclasses (branch `bases-set-subclass-mro`) | `tests/vendor.test.js`, and `tests/inherited-state.test.js`, a subclass read repainted after `C.__bases__ = (B,)` |
 | new bases CPython refuses leave the class as it was, and new bases bring their special methods (branches `bases-set-validates`, `bases-set-resets-slots`) | `tests/vendor.test.js` |
-| a class statement refuses a base written twice and builtins laid out apart (branches `mro-duplicate-base`, `solid-base-builtin-layout`) | `tests/vendor.test.js` |
+| a class refuses a base written twice, builtins laid out apart, and slot names CPython refuses (branches `mro-duplicate-base`, `solid-base-builtin-layout`, `slots-valid-identifiers`) | `tests/vendor.test.js` |
 | a method-wrapper compares and hashes by its function and its receiver (master's `e2e990dd6`, #2989) | `tests/vendor.test.js`, and `tests/method-identity.test.js`, `box.__setattr__` read twice through the runtime's wrapper |
 | the `__dict__` attribute is read as Python reads it, through `vars()`, on a slotted instance and through `super(C, C)`, and `__init_subclass__` is a classmethod (branches `init-subclass-classmethod`, `super-type-no-instance`, `slots-no-dict-descriptor`, `vars-dict-attribute`) | `tests/vendor.test.js`, and `tests/oracle-attributes.test.js`, the model and the page held against CPython |
 

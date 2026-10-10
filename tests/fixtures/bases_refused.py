@@ -22,6 +22,19 @@ def refused(bases):
     return "accepted"
 
 
+# Instances laid out alike whatever the order or the spelling of the slots
+# declared, and apart when the names differ.
+def swapped(slots_a, slots_b):
+    A = type("A", (), {} if slots_a is None else {"__slots__": slots_a})
+    B = type("B", (), {} if slots_b is None else {"__slots__": slots_b})
+    C = type("C", (A,), {"__slots__": ()})
+    try:
+        C.__bases__ = (B,)
+    except TypeError as error:
+        return str(error)
+    return "accepted"
+
+
 def answers():
     return [
         refused(lambda C: ()),
@@ -29,4 +42,7 @@ def answers():
         refused(lambda C: (C,)),
         refused(lambda C: (object,)),
         refused(lambda C: (M,)),
+        swapped(("x", "y"), ("y", "x")),
+        swapped(("__dict__", "__weakref__"), None),
+        swapped({"x": None}, {"y": None}),
     ]
