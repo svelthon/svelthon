@@ -920,6 +920,15 @@ test('the __dict__ attribute is read as Python reads it: init-subclass-classmeth
     ]);
 });
 
+// A method-wrapper compares and hashes by its function and its receiver: both
+// slots were empty functions, so `box.__setattr__ == box.__setattr__` answered
+// a JavaScript `undefined` (merged #2989, after the vendored master).
+test('a method-wrapper is equal to itself and hashes alike: #2989', async () => {
+    const { answers } = await import('./fixtures/method_wrapper_eq.py');
+
+    expect([...answers()]).toEqual(['True', 'False', 'True', 'False', 'True']);
+});
+
 // A module named with a quote, from a file such as `src/Jean's app/Page.svelte`,
 // had its name pasted between quotes in the code of every def, lambda, class
 // and comprehension, which then stopped parsing.
