@@ -14,6 +14,7 @@ tally = 0
 chosen = 0
 rows = [0, 0]
 boxes = [Box(), Box()]
+said = ""
 </script>
 
 <p data-k="key">{m["x"]}</p>
@@ -34,3 +35,9 @@ boxes = [Box(), Box()]
 <button data-k="by-ligature" onclick={lambda: (box.ﬁeld := 3, m.ﬁeld := 4)}>ligature</button>
 <button data-k="nested-key" onclick={lambda: (rows[(chosen := 1)] := 7)}>key</button>
 <button data-k="nested-receiver" onclick={lambda: (boxes[(chosen := 1)].width := 8)}>receiver</button>
+
+<!-- A walrus in an f-string field writes the name, whatever the field prints. -->
+<p data-k="formatted">{chosen}|{said}</p>
+<button data-k="in-field" onclick={lambda: (said := f"{(chosen := chosen + 1)}")}>field</button>
+<button data-k="in-debug" onclick={lambda: (said := f"{(chosen := 5)=}")}>debug</button>
+<button data-k="in-spec" onclick={lambda: (said := f"{(chosen := 6)=:>3}")}>spec</button>

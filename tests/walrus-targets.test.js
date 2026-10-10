@@ -57,7 +57,20 @@ describe('what a walrus may aim at', () => {
         // comparison is not an assignment.
         ['lambda: f(x := 1)', 'lambda: f(x := 1)'],
         ['lambda: (a == b)', 'lambda: (a == b)'],
-        ['lambda: (m[a := 1])', 'lambda: (m[a := 1])']
+        ['lambda: (m[a := 1])', 'lambda: (m[a := 1])'],
+
+        // An f-string's fields are code, its text is not. A field ending in `=`
+        // prints its own text, kept in a string field of its own, then the value
+        // with the `!r` the `=` implies when nothing else is said.
+        ['lambda: f"{(n := 1)}"', 'lambda: f"{__assign("n", 1)}"'],
+        ['lambda: f"{(n := 1)!s:>3}"', 'lambda: f"{__assign("n", 1)!s:>3}"'],
+        ['lambda: f"{x:{(w := 4)}}"', 'lambda: f"{x:{__assign("w", 4)}}"'],
+        ['lambda: f"{ (n := 1) = }"', 'lambda: f"{" (n := 1) = "}{ __assign("n", 1) !r}"'],
+        ['lambda: f"{(n := 1)=:>3}"', 'lambda: f"{"(n := 1)="}{__assign("n", 1):>3}"'],
+        ['lambda: f"{(n := 1)=!s}"', 'lambda: f"{"(n := 1)="}{__assign("n", 1)!s}"'],
+        ['lambda: f"{n}{n == 1}{n=}"', 'lambda: f"{n}{n == 1}{n=}"'],
+        ['lambda: f"(n := 1) {{(n := 1)}}"', 'lambda: f"(n := 1) {{(n := 1)}}"'],
+        ['lambda: "{(n := 1)}"', 'lambda: "{(n := 1)}"']
     ])('%s', ([source, expected]) => {
         expect(walrus(source)).toBe(expected);
     });
@@ -149,5 +162,21 @@ describe('a walrus onto something other than a name', () => {
         flushSync();
 
         expect(target.querySelector('p[data-k="nested"]').textContent).toBe(k === 'nested-key' ? '1|7|1' : '1|0|8');
+    });
+
+    // The texts are CPython's for the same f-strings with `chosen` a global.
+    test.for([
+        ['in-field', '1|1'],
+        ['in-debug', '5|(chosen := 5)=5'],
+        ['in-spec', '6|(chosen := 6)=  6']
+    ])('a walrus in an f-string field writes the name: %s', ([k, shown]) => {
+        const target = document.body.appendChild(document.createElement('div'));
+        mount(WalrusTargets, { target });
+        flushSync();
+
+        target.querySelector(`button[data-k="${k}"]`).click();
+        flushSync();
+
+        expect(target.querySelector('p[data-k="formatted"]').textContent).toBe(shown);
     });
 });

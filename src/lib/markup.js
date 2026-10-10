@@ -289,10 +289,11 @@ export function walrus(expression) {
     let index = 0;
 
     while (index < expression.length) {
-        const skip = atomic(expression, index);
+        const fields = [];
+        const skip = atomic(expression, index, (from, to) => fields.push([from, to]));
 
         if (skip > 0) {
-            out += expression.slice(index, index + skip);
+            out += walrusFields(expression, index, index + skip, fields);
             index += skip;
             continue;
         }
@@ -363,6 +364,34 @@ export function walrus(expression) {
     }
 
     return out;
+}
+
+// An f-string's fields are code, and a walrus in one writes the component's name
+// as it does anywhere else in a handler: `f"{(count := 1)}"`. The text around
+// them is kept. A field ending in `=` prints its own text, `(count := 1)=1`, so
+// that text becomes a string field of its own, and the value follows with the
+// `!r` the `=` implies when the field gives no conversion and no specification.
+function walrusFields(source, from, to, fields) {
+    let out = '';
+    let at = from;
+
+    for (const [start, end] of fields) {
+        const field = source.slice(start, end);
+        const conversion = field.match(CONVERSION)?.[0] ?? '';
+        const text = field.slice(0, field.length - conversion.length);
+        const debug = text.match(/(?<![=!<>])=\s*$/);
+        const expression = debug ? text.slice(0, debug.index) : field;
+        const written = walrus(expression);
+
+        if (written === expression) continue;
+
+        out += debug
+            ? `${source.slice(at, start - 1)}{${JSON.stringify(text)}}{${written}${conversion || (source[end] === ':' ? '' : '!r')}`
+            : source.slice(at, start) + written;
+        at = end;
+    }
+
+    return out + source.slice(at, to);
 }
 
 // The markup of a component, and nothing else: Python is full of braces (dict
