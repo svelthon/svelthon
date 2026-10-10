@@ -796,7 +796,7 @@ function installMutationTracking($B) {
                 stored(obj, args[0], args[1]);
             } else if (attr === '__setattr__' || attr === '__delattr__') {
                 // What the object holds now, as after `box.value = 1`.
-                rewalk(obj, args[1]);
+                rewalk(obj, args[1], args[0]);
             } else {
                 for (const arg of args) {
                     if (!SOURCES.has(attr)) inherit(obj, arg);
@@ -931,7 +931,7 @@ function installMutationTracking($B) {
 
         // Data, not a method: a method read is a new bound object each time,
         // and what replaces it is a write of the name.
-        if (holder !== undefined && !callable(result)) linked(nameMarker(holder, attr), holder, result, undefined, true);
+        if (holder !== undefined && !callable(result)) linked(nameMarker(holder, attr), holder, result, undefined, true, attr);
 
         if (!MARKS.has(obj)) return;
 
@@ -945,7 +945,7 @@ function installMutationTracking($B) {
         // hierarchy, so no property of the author's is run by the act of
         // watching, and `inherit` steps over a function of JavaScript's, a
         // string or a class on its own.
-        inherit(obj, result, undefined, true);
+        inherit(obj, result, undefined, true, attr);
 
         // And the classes the value was looked up through, when it was not the
         // object's own: linked under the object, so a write on any of them,
@@ -1117,7 +1117,16 @@ function installMutationTracking($B) {
     // Svelte refuses to make of its own state, and waking the reader would run
     // the expression that wrote it again, without end.
     const classNameChanged = (cls, attr) => {
-        if (typeof attr !== 'string' || !pyClass(cls) || rendering > 0) return;
+        if (typeof attr !== 'string' || !pyClass(cls)) return;
+
+        // The value the name held is asked again the next time a mutation of
+        // it climbs to the name (`attributeHolds`), as a container's links are
+        // once the container itself has changed.
+        const marker = NAME_MARKERS.get(cls)?.get(attr);
+
+        if (marker !== undefined) marker.stamp = ++changes;
+
+        if (rendering > 0) return;
 
         const names = CLASS_NAMES.get(cls);
 
@@ -1261,7 +1270,7 @@ function installMutationTracking($B) {
     // All of it is idempotent: `inherit` keeps one parent per child and `mark`
     // is a WeakMap lookup away. It runs only for an object under watch, which is
     // the guard the caller already holds.
-    const rewalk = (obj, value) => {
+    const rewalk = (obj, value, name) => {
         adopt(obj);
 
         const attributes = ownAttributes(obj);
@@ -1270,7 +1279,7 @@ function installMutationTracking($B) {
             adopt(attributes);
         }
 
-        inherit(obj, value, undefined, true);
+        inherit(obj, value, undefined, true, name);
     };
 
     // `box.value = 1` and `del box.value`. Brython compiles an attribute write
@@ -1302,7 +1311,7 @@ function installMutationTracking($B) {
                     // Read off the instance's own storage, never through
                     // `$getattr`: a property of the author's must not run
                     // because something was written.
-                    rewalk(obj, value);
+                    rewalk(obj, value, attr);
                     MARKS.get(obj)();
                 }
             }
@@ -1880,9 +1889,30 @@ function holds(holder, child, marker) {
 
     const base = storedAs(cls);
 
-    if (base === undefined || stores(base, holder, child, marker)) return true;
+    if (base === undefined) return attributeHolds(holder, child, marker);
+    if (stores(base, holder, child, marker)) return true;
 
     return base !== cls && (marker.loose?.has(holder) === true || redefinesItems(cls));
+}
+
+// Whether an object, an instance or a class, still holds what was read off it
+// under a name, `box.rows` or `Shelf.rows`: one of those names still binds it
+// in the holder's own dictionary, read as data, so no property of the author's
+// runs. `Shelf.rows = [1]` and the old list no longer wakes what reads the new
+// one. A name the holder does not bind itself, the child found on its class or
+// behind a property, cannot be told, and the link is kept, as is one made with
+// no name.
+function attributeHolds(holder, child, marker) {
+    const names = marker.names?.get(holder);
+    const own = ownAttributes(holder);
+
+    if (names === undefined || own === null || typeof own !== 'object') return true;
+
+    for (const name of names) {
+        if (!Object.hasOwn(own, name) || own[name] === child) return true;
+    }
+
+    return false;
 }
 
 // Whether the storage of a list, a dict or a set holds `child`.
@@ -2537,13 +2567,14 @@ export function unsubscribe(owner) {
 // parent's can confirm, so `holds` keeps it.
 const SWEEP_FROM = 8;
 
-function inherit(parent, child, key, loose = false) {
-    return linked(MARKS.get(parent), parent, child, key, loose);
+function inherit(parent, child, key, loose = false, name = undefined) {
+    return linked(MARKS.get(parent), parent, child, key, loose, name);
 }
 
 // The same, under a marker given rather than read off `parent`: the one that
-// stands for a name of a class, which carries no marker of its own.
-function linked(marker, parent, child, key, loose) {
+// stands for a name of a class, which carries no marker of its own. `name` is
+// the attribute the child was read under, which `holds` asks again.
+function linked(marker, parent, child, key, loose, name) {
     if (!watchable(child)) return child;
 
     let own = MARKS.get(child);
@@ -2599,6 +2630,13 @@ function linked(marker, parent, child, key, loose) {
     // its key, so this holds it no longer than the container lives.
     if (key !== undefined) (own.keys ??= new WeakMap()).set(parent, key);
     if (loose) (own.loose ??= new WeakSet()).add(parent);
+
+    if (name !== undefined) {
+        const names = (own.names ??= new WeakMap());
+
+        if (!names.has(parent)) names.set(parent, new Set());
+        names.get(parent).add(name);
+    }
 
     if (revived) adopt(child);
 

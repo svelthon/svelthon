@@ -4,11 +4,30 @@
 import { test, expect, beforeEach } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import Rebound from './fixtures/Rebound.svelte';
+import ReboundAttribute from './fixtures/ReboundAttribute.svelte';
 import { events, oldEvents } from './fixtures/rebound_log.js';
 
 beforeEach(() => {
     events.length = 0;
     oldEvents.length = 0;
+});
+
+// The same rule for a list an attribute held: `Shelf.rows = [1]` or `box.rows =
+// [1]`, then the old list changed, re-ran the effect reading the new one, the
+// old list's link to the attribute kept as long as it lived. The runs are
+// counted, since the page reads right either way.
+test.for(['class', 'instance', 'module name'])('an attribute replaced lets its old list go: %s', (kind) => {
+    const target = document.body.appendChild(document.createElement('div'));
+    const runs = [];
+    const instance = mount(ReboundAttribute, { target, props: { kind, runs } });
+
+    flushSync();
+    for (const step of ['replace', 'change_old', 'change_current']) {
+        instance[step]();
+        flushSync();
+    }
+
+    expect(runs).toEqual([0, 1, 2]);
 });
 
 const setup = () => {
