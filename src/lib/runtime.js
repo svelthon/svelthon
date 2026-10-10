@@ -6761,7 +6761,7 @@ function lookup(target, name) {
     let cls;
     try {
         cls = $B.get_class(target);
-        if ($B.$getattr(cls, '__getitem__', MISSING) === MISSING) return MISSING;
+        if ($B.search_in_mro(cls, '__getitem__', $B.NULL) === $B.NULL) return MISSING;
     } catch {
         return MISSING; // a foreign JavaScript value has no Python protocol to ask
     }

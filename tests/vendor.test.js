@@ -859,6 +859,25 @@ test('an identifier is read in its normalized form: identifier-nfkc', async () =
     expect([...answers()]).toEqual(['field', 'flag', '8', 'full', 'composed', 'missing']);
 });
 
+// A metaclass's `__getattribute__` was handed a third argument, so every read of
+// a class it governs raised `TypeError`, `Plain.__name__` included. And a
+// subscript asked the metaclass for `__setitem__`, `__delitem__` and, for a
+// slice, `__getitem__`, where Python reads the class's MRO.
+test('a metaclass __getattribute__ is called with the class and the name, and a subscript never asks it: metaclass-getattribute-args, item-dunder-mro-lookup', async () => {
+    const { answers } = await import('./fixtures/metaclass_getattribute.py');
+
+    expect([...answers()]).toEqual([
+        '1',
+        'Plain',
+        '0',
+        'False',
+        'fallback',
+        'slice(0, 1, None)',
+        "{'k': 1}",
+        '{}'
+    ]);
+});
+
 // A method descriptor called through its type checks its receiver: `list.append`
 // handed an object that is not a list answered `None`, and `str.upper` handed
 // an int raised a `JavascriptError`.
