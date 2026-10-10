@@ -131,11 +131,12 @@ describe('the walrus', () => {
         ])('%s', ([source, expected]) => expect(walrus(source)).toBe(expected));
     });
 
-    // An f-string is a string, and strings are opaque by design — the rule that
-    // protects `"(a := 1)"`. The assignment inside one is therefore lost, which
-    // is a question about f-strings rather than about the walrus.
-    test('a walrus inside an f-string is not rewritten', () =>
-        expect(walrus('f"{(a := 1)}"')).toBe('f"{(a := 1)}"'));
+    // A string is opaque by design, the rule that protects `"(a := 1)"`. An
+    // f-string's fields are code, and a walrus there writes as anywhere else.
+    test('a walrus inside an f-string field is rewritten, not one inside a string', () => {
+        expect(walrus('f"{(a := 1)}"')).toBe('f"{__assign("a", 1)}"');
+        expect(walrus('"{(a := 1)}"')).toBe('"{(a := 1)}"');
+    });
 });
 
 // Python is full of braces — dict literals, f-strings — so a `<script>` or a
