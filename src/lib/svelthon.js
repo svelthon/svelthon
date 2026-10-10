@@ -16,7 +16,7 @@ import {
 import { parse } from 'svelte/compiler';
 
 const require = createRequire(import.meta.url);
-const { compile, VIRTUAL_PREFIX, virtualId, pythonModuleName, elementProps, PY_NAME } = require('./compile.cjs');
+const { compile, VIRTUAL_PREFIX, virtualId, pythonModuleName, elementProps, PY_NAME, componentImports } = require('./compile.cjs');
 
 // Generated modules, keyed by project and component name. Filled by the preprocessor when
 // Svelte transforms a component, read back when Vite resolves the import that
@@ -441,14 +441,31 @@ export function python(options = {}) {
             // The collector itself is in markup.js, which the browser can load.
             const collect = collector(file.defs, file.defLines, file.defColumns);
 
+            const python = content.slice(open, declaring.end);
+
+            // The children written in Python, read off their own file: a prop
+            // handed to one is the Python value itself, a `Price(float)` with
+            // its class, where a JavaScript child is handed JavaScript's
+            // number. A child the file system cannot name, an alias or a
+            // package, is taken for a JavaScript one, as before.
+            const pythonChildren = new Set(
+                componentImports(python, filename ?? 'component')
+                    .filter(({ from }) => {
+                        if (!filename || !from.startsWith('.')) return false;
+
+                        const path = resolve(dirname(filename), from);
+
+                        return existsSync(path) && pythonScript(readFileSync(path, 'utf8')) !== null;
+                    })
+                    .map(({ local }) => local)
+            );
+
             const code = overMarkup(
                 content,
                 // The markup, and where it starts, so a refusal can name a
                 // line and a column in the file the author is looking at.
-                (markup, offset) => pythonExpressions(markup, collect, undefined, { filename, content, offset })
+                (markup, offset) => pythonExpressions(markup, collect, undefined, { filename, content, offset, pythonChildren })
             );
-
-            const python = content.slice(open, declaring.end);
 
             return { code: tagged(elementOptions(code, python), calls.open(file)) };
         },

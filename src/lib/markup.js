@@ -2341,7 +2341,13 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         // A `value` is what a binding compares by identity, an `<option>`
         // against its `<select>`, so a container keeps its own, and a scalar
         // is still compared by value.
-        return `{${call(inner, '__bound', undefined, name === 'value' ? 'scalar' : '')}}`;
+        //
+        // A prop handed to a child written in Python is the Python value itself,
+        // as the context hands it: a `Price(float)` keeps its class, and a
+        // `15.0` stays a float. A JavaScript child is handed JavaScript's own.
+        const pythonChild = isComponent(tag) && where?.pythonChildren?.has(tag.name);
+
+        return `{${call(inner, '__bound', undefined, pythonChild ? 'python' : name === 'value' ? 'scalar' : '')}}`;
     };
 
     const refuseLet = (name) => {
@@ -2541,8 +2547,14 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                         // previous render sees a mutation: that is what a
                         // JavaScript spread does by itself.
                         // On an element, each key is read by its name as the
-                        // attribute it becomes.
-                        out += `{...${call(trimmed.slice(2), onElement(tag) ? '__spreadElement' : '__spread')}}`;
+                        // attribute it becomes. On a child written in Python,
+                        // each value is handed over as a prop written by name
+                        // is, the Python value itself.
+                        const toPython = isComponent(tag) && where?.pythonChildren?.has(tag.name);
+
+                        out += toPython
+                            ? `{...${call(trimmed.slice(2), '__spreadPython', undefined, 'python')}}`
+                            : `{...${call(trimmed.slice(2), onElement(tag) ? '__spreadElement' : '__spread')}}`;
                     } else if (trimmed.startsWith('...')) {
                         throw refuse(
                             new SyntaxError(

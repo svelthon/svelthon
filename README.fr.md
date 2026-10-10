@@ -75,7 +75,7 @@ reste de cette configuration et ce que chaque ligne apporte.
 npm install
 npm run dev
 
-npm test             # 1 760 tests : sémantique, props, réactivité, surface Svelte
+npm test             # 1 761 tests : sémantique, props, réactivité, surface Svelte
 npm run test:quiet   # la sortie de la suite : un run vert ne doit rien dire
 npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
@@ -255,6 +255,12 @@ Un prop est lisible dès l'exécution du corps du module, une mise à jour du
 parent traverse jusqu'au Python, et un prop requis non fourni vaut `None`, pas
 `undefined`. Écrire dans un prop depuis Python n'a d'effet que si le parent n'en
 fournit pas : c'est la règle de Svelte pour les props non `$bindable`.
+
+Un parent Python donne à un enfant Python la valeur elle-même, une sous-classe
+de `float` avec sa classe, et à un enfant JavaScript le nombre ou la chaîne de
+JavaScript. Le compilateur les distingue en lisant le fichier de l'enfant : un
+enfant qu'il ne peut pas nommer, importé par un alias ou choisi à l'exécution,
+reçoit ce que reçoit un enfant JavaScript.
 
 ### Un prop qui remonte
 
@@ -1558,7 +1564,7 @@ part jamais.
 
 ## État
 
-Validé par `npm test`, 1 760 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 1 761 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;

@@ -77,7 +77,7 @@ rest of that configuration and what each line buys.
 npm install
 npm run dev
 
-npm test             # 1 760 tests: semantics, props, reactivity, Svelte surface
+npm test             # 1 761 tests: semantics, props, reactivity, Svelte surface
 npm run test:quiet   # the suite's own output: a green run must say nothing
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
@@ -253,6 +253,12 @@ A prop is readable while the module body runs, a parent update flows through to
 Python, and a required prop that was not passed reads as `None`, not
 `undefined`. Writing to a prop from Python only takes effect when the parent
 supplies nothing, which is Svelte's own rule for non-`$bindable` props.
+
+A Python parent hands a Python child the value itself, a `float` subclass with
+its class, and a JavaScript child JavaScript's number or string. The compiler
+tells the two apart by reading the child's file, so a child it cannot name, one
+imported through an alias or chosen at runtime, is handed what a JavaScript
+child is.
 
 ### A prop that travels back up
 
@@ -1539,7 +1545,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 1 760 tests as written (vitest reports more, one per
+Validated by `npm test`, 1 761 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;

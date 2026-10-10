@@ -611,6 +611,12 @@ export const __pybridge = {
         return spreadOf(value, (one) => pyNumbers(__pybridge.bound(one)));
     },
 
+    // The same props handed to a child written in Python, each the Python value
+    // itself, as one written by name is handed to it.
+    spreadPython(value) {
+        return spreadOf(value, __pybridge.bound);
+    },
+
     // A spread on an element: each key is the attribute it becomes, read the
     // way that attribute is read when written by name. Only None is converted
     // first, as the direct path converts it: an object stays the object, which

@@ -1280,6 +1280,24 @@ function importJsClause(line, where, source, lineno) {
     );
 }
 
+// The components a component's Python imports by default from a `.svelte`
+// file, `importjs Child from "./Child.svelte"`, read by the same rule as the
+// compiler reads the line: what each local name is, and where it comes from.
+// Nothing for a script the compiler would refuse, which it then does itself.
+function componentImports(src, where) {
+    try {
+        return takeImportJs(src, where, 0, true)
+            .imports.filter((one) => one.from.endsWith('.svelte'))
+            .flatMap((one) =>
+                one.entries
+                    .filter((entry) => entry.name === null || entry.name === 'default')
+                    .map((entry) => ({ local: entry.local, from: one.from }))
+            );
+    } catch {
+        return [];
+    }
+}
+
 // Lift every `importjs` out of the source, leaving the line blank behind it.
 //
 // Blank rather than removed, and on the same line rather than rewritten into a
@@ -3171,6 +3189,7 @@ function injectedBindings(c) {
                   // A handler in a spread is adapted as one written by name.
                   `__bind(__proto, '__spreadElement', () => (value) => __pybridge.spreadElement(value, __event));`,
                   `__bind(__proto, '__spread', () => __pybridge.spread);`,
+                  `__bind(__proto, '__spreadPython', () => __pybridge.spreadPython);`,
                   `__bind(__proto, '__bound', () => __pybridge.bound);`,
                   `__bind(__proto, '__assign', () => __assign);`,
                   `__bind(__proto, '__getattr', () => __getattr);`,
@@ -4106,4 +4125,4 @@ function elementProps(src) {
     return [...props, ...bindables].map((name) => ({ name, type: types.get(name) }));
 }
 
-module.exports = { compile, VIRTUAL_PREFIX, virtualId, pythonModuleName, elementProps, PY_NAME };
+module.exports = { compile, VIRTUAL_PREFIX, virtualId, pythonModuleName, elementProps, PY_NAME, componentImports };
