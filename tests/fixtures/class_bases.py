@@ -32,17 +32,6 @@ def bound(slots, namespace):
         return str(error)
 
 
-class E(A):
-    pass
-
-
-def bound(slots, namespace):
-    try:
-        return type("P", (), {"__slots__": slots, **namespace}).__name__
-    except ValueError as error:
-        return str(error)
-
-
 def made_on(base, slots):
     try:
         return type("C", (base,), {"__slots__": slots}).__name__
@@ -58,8 +47,6 @@ def answers():
         made((A, E)),
         bound(("x",), {"x": 1}),
         made_on(tuple, ("x",)),
-        made((A, E)),
-        bound(("x",), {"x": 1}),
         slotted(("x,y",)),
         slotted((1,)),
         slotted(("__dict__", "__dict__")),

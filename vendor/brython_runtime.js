@@ -2969,7 +2969,11 @@ function set_slots(cl_dict,class_obj){let slots=$B.str_dict_get(cl_dict,'__slots
 if(slots !==$B.NULL){class_obj.$slots=[]
 if(typeof slots=='string'){slots=[slots]
 $B.str_dict_set(cl_dict,'__slots__',slots)}
-for(let key of $B.make_js_iterator(slots)){if(typeof key !='string'){$B.RAISE(_b_.TypeError,'__slots__ items must be '+
+var base=class_obj.tp_base
+while(base.tp_flags & TPFLAGS.HEAPTYPE){base=base.tp_base}
+for(let key of $B.make_js_iterator(slots)){if(base.tp_itemsize){$B.RAISE(_b_.TypeError,'nonempty __slots__ not supported '+
+`for subtype of '${$B.get_name(class_obj.tp_base)}'`)}
+if(typeof key !='string'){$B.RAISE(_b_.TypeError,'__slots__ items must be '+
 `strings, not '${$B.class_name(key)}'`)}
 if(! _b_.str.tp_funcs.isidentifier(key)){$B.RAISE(_b_.TypeError,'__slots__ must be identifiers')}
 if(MARKERS.includes(key)&& class_obj.$slots.includes(key)){$B.RAISE(_b_.TypeError,`${key} slot disallowed: we already got one`)}
