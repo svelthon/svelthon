@@ -3,6 +3,7 @@
 // What JavaScript writes through the view of a Python list, against what the
 // same write does to an array.
 import { test, expect, describe } from 'vitest';
+import '../src/lib/compile.cjs';
 import { __pybridge, pyData } from '../src/lib/runtime.js';
 
 const view = (items) => {
@@ -91,8 +92,8 @@ describe('a length an array would refuse', () => {
     // property, so the write is refused, through `defineProperty` too, and
     // the length is the array's.
     //
-    // The appends are counted and stopped at the tenth, so that a regression
-    // fails here rather than filling the worker's memory.
+    // The calls that grow the list are counted and stopped at the tenth, so
+    // that a regression fails here rather than filling the worker's memory.
     test.for([
         ['2³² − 1', '4294967295'],
         ['2³²', '4294967296'],
@@ -109,7 +110,7 @@ describe('a length an array would refuse', () => {
 
             $B.$getattr = function (object, name, ...rest) {
                 const found = getattr.call(this, object, name, ...rest);
-                if (object !== source || name !== 'append') return found;
+                if (object !== source || (name !== 'append' && name !== 'extend')) return found;
 
                 return (...given) => {
                     if (++appends > 10) throw new Error('the list grew past ten appends');
@@ -150,6 +151,51 @@ describe('a length an array would refuse', () => {
 
         native.length = length;
         list.length = length;
+
+        expect([...list].map((one) => one ?? undefined)).toEqual([...native]);
+    });
+});
+
+// A subclass whose `pop` or `append` moves nothing: the length and an index
+// past the end are written as Python writes them, `del rows[n:]` and
+// `rows.extend(...)`, and the write ends where an array's does. Each method
+// raises past its tenth call, so a loop on it fails here.
+describe('a subclass whose pop or append moves nothing', () => {
+    const $B = globalThis.__BRYTHON__;
+    const source = [
+        'calls = [0]',
+        '',
+        '',
+        'def counted():',
+        '    calls[0] += 1',
+        '    if calls[0] > 10:',
+        '        raise RuntimeError("called past ten times")',
+        '',
+        '',
+        'class StuckPop(list):',
+        '    def pop(self, index=-1):',
+        '        counted()',
+        '        return 99',
+        '',
+        '',
+        'class StuckAppend(list):',
+        '    def append(self, value):',
+        '        counted()',
+        ''
+    ].join('\n');
+    const js = $B.py2js({ src: source, filename: 'stuck_rows.py' }, 'stuck_rows', ['stuck_rows']).to_js();
+    const module = new Function(`${js}\nreturn locals_stuck_rows_py;`)();
+
+    test.for([
+        ['pop', 'the length 0', [1, 2], (rows) => (rows.length = 0)],
+        ['append', 'the length 3', [1], (rows) => (rows.length = 3)],
+        ['append', 'the index 3', [1], (rows) => (rows[3] = 9)]
+    ])('with %s stuck, %s is written as on an array', ([stuck, , items, write]) => {
+        const native = [...items];
+        const list = __pybridge.bound($B.$call(module[stuck === 'pop' ? 'StuckPop' : 'StuckAppend'], pyData(items)));
+
+        write(native);
+        write(list);
 
         expect([...list].map((one) => one ?? undefined)).toEqual([...native]);
     });

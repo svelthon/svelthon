@@ -3161,6 +3161,14 @@ function viewOf(value) {
         return Reflect.ownKeys(names);
     };
 
+    // A length or an index past the end, written as Python writes it, each in
+    // one call: `del rows[wanted:]`, `rows.extend([None] * missing)`, then
+    // `rows[at] = given`. A subclass whose `pop` or `append` does not move the
+    // length ends the write all the same.
+    const pad = (to) => {
+        if (length() < to) $B.$call($B.$getattr(value, 'extend'), _b_.list.$factory(Array(to - length()).fill(NONE)));
+    };
+
     const write = (key, given) => {
         if (!sequence) {
             const held = keyFor(key);
@@ -3180,8 +3188,8 @@ function viewOf(value) {
 
             const wanted = probe.length;
 
-            while (length() > wanted) $B.$call($B.$getattr(value, 'pop'));
-            while (length() < wanted) $B.$call($B.$getattr(value, 'append'), NONE);
+            if (length() > wanted) $B.$call($B.$getattr(value, '__delitem__'), _b_.slice.$factory(wanted, NONE));
+            else pad(wanted);
 
             return true;
         }
@@ -3190,10 +3198,8 @@ function viewOf(value) {
 
         if (at === undefined) return false;
 
-        while (length() < at) $B.$call($B.$getattr(value, 'append'), NONE);
-
-        if (at === length()) $B.$call($B.$getattr(value, 'append'), entering(given));
-        else $B.$setitem(value, at, entering(given));
+        pad(at + 1);
+        $B.$setitem(value, at, entering(given));
 
         return true;
     };
