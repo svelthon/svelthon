@@ -1,6 +1,6 @@
 # Bases a class refuses, the one it lays out on, and the slot names it
 # refuses. `python3` on this module gives the lines the test expects.
-__all__ = ["answers"]
+__all__ = ["answers", "shadowed_box"]
 
 
 class A:
@@ -39,6 +39,21 @@ def made_on(base, slots):
         return str(error)
 
 
+# A slot a subclass redeclares, written through each class's descriptor.
+def shadowed_box():
+    A = type("A", (), {"__slots__": ("x",)})
+    B = type("B", (A,), {"__slots__": ("x",)})
+    box = B()
+    box.x = 2
+    A.x.__set__(box, 1)
+    return box
+
+
+def shadowed():
+    box = shadowed_box()
+    return f"{box.x} {type(box).__mro__[1].x.__get__(box)}"
+
+
 def answers():
     return [
         made((A, A)),
@@ -47,6 +62,7 @@ def answers():
         made((A, E)),
         bound(("x",), {"x": 1}),
         made_on(tuple, ("x",)),
+        shadowed(),
         slotted(("x,y",)),
         slotted((1,)),
         slotted(("__dict__", "__dict__")),

@@ -995,7 +995,7 @@ test('new bases bring their special methods: bases-set-resets-slots', async () =
 // with no consistent MRO are named. And a slot is an identifier, a `__dict__`
 // declared once, a name the class does not bind: `type()` took any name, and
 // raised a JavaScript error on a slot that is no string.
-test('a class refuses the bases and slots CPython refuses: mro-duplicate-base, solid-base-builtin-layout, mro-error-message, slots-class-variable-conflict, slots-variable-size-base, slots-valid-identifiers', async () => {
+test('a class refuses the bases and slots CPython refuses, and keeps a redeclared slot apart: mro-duplicate-base, solid-base-builtin-layout, mro-error-message, slots-class-variable-conflict, slots-variable-size-base, slots-shadowed-storage, slots-valid-identifiers', async () => {
     const { answers } = await import('./fixtures/class_bases.py');
 
     expect([...answers()]).toEqual([
@@ -1005,6 +1005,7 @@ test('a class refuses the bases and slots CPython refuses: mro-duplicate-base, s
         'Cannot create a consistent method resolution order (MRO) for bases A, E',
         "'x' in __slots__ conflicts with class variable",
         "nonempty __slots__ not supported for subtype of 'tuple'",
+        '2 1',
         '__slots__ must be identifiers',
         "__slots__ items must be strings, not 'int'",
         '__dict__ slot disallowed: we already got one',
@@ -1039,6 +1040,15 @@ test('code from compile() runs where its tree leaves a field out: compile-ast-op
     const { seen } = new Function(`${js}\nreturn locals_round_trip_py;`)();
 
     expect([...seen]).toEqual(['1', 'None', '([1, 2, 3], [0, 2])', "{'a': 1}", "'in'"]);
+});
+
+// And the runtime reads the slot `box.x` reads, the subclass's, through the
+// descriptors: it read the storage by its name, which is the base's.
+test('a redeclared slot crosses as box.x reads it: slots-shadowed-storage', async () => {
+    const { shadowed_box } = await import('./fixtures/class_bases.py');
+    const { plainData } = await import('../src/lib/runtime.js');
+
+    expect(plainData(shadowed_box())).toEqual({ x: 2 });
 });
 
 // A module named with a quote, from a file such as `src/Jean's app/Page.svelte`,

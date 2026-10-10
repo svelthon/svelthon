@@ -1983,7 +1983,9 @@ function attributeOf(holder, name) {
     if (described !== $B.NULL && has(described, 'tp_descr_set')) {
         if (pyClass(holder) || $B.get_class(described) !== $B.member_descriptor) return UNTOLD;
 
-        return Object.hasOwn(holder, SLOT + name) ? holder[SLOT + name] : MISSING;
+        const slot = slotValues(holder);
+
+        return slot.has(name) ? slot.get(name) : MISSING;
     }
 
     const own = ownAttributes(holder);
@@ -2189,9 +2191,34 @@ const MARKS = new WeakMap();
 // reads a name, a test names it too.
 export const marks = (value) => MARKS.get(value);
 
-// Brython's own name for a slot's storage on an instance, from `set_slots` in
-// `py_type.js`. Part of the vendored contract, like `$store` and `$iter_items`.
-const SLOT = 'slot_value_';
+// The slots of an instance, read through their member descriptors, each from
+// the storage it names (`d_member.attr`), so a slot a subclass redeclares is
+// its own: by name, the first descriptor of a name along the MRO, as `box.x`
+// reads it, for the slots that hold a value; with `all`, every value stored,
+// a shadowed slot's too. The one reader of a slot's storage.
+function slotValues(value, all = false) {
+    const $B = globalThis.__BRYTHON__;
+    const named = new Map();
+    const stored = [];
+    const seen = new Set();
+    const mro = declaresSlots(value) ? quietPyType(value)?.tp_mro : undefined;
+
+    for (const cls of Array.isArray(mro) ? mro : []) {
+        if ((cls.tp_flags & $B.TPFLAGS.HEAPTYPE) === 0) continue;
+
+        for (const [name, member] of pyEntries($B.get_dict(cls))) {
+            if ($B.get_class(member) !== $B.member_descriptor) continue;
+
+            const held = Object.hasOwn(value, member.d_member.attr);
+
+            if (held) stored.push(value[member.d_member.attr]);
+            if (!seen.has(name) && held) named.set(name, value[member.d_member.attr]);
+            seen.add(name);
+        }
+    }
+
+    return all ? stored : named;
+}
 
 // A name declared by a class **or by one of its bases**, read from the class
 // dictionaries rather than through the attribute protocol, so nothing of the
@@ -2471,23 +2498,15 @@ function adoptOne(value) {
 
     // An instance is not its `__dict__`. A class declaring `__slots__` has no
     // per-instance dict at all, and Brython's member descriptor keeps each slot
-    // as an own property of the object named `slot_value_<name>`
-    // (`descriptors.js`, `d_member.attr`). So the walk above found nothing, and
-    // `box.rows.append(1)` changed the list while the page kept the old count.
+    // as an own property of the object, the one its `d_member.attr` names. So
+    // the walk above found nothing, and `box.rows.append(1)` changed the list
+    // while the page kept the old count.
     //
-    // Read off the object rather than asked of the class, which settles the
-    // three neighbouring cases at once: an uninitialised slot has no property
-    // and is skipped, an inherited slot is stored here like any other, and
-    // nothing goes through `$getattr`, so no property getter of the author's is
-    // run by the act of watching. An array is scanned only when its class
-    // declares slots: a plain list's keys are its indices, and a long one would
-    // pay for a scan that cannot match, but `class Rows(list)` with `__slots__`
-    // keeps its slots on the array beside the elements.
-    if (!Array.isArray(value) || declaresSlots(value)) {
-        for (const key of Object.keys(value)) {
-            if (key.startsWith(SLOT)) inherit(value, value[key], undefined, true);
-        }
-    }
+    // Read off the object through the descriptors (`slotValues`), every value
+    // stored, a slot a subclass redeclares among them: an uninitialised slot
+    // has no property and is skipped, and nothing goes through `$getattr`, so
+    // no property getter of the author's is run by the act of watching.
+    for (const one of slotValues(value, true)) inherit(value, one, undefined, true);
 
     // Only what Python calls a container, and that bound is the whole point:
     // walking any object's keys would let the watch leave the author's data, as
@@ -3381,12 +3400,7 @@ function viewOf(value) {
 function instanceView(value) {
     const $B = globalThis.__BRYTHON__;
     const attribute = (key) => (typeof key === 'string' ? $B.$getattr(value, key, MISSING) : MISSING);
-    const slots = () =>
-        declaresSlots(value)
-            ? Object.keys(value)
-                  .filter((key) => key.startsWith(SLOT))
-                  .map((key) => key.slice(SLOT.length))
-            : [];
+    const slots = () => [...slotValues(value).keys()];
     const fields = () => {
         const attributes = ownAttributes(value);
         const own = attributes !== null && typeof attributes === 'object' ? Object.keys(attributes) : [];
@@ -3400,7 +3414,7 @@ function instanceView(value) {
 
         return (
             (attributes !== null && typeof attributes === 'object' && Object.hasOwn(attributes, key)) ||
-            (declaresSlots(value) && Object.hasOwn(value, SLOT + key))
+            slotValues(value).has(key)
         );
     };
     const write = (key, given) => typeof key === 'string' && ($B.$setattr(value, key, entering(given)), true);
@@ -4590,18 +4604,15 @@ function branch(value, seen, shell, adapt) {
     // instance: the fields, not the getters on the prototype.
     //
     // And a class declaring `__slots__` keeps them somewhere else again: each
-    // slot is an own property named `slot_value_<name>`, read here under its
-    // own name, so adding `__slots__` to a model changes nothing of what
-    // crosses.
+    // slot is read through its descriptor (`slotValues`) under its own name,
+    // so adding `__slots__` to a model changes nothing of what crosses.
     //
     // Both sources and not one: `__slots__` may name `__dict__`, and then an
     // instance has slots *and* a dict. A dict of the author's is stepped over,
     // since `{"slot_value_x": 1}` is data and not storage.
     const attributes = ownAttributes(value);
     const holder = attributes !== null && typeof attributes === 'object' ? attributes : undefined;
-    const slots = declaresSlots(value)
-        ? Object.keys(value).filter((key) => key.startsWith(SLOT))
-        : [];
+    const slots = slotValues(value);
 
     // A mapping is its entries, whatever else it also is.
     //
@@ -4626,8 +4637,8 @@ function branch(value, seen, shell, adapt) {
 
         // Under the name the author wrote, which is what the same class without
         // `__slots__` hands over.
-        for (const key of slots) {
-            define(fields, key.slice(SLOT.length), plainData(value[key], seen, adapt));
+        for (const [key, one] of slots) {
+            define(fields, key, plainData(one, seen, adapt));
         }
 
         return fields;
