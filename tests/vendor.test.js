@@ -1051,6 +1051,30 @@ test('a redeclared slot crosses as box.x reads it: slots-shadowed-storage', asyn
     expect(plainData(shadowed_box())).toEqual({ x: 2 });
 });
 
+// A loop wrote its position on the value it walked, which a str refuses in a
+// module; a str subclass iterated over a property it does not have; str() and
+// repr() reshaped combining and astral characters and a stepped slice cut them
+// in two; a descriptor's `__set__` returned undefined; `__slots__` iterated a
+// str subclass and replaced a str by an array; a slot written once its
+// descriptor was gone read a property that does not exist.
+test('text, descriptors and slots answer as in CPython: for-loop-inum, str-subclass-iteration, str-keeps-its-characters, str-slice-step-astral, descriptor-set-returns-none, slots-str-subclass, slots-valid-identifiers, slot-deleted-descriptor', async () => {
+    const { answers } = await import('./fixtures/text_and_slots.py');
+
+    expect([...answers()]).toEqual([
+        '[]',
+        "['a', 'b']",
+        "['😀', 'a']",
+        "['a', 'b']",
+        'True',
+        '5',
+        'True',
+        "'😀😀'",
+        "'b😀a😀'",
+        "[[(None, None), (None, None)], '__delete__']",
+        "[True, False, True, 'field', 'refused']"
+    ]);
+});
+
 // A module named with a quote, from a file such as `src/Jean's app/Page.svelte`,
 // had its name pasted between quotes in the code of every def, lambda, class
 // and comprehension, which then stopped parsing.

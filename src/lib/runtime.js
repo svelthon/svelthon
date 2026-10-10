@@ -1361,29 +1361,30 @@ function installMutationTracking($B) {
     // itself. The instance is the descriptor's first argument, not the object
     // the method is read from.
     //
-    // Brython builds the two methods once, from `tp_descr_set` as it was then
-    // (`make_set_del`), so they are rebuilt here the same way around a setter
-    // that notifies. `tp_descr_set` itself is left alone: an ordinary
-    // `box.rows = [1]` reaches it from `$setattr`, which already answers.
+    // Brython builds the two methods once (`make_set_del`), so each is wrapped
+    // here as Brython built it, its answer kept, around a notification.
+    // `tp_descr_set` itself is left alone: an ordinary `box.rows = [1]` reaches
+    // it from `$setattr`, which already answers.
     const member = $B.member_descriptor;
-    const describe = member.tp_descr_set;
-    const described = (self, obj, value) => {
-        try {
-            return describe(self, obj, value);
-        } finally {
-            if (MARKS.has(obj)) {
-                if (value !== $B.NULL) rewalk(obj, value);
-                MARKS.get(obj)();
-            }
-        }
-    };
 
-    $B.set_to_dict(member, '__set__', $B.wrapper_descriptor.$factory(member, '__set__', described));
-    $B.set_to_dict(
-        member,
-        '__delete__',
-        $B.wrapper_descriptor.$factory(member, '__delete__', (self, obj) => described(self, obj, $B.NULL))
-    );
+    for (const name of ['__set__', '__delete__']) {
+        const built = $B.search_in_dict(member, name, $B.NULL).wrapped;
+
+        $B.set_to_dict(
+            member,
+            name,
+            $B.wrapper_descriptor.$factory(member, name, (self, obj, ...value) => {
+                try {
+                    return built(self, obj, ...value);
+                } finally {
+                    if (MARKS.has(obj)) {
+                        if (value.length > 0) rewalk(obj, value[0]);
+                        MARKS.get(obj)();
+                    }
+                }
+            })
+        );
+    }
 
     // The builtin `delattr`, which `del box.value` reaches too: the statement's
     // entry point, `$B.$delattr`, calls it by name at each call, so the one
