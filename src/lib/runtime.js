@@ -1130,8 +1130,8 @@ function installMutationTracking($B) {
         return entry;
     };
 
-    // Not while a template expression runs: a write it makes then, a getter
-    // counting its reads on its class, is a side effect of the reading, which
+    // Not while the template renders: a write made then, a getter counting its
+    // reads on its class, is a side effect of the reading, which
     // Svelte refuses to make of its own state, and waking the reader would run
     // the expression that wrote it again, without end.
     const classNameChanged = (cls, attr) => {
@@ -6239,19 +6239,22 @@ const COMPARED = {
 //
 // `rendering` counts the template expressions running: whatever Python runs
 // inside one, a lambda or a generator it drives, runs while the template
-// renders, and a handler a click calls later does not.
+// renders, and a handler a click calls later does not, nor the write half of a
+// binding, `writes`, which an input event calls.
 let rendering = 0;
 
-export const pyExpression = (call, where, arity, kept = false) =>
+export const pyExpression = (call, where, arity, kept = false, writes = false) =>
     identified(
         (...args) =>
             running(
                 () => {
-                    rendering += 1;
+                    const counted = writes ? 0 : 1;
+
+                    rendering += counted;
                     try {
                         return call(args.slice(0, arity).map(pyBind));
                     } finally {
-                        rendering -= 1;
+                        rendering -= counted;
                     }
                 },
                 where,

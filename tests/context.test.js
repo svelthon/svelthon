@@ -58,7 +58,7 @@ test('and a child imported in the <script module> is handed the value itself too
 // and to a child imported as `{ default as Named }`, which was not recognised.
 test.for(['bound', 'online', 'named'])('a scalar reaches a Python child as itself: %s', (way) => {
     const target = document.body.appendChild(document.createElement('div'));
-    mount(PropScalarsPaths, { target });
+    mount(PropScalarsPaths, { target, props: { way } });
     flushSync();
 
     expect(target.querySelector(`[data-k="${way}"] p`).textContent).toBe(

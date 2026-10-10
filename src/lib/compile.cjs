@@ -1476,6 +1476,9 @@ const KEPT_PYTHON = /^__expr_(?:py|lazy)_/;
 // container keeping its identity and a scalar made JavaScript's, and
 // `selection_`, the list of a `<select multiple>`, item by item.
 const COMPARED = /^__expr_(scalar|selection)_/;
+// The write half of a binding, `set_`, which an input event calls and not the
+// render.
+const WRITES = /^__expr_set_/;
 
 // In the markup, and only there, the dot finds a key as well as an attribute:
 // `{pep.title}` reads a dict. The same text in the `<script>` stays plain Python
@@ -3254,7 +3257,8 @@ function instanceExports(c) {
             componentWrapper(f) === RUNTIME.pyExpression
                 ? `const ${wrapperName(f.name)} = ${RUNTIME.pyExpression}((a) => ${fn(f.name)}(...a), ` +
                   `${JSON.stringify(`${f.name}() — ${c.source}`)}, ${f.arity}, ` +
-                  `${KEPT_PYTHON.test(f.name) ? 'true' : COMPARED.test(f.name) ? `'${f.name.match(COMPARED)[1]}'` : 'false'});`
+                  `${KEPT_PYTHON.test(f.name) ? 'true' : COMPARED.test(f.name) ? `'${f.name.match(COMPARED)[1]}'` : 'false'}` +
+                  `${WRITES.test(f.name) ? ', true' : ''});`
                 : `const ${wrapperName(f.name)} = ${RUNTIME.pyComponent}(() => ${fn(f.name)}, ` +
                   `${JSON.stringify(`${f.name}() — ${c.source}`)}${f.exported && !c.store ? ', true' : ''});`
         ),

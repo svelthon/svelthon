@@ -10,6 +10,7 @@ import { test, expect } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import InheritedState from './fixtures/InheritedState.svelte';
 import DescriptorState from './fixtures/DescriptorState.svelte';
+import ClassSettingsBind from './fixtures/ClassSettingsBind.svelte';
 
 // A property or a method is looked up through the classes as a constant is, and
 // replacing it on one of them, or shadowing it from one between, changes what
@@ -57,6 +58,24 @@ test.for([
         expect(target.querySelector('output').textContent).toBe('1');
     }
 );
+
+// And written by a binding: its write half runs as a template expression does,
+// and the wake-up by name, quiet while the template renders, was quiet for it
+// too, so a class bound by `class` kept `light` on the page where the model held
+// `dark`. A class bound by `=` repainted, woken through its mark.
+test.for(['class', 'assigned'])('a class attribute a field is bound to repaints, bound by %s', (way) => {
+    const target = document.body.appendChild(document.createElement('div'));
+    const instance = mount(ClassSettingsBind, { target, props: { way } });
+
+    flushSync();
+    const input = target.querySelector('input');
+    input.value = 'dark';
+    input.dispatchEvent(new Event('input'));
+    flushSync();
+
+    expect(instance.model()).toBe('dark');
+    expect(target.querySelector('p').textContent).toBe('dark');
+});
 
 const shown = (kind, steps) => {
     const target = document.body.appendChild(document.createElement('div'));
