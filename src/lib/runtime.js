@@ -1009,7 +1009,13 @@ function installMutationTracking($B) {
         if (ownType(obj) === _b_.super && obj.obj !== _b_.None) {
             const mro = obj.obj_type?.tp_mro;
 
-            if (Array.isArray(mro)) return namesRead(mro.slice(mro.indexOf(obj.type) + 1), attr);
+            if (Array.isArray(mro)) {
+                const after = mro.indexOf(obj.type) + 1;
+
+                basesRead(mro.slice(0, after));
+
+                return namesRead(mro.slice(after), attr);
+            }
         }
 
         // An instance of the author's that no name watches, `Tile()` made in
@@ -1115,8 +1121,38 @@ function installMutationTracking($B) {
 
         const names = CLASS_NAMES.get(cls);
 
-        for (const update of [...(names?.get(attr)?.updates ?? []), ...(names?.get(EVERY)?.updates ?? [])]) update();
+        // New bases are a new lookup for every name read through the class,
+        // or through a subclass or an instance of it, all of which followed
+        // the name on it: `C.__bases__ = (B,)` wakes them all.
+        const woken = attr === '__bases__' ? [...(names?.values() ?? [])] : [names?.get(attr), names?.get(EVERY)];
+
+        for (const update of woken.flatMap((entry) => [...(entry?.updates ?? [])])) update();
     };
+
+    // What depends on the order a class is searched in, with no name read
+    // along it: `issubclass(C, B)`, `isinstance(box, B)`, and a `super()`
+    // starting from the classes before it. New bases on any class of it change
+    // the answer.
+    const basesRead = (classes) => {
+        for (const one of classes) className(one, '__bases__').subscribe();
+    };
+
+    for (const [name, classOf] of [
+        ['issubclass', (value) => (pyClass(value) ? value : undefined)],
+        ['isinstance', (value) => quietPyType(value)]
+    ]) {
+        const builtin = $B.builtins[name];
+
+        $B.builtins[name] = function (...args) {
+            const result = Reflect.apply(builtin, this, args);
+            const mro = classOf(args[0])?.tp_mro;
+
+            if (Array.isArray(mro)) basesRead(mro);
+
+            return result;
+        };
+        Object.defineProperties($B.builtins[name], Object.getOwnPropertyDescriptors(builtin));
+    }
 
     // The classes an attribute read off `obj` rather than off `obj` itself
     // was looked up through, up to the one whose dictionary holds it, asked of
@@ -6444,9 +6480,11 @@ export function directiveAnimate(node, rects, [where, head, ...value]) {
 // later for the config. It is wrapped like the directive's own callee, so its
 // arguments are converted and its config comes back through this same rule. A
 // callable instance is asked first, before it is taken for a config object.
+// And it is read like an instance all the same: an action's result that is a
+// function carrying `update` and `destroy`, or an instance with `__call__`,
+// still hands Svelte both, which it reads off whatever it is handed.
 function directiveResult(value, where) {
-    if (declared(value) !== null) return directiveCallable(value, `${where} result`);
-
+    const called = declared(value) !== null;
     const instance =
         value !== null &&
         typeof value === 'object' &&
@@ -6455,15 +6493,17 @@ function directiveResult(value, where) {
         pyScalar(value) === undefined &&
         !globalThis.__BRYTHON__.is_dict(value);
 
-    if (!instance) return pyNumbers(value);
+    if (!called && !instance) return pyNumbers(value);
 
     // Read when Svelte asks, after the directive has returned, so what a
-    // property raises is relayed here, as under a view (`relayed`).
+    // property raises is relayed here, as under a view (`relayed`). What the
+    // function Svelte calls has of its own is its own.
     return new Proxy(
-        {},
+        called ? directiveCallable(value, `${where} result`) : Object.create(null),
         relayed(
             {
-                get(_, key) {
+                get(target, key) {
+                    if (key in target) return Reflect.get(target, key);
                     if (typeof key === 'symbol') return undefined;
 
                     const found = globalThis.__BRYTHON__.$getattr(value, key, MISSING);

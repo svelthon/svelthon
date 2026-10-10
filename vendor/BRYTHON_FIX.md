@@ -1,7 +1,7 @@
 # Patches applied to the vendored Brython
 
 `brython_runtime.js` and `brython_compiler.js` are cut from one bundle, built
-from Brython's master of 11 September 2026 plus eighty-two proposed commits
+from Brython's master of 11 September 2026 plus eighty-three proposed commits
 (`metaclass-getattribute-args` in two, as amended for its PR) and three merged
 upstream since (#3022, #2996, #2989), with **four** edits
 made in the file itself afterwards. The wrapper, the integer format and the
@@ -69,6 +69,7 @@ written against:
 | `pyobj2jsobj-graph` | the arguments of one JavaScript call are converted with one memo, and a list or dict is registered in it before its items are walked. `same(rows, rows)` handed over two arrays, and `rows.append(rows)` overflowed the stack. The memo is handed to the hook as its second argument, which is how Svelthon's conversion keeps the same graph |
 | `callable-type-slot` | `callable()` asks the type's `tp_call`, the slot `$B.$call` uses, instead of `hasattr(obj, "__call__")`. An object whose `__getattr__` answers every name, or one given a `__call__` attribute of its own, was callable, so a configuration object crossed to JavaScript as a function and `tojson` refused it as a call |
 | `json-parse-str-subclass` | `javascript.JSON.parse` reads a subclass of str by its value. It was handed to `JSON.parse` as the object Brython keeps it in, so `JSON.parse(Text('{"answer": 42}'))` raised `"[object Object]" is not valid JSON`. `from_json` is this `parse` |
+| `bases-set-subclass-mro` | a class given new bases, `C.__bases__ = (B,)`, reorders its subclasses too, where only the class itself was: `D(C)` kept finding the name on `C`'s old base |
 | `init-subclass-classmethod` | an `__init_subclass__` written in a class body is a classmethod, as `__class_getitem__` already was: `vars(C)["__init_subclass__"]` was a function, and `C.__init_subclass__` a function not bound to `C` |
 | `super-type-no-instance` | a `super()` whose second argument is its own start type hands what it finds no instance: `super(C, C).prop` is the property, where its getter ran with the class as `self`, `super(C, C).method` the function, where it was bound to the class, and `super(C, C).__dict__` the descriptor. On `init-subclass-classmethod`, which the class statement's own `super()` call relied on |
 | `slots-no-dict-descriptor` | a class whose `__slots__` leave out `'__dict__'` gets no `__dict__` descriptor, so its instance raises `AttributeError` for `__dict__`, where it answered a JavaScript `undefined` |
@@ -186,6 +187,7 @@ than by a build-time check, and going upstream retires none of them:
 | a metaclass's `__getattribute__` is called with the class and the name, and a subscript never asks it (branches `metaclass-getattribute-args`, `item-dunder-mro-lookup`) | `tests/vendor.test.js`, and `tests/dot.test.js`, a mapping whose metaclass hides `__getitem__`, written through a binding |
 | a set made from a JavaScript array holds Python floats, and one made from a list subclass holds what its `__iter__` yields (branch `set-update-iterates`) | `tests/vendor.test.js`, and `tests/synced-exports.test.js`, a set's walk over floats a JavaScript caller handed in |
 | an unhashable value is named by its type, and a set element or a dict key says what it was refused as (branches `unhashable-type-name`, `unhashable-element-context`, `unhashable-dict-key-context`) | `tests/vendor.test.js`, and `tests/synced-exports.test.js`, a write into a set's view refused and caught by the Python caller |
+| a class given new bases reorders its subclasses (branch `bases-set-subclass-mro`) | `tests/vendor.test.js`, and `tests/inherited-state.test.js`, a subclass read repainted after `C.__bases__ = (B,)` |
 | a method-wrapper compares and hashes by its function and its receiver (master's `e2e990dd6`, #2989) | `tests/vendor.test.js`, and `tests/method-identity.test.js`, `box.__setattr__` read twice through the runtime's wrapper |
 | the `__dict__` attribute is read as Python reads it, through `vars()`, on a slotted instance and through `super(C, C)`, and `__init_subclass__` is a classmethod (branches `init-subclass-classmethod`, `super-type-no-instance`, `slots-no-dict-descriptor`, `vars-dict-attribute`) | `tests/vendor.test.js`, and `tests/oracle-attributes.test.js`, the model and the page held against CPython |
 

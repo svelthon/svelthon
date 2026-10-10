@@ -11,6 +11,7 @@ import { mount, flushSync } from './mounted.js';
 import InheritedState from './fixtures/InheritedState.svelte';
 import DescriptorState from './fixtures/DescriptorState.svelte';
 import ClassSettingsBind from './fixtures/ClassSettingsBind.svelte';
+import BasesChange from './fixtures/BasesChange.svelte';
 
 // A property or a method is looked up through the classes as a constant is, and
 // replacing it on one of them, or shadowing it from one between, changes what
@@ -88,6 +89,32 @@ test.for(['class', 'assigned'])('a class attribute a field is bound to repaints,
 
     expect(instance.model()).toBe('dark');
     expect(target.querySelector('p').textContent).toBe('dark');
+});
+
+// New bases, `C.__bases__ = (B,)`, are a new lookup for every name read
+// through the class: the page kept `A`'s value while the model read `B`'s, and
+// `issubclass`, `isinstance` and `super()`, which read the order with no name
+// along it, kept the old answer. The values are CPython's.
+test.for([
+    ['class', '0', '1'],
+    ['subclass', '0', '1'],
+    ['instance made in the expression', '0', '1'],
+    ['super()', '0', '1'],
+    ['issubclass', 'False', 'True'],
+    ['isinstance', 'False', 'True'],
+    ['mro', 'C,A,object', 'C,B,object']
+])('a read through a class given new bases repaints: %s', ([kind, before, after]) => {
+    const target = document.body.appendChild(document.createElement('div'));
+    const instance = mount(BasesChange, { target, props: { kind } });
+
+    flushSync();
+    expect(target.querySelector('output').textContent).toBe(before);
+
+    instance.change();
+    flushSync();
+
+    expect(instance.model()).toBe(after);
+    expect(target.querySelector('output').textContent).toBe(after);
 });
 
 const shown = (kind, steps) => {

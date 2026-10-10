@@ -929,6 +929,14 @@ test('a method-wrapper is equal to itself and hashes alike: #2989', async () => 
     expect([...answers()]).toEqual(['True', 'False', 'True', 'False', 'True']);
 });
 
+// A class given new bases reorders its subclasses too: only the class itself
+// was, so `D(C)` kept looking a name up on `C`'s old base.
+test('new bases reorder the subclasses: bases-set-subclass-mro', async () => {
+    const { answers } = await import('./fixtures/bases_assignment.py');
+
+    expect([...answers()]).toEqual(['1', 'F,D,E,C,B,object']);
+});
+
 // A module named with a quote, from a file such as `src/Jean's app/Page.svelte`,
 // had its name pasted between quotes in the code of every def, lambda, class
 // and comprehension, which then stopped parsing.
