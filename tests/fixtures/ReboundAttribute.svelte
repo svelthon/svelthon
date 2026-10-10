@@ -63,7 +63,8 @@ def counter():
 counter.rows = []
 
 
-# A list only the author's code hands out, from a closure no name watches.
+# A list only the author's code hands out, from a closure no name watches, and
+# a value of the same name in the storage Python reads after it.
 def answering():
     hidden = []
 
@@ -76,10 +77,26 @@ def answering():
         def rows(self):
             return hidden
 
-    return Asked(), Described()
+    class Meta(type):
+        @property
+        def rows(cls):
+            return hidden
+
+    class Classy(metaclass=Meta):
+        rows = [99]
+
+    class Intercepting:
+        def __getattribute__(self, name):
+            return hidden if name == "rows" else object.__getattribute__(self, name)
+
+    shadowed = Described()
+    vars(shadowed)["rows"] = [99]
+    intercepting = Intercepting()
+    object.__setattr__(intercepting, "rows", [99])
+    return Asked(), Described(), shadowed, Classy, intercepting
 
 
-asked, described = answering()
+asked, described, shadowed, classy, intercepting = answering()
 
 
 def holder():
@@ -87,6 +104,12 @@ def holder():
         return asked
     if kind == "property":
         return described
+    if kind == "shadowed property":
+        return shadowed
+    if kind == "metaclass property":
+        return classy
+    if kind == "getattribute":
+        return intercepting
     if kind == "class":
         return Shelf
     if kind == "instance":

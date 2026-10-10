@@ -36,9 +36,11 @@ test.for(HOLDERS.flatMap((kind) => [[kind, 'replace'], [kind, 'delete']]))(
     }
 );
 
-// A name only the author's code answers, a `__getattr__` or a property, is not
-// read again to tell: the link stays, and a change of the list is seen.
-test.for(['getattr', 'property'])('a list a %s hands out stays followed', (kind) => {
+// A name only the author's code answers, a `__getattr__`, a property or a
+// `__getattribute__`, is not read again to tell: the link stays, and a change
+// of the list is seen. Even with a value of that name in the storage Python
+// reads after the property, the class's for a metaclass's.
+test.for(['getattr', 'property', 'shadowed property', 'metaclass property', 'getattribute'])('a list a %s hands out stays followed', (kind) => {
     const target = document.body.appendChild(document.createElement('div'));
     const runs = [];
     const instance = mount(ReboundAttribute, { target, props: { kind, runs } });

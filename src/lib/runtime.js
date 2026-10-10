@@ -1957,21 +1957,17 @@ function attributeHolds(holder, child, marker) {
     return false;
 }
 
-// What Python's lookup of `name` on `holder` finds, read as data so that nothing
-// of the author's runs: its own dictionary, its slot, then the dictionaries of
-// its classes, a class's metaclass after them. MISSING when nothing binds the
-// name. UNTOLD when only the author's code could say, a descriptor's `__get__`
-// or a `__getattr__`, or when the holder keeps its own names elsewhere.
+// What Python's lookup of `name` on `holder` finds, in Python's order and read
+// as data so that nothing of the author's runs: a data descriptor of its type
+// first, a slot read off its storage; then its own names, an instance's
+// dictionary or a class's MRO; then what its type holds. MISSING when nothing
+// binds the name. UNTOLD when only the author's code could say, a property, a
+// descriptor's `__get__`, a `__getattr__` or a `__getattribute__`, or when the
+// holder keeps its own names elsewhere.
 const UNTOLD = Symbol('untold');
 
 function attributeOf(holder, name) {
     const $B = globalThis.__BRYTHON__;
-    const own = ownAttributes(holder);
-    const dictionary = own !== null && typeof own === 'object';
-
-    if (dictionary && Object.hasOwn(own, name)) return own[name];
-    if (Object.hasOwn(holder, SLOT + name)) return holder[SLOT + name];
-
     const kind = quietPyType(holder);
 
     if (!pyClass(kind)) return UNTOLD;
@@ -1981,18 +1977,29 @@ function attributeOf(holder, name) {
 
     if (asks('__getattr__') || asks('__getattribute__')) return UNTOLD;
 
-    for (const cls of pyClass(holder) ? [holder, kind] : [kind]) {
-        const found = declares(cls, name);
+    const has = (value, slot) => $B.search_slot($B.get_class(value), slot, $B.NULL) !== $B.NULL;
+    const described = declares(kind, name);
 
-        if (found === $B.NULL) continue;
+    if (described !== $B.NULL && has(described, 'tp_descr_set')) {
+        if (pyClass(holder) || $B.get_class(described) !== $B.member_descriptor) return UNTOLD;
 
-        // An instance's slot left empty: its storage was read above.
-        if (!pyClass(holder) && $B.get_class(found) === $B.member_descriptor) return MISSING;
-
-        return $B.search_slot($B.get_class(found), 'tp_descr_get', $B.NULL) === $B.NULL ? found : UNTOLD;
+        return Object.hasOwn(holder, SLOT + name) ? holder[SLOT + name] : MISSING;
     }
 
-    return dictionary ? MISSING : UNTOLD;
+    const own = ownAttributes(holder);
+    const dictionary = own !== null && typeof own === 'object';
+
+    if (pyClass(holder)) {
+        const found = declares(holder, name);
+
+        if (found !== $B.NULL) return has(found, 'tp_descr_get') ? UNTOLD : found;
+    } else if (dictionary && Object.hasOwn(own, name)) {
+        return own[name];
+    }
+
+    if (described !== $B.NULL) return has(described, 'tp_descr_get') ? UNTOLD : described;
+
+    return pyClass(holder) || dictionary ? MISSING : UNTOLD;
 }
 
 // Whether the storage of a list, a dict or a set holds `child`.
@@ -7016,9 +7023,10 @@ const SEQUENCES = [_b_.list, _b_.tuple, _b_.str, _b_.bytes, _b_.range];
 
 // The key `name` of `target`, or MISSING when there is none. An absence is what
 // the protocol answers when nothing is there: no `__getitem__` at all, a
-// `LookupError`, or a builtin sequence refusing a string. Anything else a
-// `__getitem__` raises is its author's answer and goes on, both to a read and
-// to the choice of where a write lands.
+// `LookupError`, or a builtin sequence's `__getitem__`, inherited by a subclass
+// or not, refusing a string. Anything else a `__getitem__` raises is its
+// author's answer and goes on, both to a read and to the choice of where a
+// write lands.
 //
 // Whether there is a `__getitem__` is asked the way `target[name]` asks it, of
 // the dicts along the class's MRO: reading it as an attribute of the class runs
@@ -7026,10 +7034,10 @@ const SEQUENCES = [_b_.list, _b_.tuple, _b_.str, _b_.bytes, _b_.range];
 function lookup(target, name) {
     const $B = globalThis.__BRYTHON__;
 
-    let cls;
+    let getitem;
     try {
-        cls = $B.get_class(target);
-        if ($B.search_in_mro(cls, '__getitem__', $B.NULL) === $B.NULL) return MISSING;
+        getitem = $B.search_in_mro($B.get_class(target), '__getitem__', $B.NULL);
+        if (getitem === $B.NULL) return MISSING;
     } catch {
         return MISSING; // a foreign JavaScript value has no Python protocol to ask
     }
@@ -7045,7 +7053,9 @@ function lookup(target, name) {
         }
         if (!Array.isArray(mro)) return MISSING;
         if (mro.includes(_b_.LookupError)) return MISSING;
-        if (mro.includes(_b_.TypeError) && SEQUENCES.includes(cls)) return MISSING;
+        if (mro.includes(_b_.TypeError) && SEQUENCES.some((one) => $B.search_in_mro(one, '__getitem__', $B.NULL) === getitem)) {
+            return MISSING;
+        }
 
         throw error;
     }

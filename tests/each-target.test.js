@@ -19,6 +19,7 @@ import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import EachTarget from './fixtures/EachTarget.svelte';
 import EachTargetNative from './fixtures/EachTargetNative.svelte';
+import EachSequenceDefault from './fixtures/EachSequenceDefault.svelte';
 
 const rendered = (Component) => {
     const target = document.body.appendChild(document.createElement('div'));
@@ -85,5 +86,30 @@ describe('an {#each} target', () => {
     // in its default.
     test('a name a default reads is not a name the block declares', () => {
         expect(rendered(EachTarget).j).toBe('2:3');
+    });
+});
+
+// A builtin sequence asked for a name refuses the string key, which says it
+// holds no such name, and the default is taken: for a subclass as much, which
+// inherits the same refusal. A `__getitem__` of the author's that refuses is
+// heard.
+describe('a name a sequence does not hold', () => {
+    const shown = (kind) => {
+        const target = document.body.appendChild(document.createElement('div'));
+        mount(EachSequenceDefault, { target, props: { kind } });
+        flushSync();
+
+        return target.querySelector('output').textContent;
+    };
+
+    test.for(['list', 'list subclass', 'tuple', 'tuple subclass', 'str', 'str subclass', 'bytes', 'bytes subclass'])(
+        'takes its default from a %s',
+        (kind) => {
+            expect(shown(kind)).toBe('7');
+        }
+    );
+
+    test('while a __getitem__ of the author’s that refuses is heard', () => {
+        expect(() => shown('refusing')).toThrow(/custom refusal/);
     });
 });
