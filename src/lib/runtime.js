@@ -3036,12 +3036,15 @@ function viewOf(value) {
         if (!$B.is_list(value)) return false;
 
         if (key === 'length') {
-            const wanted = Number(given);
+            // An array's own rule, applied by an array before the first element
+            // goes: a length is a whole number below 2³², `-1`, `1.5` or `NaN`
+            // a RangeError and `1n` a TypeError, the value converted twice as
+            // the engine converts it. An empty array holds none of it.
+            const probe = [];
 
-            // An array's own rule, checked before the first element goes: a
-            // length is a whole number below 2³², and anything else, `-1`, `1.5`
-            // or `NaN`, is a RangeError that leaves the array as it was.
-            if (wanted >>> 0 !== wanted) throw new RangeError('Invalid array length');
+            probe.length = given;
+
+            const wanted = probe.length;
 
             while (length() > wanted) $B.$call($B.$getattr(value, 'pop'));
             while (length() < wanted) $B.$call($B.$getattr(value, 'append'), NONE);

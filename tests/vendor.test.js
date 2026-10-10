@@ -860,10 +860,12 @@ test('an identifier is read in its normalized form: identifier-nfkc', async () =
 });
 
 // A metaclass's `__getattribute__` was handed a third argument, so every read of
-// a class it governs raised `TypeError`, `Plain.__name__` included. And a
-// subscript asked the metaclass for `__setitem__`, `__delitem__` and, for a
-// slice, `__getitem__`, where Python reads the class's MRO.
-test('a metaclass __getattribute__ is called with the class and the name, and a subscript never asks it: metaclass-getattribute-args, item-dunder-mro-lookup', async () => {
+// a class it governs raised `TypeError`, `Plain.__name__` included, and the
+// AttributeError it raises is its own message. And a subscript asked the
+// metaclass for `__setitem__`, `__delitem__` and, for a slice, `__getitem__`,
+// where Python reads the class's MRO, which the metaclass's own `__getitem__`
+// is the first of when the subscript is on a class (merged #2996).
+test('a metaclass __getattribute__ is called with the class and the name, and a subscript never asks it: metaclass-getattribute-args, item-dunder-mro-lookup, #2996', async () => {
     const { answers } = await import('./fixtures/metaclass_getattribute.py');
 
     expect([...answers()]).toEqual([
@@ -874,7 +876,10 @@ test('a metaclass __getattribute__ is called with the class and the name, and a 
         'fallback',
         'slice(0, 1, None)',
         "{'k': 1}",
-        '{}'
+        '{}',
+        'custom message',
+        "('meta get', 1)",
+        "('meta get', slice(0, 1, None))"
     ]);
 });
 

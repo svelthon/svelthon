@@ -7,7 +7,7 @@ __all__ = ["answers"]
 class Meta(type):
     def __getattribute__(cls, name):
         if name == "hidden":
-            raise AttributeError(name)
+            raise AttributeError("custom message")
         return super().__getattribute__(name)
 
 
@@ -47,7 +47,22 @@ class Store(metaclass=Hiding):
         del self.held[key]
 
 
+# A metaclass's own `__getitem__`, which `Indexed[1]` and `Indexed[0:1]` call.
+class MetaIndexed(type):
+    def __getitem__(cls, key):
+        return ("meta get", key)
+
+
+class Indexed(metaclass=MetaIndexed):
+    pass
+
+
 def answers():
+    try:
+        Plain.hidden
+        hidden = "no error"
+    except AttributeError as error:
+        hidden = str(error)
     store = Store()
     store["k"] = 1
     written = repr(store.held)
@@ -61,4 +76,7 @@ def answers():
         repr(store[0:1]),
         written,
         repr(store.held),
+        hidden,
+        repr(Indexed[1]),
+        repr(Indexed[0:1]),
     ]

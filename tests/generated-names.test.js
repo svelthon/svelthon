@@ -46,14 +46,17 @@ const MARKUP_LOCAL = new Set([
     '__probe'
 ]);
 
+// Python's own special methods, which the markup calls on a number it reads at a
+// key (`bag[-1]`) and which no compiler defines. Named one by one rather than
+// by their shape: the compiler generates `__svelthon_all__` too.
+const PYTHON_OWN = new Set(['__neg__', '__pos__']);
+
 test('every generated name the markup writes is defined by the compiler', () => {
     const markup = read('markup.js');
     const compiler = read('compile.cjs');
 
-    // A generated name begins with `__` and never ends with it, which leaves
-    // Python's own dunders, `__neg__` among them, to Python.
     const written = [...new Set([...markup.matchAll(/__[a-z][\w]*/g)].map((one) => one[0]))]
-        .filter((one) => !MARKUP_LOCAL.has(one) && !one.endsWith('__'))
+        .filter((one) => !MARKUP_LOCAL.has(one) && !PYTHON_OWN.has(one))
         .sort();
 
     // The list is not written out here on purpose: it is read from the file that

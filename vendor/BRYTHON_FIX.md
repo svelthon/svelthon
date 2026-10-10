@@ -2,7 +2,8 @@
 
 `brython_runtime.js` and `brython_compiler.js` are cut from one bundle, built
 from Brython's master of 11 September 2026 plus seventy-eight proposed commits
-and one merged upstream since, with **four** edits
+(`metaclass-getattribute-args` in two, as amended for its PR) and two merged
+upstream since (#3022, #2996), with **four** edits
 made in the file itself afterwards. The wrapper, the integer format and the
 `__call__` binding carry a `/* SVELTHON patch, see BRYTHON_FIX.md */` comment,
 the only way to find them again in 1.4 MB; the other edit *is* a comment, so

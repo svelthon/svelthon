@@ -33,6 +33,43 @@ describe('a length an array would refuse', () => {
         }
     );
 
+    // A `bigint` is no length to an array, and a value is converted twice, so an
+    // object answering 1 then 2 is refused there. The view converted once with
+    // `Number`, which takes a `bigint`: `1n` cut the Python list to one element.
+    test.for([
+        ['1n', () => 1n],
+        ['0n', () => 0n],
+        ['an object answering 1 then 2', () => {
+            let calls = 0;
+            return { valueOf: () => ++calls };
+        }],
+        ['an object raising at its second conversion', () => {
+            let calls = 0;
+            return {
+                valueOf: () => {
+                    if (++calls > 1) throw new Error('second conversion');
+                    return 1;
+                }
+            };
+        }]
+    ])('%s is refused as an array refuses it, the list kept', ([, made]) => {
+        const native = [1, 2, 3];
+        const { source, view: list } = view([1, 2, 3]);
+        let refusal;
+
+        try {
+            native.length = made();
+        } catch (error) {
+            refusal = error.constructor;
+        }
+
+        expect(refusal).toBeDefined();
+        expect(() => {
+            list.length = made();
+        }).toThrow(refusal);
+        expect([...source]).toEqual(native);
+    });
+
     // A `delete` keeps the length, at the last index as at any other, as on an
     // array; `pop` is what shortens it.
     test.for([[0], [1], [2]])('delete at %s keeps the length, as on an array', ([at]) => {
