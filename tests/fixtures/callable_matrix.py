@@ -25,6 +25,7 @@ __all__ = [
     "absolute",
     "rounding",
     "builtin_held",
+    "bound_by_getter",
     "mapped",
     "order",
     "listed",
@@ -192,6 +193,23 @@ class Rounding:
 absolute = Absolute()
 rounding = Rounding()
 builtin_held = {"abs": absolute, "round": rounding}
+
+
+# A `__call__` whose type has `__get__`: Python binds it and calls what `__get__`
+# hands back, never the `__call__` of its own class.
+class HalfGetter:
+    def __get__(self, obj, owner=None):
+        return lambda half: half * 2
+
+    def __call__(self):
+        return VALUE
+
+
+class BoundByGetter:
+    __call__ = HalfGetter()
+
+
+bound_by_getter = BoundByGetter()
 
 mapped = {
     "fn": fn,

@@ -296,6 +296,13 @@ describe('a static __call__ that takes an argument', () => {
     });
 });
 
+// A `__call__` whose type has `__get__` is bound, and what `__get__` hands back is
+// what is called: the instance's own `__call__`, declaring nothing, is never
+// reached, and the argument is not trimmed away from the function that takes it.
+test('a __call__ bound by its __get__ receives what the call hands it', () => {
+    expect(mod.bound_by_getter(0.125)).toBe(0.25);
+});
+
 // And one that is a builtin, `staticmethod(abs)`, which has no signature to read
 // and is called through Python's own protocol: what it answers is what CPython
 // answers, `round(-0.5)` the int 0 and not a negative zero.

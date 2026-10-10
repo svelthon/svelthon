@@ -5372,7 +5372,9 @@ const signatureArity = (fn, receiver) => {
 // Where a class's `__call__` lands when it is itself a callable instance,
 // `__call__ = zero`: the `__call__` of that instance's class, and so on, as
 // Python's call protocol follows it, a cycle stopping where it closes. A
-// method, a static or class method, a builtin or a function is where it lands.
+// method, a builtin or a function is where it lands, and so is a value whose
+// type has `__get__`, a static or class method among them: Python binds it
+// rather than following it, and calls what `__get__` hands back.
 function finalCall(call) {
     const seen = new Set();
 
@@ -5384,13 +5386,17 @@ function finalCall(call) {
     return call;
 }
 
-const callableInstance = (value) =>
-    value !== null &&
-    typeof value === 'object' &&
-    value.sm_callable === undefined &&
-    value.cm_callable === undefined &&
-    !wrapperMethod(value) &&
-    callDescriptor(value) !== null;
+const callableInstance = (value) => {
+    const $B = globalThis.__BRYTHON__;
+
+    return (
+        value !== null &&
+        typeof value === 'object' &&
+        $B.search_slot($B.get_class(value), 'tp_descr_get', $B.NULL) === $B.NULL &&
+        !wrapperMethod(value) &&
+        callDescriptor(value) !== null
+    );
+};
 
 // A builtin bound to its receiver, `rows.clear`: a JavaScript function carrying
 // `m_self`, the third representation of a bound method in this engine.
