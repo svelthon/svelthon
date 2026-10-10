@@ -1323,7 +1323,9 @@ function snippetParameters(trimmed, declare, call, refuse) {
     const head = open === -1 ? trimmed : trimmed.slice(0, open);
     const close = open === -1 ? -1 : closingPair(trimmed, open);
 
-    const name = head.replace(/^#snippet\s*/, '').trim();
+    // Named as Python names it, `ﬁeld` being `field`, the spelling every
+    // `{@render}` of it is given too.
+    const name = pythonName(head.replace(/^#snippet\s*/, '').trim());
 
     // No parameter list, or one Svelte will refuse in its own words: nothing is
     // declared.
@@ -2803,7 +2805,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
 
                 if (record && declares) {
                     const holder = ids[ids.length - 1];
-                    record.set(holder, [...(record.get(holder) || []), declares[1]]);
+                    record.set(holder, [...(record.get(holder) || []), pythonName(declares[1])]);
                 }
 
                 // **A parameter may carry a default, and a default is an
@@ -2886,12 +2888,13 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 const called = written.rest.trim();
                 const opens = called.indexOf('(');
                 const closes = opens === -1 ? -1 : closingPair(called, opens);
-                const callee = opens === -1 ? '' : called.slice(0, opens).replace(/\?\.\s*$/, '').trim();
+                const spelled = opens === -1 ? '' : called.slice(0, opens).replace(/\?\.\s*$/, '').trim();
+                const callee = pythonName(spelled);
                 const ours = snippets.has(callee) && inScope().includes(callee);
 
                 out += closes === -1
                     ? markup.slice(index, end + 1)
-                    : `{@render ${called.slice(0, opens)}(${arguments_(called.slice(opens + 1, closes))
+                    : `{@render ${called.slice(0, opens).replace(spelled, callee)}(${arguments_(called.slice(opens + 1, closes))
                           .map((one) =>
                               !one.trim() ? one : ours ? call(one, '', undefined, 'python') : call(one, '__bound')
                           )

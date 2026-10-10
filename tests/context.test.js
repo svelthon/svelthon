@@ -55,8 +55,9 @@ test('and a child imported in the <script module> is handed the value itself too
 
 // Every other way a prop reaches a Python child hands it the value itself as
 // well: bound, under a name beginning with `on`, which took the callbacks' path,
-// and to a child imported as `{ default as Named }`, which was not recognised.
-test.for(['bound', 'online', 'named'])('a scalar reaches a Python child as itself: %s', (way) => {
+// to a child imported as `{ default as Named }`, which was not recognised, and to
+// one named again by plain assignment, `Alias = Bound`, taken for JavaScript.
+test.for(['bound', 'online', 'named', 'alias', 'alias of an alias'])('a scalar reaches a Python child as itself: %s', (way) => {
     const target = document.body.appendChild(document.createElement('div'));
     mount(PropScalarsPaths, { target, props: { way } });
     flushSync();

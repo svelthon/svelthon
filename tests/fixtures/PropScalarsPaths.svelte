@@ -9,6 +9,10 @@
 from context_scalars import Price, Label
 importjs Bound from "./PropScalarsBindable.svelte"
 
+# The same child named again by plain assignment, and again from there.
+Alias = Bound
+Again = Alias
+
 way: str = "bound"
 
 price = Price(0.5)
@@ -19,3 +23,5 @@ label = Label("hello")
 {#if way == "bound"}<div data-k="bound"><Bound bind:price={price} bind:whole={whole} bind:label={label} bind:online={whole} /></div>{/if}
 {#if way == "online"}<div data-k="online"><Bound {price} {whole} {label} online={whole} /></div>{/if}
 {#if way == "named"}<div data-k="named"><Named {price} {whole} {label} online={whole} /></div>{/if}
+{#if way == "alias"}<div data-k="alias"><Alias {price} {whole} {label} online={whole} /></div>{/if}
+{#if way == "alias of an alias"}<div data-k="alias of an alias"><Again {price} {whole} {label} online={whole} /></div>{/if}

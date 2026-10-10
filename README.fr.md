@@ -255,8 +255,9 @@ fournit pas : c'est la règle de Svelte pour les props non `$bindable`.
 
 Un parent Python donne à un enfant Python la valeur elle-même, une sous-classe
 de `float` avec sa classe, et à un enfant JavaScript le nombre ou la chaîne de
-JavaScript. Le compilateur les distingue en lisant le fichier de l'enfant : un
-enfant qu'il ne peut pas nommer, importé par un alias ou choisi à l'exécution,
+JavaScript. Le compilateur les distingue en lisant le fichier de l'enfant, et
+suit l'enfant à travers une affectation simple, `Alias = Child`. Un enfant qu'il
+ne peut pas nommer, importé par un alias de chemin ou choisi à l'exécution,
 reçoit ce que reçoit un enfant JavaScript.
 
 ### Un prop qui remonte

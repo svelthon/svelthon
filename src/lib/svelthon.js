@@ -16,7 +16,7 @@ import {
 import { parse } from 'svelte/compiler';
 
 const require = createRequire(import.meta.url);
-const { compile, VIRTUAL_PREFIX, virtualId, pythonModuleName, elementProps, PY_NAME, componentImports } = require('./compile.cjs');
+const { compile, VIRTUAL_PREFIX, virtualId, pythonModuleName, elementProps, PY_NAME, componentImports, componentAliases } = require('./compile.cjs');
 
 // Generated modules, keyed by project and component name. Filled by the preprocessor when
 // Svelte transforms a component, read back when Vite resolves the import that
@@ -465,26 +465,26 @@ export function python(options = {}) {
             // handed to one is the Python value itself, a `Price(float)` with
             // its class, where a JavaScript child is handed JavaScript's
             // number. Imported by `importjs` or in the `<script module>`, the
-            // way the README writes a composition. A child the file system
-            // cannot name, an alias or a package, is taken for a JavaScript
-            // one. Each file read is a dependency of this one, so a child that
-            // changes language recompiles its parent.
+            // way the README writes a composition, and named again by plain
+            // assignment, `Alias = Child`. A child the file system cannot
+            // name, a package, or one an expression picks, is taken for a
+            // JavaScript one. Each file read is a dependency of this one, so a
+            // child that changes language recompiles its parent.
             const read = [];
-            const pythonChildren = new Set(
-                [...componentImports(python, filename ?? 'component'), ...moduleComponents(content)]
-                    .filter(({ from }) => {
-                        if (!filename || !from.startsWith('.')) return false;
+            const children = [...componentImports(python, filename ?? 'component'), ...moduleComponents(content)]
+                .filter(({ from }) => {
+                    if (!filename || !from.startsWith('.')) return false;
 
-                        const path = resolve(dirname(filename), from);
+                    const path = resolve(dirname(filename), from);
 
-                        if (!existsSync(path)) return false;
+                    if (!existsSync(path)) return false;
 
-                        read.push(path);
+                    read.push(path);
 
-                        return pythonScript(readFileSync(path, 'utf8')) !== null;
-                    })
-                    .map(({ local }) => local)
-            );
+                    return pythonScript(readFileSync(path, 'utf8')) !== null;
+                })
+                .map(({ local }) => local);
+            const pythonChildren = new Set([...children, ...componentAliases(python, children)]);
 
             const code = overMarkup(
                 content,

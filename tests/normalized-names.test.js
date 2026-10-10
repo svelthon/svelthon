@@ -30,6 +30,12 @@ test.for([
     ['each', 'OK'],
     ['each back', 'OK'],
     ['snippet', 'OK'],
+    // A snippet declared under one spelling and rendered under another: its
+    // name went to Svelte as written, two JavaScript names for one Python name.
+    ['snippet declared with a ligature', 'OK'],
+    ['snippet rendered with a ligature', 'OK'],
+    ['snippet declared full width', 'OK'],
+    ['snippet rendered full width', 'OK'],
     ['declared', 'OK'],
     ['bound', 'a']
 ])('a name spelled another way reads the same name: %s', ([k, expected]) => {

@@ -4084,6 +4084,46 @@ const ELEMENT_TYPES = {
     str: 'String'
 };
 
+// The names the module binds to a child by plain assignment, `Alias = Child`,
+// followed from alias to alias: a child named another way is the child. A name
+// bound more than once at the top of the module is not followed, nor one bound
+// to anything but a name. A script that does not parse has none.
+function componentAliases(src, children) {
+    let tree;
+
+    try {
+        const lifted = takeImportJs($B.unindent(src), '<aliases>', 0, true);
+        const theirs = new Set(lifted.imports.flatMap((one) => one.entries.map((e) => e.local)));
+        tree = $B._PyPegen.run_parser(new $B.Parser(takeArrows(lifted.source, '<aliases>', 0, true, theirs), '<aliases>', 'file'));
+    } catch {
+        return [];
+    }
+
+    const bound = new Map();
+
+    for (const node of tree.body) {
+        const targets = node instanceof $B.ast.Assign ? node.targets : node.target ? [node.target] : [];
+
+        for (const target of targets) {
+            if (target instanceof $B.ast.Name) bound.set(target.id, bound.has(target.id) ? null : node.value);
+        }
+    }
+
+    const found = new Set(children);
+
+    for (let grew = true; grew; ) {
+        grew = false;
+        for (const [name, value] of bound) {
+            if (!found.has(name) && value instanceof $B.ast.Name && found.has(value.id)) {
+                found.add(name);
+                grew = true;
+            }
+        }
+    }
+
+    return [...found].filter((name) => !children.includes(name));
+}
+
 // A component's props and the Svelte type of each, for a custom element: Svelte
 // learns what to observe from a destructured `$props()`, which Svelthon does not
 // write, or from `customElement.props`, which this fills. Read off the script
@@ -4129,4 +4169,4 @@ function elementProps(src) {
     return [...props, ...bindables].map((name) => ({ name, type: types.get(name) }));
 }
 
-module.exports = { compile, VIRTUAL_PREFIX, virtualId, pythonModuleName, elementProps, PY_NAME, componentImports };
+module.exports = { compile, VIRTUAL_PREFIX, virtualId, pythonModuleName, elementProps, PY_NAME, componentImports, componentAliases };

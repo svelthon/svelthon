@@ -21,6 +21,14 @@ inner_box = Box()
 {#each ["OK"] as field}<p data-k="each back">{ﬁeld}</p>{/each}
 {#snippet shown(ﬁeld)}<p data-k="snippet">{field}</p>{/snippet}
 {@render shown("OK")}
+{#snippet ﬁeldset(value)}<p data-k="snippet declared with a ligature">{value}</p>{/snippet}
+{@render fieldset("OK")}
+{#snippet profile(value)}<p data-k="snippet rendered with a ligature">{value}</p>{/snippet}
+{@render proﬁle("OK")}
+{#snippet ｍｅｎｕ(value)}<p data-k="snippet declared full width">{value}</p>{/snippet}
+{@render menu("OK")}
+{#snippet card(value)}<p data-k="snippet rendered full width">{value}</p>{/snippet}
+{@render ｃａｒｄ("OK")}
 {ﬂag = "OK"}<p data-k="declared">{flag}</p>
 {ｔｅｘｔ = "a"}<input data-k="bind" bind:value={text} /><p data-k="bound">{text}</p>
 <button onclick={lambda: (ｃｏｕｎｔ := count + 1)}>add</button>

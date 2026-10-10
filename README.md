@@ -253,9 +253,9 @@ supplies nothing, which is Svelte's own rule for non-`$bindable` props.
 
 A Python parent hands a Python child the value itself, a `float` subclass with
 its class, and a JavaScript child JavaScript's number or string. The compiler
-tells the two apart by reading the child's file, so a child it cannot name, one
-imported through an alias or chosen at runtime, is handed what a JavaScript
-child is.
+tells the two apart by reading the child's file, and follows the child through
+a plain assignment, `Alias = Child`. A child it cannot name, one imported
+through a path alias or chosen at runtime, is handed what a JavaScript child is.
 
 ### A prop that travels back up
 
