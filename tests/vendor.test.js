@@ -1040,6 +1040,35 @@ test('code from compile() runs where its tree leaves a field out: compile-ast-op
     expect([...seen]).toEqual(['1', 'None', '([1, 2, 3], [0, 2])', "{'a': 1}", "'in'"]);
 });
 
+// What `compile()` hands to `exec()` runs where its tree leaves a field out:
+// the field came back as None rather than empty, and a method, a bare
+// `return`, a slice, a `**` or a `with` with no `as` raised a JavaScript error.
+// A page's runtime has no parser, so this runs in the engine the compiler
+// loads; `python3` on the same lines prints the answers.
+test('code from compile() runs where its tree leaves a field out: compile-ast-optional-none', () => {
+    createRequire(import.meta.url)('../src/lib/compile.cjs');
+    const $B = globalThis.__BRYTHON__;
+    const program = [
+        'SOURCES = [',
+        '    "class A:\\n    def f(self):\\n        return 1\\nout = A().f()",',
+        '    "def f():\\n    return\\nout = f()",',
+        '    "a = [0, 1, 2, 3]\\nout = (a[1:], a[::2])",',
+        '    "def f(**k):\\n    return k\\nout = f(**{\'a\': 1})",',
+        '    "class C:\\n    def __enter__(self): return 1\\n    def __exit__(self, *a): return False\\nwith C():\\n    out = \'in\'",',
+        ']',
+        'seen = []',
+        'for source in SOURCES:',
+        '    space = {}',
+        '    exec(compile(source, "<string>", "exec"), space)',
+        '    seen.append(repr(space["out"]))',
+        ''
+    ].join('\n');
+    const js = $B.py2js({ src: program, filename: 'round_trip.py' }, 'round_trip', ['round_trip']).to_js();
+    const { seen } = new Function(`${js}\nreturn locals_round_trip_py;`)();
+
+    expect([...seen]).toEqual(['1', 'None', '([1, 2, 3], [0, 2])', "{'a': 1}", "'in'"]);
+});
+
 // A module named with a quote, from a file such as `src/Jean's app/Page.svelte`,
 // had its name pasted between quotes in the code of every def, lambda, class
 // and comprehension, which then stopped parsing.
