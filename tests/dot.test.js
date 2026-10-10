@@ -2,6 +2,7 @@ import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import DotFallback from './fixtures/DotFallback.svelte';
 import DotMissing from './fixtures/DotMissing.svelte';
+import DotHiddenGetitem from './fixtures/DotHiddenGetitem.svelte';
 
 // `{pep.title}` on a dict. A template expression already differs from the same
 // text in the script — `{#if}` goes through `__truthy`, an interpolation through
@@ -36,6 +37,26 @@ describe('the dot in a template expression', () => {
         // That is Jinja's order, and it is why the subscript keeps its purpose.
         expect(setup()('attribute-wins')).toBe('builtin_method');
         expect(setup()('key-by-subscript')).toBe('a key called items');
+    });
+
+    // Whether there is a key to read is asked as `obj["answer"]` asks it, of the
+    // class's MRO, and never of the metaclass's `__getattribute__`, which hid
+    // the method or raised and left the read with no key. The write a binding
+    // makes asks the same question.
+    test('a key is found as the subscript finds it, whatever the metaclass', () => {
+        const target = document.body.appendChild(document.createElement('div'));
+        mount(DotHiddenGetitem, { target });
+        flushSync();
+        const read = (k) => target.querySelector(`p[data-k="${k}"]`).textContent;
+
+        expect([read('hidden'), read('raising')]).toEqual(['42', '42']);
+
+        const input = target.querySelector('input[data-k="write"]');
+        input.value = '7';
+        input.dispatchEvent(new Event('input'));
+        flushSync();
+
+        expect(read('held')).toBe('7');
     });
 
     test('a name that is neither raises rather than rendering nothing', () => {

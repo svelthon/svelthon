@@ -13,6 +13,7 @@ import GroupSpellings from './fixtures/GroupSpellings.svelte';
 import GroupSpellingsNative from './fixtures/GroupSpellingsNative.svelte';
 import ParenthesizedTargets from './fixtures/ParenthesizedTargets.svelte';
 import GroupNumericKeys from './fixtures/GroupNumericKeys.svelte';
+import GroupSignedKeys from './fixtures/GroupSignedKeys.svelte';
 
 const mounted = async (Component) => {
     const target = document.body.appendChild(document.createElement('div'));
@@ -65,6 +66,24 @@ test('equal numeric keys are one target, and only the key is compared by value',
 
     expect(models).toEqual(['a', 'a,b', 'a,b,c', 'd']);
     expect(target.querySelector('output').textContent).toBe("{'1': ['e'], 'True': ['f']}");
+});
+
+// A sign in front of a number at a key is the number it makes: `bag[1] is
+// bag[+1]` and `bag[0] is bag[-0.0]` in `python3`, so each pair is one group,
+// where the second box of a pair cleared the first. Svelte keeps `+1` apart
+// from `1`, as it keeps every two spellings it does not parse as Python.
+test('a signed number at a key is the number it makes', async () => {
+    const target = await mounted(GroupSignedKeys);
+    const models = [];
+
+    for (const key of ['a', 'b', 'c', 'd', 'e']) {
+        target.querySelector(`[data-k="${key}"]`).click();
+        flushSync();
+        models.push(target.querySelector('p').textContent);
+    }
+
+    expect(models).toEqual(['a|', 'a,b|', 'a,b,c|', 'a,b,c|d', 'a,b,c|d,e']);
+    expect([...target.querySelectorAll('input')].map((one) => one.checked)).toEqual([true, true, true, true, true]);
 });
 
 test('a parenthesized name is the name it holds, in the script and in the markup', async () => {

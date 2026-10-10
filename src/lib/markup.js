@@ -1569,10 +1569,22 @@ const numberKey = (value) => {
 // value, as Python compares keys. A key is what a subscript holds, each member
 // of a tuple held there and the operand of a sign in front of it: `bag[1]`,
 // `bag[True]` and `bag[(1.0, -1)]` are entries a dict compares, while the `1`
-// of `bag[str(1)]` is an argument, and `str(1)` is not `str(True)`.
+// of `bag[str(1)]` is an argument, and `str(1)` is not `str(True)`. A sign in
+// front of a number at a key is the number it makes: `bag[+1]` is `bag[1]`, and
+// `bag[-0.0]` is `bag[0]`.
 const targetKey = (expr) => {
     const $B = globalThis.__BRYTHON__;
     const signed = (node) => node.op instanceof $B.ast.USub || node.op instanceof $B.ast.UAdd;
+    const number = (node) => {
+        if (node instanceof $B.ast.Constant) return NUMBERS.has($B.class_name(node.value)) ? node.value : null;
+        if (!(node instanceof $B.ast.UnaryOp) || !signed(node)) return null;
+
+        const operand = number(node.operand);
+
+        return operand === null
+            ? null
+            : $B.$call($B.$getattr(operand, node.op instanceof $B.ast.USub ? '__neg__' : '__pos__'));
+    };
     const atKey = (node, field, held) =>
         node instanceof $B.ast.Subscript
             ? field === 'slice'
@@ -1582,13 +1594,11 @@ const targetKey = (expr) => {
     const key = (node, held = false) => {
         if (Array.isArray(node)) return `[${node.map((one) => key(one, held)).join(',')}]`;
         if (node === null || typeof node !== 'object') return JSON.stringify(node ?? null);
-        if (node instanceof $B.ast.Constant) {
-            const kind = $B.class_name(node.value);
 
-            return held && NUMBERS.has(kind)
-                ? `Number(${numberKey(node.value)})`
-                : `Constant(${kind}:${$B.builtins.repr(node.value)})`;
-        }
+        const value = held ? number(node) : null;
+
+        if (value !== null) return `Number(${numberKey(value)})`;
+        if (node instanceof $B.ast.Constant) return `Constant(${$B.class_name(node.value)}:${$B.builtins.repr(node.value)})`;
 
         const fields = node.constructor._fields.map((field) => key(node[field], atKey(node, field, held)));
 

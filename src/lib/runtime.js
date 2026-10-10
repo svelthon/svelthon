@@ -846,8 +846,10 @@ function installMutationTracking($B) {
         // `list.append.__objclass__`, where `list.copy` beside it answers
         // `method_descriptor` and `list`. Four properties carry that,
         // `ob_type`, `method`, `d_name`, `d_type`, and copying them keeps both
-        // answers.
-        return descriptor === undefined ? wrapper : Object.assign(wrapper, descriptor);
+        // answers. A descriptor that is a function, `dict.get`, carries them
+        // as its own properties, and the export boundary reads the same ones to
+        // know it holds a Python callable whose arguments it converts.
+        return Object.assign(wrapper, descriptor);
     };
 
     const onFirst = (obj, attr, rest, call) => {
@@ -996,9 +998,7 @@ function installMutationTracking($B) {
             // method kept as a value left that path, so `add(rows, 1)` mutated a
             // watched list and told nobody, while `list.append(rows, 1)` written
             // in place worked.
-            if (call !== null && pyClass(obj)) {
-                return onType(attr, call, typeof result === 'function' ? undefined : result);
-            }
+            if (call !== null && pyClass(obj)) return onType(attr, call, result);
 
             if (typeof result === 'function') return notifying(owner, attr, result);
 
@@ -4682,8 +4682,10 @@ export function pyArg(value) {
     // An absence is `None`, the rule `pyData` applies: `value is None` in the
     // function called has to be true for a `null` or an `undefined`.
     if (value === null || value === undefined) return NONE;
-    if (typeof value !== 'object') return pyBind(value);
-    if (!routeEvent(value)) return value;
+
+    // A view handed back is its container again, as at every other door: a
+    // method taken off `dict` is given the dict, not a JavaScript object.
+    if (typeof value !== 'object' || !routeEvent(value)) return pyBind(value);
 
     // Reading the framework's own searchParams is what registers the dependency,
     // so it is tried first, but it throws while prerendering, where a query
@@ -5120,9 +5122,10 @@ export const callable = (value) =>
 // Any other value Python calls: `list.index`, `list.__setitem__`, the
 // descriptors a builtin type hands out, which Brython calls through a `tp_call`
 // slot. Python's own `callable()` answers, a class excluded, since a class
-// crossing is the class.
+// crossing is the class. Some of those descriptors are JavaScript functions
+// carrying their type, `dict.get` among them, and are Python's all the same.
 const slotCallable = (value) =>
-    pyType(value) !== undefined &&
+    quietPyType(value) !== undefined &&
     !pyClass(value) &&
     _b_.callable(value) === true;
 
@@ -6744,13 +6747,17 @@ const SEQUENCES = [_b_.list, _b_.tuple, _b_.str, _b_.bytes, _b_.range];
 // `LookupError`, or a builtin sequence refusing a string. Anything else a
 // `__getitem__` raises is its author's answer and goes on, both to a read and
 // to the choice of where a write lands.
+//
+// Whether there is a `__getitem__` is asked the way `target[name]` asks it, of
+// the dicts along the class's MRO: reading it as an attribute of the class runs
+// the metaclass's `__getattribute__`, which an operator never consults.
 function lookup(target, name) {
     const $B = globalThis.__BRYTHON__;
 
     let cls;
     try {
         cls = $B.get_class(target);
-        if ($B.$getattr(cls, '__getitem__', MISSING) === MISSING) return MISSING;
+        if ($B.search_in_mro(cls, '__getitem__', $B.NULL) === $B.NULL) return MISSING;
     } catch {
         return MISSING; // a foreign JavaScript value has no Python protocol to ask
     }
