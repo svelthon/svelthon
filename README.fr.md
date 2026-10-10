@@ -75,7 +75,7 @@ reste de cette configuration et ce que chaque ligne apporte.
 npm install
 npm run dev
 
-npm test             # 1 758 tests : sémantique, props, réactivité, surface Svelte
+npm test             # 1 760 tests : sémantique, props, réactivité, surface Svelte
 npm run test:quiet   # la sortie de la suite : un run vert ne doit rien dire
 npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
@@ -834,8 +834,9 @@ reste celle qu'il a prise, comme `from m import f` la garde dans CPython, et la
 même fonction réécrite reste le même objet. Une liste, un dict, un set ou une
 instance est l'objet même du module, comme `m.items` en Python : modifié sur
 place par le module, `items.append(2)` ou `thing.count = 1`, il l'est pour
-l'importateur, et une écriture depuis JavaScript est celle du module. Un set se
-lit comme un `Set` JavaScript, comme le `SvelteSet` de Svelte, et un dict dont
+l'importateur, et une écriture depuis JavaScript est celle du module. Ce qu'une
+fonction rend à JavaScript traverse de la même façon, l'objet lui-même et non une
+copie. Un set se lit comme un `Set` JavaScript, comme le `SvelteSet` de Svelte, et un dict dont
 une clé est un objet JavaScript nomme cette clé par son `toString` à son entrée,
 comme un objet JavaScript nomme une clé quand on l'écrit : le seul nom qu'il ne
 peut pas avoir est celui qu'une clé donnait avant que la vue ne regarde. Des
@@ -1557,7 +1558,7 @@ part jamais.
 
 ## État
 
-Validé par `npm test`, 1 758 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 1 760 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;

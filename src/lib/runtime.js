@@ -2819,6 +2819,11 @@ const viewDescriptor = (view, key, authored, read) =>
 
 const forReader = (one) => {
     if (one === NONE) return null;
+
+    // A coroutine read off a view is the promise it crosses as anywhere, one run
+    // for every reference to it, its result crossing as a returned value does:
+    // `{"slow": fetch_slowly()}` returned by a `load()` streams.
+    if (pyCoroutine(one)) return crossedAs(one, forReader, (result) => pyExport(result));
     if (one !== null && (typeof one === 'object' || typeof one === 'function') && callable(one)) return pyHandler(one);
 
     const scalar = pyScalar(one);
@@ -3987,6 +3992,29 @@ const define = (target, key, value) =>
 // one view per policy.
 const CROSSED = new WeakMap();
 
+// The promise a coroutine crosses as under one policy, its run shared with every
+// other: `convert` is what its result goes through, `policy` the key that says
+// which conversion it was.
+const crossedAs = (coroutine, policy, convert) => {
+    let crossing = CROSSED.get(coroutine);
+
+    if (crossing === undefined) {
+        crossing = { run: scheduleAsync(coroutine, 'coroutine'), views: new Map() };
+
+        CROSSED.set(coroutine, crossing);
+    }
+
+    let view = crossing.views.get(policy);
+
+    if (view === undefined) {
+        view = crossing.run.then(convert);
+
+        crossing.views.set(policy, view);
+    }
+
+    return view;
+};
+
 // What an exported function hands back to the framework.
 //
 // SvelteKit serialises whatever `load()` returns, and a Brython dict carries
@@ -4114,6 +4142,11 @@ export function plainData(value, seen, adapt) {
     if (value === undefined || value === null || value === NONE) return null;
     if (typeof value === 'function') return adapt === undefined ? value : adapt(value);
 
+    // A view handed back is its container again, as at every other door: a
+    // value a Python function returned and JavaScript hands to `tojson` is the
+    // Python value it reads, not a JavaScript object.
+    if (VIEWED.has(value)) value = globalThis.__BRYTHON__.PYOBJ_MAP.get(value);
+
     // Under the serialiser's rule, a JavaScript object is handed on as a
     // stand-in whose `toJSON` the serialiser calls at the object's own turn,
     // with its key, and nothing of it is read before then: not its fields, not
@@ -4203,26 +4236,11 @@ export function plainData(value, seen, adapt) {
         // not something Python offers, so two references to it cannot mean two
         // runs under any rule, JSON included. Two distinct coroutine objects are
         // two distinct keys here, and still run once each.
-        let crossing = CROSSED.get(value);
-
-        if (crossing === undefined) {
-            crossing = { run: scheduleAsync(value, 'coroutine'), views: new Map() };
-
-            CROSSED.set(value, crossing);
-        }
-
-        let view = crossing.views.get(adapt);
-
-        if (view === undefined) {
-            // What it resolves to is Python too, and has to make the same
-            // crossing, under the same rule, so a dict returned behind a
-            // coroutine crosses as the same dict returned directly does.
-            view = crossing.run.then((result) => plainData(result, undefined, adapt));
-
-            crossing.views.set(adapt, view);
-        }
-
-        return view;
+        //
+        // What it resolves to is Python too, and has to make the same crossing,
+        // under the same rule, so a dict returned behind a coroutine crosses as
+        // the same dict returned directly does.
+        return crossedAs(value, adapt, (result) => plainData(result, undefined, adapt));
     }
 
     // Two rules, and the caller says which. Note that `map` passes an index as
@@ -4929,7 +4947,7 @@ export function pyNumbers(value) {
 // decision taken seven times, and nobody could see it without this table.
 //
 //                | arity | args in  | coroutine | result out | memoised |
-//   pyCall       |  yes  | pyArg    | awaited   | plainData  |          |
+//   pyCall       |  yes  | pyArg    | awaited   | pyExport   |          |
 //   pyHandler    |  yes  | pyCall, with the arity read off the signature  |
 //   pyEvent      |  yes  | pyArg    | fired     |            |          |
 //   pyExport     |       |          |   (a)     | plainData  |   yes    |
@@ -5008,6 +5026,23 @@ const identified = (wrapper, name, arity) =>
         length: { value: Number.isFinite(arity) ? arity : 0, configurable: true }
     });
 
+// What a call hands back crosses as an export does, a container as its view.
+// A dict's keys are named here, inside the call, by the copy's own rule: one
+// JavaScript cannot spell, `{1: "a", "1": "b"}`, is refused while the refusal
+// can still name the call that returned it. One held deeper is refused as it is
+// read, as an exported one is.
+const handedBack = (value, where) => {
+    const out = pyExport(value, where);
+
+    if (VIEWED.has(out) && globalThis.__BRYTHON__.is_dict(value)) {
+        const names = {};
+
+        for (const [key] of pyItems(value, unpackedPair)) define(names, propertyName(key, names), true);
+    }
+
+    return out;
+};
+
 export function pyCall(fn, where, arity = Infinity, named, convert = pyArg) {
     const wrapper = (...args) => {
         try {
@@ -5031,11 +5066,11 @@ export function pyCall(fn, where, arity = Infinity, named, convert = pyArg) {
             // JavaScript error or value it rejects with passes as it is.
             const pending = awaited(result);
 
-            if (pending === undefined) return plainData(result, undefined, pyHandler);
+            if (pending === undefined) return handedBack(result, where);
 
             return (async () => {
                 try {
-                    return plainData(await pending, undefined, pyHandler);
+                    return handedBack(await pending, where);
                 } catch (error) {
                     throw pyError(error, where);
                 }

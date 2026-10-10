@@ -77,7 +77,7 @@ rest of that configuration and what each line buys.
 npm install
 npm run dev
 
-npm test             # 1 758 tests: semantics, props, reactivity, Svelte surface
+npm test             # 1 760 tests: semantics, props, reactivity, Svelte surface
 npm run test:quiet   # the suite's own output: a green run must say nothing
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
@@ -796,7 +796,8 @@ as `from m import f` keeps it in CPython, and the same function written again is
 the same object. A list, a dict, a set or an instance is the module's own
 object, as `m.items` is in Python: changed in place by the module,
 `items.append(2)` or `thing.count = 1`, it is changed for the importer, and a
-write from JavaScript is the module's. A set reads as a JavaScript `Set`, as
+write from JavaScript is the module's. What a function returns to JavaScript
+crosses the same way, the object itself rather than a copy. A set reads as a JavaScript `Set`, as
 Svelte's own `SvelteSet` does, and a dict keyed by a JavaScript object names
 that key by its `toString` when it enters, as a JavaScript object names a key
 when it is written: the one name it cannot have is the one a key answered
@@ -1538,7 +1539,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 1 758 tests as written (vitest reports more, one per
+Validated by `npm test`, 1 760 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;

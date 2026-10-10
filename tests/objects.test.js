@@ -28,8 +28,24 @@ describe('a Python object crossing the boundary', () => {
 
     test('a @property is not a field, exactly as in JavaScript', () => {
         // `JSON.stringify(new Pep())` does not serialise a getter on the
-        // prototype either. The rule is the host's, not ours.
-        expect(one()).not.toHaveProperty('url');
+        // prototype either, and the getter still reads. The rule is the host's,
+        // not ours: the returned instance is measured against a JavaScript one.
+        class Pep {
+            constructor() {
+                this.number = 703;
+                this.tags = ['gil'];
+            }
+
+            get url() {
+                return `https://peps.python.org/pep-${this.number}/`;
+            }
+        }
+        const native = new Pep();
+        const returned = one();
+
+        expect(Object.keys(returned)).toEqual(Object.keys(native));
+        expect(JSON.parse(JSON.stringify(returned))).toEqual(JSON.parse(JSON.stringify(native)));
+        expect('url' in returned).toBe('url' in native);
     });
 
     test('nested inside containers, at any depth', () => {
