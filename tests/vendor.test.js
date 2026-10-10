@@ -995,7 +995,7 @@ test('new bases bring their special methods: bases-set-resets-slots', async () =
 // with no consistent MRO are named. And a slot is an identifier, a `__dict__`
 // declared once, a name the class does not bind: `type()` took any name, and
 // raised a JavaScript error on a slot that is no string.
-test('a class refuses the bases and slots CPython refuses: mro-duplicate-base, solid-base-builtin-layout, mro-error-message, slots-class-variable-conflict, slots-valid-identifiers', async () => {
+test('a class refuses the bases and slots CPython refuses: mro-duplicate-base, solid-base-builtin-layout, mro-error-message, slots-class-variable-conflict, slots-variable-size-base, slots-valid-identifiers', async () => {
     const { answers } = await import('./fixtures/class_bases.py');
 
     expect([...answers()]).toEqual([
@@ -1004,6 +1004,7 @@ test('a class refuses the bases and slots CPython refuses: mro-duplicate-base, s
         'list',
         'Cannot create a consistent method resolution order (MRO) for bases A, E',
         "'x' in __slots__ conflicts with class variable",
+        "nonempty __slots__ not supported for subtype of 'tuple'",
         '__slots__ must be identifiers',
         "__slots__ items must be strings, not 'int'",
         '__dict__ slot disallowed: we already got one',

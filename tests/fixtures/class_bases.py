@@ -43,6 +43,13 @@ def bound(slots, namespace):
         return str(error)
 
 
+def made_on(base, slots):
+    try:
+        return type("C", (base,), {"__slots__": slots}).__name__
+    except TypeError as error:
+        return str(error)
+
+
 def answers():
     return [
         made((A, A)),
@@ -50,6 +57,7 @@ def answers():
         made((A, list)),
         made((A, E)),
         bound(("x",), {"x": 1}),
+        made_on(tuple, ("x",)),
         made((A, E)),
         bound(("x",), {"x": 1}),
         slotted(("x,y",)),
