@@ -3712,13 +3712,15 @@ const walk = (iterator) => ({ [Symbol.iterator]: () => iterator });
 // would read nothing in silence. `structuredClone` refuses a proxy, as it does
 // a list's view, where it copied an empty `Set`, and `Set.prototype.has.call`
 // refuses its receiver. A method is read off the view and runs on it, its
-// fields being private; one function per name, so `view.has` is one value.
+// fields being private; one bound function per function read, so `view.has`
+// is one value, and a function put in its place is the one called. Bound by
+// JavaScript's own `bind`, not by whatever the function holds under that name.
 // Each set view's proxy, by the object behind it (`#published`).
 const PUBLISHED_SETS = new WeakMap();
 
 function setView(value) {
     const target = new SetView(value);
-    const bound = new Map();
+    const bound = new WeakMap();
     const view = new Proxy(target, {
         get(shell, key) {
             // Its constructor is `Set`, as a list's view's is `Array`: what a
@@ -3730,9 +3732,9 @@ function setView(value) {
             const found = Reflect.get(shell, key, shell);
 
             if (typeof found !== 'function') return found;
-            if (!bound.has(key)) bound.set(key, found.bind(shell));
+            if (!bound.has(found)) bound.set(found, Reflect.apply(Function.prototype.bind, found, [shell]));
 
-            return bound.get(key);
+            return bound.get(found);
         }
     });
 
