@@ -22,6 +22,20 @@ class Derived(Base):
     pass
 
 
+# And the `__init_subclass__` a class statement calls through `super(C, C)`,
+# which is a classmethod by Python's rule however it is written.
+class Registry:
+    names = []
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        Registry.names.append(cls.__name__)
+
+
+class Entry(Registry):
+    pass
+
+
 def answers():
     slotted = Slotted()
     slotted.x = 1
@@ -37,4 +51,6 @@ def answers():
         type(super(Derived, Derived).method).__name__,
         type(vars(super(Derived, Derived))).__name__,
         super(Derived, Derived()).prop,
+        type(vars(Registry)["__init_subclass__"]).__name__,
+        repr(Registry.names),
     ]

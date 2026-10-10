@@ -901,8 +901,10 @@ test('a method descriptor refuses a receiver of another type: method-descriptor-
 // out of its `__slots__` answered a JavaScript `undefined`; `vars()` read the
 // engine's dictionary rather than the attribute, so a class handed out a
 // mutable dict where Python hands its mappingproxy; and `super(C, C)` bound
-// what it found to the class, running a property's getter on it.
-test('the __dict__ attribute is read as Python reads it: slots-no-dict-descriptor, vars-dict-attribute, super-type-no-instance', async () => {
+// what it found to the class, running a property's getter on it. An
+// `__init_subclass__` written in a class body is a classmethod, which the class
+// statement's own `super(C, C)` call finds bound.
+test('the __dict__ attribute is read as Python reads it: init-subclass-classmethod, super-type-no-instance, slots-no-dict-descriptor, vars-dict-attribute', async () => {
     const { answers } = await import('./fixtures/dict_attribute.py');
 
     expect([...answers()]).toEqual([
@@ -912,7 +914,9 @@ test('the __dict__ attribute is read as Python reads it: slots-no-dict-descripto
         'property',
         'function',
         'getset_descriptor',
-        'value'
+        'value',
+        'classmethod',
+        "['Entry']"
     ]);
 });
 
