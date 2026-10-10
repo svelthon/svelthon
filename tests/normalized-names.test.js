@@ -47,6 +47,32 @@ test('a binding writes the declared name under another spelling', () => {
     expect(target.querySelector('[data-k="bound"]').textContent).toBe('typed');
 });
 
+// Two spellings of one name in nested scopes are one name, the inner hiding the
+// outer as in Python: both were handed to the expression, which Brython refused
+// as a duplicate parameter, and the component did not compile.
+test.for([
+    ['hidden', 'inner'],
+    ['outer again', 'outer'],
+    ['hidden back', 'inner'],
+    ['hidden by a snippet', 'inner']
+])('an inner spelling hides the outer one: %s', ([k, expected]) => {
+    expect(mounted().querySelector(`[data-k="${k}"]`).textContent).toBe(expected);
+});
+
+test('a binding writes the name the inner scope declares', () => {
+    const target = mounted();
+    const field = target.querySelector('[data-k="bind hidden"]');
+
+    field.value = 'typed';
+    field.dispatchEvent(new Event('input'));
+    flushSync();
+
+    expect([
+        target.querySelector('[data-k="inner box"]').textContent,
+        target.querySelector('[data-k="outer box"]').textContent
+    ]).toEqual(['typed', 'field']);
+});
+
 test('a walrus writes the script name under another spelling', () => {
     const target = mounted();
 

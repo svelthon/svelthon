@@ -1878,7 +1878,20 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         }
     };
 
-    const inScope = () => [...new Set(scopes.flat())];
+    // The names in scope, one per name as Python compares names, the innermost
+    // hiding the outer ones: an inner `ﬁeld` hides an outer `field`, and is read
+    // under the spelling it was declared with, what JavaScript knows it by.
+    const inScope = () => {
+        const visible = new Map();
+
+        for (let at = scopes.length - 1; at >= 0; at--) {
+            for (const one of scopes[at]) {
+                if (!visible.has(one)) visible.set(one, one);
+            }
+        }
+
+        return [...visible.values()];
+    };
 
     // A snippet's parameter is handed over by whoever renders the snippet, a
     // JavaScript component or this markup, converted or not: it is read as
