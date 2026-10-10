@@ -12,22 +12,42 @@ beforeEach(() => {
     oldEvents.length = 0;
 });
 
-// The same rule for a list an attribute held: `Shelf.rows = [1]` or `box.rows =
-// [1]`, then the old list changed, re-ran the effect reading the new one, the
-// old list's link to the attribute kept as long as it lived. The runs are
-// counted, since the page reads right either way.
-test.for(['class', 'instance', 'list subclass', 'function', 'module name'])('an attribute replaced lets its old list go: %s', (kind) => {
+// The same rule for a list an attribute held: `Shelf.rows = [1]`, `box.rows =
+// [1]` or `del box.rows`, then the old list changed, re-ran the effect reading
+// the new one, the old list's link to the attribute kept as long as it lived.
+// So did a slot, and a list an instance read off its class, the class given a
+// new one. The runs are counted, since the page reads right either way.
+const HOLDERS = ['class', 'instance', 'inherited', 'list subclass', 'dict subclass', 'slot', 'function', 'module name'];
+
+test.for(HOLDERS.flatMap((kind) => [[kind, 'replace'], [kind, 'delete']]))(
+    '%s: its attribute %sd lets the old list go',
+    ([kind, mode]) => {
+        const target = document.body.appendChild(document.createElement('div'));
+        const runs = [];
+        const instance = mount(ReboundAttribute, { target, props: { kind, mode, runs } });
+
+        flushSync();
+        for (const step of ['detach', 'change_old', 'change_current']) {
+            instance[step]();
+            flushSync();
+        }
+
+        expect(runs).toEqual(mode === 'replace' ? [0, 1, 2] : [0, 2, 3]);
+    }
+);
+
+// A name only the author's code answers, a `__getattr__` or a property, is not
+// read again to tell: the link stays, and a change of the list is seen.
+test.for(['getattr', 'property'])('a list a %s hands out stays followed', (kind) => {
     const target = document.body.appendChild(document.createElement('div'));
     const runs = [];
     const instance = mount(ReboundAttribute, { target, props: { kind, runs } });
 
     flushSync();
-    for (const step of ['replace', 'change_old', 'change_current']) {
-        instance[step]();
-        flushSync();
-    }
+    instance.change_current();
+    flushSync();
 
-    expect(runs).toEqual([0, 1, 2]);
+    expect(runs).toEqual([0, 1]);
 });
 
 const setup = () => {

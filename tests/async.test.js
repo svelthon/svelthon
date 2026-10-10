@@ -68,7 +68,12 @@ describe('async def', () => {
 // nothing at all. We re-raise it from a timer, which makes it a genuine uncaught
 // error — visible in devtools and in the overlay.
 describe('error inside a coroutine', () => {
-    test('it surfaces, named and located', async () => {
+    // And an `aio.Future` a handler hands back failed, which reached the host as
+    // a Python object with no message.
+    test.for([
+        ['a coroutine', 'boom', /ValueError: broken inside the coroutine \(boom\(\) — tests\/fixtures\/AsyncError\.svelte/],
+        ['an aio.Future', 'failed', /ValueError: failed future \(failed\(\) — tests\/fixtures\/AsyncError\.svelte/]
+    ])('%s that fails surfaces, named and located', async ([, key, message]) => {
         const target = document.body.appendChild(document.createElement('div'));
         mount(AsyncError, { target });
         flushSync();
@@ -81,16 +86,14 @@ describe('error inside a coroutine', () => {
             typeof fn === 'function' && rest.length === 0 ? pending.push(fn) : original(fn, ...rest);
 
         try {
-            target.querySelector('button[data-k="boom"]').click();
+            target.querySelector(`button[data-k="${key}"]`).click();
             await new Promise((resolve) => original(resolve, 80));
         } finally {
             globalThis.setTimeout = original;
         }
 
         expect(pending).toHaveLength(1);
-        expect(pending[0]).toThrow(
-            /ValueError: broken inside the coroutine \(boom\(\) — tests\/fixtures\/AsyncError\.svelte/
-        );
+        expect(pending[0]).toThrow(message);
     });
 
     test('a coroutine that completes triggers nothing', async () => {
@@ -220,6 +223,14 @@ describe('a value handed back behind a promise', () => {
         expect(await caught(awaited_future)).toMatch(/^ValueError: delayed failure \(/);
     });
 
+    // A Future held in what a `def` hands back crosses as a coroutine held there
+    // does: a promise whose value crosses as one returned at once.
+    test('and a Future held in a dict resolves to JavaScript values', async () => {
+        const { held_future } = await import('./fixtures/failed_future.py');
+
+        expect((await held_future().later).duration).toBe(0.5);
+    });
+
     // A `then` getter that raises rejects, as `await` rejects.
     test('and a then getter that raises rejects as await rejects', async () => {
         await expect((async () => await raising())()).rejects.toThrow(/no then/);
@@ -244,8 +255,8 @@ describe('a value handed back behind a promise', () => {
 });
 
 // A component's export hands the framework JavaScript numbers, a transition's
-// `duration` above all, and an `async def` export hands them over once
-// resolved: a Brython float is an object.
+// `duration` above all, and an `async def` export, or one returning an
+// `aio.Future`, hands them over once resolved: a Brython float is an object.
 describe("what a component's async export resolves to", () => {
     const setup = () => {
         const target = document.body.appendChild(document.createElement('div'));
@@ -259,10 +270,12 @@ describe("what a component's async export resolves to", () => {
         const { instance } = setup();
         expect(scalar(instance[`sync_${kind}`]())).toBe(0.5);
         expect(scalar(await instance[`async_${kind}`]())).toBe(0.5);
+        expect(scalar(await instance[`future_${kind}`]())).toBe(0.5);
     });
 
     test('a failure still rejects with the Python error', async () => {
         await expect(setup().instance.async_failing()).rejects.toThrow(/boom/);
+        await expect(setup().instance.future_failing()).rejects.toThrow(/^ValueError: boom \(/);
     });
 
     test('and an awaited float in the markup prints as Python prints it', async () => {

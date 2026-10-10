@@ -1939,23 +1939,60 @@ function holds(holder, child, marker) {
 }
 
 // Whether an object, an instance or a class, still holds what was read off it
-// under a name, `box.rows` or `Shelf.rows`: one of those names still binds it
-// in the holder's own dictionary, read as data, so no property of the author's
-// runs. `Shelf.rows = [1]` and the old list no longer wakes what reads the new
-// one. A name the holder does not bind itself, the child found on its class or
-// behind a property, cannot be told, and the link is kept, as is one made with
-// no name.
+// under a name, `box.rows` or `Shelf.rows`: one of those names still finds it.
+// `Shelf.rows = [1]`, `del Shelf.rows`, a slot written again, or a new value on
+// the class an instance reads it from, and the old list no longer wakes what
+// reads the name. A link made with no name is kept.
 function attributeHolds(holder, child, marker) {
     const names = marker.names?.get(holder);
-    const own = ownAttributes(holder);
 
-    if (names === undefined || own === null || typeof own !== 'object') return true;
+    if (names === undefined) return true;
 
     for (const name of names) {
-        if (!Object.hasOwn(own, name) || own[name] === child) return true;
+        const found = attributeOf(holder, name);
+
+        if (found === UNTOLD || found === child) return true;
     }
 
     return false;
+}
+
+// What Python's lookup of `name` on `holder` finds, read as data so that nothing
+// of the author's runs: its own dictionary, its slot, then the dictionaries of
+// its classes, a class's metaclass after them. MISSING when nothing binds the
+// name. UNTOLD when only the author's code could say, a descriptor's `__get__`
+// or a `__getattr__`, or when the holder keeps its own names elsewhere.
+const UNTOLD = Symbol('untold');
+
+function attributeOf(holder, name) {
+    const $B = globalThis.__BRYTHON__;
+    const own = ownAttributes(holder);
+    const dictionary = own !== null && typeof own === 'object';
+
+    if (dictionary && Object.hasOwn(own, name)) return own[name];
+    if (Object.hasOwn(holder, SLOT + name)) return holder[SLOT + name];
+
+    const kind = quietPyType(holder);
+
+    if (!pyClass(kind)) return UNTOLD;
+
+    const asks = (hook) =>
+        kind.tp_mro.some((one) => (one.tp_flags & $B.TPFLAGS.HEAPTYPE) !== 0 && $B.search_in_dict(one, hook, $B.NULL) !== $B.NULL);
+
+    if (asks('__getattr__') || asks('__getattribute__')) return UNTOLD;
+
+    for (const cls of pyClass(holder) ? [holder, kind] : [kind]) {
+        const found = declares(cls, name);
+
+        if (found === $B.NULL) continue;
+
+        // An instance's slot left empty: its storage was read above.
+        if (!pyClass(holder) && $B.get_class(found) === $B.member_descriptor) return MISSING;
+
+        return $B.search_slot($B.get_class(found), 'tp_descr_get', $B.NULL) === $B.NULL ? found : UNTOLD;
+    }
+
+    return dictionary ? MISSING : UNTOLD;
 }
 
 // Whether the storage of a list, a dict or a set holds `child`.
@@ -2824,6 +2861,27 @@ export function pyError(error, where) {
 // every value a conversion walks is asked.
 export const pyCoroutine = (value) => pyType(value) === globalThis.__BRYTHON__.coroutine;
 
+// What Python hands JavaScript to wait on: a coroutine, which runs once asked
+// (`started`), or an `aio.Future`, a promise of Brython's already under way.
+// Either crosses as a promise, whatever it resolves to crossing as a value
+// returned at once does, and whatever it rejects with as an error raised. The
+// class is asked of its module once, and only for a promise.
+let futures;
+
+export const pyAwaitable = (value) => {
+    if (pyCoroutine(value)) return true;
+    if (!(value instanceof Promise)) return false;
+
+    const $B = globalThis.__BRYTHON__;
+    const aio = $B.imported['browser.aio'];
+
+    if (aio === undefined) return false;
+
+    futures ??= $B.$getattr(aio, 'Future');
+
+    return pyType(value) === futures;
+};
+
 // A Python scalar held as an object, and the number or the string inside it.
 //
 // A Brython float is an object holding a number, which is the reason `pyNumbers`
@@ -2952,7 +3010,7 @@ const forReader = (one) => {
     // A coroutine read off a view is the promise it crosses as anywhere, one run
     // for every reference to it, its result crossing as a returned value does:
     // `{"slow": fetch_slowly()}` returned by a `load()` streams.
-    if (pyCoroutine(one)) return crossedAs(one, forReader, (result) => pyExport(result));
+    if (pyAwaitable(one)) return crossedAs(one, forReader, (result) => pyExport(result));
     if (one !== null && (typeof one === 'object' || typeof one === 'function') && callable(one)) return pyHandler(one);
 
     const scalar = pyScalar(one);
@@ -4014,7 +4072,7 @@ export function schedule(result, where, convert = undefined) {
     // Compared in JavaScript rather than through aio.iscoroutine(): this runs on
     // every call into Python, template expressions included, and a Brython call
     // here costs more than the check saves.
-    if (!pyCoroutine(result)) return result;
+    if (!pyAwaitable(result)) return result;
 
     // What the caller gets back is a promise, so an `async def` can be awaited
     // by whoever called it, `{#await greet()}` in a template above all, which
@@ -4371,8 +4429,9 @@ export function plainData(value, seen, adapt) {
 
     // A coroutine handed to the framework becomes a promise. That is what lets a
     // `load()` stream: `{"lentes": chercher_lentement()}` returns a coroutine,
-    // and SvelteKit waits on the promise it turns into.
-    if (pyCoroutine(value)) {
+    // and SvelteKit waits on the promise it turns into. An `aio.Future` is one
+    // already, whose result crosses the same way.
+    if (pyAwaitable(value)) {
         // A walk that cannot wait must not start one.
         //
         // The JSON rule is a serialiser's, and a serialiser is synchronous: the
@@ -4935,9 +4994,13 @@ export function pyArg(value) {
 // and returns it untouched afterwards, so when one coroutine is handed out by
 // two routes the *label* is the first asker's. The line stays the author's,
 // since it comes from the traceback and not from the label.
+//
+// An `aio.Future` is under way already, and is its own run.
 const RUNS = new WeakMap();
 
 function started(coroutine) {
+    if (!pyCoroutine(coroutine)) return coroutine;
+
     let run = RUNS.get(coroutine);
 
     if (run === undefined) {
@@ -4965,7 +5028,7 @@ export function scheduleAsync(result, where) {
     const aio = $B.imported['browser.aio'];
 
     if (!aio || result === undefined || result === null) return result;
-    if (!pyCoroutine(result)) return result;
+    if (!pyAwaitable(result)) return result;
 
     return started(result).catch((error) => {
         throw pyError(error, where);
@@ -5730,7 +5793,7 @@ export function pyAttach(value) {
 }
 
 export function pyTeardown(value, where) {
-    if (pyCoroutine(value)) {
+    if (pyAwaitable(value)) {
         schedule(value, where);
         return undefined;
     }
