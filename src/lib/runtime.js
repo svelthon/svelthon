@@ -4,6 +4,8 @@
 import './globals.js';
 import './boot.js';
 import { createSubscriber } from 'svelte/reactivity';
+// What `$effect.tracking()` compiles to: a plain module has no runes.
+import { effect_tracking } from 'svelte/internal/client';
 import { attributeWrapper } from './attributes.js';
 
 // Python's None, so a prop the parent never passed reads as None rather than
@@ -1020,8 +1022,11 @@ function installMutationTracking($B) {
     // through `super()` follows it on the MRO of `__self_class__` after
     // `__thisclass__`, where `super().value` looks. The class that holds the
     // name, or undefined.
+    //
+    // Only in a reaction that follows its reads: a handler or the script's own
+    // run subscribes nothing, and what a reaction reads it links itself.
     const lookedUp = (obj, attr) => {
-        if (typeof attr !== 'string') return undefined;
+        if (typeof attr !== 'string' || !effect_tracking()) return undefined;
 
         if (pyClass(obj)) {
             const meta = namesRead(quietPyType(obj)?.tp_mro, attr);
@@ -1198,9 +1203,10 @@ function installMutationTracking($B) {
     // was looked up through, up to the one whose dictionary holds it, asked of
     // the dictionaries along the MRO, so no getter runs, and whether what it
     // holds is a descriptor, a method, a property or a slot: `{ through,
-    // descriptor }`, or null for a read nothing of a class answers.
+    // descriptor }`, or null for a read nothing of a class answers. Only in a
+    // reaction, as `lookedUp`.
     const providers = (obj, attr) => {
-        if (typeof attr !== 'string') return null;
+        if (typeof attr !== 'string' || !effect_tracking()) return null;
 
         const own = pyClass(obj) ? obj : undefined;
 
@@ -1476,7 +1482,9 @@ function mutable(value) {
         // Brython; the engine's own classes have nothing to watch.
         if (cls === _b_.type) return (value.tp_flags & $B.TPFLAGS.HEAPTYPE) !== 0;
 
-        return cls !== undefined;
+        // A bound method, made anew by each read, holds nothing of its own:
+        // what changes is its function or its instance, each watched as itself.
+        return cls !== undefined && cls !== $B.method;
     } catch {
         return false; // a foreign JavaScript value is not ours to mark
     }
