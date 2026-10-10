@@ -3896,6 +3896,10 @@ function compile(
     if (resolves) refuseMissingModules(importedAt, resolves, source, lineOffset);
     refuseTypeParameters(root._ast.body, source, lineOffset);
 
+    // Python's symbol table, which says what every name means in every scope.
+    const table = symbolTable(root._ast, source);
+    refuseBoundImports(root._ast, table, jsImported, source, lineOffset);
+    refuseLibraryCalls(root._ast, table, source, lineOffset);
     const module = [
         `import { ${runtimeAliases(['withNamespace', 'pyError'])} } from 'svelthon/runtime';`,
         ``,
@@ -4089,6 +4093,8 @@ const ELEMENT_TYPES = {
 // bound more than once at the top of the module is not followed, nor one bound
 // to anything but a name. A script that does not parse has none.
 function componentAliases(src, children) {
+    if (children.length === 0) return [];
+
     let tree;
 
     try {

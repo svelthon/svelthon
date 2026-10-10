@@ -87,9 +87,9 @@ const install = block(code, code.indexOf('{', code.indexOf('function installMuta
 
 // Every interception: a function put onto the engine under one of its own names,
 // either directly or through the loop that covers `$setattr` and `$setattr1`,
-// and `sourced`, which takes the place of each builtin mutator where the engine
-// keeps it.
-const ENTRY = /(?:\$B(?:(?:\.[A-Za-z_$][\w$]*)+|\[name\])|\bconst sourced) = function/g;
+// `sourced`, which takes the place of each builtin mutator where the engine
+// keeps it, and `notified`, a JavaScript object's own mutator as Python reads it.
+const ENTRY = /(?:\$B(?:(?:\.[A-Za-z_$][\w$]*)+|\[name\])|\bconst (?:sourced|notified)) = function/g;
 
 // Telling a watched object it changed, in the three spellings this file uses:
 // the marker called on the spot, and the two helpers whose whole job is to call
@@ -107,7 +107,7 @@ describe('every interception that notifies, notifies on the raising path too', (
     test('the wrappers are found where they live', () => {
         expect(wrappers.map((one) => one.name)).toEqual([
             'const sourced',
-            '$B.call_attr',
+            'const notified',
             '$B.$getattr',
             '$B.builtins.dir',
             '$B.$setitem',

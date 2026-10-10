@@ -16,7 +16,7 @@ beforeEach(() => {
 // [1]`, then the old list changed, re-ran the effect reading the new one, the
 // old list's link to the attribute kept as long as it lived. The runs are
 // counted, since the page reads right either way.
-test.for(['class', 'instance', 'module name'])('an attribute replaced lets its old list go: %s', (kind) => {
+test.for(['class', 'instance', 'list subclass', 'function', 'module name'])('an attribute replaced lets its old list go: %s', (kind) => {
     const target = document.body.appendChild(document.createElement('div'));
     const runs = [];
     const instance = mount(ReboundAttribute, { target, props: { kind, runs } });

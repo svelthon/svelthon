@@ -69,6 +69,11 @@ def change(step):
         pairs.delete(step)
     elif kind == "set held by an instance":
         holder.members.add(step)
+    elif kind == "kept method":
+        add = members.add
+        add(step)
+    elif kind == "method taken by getattr":
+        getattr(members, "add")(step)
     else:
         tags.tag(step)
 </script>

@@ -21,11 +21,30 @@ class Box:
 box = Box()
 
 
+class Row(list):
+    pass
+
+
+row = Row()
+row.rows = []
+
+
+def counter():
+    pass
+
+
+counter.rows = []
+
+
 def current():
     if kind == "class":
         return Shelf.rows
     if kind == "instance":
         return box.rows
+    if kind == "list subclass":
+        return row.rows
+    if kind == "function":
+        return counter.rows
     return rows
 
 
@@ -44,6 +63,10 @@ def replace():
         Shelf.rows = [1]
     elif kind == "instance":
         box.rows = [1]
+    elif kind == "list subclass":
+        row.rows = [1]
+    elif kind == "function":
+        counter.rows = [1]
     else:
         rows = [1]
 

@@ -908,18 +908,29 @@ function installMutationTracking($B) {
     }
 
     // A JavaScript object Python holds, a `js.Set.new()` or a `Map`, changed
-    // by its own method: nothing of the engine's runs, so the call is followed
-    // where it is made, by the name of one of JavaScript's mutators.
+    // by its own method: nothing of the engine's runs, so the method read off
+    // it under the name of one of JavaScript's mutators notifies once called,
+    // in place, kept as `add = seen.add` or taken by `getattr`. One wrapper per
+    // object and method, so two reads are one method.
     const JS_MUTATORS = new Set(['add', 'delete', 'clear', 'set', 'push', 'pop', 'shift', 'unshift', 'splice', 'sort', 'reverse', 'fill', 'copyWithin']);
-    const callAttr = $B.call_attr;
-    $B.call_attr = function (obj, attr, ...rest) {
-        if (!JS_MUTATORS.has(attr) || !MARKS.has(obj) || !javascriptOwn(obj)) return callAttr(obj, attr, ...rest);
+    const JS_WRAPPERS = new WeakMap();
 
-        try {
-            return callAttr(obj, attr, ...rest);
-        } finally {
-            MARKS.get(obj)();
+    const jsMutator = (obj, method) => {
+        const wrappers = JS_WRAPPERS.get(obj) ?? JS_WRAPPERS.set(obj, new WeakMap()).get(obj);
+
+        if (!wrappers.has(method)) {
+            const notified = function (...args) {
+                try {
+                    return Reflect.apply(method, this, args);
+                } finally {
+                    notify(obj);
+                }
+            };
+
+            wrappers.set(method, Object.assign(notified, method));
         }
+
+        return wrappers.get(method);
     };
 
     const getattr = $B.$getattr;
@@ -934,7 +945,8 @@ function installMutationTracking($B) {
         }
 
         read(obj, attr, result);
-        return result;
+
+        return JS_MUTATORS.has(attr) && typeof result === 'function' && MARKS.has(obj) && javascriptOwn(obj) ? jsMutator(obj, result) : result;
     };
 
     // A read that found its value, however it was written: `box.x`,
@@ -1059,8 +1071,12 @@ function installMutationTracking($B) {
 
         let marker = markers.get(attr);
 
+        // The class is held weakly here too: a value that outlives it, a list
+        // the module shares, keeps this marker among its parents.
         if (marker === undefined) {
-            marker = { stamp: 0, bumps: [() => classNameChanged(cls, attr)], reads: [], target: new WeakRef(cls) };
+            const target = new WeakRef(cls);
+
+            marker = { stamp: 0, bumps: [() => target.deref() && classNameChanged(target.deref(), attr)], reads: [], target };
             markers.set(attr, marker);
         }
 
@@ -1906,6 +1922,10 @@ function holds(holder, child, marker) {
 
     if (base === undefined) return attributeHolds(holder, child, marker);
     if (stores(base, holder, child, marker)) return true;
+
+    // Read off an attribute of a subclass, `rows.label` of `class Row(list)`:
+    // the name is asked, as an instance's is.
+    if (base !== cls && marker.names?.has(holder)) return attributeHolds(holder, child, marker);
 
     return base !== cls && (marker.loose?.has(holder) === true || redefinesItems(cls));
 }
