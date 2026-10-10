@@ -34,7 +34,13 @@ test.for([
     'instance attribute deleted by delattr()',
     'name a class gains',
     'property a class gains',
-    'method a class gains'
+    'method a class gains',
+    // Read on the class itself, `Base.method(holder)`: the class is bound by
+    // `class`, nothing watched it, and the page kept the old answer while the
+    // model gave the new one.
+    'method read on its class',
+    'method read on a subclass',
+    'data read on its class'
 ])(
     'a %s replaced on a class repaints what reads it through an instance',
     (kind) => {

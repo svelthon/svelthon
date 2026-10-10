@@ -8,6 +8,7 @@ import ContextCallbacks from './fixtures/ContextCallbacks.svelte';
 import ContextCallbacksFromJs from './fixtures/ContextCallbacksFromJs.svelte';
 import ContextScalars from './fixtures/ContextScalars.svelte';
 import PropScalars from './fixtures/PropScalars.svelte';
+import PropScalarsModule from './fixtures/PropScalarsModule.svelte';
 import ContextLate from './fixtures/ContextLate.svelte';
 import ContextLateNative from './fixtures/ContextLateNative.svelte';
 
@@ -39,6 +40,16 @@ test('a scalar handed as a prop reads as itself in Python and as a number in Jav
     expect(read('python')).toBe('Price|EUR|float|1.0|Label|HELLO!');
     expect(read('js')).toBe('number|0.50|number|1.00|string|hello');
     expect(target.querySelector('[data-k="spread"] p').textContent).toBe('Price|EUR|float|1.0|Label|HELLO!');
+});
+
+// The same child imported in a `<script module>`, as the README writes a
+// composition: only `importjs` was read, and the child had JavaScript's number.
+test('and a child imported in the <script module> is handed the value itself too', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+    mount(PropScalarsModule, { target });
+    flushSync();
+
+    expect(target.querySelector('[data-k="module"] p').textContent).toBe('Price|EUR|float|1.0|Label|HELLO!');
 });
 
 // A context value crosses languages like any other value: a scalar becomes the

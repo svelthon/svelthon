@@ -50,6 +50,51 @@ test.for([
     expect(run(sets[name])).toBe(run(new Set([1, 2])));
 });
 
+// A member JavaScript adds to the view is the view's, its `this` the view, as
+// on a `Set`: it was bound to the object behind the view, which then leaked
+// out, and `structuredClone` copied that one as an empty set.
+test('a method and a getter put on the view see the view as this', () => {
+    const tags = sets.receiver;
+
+    tags.self = function () {
+        return this;
+    };
+    expect(tags.self()).toBe(tags);
+    expect(() => structuredClone(tags.self())).toThrow();
+
+    Object.defineProperty(sets.getter, 'same', {
+        get() {
+            return this === sets.getter;
+        }
+    });
+    expect(sets.getter.same).toBe(true);
+});
+
+// A function defined locked, or frozen in afterwards, reads as itself: the view
+// handed back another function, which a non-configurable property forbids,
+// and the read raised.
+test('a locked or frozen function on the view still reads, as on a Set', () => {
+    Object.defineProperty(sets.locked, 'describe', { value: () => 'real' });
+    expect(sets.locked.describe()).toBe('real');
+
+    sets.frozen.describe = () => 'real';
+    Object.freeze(sets.frozen);
+    expect(sets.frozen.describe()).toBe('real');
+    expect(sets.frozen.has(1)).toBe(true);
+});
+
+// The set's own methods still run on what it holds, and answer the view.
+test('its own methods answer the view', () => {
+    const tags = sets.added;
+    let third;
+
+    expect(tags.add(3)).toBe(tags);
+    tags.forEach((one, again, set) => {
+        third = set;
+    });
+    expect(third).toBe(tags);
+});
+
 // And a method nobody replaced is one value, read after read.
 test('an unchanged method is one function, read after read', () => {
     expect(sets.unchanged.has).toBe(sets.unchanged.has);

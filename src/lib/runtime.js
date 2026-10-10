@@ -972,6 +972,11 @@ function installMutationTracking($B) {
             throw error;
         }
 
+        // A read made on a class itself, `Base.method`, follows the name on
+        // the classes it was looked up through, as one made through an
+        // instance does, whether the class was bound by `class` or by `=`.
+        if (pyClass(obj)) classRead(obj, attr);
+
         if (!watchable(obj)) return result;
 
         // Wrapped whether or not the object is watched **yet**: a factory that
@@ -1071,10 +1076,25 @@ function installMutationTracking($B) {
         return result;
     };
 
+    // The name read on a class, on each class of its MRO up to the one whose
+    // dictionary holds it, that one included: a write to any of them is
+    // what the read finds next. On all of them when none holds it, since any
+    // may gain it.
+    const classRead = (cls, attr) => {
+        if (typeof attr !== 'string' || !Array.isArray(cls.tp_mro)) return;
+
+        for (const one of cls.tp_mro) {
+            className(one, attr).subscribe();
+
+            if ($B.search_in_dict(one, attr, $B.NULL) !== $B.NULL) return;
+        }
+    };
+
     // A read that found nothing and raised, `hasattr(box, "later")`, follows
     // the name on the classes as a read that found nothing and answered a
     // default does.
     const missing = (obj, attr) => {
+        if (pyClass(obj)) classRead(obj, attr);
         if (!MARKS.has(obj)) return;
 
         const found = providers(obj, attr);
@@ -1110,8 +1130,12 @@ function installMutationTracking($B) {
         return entry;
     };
 
+    // Not while a template expression runs: a write it makes then, a getter
+    // counting its reads on its class, is a side effect of the reading, which
+    // Svelte refuses to make of its own state, and waking the reader would run
+    // the expression that wrote it again, without end.
     const classNameChanged = (cls, attr) => {
-        if (typeof attr !== 'string' || !pyClass(cls)) return;
+        if (typeof attr !== 'string' || !pyClass(cls) || rendering > 0) return;
 
         for (const update of [...(CLASS_NAMES.get(cls)?.get(attr)?.updates ?? [])]) update();
     };
@@ -3742,6 +3766,13 @@ function setView(value) {
             // `cloneDeep` writes it, where `SetView` took its argument for a
             // Python set and raised from inside the engine.
             if (key === 'constructor') return Set;
+
+            // A member JavaScript put on the view is the view's, as on a `Set`:
+            // its value handed back as it is, which a locked or frozen one
+            // demands, and its getter run with the view as `this`. Only the
+            // set's own methods run on the object behind, whose private fields
+            // they read.
+            if (Object.hasOwn(shell, key)) return Reflect.get(shell, key, view);
 
             const found = Reflect.get(shell, key, shell);
 

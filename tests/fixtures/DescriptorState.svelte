@@ -62,8 +62,10 @@ def change():
         Base.prop = property(lambda self: 1)
     elif kind == "property to data":
         Base.prop = 1
-    elif kind == "method":
+    elif kind in ("method", "method read on its class", "method read on a subclass"):
         Base.method = lambda self: 1
+    elif kind == "data read on its class":
+        Base.data = 1
     elif kind == "shadowing property":
         Middle.prop = property(lambda self: 1)
     elif kind == "shadowing method":
@@ -89,6 +91,13 @@ def change():
 def read():
     if kind == "data":
         return holder.data
+    # Read on the class itself, bound by `class` and not by `=`.
+    if kind == "method read on its class":
+        return Base.method(holder)
+    if kind == "method read on a subclass":
+        return Derived.method(holder)
+    if kind == "data read on its class":
+        return Base.data
     if kind.startswith("shadow deleted"):
         return below.method()
     if kind == "instance attribute deleted by delattr()":

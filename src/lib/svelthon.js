@@ -267,24 +267,38 @@ const hoisted = (node, found = []) => {
     return found;
 };
 
-export function moduleImports(content) {
+// The statements of the `<script module>`, or none.
+const moduleBody = (content) => {
     const block = moduleScript(content);
 
     if (block === null) return [];
 
-    let module;
-
     try {
         // The element as written, so `lang="ts"` parses its annotations.
-        module = parse(block, { modern: true }).module;
+        return parse(block, { modern: true }).module?.content?.body ?? [];
     } catch {
         // A block that does not parse is one Svelte is about to refuse itself,
         // naming the line. Publishing nothing leaves that message as the only
         // one the author sees, rather than ours in front of it.
         return [];
     }
+};
 
-    const body = module?.content?.body ?? [];
+// The components the `<script module>` imports by default from a `.svelte`
+// file, `import Child from "./Child.svelte"`: what each local name is, and
+// where it comes from. The other half of `componentImports`, which reads the
+// same of `importjs`.
+const moduleComponents = (content) =>
+    moduleBody(content)
+        .filter((node) => node.type === 'ImportDeclaration' && String(node.source.value).endsWith('.svelte'))
+        .flatMap((node) =>
+            node.specifiers
+                .filter((one) => one.type === 'ImportDefaultSpecifier')
+                .map((one) => ({ local: one.local.name, from: String(node.source.value) }))
+        );
+
+export function moduleImports(content) {
+    const body = moduleBody(content);
 
     return [...new Set([...body.flatMap(declares), ...hoisted(body)])];
 }
@@ -446,16 +460,24 @@ export function python(options = {}) {
             // The children written in Python, read off their own file: a prop
             // handed to one is the Python value itself, a `Price(float)` with
             // its class, where a JavaScript child is handed JavaScript's
-            // number. A child the file system cannot name, an alias or a
-            // package, is taken for a JavaScript one, as before.
+            // number. Imported by `importjs` or in the `<script module>`, the
+            // way the README writes a composition. A child the file system
+            // cannot name, an alias or a package, is taken for a JavaScript
+            // one. Each file read is a dependency of this one, so a child that
+            // changes language recompiles its parent.
+            const read = [];
             const pythonChildren = new Set(
-                componentImports(python, filename ?? 'component')
+                [...componentImports(python, filename ?? 'component'), ...moduleComponents(content)]
                     .filter(({ from }) => {
                         if (!filename || !from.startsWith('.')) return false;
 
                         const path = resolve(dirname(filename), from);
 
-                        return existsSync(path) && pythonScript(readFileSync(path, 'utf8')) !== null;
+                        if (!existsSync(path)) return false;
+
+                        read.push(path);
+
+                        return pythonScript(readFileSync(path, 'utf8')) !== null;
                     })
                     .map(({ local }) => local)
             );
@@ -467,7 +489,7 @@ export function python(options = {}) {
                 (markup, offset) => pythonExpressions(markup, collect, undefined, { filename, content, offset, pythonChildren })
             );
 
-            return { code: tagged(elementOptions(code, python), calls.open(file)) };
+            return { code: tagged(elementOptions(code, python), calls.open(file)), dependencies: read };
         },
         script({ content, attributes, filename }) {
             // Read as `pythonScript` reads the tag, by names in any case: Svelte
