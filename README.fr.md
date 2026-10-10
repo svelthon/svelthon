@@ -75,7 +75,7 @@ reste de cette configuration et ce que chaque ligne apporte.
 npm install
 npm run dev
 
-npm test             # 1 749 tests : sémantique, props, réactivité, surface Svelte
+npm test             # 1 754 tests : sémantique, props, réactivité, surface Svelte
 npm run test:quiet   # la sortie de la suite : un run vert ne doit rien dire
 npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
@@ -172,7 +172,10 @@ en place est attrapée sans proxy.
 
 Il n'y a pas d'équivalent de `$state` à écrire, parce qu'il n'y a rien à
 déclarer : une affectation au niveau du module *est* la déclaration, et le
-compilateur la lit dans l'AST.
+compilateur la lit dans l'AST. Une instruction `class` n'en est pas une, comme
+une classe JavaScript n'est pas un `$state` : une méthode remplacée sur une
+classe se voit à travers ses instances, ou à travers un nom lié à la classe par
+`=`, et non par `Base.method(obj)` écrit sur le nom que l'instruction a lié.
 
 **Et c'est toute la règle : une rune vit au niveau module du script, et dans le
 gabarit. Ce sont les deux endroits où le compilateur lit une déclaration.** Dans
@@ -1554,7 +1557,7 @@ part jamais.
 
 ## État
 
-Validé par `npm test`, 1 749 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 1 754 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;

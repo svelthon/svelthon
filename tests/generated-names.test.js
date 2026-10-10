@@ -50,8 +50,10 @@ test('every generated name the markup writes is defined by the compiler', () => 
     const markup = read('markup.js');
     const compiler = read('compile.cjs');
 
+    // A generated name begins with `__` and never ends with it, which leaves
+    // Python's own dunders, `__neg__` among them, to Python.
     const written = [...new Set([...markup.matchAll(/__[a-z][\w]*/g)].map((one) => one[0]))]
-        .filter((one) => !MARKUP_LOCAL.has(one))
+        .filter((one) => !MARKUP_LOCAL.has(one) && !one.endsWith('__'))
         .sort();
 
     // The list is not written out here on purpose: it is read from the file that

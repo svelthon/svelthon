@@ -77,7 +77,7 @@ rest of that configuration and what each line buys.
 npm install
 npm run dev
 
-npm test             # 1 749 tests: semantics, props, reactivity, Svelte surface
+npm test             # 1 754 tests: semantics, props, reactivity, Svelte surface
 npm run test:quiet   # the suite's own output: a green run must say nothing
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
@@ -171,7 +171,10 @@ caught without a proxy.
 
 There is no `$state` equivalent to write, because there is nothing to declare: a
 module-level assignment already *is* the declaration, and the compiler reads it
-from the AST.
+from the AST. A `class` statement is not one, as a JavaScript class is not a
+`$state`: a method replaced on a class is seen through its instances, or through
+a name bound to the class with `=`, and not by `Base.method(obj)` written on the
+name the statement bound.
 
 **And that is the whole rule: a rune lives at the top level of the script, and in
 the markup. Those are the two places the compiler reads a declaration.** In the
@@ -1535,7 +1538,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 1 749 tests as written (vitest reports more, one per
+Validated by `npm test`, 1 754 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;
