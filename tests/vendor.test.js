@@ -897,6 +897,25 @@ test('a method descriptor refuses a receiver of another type: method-descriptor-
     ]);
 });
 
+// The `__dict__` attribute as Python reads it. An instance whose class keeps it
+// out of its `__slots__` answered a JavaScript `undefined`; `vars()` read the
+// engine's dictionary rather than the attribute, so a class handed out a
+// mutable dict where Python hands its mappingproxy; and `super(C, C)` bound
+// what it found to the class, running a property's getter on it.
+test('the __dict__ attribute is read as Python reads it: slots-no-dict-descriptor, vars-dict-attribute, super-type-no-instance', async () => {
+    const { answers } = await import('./fixtures/dict_attribute.py');
+
+    expect([...answers()]).toEqual([
+        "'Slotted' object has no attribute '__dict__'",
+        'False',
+        'mappingproxy',
+        'property',
+        'function',
+        'getset_descriptor',
+        'value'
+    ]);
+});
+
 // A module named with a quote, from a file such as `src/Jean's app/Page.svelte`,
 // had its name pasted between quotes in the code of every def, lambda, class
 // and comprehension, which then stopped parsing.

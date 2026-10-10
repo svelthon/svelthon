@@ -632,7 +632,7 @@ describe('the blocks that declare names', () => {
     test('{#await} splits the promise from the name it declares', () => {
         const { out, defs } = rewrite('{#await later() then value}{value}{/await}');
 
-        expect(out).toMatch(/\{#await __expr_\d+\(\) then value\}/);
+        expect(out).toMatch(/\{#await __expr_py_\d+\(\) then value\}/);
         expect(defs.some((one) => /^def __expr_\d+\(value\):/m.test(one))).toBe(true);
     });
 
@@ -641,7 +641,7 @@ describe('the blocks that declare names', () => {
     test('{#await} is not cut inside its own string', () => {
         const { out } = rewrite('{#await f(" then ")}waiting{/await}');
 
-        expect(out).toMatch(/^\{#await __expr_\d+\(\)\}waiting\{\/await\}$/);
+        expect(out).toMatch(/^\{#await __expr_py_\d+\(\)\}waiting\{\/await\}$/);
     });
 
     test('{:then} and {:catch} cross unchanged', () => {

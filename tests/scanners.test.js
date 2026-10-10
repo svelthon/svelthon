@@ -66,12 +66,12 @@ describe('atTopLevel reads through a string', () => {
     // `{#await f(" then ")}` holds the word inside a literal. Split there, the
     // block awaits half a call and declares a name out of the other half.
     test('the word then inside a string is not the clause', () => {
-        expect(rewrite('{#await f(" then ")}x{/await}')).toBe('{#await __expr_0()}x{/await}');
+        expect(rewrite('{#await f(" then ")}x{/await}')).toBe('{#await __expr_py_0()}x{/await}');
     });
 
     test('while the real clause still splits', () => {
         expect(rewrite('{#await f() then row}x{/await}')).toBe(
-            '{#await __expr_0() then row}x{/await}'
+            '{#await __expr_py_0() then row}x{/await}'
         );
     });
 });

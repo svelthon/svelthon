@@ -2774,8 +2774,12 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 // The promise is evaluated outside the block, so it is compiled
                 // before the block's names exist: `{#await f(value) then value}`
                 // reads the outer one. What `then` or `catch` receives is a
-                // declaration like any other, a pattern with its defaults.
-                const promise = call(awaited, '');
+                // declaration like any other, a pattern with its defaults, and
+                // the value is Python's own, as the block's names are read by
+                // Python: a coroutine is still handed over as a promise, and
+                // what it returns, a `Price` or the list itself, is not made
+                // JavaScript's on the way.
+                const promise = call(awaited, '', undefined, 'python');
 
                 if (tail === null || !tail[2]?.trim()) {
                     push([]);

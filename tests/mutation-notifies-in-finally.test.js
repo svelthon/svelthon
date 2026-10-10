@@ -106,6 +106,7 @@ describe('every interception that notifies, notifies on the raising path too', (
         expect(wrappers.map((one) => one.name)).toEqual([
             '$B.call_attr',
             '$B.$getattr',
+            '$B.builtins.dir',
             '$B.$setitem',
             '$B.$getitem',
             '$B.$delitem',

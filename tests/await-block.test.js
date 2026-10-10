@@ -2,6 +2,7 @@ import { test, expect, describe } from 'vitest';
 import { mount, flushSync, rendered, settled } from './mounted.js';
 import AwaitCoroutine from './fixtures/AwaitCoroutine.svelte';
 import AwaitShorthand from './fixtures/AwaitShorthand.svelte';
+import AwaitKeepsValue from './fixtures/AwaitKeepsValue.svelte';
 
 // An `{#await}` over a promise works and is covered elsewhere. This is the case
 // a Python author reaches for first: an `async def` in the component, awaited by
@@ -39,6 +40,48 @@ describe('an await block over a coroutine', () => {
         const { read, settle } = setup();
         await settle();
         expect(read('failing')).toContain('no answer');
+    });
+});
+
+// What the block's names receive is Python's own value, as `item = await
+// later()` holds it. The value went through JavaScript's numbers on the way: a
+// float came back an `int`, a `Price` a plain `float`, and a list holding a
+// float was copied, so what the block appended never reached the list.
+describe('an await block hands its names the value itself', () => {
+    const setup = (kind) => {
+        const target = document.body.appendChild(document.createElement('div'));
+        mount(AwaitKeepsValue, { target, props: { kind } });
+        flushSync();
+
+        return { target, read: (k) => target.querySelector(`[data-k="${k}"]`).textContent };
+    };
+
+    test.for([
+        ['float', 'float:-:True'],
+        ['price', 'Price:EUR:True'],
+        ['list', 'list:float:True'],
+        ['dict', 'dict:Price:True']
+    ])('%s, there already and returned by a coroutine', async ([kind, shown]) => {
+        const { read } = setup(kind);
+
+        expect(read('sync')).toBe(shown);
+        await settled(() => expect(read('async')).toBe(shown));
+    });
+
+    test('what the block appends reaches the list it was handed', async () => {
+        const { target, read } = setup('list');
+
+        await settled(() => expect(target.querySelector('button')).not.toBeNull());
+        target.querySelector('button').click();
+        flushSync();
+
+        expect(read('length')).toBe('2');
+    });
+
+    test('and its catch branch the exception itself', async () => {
+        const { read } = setup('float');
+
+        await settled(() => expect(read('caught')).toBe('ValueError'));
     });
 });
 

@@ -711,7 +711,9 @@ const VIEWS = new Set(['items', 'values']);
 // Every name a call on a watched container has to be followed up on. Read on
 // the way out of `$getattr`, which is asked for every attribute in the program
 // and has to decide in one lookup whether this one is any of its business.
-const FOLLOWED = new Set([...MUTATORS, ...VIEWS, 'get']);
+// `__getattribute__` among them: called by name, `type(box).__getattribute__(box,
+// "x")`, it is the read `box.x` makes.
+const FOLLOWED = new Set([...MUTATORS, ...VIEWS, 'get', '__getattribute__']);
 
 // Make an in-place mutation reactive: `items.append(x)` with nothing after it.
 //
@@ -766,6 +768,15 @@ function installMutationTracking($B) {
         // write `Base.prop = …` makes, and wake the readers of that name of a
         // class, watched or not, as that write does.
         if (attr === '__setattr__' || attr === '__delattr__') classNameChanged(obj, args[0]);
+
+        // And `__getattribute__` the read `box.x` makes, followed as that read
+        // is, watched or not: a Python read never hands back `undefined`, so
+        // that is one that raised.
+        if (attr === '__getattribute__') {
+            if (result === undefined) missing(obj, args[0]);
+            else read(obj, args[0], result);
+            return;
+        }
 
         if (!MARKS.has(obj)) return;
 
@@ -866,9 +877,7 @@ function installMutationTracking($B) {
             result = call(obj, attr, ...rest);
             return result;
         } finally {
-            if (MARKS.has(target)) {
-                afterCall(target, attr, result, rest.slice(2));
-            }
+            afterCall(target, attr, result, rest.slice(2));
         }
     };
 
@@ -972,69 +981,87 @@ function installMutationTracking($B) {
             throw error;
         }
 
-        lookedUp(obj, attr);
+        const wrapper = watchable(obj) && FOLLOWED.has(attr) ? follow(obj, attr, result) : null;
 
-        if (!watchable(obj)) return result;
-
-        // Wrapped whether or not the object is watched **yet**: a factory that
-        // hands out its state and an operation on it, `values, add = make()`,
-        // gives the operation away before the state has a name. `afterCall`
-        // asks at the call, which is the moment that knows.
-        if (FOLLOWED.has(attr)) {
-            // The container a method changes: the object itself, or the
-            // `__self__` of a `super` it was read through.
-            const owner = ownType(obj) === _b_.super ? obj.obj : obj;
-
-            // Four shapes reach here and only the first is a function. A
-            // special method read off a builtin is a `method-wrapper`
-            // (`rows.__setitem__`), one read off a type is a
-            // `method_descriptor` (`list.append`) or, for a slot, a
-            // `wrapper_descriptor` (`object.__setattr__`); all are objects, and
-            // all are called through Python's own protocol.
-            const call =
-                typeof result === 'function'
-                    ? result
-                    : result !== null &&
-                        typeof result === 'object' &&
-                        [$B.method_wrapper, $B.method_descriptor, $B.wrapper_descriptor].includes(ownType(result))
-                      ? (...args) => $B.$call(result, ...args)
-                      : null;
-
-            // A method taken off the **type** carries no target: `add =
-            // list.append` finds its list in the first argument, at the call.
-            // `call_attr` already knows that rule and `onFirst` applies it; a
-            // method kept as a value left that path, so `add(rows, 1)` mutated a
-            // watched list and told nobody, while `list.append(rows, 1)` written
-            // in place worked.
-            if (call !== null && pyClass(obj)) return onType(attr, call, typeof result === 'function' ? undefined : result);
-
-            if (typeof result === 'function') return notifying(owner, attr, result);
-
-            // A method-wrapper stays one, `type()`, `__self__` and `repr()`
-            // included, and so does what the export boundary sees of it: only
-            // the function it calls is wrapped, and Brython's own call,
-            // `wrapped(self, ...args)`, is what reaches it.
-            if (call !== null) {
-                const wrapped = (target, ...args) => {
-                    let out;
-
-                    try {
-                        out = result.wrapped(target, ...args);
-                        return out;
-                    } finally {
-                        afterCall(owner, attr, out, args);
-                    }
-                };
-
-                // The operation it stands for, shared by every receiver: what
-                // an adapter is keyed by, so two reads are one callback.
-                wrapped.original = result.wrapped;
-
-                return { ...result, wrapped };
-            }
+        if (wrapper !== null) {
+            lookedUp(obj, attr);
+            return wrapper;
         }
 
-        if (!MARKS.has(obj)) return result;
+        read(obj, attr, result);
+        return result;
+    };
+
+    // A method read off an object, wrapped so that its call is followed up,
+    // or null for a value no call is made through. Wrapped whether or not the
+    // object is watched **yet**: a factory that hands out its state and an
+    // operation on it, `values, add = make()`, gives the operation away before
+    // the state has a name. `afterCall` asks at the call, which is the moment
+    // that knows.
+    const follow = (obj, attr, result) => {
+        // The container a method changes: the object itself, or the
+        // `__self__` of a `super` it was read through. A read made by name
+        // through a `super` is that `super`'s, which looks past its class.
+        const owner = ownType(obj) === _b_.super && attr !== '__getattribute__' ? obj.obj : obj;
+
+        // Four shapes reach here and only the first is a function. A special
+        // method read off a builtin is a `method-wrapper` (`rows.__setitem__`),
+        // one read off a type is a `method_descriptor` (`list.append`) or, for
+        // a slot, a `wrapper_descriptor` (`object.__setattr__`); all are
+        // objects, and all are called through Python's own protocol.
+        const call =
+            typeof result === 'function'
+                ? result
+                : result !== null &&
+                    typeof result === 'object' &&
+                    [$B.method_wrapper, $B.method_descriptor, $B.wrapper_descriptor].includes(ownType(result))
+                  ? (...args) => $B.$call(result, ...args)
+                  : null;
+
+        // A method taken off the **type** carries no target: `add =
+        // list.append` finds its list in the first argument, at the call.
+        // `call_attr` already knows that rule and `onFirst` applies it; a
+        // method kept as a value left that path, so `add(rows, 1)` mutated a
+        // watched list and told nobody, while `list.append(rows, 1)` written in
+        // place worked.
+        if (call !== null && pyClass(obj)) return onType(attr, call, typeof result === 'function' ? undefined : result);
+
+        if (typeof result === 'function') return notifying(owner, attr, result);
+
+        // A method-wrapper stays one, `type()`, `__self__` and `repr()`
+        // included, and so does what the export boundary sees of it: only the
+        // function it calls is wrapped, and Brython's own call, `wrapped(self,
+        // ...args)`, is what reaches it.
+        if (call !== null) {
+            const wrapped = (target, ...args) => {
+                let out;
+
+                try {
+                    out = result.wrapped(target, ...args);
+                    return out;
+                } finally {
+                    afterCall(owner, attr, out, args);
+                }
+            };
+
+            // The operation it stands for, shared by every receiver: what an
+            // adapter is keyed by, so two reads are one callback.
+            wrapped.original = result.wrapped;
+
+            return { ...result, wrapped };
+        }
+
+        return null;
+    };
+
+    // A read that found its value, however it was written: `box.x`,
+    // `getattr(box, "x")`, or `type(box).__getattribute__(box, "x")` called by
+    // name. The name on the classes it was looked up through, and on a watched
+    // object what the read handed back.
+    const read = (obj, attr, result) => {
+        lookedUp(obj, attr);
+
+        if (!MARKS.has(obj)) return;
 
         // What an attribute read hands back, the way `$getitem` treats a
         // subscript: reading is the last moment before the value could be
@@ -1069,8 +1096,6 @@ function installMutationTracking($B) {
                 else inherit(obj, cls, undefined, true);
             }
         }
-
-        return result;
     };
 
     // The name read along `classes`, on each up to the one whose dictionary
@@ -1098,6 +1123,9 @@ function installMutationTracking($B) {
         if (pyClass(obj)) {
             namesRead(quietPyType(obj)?.tp_mro, attr);
             namesRead(obj.tp_mro, attr);
+
+            // `vars(Box)` and `Box.__dict__` list every name the class holds.
+            if (attr === '__dict__') className(obj, EVERY).subscribe();
         } else if (ownType(obj) === _b_.super && obj.obj !== _b_.None) {
             const mro = obj.obj_type?.tp_mro;
 
@@ -1119,8 +1147,28 @@ function installMutationTracking($B) {
 
     // A reader's dependency on one name of one class, and the write that
     // changes it: per name, so the readers of `prop` wake when it is replaced
-    // and not when the class writes `reads`.
+    // and not when the class writes `reads`. And on every name, `EVERY`, for a
+    // read that lists them.
     const CLASS_NAMES = new WeakMap();
+    const EVERY = Symbol('every name');
+
+    // `dir(box)` lists the names of every class the object is looked up
+    // through, and of a class's metaclass: any of them gaining or losing one
+    // changes the listing. The object's own names are its watch's.
+    const dir = $B.builtins.dir;
+    $B.builtins.dir = function (...args) {
+        const result = Reflect.apply(dir, this, args);
+        const [obj] = args;
+
+        if (args.length === 1) {
+            const classes = pyClass(obj) ? [...(quietPyType(obj)?.tp_mro ?? []), ...obj.tp_mro] : (quietPyType(obj)?.tp_mro ?? []);
+
+            for (const cls of classes) className(cls, EVERY).subscribe();
+        }
+
+        return result;
+    };
+    Object.defineProperties($B.builtins.dir, Object.getOwnPropertyDescriptors(dir));
 
     const className = (cls, attr) => {
         let names = CLASS_NAMES.get(cls);
@@ -1152,7 +1200,9 @@ function installMutationTracking($B) {
     const classNameChanged = (cls, attr) => {
         if (typeof attr !== 'string' || !pyClass(cls) || rendering > 0) return;
 
-        for (const update of [...(CLASS_NAMES.get(cls)?.get(attr)?.updates ?? [])]) update();
+        const names = CLASS_NAMES.get(cls);
+
+        for (const update of [...(names?.get(attr)?.updates ?? []), ...(names?.get(EVERY)?.updates ?? [])]) update();
     };
 
     // The classes an attribute read off `obj` rather than off `obj` itself
