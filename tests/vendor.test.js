@@ -1075,6 +1075,34 @@ test('text, descriptors and slots answer as in CPython: for-loop-inum, str-subcl
     ]);
 });
 
+// A str method read a str subclass as a JavaScript object, as receiver or
+// argument; positions and lengths around an astral character counted UTF-16
+// units; center() put the odd fill char right; float() refused a str subclass;
+// print() of astral text was refused by the console's write(); a class wrapped
+// a staticmethod __class_getitem__, handed it its key in a tuple, replaced a
+// __dict__ of its own, skipped __set_name__ for some names, and rewrote its
+// methods' __qualname__.
+test('str methods and class creation answer as in CPython: str-subclass-arguments, str-astral-positions, str-astral-results, str-center-margin, float-str-subclass, write-str-check, class-getitem-raw-key, classmethod-hook-function, class-dict-kept, set-name-every-key, method-qualname-kept', async () => {
+    const { answers } = await import('./fixtures/strings_and_class_hooks.py');
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    try {
+        expect([...answers()]).toEqual([
+            "['a-b', 'ab b ', True, 2, b'ab']",
+            "[('😀a', '|', 'b'), ['😀a', 'b'], '  😀a', True]",
+            '[2, 2, 2, 4, 4]',
+            "['**ab*', '*😀*']",
+            '1.5',
+            "'printed'",
+            "[3, 3, (<class 'int'>,)]",
+            "[{'public': 1}, ['__doc__', 'x'], ('local_method.<locals>.Box.f', 'free')]"
+        ]);
+        expect(log).toHaveBeenCalledWith('😀a\n');
+    } finally {
+        log.mockRestore();
+    }
+});
+
 // A module named with a quote, from a file such as `src/Jean's app/Page.svelte`,
 // had its name pasted between quotes in the code of every def, lambda, class
 // and comprehension, which then stopped parsing.

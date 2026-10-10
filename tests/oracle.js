@@ -5,8 +5,15 @@
 import { execFileSync } from 'node:child_process';
 import { mount, flushSync } from './mounted.js';
 
+// CPython's traceback, when a fixture fails there, goes into the error thrown
+// rather than onto the run's output.
 export const cpython = (fixture) =>
-    JSON.parse(execFileSync('python3', ['tests/oracle.py', `tests/fixtures/${fixture}`], { encoding: 'utf8' }));
+    JSON.parse(
+        execFileSync('python3', ['tests/oracle.py', `tests/fixtures/${fixture}`], {
+            encoding: 'utf8',
+            stdio: ['ignore', 'pipe', 'pipe']
+        })
+    );
 
 // `act(instance, target, step)` makes the step's write, the way the case says:
 // `instance.change(step)` unless the write is one the page or JavaScript makes.

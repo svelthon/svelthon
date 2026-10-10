@@ -10,7 +10,11 @@ export default defineConfig({
             // `.svelte.py` compiles as a `.svelte.ts` does, under its own name.
             experimental: { compileModule: { extensions: ['.js', '.ts', '.py'] } },
             // A component that declares a custom element is compiled as one.
-            dynamicCompileOptions: ({ code }) => compileOptionsFor(code)
+            dynamicCompileOptions: ({ code }) => compileOptionsFor(code),
+            // The fixtures under `tests/fixtures/warned/` warn on purpose, and
+            // their tests read the warnings from the compiler: printed by the
+            // plugin as well, they were what a green run said.
+            onwarn: (warning, warn) => warning.filename?.includes('fixtures/warned/') || warn(warning)
         })],
     resolve: {
         alias: {

@@ -17071,7 +17071,7 @@ for(var _if of this.ifs){js+=prefix+`if ($B.$bool(${$B.js_from_ast(_if, scopes)}
 indent()}
 return js}
 $B.ast.Constant.prototype.to_js=function(scopes){if(this.kind===$B.JSObj){console.log('constant kind',this.kind)}
-if(this.value===true ||this.value===false){return this.value+''}else if(this.value===_b_.None){return '_b_.None'}else if(typeof this.value=="string"){
+if(this.value===true ||this.value===false){return this.value+''}else if(this.value===_b_.None){return '_b_.None'}else if(typeof this.value=="string" ||this.value instanceof String){
 var s=this.value.replace(/(\\*)'/g,(match,slashes)=> slashes.length % 2 ? match :slashes+"\\'"),srg=$B.surrogates(s)
 if(srg.length==0){return `'${s}'`}
 return `$B.String('${s}')`}

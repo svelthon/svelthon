@@ -1,7 +1,7 @@
 # Patches applied to the vendored Brython
 
 `brython_runtime.js` and `brython_compiler.js` are cut from one bundle, built
-from Brython's master of 11 September 2026 plus one hundred and two proposed commits
+from Brython's master of 11 September 2026 plus one hundred and thirteen proposed commits
 (`metaclass-getattribute-args` in two, as amended for its PR) and four merged
 upstream since (#3022, #2996, #2989, #2982), with **four** edits
 made in the file itself afterwards. The wrapper, the integer format and the
@@ -87,6 +87,17 @@ written against:
 | `str-subclass-iteration` | a str subclass iterates over the characters it holds, where it called a JavaScript protocol it does not have |
 | `str-keeps-its-characters` | `str()` and `repr()` give the characters as they are: a zero-width space was put before a combining character, and astral characters were counted twice afterwards |
 | `str-slice-step-astral` | a slice with a step counts characters, where it stepped through UTF-16 code units and cut astral characters in two |
+| `write-str-check` | the console's `write()` takes any str, where it refused one holding an astral character and a str subclass: with `str-keeps-its-characters`, `print("😀")` raised |
+| `str-subclass-arguments` | a str method reads a str subclass by its value, as receiver or argument: `join` wrote `[object Object]`, `lstrip()`, `startswith`, `endswith` and `rpartition` raised a JavaScript error, `find`, `index`, `split` and `replace` missed, `encode` encoded the object, `translate` dropped a replacement that is no JavaScript string; `normalize_start_end` reads the value once for every method that takes a start and an end |
+| `str-astral-positions` | `partition`, `splitlines`, `endswith`, `replace` with an empty pattern, the width and precision of `format()` and `translate` to a code point count characters, where they mixed UTF-16 positions with them. Written for the merged state of `str-subclass-arguments` |
+| `str-astral-results` | what a str method returns goes through `$B.String`, as `%` and `+` already did, so an astral character in it counts once: `len("😀a".upper())` was 3, and so for `join`, `strip`, `split`, `replace`, `ljust`, `zfill`, `title`, `*` and `bytes.decode` among others |
+| `str-center-margin` | `center()` puts the odd fill char left when the width is odd too, and counts an astral character once |
+| `float-str-subclass` | `float()` reads a str subclass by its value when it defines no `__float__`, where it refused it as no string |
+| `class-getitem-raw-key` | `__class_getitem__` receives the key as written, `Box[3]` handing `3` and not `(3,)`; a builtin generic puts its arguments in a tuple itself |
+| `classmethod-hook-function` | only a plain function given as `__class_getitem__` or `__init_subclass__` is made a classmethod; a staticmethod or a callable was wrapped and raised. The `__init_subclass__` half is `init-subclass-classmethod`'s |
+| `class-dict-kept` | a `__dict__` a class defines is kept, where class creation put its own descriptor over it |
+| `set-name-every-key` | `__set_name__` is called for every name of a class, `__doc__` and `__module__` included |
+| `method-qualname-kept` | a method keeps the `__qualname__` the compiler gave it, where class creation rewrote it: a method of a local class lost its `<locals>` path, and a function stored by `type()` took the class's name |
 | `mro-duplicate-base` | a base written twice is refused as `duplicate base class A`, where the MRO reported an inconsistent hierarchy |
 | `solid-base-builtin-layout` | a builtin laid out apart from its base is its own solid base, as by its size in CPython: `class X(list, dict)` is refused, and `class X(A, list)` lays out on `list` |
 | `init-subclass-classmethod` | an `__init_subclass__` written in a class body is a classmethod, as `__class_getitem__` already was: `vars(C)["__init_subclass__"]` was a function, and `C.__init_subclass__` a function not bound to `C` |
@@ -212,6 +223,7 @@ than by a build-time check, and going upstream retires none of them:
 | a class refuses a base written twice, builtins laid out apart, bases with no MRO in CPython's words, and slot names CPython refuses (branches `mro-duplicate-base`, `solid-base-builtin-layout`, `mro-error-message`, `slots-class-variable-conflict`, `slots-variable-size-base`, `slots-valid-identifiers`) | `tests/vendor.test.js` |
 | code from `compile()` runs where its tree leaves a field out (branch `compile-ast-optional-none`) | `tests/vendor.test.js`, in the compiler's engine |
 | a loop over a str runs in a strict module, a str subclass iterates, `str()`, `repr()` and a stepped slice keep astral and combining characters, a descriptor's setters return None, and `__slots__` takes a str subclass, keeps a single name, and refuses a slot whose descriptor is gone (branches `for-loop-inum`, `str-subclass-iteration`, `str-keeps-its-characters`, `str-slice-step-astral`, `descriptor-set-returns-none`, `slots-str-subclass`, `slots-valid-identifiers`, `slot-deleted-descriptor`) | `tests/vendor.test.js`, each answer computed apart, and `tests/slot-attributes.test.js`, a slot written through its descriptor repainting |
+| str methods read a str subclass, count an astral character once in positions and lengths, `center()` pads as CPython, `float()` reads a str subclass, `print()` writes astral text, and a class keeps its hooks, its `__dict__`, its `__set_name__` calls and its methods' `__qualname__` (branches `str-subclass-arguments`, `str-astral-positions`, `str-astral-results`, `str-center-margin`, `float-str-subclass`, `write-str-check`, `class-getitem-raw-key`, `classmethod-hook-function`, `class-dict-kept`, `set-name-every-key`, `method-qualname-kept`) | `tests/vendor.test.js`, each answer computed apart |
 | a method-wrapper compares and hashes by its function and its receiver (master's `e2e990dd6`, #2989) | `tests/vendor.test.js`, and `tests/method-identity.test.js`, `box.__setattr__` read twice through the runtime's wrapper |
 | the `__dict__` attribute is read as Python reads it, through `vars()`, on a slotted instance and through `super(C, C)`, and `__init_subclass__` is a classmethod (branches `init-subclass-classmethod`, `super-type-no-instance`, `slots-no-dict-descriptor`, `vars-dict-attribute`) | `tests/vendor.test.js`, and `tests/oracle-attributes.test.js`, the model and the page held against CPython |
 
