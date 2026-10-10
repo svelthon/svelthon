@@ -937,6 +937,28 @@ test('new bases reorder the subclasses: bases-set-subclass-mro', async () => {
     expect([...answers()]).toEqual(['1', 'F,D,E,C,B,object']);
 });
 
+// The registry `__subclasses__()` reads: a class with no base written is under
+// `object` (merged #2982, after the vendored master), and a class given new
+// bases moves from the old ones to the new, unless the assignment is refused,
+// which leaves the class as it was.
+test('a class is listed under the bases it has: #2982, bases-set-moves-subclass, bases-set-subclass-mro', async () => {
+    const { answers } = await import('./fixtures/subclass_registry.py');
+
+    expect([...answers()]).toEqual(['True', 'TypeError', 'X,B,object', 'True', 'False']);
+});
+
+// And it holds its classes weakly: a class a component made once per mount,
+// and nobody refers to any more, is collected, where every base kept every
+// subclass it ever had. Collection is out of a test's reach, so the registry is
+// read as the engine keeps it: no array, a weak reference per class.
+test('the subclasses of a class are held weakly: subclasses-held-weakly', () => {
+    const registry = globalThis.__BRYTHON__.builtins.object.tp_subclasses;
+
+    expect(Array.isArray(registry)).toBe(false);
+    expect(registry.refs.every((one) => one instanceof WeakRef)).toBe(true);
+    expect([...registry].length).toBeGreaterThan(0);
+});
+
 // A module named with a quote, from a file such as `src/Jean's app/Page.svelte`,
 // had its name pasted between quotes in the code of every def, lambda, class
 // and comprehension, which then stopped parsing.
