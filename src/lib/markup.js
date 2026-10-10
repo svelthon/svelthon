@@ -1772,6 +1772,9 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     let inTag = false;
     let quote = null;
     let quotedAttribute = null;
+    // Whether the quoted value being read is one interpolation and nothing
+    // else, `data="{value}"`.
+    let quotedLone = false;
     let region = null;
 
     // The index of the closing quote of a directive whose quotes are being
@@ -2372,6 +2375,10 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 // `class="badge {statut.lower()}"`, an interpolation inside a
                 // quoted attribute value. Svelte concatenates it into a string,
                 // so it renders like any other text and goes through __text.
+                // A lone one, `data="{value}"`, is the value itself, as Svelte
+                // reads it, and compiles as the bare spelling does, between the
+                // author's quotes: Svelte warns about those on a component as
+                // it does about its own.
                 if (char === '{') {
                     const end = closingBrace(markup, index);
 
@@ -2384,7 +2391,9 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
 
                         if (SPREAD(written)) throw refuse(spreadOutOfPlace(written, said(), named));
 
-                        out += `{${call(markup.slice(index + 1, end), '__text')}}`;
+                        const inner = markup.slice(index + 1, end);
+
+                        out += quotedLone ? attributeValue(named, inner) : `{${call(inner, '__text')}}`;
                         region = null;
                         index = end + 1;
                         continue;
@@ -2461,23 +2470,22 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
             } else if (char === '"' || char === "'") {
                 const named = (tagText().match(ATTRIBUTE_NAME) || [])[1] || '';
                 // A lone interpolation between quotes is the value itself, as
-                // Svelte reads it, for a directive, for an attribute whose
-                // value is read for truth, and for the `value` of a group's
-                // control, which the group reads typed off the field.
+                // Svelte reads it. A directive, an attribute whose value is read
+                // for truth, and the `value` of a group's control, which the
+                // group reads typed off the field, drop their quotes for the
+                // bare branch; any other attribute keeps them.
                 const grouped = named === 'value' && tag !== null && tagNames(markup, tag.start).has('bind:group');
-                const closing =
-                    directive(named) || wrapperFor(named, tag) || grouped
-                        ? loneInterpolation(markup, index, closingBrace)
-                        : -1;
+                const lone = loneInterpolation(markup, index, closingBrace);
 
-                if (closing !== -1) {
-                    unquoted = closing;
+                if (lone !== -1 && (directive(named) || wrapperFor(named, tag) || grouped)) {
+                    unquoted = lone;
                     index += 1;
                     continue;
                 }
 
                 quote = char;
                 quotedAttribute = named;
+                quotedLone = lone !== -1;
             } else if (char === '{') {
                 const end = closingBrace(markup, index);
                 if (end === -1 && swallowed(markup, index)) {

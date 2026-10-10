@@ -90,6 +90,17 @@ describe('the script the compiler emits', () => {
         expect(refused.length, refused.join(', ')).toBeLessThan(10);
     });
 
+    // Quotes around a lone interpolation on a component are Svelte's to warn
+    // about, `attribute_quoted`, and the author reads the warning Svelte gives
+    // the same component written in JavaScript: the value crosses as itself,
+    // between the quotes the author wrote.
+    test('and Svelte warns about a quoted prop as it does about its own', async () => {
+        const codes = async (name) => [...new Set(await warningsFor(name))].sort();
+
+        expect(await codes('warned/QuotedLoneValue.svelte')).toContain('attribute_quoted');
+        expect(await codes('warned/QuotedLoneValue.svelte')).toEqual(await codes('warned/QuotedLoneValueNative.svelte'));
+    });
+
     // A store is the other half of what the build hands Svelte: a `.svelte.py`
     // compiled to module-scope runes and then by `compileModule`, under the
     // `.svelte.js` identity the plugin serves it with. Its named exports read
