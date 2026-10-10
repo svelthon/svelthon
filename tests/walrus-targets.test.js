@@ -33,6 +33,11 @@ describe('what a walrus may aim at', () => {
         // Only the last step is assigned; the rest is the object to assign into.
         ['lambda: (a.b.c := 1)', 'lambda: __setattr(a.b, "c", 1)'],
         ['lambda: (rows[i]["done"] := True)', 'lambda: __setitem(rows[i], "done", True)'],
+        // An attribute named as Python reads the name, and a walrus inside the
+        // key or the receiver rewritten as one in the value is.
+        ['lambda: (box.ﬁeld := 1)', 'lambda: __setattr(box, "field", 1)'],
+        ['lambda: (rows[(chosen := 1)] := 7)', 'lambda: __setitem(rows, __assign("chosen", 1), 7)'],
+        ['lambda: (boxes[(chosen := 1)].width := 7)', 'lambda: __setattr(boxes[__assign("chosen", 1)], "width", 7)'],
 
         // Mixed, in one tuple: the three targets side by side.
         [
@@ -118,5 +123,31 @@ describe('a walrus onto something other than a name', () => {
 
         click('mixed');
         expect(all()).toBe('9,0,9,1');
+    });
+
+    // `box.ﬁeld` is `box.field` to Python, on an instance and through the dot
+    // on a dict, where a second attribute was made or a missing key refused.
+    test('writes the attribute a ligature names', () => {
+        const target = document.body.appendChild(document.createElement('div'));
+        mount(WalrusTargets, { target });
+        flushSync();
+
+        target.querySelector('button[data-k="by-ligature"]').click();
+        flushSync();
+
+        expect(target.querySelector('p[data-k="field"]').textContent).toBe('3|4');
+    });
+
+    // A walrus inside the key or the receiver of the target writes the
+    // component's name, as one in the value does: `chosen` stayed 0.
+    test.for(['nested-key', 'nested-receiver'])('a walrus inside the %s of a target writes the name', (k) => {
+        const target = document.body.appendChild(document.createElement('div'));
+        mount(WalrusTargets, { target });
+        flushSync();
+
+        target.querySelector(`button[data-k="${k}"]`).click();
+        flushSync();
+
+        expect(target.querySelector('p[data-k="nested"]').textContent).toBe(k === 'nested-key' ? '1|7|1' : '1|0|8');
     });
 });

@@ -112,4 +112,10 @@ describe('a name a sequence does not hold', () => {
     test('while a __getitem__ of the author’s that refuses is heard', () => {
         expect(() => shown('refusing')).toThrow(/custom refusal/);
     });
+
+    // And a list's `__getitem__` borrowed by a class that is no list, which
+    // refuses its receiver: the default hid the error.
+    test.for(['borrowed', 'borrowed by a tuple'])('as is a list’s __getitem__ %s', (kind) => {
+        expect(() => shown(kind)).toThrow(/list/);
+    });
 });

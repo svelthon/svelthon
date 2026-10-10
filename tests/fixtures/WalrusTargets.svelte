@@ -5,11 +5,15 @@
 class Box:
     def __init__(self):
         self.width = 1
+        self.field = 0
 
 
-m = {"x": 0, "y": 0}
+m = {"x": 0, "y": 0, "field": 0}
 box = Box()
 tally = 0
+chosen = 0
+rows = [0, 0]
+boxes = [Box(), Box()]
 </script>
 
 <p data-k="key">{m["x"]}</p>
@@ -22,3 +26,11 @@ tally = 0
 <button data-k="by-attr" onclick={lambda: (box.width := 7)}>attribute</button>
 <button data-k="by-event" onclick={lambda event: (m["x"] := event.detail)}>from the event</button>
 <button data-k="mixed" onclick={lambda: (tally := tally + 1, m["x"] := 9, box.width := 9)}>all three</button>
+
+<!-- An attribute written with a ligature is the one read without, and a walrus
+     inside a target's key or receiver writes the component's name. -->
+<p data-k="field">{box.field}|{m["field"]}</p>
+<p data-k="nested">{chosen}|{rows[1]}|{boxes[1].width}</p>
+<button data-k="by-ligature" onclick={lambda: (box.ﬁeld := 3, m.ﬁeld := 4)}>ligature</button>
+<button data-k="nested-key" onclick={lambda: (rows[(chosen := 1)] := 7)}>key</button>
+<button data-k="nested-receiver" onclick={lambda: (boxes[(chosen := 1)].width := 8)}>receiver</button>

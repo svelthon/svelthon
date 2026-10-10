@@ -7034,9 +7034,11 @@ const SEQUENCES = [_b_.list, _b_.tuple, _b_.str, _b_.bytes, _b_.range];
 function lookup(target, name) {
     const $B = globalThis.__BRYTHON__;
 
+    let cls;
     let getitem;
     try {
-        getitem = $B.search_in_mro($B.get_class(target), '__getitem__', $B.NULL);
+        cls = $B.get_class(target);
+        getitem = $B.search_in_mro(cls, '__getitem__', $B.NULL);
         if (getitem === $B.NULL) return MISSING;
     } catch {
         return MISSING; // a foreign JavaScript value has no Python protocol to ask
@@ -7053,7 +7055,11 @@ function lookup(target, name) {
         }
         if (!Array.isArray(mro)) return MISSING;
         if (mro.includes(_b_.LookupError)) return MISSING;
-        if (mro.includes(_b_.TypeError) && SEQUENCES.some((one) => $B.search_in_mro(one, '__getitem__', $B.NULL) === getitem)) {
+        // The sequence's own `__getitem__` on one of its instances: borrowed by
+        // another class, it refuses the receiver, which is no absence.
+        const sequence = (one) => $B.search_in_mro(one, '__getitem__', $B.NULL) === getitem && cls.tp_mro.includes(one);
+
+        if (mro.includes(_b_.TypeError) && SEQUENCES.some(sequence)) {
             return MISSING;
         }
 

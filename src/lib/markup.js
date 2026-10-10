@@ -237,7 +237,8 @@ function walrusTarget(text) {
             if (!attribute) return null;
 
             object = text.slice(0, index).trim();
-            key = `"${attribute[1]}"`;
+            // A name as Python reads it, `box.ﬁeld` being `box.field`.
+            key = `"${pythonName(attribute[1])}"`;
             subscript = false;
             index += 1 + attribute[0].length;
         } else if (text[index] === '[') {
@@ -339,9 +340,14 @@ export function walrus(expression) {
                     // A name goes through the namespace, which is what makes the
                     // signal fire. An attribute or a key is written where it
                     // lives, the attribute under the template's rule for a dot.
-                    return found.name
-                        ? `__assign("${pythonName(found.name)}", ${value})`
-                        : `${found.subscript ? '__setitem' : '__setattr'}(${found.object}, ${found.key}, ${value})`;
+                    // The receiver and the key are expressions too, rewritten
+                    // as the value is: `(rows[(chosen := 1)] := 7)` sets
+                    // `chosen` as well.
+                    if (found.name) return `__assign("${pythonName(found.name)}", ${value})`;
+
+                    const key = found.subscript ? walrus(found.key).trim() : found.key;
+
+                    return `${found.subscript ? '__setitem' : '__setattr'}(${walrus(found.object).trim()}, ${key}, ${value})`;
                 });
 
                 // One element was a grouping parenthesis and goes with it;

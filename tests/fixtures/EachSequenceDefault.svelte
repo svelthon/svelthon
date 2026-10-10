@@ -26,6 +26,16 @@ class Refusing(list):
         raise TypeError("custom refusal")
 
 
+# A list's own `__getitem__`, borrowed by a class that is no list: it refuses
+# the receiver, which says nothing of a missing name.
+class Borrowed:
+    __getitem__ = list.__getitem__
+
+
+class BorrowedByTuple(tuple):
+    __getitem__ = list.__getitem__
+
+
 def made():
     if kind == "list":
         return [1]
@@ -43,6 +53,10 @@ def made():
         return b"a"
     if kind == "bytes subclass":
         return Raw(b"a")
+    if kind == "borrowed":
+        return Borrowed()
+    if kind == "borrowed by a tuple":
+        return BorrowedByTuple((1,))
     return Refusing([1])
 </script>
 
