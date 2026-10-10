@@ -251,7 +251,6 @@ for(var category in $B.op2method){for(var op in $B.op2method[category]){var meth
 $B.method_to_op[method]=op}}
 $B.OB_TYPE=Symbol('OB_TYPE')
 $B.ID=Symbol('ID')
-$B.INUM=Symbol('INUM')
 $B.FAST_ITER=Symbol('FAST_ITER')
 $B.special_string_repr={8:"\\x08",9:"\\t",10:"\\n",11:"\\x0b",12:"\\x0c",13:"\\r",92:"\\\\",160:"\\xa0"}
 $B.$py_next_hash=Math.pow(2,53)-1
@@ -1738,7 +1737,7 @@ return items}
 $B.make_js_iterator_no_trace=function(iterator){if(Array.isArray(iterator)){if(iterator.ob_type){return iterator[Symbol.iterator]()}else{
 return iterator.map($B.jsobj2pyobj)[Symbol.iterator]()}}
 return $B.make_js_iterator(iterator,$B.NULL)}
-$B.make_js_iterator=function(iterator,frame,lineno){
+$B.make_js_iterator=function(iterator,frame,lineno,inum){
 var set_lineno=$B.set_lineno
 if(frame===undefined){if(! $B.frame_obj){set_lineno=function(){}}else{
 frame=$B.frame_obj.frame
@@ -1756,7 +1755,7 @@ if(next_func !==null){return{
 try{
 var value=$B.$call(next_func,it)
 return{done:false,value}}catch(err){if($B.is_exc(err,[_b_.StopIteration])){return{done:true,value:null}}
-if(iterator[$B.INUM]){$B.set_inum(iterator[$B.INUM])}
+if(inum){$B.set_inum(inum)}
 throw err}}}}}
 $B.unpacker=function(obj,nb_targets,has_starred){
 var inum_rank=3
@@ -2379,8 +2378,6 @@ var setter=$B.get_class(in_mro).tp_descr_set
 if(test){console.log('setter',setter)}
 if(setter !==$B.NULL){if(test){console.log('setter',setter)}
 return setter(in_mro,self,value)}}
-var slots=$B.get_from_dict(klass,'__slots__',$B.NULL)
-if(slots !==$B.NULL){if(_b_.tuple.sq_contains(slots,attr)){self.slot_values[attr]=value}}
 var dict=$B.get_dict(self)
 if(! dict && klass.$slots_has_dict){self[$B.DICT]=$B.empty_dict()
 dict=self[$B.DICT]}
@@ -2509,9 +2506,13 @@ if(spec !==""){$B.RAISE(_b_.TypeError,"non-empty format string passed to object.
 )}
 return _b_.str.$factory(self)}
 object_funcs.__getstate__=function(self){var dict=$B.get_dict(self)
-var sd=null
-for(var k in self){if(k.startsWith('slot_value_')&& self[k]!==undefined){if(sd===null){sd=$B.empty_dict()}
-_b_.dict.$setitem(sd,k.slice(11),self[k])}}
+var sd=null,seen=new Set()
+for(var klass of $B.get_mro($B.get_class(self))){if(!(klass.tp_flags & $B.TPFLAGS.HEAPTYPE)){continue}
+for(var entry of _b_.dict.$iter_items($B.get_dict(klass))){var md=entry.value
+if(seen.has(entry.key)||$B.get_class(md)!==$B.member_descriptor){continue}
+seen.add(entry.key)
+if(self[md.d_member.attr]!==undefined){sd=sd ?? $B.empty_dict()
+_b_.dict.$setitem(sd,entry.key,self[md.d_member.attr])}}}
 if(sd !==null){var d1=(dict !==undefined && dict !==null &&
 _b_.dict.mp_length(dict)> 0)? dict :_b_.None
 return $B.fast_tuple([d1,sd])}
@@ -2967,14 +2968,14 @@ if(cls.tp_subclasses===undefined){console.log('no subclasses',cls)}
 for(var kls of cls.tp_subclasses){reset_setattr(kls)}}
 function set_slots(cl_dict,class_obj){let slots=$B.str_dict_get(cl_dict,'__slots__',$B.NULL)
 if(slots !==$B.NULL){class_obj.$slots=[]
-if(typeof slots=='string'){slots=[slots]
-$B.str_dict_set(cl_dict,'__slots__',slots)}
+if($B.is_str(slots)){slots=[slots]}
 var base=class_obj.tp_base
 while(base.tp_flags & TPFLAGS.HEAPTYPE){base=base.tp_base}
 for(let key of $B.make_js_iterator(slots)){if(base.tp_itemsize){$B.RAISE(_b_.TypeError,'nonempty __slots__ not supported '+
 `for subtype of '${$B.get_name(class_obj.tp_base)}'`)}
-if(typeof key !='string'){$B.RAISE(_b_.TypeError,'__slots__ items must be '+
+if(! $B.is_str(key)){$B.RAISE(_b_.TypeError,'__slots__ items must be '+
 `strings, not '${$B.class_name(key)}'`)}
+key=_b_.str.$to_string(key)
 if(! _b_.str.tp_funcs.isidentifier(key)){$B.RAISE(_b_.TypeError,'__slots__ must be identifiers')}
 if(MARKERS.includes(key)&& class_obj.$slots.includes(key)){$B.RAISE(_b_.TypeError,`${key} slot disallowed: we already got one`)}
 if(key.startsWith('__')&& ! key.endsWith('__')){key='_'+$B.get_name(class_obj).replace(/^_+/,'')+key}
@@ -2986,7 +2987,10 @@ if(found !==$B.NULL && key !='__qualname__' &&
 !(key=='__doc__' && found===_b_.None)&&
 $B.get_class(found)!==$B.member_descriptor){$B.RAISE(_b_.ValueError,`'${key}' in __slots__ conflicts `+
 'with class variable')}
-var member={name:key,type:$B.TYPES.OBJECT,attr:'slot_value_'+key,flags:0}
+var shadowed=$B.search_in_mro(class_obj.tp_base,key,$B.NULL)
+var member={name:key,type:$B.TYPES.OBJECT,attr:shadowed !==$B.NULL &&
+$B.get_class(shadowed)===$B.member_descriptor ?
+Symbol(key):'slot_value_'+key,flags:0}
 var md={ob_type:$B.member_descriptor,d_type:class_obj,d_name:key,d_member:member}
 $B.str_dict_set(cl_dict,key,md)}
 class_obj.$slots.sort()}}
@@ -8879,12 +8883,9 @@ if(fmt.type && fmt.type !="s"){$B.RAISE(_b_.ValueError,"Unknown format code '"+f
 return _self}
 function startswith(self,prefix,start,end){if(end===null){return self.startsWith(prefix,start)}else if(end < start){return false}else if(prefix.length > end-start){return false}else{
 return self.startsWith(prefix,start)}}
-str.$getitem_slice=function(_self,slice){var len=str.mp_length(_self),s=_b_.slice.$conv_for_seq(slice,len),start=pypos2jspos(_self,s.start),stop=pypos2jspos(_self,s.stop),step=s.step
+str.$getitem_slice=function(_self,slice){var len=str.mp_length(_self),s=_b_.slice.$conv_for_seq(slice,len),chars=_self.surrogates===undefined ? _self :to_chars(_self)
 var res=""
-if(step > 0){if(stop <=start){return ""}
-for(let i=start;i < stop;i+=step){res+=_self[i]}}else{
-if(stop >=start){return ''}
-for(let i=start;i > stop;i+=step){res+=_self[i]}}
+for(let i=s.start;s.step > 0 ? i < s.stop :i > s.stop;i+=s.step){res+=chars[i]}
 return $B.String(res)}
 var prefix=2,suffix=3
 str.$getnewargs=function(self){return $B.fast_tuple([to_string(self)])}
@@ -8893,7 +8894,7 @@ $B.str_iterator.tp_iternext=function*(self){for(var char of self.it){yield char}
 var str_iterator_funcs=$B.str_iterator.tp_funcs={}
 str_iterator_funcs.__length_hint__=function(self){return self.len}
 str_iterator_funcs.__reduce__=function(self){return $B.fast_tuple([_b_.iter,$B.fast_tuple([self.obj]),0])}
-str_iterator_funcs.__setstate__=function(self,value){self.it=self.obj[Symbol.iterator]()
+str_iterator_funcs.__setstate__=function(self,value){self.it=to_string(self.obj)[Symbol.iterator]()
 for(var i=0;i < value;i++){self.it.next()}}
 $B.str_iterator.tp_methods=["__length_hint__","__reduce__","__setstate__"]
 $B.str_iterator.noargs_methods=["__length_hint__","__reduce__"]
@@ -9151,9 +9152,6 @@ argpos++}}
 ret+=func(value,fmt,type)}}
 if(argpos !==null){if(args.length > argpos){$B.RAISE(_b_.TypeError,"not enough arguments for format string")}else if(args.length < argpos){$B.RAISE(_b_.TypeError,"not all arguments converted during string formatting")}}else if(nbph==0){$B.RAISE(_b_.TypeError,"not all arguments converted during string formatting")}
 return ret}
-var combining=[]
-for(var cp=0x300;cp <=0x36F;cp++){combining.push(String.fromCharCode(cp))}
-var combining_re=new RegExp("("+combining.join("|")+")","g")
 $B.parse_format=function(fmt_string){
 var elts=fmt_string.split(":"),name,conv,spec,name_ext=[]
 if(elts.length==1){
@@ -9509,13 +9507,12 @@ if(t[cp]!==undefined){repl+=t[cp]}else if(/\p{Cn}/u.test(chars[i])){var s=cp.toS
 while(s.length < 4){s='0'+s}
 repl+='\\u'+s}else if(cp < 0x20 ||(cp >=0x7f && cp < 0xa0)){cp=cp.toString(16)
 if(cp.length < 2){cp='0'+cp}
-repl+='\\x'+cp}else if(cp >=0x300 && cp <=0x36F){repl+="\u200B"+chars[i]+' '}else if(cp.toString(16)=='feff'){repl+='\\ufeff'}else{
+repl+='\\x'+cp}else if(cp.toString(16)=='feff'){repl+='\\ufeff'}else{
 repl+=chars[i]}}
 var res=repl
-if(res.search('"')==-1 && res.search("'")==-1){return "'"+res+"'"}else if(self.search('"')==-1){return '"'+res+'"'}
+if(res.search('"')==-1 && res.search("'")==-1){return $B.String("'"+res+"'")}else if(self.search('"')==-1){return $B.String('"'+res+'"')}
 var qesc=new RegExp("'","g")
-res="'"+res.replace(qesc,"\\'")+"'"
-return res}
+return $B.String("'"+res.replace(qesc,"\\'")+"'")}
 _b_.str.tp_hash=function(self){
 var s=to_string(self)
 let h1=0xdeadbeef,h2=0x41c6ce57
@@ -9527,15 +9524,9 @@ h1 ^=Math.imul(h2 ^(h2 >>> 13),3266489909)
 h2=Math.imul(h2 ^(h2 >>> 16),2246822507)
 h2 ^=Math.imul(h1 ^(h1 >>> 13),3266489909)
 return 4294967296*(2097151 & h2)+(h1 >>> 0)}
-_b_.str.tp_str=function(self){self=to_string(self)
-var repl='',chars=to_chars(self)
-if(chars.length==self.length){return self.replace(combining_re,"\u200B$1")}
-for(var i=0;i < chars.length;i++){var cp=_b_.ord(chars[i])
-if(cp >=0x300 && cp <=0x36F){repl+="\u200B"+chars[i]}else{
-repl+=chars[i]}}
-return repl}
+_b_.str.tp_str=function(self){return to_string(self)}
 _b_.str.tp_iter=function(self){return{
-ob_type:$B.str_iterator,obj:self,len:_b_.str.mp_length(self),it:self[Symbol.iterator]()}}
+ob_type:$B.str_iterator,obj:self,len:_b_.str.mp_length(self),it:to_string(self)[Symbol.iterator]()}}
 _b_.str.tp_new=function(cls,args,kw){if(cls===undefined){$B.RAISE(_b_.TypeError,"str.__new__(): not enough arguments")}
 $B.check_expected_keywords('str',kw,['encoding','errors'])
 var nb_kwargs=$B.str_dict_length(kw)
@@ -16111,10 +16102,10 @@ cls,'__next__',next_func
 $B.set_to_dict(cls,'__next__',next_func)}
 function make_set_del(cls){var set_func=cls.tp_descr_set
 $B.set_to_dict(cls,'__set__',$B.wrapper_descriptor.$factory(
-cls,'__set__',set_func
+cls,'__set__',(self,obj,value)=>(set_func(self,obj,value),_b_.None)
 ))
 $B.set_to_dict(cls,'__delete__',$B.wrapper_descriptor.$factory(
-cls,'__set__',(self,attr)=> set_func(self,attr,$B.NULL)
+cls,'__delete__',(self,obj)=>(set_func(self,obj,$B.NULL),_b_.None)
 ))}
 function make_setitem_delitem(cls){var setitem=cls.sq_ass_item ?? cls.mp_ass_subscript
 var setitem_func=function(){var $=$B.args("__setitem__",3,{self:null,key:null,value:null},arguments)
@@ -17166,9 +17157,8 @@ prefix+`}\n`
 dedent()}else{
 js+=prefix+`var no_break_${id} = true,\n`+
 prefix+tab+tab+`iterator_${id} = ${iter}\n`
-if(this.iter.inum){js+=prefix+tab+tab+`iterator_${id}[$B.INUM] = ${this.iter.inum}\n`}
 js+=prefix+`for(var next_${id} of $B.make_js_iterator(`+
-`iterator_${id}, frame, ${this.lineno})){\n`}
+`iterator_${id}, frame, ${this.lineno}, ${this.iter.inum})){\n`}
 var name=new $B.ast.Name(`next_${id}`,new $B.ast.Load())
 copy_position(name,this.iter)
 name.to_js=function(){return `next_${id}`}
