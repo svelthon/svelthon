@@ -3474,7 +3474,22 @@ class SetView extends Set {
         }
     }
 
+    // The public members call private ones, which the other methods call too:
+    // a `has`, a `values` or a `size` JavaScript puts on the view is the
+    // view's, as on a `Set`, whose methods read its storage and not them.
     get size() {
+        return this.#size;
+    }
+
+    has(one) {
+        return this.#has(one);
+    }
+
+    values() {
+        return this.#members();
+    }
+
+    get #size() {
         follow(this.#value);
 
         try {
@@ -3484,7 +3499,7 @@ class SetView extends Set {
         }
     }
 
-    has(one) {
+    #has(one) {
         const $B = globalThis.__BRYTHON__;
         const bound = pyBind(one);
 
@@ -3520,7 +3535,7 @@ class SetView extends Set {
     }
 
     delete(one) {
-        const held = this.has(one);
+        const held = this.#has(one);
 
         if (held) this.#call('discard', pyBind(one));
 
@@ -3554,7 +3569,7 @@ class SetView extends Set {
     // code, reads the set again. Asked of every member, a walk that deleted the
     // members it had not reached, or that added one at each step, as a worklist
     // does, grew with the square of its length.
-    *values() {
+    *#members() {
         const value = this.#value;
 
         follow(value);
@@ -3708,15 +3723,15 @@ class SetView extends Set {
     }
 
     keys() {
-        return this.values();
+        return this.#members();
     }
 
     *entries() {
-        for (const one of this.values()) yield [one, one];
+        for (const one of this.#members()) yield [one, one];
     }
 
     [Symbol.iterator]() {
-        return this.values();
+        return this.#members();
     }
 
     // A callback refused before any row, an empty set included, in the words
@@ -3725,7 +3740,7 @@ class SetView extends Set {
     forEach(callback, receiver) {
         if (typeof callback !== 'function') Reflect.apply(Set.prototype.forEach, new Set(), [callback]);
 
-        for (const one of this.values()) Reflect.apply(callback, receiver, [one, one, this.#published]);
+        for (const one of this.#members()) Reflect.apply(callback, receiver, [one, one, this.#published]);
     }
 
     // The set algebra `Set.prototype` gained reads its receiver's own storage,
@@ -3735,7 +3750,7 @@ class SetView extends Set {
     // order of an intersection.
     union(other) {
         const record = setRecord(other);
-        const result = new Set(this.values());
+        const result = new Set(this.#members());
 
         for (const one of walk(record.keys())) result.add(one);
 
@@ -3746,10 +3761,10 @@ class SetView extends Set {
         const record = setRecord(other);
         const result = new Set();
 
-        if (this.size <= record.size) {
-            for (const one of this.values()) if (record.has(one)) result.add(one);
+        if (this.#size <= record.size) {
+            for (const one of this.#members()) if (record.has(one)) result.add(one);
         } else {
-            for (const one of walk(record.keys())) if (this.has(one)) result.add(one);
+            for (const one of walk(record.keys())) if (this.#has(one)) result.add(one);
         }
 
         return result;
@@ -3757,11 +3772,11 @@ class SetView extends Set {
 
     difference(other) {
         const record = setRecord(other);
-        const result = new Set(this.values());
+        const result = new Set(this.#members());
 
         // The members as they were, as the specification walks its copy: a
         // `has` that changes this set does not change what is asked.
-        if (this.size <= record.size) {
+        if (this.#size <= record.size) {
             for (const one of [...result]) if (record.has(one)) result.delete(one);
         } else {
             for (const one of walk(record.keys())) result.delete(one);
@@ -3772,10 +3787,10 @@ class SetView extends Set {
 
     symmetricDifference(other) {
         const record = setRecord(other);
-        const result = new Set(this.values());
+        const result = new Set(this.#members());
 
         for (const one of walk(record.keys())) {
-            if (this.has(one)) result.delete(one);
+            if (this.#has(one)) result.delete(one);
             else result.add(one);
         }
 
@@ -3785,8 +3800,8 @@ class SetView extends Set {
     isSubsetOf(other) {
         const record = setRecord(other);
 
-        if (this.size > record.size) return false;
-        for (const one of this.values()) if (!record.has(one)) return false;
+        if (this.#size > record.size) return false;
+        for (const one of this.#members()) if (!record.has(one)) return false;
 
         return true;
     }
@@ -3794,8 +3809,8 @@ class SetView extends Set {
     isSupersetOf(other) {
         const record = setRecord(other);
 
-        if (this.size < record.size) return false;
-        for (const one of walk(record.keys())) if (!this.has(one)) return false;
+        if (this.#size < record.size) return false;
+        for (const one of walk(record.keys())) if (!this.#has(one)) return false;
 
         return true;
     }
@@ -3803,10 +3818,10 @@ class SetView extends Set {
     isDisjointFrom(other) {
         const record = setRecord(other);
 
-        if (this.size <= record.size) {
-            for (const one of this.values()) if (record.has(one)) return false;
+        if (this.#size <= record.size) {
+            for (const one of this.#members()) if (record.has(one)) return false;
         } else {
-            for (const one of walk(record.keys())) if (this.has(one)) return false;
+            for (const one of walk(record.keys())) if (this.#has(one)) return false;
         }
 
         return true;

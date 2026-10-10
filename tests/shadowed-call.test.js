@@ -5,7 +5,7 @@
 // the native object doing the same.
 import { test, expect } from 'vitest';
 import { tojson } from '../src/lib/helpers.js';
-import { values, empty, passing } from './fixtures/shadowed_call.py';
+import { values, empty, passing, fresh } from './fixtures/shadowed_call.py';
 
 const shadowed = (fn, call) => Object.assign(fn, { call });
 const CALLS = [null, () => 99];
@@ -41,6 +41,50 @@ test('a set operation calls the other set’s has and keys themselves', () => {
 
     for (const operation of ['isSubsetOf', 'isSupersetOf', 'isDisjointFrom']) {
         expect(values[operation](other())).toBe(new Set([1, 2])[operation](other()));
+    }
+});
+
+// A `values`, a `has` or a `size` JavaScript puts on a set's view is the
+// view's, as on a `Set`, whose other methods read the set and not that member.
+const OPERATIONS = {
+    spread: (set) => [...set],
+    keys: (set) => [...set.keys()],
+    entries: (set) => [...set.entries()],
+    forEach: (set) => {
+        const seen = [];
+        set.forEach((one) => seen.push(one));
+        return seen;
+    },
+    union: (set) => [...set.union(new Set([2, 3]))],
+    intersection: (set) => [...set.intersection(new Set([2, 3]))],
+    difference: (set) => [...set.difference(new Set([2, 3]))],
+    symmetricDifference: (set) => [...set.symmetricDifference(new Set([2, 3]))],
+    isSubsetOf: (set) => set.isSubsetOf(new Set([1, 2, 3])),
+    isSupersetOf: (set) => set.isSupersetOf(new Set([1])),
+    isDisjointFrom: (set) => set.isDisjointFrom(new Set([1])),
+    delete: (set) => [set.delete(1), delete set.has, set.has(1)]
+};
+const MEMBERS = {
+    values: (set) => {
+        set.values = function* () {
+            yield 99;
+        };
+    },
+    has: (set) => {
+        set.has = () => false;
+    },
+    size: (set) => Object.defineProperty(set, 'size', { value: 0, configurable: true })
+};
+
+test.for(Object.keys(MEMBERS))('a %s put on a set’s view changes none of its other methods, as on a Set', (name) => {
+    for (const [operation, run] of Object.entries(OPERATIONS)) {
+        const native = new Set([1, 2]);
+        const view = fresh();
+
+        MEMBERS[name](native);
+        MEMBERS[name](view);
+
+        expect([operation, run(view)]).toEqual([operation, run(native)]);
     }
 });
 
