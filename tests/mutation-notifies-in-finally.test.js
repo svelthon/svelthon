@@ -86,8 +86,10 @@ const code = stripped(source);
 const install = block(code, code.indexOf('{', code.indexOf('function installMutationTracking')));
 
 // Every interception: a function put onto the engine under one of its own names,
-// either directly or through the loop that covers `$setattr` and `$setattr1`.
-const ENTRY = /\$B(?:(?:\.[A-Za-z_$][\w$]*)+|\[name\]) = function/g;
+// either directly or through the loop that covers `$setattr` and `$setattr1`,
+// and `sourced`, which takes the place of each builtin mutator where the engine
+// keeps it.
+const ENTRY = /(?:\$B(?:(?:\.[A-Za-z_$][\w$]*)+|\[name\])|\bconst sourced) = function/g;
 
 // Telling a watched object it changed, in the three spellings this file uses:
 // the marker called on the spot, and the two helpers whose whole job is to call
@@ -104,7 +106,7 @@ describe('every interception that notifies, notifies on the raising path too', (
     // A guard that found nothing to check would be green for the wrong reason.
     test('the wrappers are found where they live', () => {
         expect(wrappers.map((one) => one.name)).toEqual([
-            '$B.call_attr',
+            'const sourced',
             '$B.$getattr',
             '$B.builtins.dir',
             '$B.$setitem',

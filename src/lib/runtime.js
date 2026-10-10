@@ -708,11 +708,10 @@ const MUTATORS = new Set([
 // indexing to catch it.
 const VIEWS = new Set(['items', 'values']);
 
-// Every name a call on a watched container has to be followed up on. Read on
-// the way out of `$getattr`, which is asked for every attribute in the program
-// and has to decide in one lookup whether this one is any of its business.
-// `__getattribute__` among them: called by name, `type(box).__getattribute__(box,
-// "x")`, it is the read `box.x` makes.
+// Every name a call on a watched container has to be followed up on: the
+// builtin methods of these names are wrapped once, where the engine keeps them
+// (`atSource`). `__getattribute__` among them: called by name,
+// `type(box).__getattribute__(box, "x")`, it is the read `box.x` makes.
 const FOLLOWED = new Set([...MUTATORS, ...VIEWS, 'get', '__getattribute__']);
 
 // Make an in-place mutation reactive: `items.append(x)` with nothing after it.
@@ -835,140 +834,78 @@ function installMutationTracking($B) {
         }
     };
 
-    // A call whose target is its first argument rather than its receiver, which
-    // is what reading a method off a type gives: `list.append(xs, 2)`.
+    // A builtin method that changes its object is followed where the engine
+    // keeps it, once: the function behind `list.append`, `dict.update` or
+    // `object.__setattr__`, which every call reaches however it is written,
+    // `xs.append(1)`, `list.append(xs, 1)`, `super().append(1)`, or `add =
+    // xs.append` and `add(1)` one component away. Its first argument is the
+    // object it changes. A read of the method hands back the engine's own
+    // object, so `list.append is vars(list)["append"]` and two reads of
+    // `box.__setattr__` compare equal.
     //
-    // `call_attr` takes a position marker before the arguments, so the object is
-    // `rest[1]` and what it was handed is everything after it, the same offset
-    // the bound path uses when it passes `rest.slice(1)`.
-    // The same rule as `onFirst`, for an operation kept as a value rather than
-    // called through `call_attr`: the target is the first argument, the rest are
-    // the arguments, and the question of whether anybody watches it belongs to
-    // the call.
-    const onType = (attr, method, descriptor) => {
-        const wrapper = function (...args) {
+    // A named method sits in its type's `tp_funcs`, which `call_attr` calls
+    // directly, and in its descriptor's `method`; a special one in its slot
+    // wrapper's `wrapped`, which an operator does not call, `xs[0] = 1` being
+    // followed at its own entry below.
+    // The objects a builtin method is running on: the engine's own methods
+    // call one another, `intersection_update` through `clear` and `add`, and
+    // the outer call is the one mutation the author made. A call on another
+    // object, a `key=` that appends to a list of its own, is its own.
+    const mutating = new Map();
+
+    const atSource = (name, method) => {
+        const sourced = function (target, ...args) {
+            // `finally`, because a mutator that raises has often mutated
+            // already: `xs.extend(values())` consumes what the generator
+            // yielded before it raised, so the list holds `[1]` and the author,
+            // who caught the exception, saw the old value on the page for ever.
+            // `result` stays undefined on that path; `afterCall` reads it only
+            // to hand a returned container the watch.
+            const inner = mutating.has(target);
             let result;
 
+            mutating.set(target, (mutating.get(target) ?? 0) + 1);
             try {
-                result = method(...args);
+                result = Reflect.apply(method, this, [target, ...args]);
                 return result;
             } finally {
-                afterCall(args[0], attr, result, args.slice(1));
+                const depth = mutating.get(target) - 1;
+
+                if (depth === 0) mutating.delete(target);
+                else mutating.set(target, depth);
+
+                if (!inner) afterCall(target, name, result, args);
             }
         };
 
-        // Python has to keep seeing what it asked for, the same reason
-        // `notifying` assigns over its method: a bare function would answer
-        // `JavascriptFunction` to `type(list.append)` and `AttributeError` to
-        // `list.append.__objclass__`, where `list.copy` beside it answers
-        // `method_descriptor` and `list`. Four properties carry that,
-        // `ob_type`, `method`, `d_name`, `d_type`, and copying them keeps both
-        // answers. A descriptor that is a function, `dict.get`, carries them
-        // as its own properties, and the export boundary reads the same ones to
-        // know it holds a Python callable whose arguments it converts.
-        return descriptor === undefined ? wrapper : Object.assign(wrapper, descriptor);
+        // Python keeps seeing the method it asked for: `type()`, `repr()` and
+        // the export boundary read `ob_type` and the fields beside it off the
+        // function, which Brython sets as plain properties.
+        return Object.assign(sourced, method);
     };
 
-    const onFirst = (obj, attr, rest, call) => {
-        const target = rest[1];
-        let result;
+    // The engine's classes, recognised by shape: this runs as the module
+    // loads, before `pyClass` below is defined.
+    const engineClass = (value) => value !== null && typeof value === 'object' && value.tp_name !== undefined && value.tp_bases !== undefined;
 
-        try {
-            result = call(obj, attr, ...rest);
-            return result;
-        } finally {
-            afterCall(target, attr, result, rest.slice(2));
-        }
-    };
+    // Every class the engine has, its JavaScript array among them: a list a
+    // store was handed from JavaScript is one, and Python appends to it.
+    for (const cls of new Set([...Object.values(_b_), ...Object.values($B)].filter(engineClass))) {
+        for (const name of FOLLOWED) {
+            const descriptor = $B.search_in_dict(cls, name, $B.NULL);
+            const field = typeof descriptor?.method === 'function' ? 'method' : typeof descriptor?.wrapped === 'function' ? 'wrapped' : null;
 
-    // Rest arguments rather than `arguments` + apply: these sit on the hottest
-    // path Brython has, and the old form blocks V8's optimiser.
-    const callAttr = $B.call_attr;
-    $B.call_attr = function (obj, attr, ...rest) {
-        // The marker is checked first on purpose: this runs on every method
-        // call in the program, and an unwatched object must pay one property
-        // miss, not a set lookup.
-        let followed = MARKS.has(obj) && FOLLOWED.has(attr);
-        let target = obj;
+            if (field === null) continue;
 
-        // `super().append(value)`: the method is looked up on a `super`
-        // object, and the container it changes is that object's `__self__`.
-        if (!followed && FOLLOWED.has(attr) && obj !== null && typeof obj === 'object' && ownType(obj) === _b_.super) {
-            target = obj.obj;
-            followed = MARKS.has(target);
-        }
+            const original = descriptor[field];
+            const followed = atSource(name, original);
 
-        // `list.append(xs, 2)`, the same mutation as `xs.append(2)` written
-        // through the type. The receiver is a class, which carries no marker, so
-        // the object being changed is the first argument, known only here.
-        //
-        // The name is asked first, a set lookup, so a method that changes no
-        // container never reads the receiver: a JavaScript object's `ob_type`,
-        // a getter of its author's among them, is read for none of its calls.
-        //
-        // `pyClass`, the predicate the other half of this interception asks
-        // too, in `$getattr`: a JavaScript object carrying a `tp_bases` of its
-        // own is no class.
-        if (!followed) {
-            if (FOLLOWED.has(attr) && pyClass(obj)) {
-                return onFirst(obj, attr, rest, callAttr);
+            descriptor[field] = followed;
+            if (cls.tp_funcs !== undefined && Object.hasOwn(cls.tp_funcs, name) && cls.tp_funcs[name] === original) {
+                cls.tp_funcs[name] = followed;
             }
-
-            return callAttr(obj, attr, ...rest);
         }
-
-        // `finally`, because a mutator that raises has often mutated already:
-        // `xs.extend(values())` consumes what the generator yielded before it
-        // raised, so the list holds `[1]` and the author, who caught the
-        // exception, saw the old value on the page for ever. The assumption that
-        // an operation which raises has not changed the object does not hold in
-        // Python, and the notification is the cheap side of that bet.
-        //
-        // `result` stays undefined on that path, which is what a raising call
-        // returned anyway; `afterCall` reads it only to hand a returned
-        // container the watch.
-        let result;
-
-        try {
-            // `call_attr` takes the position marker before the arguments, and
-            // it is the arguments that come under watch.
-            result = callAttr(obj, attr, ...rest);
-            return result;
-        } finally {
-            afterCall(target, attr, result, rest.slice(1));
-        }
-    };
-
-    // `add = xs.append` and then `add(1)`, one statement later or one component
-    // away. The method has left the object as a value, so the interception
-    // above never sees the call: Brython compiles the attribute read to
-    // `$getattr` (`$getattr_pep657` delegates to it, and so does the builtin
-    // `getattr`) and the later call to `$B.$call`, which is a plain JavaScript
-    // call on whatever it was handed. Wrapping the method as it leaves is what
-    // puts `afterCall` back on that path, and it is the last place where the
-    // object the method belongs to is still known.
-    const notifying = (obj, attr, method) => {
-        const wrapper = function (...args) {
-            // The same `finally` as the interception above, for the same
-            // reason: a detached mutator that raises may have mutated first.
-            let result;
-
-            try {
-                result = method(...args);
-                return result;
-            } finally {
-                afterCall(obj, attr, result, args);
-            }
-        };
-
-        // Python has to keep seeing the method it asked for: `type(add)` and
-        // `repr(add)` read `ob_type`, `ml` and `m_self` off the function
-        // object, and a bare wrapper would answer `function` where Brython
-        // answers `builtin_method`. Brython sets those five as plain
-        // properties, so an assign takes them and leaves `length` and `name`,
-        // which a function carries as its own and non-enumerable.
-        return Object.assign(wrapper, method);
-    };
+    }
 
     const getattr = $B.$getattr;
     $B.$getattr = function (obj, attr, ...rest) {
@@ -981,108 +918,8 @@ function installMutationTracking($B) {
             throw error;
         }
 
-        const wrapper = watchable(obj) && FOLLOWED.has(attr) ? follow(obj, attr, result) : null;
-
-        if (wrapper !== null) {
-            lookedUp(obj, attr);
-            return wrapper;
-        }
-
         read(obj, attr, result);
         return result;
-    };
-
-    // A method read off an object, wrapped so that its call is followed up,
-    // or null for a value no call is made through. Wrapped whether or not the
-    // object is watched **yet**: a factory that hands out its state and an
-    // operation on it, `values, add = make()`, gives the operation away before
-    // the state has a name. `afterCall` asks at the call, which is the moment
-    // that knows.
-    const follow = (obj, attr, result) => {
-        // The container a method changes: the object itself, or the
-        // `__self__` of a `super` it was read through. A read made by name
-        // through a `super` is that `super`'s, which looks past its class.
-        const owner = ownType(obj) === _b_.super && attr !== '__getattribute__' ? obj.obj : obj;
-
-        // Four shapes reach here and only the first is a function. A special
-        // method read off a builtin is a `method-wrapper` (`rows.__setitem__`),
-        // one read off a type is a `method_descriptor` (`list.append`) or, for
-        // a slot, a `wrapper_descriptor` (`object.__setattr__`); all are
-        // objects, and all are called through Python's own protocol.
-        const call =
-            typeof result === 'function'
-                ? result
-                : result !== null &&
-                    typeof result === 'object' &&
-                    [$B.method_wrapper, $B.method_descriptor, $B.wrapper_descriptor].includes(ownType(result))
-                  ? (...args) => $B.$call(result, ...args)
-                  : null;
-
-        // A method taken off the **type** carries no target: `add =
-        // list.append` finds its list in the first argument, at the call.
-        // `call_attr` already knows that rule and `onFirst` applies it; a
-        // method kept as a value left that path, so `add(rows, 1)` mutated a
-        // watched list and told nobody, while `list.append(rows, 1)` written in
-        // place worked.
-        if (call !== null && pyClass(obj)) {
-            return wrapperOf(result, ON_TYPE, attr, () => onType(attr, call, typeof result === 'function' ? undefined : result));
-        }
-
-        if (typeof result === 'function') return notifying(owner, attr, result);
-
-        // A method-wrapper stays one, `type()`, `__self__` and `repr()`
-        // included, and so does what the export boundary sees of it: only the
-        // function it calls is wrapped, and Brython's own call, `wrapped(self,
-        // ...args)`, is what reaches it.
-        if (call !== null) {
-            const wrapped = wrapperOf(result.wrapped, owner, attr, () => {
-                const made = (target, ...args) => {
-                    let out;
-
-                    try {
-                        out = result.wrapped(target, ...args);
-                        return out;
-                    } finally {
-                        afterCall(owner, attr, out, args);
-                    }
-                };
-
-                // The operation it stands for, shared by every receiver: what
-                // an adapter is keyed by, so two reads are one callback.
-                made.original = result.wrapped;
-
-                return made;
-            });
-
-            return { ...result, wrapped };
-        }
-
-        return null;
-    };
-
-    // One wrapper per method, per receiver and per name, made the first time
-    // it is read: a method read twice is the same method, `Cart.add is
-    // Cart.add` and `Box.__setattr__ is object.__setattr__`, and two
-    // method-wrappers of one receiver compare equal, as they compare by the
-    // function they wrap. `ON_TYPE` stands for the receiver of a method read
-    // off a type, which has none until the call.
-    const WRAPPERS = new WeakMap();
-    const ON_TYPE = {};
-
-    const wrapperOf = (method, owner, attr, make) => {
-        let owners = WRAPPERS.get(method);
-
-        if (owners === undefined) WRAPPERS.set(method, (owners = new WeakMap()));
-
-        let names = owners.get(owner);
-
-        if (names === undefined) owners.set(owner, (names = new Map()));
-
-        let made = names.get(attr);
-
-        if (made === undefined) names.set(attr, (made = make()));
-
-        return made;
     };
 
     // A read that found its value, however it was written: `box.x`,

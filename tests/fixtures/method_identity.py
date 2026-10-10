@@ -29,4 +29,7 @@ def answers():
         repr(Own.__getattribute__ is Own.__getattribute__),
         repr(list.append is list.append),
         repr(box.__setattr__ == box.__setattr__),
+        repr(list.append is vars(list)["append"]),
+        repr(object.__setattr__ is vars(object)["__setattr__"]),
+        repr(Own.__getattribute__ is Own.__dict__["__getattribute__"]),
     ]
