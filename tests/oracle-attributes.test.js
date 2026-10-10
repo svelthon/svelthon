@@ -19,6 +19,12 @@ test('the oracle has its cases', () => {
     expect(Object.keys(expected).length).toBeGreaterThan(1000);
 });
 
+// And only those: a case whose reference breaks stops the driver, where it
+// vanished from the cases with nothing said.
+test('a reference that breaks stops the driver', () => {
+    expect(() => cpython('OracleBroken.svelte')).toThrow(/RuntimeError: reference failure/);
+});
+
 test.for(Object.keys(expected))('%s', (kind) => {
     const { models, pages } = mounted(OracleAttributes, kind, (instance, target, step) => {
         if (!kind.endsWith('|binding')) return instance.change(step);

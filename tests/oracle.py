@@ -4,7 +4,9 @@ Runs the Python script of the component named on the command line once per
 case of its `CASES`, `kind` set to the case, as a mount does: the model read,
 then `change(1)` and `change(2)`, each followed by the model read again. Prints
 `{case: [read, read, read]}` as JSON. A case whose write CPython refuses is
-none: no page has a right answer for it.
+none: no page has a right answer for it. Anything else that raises, or a
+refusal anywhere but the write, stops the driver: a case does not vanish
+because its reference broke.
 """
 
 import json
@@ -12,6 +14,8 @@ import re
 import sys
 
 STEPS = 2
+# What CPython raises refusing a write.
+REFUSALS = (TypeError, AttributeError, KeyError)
 
 path = sys.argv[1]
 with open(path, encoding="utf-8") as source:
@@ -31,18 +35,15 @@ def run(kind):
     seen = [space["model"]()]
 
     for step in range(1, STEPS + 1):
-        space["change"](step)
+        try:
+            space["change"](step)
+        except REFUSALS:
+            return None
         seen.append(space["model"]())
 
     return seen
 
 
-results = {}
+results = {kind: run(kind) for kind in namespace("")["CASES"]}
 
-for kind in namespace("")["CASES"]:
-    try:
-        results[kind] = run(kind)
-    except Exception:
-        continue
-
-print(json.dumps(results))
+print(json.dumps({kind: seen for kind, seen in results.items() if seen is not None}))
