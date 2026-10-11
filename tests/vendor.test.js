@@ -1103,6 +1103,36 @@ test('str methods and class creation answer as in CPython: str-subclass-argument
     }
 });
 
+// A bytes iterator started over when asked for its iterator; a bytearray
+// iterator read the size its bytearray had when it started; translate() took
+// any error of its table for a missing key and dropped what it could not use;
+// maketrans() read an astral character as two.
+test('bytes iterators, translate() and maketrans() answer as in CPython: bytes-iterator-keeps-position, bytearray-iterator-live-length, str-translate-errors, str-maketrans-astral, iterator-length-hint, iterator-setstate', async () => {
+    const { answers } = await import('./fixtures/bytes_iteration_and_translate.py');
+
+    expect([...answers()]).toEqual([
+        '[98, 99, 100]',
+        '([98, 99, 100, 101], [])',
+        'RuntimeError',
+        'ValueError',
+        "'😀\\x01'",
+        "'xb'",
+        "{128512: 'x'}",
+        '[2, 2, 2, 2, 2]',
+        "[[3, 4], [3, 4], ['😀', 'd'], [99, 100], [5, 7]]"
+    ]);
+});
+
+// The console's write() returned None where CPython gives the number of
+// characters written. A component cannot import `sys`; the runtime's stdout
+// is read where Brython keeps it.
+test("the console's write() returns what it wrote: write-returns-count", () => {
+    const $B = globalThis.__BRYTHON__;
+    const write = $B.$getattr($B.get_stdout(), 'write');
+
+    expect($B.$call(write, 'ab')).toBe(2);
+});
+
 // A module named with a quote, from a file such as `src/Jean's app/Page.svelte`,
 // had its name pasted between quotes in the code of every def, lambda, class
 // and comprehension, which then stopped parsing.

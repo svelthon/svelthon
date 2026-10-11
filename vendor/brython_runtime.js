@@ -1737,6 +1737,8 @@ return items}
 $B.make_js_iterator_no_trace=function(iterator){if(Array.isArray(iterator)){if(iterator.ob_type){return iterator[Symbol.iterator]()}else{
 return iterator.map($B.jsobj2pyobj)[Symbol.iterator]()}}
 return $B.make_js_iterator(iterator,$B.NULL)}
+$B.clip_index=function(state,low,high){
+return Math.min(Math.max(Number($B.PyNumber_Index(state)),low),high)}
 $B.make_js_iterator=function(iterator,frame,lineno,inum){
 var set_lineno=$B.set_lineno
 if(frame===undefined){if(! $B.frame_obj){set_lineno=function(){}}else{
@@ -6934,9 +6936,15 @@ while(self.it > self.stop){var res=_b_.int.$int_or_long(self.it)
 self.it+=self.step
 yield res}}}}
 var range_iterator_funcs=$B.range_iterator.tp_funcs={}
-range_iterator_funcs.__length_hint__=function(self){return _b_.range.mp_length(self.obj)}
+range_iterator_funcs.__length_hint__=function(self){var len=_b_.range.mp_length(self.obj),done=(self.it-self.start)/self.step
+return typeof done=='bigint' ?
+_b_.int.$int_or_long(BigInt(len)-done):len-done}
 range_iterator_funcs.__reduce__=function(self){return $B.fast_tuple([_b_.iter,$B.fast_tuple([self.obj]),_b_.None])}
-range_iterator_funcs.__setstate__=function(self,value){self.it=self.start+value*self.step}
+range_iterator_funcs.__setstate__=function(self,value){
+var index=$B.clip_index(value,0,Number(range_iterator_funcs.__length_hint__(self)))
+self.it+=typeof self.it=='bigint' ?
+BigInt(index)*self.step :index*self.step
+return _b_.None}
 $B.range_iterator.tp_methods=["__length_hint__","__reduce__","__setstate__"]
 $B.range_iterator.noargs_methods=["__length_hint__","__reduce__"]
 $B.set_func_names($B.range_iterator,"builtins")
@@ -7191,12 +7199,17 @@ function check_buffer_or_int(arg){if(! $B.is_int(arg)&& ! is_bytes_like(arg)){$B
 )}}
 $B.bytearray_iterator.tp_iter=function(self){return self}
 $B.bytearray_iterator.tp_iternext=function*(self){self.index++
-if(self.index >=self.len){return}
+if(self.index >=self.obj.source.length){
+self.index=Infinity
+return}
 yield self.obj.source[self.index]}
 var bytearray_iterator_funcs=$B.bytearray_iterator.tp_funcs={}
-bytearray_iterator_funcs.__length_hint__=function(self){return self.len}
+bytearray_iterator_funcs.__length_hint__=function(self){return Math.max(0,self.obj.source.length-self.index-1)}
 bytearray_iterator_funcs.__reduce__=function(self){return $B.fast_tuple([_b_.iter,$B.fast_tuple([self.obj]),0])}
-bytearray_iterator_funcs.__setstate__=function(self,value){self.index=$B.PyNumber_Index(value)-1}
+bytearray_iterator_funcs.__setstate__=function(self,value){
+var index=$B.clip_index(value,-1,self.obj.source.length)
+if(self.index !==Infinity){self.index=index < 0 ? Infinity :index-1}
+return _b_.None}
 $B.bytearray_iterator.tp_methods=["__length_hint__","__reduce__","__setstate__"]
 $B.bytearray_iterator.noargs_methods=["__length_hint__","__reduce__"]
 var bytearray=_b_.bytearray
@@ -7817,15 +7830,17 @@ if(acc.length > 0){parts.push(acc)}
 parts=parts.map(t=> cls.$factory(t))
 return $B.$list(parts)}
 var bytes_iterator=$B.bytes_iterator
-$B.bytes_iterator.tp_iter=function(self){self.index=-1
-return self}
+$B.bytes_iterator.tp_iter=function(self){return self}
 $B.bytes_iterator.tp_iternext=function*(self){self.index++
-if(self.index >=self.len){return}
+if(self.index >=self.len){self.index=Infinity
+return}
 yield self.obj.source[self.index]}
 var bytes_iterator_funcs=$B.bytes_iterator.tp_funcs={}
-bytes_iterator_funcs.__length_hint__=function(self){return self.len}
+bytes_iterator_funcs.__length_hint__=function(self){return Math.max(0,self.len-self.index-1)}
 bytes_iterator_funcs.__reduce__=function(self){return $B.fast_tuple([_b_.iter,$B.fast_tuple([self.obj]),0])}
-bytes_iterator_funcs.__setstate__=function(self,value){self.index=$B.PyNumber_Index(value)-1}
+bytes_iterator_funcs.__setstate__=function(self,value){var index=$B.clip_index(value,0,self.len)
+if(self.index !==Infinity){self.index=index-1}
+return _b_.None}
 $B.bytes_iterator.tp_methods=["__length_hint__","__reduce__","__setstate__"]
 $B.bytes_iterator.noargs_methods=["__length_hint__","__reduce__"]
 $B.set_func_names(bytes_iterator,'builtins')
@@ -8889,12 +8904,16 @@ return $B.String(res)}
 var prefix=2,suffix=3
 str.$getnewargs=function(self){return $B.fast_tuple([to_string(self)])}
 $B.str_iterator.tp_iter=function(self){return self}
-$B.str_iterator.tp_iternext=function*(self){for(var char of self.it){yield char}}
+$B.str_iterator.tp_iternext=function*(self){for(var char of self.it){self.index++
+yield char}
+self.done=true}
 var str_iterator_funcs=$B.str_iterator.tp_funcs={}
-str_iterator_funcs.__length_hint__=function(self){return self.len}
+str_iterator_funcs.__length_hint__=function(self){return self.len-self.index}
 str_iterator_funcs.__reduce__=function(self){return $B.fast_tuple([_b_.iter,$B.fast_tuple([self.obj]),0])}
-str_iterator_funcs.__setstate__=function(self,value){self.it=to_string(self.obj)[Symbol.iterator]()
-for(var i=0;i < value;i++){self.it.next()}}
+str_iterator_funcs.__setstate__=function(self,value){var index=$B.clip_index(value,0,self.len)
+if(! self.done){self.it=to_string(self.obj)[Symbol.iterator]()
+for(self.index=0;self.index < index;self.index++){self.it.next()}}
+return _b_.None}
 $B.str_iterator.tp_methods=["__length_hint__","__reduce__","__setstate__"]
 $B.str_iterator.noargs_methods=["__length_hint__","__reduce__"]
 $B.set_func_names($B.str_iterator,'builtins')
@@ -9526,7 +9545,7 @@ h2 ^=Math.imul(h1 ^(h1 >>> 13),3266489909)
 return 4294967296*(2097151 & h2)+(h1 >>> 0)}
 _b_.str.tp_str=function(self){return to_string(self)}
 _b_.str.tp_iter=function(self){return{
-ob_type:$B.str_iterator,obj:self,len:_b_.str.mp_length(self),it:to_string(self)[Symbol.iterator]()}}
+ob_type:$B.str_iterator,obj:self,len:_b_.str.mp_length(self),it:to_string(self)[Symbol.iterator](),index:0}}
 _b_.str.tp_new=function(cls,args,kw){if(cls===undefined){$B.RAISE(_b_.TypeError,"str.__new__(): not enough arguments")}
 $B.check_expected_keywords('str',kw,['encoding','errors'])
 var nb_kwargs=$B.str_dict_length(kw)
@@ -9842,19 +9861,20 @@ if($.y===null && $.z===null){
 if(! $B.is_dict($.x)){$B.RAISE(_b_.TypeError,"maketrans only argument must be a dict")}
 var items=_b_.list.$factory(_b_.dict.tp_funcs.items($.x))
 for(let i=0,len=items.length;i < len;i++){let k=items[i][0],v=items[i][1]
-if(! $B.is_int(k)){if($B.is_str(k)&& k.length==1){k=_b_.ord(k)}else{$B.RAISE(_b_.TypeError,"dictionary key "+k+
+if(! $B.is_int(k)){if($B.is_str(k)&& to_chars(k).length==1){k=_b_.ord(k)}else{$B.RAISE(_b_.TypeError,"dictionary key "+k+
 " is not int or 1-char string")}}
 if(v !==_b_.None && ! $B.$isinstance(v,[_b_.int,_b_.str])){$B.RAISE(_b_.TypeError,"dictionary value "+v+
 " is not None, integer or string")}
 _b_.dict.$setitem(_t,k,v)}
 return _t}else{
-if(!($B.is_str($.x)&& $B.is_str($.y))){$B.RAISE(_b_.TypeError,"maketrans arguments must be strings")}else if($.x.length !==$.y.length){$B.RAISE(_b_.TypeError,"maketrans arguments must be strings or same length")}else{
+if(!($B.is_str($.x)&& $B.is_str($.y))){$B.RAISE(_b_.TypeError,"maketrans arguments must be strings")}
+var x=to_chars($.x),y=to_chars($.y)
+if(x.length !==y.length){$B.RAISE(_b_.TypeError,"maketrans arguments must be strings or same length")}else{
 var toNone={}
 if($.z !==null){
 if(! $B.is_str($.z)){$B.RAISE(_b_.TypeError,"maketrans third argument must be a string")}
-for(let i=0,len=$.z.length;i < len;i++){toNone[_b_.ord($.z.charAt(i))]=true}}
-for(let i=0,len=$.x.length;i < len;i++){var key=_b_.ord($.x.charAt(i)),value=$.y.charCodeAt(i)
-_b_.dict.$setitem(_t,key,value)}
+for(var char of to_chars($.z)){toNone[_b_.ord(char)]=true}}
+for(let i=0,len=x.length;i < len;i++){_b_.dict.$setitem(_t,_b_.ord(x[i]),_b_.ord(y[i]))}
 for(let k in toNone){_b_.dict.$setitem(_t,parseInt(k),_b_.None)}
 return _t}}}
 str_funcs.partition=function(self,sep){$B.check_nb_args_no_kw('str.partition',1,arguments,true)
@@ -10081,10 +10101,14 @@ res+=char}}
 return $B.String(res)}
 str_funcs.translate=function(self,table){$B.check_nb_args_no_kw('str.translate',1,arguments,true)
 var res=[],getitem=$B.$getattr(table,"__getitem__"),cp,_self=to_string(self)
-for(var char of _self){cp=_b_.ord(char)
+for(var char of _self){
 try{
-var repl=$B.$call(getitem,cp)
-if(repl !==_b_.None){if($B.is_str(repl)){res.push(to_string(repl))}else if(typeof repl=="number"){res.push(String.fromCodePoint(repl))}}}catch(err){res.push(char)}}
+var repl=$B.$call(getitem,_b_.ord(char))}catch(err){if(! $B.is_exc(err,[_b_.LookupError])){throw err}
+res.push(char)
+continue}
+if($B.is_str(repl)){res.push(to_string(repl))}else if($B.$isinstance(repl,_b_.int)){cp=$B.PyNumber_Index(repl)
+if(cp < 0 ||cp > 0x10FFFF){$B.RAISE(_b_.ValueError,"character mapping must be in range(0x110000)")}
+res.push(String.fromCodePoint(Number(cp)))}else if(repl !==_b_.None){$B.RAISE(_b_.TypeError,"character mapping must return integer, None or str")}}
 return $B.String(res.join(""))}
 str_funcs.upper=function(self){var _self=to_string(self)
 return $B.String(_self.toUpperCase())}
@@ -12307,11 +12331,15 @@ return res}}
 list.__hash__=_b_.None
 var list_iterator=$B.list_iterator
 $B.list_iterator.tp_iter=function(self){return self}
-$B.list_iterator.tp_iternext=function*(self){for(var value of self.it){yield value}}
+$B.list_iterator.tp_iternext=function*(self){if(self.index < self.obj.length){yield self.obj[self.index++]}else{
+self.index=Infinity}}
 var list_iterator_funcs=$B.list_iterator.tp_funcs={}
-list_iterator_funcs.__length_hint__=function(self){return self.len}
+list_iterator_funcs.__length_hint__=function(self){return Math.max(0,self.obj.length-self.index)}
 list_iterator_funcs.__reduce__=function(self){return $B.fast_tuple([_b_.iter,$B.fast_tuple([list.$factory(self)]),0])}
-list_iterator_funcs.__setstate__=function(self){}
+list_iterator_funcs.__setstate__=function(self,state){
+var index=$B.clip_index(state,-1,self.obj.length)
+if(self.index !==Infinity){self.index=index < 0 ? Infinity :index}
+return _b_.None}
 $B.list_iterator.tp_methods=["__length_hint__","__reduce__","__setstate__"]
 $B.list_iterator.noargs_methods=["__length_hint__","__reduce__"]
 var eq=$B.list_eq=function(self,other){if($B.PYOBJ_MAP.has(other)){other=$B.PYOBJ_MAP.get(other)}
@@ -12366,9 +12394,11 @@ $B.list_reverseiterator.tp_iternext=function*(self){if(self.counter >=0){var res
 self.counter--
 yield res}}
 var list_reverseiterator_funcs=$B.list_reverseiterator.tp_funcs={}
-list_reverseiterator_funcs.__length_hint__=function(self){return self.items.length}
+list_reverseiterator_funcs.__length_hint__=function(self){var len=self.counter+1
+return len <=self.items.length ? Math.max(0,len):0}
 list_reverseiterator_funcs.__reduce__=function(self){return $B.fast_tuple([_b_.iter,$B.fast_tuple([list.$factory(self).reverse()]),0])}
-list_reverseiterator_funcs.__setstate__=function(self){}
+list_reverseiterator_funcs.__setstate__=function(self,state){self.counter=$B.clip_index(state,-1,self.items.length-1)
+return _b_.None}
 $B.list_reverseiterator.tp_methods=["__length_hint__","__reduce__","__setstate__"]
 $B.list_reverseiterator.noargs_methods=["__length_hint__","__reduce__"]
 function set_list_slice(obj,start,stop,value){var res=_b_.list.$factory(value)
@@ -12440,7 +12470,7 @@ return list.$setitem(self,key,value)}}
 _b_.list.tp_repr=function(self){$B.builtins_repr_check(list,arguments)
 return _repr(self)}
 _b_.list.tp_hash=_b_.None
-_b_.list.tp_iter=function(self){var res={ob_type:list_iterator,it:self[Symbol.iterator](),len:self.length}
+_b_.list.tp_iter=function(self){var res={ob_type:list_iterator,obj:self,index:0}
 return res}
 _b_.list.tp_init=function(self){var $=$B.args('__init__',1,{self:null},arguments,null,'args','kw')
 var self=$.self,args=$.args,kw=$.kw
@@ -12564,11 +12594,14 @@ var tuple=_b_.tuple
 tuple.$match_sequence_pattern=true
 tuple.$is_sequence=true
 $B.tuple_iterator.tp_iter=function(self){return self}
-$B.tuple_iterator.tp_iternext=function*(self){for(var value of self.it){yield value}}
+$B.tuple_iterator.tp_iternext=function*(self){if(self.index < self.obj.length){yield self.obj[self.index++]}else{
+self.index=Infinity}}
 var tuple_iterator_funcs=$B.tuple_iterator.tp_funcs={}
-tuple_iterator_funcs.__length_hint__=function(self){return self.obj.length}
+tuple_iterator_funcs.__length_hint__=function(self){return Math.max(0,self.obj.length-self.index)}
 tuple_iterator_funcs.__reduce__=function(self){}
-tuple_iterator_funcs.__setstate__=function(self){}
+tuple_iterator_funcs.__setstate__=function(self,state){var index=$B.clip_index(state,0,self.obj.length)
+if(self.index !==Infinity){self.index=index}
+return _b_.None}
 $B.tuple_iterator.tp_methods=["__length_hint__","__reduce__","__setstate__"]
 $B.tuple_iterator.noargs_methods=["__length_hint__","__reduce__"]
 tuple.$factory=function(){var obj=factory.apply(tuple,arguments)
@@ -12592,7 +12625,7 @@ y=Number(BigInt.asIntN(32,y))}
 x=c_mul(1000003,x)^ y & 0xFFFFFFFF}
 return x}
 _b_.tuple.tp_iter=function(self){return{
-ob_type:$B.tuple_iterator,obj:self,it:self[Symbol.iterator]()}}
+ob_type:$B.tuple_iterator,obj:self,index:0}}
 _b_.tuple.tp_new=function(cls,args,kw){if(cls===_b_.tuple){$B.check_no_kw('tuple',kw)}
 var self=[]
 self.ob_type=cls
@@ -15176,7 +15209,7 @@ if(self.buf===undefined){self.buf=[]}
 if(! $B.is_str(msg)){$B.RAISE(_b_.TypeError,"write() argument must be str, not "+
 $B.class_name(msg))}
 self.buf.push(_b_.str.$to_string(msg))
-return _b_.None}
+return _b_.str.mp_length(msg)}
 $io.tp_methods=["flush","write"]
 $io.tp_getset=["encoding"]
 modules['_sys']={_getframe :function(){var $=$B.args("_getframe",1,{depth:null},arguments,{depth:0})

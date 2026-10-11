@@ -1,7 +1,7 @@
 # Patches applied to the vendored Brython
 
 `brython_runtime.js` and `brython_compiler.js` are cut from one bundle, built
-from Brython's master of 11 September 2026 plus one hundred and thirteen proposed commits
+from Brython's master of 11 September 2026 plus one hundred and twenty proposed commits
 (`metaclass-getattribute-args` in two, as amended for its PR) and four merged
 upstream since (#3022, #2996, #2989, #2982), with **four** edits
 made in the file itself afterwards. The wrapper, the integer format and the
@@ -88,8 +88,8 @@ written against:
 | `str-keeps-its-characters` | `str()` and `repr()` give the characters as they are: a zero-width space was put before a combining character, and astral characters were counted twice afterwards |
 | `str-slice-step-astral` | a slice with a step counts characters, where it stepped through UTF-16 code units and cut astral characters in two |
 | `write-str-check` | the console's `write()` takes any str, where it refused one holding an astral character and a str subclass: with `str-keeps-its-characters`, `print("😀")` raised |
-| `str-subclass-arguments` | a str method reads a str subclass by its value, as receiver or argument: `join` wrote `[object Object]`, `lstrip()`, `startswith`, `endswith` and `rpartition` raised a JavaScript error, `find`, `index`, `split` and `replace` missed, `encode` encoded the object, `translate` dropped a replacement that is no JavaScript string; `normalize_start_end` reads the value once for every method that takes a start and an end |
-| `str-astral-positions` | `partition`, `splitlines`, `endswith`, `replace` with an empty pattern, the width and precision of `format()` and `translate` to a code point count characters, where they mixed UTF-16 positions with them. Written for the merged state of `str-subclass-arguments` |
+| `str-subclass-arguments` | a str method reads a str subclass by its value, as receiver or argument: `join` wrote `[object Object]`, `lstrip()`, `startswith`, `endswith` and `rpartition` raised a JavaScript error, `find`, `index`, `split` and `replace` missed, `encode` encoded the object; `normalize_start_end` reads the value once for every method that takes a start and an end |
+| `str-astral-positions` | `partition`, `splitlines`, `endswith`, `replace` with an empty pattern, the width and precision of `format()` count characters, where they mixed UTF-16 positions with them. Written for the merged state of `str-subclass-arguments` |
 | `str-astral-results` | what a str method returns goes through `$B.String`, as `%` and `+` already did, so an astral character in it counts once: `len("😀a".upper())` was 3, and so for `join`, `strip`, `split`, `replace`, `ljust`, `zfill`, `title`, `*` and `bytes.decode` among others |
 | `str-center-margin` | `center()` puts the odd fill char left when the width is odd too, and counts an astral character once |
 | `float-str-subclass` | `float()` reads a str subclass by its value when it defines no `__float__`, where it refused it as no string |
@@ -97,6 +97,13 @@ written against:
 | `classmethod-hook-function` | only a plain function given as `__class_getitem__` or `__init_subclass__` is made a classmethod; a staticmethod or a callable was wrapped and raised. The `__init_subclass__` half is `init-subclass-classmethod`'s |
 | `class-dict-kept` | a `__dict__` a class defines is kept, where class creation put its own descriptor over it |
 | `set-name-every-key` | `__set_name__` is called for every name of a class, `__doc__` and `__module__` included |
+| `bytes-iterator-keeps-position` | a bytes iterator asked for its iterator keeps its position, where `list(it)` started it over |
+| `bytearray-iterator-live-length` | a bytearray iterator reads the size its bytearray has now, and stays exhausted once it is: after `clear()` it yielded undefined, after `append()` it stopped short |
+| `str-translate-errors` | `translate()` keeps a character only on a `LookupError` of its table, where any error did, and takes a str (a subclass or an astral one included), None or a code point, refusing anything else as CPython does, where it dropped it |
+| `write-returns-count` | the console's `write()` returns the number of characters written, where it returned None |
+| `iterator-length-hint` | `__length_hint__` of a list, tuple, str, bytes, bytearray, range or reversed list iterator is what remains, where it was the whole sequence; list and tuple iterators keep an index, a list's read live and exhausted for good |
+| `iterator-setstate` | `__setstate__` of those iterators moves them, the integer brought within bounds as CPython does (`$B.clip_index`), and leaves an exhausted one alone, where list, tuple and reversed list ignored it and the others took any value. Written for the merged state of `iterator-length-hint`, `bytes-iterator-keeps-position` and `bytearray-iterator-live-length` |
+| `str-maketrans-astral` | `maketrans()` reads characters, where it read UTF-16 code units and made two entries, or refused, for an astral one |
 | `method-qualname-kept` | a method keeps the `__qualname__` the compiler gave it, where class creation rewrote it: a method of a local class lost its `<locals>` path, and a function stored by `type()` took the class's name |
 | `mro-duplicate-base` | a base written twice is refused as `duplicate base class A`, where the MRO reported an inconsistent hierarchy |
 | `solid-base-builtin-layout` | a builtin laid out apart from its base is its own solid base, as by its size in CPython: `class X(list, dict)` is refused, and `class X(A, list)` lays out on `list` |
@@ -224,6 +231,8 @@ than by a build-time check, and going upstream retires none of them:
 | code from `compile()` runs where its tree leaves a field out (branch `compile-ast-optional-none`) | `tests/vendor.test.js`, in the compiler's engine |
 | a loop over a str runs in a strict module, a str subclass iterates, `str()`, `repr()` and a stepped slice keep astral and combining characters, a descriptor's setters return None, and `__slots__` takes a str subclass, keeps a single name, and refuses a slot whose descriptor is gone (branches `for-loop-inum`, `str-subclass-iteration`, `str-keeps-its-characters`, `str-slice-step-astral`, `descriptor-set-returns-none`, `slots-str-subclass`, `slots-valid-identifiers`, `slot-deleted-descriptor`) | `tests/vendor.test.js`, each answer computed apart, and `tests/slot-attributes.test.js`, a slot written through its descriptor repainting |
 | str methods read a str subclass, count an astral character once in positions and lengths, `center()` pads as CPython, `float()` reads a str subclass, `print()` writes astral text, and a class keeps its hooks, its `__dict__`, its `__set_name__` calls and its methods' `__qualname__` (branches `str-subclass-arguments`, `str-astral-positions`, `str-astral-results`, `str-center-margin`, `float-str-subclass`, `write-str-check`, `class-getitem-raw-key`, `classmethod-hook-function`, `class-dict-kept`, `set-name-every-key`, `method-qualname-kept`) | `tests/vendor.test.js`, each answer computed apart |
+| a bytes iterator keeps its position, a bytearray iterator reads the current size, `translate()` propagates its table's errors and refuses what it cannot use, `maketrans()` reads astral characters (branches `bytes-iterator-keeps-position`, `bytearray-iterator-live-length`, `str-translate-errors`, `str-maketrans-astral`, and `iterator-length-hint`, `iterator-setstate` for what remains and where an iterator is put) | `tests/vendor.test.js`, each answer computed apart |
+| the console's `write()` returns the number of characters written (branch `write-returns-count`) | `tests/vendor.test.js`, through the runtime's stdout |
 | a method-wrapper compares and hashes by its function and its receiver (master's `e2e990dd6`, #2989) | `tests/vendor.test.js`, and `tests/method-identity.test.js`, `box.__setattr__` read twice through the runtime's wrapper |
 | the `__dict__` attribute is read as Python reads it, through `vars()`, on a slotted instance and through `super(C, C)`, and `__init_subclass__` is a classmethod (branches `init-subclass-classmethod`, `super-type-no-instance`, `slots-no-dict-descriptor`, `vars-dict-attribute`) | `tests/vendor.test.js`, and `tests/oracle-attributes.test.js`, the model and the page held against CPython |
 
