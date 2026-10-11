@@ -4979,10 +4979,11 @@ var klass=$B.get_class(obj),raw=$B.search_in_mro(klass,name,$B.NULL)
 if(raw===$B.NULL){$B.RAISE(_b_.TypeError,`bad operand type for ${op_repr}: '${$B.class_name(obj)}'`)}
 return $B.call_special(raw,obj)}
 $B.call_special=function(raw,obj,...args){
-if(typeof raw=='function'){
+var klass=$B.get_class(raw)
+if(klass===$B.function){
 return $B.$call(raw,obj,...args)}
-var descr_get=raw.ob_type && raw.ob_type.tp_descr_get
-if(descr_get){return $B.$call(descr_get(raw,obj,$B.get_class(obj)),...args)}
+var descr_get=$B.search_slot(klass,'tp_descr_get',$B.NULL)
+if(descr_get !==$B.NULL){return $B.$call(descr_get(raw,obj,$B.get_class(obj)),...args)}
 return $B.$call(raw,...args)}
 $B.search_in_dict=function(obj,attr,_default){if($B.get_dict(obj)){try{
 var v=$B.get_from_dict(obj,attr,$B.NULL)}catch(err){console.log('error',obj,attr)
@@ -7279,31 +7280,34 @@ if(diff <=0){return bytes.$factory($.self.source)}
 var type=main_type(self)
 var ljust=type.tp_funcs.ljust($.self,$.self.source.length+Math.floor(diff/2),$.fillbyte)
 return type.tp_funcs.rjust(ljust,$.width,$.fillbyte)}
-function count(self){var $=$B.args('count',4,{self:null,sub:null,start:null,end:null},arguments,{start:0,end:-1},null,null)
-var self=$.self,sub=$.sub,start=$.start,end=$.end
-var nb=0,len=self.source.length
+function search_bounds(self,start,end){
+var len=self.source.length
+var bounds=[start,end].map(function(bound,rank){if(bound===_b_.None){return rank==0 ? 0 :len}
+try{
+bound=Number($B.PyNumber_Index(bound))}catch(err){$B.RAISE(_b_.TypeError,"slice indices must be integers "+
+"or None or have an __index__ method")}
+return bound < 0 ? Math.max(0,bound+len):bound})
+return[bounds[0],Math.min(bounds[1],len)]}
+function matches(self,seq,pos){for(var j=0;j < seq.length;j++){if(self.source[pos+j]!=seq[j]){return false}}
+return true}
+function count(self){var $=$B.args('count',4,{self:null,sub:null,start:null,end:null},arguments,{start:_b_.None,end:_b_.None},null,null)
+var self=$.self,sub=$.sub,[start,end]=search_bounds(self,$.start,$.end)
+var nb=0
 if(typeof sub=="number"){if(sub < 0 ||sub > 255){$B.RAISE(_b_.ValueError,"byte must be in range(0, 256)")}
-for(var b of self.source){if(b==sub){nb++}}
+for(var i=start;i < end;i++){if(self.source[i]==sub){nb++}}
 return nb}
 check_buffer(sub)
 var seq=get_list_from_bytes_like(sub)
-var seq_len=seq.length
-var le
-for(var i=0;i < len;i++){var found=1
-for(var j=0;j < seq_len;j++){if(self.source[i+j]!=seq[j]){found=0
-break}}
-nb+=found}
+if(start > end){return 0}
+if(seq.length==0){return end-start+1}
+for(var i=start;i <=end-seq.length;i++){if(matches(self,seq,i)){nb++
+i+=seq.length-1}}
 return nb}
-function endswith(){var $=$B.args('endswith',4,{self:null,suffix:null,start:null,end:null},arguments,{start:-1,end:-1},null,null)
-var self=$.self,suffix=$.suffix,start=$.start,end=$.end
+function endswith(){var $=$B.args('endswith',4,{self:null,suffix:null,start:null,end:null},arguments,{start:_b_.None,end:_b_.None},null,null)
+var self=$.self,suffix=$.suffix,[start,end]=search_bounds(self,$.start,$.end)
 if(is_bytes_like(suffix)){var seq=get_list_from_bytes_like(suffix)
-start=start==-1 ? 0 :start
-end=end==-1 ? self.source.length :end
-var res=true
-var seq_len=seq.length
-if(seq_len > end-start){return false}
-for(let i=0;i < seq_len && res;i++){res=self.source[end-seq_len+i]==seq[i]}
-return res}else if($B.is_tuple(suffix)){for(let sub of suffix){if(endswith(self,sub,start,end)){return true}}
+return end-start >=seq.length &&
+matches(self,seq,end-seq.length)}else if($B.is_tuple(suffix)){for(let sub of suffix){if(endswith(self,sub,start,end)){return true}}
 return false}else{
 $B.RAISE(_b_.TypeError,"endswith first arg must be bytes-like "+
 "or a tuple of bytes-like, not "+$B.class_name($.suffix))}}
@@ -7319,23 +7323,13 @@ buffer.splice.apply(buffer,[i,1].concat(tabs))}}
 return main_type(self).$factory(buffer)}
 function find(){var func=this 
 var $=$B.args(func,4,{self:null,sub:null,start:null,end:null},arguments,{start:_b_.None,end:_b_.None},null,null)
-var self=$.self,sub=$.sub,start=$.start,end=$.end
+var self=$.self,sub=$.sub,[start,end]=search_bounds(self,$.start,$.end)
 check_buffer_or_int(sub)
 var seq
 if($B.is_int(sub)){seq=[$B.PyNumber_Index(sub)]}else{
 seq=get_list_from_bytes_like(sub)}
-var boundaries=_b_.slice.$conv_for_seq({start,stop:end,step:1},self.source.length)
-start=boundaries.start
-end=boundaries.stop
-var seq_len=seq.length
-if(func=='find'){for(var i=start;i < end-seq_len+1;i++){var found=true
-for(var j=0;j < seq_len;j++){if(self.source[i+j]!=seq[j]){found=false
-break}}
-if(found){return i}}}else{
-for(var i=end-1;i > start-seq_len;i--){var found=true
-for(var j=0;j < seq_len;j++){if(self.source[i+j]!=seq[j]){found=false
-break}}
-if(found){return i}}}
+if(func=='find'){for(var i=start;i <=end-seq.length;i++){if(matches(self,seq,i)){return i}}}else{
+for(var i=end-seq.length;i >=start;i--){if(matches(self,seq,i)){return i}}}
 return-1}
 function fromhex(){var $=$B.args('fromhex',2,{cls:null,string:null},arguments,null,null,null)
 var cls=$.cls,string=$.string
@@ -7557,15 +7551,14 @@ start=pos=pos+1}else{
 pos++}}
 if(start < source.length){res.push(cls.$factory(source.slice(start)))}
 return $B.$list(res)}
-function startswith(){var $=$B.args('startswith',3,{self:null,prefix:null,start:null},arguments,{start:0})
-var self=$.self,prefix=$.prefix,start=$.start
+function startswith(){var $=$B.args('startswith',4,{self:null,prefix:null,start:null,end:null},arguments,{start:_b_.None,end:_b_.None},null,null)
+var self=$.self,prefix=$.prefix,[start,end]=search_bounds(self,$.start,$.end)
 var cls=this 
-if($B.$isinstance($.prefix,[bytes,bytearray])){let res=true
-for(let i=0;i < prefix.source.length && res;i++){res=self.source[start+i]==prefix.source[i]}
-return res}else if($B.is_tuple(prefix)){
+if($B.$isinstance($.prefix,[bytes,bytearray])){return end-start >=prefix.source.length &&
+matches(self,prefix.source,start)}else if($B.is_tuple(prefix)){
 for(let sub of prefix){if(! $B.$isinstance(sub,[bytes,bytearray])){$B.RAISE(_b_.TypeError,"startswith first arg must be "+
 "bytes or a tuple of bytes, not "+$B.class_name(prefix))}
-if(startswith.call(cls,self,sub,start)){return true}}
+if(startswith.call(cls,self,sub,start,end)){return true}}
 return false}else{
 $B.RAISE(_b_.TypeError,"startswith first arg must be bytes "+
 "or a tuple of bytes, not "+$B.class_name(prefix))}}
@@ -8186,8 +8179,7 @@ bytes_funcs.expandtabs=function(self){return expandtabs.apply(null,arguments)}
 bytes_funcs.find=function(self,sub){return find.apply('find',arguments)}
 bytes_funcs.fromhex=function(self){return fromhex.apply(null,arguments)}
 bytes_funcs.hex=function(){return hex.apply(null,arguments)}
-bytes_funcs.index=function(){var $=$B.args('index',4,{self:null,sub:null,start:null,end:null},arguments,{start:0,end:-1})
-var index=bytes_funcs.find($.self,$.sub,$.start,$.end)
+bytes_funcs.index=function(){var index=find.apply('find',arguments)
 if(index==-1){$B.RAISE(_b_.ValueError,"subsection not found")}
 return index}
 bytes_funcs.isalnum=function(){return isalnum.apply(null,arguments)}
@@ -8210,8 +8202,7 @@ bytes_funcs.removeprefix=function(){return removeprefix.apply(null,arguments)}
 bytes_funcs.removesuffix=function(){return removesuffix.apply(null,arguments)}
 bytes_funcs.replace=function(){return replace.apply(_b_.bytes,arguments)}
 bytes_funcs.rfind=function(){return find.apply('rfind',arguments)}
-bytes_funcs.rindex=function(){var $=$B.args('rfind',4,{self:null,sub:null,start:null,end:null},arguments,{start:0,end:-1})
-var index=bytes_funcs.rfind($.self,$.sub,$.start,$.end)
+bytes_funcs.rindex=function(){var index=find.apply('rfind',arguments)
 if(index==-1){$B.RAISE(_b_.ValueError,"subsection not found")}
 return index}
 bytes_funcs.rjust=function(){return rjust.apply(_b_.bytes,arguments)}
