@@ -1,6 +1,7 @@
 # A __getitem__ iterator asked for its iterator and once exhausted, a
-# __getitem__ defined as a staticmethod, the start of enumerate, a subclass of a
-# builtin iterator, zip() with nothing to zip, and the bounds of a str search.
+# __getitem__ defined as a staticmethod or a callable instance, the start of
+# enumerate, a subclass of a builtin iterator, zip() with nothing to zip, and
+# the bounds of a str or bytes search.
 # `python3` on this module gives the lines the test expects.
 __all__ = ["answers"]
 
@@ -17,6 +18,15 @@ class Static:
     @staticmethod
     def __getitem__(index):
         return [1, 2][index]
+
+
+class Calls:
+    def __call__(self, *args):
+        return len(args)
+
+
+class CallableItem:
+    __getitem__ = Calls()
 
 
 class Seven:
@@ -60,12 +70,15 @@ def answers():
     return [answer(one) for one in [
         sequence_rest,
         lambda: (Static()[1], list(Static())),
+        lambda: CallableItem()[0],
         lambda: list(enumerate("ab", Seven())),
         lambda: list(enumerate("ab", 2 ** 53 + 1)),
         lambda: list(enumerate("ab", 1.5)),
         labelled,
         lambda: list(zip()),
         searches,
+        lambda: (b"aaa".count(b"a", 2), b"abcab".index(b"b", 2), b"abc".find(b"", 4),
+                 bytearray(b"abc").startswith(b"", 4), b"aaa".count(b"aa")),
     ]]
 
 
