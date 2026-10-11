@@ -65,6 +65,23 @@ describe('the vendored Brython carries its repairs', () => {
         expect($B.class_name($B.$getitem(dict, 'rows'))).toBe('list');
     });
 
+    // The engine's own conversion of a list is a copy JavaScript may change,
+    // so the copy is not read back as the list: Brython's test 2474 appends to
+    // it from both sides. What the runtime hands over is its own view, mapped.
+    test('a copy of a list made by the engine is not mapped back to it: list-copy-not-mapped', () => {
+        const hook = $B.pyobj2jsobj_hook;
+        $B.pyobj2jsobj_hook = undefined;
+
+        try {
+            const copy = $B.pyobj2jsobj($B.builtins.list.$factory([1, 2]));
+
+            expect($B.PYOBJ_MAP.has(copy)).toBe(false);
+            expect($B.jsobj2pyobj(copy)).toBe(copy);
+        } finally {
+            $B.pyobj2jsobj_hook = hook;
+        }
+    });
+
     // A debug print here fires on every attribute access on a JavaScript class
     // from Python, so two requests through `js.` fill a server log.
     test('no debug print in JSClass.tp_getattro', () => {
