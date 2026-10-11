@@ -1984,7 +1984,7 @@ function attributeOf(holder, name) {
     if (described !== $B.NULL && has(described, 'tp_descr_set')) {
         if (pyClass(holder) || $B.get_class(described) !== $B.member_descriptor) return UNTOLD;
 
-        const slot = slotValues(holder);
+        const slot = slotValues(holder, false, name);
 
         return slot.has(name) ? slot.get(name) : MISSING;
     }
@@ -2196,8 +2196,10 @@ export const marks = (value) => MARKS.get(value);
 // the storage it names (`d_member.attr`), so a slot a subclass redeclares is
 // its own: by name, the first descriptor of a name along the MRO, as `box.x`
 // reads it, for the slots that hold a value; with `all`, every value stored,
-// a shadowed slot's too. The one reader of a slot's storage.
-function slotValues(value, all = false) {
+// a shadowed slot's too; with `only`, that one name, looked up in each class
+// rather than read off all its entries, since a view asks it once per key.
+// The one reader of a slot's storage.
+function slotValues(value, all = false, only = null) {
     const $B = globalThis.__BRYTHON__;
     const named = new Map();
     const stored = [];
@@ -2207,8 +2209,10 @@ function slotValues(value, all = false) {
     for (const cls of Array.isArray(mro) ? mro : []) {
         if ((cls.tp_flags & $B.TPFLAGS.HEAPTYPE) === 0) continue;
 
-        for (const [name, member] of pyEntries($B.get_dict(cls))) {
-            if ($B.get_class(member) !== $B.member_descriptor) continue;
+        const entries = only === null ? pyEntries($B.get_dict(cls)) : [[only, $B.search_in_dict(cls, only, $B.NULL)]];
+
+        for (const [name, member] of entries) {
+            if (member === $B.NULL || $B.get_class(member) !== $B.member_descriptor) continue;
 
             const held = Object.hasOwn(value, member.d_member.attr);
 
@@ -3415,7 +3419,7 @@ function instanceView(value) {
 
         return (
             (attributes !== null && typeof attributes === 'object' && Object.hasOwn(attributes, key)) ||
-            slotValues(value).has(key)
+            slotValues(value, false, key).has(key)
         );
     };
     const write = (key, given) => typeof key === 'string' && ($B.$setattr(value, key, entering(given)), true);
