@@ -1123,6 +1123,26 @@ test('bytes iterators, translate() and maketrans() answer as in CPython: bytes-i
     ]);
 });
 
+// A __getitem__ iterator started over when asked for its iterator and read
+// its sequence again once exhausted; __getitem__ was called unbound, whatever
+// its descriptor; enumerate counted from its start with JavaScript arithmetic;
+// a subclass of filter made filters; zip() made an iterator it could not run;
+// a str search looked beyond its bounds.
+test('sequences, iterators and str searches answer as in CPython: sequence-iterator-position, getitem-binding, enumerate-start, builtin-iterator-subclass, zip-no-argument, str-search-bounds', async () => {
+    const { answers } = await import('./fixtures/sequences_and_searches.py');
+
+    expect([...answers()]).toEqual([
+        "([2, 3], 'stop')",
+        '(2, [1, 2])',
+        "[(7, 'a'), (8, 'b')]",
+        "[(9007199254740993, 'a'), (9007199254740994, 'b')]",
+        'TypeError',
+        "('Labelled', 'derived', True, [1, 2])",
+        '[]',
+        '(-1, -1, 1, False, False, 4, 1)'
+    ]);
+});
+
 // The console's write() returned None where CPython gives the number of
 // characters written. A component cannot import `sys`; the runtime's stdout
 // is read where Brython keeps it.
