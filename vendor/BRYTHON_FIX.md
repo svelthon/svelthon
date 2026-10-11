@@ -1,8 +1,8 @@
 # Patches applied to the vendored Brython
 
 `brython_runtime.js` and `brython_compiler.js` are cut from one bundle, built
-from Brython's master of 11 September 2026 plus one hundred and twenty proposed commits
-(`metaclass-getattribute-args` in two, as amended for its PR) and four merged
+from Brython's master of 11 September 2026 plus one hundred and twenty-six proposed commits
+(`metaclass-getattribute-args` and `iterator-setstate` in two, as amended for their PRs) and four merged
 upstream since (#3022, #2996, #2989, #2982), with **four** edits
 made in the file itself afterwards. The wrapper, the integer format and the
 `__call__` binding carry a `/* SVELTHON patch, see BRYTHON_FIX.md */` comment,
@@ -103,6 +103,12 @@ written against:
 | `write-returns-count` | the console's `write()` returns the number of characters written, where it returned None |
 | `iterator-length-hint` | `__length_hint__` of a list, tuple, str, bytes, bytearray, range or reversed list iterator is what remains, where it was the whole sequence; list and tuple iterators keep an index, a list's read live and exhausted for good |
 | `iterator-setstate` | `__setstate__` of those iterators moves them, the integer brought within bounds as CPython does (`$B.clip_index`), and leaves an exhausted one alone, where list, tuple and reversed list ignored it and the others took any value. Written for the merged state of `iterator-length-hint`, `bytes-iterator-keeps-position` and `bytearray-iterator-live-length` |
+| `sequence-iterator-position` | an iterator over a `__getitem__` sequence keeps its position through `iter()` and stays exhausted, where it started over and read the sequence again |
+| `getitem-binding` | `__getitem__` is bound like any special method (`$B.call_special`), in subscription, iteration, `reversed()`, `**` and `dict()`, where a staticmethod, classmethod or property raised TypeError |
+| `enumerate-start` | the start of `enumerate` is an index (`__index__`, bool, big int) counted as a Python int, where it was kept as given and incremented in JavaScript |
+| `builtin-iterator-subclass` | a subclass of `enumerate`, `filter`, `map`, `zip` or `reversed` makes instances of the subclass, with a `__dict__`, where `enumerate` and `filter` made base instances |
+| `zip-no-argument` | `zip()` with no iterable is empty, where it raised a JavascriptError |
+| `str-search-bounds` | `find`, `rfind`, `index`, `count`, `startswith` and `endswith` adjust their bounds as CPython does (`normalize_start_end`), where they searched past the end bound, matched an empty pattern past the string and counted it in UTF-16 units |
 | `str-maketrans-astral` | `maketrans()` reads characters, where it read UTF-16 code units and made two entries, or refused, for an astral one |
 | `method-qualname-kept` | a method keeps the `__qualname__` the compiler gave it, where class creation rewrote it: a method of a local class lost its `<locals>` path, and a function stored by `type()` took the class's name |
 | `mro-duplicate-base` | a base written twice is refused as `duplicate base class A`, where the MRO reported an inconsistent hierarchy |
@@ -233,6 +239,7 @@ than by a build-time check, and going upstream retires none of them:
 | str methods read a str subclass, count an astral character once in positions and lengths, `center()` pads as CPython, `float()` reads a str subclass, `print()` writes astral text, and a class keeps its hooks, its `__dict__`, its `__set_name__` calls and its methods' `__qualname__` (branches `str-subclass-arguments`, `str-astral-positions`, `str-astral-results`, `str-center-margin`, `float-str-subclass`, `write-str-check`, `class-getitem-raw-key`, `classmethod-hook-function`, `class-dict-kept`, `set-name-every-key`, `method-qualname-kept`) | `tests/vendor.test.js`, each answer computed apart |
 | a bytes iterator keeps its position, a bytearray iterator reads the current size, `translate()` propagates its table's errors and refuses what it cannot use, `maketrans()` reads astral characters (branches `bytes-iterator-keeps-position`, `bytearray-iterator-live-length`, `str-translate-errors`, `str-maketrans-astral`, and `iterator-length-hint`, `iterator-setstate` for what remains and where an iterator is put) | `tests/vendor.test.js`, each answer computed apart |
 | the console's `write()` returns the number of characters written (branch `write-returns-count`) | `tests/vendor.test.js`, through the runtime's stdout |
+| a `__getitem__` iterator keeps its position, `__getitem__` is bound, `enumerate` counts from an index, a builtin iterator's subclass makes its own instances, `zip()` is empty, str searches keep to their bounds (branches `sequence-iterator-position`, `getitem-binding`, `enumerate-start`, `builtin-iterator-subclass`, `zip-no-argument`, `str-search-bounds`) | `tests/vendor.test.js`, each answer computed apart |
 | a method-wrapper compares and hashes by its function and its receiver (master's `e2e990dd6`, #2989) | `tests/vendor.test.js`, and `tests/method-identity.test.js`, `box.__setattr__` read twice through the runtime's wrapper |
 | the `__dict__` attribute is read as Python reads it, through `vars()`, on a slotted instance and through `super(C, C)`, and `__init_subclass__` is a classmethod (branches `init-subclass-classmethod`, `super-type-no-instance`, `slots-no-dict-descriptor`, `vars-dict-attribute`) | `tests/vendor.test.js`, and `tests/oracle-attributes.test.js`, the model and the page held against CPython |
 

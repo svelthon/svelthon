@@ -48,6 +48,9 @@ def restored():
     next(it)
     it.__setstate__(1)
     seen.append(list(it))
+    it = iter(range(2 ** 54))
+    it.__setstate__(2 ** 53 + 1)
+    seen.append([next(it)])
     return seen
 
 

@@ -1738,7 +1738,8 @@ $B.make_js_iterator_no_trace=function(iterator){if(Array.isArray(iterator)){if(i
 return iterator.map($B.jsobj2pyobj)[Symbol.iterator]()}}
 return $B.make_js_iterator(iterator,$B.NULL)}
 $B.clip_index=function(state,low,high){
-return Math.min(Math.max(Number($B.PyNumber_Index(state)),low),high)}
+var index=$B.PyNumber_Index(state)
+return index < low ? low :index > high ? high :index}
 $B.make_js_iterator=function(iterator,frame,lineno,inum){
 var set_lineno=$B.set_lineno
 if(frame===undefined){if(! $B.frame_obj){set_lineno=function(){}}else{
@@ -6943,7 +6944,7 @@ return typeof done=='bigint' ?
 _b_.int.$int_or_long(BigInt(len)-done):len-done}
 range_iterator_funcs.__reduce__=function(self){return $B.fast_tuple([_b_.iter,$B.fast_tuple([self.obj]),_b_.None])}
 range_iterator_funcs.__setstate__=function(self,value){
-var index=$B.clip_index(value,0,Number(range_iterator_funcs.__length_hint__(self)))
+var index=$B.clip_index(value,0,range_iterator_funcs.__length_hint__(self))
 self.it+=typeof self.it=='bigint' ?
 BigInt(index)*self.step :index*self.step
 return _b_.None}
