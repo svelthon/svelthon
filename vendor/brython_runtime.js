@@ -12768,7 +12768,6 @@ if(memo.has(pyobj)){return memo.get(pyobj)}
 var jsobj=[]
 memo.set(pyobj,jsobj)
 for(var item of pyobj){jsobj.push(pyobj2jsobj(item,memo))}
-PYOBJ_MAP.set(jsobj,pyobj)
 return jsobj}
 if(has_type(klass,_b_.dict)){
 memo=memo ?? new Map()
