@@ -4994,22 +4994,27 @@ const urlish = (value) =>
 // getter the author wrote, a business object's lazy `fetch` or `method`, is
 // not an event's, and is not run to find that out.
 //
-// The platform's getters are those of its own classes, which a server writes
-// in JavaScript (Node's `Request` and `URL`), from whichever context handed
-// them over, and those written in no language at all, a browser's.
+// The platform's getters are those its own classes carry, the very functions
+// and not a class of the same name, which a server writes in JavaScript (Node's
+// `Request` and `URL`), and those written in no language at all, a browser's,
+// from any context.
 const NO_FIELD = Symbol();
 const NATIVE = /\{\s*\[native code\]\s*\}\s*$/;
-const PLATFORM = new Set(['Request', 'Response', 'URL', 'Headers']);
+const PLATFORM = ['Request', 'Response', 'URL', 'Headers'];
+const platformGetter = (getter, name) =>
+    PLATFORM.some((one) => {
+        for (let proto = globalThis[one]?.prototype; proto; proto = Object.getPrototypeOf(proto)) {
+            if (Object.getOwnPropertyDescriptor(proto, name)?.get === getter) return true;
+        }
+        return false;
+    }) || NATIVE.test(Function.prototype.toString.call(getter));
 const member = (value, name) => {
     for (let at = value; at !== null; at = Object.getPrototypeOf(at)) {
         const own = Object.getOwnPropertyDescriptor(at, name);
         if (own === undefined) continue;
         if ('value' in own) return own.value;
 
-        const platform =
-            (Object.hasOwn(at, 'constructor') && PLATFORM.has(at.constructor?.name)) ||
-            (own.get !== undefined && NATIVE.test(Function.prototype.toString.call(own.get)));
-        return platform ? value[name] : NO_FIELD;
+        return own.get !== undefined && platformGetter(own.get, name) ? value[name] : NO_FIELD;
     }
     // Described nowhere: an ordinary object reads nothing, and a proxy, a URL
     // handed over from another context or while prerendering, answers.

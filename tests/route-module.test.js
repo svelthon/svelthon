@@ -333,6 +333,28 @@ describe('what crosses as a request event', () => {
         }
     );
 
+    // A class of the author's is not the platform's for bearing its name: the
+    // getters trusted are the platform's own functions.
+    test('and a class of the author named Request has none of its getters run', () => {
+        let reads = 0;
+
+        class Request {
+            constructor() {
+                this.headers = { get: () => null };
+            }
+
+            get method() {
+                reads += 1;
+                return 'GET';
+            }
+        }
+
+        const value = { payload: 42, fetch() {}, url: new URL('https://example.test/'), params: {}, request: new Request() };
+
+        expect(given(value)).toEqual({ kind: 'JSObject', payload: 42 });
+        expect(reads).toBe(0);
+    });
+
     // And a URL that refuses the member the recognition itself reads. No version
     // of SvelteKit guards `pathname` today, and the rule held here is what the
     // boundary does when one does: the throw must not **escape** — that was the
