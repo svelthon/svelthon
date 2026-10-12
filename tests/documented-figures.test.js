@@ -36,13 +36,8 @@ describe('the sizes the documents claim', () => {
         expect(read()).toBe(Math.round(runtime));
     });
 
-    // And the bundle it is cut from, named in the same sentence so a reader can
-    // see what the split buys. It does not ship, so it is not in `files`.
-    test('and the size of the one that does not', () => {
-        const full = gzipSync(readFileSync('build/brython.js')).length / KIB;
-
-        expect(stated(english, /the full bundle it is cut from is (\d+) KB/)).toBe(Math.round(full));
-    });
+    // The bundle it is cut from, named in the same sentence, does not ship and
+    // is not in the repository: its figure is held by a private test.
 
     // The two documents have to agree with each other, which is the drift an
     // outside reading found first: one said 250, the other 255.
