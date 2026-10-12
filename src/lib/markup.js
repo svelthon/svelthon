@@ -2170,8 +2170,12 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     // the Python value itself, a `Price(float)` with its class and a `15.0`
     // still a float, by every way a prop is written: by name, short, spread,
     // bound, and under a name beginning with `on`, which may be a callback or
-    // data. A JavaScript child is handed JavaScript's own.
-    const toPythonChild = () => isComponent(tag) && where?.pythonChildren?.has(tag.name) === true;
+    // data. A JavaScript child is handed JavaScript's own. The tag is the child
+    // imported under its name only while the markup binds no name of that
+    // spelling: a snippet's parameter, an `{#each}` item, holds whatever
+    // component it is handed.
+    const toPythonChild = () =>
+        isComponent(tag) && where?.pythonChildren?.has(tag.name) === true && scoped(tag.name.split('.')[0]) === null;
 
     // The iterations a group binding stands in, as Svelte finds them: every
     // `{#each}` whose names the binding reads, and then those its iterable
