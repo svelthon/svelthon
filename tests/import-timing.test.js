@@ -10,6 +10,7 @@ import { recorded } from './fixtures/timing_log.py';
 import { later, again, retried } from './fixtures/timing_imports.py';
 import { store } from './fixtures/timing_store.svelte.py';
 import TimingImport from './fixtures/TimingImport.svelte';
+import TimingLate from './fixtures/TimingLate.svelte';
 import { early, late } from './fixtures/cycle_a.py';
 import { seen, refused, now } from './fixtures/cycle_b.py';
 
@@ -45,6 +46,24 @@ test('an import in a branch not taken runs nothing, in a module, a reactive modu
     expect(target.textContent).toBe('ok');
     expect(store.count).toBe(0);
     expect(recorded()).not.toContain('never');
+
+    unmount(instance);
+    target.remove();
+});
+
+// A reactive module first imported while the page reads, by a `@derived` or a
+// function the template calls: its body binds its names outside that reaction,
+// and what the page reads of it afterwards is followed.
+test('a reactive module first imported while the page reads binds its names, and is followed', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+    const instance = mount(TimingLate, { target });
+
+    flushSync();
+    expect(target.textContent).toBe('7 7');
+
+    instance.bump();
+    flushSync();
+    expect(target.textContent).toBe('8 8');
 
     unmount(instance);
     target.remove();

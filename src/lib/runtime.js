@@ -6922,6 +6922,12 @@ const WAITING = new Map();
 // `import x`, `from x import y` and `__import__("x")` all reach the engine's
 // `$__import__`, which looks the name up in `$B.imported`: a body still
 // waiting runs first, so the lookup finds its namespace.
+//
+// Untracked, as the module's own: an import in a `@derived` or in a function
+// the template calls runs the body under that reaction, and a reactive
+// module's first bindings were writes Svelte refused there
+// (`state_unsafe_mutation`). What the importer reads of the module afterwards
+// is read where it is, and followed.
 const importsRunBodies = ($B) => {
     if ($B.$svelthonImports) return;
     $B.$svelthonImports = true;
@@ -6929,7 +6935,9 @@ const importsRunBodies = ($B) => {
     const engine = $B.$__import__;
 
     $B.$__import__ = function (name, ...rest) {
-        WAITING.get(name)?.();
+        const waiting = WAITING.get(name);
+
+        if (waiting !== undefined) untrack(waiting);
         return Reflect.apply(engine, this, [name, ...rest]);
     };
 };
