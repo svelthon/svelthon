@@ -1,7 +1,6 @@
 <script lang="python">
-# The same effect, twice: once written at the top of the component, once created
-# by a function that the component calls while it initialises. Only one of them
-# runs.
+# The same effect in both of its spellings, the decorator and the arrow, each at
+# the top of the component, where an effect is written. Both run.
 n = 0
 top_ran = "never"
 arrow_ran = "never"
@@ -24,9 +23,8 @@ def top():
     top_ran = "ran, n={}".format(n)
 
 
-# The third shape used to live here, one indentation level deeper, and did
-# nothing at all. It is refused at compile time now, so it cannot be shown
-# running: the message is printed beside this box instead.
+# The third shape, an effect decorated inside a function, is refused at compile
+# time, so it cannot be shown running: the page prints its message instead.
 
 
 def bump():

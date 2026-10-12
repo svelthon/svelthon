@@ -5,7 +5,7 @@ import { python, svelthon, compileOptionsFor } from './src/lib/svelthon.js';
 
 export default defineConfig({
     plugins: [svelthon(), svelte({
-            preprocess: [python({ path: ['src'] })],
+            preprocess: [python({ path: ['demo'] })],
             // vite-plugin-svelte's module filter, widened to Python: a
             // `.svelte.py` compiles as a `.svelte.ts` does, under its own name.
             experimental: { compileModule: { extensions: ['.js', '.ts', '.py'] } },
@@ -40,6 +40,16 @@ export default defineConfig({
     // server died before the first edit.
     server: {
         watch: { ignored: ['**/tests/scratch/**'] }
+    },
+
+    // The demo's pages, served under `/demo/`; the two pages at the root are
+    // the browser check's probe and the bench.
+    build: {
+        rolldownOptions: {
+            input: ['index', 'snippets', 'directives', 'instances', 'effects', 'django'].map((page) =>
+                fileURLToPath(new URL(`./demo/${page}.html`, import.meta.url))
+            )
+        }
     },
     test: {
         environment: 'jsdom',

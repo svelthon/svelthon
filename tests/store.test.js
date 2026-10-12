@@ -3,7 +3,7 @@ import { mount, unmount, flushSync } from './mounted.js';
 import StoreA from './fixtures/StoreA.svelte';
 import StoreB from './fixtures/StoreB.svelte';
 import StoreFromPython from './fixtures/StoreFromPython.svelte';
-import { store } from '../src/counter_store.svelte.py';
+import { store } from '../demo/counter_store.svelte.py';
 
 // A store's state outliving a test is the feature this file is about, so a test
 // that opens on an absolute value is asserting the order it happens to run in:

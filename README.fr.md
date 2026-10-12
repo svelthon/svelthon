@@ -73,7 +73,7 @@ reste de cette configuration et ce que chaque ligne apporte.
 
 ```sh
 npm install
-npm run dev
+npm run dev          # la démo, sous /demo/
 
 npm test             # 1 807 tests : sémantique, props, réactivité, surface Svelte
 npm run test:quiet   # la sortie de la suite : un run vert ne doit rien dire
@@ -1720,7 +1720,7 @@ npm test             # grille de fidélité, props, réactivité (jsdom)
 npm run test:browser # interop DOM, dans un vrai Chromium
 npm run test:hmr     # invalidation des modules virtuels (composant + store)
 npm run test:all     # les trois ci-dessus, arrêt au premier échec
-npm run dev          # page de démonstration
+npm run dev          # la démo, sous /demo/
 npm run build
 ```
 

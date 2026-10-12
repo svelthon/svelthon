@@ -1,6 +1,6 @@
 import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
-import Greeting from '../src/Greeting.svelte';
+import Greeting from '../demo/Greeting.svelte';
 import PropsHost from './fixtures/PropsHost.svelte';
 import PropsInit from './fixtures/PropsInit.svelte';
 

@@ -7,13 +7,13 @@
 import { test, expect, describe } from 'vitest';
 import { render } from 'svelte/server';
 
-import Counter from '../src/Counter.svelte';
-import Greeting from '../src/Greeting.svelte';
-import Semantics from '../src/Semantics.svelte';
-import StoreDemo from '../src/StoreDemo.svelte';
+import Counter from '../demo/Counter.svelte';
+import Greeting from '../demo/Greeting.svelte';
+import Semantics from '../demo/Semantics.svelte';
+import StoreDemo from '../demo/StoreDemo.svelte';
 import Composition from './fixtures/Composition.svelte';
 import CtxHost from './fixtures/CtxHost.svelte';
-import { store } from '../src/counter_store.svelte.py';
+import { store } from '../demo/counter_store.svelte.py';
 
 // Svelte sprinkles hydration markers through the HTML; only the text matters here.
 const text = (result) => result.body.replace(/<!--[^>]*-->/g, '');

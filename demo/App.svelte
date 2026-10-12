@@ -159,6 +159,19 @@
         </div>
     </article>
 
+    <nav class="demo pages">
+        <div class="head">
+            <h2>More pages</h2>
+        </div>
+        <ul>
+            <li><a href="./snippets.html">Snippets</a>: reusing a piece of markup, in every form Svelte gives it.</li>
+            <li><a href="./directives.html">Directives</a>: what a directive names, as opposed to what it is given.</li>
+            <li><a href="./instances.html">Talking to a child</a>: the same counter, four ways.</li>
+            <li><a href="./effects.html">An effect made inside a function</a>: what Svelthon refuses and Svelte runs.</li>
+            <li><a href="./django.html">Django templates, in Svelthon</a>: the whole translation, for Django and Flask authors.</li>
+        </ul>
+    </nav>
+
     <footer>
         <span><strong>225 KB</strong> gzip, runtime included</span>
         <span><strong>{tests}</strong> tests</span>
@@ -447,6 +460,32 @@
 
     .live :global(button:hover) {
         filter: brightness(1.08);
+    }
+
+    .pages ul {
+        margin: 0;
+        padding: 0.5rem 1.4rem 0.8rem;
+        list-style: none;
+    }
+
+    .pages li {
+        padding: 0.45rem 0;
+        font-size: 0.92rem;
+        color: var(--muted);
+    }
+
+    .pages li + li {
+        border-top: 1px solid var(--border);
+    }
+
+    .pages a {
+        color: var(--accent);
+        font-weight: 600;
+        text-decoration: none;
+    }
+
+    .pages a:hover {
+        text-decoration: underline;
     }
 
     footer {

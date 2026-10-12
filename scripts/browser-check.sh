@@ -85,16 +85,16 @@ done
 # the graph, which overruns Chromium's time budget on a modest machine. Both
 # pages are warmed up before measuring.
 curl -sf -o /dev/null "$URL"
-curl -sf -o /dev/null "http://localhost:$PORT/"
+curl -sf -o /dev/null "http://localhost:$PORT/demo/"
 # The HTML shell answers at once; it is the entry module that triggers the
 # graph's compilation, and that is what has to be waited for.
 curl -sf -o /dev/null "http://localhost:$PORT/src/probe.js"
-curl -sf -o /dev/null "http://localhost:$PORT/src/main.js"
+curl -sf -o /dev/null "http://localhost:$PORT/demo/main.js"
 # The big one: the engine, which Vite transforms before serving and which no
 # cache holds on a first run. Until it is warm, a render can overrun the
 # browser's budget. `boot.js` names this file, so a page asks for this one.
 curl -sf -o /dev/null "http://localhost:$PORT/vendor/brython_runtime.js"
-curl -sf -o /dev/null "http://localhost:$PORT/src/App.svelte"
+curl -sf -o /dev/null "http://localhost:$PORT/demo/App.svelte"
 
 REPORT=$(browse probe 8000 "$URL" |
     grep -o '<pre id="report">[^<]*' | sed 's|<pre id="report">||')
@@ -119,7 +119,7 @@ expected=("increment()" "Hello Ada!" "0 · []" "1180591620717411303424" \
 
 missing=()
 for attempt in 1 2 3; do
-    APP=$(browse "app$attempt" 40000 "http://localhost:$PORT/")
+    APP=$(browse "app$attempt" 40000 "http://localhost:$PORT/demo/")
 
     missing=()
     for one in "${expected[@]}"; do
@@ -143,7 +143,7 @@ for one in "${expected[@]}"; do
 done
 
 # Both dev pages, and what they said while the assertions above read the DOM.
-console_check dev "$URL" "http://localhost:$PORT/"
+console_check dev "$URL" "http://localhost:$PORT/demo/"
 
 # The same page, from a production build. Everything above runs against the dev
 # server, which serves modules one by one; a build bundles them, minifies them
@@ -164,10 +164,10 @@ if npx vite build >/dev/null 2>&1; then
 
     for _ in $(seq 40); do
         sleep 0.5
-        curl -sf -o /dev/null "http://localhost:$PORT/" && break
+        curl -sf -o /dev/null "http://localhost:$PORT/demo/" && break
     done
 
-    BUILT=$(browse built 40000 "http://localhost:$PORT/")
+    BUILT=$(browse built 40000 "http://localhost:$PORT/demo/")
 
     built_missing=()
     for one in "${expected[@]}"; do
@@ -181,7 +181,7 @@ if npx vite build >/dev/null 2>&1; then
         status=1
     fi
 
-    console_check built "http://localhost:$PORT/"
+    console_check built "http://localhost:$PORT/demo/"
 else
     echo "✗ production build — vite build failed"
     status=1

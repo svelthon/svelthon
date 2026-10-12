@@ -1,6 +1,6 @@
 import { test, expect } from 'vitest';
 import { mount, flushSync } from './mounted.js';
-import Counter from '../src/Counter.svelte';
+import Counter from '../demo/Counter.svelte';
 
 test('a click runs Python and the DOM follows', () => {
     const target = document.body.appendChild(document.createElement('div'));

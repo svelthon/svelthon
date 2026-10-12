@@ -3,9 +3,9 @@
 </script>
 
 <script lang="python">
-# Four ways a parent can talk to a child, about one number. Three work. The
-# fourth is the only one that asks the child to *be* an object the parent holds
-# and calls, and that is the one Svelthon does not do yet.
+# Four ways a parent can talk to a child, about one number. Three are props. The
+# fourth asks the child to *be* an object the parent holds and calls, through
+# what the child marks `@export`.
 seen = "nothing yet"
 shared = 10
 outcome = "not tried"
@@ -51,6 +51,8 @@ code = {
     + here + 'mine.focus()',
 }
 </script>
+
+<p class="back"><a href="./">← Svelthon</a></p>
 
 <h1>Talking to a child</h1>
 <p class="lede">The same counter, four ways. Three are props. The fourth is not.</p>
@@ -113,6 +115,10 @@ code = {
         margin: 0 auto;
         padding: 2rem;
         max-width: 46rem;
+    }
+    .back {
+        margin: 0 0 1rem;
+        font-size: 13px;
     }
     h1 {
         margin-bottom: 0;

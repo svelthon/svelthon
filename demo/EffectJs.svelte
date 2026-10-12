@@ -1,5 +1,5 @@
 <script>
-    // The same four shapes in JavaScript, to see where Svelte itself draws the
+    // The same shapes in JavaScript, to see where Svelte itself draws the
     // line. This component declares no Python, so the preprocessor leaves it
     // alone.
     let n = $state(0);

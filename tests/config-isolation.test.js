@@ -25,11 +25,11 @@ x = 1
 <p>{x}</p>
 `;
 
-// The importer's own directory is searched first, and `src` holds no
+// The importer's own directory is searched first, and `demo` holds no
 // `shapes.py`, so only the configured path can find the one in
 // `tests/fixtures`. The name has to be a file that exists, because the `script`
 // hook reads the source back to map its lines.
-const FILE = 'src/App.svelte';
+const FILE = 'demo/App.svelte';
 
 // The prelude does not go into the code the hook returns: it goes into the
 // component's virtual module, which is where the audit read it. That map is on

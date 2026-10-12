@@ -57,7 +57,7 @@ describe('the sizes the documents claim', () => {
     // drifted furthest from the README.
     test('and the demo prints the number the README states', () => {
         const shown = Number(
-            readFileSync('src/App.svelte', 'utf8').match(
+            readFileSync('demo/App.svelte', 'utf8').match(
                 /<strong>(\d+) KB<\/strong> gzip, runtime included/
             )[1]
         );

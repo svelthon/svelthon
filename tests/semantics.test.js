@@ -1,6 +1,6 @@
 import { test, expect } from 'vitest';
 import { mount } from './mounted.js';
-import Semantics from '../src/Semantics.svelte';
+import Semantics from '../demo/Semantics.svelte';
 
 // Each of these is wrong under JavaScript semantics, so passing them means the
 // component really ran through CPython's grammar and Brython's object model —

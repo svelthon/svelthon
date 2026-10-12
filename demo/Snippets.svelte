@@ -56,6 +56,8 @@ beside = here + '{#snippet row(x)}<b>row says {x}</b>{/snippet}\n' + here + '<Ca
 
 {#snippet row(x)}<b>row says {x}</b>{/snippet}
 
+<p class="back"><a href="./">← Svelthon</a></p>
+
 <h1>Snippets</h1>
 <p class="lede">Reusing a piece of markup, in every form Svelte gives it.</p>
 
@@ -150,6 +152,10 @@ beside = here + '{#snippet row(x)}<b>row says {x}</b>{/snippet}\n' + here + '<Ca
         margin: 0 auto;
         padding: 2rem;
         max-width: 46rem;
+    }
+    .back {
+        margin: 0 0 1rem;
+        font-size: 13px;
     }
     h1 {
         margin-bottom: 0;

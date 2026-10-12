@@ -4,10 +4,10 @@
 </script>
 
 <script lang="python">
-# The last of the four holes, and the only one that is a design question rather
-# than an omission. An effect belongs to an owner; a function called at any
-# moment has none. Svelte answers "whoever is initialising", and it can, because
-# it has a current owner at run time. We wire at compile time and have none.
+# An effect belongs to an owner, and a function called at any moment has none.
+# Svelte answers "whoever is initialising", and it can, because it has a current
+# owner at run time. Svelthon wires effects at compile time and has none, so an
+# effect is written at the top of the component and refused anywhere else.
 py_code = (
     "@effect\n"
     "def top(): ...              <- runs\n"
@@ -23,7 +23,7 @@ py_code = (
 
 refusal = (
     "svelthon — a rune belongs at the top level of the module,\n"
-    "           and `@effect` is only read there (src/App.svelte:12)"
+    "           and `@effect` is only read there (App.svelte:9)"
 )
 
 js_code = (
@@ -39,6 +39,8 @@ js_code = (
 )
 </script>
 
+<p class="back"><a href="./">← Svelthon</a></p>
+
 <h1>An effect made inside a function</h1>
 <p class="lede">
     Press <b>+1</b> in each box: an effect that runs says so again with the new number.
@@ -52,8 +54,8 @@ js_code = (
         built and wired to nothing, so it is refused rather than shipped silent:</p>
     <code class="err">{refusal}</code>
     <p class="what">
-        The arrow already refused it by indentation; the decorator now says the same thing.
-        A rune lives at the top level of a component's module, and nowhere else.
+        The arrow is refused there by its indentation, the decorator by this message. A
+        rune lives at the top level of a component's module, and nowhere else.
     </p>
 </section>
 
@@ -74,6 +76,10 @@ js_code = (
         margin: 0 auto;
         padding: 2rem;
         max-width: 46rem;
+    }
+    .back {
+        margin: 0 0 1rem;
+        font-size: 13px;
     }
     h1 {
         margin-bottom: 0;

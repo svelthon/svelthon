@@ -6,9 +6,9 @@
 </script>
 
 <script lang="python">
-# What a directive names is read as JavaScript, whatever the value beside it is
-# written in. So a name that lives only in Python is a name Svelte cannot find,
-# and the failure is silent: the element mounts, nothing runs, nothing is said.
+# What a directive names is a function: one from JavaScript, a def of this
+# component, or a def of a Python module, named with its dot. Each row below
+# names one of them, and each one runs.
 importjs {fly} from "svelte/transition"
 
 import directive_probe
@@ -44,6 +44,8 @@ code = {
     "dottedt": 'in:directive_probe.typewriter    a def in a Python module',
 }
 </script>
+
+<p class="back"><a href="./">← Svelthon</a></p>
 
 <h1>Directives</h1>
 <p class="lede">What a directive <em>names</em>, as opposed to what it is given.</p>
@@ -90,6 +92,10 @@ code = {
         margin: 0 auto;
         padding: 2rem;
         max-width: 46rem;
+    }
+    .back {
+        margin: 0 0 1rem;
+        font-size: 13px;
     }
     h1 {
         margin-bottom: 0;
