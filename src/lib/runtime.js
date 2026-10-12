@@ -5801,7 +5801,7 @@ function descriptorCall(value, origin) {
             const target = boundByGet(call) ? $B.$call($B.$getattr(call, '__get__'), value, pyType(value)) : value;
             const inner = declared(target);
 
-            return $B.$call(target, ...(inner === null ? args : args.slice(0, arityNow(inner.arity))));
+            return inner === null ? $B.$call(target, ...args) : inner.fn(...args.slice(0, arityNow(inner.arity)));
         },
         where: `${$B.class_name(value)}()`,
         arity: Infinity,

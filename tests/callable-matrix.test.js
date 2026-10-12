@@ -337,6 +337,12 @@ test('a __call__ descriptor is called as what the class holds now', () => {
     expect(kept('event')).toBe(0.5);
 });
 
+// And a descriptor handing back another is adapted at each level, where the
+// event reached the function the second one handed back.
+test('a __call__ descriptor handing back another is adapted at each level', () => {
+    expect(mod.outer('event')).toBe(0.25);
+});
+
 // And one that is a builtin, `staticmethod(abs)`, which has no signature to read
 // and is called through Python's own protocol: what it answers is what CPython
 // answers, `round(-0.5)` the int 0 and not a negative zero.

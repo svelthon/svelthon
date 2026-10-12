@@ -34,6 +34,7 @@ __all__ = [
     "lazy_resolutions",
     "strategy",
     "make_ordinary",
+    "outer",
     "mapped",
     "order",
     "listed",
@@ -301,6 +302,23 @@ strategy = Strategy()
 
 def make_ordinary():
     Strategy.__call__ = Ordinary()
+
+
+# And one whose `__get__` hands back an instance whose `__call__` is a
+# descriptor too: each level is adapted, and the event reaches neither.
+class Inner:
+    @property
+    def __call__(self):
+        return nothing
+
+
+class Outer:
+    @property
+    def __call__(self):
+        return Inner()
+
+
+outer = Outer()
 
 mapped = {
     "fn": fn,
