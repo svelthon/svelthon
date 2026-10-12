@@ -16,6 +16,16 @@ test('listing the names of a module runs none of its derived, reading its values
     expect(instance.values()).toBe('read');
 });
 
+// Backwards too: the reverse walk is a second path through the dict.
+test('listing the names of a module backwards runs none of its derived', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+    const instance = mount(LazyNames, { target });
+    flushSync();
+
+    expect([...instance.reversed_names()]).toEqual([true, true]);
+    expect(instance.reversed_values()).toBe('read');
+});
+
 // Walked lazily, the names still notice a key added through the dict, as
 // CPython's walk does; a value replaced is no change of shape.
 test('walking the globals of a module stops at a key added meanwhile, not at a value replaced', () => {

@@ -12,6 +12,19 @@ def names():
 
 
 @export
+def reversed_names():
+    return ["dangerous" in list(reversed(globals())), "dangerous" in list(reversed(globals().keys()))]
+
+
+@export
+def reversed_values():
+    try:
+        return list(reversed(globals().values()))
+    except ValueError:
+        return "read"
+
+
+@export
 def values():
     try:
         return list(globals().values())

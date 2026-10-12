@@ -7941,11 +7941,32 @@ const NAMESPACE_VERSIONS = new WeakMap();
 const changedShape = (dict) => NAMESPACE_VERSIONS.set(dict, (NAMESPACE_VERSIONS.get(dict) ?? 0) + 1);
 
 // Brython walks a dict as items, each with its value read, whether the keys
-// alone are wanted, `list(globals())`, or the pairs. A namespace's value may
-// be a derived, run by being read, so its items read their value only when
-// it is asked for. A key added or removed meanwhile ends the walk, as it ends
-// Brython's.
+// alone are wanted, `list(globals())`, or the pairs, and in both directions,
+// `reversed(globals())`. A namespace's value may be a derived, run by being
+// read, so its items read their value only when it is asked for. A key added
+// or removed meanwhile ends the walk, as it ends Brython's.
 (function lazyNamespaceItems(dict) {
+    const $B = globalThis.__BRYTHON__;
+    const changed = () => $B.RAISE($B.builtins.RuntimeError, 'dictionary changed size during iteration');
+    const iterReversed = dict.$iter_items_reversed;
+
+    // The reverse walk's items are pairs, the value the second of them.
+    dict.$iter_items_reversed = function* (d) {
+        if (!NAMESPACE_DICTS.has(d)) {
+            yield* iterReversed.call(this, d);
+            return;
+        }
+
+        const version = NAMESPACE_VERSIONS.get(d);
+
+        for (const key of Object.keys(d).reverse()) {
+            const pair = Object.defineProperty([key], 1, { get: () => d[key], enumerable: true });
+
+            yield $B.fast_tuple(pair);
+            if (NAMESPACE_VERSIONS.get(d) !== version) changed();
+        }
+    };
+
     const iterItems = dict.$iter_items;
 
     dict.$iter_items = function* (d) {
@@ -7964,9 +7985,7 @@ const changedShape = (dict) => NAMESPACE_VERSIONS.set(dict, (NAMESPACE_VERSIONS.
                 }
             };
 
-            if (NAMESPACE_VERSIONS.get(d) !== version) {
-                globalThis.__BRYTHON__.RAISE(globalThis.__BRYTHON__.builtins.RuntimeError, 'dictionary changed size during iteration');
-            }
+            if (NAMESPACE_VERSIONS.get(d) !== version) changed();
         }
     };
 })(globalThis.__BRYTHON__.builtins.dict);
