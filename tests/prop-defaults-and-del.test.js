@@ -122,6 +122,20 @@ test('a parent passing a deleted prop a new value brings it back', () => {
     expect(instance.seen()).toBe('b 2 True True');
 });
 
+// Back in globals() as soon as the parent passes it, before anything reads the
+// name: `seen()` above reads each prop first, which hid that.
+test('a deleted prop the parent passes again is in globals() before it is read', () => {
+    const { instance } = setup(DeletedPropHost);
+
+    instance.drop();
+    flushSync();
+    expect(instance.listed()).toBe('False False missing False');
+
+    instance.pass();
+    flushSync();
+    expect(instance.listed()).toBe('True True b True');
+});
+
 test.for([
     ['absent', {}, '4|8'],
     ['undefined', { value: undefined, other: undefined }, '4|8'],

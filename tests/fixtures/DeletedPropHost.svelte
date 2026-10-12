@@ -5,6 +5,7 @@
     let child;
     export function drop() { child.drop(); }
     export function seen() { return child.seen(); }
+    export function listed() { return child.listed(); }
     export function pass() { label = 'b'; level = 2; }
 </script>
 

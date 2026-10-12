@@ -12,6 +12,13 @@ def drop():
 
 
 @export
+def listed():
+    # Asked of globals() alone, before anything reads the names.
+    g = globals()
+    return " ".join(str(item) for item in ("label" in g, "label" in list(g), g.get("label", "missing"), "level" in g))
+
+
+@export
 def seen():
     out = []
     for read in (lambda: label, lambda: level):

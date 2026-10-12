@@ -7842,7 +7842,9 @@ export const handOver = (written, write) => {
         // `undefined`, which a `$proxy` namespace reads as no name at all. Any
         // write puts the published accessor back: through the namespace, by
         // `=`, a loop, an import or a store's setter; or from outside it, a
-        // parent passing a prop a new value, which the source shows.
+        // parent passing a prop a new value, which the source shows. Listed as
+        // the name was, so `globals()` asks the source, and finds that value
+        // before anything reads the name.
         Object.defineProperty(proto, name, {
             get() {
                 if (Object.is(source.call(this), left)) return undefined;
@@ -7854,7 +7856,7 @@ export const handOver = (written, write) => {
                 restore(this);
                 accessor.set?.call(this, value);
             },
-            enumerable: false,
+            enumerable: accessor.enumerable,
             configurable: true
         });
 
