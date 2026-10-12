@@ -1,5 +1,5 @@
 <script lang="python">
-value: object = None
+value: object <=> None
 </script>
 
-<p>{value}</p>
+<p>{type(value).__name__}|{value}</p>

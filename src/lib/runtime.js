@@ -289,7 +289,28 @@ const keyFor = (repr) => {
     return key;
 };
 
+// The components written in Python, as their Python parents import them.
+const PYTHON_COMPONENTS = new WeakSet();
+
 export const __pybridge = {
+    // Registered by a Python parent's script: the components it imports from
+    // Python files.
+    python(...components) {
+        for (const one of components) if (one !== null && (typeof one === 'function' || typeof one === 'object')) PYTHON_COMPONENTS.add(one);
+    },
+
+    // A prop handed to a component a template name holds, a snippet's
+    // parameter: the Python value itself to one written in Python, and
+    // JavaScript's to any other, as a child named by its import gets it.
+    child(component, value, kind = '') {
+        // Handed through a `{@render}` argument, which is Python, it comes
+        // back as the adapter made for it, which knows the component.
+        const python = PYTHON_COMPONENTS.has(component) || PYTHON_COMPONENTS.has(ADAPTERS.get(component));
+        if (kind === 'spread') return python ? __pybridge.spreadPython(value) : __pybridge.spread(value);
+        if (python) return value;
+        return kind === 'scalar' ? scalarOnly(value) : pyNumbers(value);
+    },
+
     // The value of `class={…}` on an element, which Svelte hands to `clsx`: a
     // string as it is, a dict as an object whose values are Python's truth, a
     // list as the names Python finds true. `clsx` would read JavaScript's truth

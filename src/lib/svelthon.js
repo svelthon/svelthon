@@ -485,6 +485,9 @@ export function python(options = {}) {
                 })
                 .map(({ local }) => local);
             const pythonChildren = new Set([...children, ...componentAliases(python, children)]);
+            // Registered by the script, for a tag a template name holds, a
+            // snippet's parameter, which may be handed one of them.
+            file.pythonImports = children;
 
             const code = overMarkup(
                 content,
@@ -554,7 +557,9 @@ export function python(options = {}) {
             // way, but every tool downstream reads the attribute and refuses:
             // `svelte-check`, installed by 93% of SvelteKit projects, would
             // report dozens of parse errors per component.
-            return { code: sameLines(script, content), attributes: rest };
+            const registered = about.pythonImports?.length ? `;__pybridge.python(${about.pythonImports.join(', ')});` : '';
+
+            return { code: sameLines(script + registered, content), attributes: rest };
         }
     };
 }

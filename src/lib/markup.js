@@ -2161,6 +2161,10 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         const multiple = directive === 'bind:value' && tag?.name === 'select' && tagNames(markup, tag.start).has('multiple');
         const crossing = multiple ? SELECTED_VALUE : BIND_VALUE;
         const write = declaredHere(expr) ? `${scoped(bareName(expr))} = ${crossing}(${BOUND_VALUE})` : assign(expr, crossing);
+        if (heldChild() !== null) {
+            return `() => ${forChild(call(expr, '__bound', undefined, 'python'), 'scalar')}, (${BOUND_VALUE}) => ${write}`;
+        }
+
         const read = multiple ? 'selection' : toPythonChild() ? 'python' : 'scalar';
 
         return `() => ${call(expr, '__bound', undefined, read)}, (${BOUND_VALUE}) => ${write}`;
@@ -2176,6 +2180,17 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     // component it is handed.
     const toPythonChild = () =>
         isComponent(tag) && where?.pythonChildren?.has(tag.name) === true && scoped(tag.name.split('.')[0]) === null;
+
+    // The JavaScript name of the component a template name holds, when the tag
+    // is one: its language is known only once it is handed, so its props are
+    // made Python and converted then, `__pybridge.child`. Null otherwise.
+    const heldChild = () => {
+        if (!isComponent(tag)) return null;
+        const [head, ...rest] = tag.name.split('.');
+        const held = scoped(head);
+        return held === null ? null : [held, ...rest].join('.');
+    };
+    const forChild = (read, kind = '') => `__pybridge.child(${heldChild()}, ${read}, ${JSON.stringify(kind)})`;
 
     // The iterations a group binding stands in, as Svelte finds them: every
     // `{#each}` whose names the binding reads, and then those its iterable
@@ -2373,6 +2388,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
             // where it warns about `undefined`, after `save()` and not after a
             // name holding an optional handler. `?? undefined` is a form
             // Svelte reads as no call, and changes no value.
+            if (heldChild() !== null) return `{${forChild(call(rewritten, '__bound', inner, 'python'))}}`;
             if (isComponent(tag)) return `{${call(rewritten, '__bound', inner, toPythonChild() ? 'python' : '')}}`;
 
             const adapted = `${EVENT_WRAPPER}(${call(rewritten, '', inner)})`;
@@ -2396,6 +2412,10 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         // against its `<select>`, so a container keeps its own, and a scalar
         // is still compared by value.
         //
+        if (heldChild() !== null) {
+            return `{${forChild(call(inner, '__bound', undefined, 'python'), name === 'value' ? 'scalar' : '')}}`;
+        }
+
         return `{${call(inner, '__bound', undefined, toPythonChild() ? 'python' : name === 'value' ? 'scalar' : '')}}`;
     };
 
@@ -2604,9 +2624,12 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                         // attribute it becomes. On a child written in Python,
                         // each value is handed over as a prop written by name
                         // is, the Python value itself.
-                        out += toPythonChild()
-                            ? `{...${call(trimmed.slice(2), '__spreadPython', undefined, 'python')}}`
-                            : `{...${call(trimmed.slice(2), onElement(tag) ? '__spreadElement' : '__spread')}}`;
+                        out +=
+                            heldChild() !== null
+                                ? `{...${forChild(call(trimmed.slice(2), '', undefined, 'python'), 'spread')}}`
+                                : toPythonChild()
+                                  ? `{...${call(trimmed.slice(2), '__spreadPython', undefined, 'python')}}`
+                                  : `{...${call(trimmed.slice(2), onElement(tag) ? '__spreadElement' : '__spread')}}`;
                     } else if (trimmed.startsWith('...')) {
                         throw refuse(
                             new SyntaxError(
