@@ -54,9 +54,11 @@ export default defineConfig({
     test: {
         environment: 'jsdom',
 
-        // An audit keeps a copy of the tests it ran beside its evidence, and a
-        // copy is no test of this tree: it imports what is no longer there.
-        exclude: [...configDefaults.exclude, 'tests/scratch/*-evidence/**'],
+        // An audit keeps a copy of the tests it ran beside its evidence, and the
+        // history tool its copies of the tree: a copy is no test of this tree,
+        // it imports what is no longer there. Only the copies: a probe of the
+        // scratch has to stay runnable by its own config.
+        exclude: [...configDefaults.exclude, 'tests/scratch/*-evidence/**', 'tests/scratch/history/**'],
 
         // **The clock is declared, the way the locale already is at every call.**
         // Every assertion that depends on a language passes one — `en-GB`,
