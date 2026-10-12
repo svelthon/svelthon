@@ -25,6 +25,22 @@ test('the date helpers follow a SvelteDate changed in place', () => {
     expect(after[2]).toBe('2 weeks ago');
 });
 
+// A date's own `getTime` is called itself, as `stamp.getTime()` calls it: a
+// field named `call` on the function is no way of calling it.
+test('the date helpers call a getTime whose call field is replaced, as a call does', () => {
+    const stamp = new Date('2026-01-02T00:00:00.000Z');
+    stamp.getTime = function () {
+        return Date.prototype.getTime.call(this);
+    };
+    stamp.getTime.call = () => Date.parse('2027-01-02T00:00:00.000Z');
+
+    expect(urlencode(stamp)).toBe(encodeURIComponent('2026-01-02T00:00:00.000Z'));
+    expect(date(stamp, 'short', null, 'en-GB')).toBe('02/01/2026');
+
+    stamp.getTime.call = null;
+    expect(urlencode(stamp)).toBe(encodeURIComponent('2026-01-02T00:00:00.000Z'));
+});
+
 // Django's `|date` keeps its word; what stands behind it is the platform's
 // `Intl`, which answers in the reader's language — something Django's format
 // letters never did.

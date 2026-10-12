@@ -67,15 +67,17 @@ const instantOf = (value) => {
     let held;
 
     try {
-        held = Date.prototype.getTime.call(value);
+        held = Reflect.apply(Date.prototype.getTime, value, []);
     } catch {
         return undefined;
     }
 
     const own = value.getTime;
 
+    // Called itself, by `Reflect.apply`: `own.call` would be whatever the
+    // function holds under that name.
     if (typeof own === 'function' && own !== Date.prototype.getTime) {
-        const asked = own.call(value);
+        const asked = Reflect.apply(own, value, []);
         if (typeof asked === 'number') return asked;
     }
 
