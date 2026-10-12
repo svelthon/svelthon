@@ -5007,10 +5007,13 @@ const urlish = (value) =>
 // while running the author's.
 //
 // A URL or a Request of another context, an iframe's, carries that context's
-// getters, which are other functions. It is asked by ours instead: the
-// platform's own getter, applied to it, checks that it holds the platform's
-// slots, and reads them, or throws for anything else, before any code of the
-// author's could run.
+// getters, which are other functions; and SvelteKit writes getters of its own
+// on the URL of every `load()`, which note the read. Either is asked by ours
+// instead: the platform's own getter, applied to it, checks that it holds the
+// platform's slots, and reads them, or throws for anything else, before any
+// code of the author's or the framework's could run. An object whose four
+// members are the platform's own objects is an event, whoever wrote a getter
+// on them.
 const NO_FIELD = Symbol();
 const PLATFORM = ['Request', 'Response', 'URL', 'Headers'];
 const platformGetters = (name) =>
@@ -5036,10 +5039,6 @@ const member = (value, name, answered = false) => {
 
         const ours = platformGetters(name);
         if (ours.includes(own.get)) return value[name];
-
-        // One of our classes with the getter replaced: the author's.
-        const local = PLATFORM.some((one) => globalThis[one]?.prototype?.isPrototypeOf(value) === true);
-        if (local) return NO_FIELD;
 
         for (const getter of ours) {
             try {

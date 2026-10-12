@@ -23,7 +23,7 @@ import {
     given_second,
     both_views
 } from './fixtures/route.py';
-import { requestEvent as event, prerenderingEvent, foreignRealmEvent } from './request-event.js';
+import { requestEvent as event, prerenderingEvent, foreignRealmEvent, loadEvent } from './request-event.js';
 
 // A RequestEvent as SvelteKit builds one, from the one place that says what
 // that is. The conversion is recognised by what the event's members *are* — a
@@ -486,5 +486,24 @@ describe('a load() whose URL is not the ordinary one', () => {
         );
 
         expect(out).toEqual({ slug: 'pep-703', page: 7, method: 'GET', keys: ['slug'] });
+    });
+
+    // The URL every server `load()` is handed: a real URL whose path the
+    // framework reads through a getter of its own. Recognised by the platform's
+    // getter, which runs neither; read afterwards as the framework expects, so
+    // its tracking sees what the conversion read.
+    test('and when the framework tracks what is read of it', async () => {
+        const reads = [];
+        const out = await load(
+            loadEvent({
+                reads,
+                url: 'https://example.test/peps/pep-703?page=7',
+                params: { slug: 'pep-703' },
+                route: { id: '/peps/[slug]' }
+            })
+        );
+
+        expect(out).toEqual({ slug: 'pep-703', page: 7, method: 'GET', keys: ['slug'] });
+        expect(reads.length).toBeGreaterThan(0);
     });
 });

@@ -61,6 +61,36 @@ export const prerenderingEvent = ({ refuses = ['searchParams', 'search'], ...opt
     };
 };
 
+// The same event as SvelteKit hands it to a **`load()`**, rendered or
+// prerendered: `url` is a real `URL` on which the framework writes getters of
+// its own, `href`, `pathname`, `search`, `toString` and `toJSON`, that note the
+// read and then read the URL it was made from, and one for `hash` that throws
+// (SvelteKit 3, `src/utils/url.js`, `make_trackable`). `reads` lists the
+// members read through them.
+export const loadEvent = ({ reads = [], ...options } = {}) => {
+    const one = requestEvent(options);
+    const tracked = new URL(one.url);
+
+    for (const property of ['href', 'pathname', 'search', 'toString', 'toJSON']) {
+        Object.defineProperty(tracked, property, {
+            get() {
+                reads.push(property);
+                return one.url[property];
+            },
+            enumerable: true,
+            configurable: true
+        });
+    }
+
+    Object.defineProperty(tracked, 'hash', {
+        get() {
+            throw new Error('Cannot access event.url.hash. Consider using `page.url.hash` inside a component instead');
+        }
+    });
+
+    return { ...one, url: tracked };
+};
+
 // The same event with a URL **from another JavaScript context**: an adapter, a
 // worker, a `vm` context or an iframe builds it with that context's own `URL`
 // constructor, so it answers everything a URL answers and `instanceof URL`
