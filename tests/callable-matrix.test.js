@@ -343,6 +343,17 @@ test('a __call__ descriptor handing back another is adapted at each level', () =
     expect(mod.outer('event')).toBe(0.25);
 });
 
+// And the other way round from an ordinary `__call__` to a descriptor: the
+// callback kept from before resolves it at the call, where it handed the event
+// to the function the `property` hands back.
+test('a __call__ the class later makes a descriptor is called through it', () => {
+    const kept = mod.turning;
+
+    expect(kept('event')).toBe(0.25);
+    mod.make_property();
+    expect(kept('event')).toBe(0.25);
+});
+
 // And one that is a builtin, `staticmethod(abs)`, which has no signature to read
 // and is called through Python's own protocol: what it answers is what CPython
 // answers, `round(-0.5)` the int 0 and not a negative zero.

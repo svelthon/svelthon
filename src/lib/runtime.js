@@ -5663,7 +5663,7 @@ function declared(value) {
     const call = method === null ? finalCall(callDescriptor(value)) : null;
 
     if (method === null && call === null && typeof value !== 'function') return slotDeclared(value);
-    if (call !== null && boundByGet(call)) return descriptorCall(value, call);
+    if (call !== null && boundByGet(call)) return instanceCall(value, `${globalThis.__BRYTHON__.class_name(value)}()`, call);
 
     // `@staticmethod def __call__` is kept in the class dictionary as the
     // descriptor Brython builds for it, `{ob_type, sm_callable}`, the function
@@ -5783,39 +5783,13 @@ const boundByGet = (call) => {
     );
 };
 
-// Such an instance, its call resolved through the descriptor at each call, and
-// only then: making the wrapper, publishing it or handing it back runs no
-// `__get__` of the author's, which may not be ready to answer. What it takes is
-// unknown until then, so everything is passed in, and the call hands it to the
-// adaptation of what it calls now, which trims it as it trims the same callable
-// handed over directly: a `property` handing back a function that takes nothing
-// was handed the click, and raised.
-//
-// What it calls now is asked of the class at each call, as Python asks it: a
-// descriptor's `__get__` hands it back, a descriptor in turn adapted as this one
-// is; a `__call__` the class has since made an ordinary one is the instance's
-// call like any other, and never asked for a `__get__` it does not have.
-function descriptorCall(value, origin) {
+// What a descriptor in an instance's call hands back, or null when there is
+// none: the class's `__call__`, bound to the instance by its `__get__`.
+function boundCall(value) {
     const $B = globalThis.__BRYTHON__;
+    const call = callDescriptor(value);
 
-    return {
-        fn: (...args) => {
-            const call = callDescriptor(value);
-
-            if (call === null) return $B.$call(value, ...args);
-
-            const target = boundByGet(call) ? $B.$call($B.$getattr(call, '__get__'), value, pyType(value)) : value;
-            const inner = declared(target);
-
-            return inner === null ? $B.$call(target, ...args) : inner.fn(...args.slice(0, arityNow(inner.arity)));
-        },
-        where: `${$B.class_name(value)}()`,
-        arity: Infinity,
-        origin,
-        self: value,
-        named: labelled(value),
-        instance: true
-    };
+    return call !== null && boundByGet(call) ? $B.$call($B.$getattr(call, '__get__'), value, pyType(value)) : null;
 }
 
 // The instance, whose call is looked up **at every call** and whose contract
@@ -5827,9 +5801,28 @@ function descriptorCall(value, origin) {
 // asked at each call against whatever the class holds now, and the wrapper
 // that trims asks it before converting anything. The wrapper's identity is
 // untouched, which is what a registry that holds a callback needs.
+//
+// A `__call__` that is a descriptor, a `property` or one of the author's, at
+// whatever depth and whenever the class made it one: what its `__get__` hands
+// back is asked at the call, and only then, so making the wrapper or handing it
+// over runs no getter that may not be ready to answer. What it takes is unknown
+// until then, so everything is passed in, and the call hands it to the
+// adaptation of what it calls, which trims it as it trims the same callable
+// handed over directly: a `property` handing back a function that takes
+// nothing was handed the click, and raised.
 function instanceCall(value, where, origin) {
+    const $B = globalThis.__BRYTHON__;
+
     return {
-        fn: (...args) => globalThis.__BRYTHON__.$call(value, ...args),
+        fn: (...args) => {
+            const bound = boundCall(value);
+
+            if (bound === null) return $B.$call(value, ...args);
+
+            const inner = declared(bound);
+
+            return inner === null ? $B.$call(bound, ...args) : inner.fn(...args.slice(0, arityNow(inner.arity)));
+        },
         where,
         arity: () => liveArity(value),
         origin,

@@ -35,6 +35,8 @@ __all__ = [
     "strategy",
     "make_ordinary",
     "outer",
+    "turning",
+    "make_property",
     "mapped",
     "order",
     "listed",
@@ -319,6 +321,19 @@ class Outer:
 
 
 outer = Outer()
+
+
+# And one whose class later makes its ordinary `__call__` a descriptor.
+class Turning:
+    def __call__(self):
+        return VALUE
+
+
+turning = Turning()
+
+
+def make_property():
+    Turning.__call__ = property(lambda self: nothing)
 
 mapped = {
     "fn": fn,
