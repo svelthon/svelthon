@@ -13,11 +13,12 @@ const read = (k) => {
     return target.querySelector(`p[data-k="${k}"]`).textContent;
 };
 
-// The module itself is a JavaScript object, and its function a Python
-// `function`, as CPython's `type(module.fn)` says: Brython's interop hands back
-// a function that carries a class untouched, so a call into it converts nothing.
-test('a module is reached through JavaScript, its function a function', () =>
-    expect(read('module')).toBe('JSObject / function'));
+// The module itself is a `module` and its function a Python `function`, as
+// CPython's `type(module)` and `type(module.fn)` say: the function is read off
+// the module's dict, the Python function itself, so a call into it converts
+// nothing. It was a JavaScript object, its function handed back by Brython's
+// interop, which carried the class untouched.
+test('a module is a module, its function a function', () => expect(read('module')).toBe('module / function'));
 
 describe.each([
     ['dict', 'dict len=1'],
@@ -26,8 +27,8 @@ describe.each([
 ])('a %s crossing a module boundary', (kind, intact) => {
     test('where it was made', () => expect(read(`${kind}-local`)).toBe(intact));
 
-    // `$B.imported` holds a plain JavaScript object, and the function read off
-    // it is the Python function itself, so the argument arrives as it was made.
+    // The function read off the module is the Python function itself, so the
+    // argument arrives as it was made.
     test('handed to another module as an argument', () =>
         expect(read(`${kind}-argument`)).toBe(intact));
 

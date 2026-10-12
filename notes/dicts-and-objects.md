@@ -79,36 +79,31 @@ every read site. `{pep["title"]}` still works and means exactly the same thing.
 | computed field (`@property`) in the markup | works | impossible |
 | mutated in place, reactively | works | works |
 | passed as a component prop | arrives as `Pep` | arrives as `dict` |
-| **handed to another module's function** | arrives as `Pep` | **arrives as a JavaScript object** |
-| **spread into a child, `{...record}`** | **nothing arrives** | arrives whole |
+| handed to another module's function | arrives as `Pep` | arrives as `dict` |
+| spread into a child, `{...record}` | its attributes arrive | arrives whole |
 | what crosses an export boundary | its fields, never a `@property` | everything |
 | what a key may be called | a Python identifier | any string |
 
-## The two failures are debts, not properties
+## The two failures were debts, not properties
 
-Neither of the bold cells is a fact about the shape. Both are ours.
+Two cells of this table used to differ, and neither was a fact about the shape.
+Both were ours, and both are paid.
 
-**A dict handed to another module's function** arrives as a JavaScript object:
-`d["k"]` still reads, `.get()`, `.items()` and `isinstance(d, dict)` do not.
-`registerModule` puts a plain JavaScript object into `$B.imported`, so Brython
-sees the imported module as foreign and its functions as JavaScript functions —
-the call converts its arguments on the way in, and the function underneath is
-Python, so nothing converts them back. Reads and return values survive, because
-the `PYOBJ` cache finds the original Python object again. Measured in
-`tests/crossing.test.js`. Marking the namespace as a module does not fix it and
-cannot: `$B.module.tp_getattro` reads attributes from a dict attached to the
-object, while ours live as accessors on a prototype — a plain property would be
-destroyed by the `delete_for_reassign` Brython emits before every global
-rebinding. What remains is to give the namespace a dict of *own* accessors
-delegating to those.
+**A dict handed to another module's function** arrived as a JavaScript object:
+`d["k"]` still read, `.get()`, `.items()` and `isinstance(d, dict)` did not. The
+module's namespace was a plain JavaScript object to Brython, and the call
+converted its arguments on the way in. The function read off a module is the
+Python function itself now, so the argument arrives as it was made; and the
+namespace is a `module` (`pythonModule` in `runtime.js`), whose attributes are
+read through a dict delegating to its accessors. Measured in
+`tests/crossing.test.js`.
 
-**An object spread into a child** contributes nothing, and the child falls back
-on its defaults. A class instance keeps its attributes under a private symbol,
-so `{...record}` finds no enumerable property. `py.spread` could read the
-instance dict — `plainData` already does exactly that.
+**An object spread into a child** contributed nothing, and the child fell back
+on its defaults: a class instance keeps its attributes under a private symbol,
+so `{...record}` found no enumerable property. The spread takes what `**rest`
+takes of an instance, its attributes. Measured in `tests/shapes.test.js`.
 
-Until both are paid, the shapes are not interchangeable at those two sites, and
-that is the only place where the choice is forced rather than preferred.
+The choice between the shapes is preferred, not forced, at every site.
 
 ## What each is on the way out
 

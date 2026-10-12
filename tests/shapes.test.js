@@ -52,12 +52,11 @@ describe('a record as an object and as a dict', () => {
         expect(text('prop-dic')).toBe('dict');
     });
 
-    test('an object survives a call into another module', () => {
-        // The dict does not: it arrives as a JavaScript object, because
-        // `registerModule` puts a plain object into `$B.imported` and the call
-        // takes Brython's interop path. Asserted in tests/crossing.test.js,
-        // where the failing direction is described rather than pinned.
+    // The function read off a module is the Python function itself, so neither
+    // shape is converted on the way in. tests/crossing.test.js holds the grid.
+    test('an object and a dict survive a call into another module', () => {
         expect(setup().text('cross-obj')).toBe('Pep dict=False');
+        expect(setup().text('cross-dic')).toBe('dict dict=True');
     });
 
     test('a dict spreads into a child as props', () => {

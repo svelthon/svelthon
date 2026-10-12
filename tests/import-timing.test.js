@@ -10,6 +10,8 @@ import { recorded } from './fixtures/timing_log.py';
 import { later, again } from './fixtures/timing_imports.py';
 import { store } from './fixtures/timing_store.svelte.py';
 import TimingImport from './fixtures/TimingImport.svelte';
+import { early, late } from './fixtures/cycle_a.py';
+import { seen, refused, now } from './fixtures/cycle_b.py';
 
 test('a module runs at its import, after what comes before it, and raises into its except', () => {
     expect(recorded()).toBe('before first after fails caught');
@@ -37,4 +39,12 @@ test('an import in a branch not taken runs nothing, in a module, a reactive modu
 
     unmount(instance);
     target.remove();
+});
+
+// The module is published before its body runs, so a cycle finds it half made:
+// what it bound before the import that closes the cycle, and not what it binds
+// after, which `from … import` refuses and a later read finds.
+test('an import cycle finds the module half made', () => {
+    expect([early, late]).toEqual(['early', 'late']);
+    expect([seen, refused, now()]).toEqual(['early', 'ImportError', 'late']);
 });

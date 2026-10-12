@@ -6949,6 +6949,16 @@ export function pythonModule(namespace, published, run) {
 
     importsRunBodies($B);
 
+    // A module to Python, and not a JavaScript object: `module.name`,
+    // `from module import name`, `getattr` and `hasattr` read the names
+    // through its dict, which holds the names the namespace holds now. A name
+    // the module has not bound yet, in an import cycle, or has deleted, is
+    // missing there, where its accessor read `None`. Under the engine's own
+    // symbol, which it reads before the field: `ob_type` may be a name of the
+    // module's.
+    Object.defineProperty(namespace, $B.OB_TYPE, { value: $B.module });
+    namespace[$B.DICT] = namespaceDict(namespace);
+
     const load = () => {
         if (state !== 'waiting') return;
 

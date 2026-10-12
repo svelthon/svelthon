@@ -2,8 +2,8 @@
 // name comes back, with the same contract in every cell.
 //
 // The contract: once deleted, a read raises NameError and the name is not in
-// `globals()`, and deleting evaluates nothing; a write brings it back, whoever
-// makes it. It was repaired one kind at a time over four audits, each finding
+// `globals()`, another module finds no such attribute of the module, and
+// deleting evaluates nothing; a write brings it back, whoever makes it. It was repaired one kind at a time over four audits, each finding
 // the next kind: an accessor left present, a store setter that did not restore,
 // a prop whose getter converts and so never reads the same twice, a derived
 // whose getter runs the body just removed. What the deletion watches is the
@@ -16,6 +16,7 @@ import { mount, flushSync } from './mounted.js';
 import DelMatrixHost from './fixtures/DelMatrixHost.svelte';
 import LazyDelete from './fixtures/LazyDelete.svelte';
 import store from './fixtures/del_matrix.svelte.py';
+import { outside } from './fixtures/del_reader.py';
 
 const host = () => {
     const target = document.body.appendChild(document.createElement('div'));
@@ -104,12 +105,15 @@ describe.for([
 ])('in a store, %s', ([, name]) => {
     test('is absent once deleted, and comes back when Python binds it', () => {
         expect(store.seen(name)).toMatch(/ True$/);
+        expect(outside(name)).toBe('found found value True');
         store.drop(name);
         expect(store.seen(name)).toBe('NameError False');
         expect(store.seen(name)).toBe('NameError False');
+        expect(outside(name)).toBe('AttributeError ImportError default False');
 
         store.rebind(name);
         expect(store.seen(name)).toBe('7 True');
+        expect(outside(name)).toBe('found found value True');
     });
 });
 
