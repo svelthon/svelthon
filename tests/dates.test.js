@@ -1,7 +1,29 @@
 import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import Dates from './fixtures/Dates.svelte';
+import ReactiveDateHost from './fixtures/ReactiveDateHost.svelte';
 import { date, fromnow, urlencode } from '../src/lib/helpers.js';
+
+// A `SvelteDate` changed in place by its parent: the helpers read its instant
+// through its own `getTime`, which is what subscribes the page, where reading
+// the slot alone kept the old text.
+test('the date helpers follow a SvelteDate changed in place', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+    const host = mount(ReactiveDateHost, { target });
+    flushSync();
+
+    const read = () => ['date', 'urlencode', 'fromnow'].map((k) => target.querySelector(`p[data-k="${k}"]`).textContent);
+    const before = read();
+
+    host.change();
+    flushSync();
+
+    const after = read();
+    expect(after[0]).not.toBe(before[0]);
+    expect(after[1]).not.toBe(before[1]);
+    expect(before[2]).toBe('in 2 weeks');
+    expect(after[2]).toBe('2 weeks ago');
+});
 
 // Django's `|date` keeps its word; what stands behind it is the platform's
 // `Intl`, which answers in the reader's language — something Django's format

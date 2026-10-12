@@ -57,12 +57,29 @@ const written = (value) => pyScalar(value) ?? value;
 // `Symbol.toStringTag` to 'Date', which `Object.prototype.toString` would
 // believe. An invalid Date answers NaN, which is a number and therefore an
 // answer; the caller's own domain decides what to do with it.
+//
+// The slot alone would read past a reactive date: Svelte's `SvelteDate` keeps
+// its time in a signal, which its own `getTime` reads, and that read is what
+// subscribes the page to the date's changes. So a Date with a `getTime` of its
+// own is asked through it as well, and its answer is the instant when it is a
+// number.
 const instantOf = (value) => {
+    let held;
+
     try {
-        return Date.prototype.getTime.call(value);
+        held = Date.prototype.getTime.call(value);
     } catch {
         return undefined;
     }
+
+    const own = value.getTime;
+
+    if (typeof own === 'function' && own !== Date.prototype.getTime) {
+        const asked = own.call(value);
+        if (typeof asked === 'number') return asked;
+    }
+
+    return held;
 };
 
 // A helper's refusal, in the dialect the rest of the project speaks.
