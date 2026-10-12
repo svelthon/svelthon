@@ -39,6 +39,10 @@ const { atomic, replaceLiterals } = require('./lexical.js');
 // Name the generated module gives to the reactive namespace it receives.
 const NS = '__py';
 
+// What a reactive module declares its `store` object under, the name it
+// exports it by being one the module's own names may take.
+const STORE_FACADE = '__store';
+
 // Brython emits module state into a namespace object:
 //     locals_Counter = $B.namespace('Counter')
 //     locals_Counter.count = 0
@@ -3406,7 +3410,11 @@ function instanceExports(c) {
                   // not by what bound the name: `__storeMember` makes a float a
                   // number, keeps a container itself, and hands a Python
                   // callable over as a call, a `def` through its own wrapper.
-                  `export const store = {`,
+                  //
+                  // Under a name of the compiler's, and exported as `store`:
+                  // `store` may be a name of the module's own, whose cell or
+                  // derived is declared under it in this same scope.
+                  `const ${STORE_FACADE} = {`,
                   ...c.state
                       .filter(c.published)
                       .map((n) => `    get ${n}() { return (${rev(n)}, ${storeRead(c, n, n)}); },`),
@@ -3437,6 +3445,7 @@ function instanceExports(c) {
                       .filter((f) => c.published(f.name))
                       .map((f) => `    get ${f.name}() { return ${storeRead(c, f.name, `${NS}.${f.name}`, wrapperName(f.name))}; },`),
                   `};`,
+                  `export { ${STORE_FACADE} as store };`,
                   // Its default export too, made by the module JavaScript
                   // imports (`svelthon.js`, `eagerModule`).
                   //
@@ -3448,12 +3457,11 @@ function instanceExports(c) {
                   // after `del`, as the getter above reads it. Through the
                   // namespace: the cell itself read at the top of the module is
                   // what Svelte reports as `state_referenced_locally`.
-                  ...(c.funcs.filter((f) => c.published(f.name)).length
+                  ...(storeExports(c).length
                       ? [
                             ``,
-                            ...c.funcs.filter((f) => c.published(f.name)).map((f) => `let __export_${f.name};`),
-                            `export { ${c.funcs
-                                .filter((f) => c.published(f.name))
+                            ...storeExports(c).map((f) => `let __export_${f.name};`),
+                            `export { ${storeExports(c)
                                 .map((f) => `__export_${f.name} as ${f.name}`)
                                 .join(', ')} };`
                         ]
@@ -3646,13 +3654,17 @@ function plainInit(c) {
     ];
 }
 
+// The functions a reactive module also exports by name. A function it names
+// `store` is not one: that name is the module's `store` object, which reaches
+// the function as `store.store`, and Python's importers as `module.store`.
+const storeExports = (c) => c.funcs.filter((f) => c.published(f.name) && f.name !== 'store');
+
 // What a module exports by name, filled as its body binds it: a `.py` hands
 // JavaScript every name through the boundary, a `.svelte.py` its functions,
 // the rest through `store`.
 const liveExports = (c) =>
     c.store
-        ? c.funcs
-              .filter((f) => c.published(f.name))
+        ? storeExports(c)
               .map(
                   (f) =>
                       `__liveExport(${NS}, ${JSON.stringify(f.name)}, (__value) => { __export_${f.name} = ` +

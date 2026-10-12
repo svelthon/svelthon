@@ -75,7 +75,7 @@ reste de cette configuration et ce que chaque ligne apporte.
 npm install
 npm run dev          # la démo, sous /demo/
 
-npm test             # 1 825 tests : sémantique, props, réactivité, surface Svelte
+npm test             # 1 826 tests : sémantique, props, réactivité, surface Svelte
 npm run test:quiet   # la sortie de la suite : un run vert ne doit rien dire
 npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
@@ -925,7 +925,9 @@ Le filtre est un infixe, `.svelte.`, suivi d'une de ces extensions, donc
 `panier.svelte.py` correspond et `peps.py` non : exactement la ligne que tracent
 les deux sortes. Les noms sont exportés par des accesseurs : Svelte interdit
 d'exporter une liaison `$state` réaffectée, et un getter est de toute façon ce
-qui garde la lecture réactive au point d'appel.
+qui garde la lecture réactive au point d'appel. Un nom propre au module peut
+s'écrire `store` : JavaScript le lit comme `store.store`, et une fonction de ce
+nom n'est pas en plus exportée par son nom, puisque `store` est l'objet.
 
 Le pont marche dans les deux sens : le Python d'un composant importe le module
 comme un module Python ordinaire et atteint les mêmes signaux.
@@ -1566,7 +1568,7 @@ part jamais.
 
 ## État
 
-Validé par `npm test`, 1 825 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 1 826 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;

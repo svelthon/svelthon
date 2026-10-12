@@ -523,7 +523,7 @@ describe('a store takes the other branch of the compiler', () => {
         const code = plugin.load.call({ addWatchFile() {} }, `${file}?python`);
 
         expect(code).toContain('$state');
-        expect(code).toContain('export const store');
+        expect(code).toContain('export { __store as store };');
     });
 
     test('and a default export, which a route module does not have', () => {

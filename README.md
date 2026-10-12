@@ -77,7 +77,7 @@ rest of that configuration and what each line buys.
 npm install
 npm run dev          # the demo, at /demo/
 
-npm test             # 1 825 tests: semantics, props, reactivity, Svelte surface
+npm test             # 1 826 tests: semantics, props, reactivity, Svelte surface
 npm run test:quiet   # the suite's own output: a green run must say nothing
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
@@ -883,7 +883,9 @@ The filter is an infix, `.svelte.`, followed by one of those extensions, so
 `panier.svelte.py` matches and `peps.py` does not: exactly the line the two kinds
 draw. Names are exported through accessors: Svelte forbids exporting a reassigned
 `$state` binding, and a getter is what keeps the read reactive at the call site
-anyway.
+anyway. A name of the module's own may be spelled `store`: JavaScript reads it as
+`store.store`, and a function of that name is not also exported by name, since
+`store` is the object.
 
 The bridge runs both ways: a component's Python imports the module as an ordinary
 Python module and reaches the same signals.
@@ -1546,7 +1548,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 1 825 tests as written (vitest reports more, one per
+Validated by `npm test`, 1 826 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;
