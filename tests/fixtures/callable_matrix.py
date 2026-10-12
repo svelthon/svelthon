@@ -35,6 +35,7 @@ __all__ = [
     "strategy",
     "make_ordinary",
     "outer",
+    "assigned",
     "turning",
     "make_property",
     "mapped",
@@ -321,6 +322,15 @@ class Outer:
 
 
 outer = Outer()
+
+
+# One whose class stores as its `__call__` an instance whose own `__call__` is
+# a descriptor: Python follows the instance, then binds the descriptor to it.
+class Assigned:
+    __call__ = Inner()
+
+
+assigned = Assigned()
 
 
 # And one whose class later makes its ordinary `__call__` a descriptor.

@@ -5784,12 +5784,22 @@ const boundByGet = (call) => {
 };
 
 // What a descriptor in an instance's call hands back, or null when there is
-// none: the class's `__call__`, bound to the instance by its `__get__`.
+// none: the class's `__call__`, followed through the instances a class stores
+// as its `__call__`, as Python follows them, and a descriptor found there bound
+// to the instance that holds it, by its `__get__`.
 function boundCall(value) {
     const $B = globalThis.__BRYTHON__;
-    const call = callDescriptor(value);
+    const seen = new Set();
+    let owner = value;
+    let call = callDescriptor(owner);
 
-    return call !== null && boundByGet(call) ? $B.$call($B.$getattr(call, '__get__'), value, pyType(value)) : null;
+    while (call !== null && callableInstance(call) && !seen.has(call)) {
+        seen.add(call);
+        owner = call;
+        call = callDescriptor(owner);
+    }
+
+    return call !== null && boundByGet(call) ? $B.$call($B.$getattr(call, '__get__'), owner, pyType(owner)) : null;
 }
 
 // The instance, whose call is looked up **at every call** and whose contract

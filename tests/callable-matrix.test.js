@@ -343,6 +343,14 @@ test('a __call__ descriptor handing back another is adapted at each level', () =
     expect(mod.outer('event')).toBe(0.25);
 });
 
+// And one reached through an instance a class stores as its `__call__`: Python
+// follows the instance and binds its descriptor to it. The adaptation took the
+// outer object for what to call, adapted it again, and recursed until the stack
+// was spent.
+test('a __call__ that is an instance with a descriptor __call__ is followed to it', () => {
+    expect(mod.assigned('event')).toBe(0.25);
+});
+
 // And the other way round from an ordinary `__call__` to a descriptor: the
 // callback kept from before resolves it at the call, where it handed the event
 // to the function the `property` hands back.
