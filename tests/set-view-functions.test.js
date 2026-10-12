@@ -95,6 +95,32 @@ test('its own methods answer the view', () => {
     expect(third).toBe(tags);
 });
 
+// A `constructor` of its own is the view's, as on a `Set`: written, defined,
+// locked, frozen in or a getter. The view's own default, `Set`, came first,
+// and a locked one then raised on read.
+test('a constructor of its own reads as itself, as on a Set', () => {
+    function Business() {}
+
+    const assigned = sets.fresh();
+    assigned.constructor = Business;
+    expect(assigned.constructor).toBe(Business);
+
+    const locked = sets.fresh();
+    Object.defineProperty(locked, 'constructor', { value: Business });
+    expect(locked.constructor).toBe(Business);
+
+    const frozen = sets.fresh();
+    frozen.constructor = Business;
+    Object.freeze(frozen);
+    expect(frozen.constructor).toBe(Business);
+
+    const got = sets.fresh();
+    Object.defineProperty(got, 'constructor', { get: () => Business });
+    expect(got.constructor).toBe(Business);
+
+    expect(sets.fresh().constructor).toBe(Set);
+});
+
 // And a method nobody replaced is one value, read after read.
 test('an unchanged method is one function, read after read', () => {
     expect(sets.unchanged.has).toBe(sets.unchanged.has);

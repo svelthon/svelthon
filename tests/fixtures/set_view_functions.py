@@ -2,8 +2,13 @@
 # writes on the one it reads.
 __all__ = [
     "replaced", "own", "bind_null", "bind_other", "unchanged",
-    "receiver", "getter", "locked", "frozen", "added",
+    "receiver", "getter", "locked", "frozen", "added", "fresh",
 ]
+
+
+def fresh():
+    # A set of its own for each case that writes on it.
+    return {1, 2}
 
 replaced = {1, 2}
 own = {1, 2}

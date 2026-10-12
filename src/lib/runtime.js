@@ -4020,18 +4020,18 @@ function setView(value) {
     const bound = new WeakMap();
     const view = new Proxy(target, {
         get(shell, key) {
-            // Its constructor is `Set`, as a list's view's is `Array`: what a
-            // copy made by it is, `new data.constructor(data)` as lodash's
-            // `cloneDeep` writes it, where `SetView` took its argument for a
-            // Python set and raised from inside the engine.
-            if (key === 'constructor') return Set;
-
             // A member JavaScript put on the view is the view's, as on a `Set`:
             // its value handed back as it is, which a locked or frozen one
-            // demands, and its getter run with the view as `this`. Only the
-            // set's own methods run on the object behind, whose private fields
-            // they read.
+            // demands, and its getter run with the view as `this`, its
+            // `constructor` too. Only the set's own methods run on the object
+            // behind, whose private fields they read.
             if (Object.hasOwn(shell, key)) return Reflect.get(shell, key, view);
+
+            // Otherwise its constructor is `Set`, as a list's view's is
+            // `Array`: what a copy made by it is, `new data.constructor(data)`
+            // as lodash's `cloneDeep` writes it, where `SetView` took its
+            // argument for a Python set and raised from inside the engine.
+            if (key === 'constructor') return Set;
 
             const found = Reflect.get(shell, key, shell);
 
