@@ -126,6 +126,28 @@ describe('a declaration the compiler cannot read', () => {
         ).not.toThrow();
     });
 
+    // A parameter or a local of that name is the function's own, and changing
+    // it changes nothing the module declares; through `global`, it is the
+    // module's again.
+    test.for([
+        ['a parameter', 'def clean(__js__):\n    __js__.clear()\n    __js__["b"] = 1'],
+        ['a local', 'def build():\n    __js__ = {}\n    __js__ |= {"b": 1}\n    return __js__'],
+        ['a closure', 'def outer():\n    __js__ = {}\n    def inner():\n        __js__.update(b=1)\n    return inner'],
+        ['an annotated local', 'def build():\n    __js__: dict = {}\n    return __js__']
+    ])('a __js__ that is %s is theirs', ([, written]) => {
+        for (const options of [{ plain: true }, {}]) {
+            expect(() => compile(`${written}\n`, 'M', 'm.py', options)).not.toThrow();
+        }
+    });
+
+    test('while the module __js__ changed through global is refused', () => {
+        expect(() =>
+            compile('__js__ = {"a": ["one"]}\ndef add():\n    global __js__\n    __js__["b"] = ["two"]\n', 'M', 'm.py', {
+                plain: true
+            })
+        ).toThrow(/`__js__` is set by assigning it, and changed by nothing else \(m\.py:4\)/);
+    });
+
     test('and one whose values are empty imports nothing', () => {
         const out = compile('__js__ = {"@sveltejs/kit": []}\n\n\nx = 1\n', 'M', 'm.py', {
             plain: true

@@ -698,7 +698,8 @@ function declaredExports(ast, table, source, lineOffset = 0, src = '') {
 // ordinary assignment and read from the AST like `__all__`, under the same two
 // rules: the value that counts is the last one assigned, and what a static read
 // cannot follow is refused rather than skipped.
-function declaredJsImports(body, source, lineOffset = 0) {
+function declaredJsImports(ast, table, source, lineOffset = 0) {
+    const body = ast.body;
     let modules = [];
 
     const refuseAt = (node, what) => {
@@ -708,25 +709,23 @@ function declaredJsImports(body, source, lineOffset = 0) {
     };
 
     // Any other write reaches the dict after the read: `__js__["m"] = […]`,
-    // `__js__ |= {…}`, `__js__.update(…)`, anywhere in the module.
+    // `__js__ |= {…}`, `__js__.update(…)`, wherever the name is the module's.
+    // A parameter or a local of that name is the function's own, as with
+    // `__all__`.
     const isJs = (node) => node instanceof $B.ast.Name && node.id === '__js__';
-    const met = new WeakSet();
-    const writes = (node) => {
-        if (!node || typeof node !== 'object' || met.has(node)) return;
-        met.add(node);
-        if (Array.isArray(node)) return node.forEach(writes);
-
+    walkScoped(body, (node, scope) => {
         const changed =
             ((node instanceof $B.ast.AugAssign || node instanceof $B.ast.AnnAssign) && isJs(node.target)) ||
             (node instanceof $B.ast.Subscript && isJs(node.value) && !(node.ctx instanceof $B.ast.Load)) ||
             (node instanceof $B.ast.Call && node.func instanceof $B.ast.Attribute && isJs(node.func.value));
 
-        if (changed) refuseAt(node, 'is set by assigning it, and changed by nothing else');
+        if (!changed) return;
 
-        for (const key of Object.keys(node)) if (key !== 'parent') writes(node[key]);
-    };
+        const block = scope === null ? null : table.blockOf(scope);
+        if (block !== null && block !== undefined && !isGlobalScope(scopeIn(block, '__js__'))) return;
 
-    writes(body);
+        refuseAt(node, 'is set by assigning it, and changed by nothing else');
+    });
 
     for (const node of body) {
         if (!(node instanceof $B.ast.Assign)) continue;
@@ -3892,10 +3891,13 @@ function compile(
 
     const root = brython(src);
 
+    // Python's symbol table, which says what every name means in every scope.
+    const table = symbolTable(root._ast, source);
+
     // The two declarations meet here, in one shape: `__js__` is the module's and
     // only ever names, `importjs` is the component's and covers the four forms.
     const jsImports = [
-        ...declaredJsImports(root._ast.body, source, lineOffset).map((one) => ({
+        ...declaredJsImports(root._ast, table, source, lineOffset).map((one) => ({
             from: one.from,
             kind: 'named',
             entries: one.names.map((n) => ({ name: n, local: n }))
@@ -4004,8 +4006,6 @@ function compile(
     if (resolves) refuseMissingModules(importedAt, resolves, source, lineOffset);
     refuseTypeParameters(root._ast.body, source, lineOffset);
 
-    // Python's symbol table, which says what every name means in every scope.
-    const table = symbolTable(root._ast, source);
     refuseBoundImports(root._ast, table, jsImported, source, lineOffset);
     refuseLibraryCalls(root._ast, table, source, lineOffset);
     const module = [
@@ -4220,7 +4220,9 @@ function elementProps(src) {
         theirs = new Set(lifted.imports.flatMap((one) => one.entries.map((e) => e.local)));
         const body = takeArrows(lifted.source, '<props>', 0, true, theirs);
         tree = $B._PyPegen.run_parser(new $B.Parser(body, '<props>', 'file'));
-        for (const one of declaredJsImports(tree.body, '<props>')) for (const name of one.names) theirs.add(name);
+        for (const one of declaredJsImports(tree, symbolTable(tree, '<props>'), '<props>')) {
+            for (const name of one.names) theirs.add(name);
+        }
     } catch {
         return [];
     }
