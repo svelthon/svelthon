@@ -1738,6 +1738,7 @@ $B.make_js_iterator_no_trace=function(iterator){if(Array.isArray(iterator)){if(i
 return iterator.map($B.jsobj2pyobj)[Symbol.iterator]()}}
 return $B.make_js_iterator(iterator,$B.NULL)}
 $B.clip_index=function(state,low,high){
+if(! $B.is_int(state)){$B.RAISE(_b_.TypeError,"an integer is required")}
 var index=$B.PyNumber_Index(state)
 return index < low ? low :index > high ? high :index}
 $B.make_js_iterator=function(iterator,frame,lineno,inum){
@@ -2968,6 +2969,11 @@ break}}}}
 function reset_setattr(cls){$B.make_setattr(cls)
 if(cls.tp_subclasses===undefined){console.log('no subclasses',cls)}
 for(var kls of cls.tp_subclasses){reset_setattr(kls)}}
+function dict_from_base(class_obj){
+for(var base of $B.get_mro(class_obj).slice(1)){if((base.tp_flags & TPFLAGS.HEAPTYPE)&&
+($B.get_from_dict(base,'__slots__',$B.NULL)===$B.NULL ||
+base.$slots_has_dict)){return true}}
+return false}
 function set_slots(cl_dict,class_obj){let slots=$B.str_dict_get(cl_dict,'__slots__',$B.NULL)
 if(slots !==$B.NULL){class_obj.$slots=[]
 if($B.is_str(slots)){slots=[slots]}
@@ -2982,7 +2988,8 @@ if(! _b_.str.tp_funcs.isidentifier(key)){$B.RAISE(_b_.TypeError,'__slots__ must 
 if(MARKERS.includes(key)&& class_obj.$slots.includes(key)){$B.RAISE(_b_.TypeError,`${key} slot disallowed: we already got one`)}
 if(key.startsWith('__')&& ! key.endsWith('__')){key='_'+$B.get_name(class_obj).replace(/^_+/,'')+key}
 class_obj.$slots.push(key)
-if(key=='__dict__' ||key=='__weakref__'){if(key=='__dict__'){class_obj.$slots_has_dict=true}
+if(key=='__dict__' ||key=='__weakref__'){if(key=='__dict__'){if(class_obj.$slots_has_dict ||dict_from_base(class_obj)){$B.RAISE(_b_.TypeError,"__dict__ slot disallowed: we already got one")}
+class_obj.$slots_has_dict=true}
 continue}
 var found=$B.str_dict_get(cl_dict,key,$B.NULL)
 if(found !==$B.NULL && key !='__qualname__' &&
@@ -5093,8 +5100,9 @@ check_nb_args_no_kw('globals',0,arguments)
 return $B.frame_obj.frame[3]}
 _b_.hasattr=function(obj,attr){check_nb_args_no_kw('hasattr',2,arguments)
 try{
-$B.$getattr(obj,attr)
-return true}catch(err){return false}}
+_b_.getattr(obj,attr)
+return true}catch(err){if($B.is_exc(err,[_b_.AttributeError])){return false}
+throw err}}
 _b_.hash=function(obj){check_nb_args_no_kw('hash',1,arguments)
 return $B.$hash(obj)}
 $B.$hash=function(obj){if(obj.__hashvalue__ !==undefined){return obj.__hashvalue__}
@@ -5161,7 +5169,10 @@ return res}
 _b_.isinstance=function(obj,cls){check_nb_args_no_kw('isinstance',2,arguments)
 return $B.$isinstance(obj,cls)}
 $B.$isinstance=function(obj,cls){var kls
-if(Array.isArray(cls)){for(kls of cls){if($B.$isinstance(obj,kls)){return true}}
+if(Array.isArray(cls)){
+if(cls.ob_type !==undefined && ! $B.is_tuple(cls)){$B.RAISE(_b_.TypeError,"isinstance() arg 2 must be a type, "+
+"a tuple of types, or a union")}
+for(kls of cls){if($B.$isinstance(obj,kls)){return true}}
 return false}
 var klass=$B.get_class(cls)
 if(klass===$B.UnionType){for(kls of cls.args){if($B.$isinstance(obj,kls)){return true}}
@@ -5177,6 +5188,10 @@ var mro=$B.get_mro(obj_class)
 if(mro){for(var i=0;i < mro.length;i++){if(mro[i]===cls){return true}}}
 var instancecheck=$B.type_getattribute($B.get_class(cls),'__instancecheck__',$B.NULL)
 if(instancecheck !==$B.NULL){if(instancecheck.method !==_b_.type.tp_funcs.__instancecheck__){return $B.$call(instancecheck,cls,obj)}}
+if($B.search_in_mro(obj_class,'__class__',$B.NULL)!==
+$B.search_in_dict(_b_.object,'__class__',$B.NULL)){var reported=$B.$getattr(obj,'__class__',$B.NULL)
+if(reported !==$B.NULL && reported !==obj_class &&
+$B.is_type(reported)){return $B.get_mro(reported).includes(cls)}}
 return false}
 var issubclass=_b_.issubclass=function(cls,class_or_tuple){check_nb_args_no_kw('issubclass',2,arguments)
 let _class
@@ -5459,25 +5474,11 @@ _b_.reversed.tp_methods=["__length_hint__","__reduce__","__setstate__"]
 _b_.reversed.noargs_methods=["__length_hint__","__reduce__"]
 $B.set_func_names(reversed,"builtins")
 _b_.round=function(){var $=$B.args('round',2,{number:null,ndigits:null},arguments,{ndigits:None},null,null)
-var arg=$.number,n=$.ndigits===None ? 0 :$.ndigits
-var klass
-if(! $B.$isinstance(arg,[_b_.int,_b_.float])){klass=$B.get_class(arg)
-try{
-return $B.$call($B.$getattr(klass,"__round__"),...arguments)}catch(err){if($B.is_exc(err,[_b_.AttributeError])){$B.RAISE(_b_.TypeError,"type "+$B.class_name(arg)+
-" doesn't define __round__ method")}else{
-throw err}}}
-if(! $B.is_int(n)){$B.RAISE(_b_.TypeError,"'"+$B.class_name(n)+
-"' object cannot be interpreted as an integer")}
-klass=$B.get_class(arg)
-if($B.$isinstance(arg,_b_.float)){return _b_.float.tp_funcs.__round__(arg,$.ndigits)}
-var mult=Math.pow(10,n),x=arg*mult,floor=Math.floor(x),diff=Math.abs(x-floor),res
-if(diff==0.5){if(floor % 2){floor+=1}
-res=_b_.int.nb_true_divide(floor,mult)}else{
-res=_b_.int.nb_true_divide(Math.round(x),mult)}
-if(res.value===Infinity ||res.value===-Infinity){$B.RAISE(_b_.OverflowError,"rounded value too large to represent")}
-if($.ndigits===None){
-return Math.floor(res.value)}else{
-return $B.$call(klass,res)}}
+var round=$B.$getattr($B.get_class($.number),"__round__",$B.NULL)
+if(round===$B.NULL){$B.RAISE(_b_.TypeError,"type "+$B.class_name($.number)+
+" doesn't define __round__ method")}
+if($.ndigits===None){return $B.$call(round,$.number)}
+return $B.$call(round,$.number,$.ndigits)}
 _b_.setattr=function(){var $=$B.args('setattr',3,{obj:null,attr:null,value:null},arguments,null,null,null)
 var obj=$.obj,attr=$.attr,value=$.value
 if(!(typeof attr=='string')){$B.RAISE(_b_.TypeError,"setattr(): attribute name must be string")}
@@ -6945,7 +6946,7 @@ return typeof done=='bigint' ?
 _b_.int.$int_or_long(BigInt(len)-done):len-done}
 range_iterator_funcs.__reduce__=function(self){return $B.fast_tuple([_b_.iter,$B.fast_tuple([self.obj]),_b_.None])}
 range_iterator_funcs.__setstate__=function(self,value){
-var index=$B.clip_index(value,0,range_iterator_funcs.__length_hint__(self))
+var index=$B.clip_index($B.PyNumber_Index(value),0,range_iterator_funcs.__length_hint__(self))
 self.it+=typeof self.it=='bigint' ?
 BigInt(index)*self.step :index*self.step
 return _b_.None}
@@ -10545,7 +10546,16 @@ chunks.reverse()
 res=sign+chunks.join(",")}
 return $B.format_width(res,fmt)}
 int_funcs.__getnewargs__=function(self){return $B.fast_tuple([int_value(self)])}
-int_funcs.__round__=function(self){return int_value(self)}
+int_funcs.__round__=function(self){var $=$B.args('__round__',2,{self:null,ndigits:null},arguments,{ndigits:_b_.None},null,null)
+var value=int_value($.self)
+if($.ndigits===_b_.None){return value}
+var ndigits=$B.PyNumber_Index($.ndigits)
+if(ndigits >=0){return value}
+var pow=10n**BigInt(-ndigits),x=BigInt(value),q=x/pow,r=x-q*pow
+if(r < 0n){q-=1n
+r+=pow}
+if(2n*r > pow ||(2n*r==pow && q % 2n !=0n)){q+=1n}
+return int_or_long(q*pow)}
 int_funcs.__sizeof__=function(self){}
 int_funcs.__trunc__=function(self){return int_value(self)}
 int_funcs.as_integer_ratio=function(self){return $B.fast_tuple([self,1])}
@@ -10826,36 +10836,34 @@ return fast_float(result)}
 float.$funcs={isinf,isninf,isnan,fabs,frexp,ldexp}
 function float_round(x,ndigits){function overflow(){$B.RAISE(_b_.OverflowError,"cannot convert float infinity to integer")}
 var no_digits=ndigits===_b_.None
+if(! no_digits){ndigits=Number($B.PyNumber_Index(ndigits))}
 if(isnan(x)){if(ndigits===_b_.None){$B.RAISE(_b_.ValueError,"cannot convert float NaN to integer")}
 return NAN}else if(isninf(x)){return ndigits===_b_.None ? overflow():NINF}else if(isinf(x)){return ndigits===_b_.None ? overflow():INF}
-x=float_value(x)
-ndigits=ndigits===_b_.None ? 0 :ndigits
-if(ndigits==0){var res=Math.round(x.value)
-if(Math.abs(x.value-res)==0.5){
-if(res % 2){return res-1}}
+x=float_value(x).value
 if(no_digits){
-return res+0}
-return $B.fast_float(res)}
-if(typeof ndigits=="bigint"){ndigits=Number(ndigits)}
-var pow1,pow2,y,z
-if(ndigits >=0){if(ndigits > 22){
-pow1=10**(ndigits-22)
-pow2=1e22}else{
-pow1=10**ndigits
-pow2=1.0}
-y=(x.value*pow1)*pow2
-if(!isFinite(y)){return x}}else{
-pow1=10**-ndigits
-pow2=1.0 
-if(isFinite(pow1)){y=x.value/pow1}else{
-return ZERO}}
-z=Math.round(y)
-if(fabs(y-z).value==0.5){
-z=2.0*Math.round(y/2)}
-if(ndigits >=0){z=(z/pow2)/pow1}else{
-z*=pow1}
-if(! isFinite(z)){$B.RAISE(_b_.OverflowError,"overflow occurred during round")}
-return fast_float(z)}
+var res=Math.round(x)
+if(Math.abs(x-res)==0.5 && res % 2){res-=1}
+return _b_.int.$int_or_long(BigInt(res))}
+if(ndigits > 323 ||x==0){
+return fast_float(x)}
+if(ndigits <-308){return fast_float(0*x)}
+var view=new DataView(new ArrayBuffer(8))
+view.setFloat64(0,Math.abs(x))
+var high=view.getUint32(0),exp=high >>> 20,mant=(BigInt(high & 0xfffff)<< 32n)|BigInt(view.getUint32(4))
+if(exp==0){exp=1}else{
+mant |=1n << 52n}
+exp-=1075
+var num=mant*10n**BigInt(Math.max(ndigits,0))*
+2n**BigInt(Math.max(exp,0)),den=10n**BigInt(Math.max(-ndigits,0))*
+2n**BigInt(Math.max(-exp,0)),q=num/den,r=num % den
+if(2n*r > den ||(2n*r==den && q % 2n==1n)){q+=1n}
+var digits=q.toString()
+if(ndigits > 0){digits=digits.padStart(ndigits+1,'0')
+digits=digits.slice(0,-ndigits)+'.'+digits.slice(-ndigits)}else{
+digits+='0'.repeat(-ndigits)}
+var z=Number(digits)
+if(! isFinite(z)){$B.RAISE(_b_.OverflowError,"rounded value too large to represent")}
+return fast_float(x < 0 ?-z :z)}
 function to_digits(s){
 var arabic_digits="\u0660\u0661\u0662\u0663\u0664\u0665\u0666\u0667\u0668\u0669",res=""
 for(var i=0;i < s.length;i++){var x=arabic_digits.indexOf(s[i])
@@ -11719,6 +11727,21 @@ $B.is_or_equals(value,other_pair[1])){flag=true
 break}}
 if(! flag){return false}}}
 return true}
+function dict_update_arg(self,arg){
+if($B.$isinstance(arg,dict)&&
+$B.search_in_mro($B.get_class(arg),'__iter__',$B.NULL)===
+$B.search_in_dict(dict,'__iter__',$B.NULL)){$copy_dict(self,arg)}else if($B.get_class(arg)===$B.JSObj){for(let key in arg){$B.str_dict_set(self,key,$B.jsobj2pyobj(arg[key]))}}else if($B.$getattr(arg,"keys",$B.NULL)!==$B.NULL){for(let key of $B.make_js_iterator($B.$call($B.$getattr(arg,"keys")))){dict.$setitem(self,key,$B.$getitem1(arg,key))}}else{
+let it=_b_.iter(arg),i=0,key_value
+while(true){try{
+var item=_b_.next(it)}catch(err){if($B.is_exc(err,_b_.StopIteration)){break}
+throw err}
+try{
+key_value=_b_.list.$factory(item)}catch(err){$B.RAISE(_b_.TypeError,"object is not iterable")}
+if(key_value.length !==2){$B.RAISE(_b_.ValueError,"dictionary update "+
+"sequence element #"+i+" has length "+
+key_value.length+"; 2 is required")}
+dict.$setitem(self,key_value[0],key_value[1])
+i++}}}
 dict.$delete_string=function(self,key){
 if(! self[KEYS]){var ix=self[key]
 if(ix !==undefined){delete self[key]}}
@@ -11870,17 +11893,7 @@ $B.RAISE(_b_.TypeError,'expected mapping or '+
 `iterable, got ${$B.class_name(arg)}`)}
 add_iterable(self,js_iterable)}}}else{
 $B.RAISE(_b_.TypeError,"dict expected at most 1 argument"+
-`, got ${args.length}`)}}else if(args.length==1){args=args[0]
-if($B.exact_type(args,dict)){for(let entry of dict.$iter_items(args)){dict.$setitem(self,entry.key,entry.value,entry.hash)}}else{
-var keys=$B.$getattr($B.get_class(args),"keys",$B.NULL)
-if(keys !==$B.NULL){var gi=$B.$getattr($B.get_class(args),"__getitem__",$B.NULL)
-if(gi !==$B.NULL){
-for(var key of $B.make_js_iterator($B.$call(keys,args))){try{
-let value=$B.$getitem1(args,key)
-dict.$setitem(self,key,value)}catch(err){if($B.is_exc(err,_b_.StopIteration)){break}
-throw err}}}}else{
-if(! Array.isArray(args)){args=_b_.list.$factory(args)}
-init_from_list(self,args)}}}
+`, got ${args.length}`)}}else if(args.length==1){dict_update_arg(self,args[0])}
 for(let item of _b_.dict.$iter_items($.second)){dict.$setitem(self,item.key,item.value)}
 return _b_.None}
 _b_.dict.nb_inplace_or=function(self,other){
@@ -11918,8 +11931,7 @@ self[VERSION]++
 return _b_.None}
 dict_funcs.copy=function(self){
 var res=$B.empty_dict()
-if($B.exact_type(self,_b_.dict)){$copy_dict(res,self)
-return res}
+$copy_dict(res,self)
 return res}
 dict_funcs.fromkeys=function(){var $=$B.args("fromkeys",3,{cls:null,keys:null,value:null},arguments,{value:_b_.None})
 var keys=$.keys,value=$.value
@@ -11972,23 +11984,8 @@ dict.$setitem(self,key,_default,hash,true)
 return _default}
 dict_funcs.update=function(self){var $=$B.args("update",1,{"self":null},arguments,null,"args","kw")
 var self=$.self,args=$.args,kw=$.kw
-if(args.length > 0){var o=args[0]
-if($B.$isinstance(o,dict)){$copy_dict(self,o)}else if(_b_.hasattr(o,"keys")){var _keys=_b_.list.$factory($B.$call($B.$getattr(o,"keys")))
-for(let i=0,len=_keys.length;i < len;i++){var getitem=$B.$getattr(o,"__getitem__",$B.NULL)
-if(getitem !==$B.NULL){var _value=$B.$call(getitem,_keys[i])
-dict.$setitem(self,_keys[i],_value)}}}else{
-let it=_b_.iter(o),i=0,key_value
-while(true){try{
-var item=_b_.next(it)}catch(err){if($B.is_exc(err,_b_.StopIteration)){break}
-throw err}
-try{
-key_value=_b_.list.$factory(item)}catch(err){$B.RAISE(_b_.TypeError,"cannot convert dictionary"+
-" update sequence element #"+i+" to a sequence")}
-if(key_value.length !==2){$B.RAISE(_b_.ValueError,"dictionary update "+
-"sequence element #"+i+" has length "+
-key_value.length+"; 2 is required")}
-dict.$setitem(self,key_value[0],key_value[1])
-i++}}}
+if(args.length > 1){$B.RAISE(_b_.TypeError,"update expected at most 1 argument"+
+`, got ${args.length}`)}else if(args.length==1){dict_update_arg(self,args[0])}
 $copy_dict(self,kw)
 return _b_.None}
 dict_funcs.values=function(self){return{

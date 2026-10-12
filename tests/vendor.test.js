@@ -1162,6 +1162,29 @@ test('sequences, iterators and searches answer as in CPython: sequence-iterator-
     ]);
 });
 
+// hasattr() answered False for any error; a dict subclass copied as empty and
+// updated a dict through its storage whatever it redefined; round() missed a
+// subclass's __round__ and rounded in JavaScript arithmetic; isinstance()
+// ignored a proxy's __class__ and took a list; an iterator took any index as
+// its state; __slots__ could ask again for a __dict__ a base gives.
+test('attributes, dicts and rounding answer as in CPython: hasattr-attribute-error, dict-subclass-copy, dict-update-arg, round-exact, isinstance-reported-class, isinstance-list-refused, iterator-setstate, slots-marker-redeclared', async () => {
+    const { answers } = await import('./fixtures/attributes_dicts_rounding.py');
+
+    expect([...answers()]).toEqual([
+        'RuntimeError',
+        "{'a': 1, 'b': 2}",
+        "{'before': 0, 'b': 2}",
+        'TypeError',
+        'TypeError',
+        '(1200, 9007199254740993, 2.67, 2.0)',
+        "(('custom', 1), 1.2)",
+        'True',
+        'TypeError',
+        'TypeError',
+        'TypeError'
+    ]);
+});
+
 // The console's write() returned None where CPython gives the number of
 // characters written. A component cannot import `sys`; the runtime's stdout
 // is read where Brython keeps it.
