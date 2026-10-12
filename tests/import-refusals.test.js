@@ -139,7 +139,13 @@ test.for([
         'an async __reduce__',
         'class Box:\n    async def __reduce__(self):\n        return 42\n\nasync def run():\n    return await Box().__reduce__()'
     ],
-    ['an object named builtins', 'class Own:\n    def eval(self, v):\n        return v + 1\n\nbuiltins = Own()\nanswer = builtins.eval(41)']
+    ['an object named builtins', 'class Own:\n    def eval(self, v):\n        return v + 1\n\nbuiltins = Own()\nanswer = builtins.eval(41)'],
+    // A name is the module only where the binding it reads is the import.
+    [
+        'a parameter named like the module',
+        'import builtins as tools\n\nclass Reader:\n    def open(self):\n        return "ok"\n\ndef read(tools):\n    return tools.open()'
+    ],
+    ['a name the module is imported under in another function', 'def other():\n    import builtins as tools\n\ndef read(tools):\n    return tools.eval()']
 ])('%s is theirs', ([, written]) => {
     expect(() => compile(`${written}\n`, 'C', 'src/C.svelte', { plain: true })).not.toThrow();
     expect(() => compile(`${written}\n`, 'C', 'src/C.svelte')).not.toThrow();
@@ -158,6 +164,11 @@ test.for([
     ['handed on', 'run = eval\nx = run("1 + 1")', /`eval\(\)` parses its text.*\(src\/C\.svelte:1\)/],
     ['through builtins', 'import builtins\nx = builtins.eval("1 + 1")', /`eval\(\)` parses its text.*\(src\/C\.svelte:2\)/],
     ['imported from builtins', 'from builtins import open', /`open\(\)` reads a file.*\(src\/C\.svelte:1\)/],
+    [
+        'through the module a nested function closes over',
+        'def outer():\n    import builtins as b\n    def inner():\n        return b.open("x")\n    return inner',
+        /`open\(\)` reads a file.*\(src\/C\.svelte:4\)/
+    ],
     [
         'beside a local of that name',
         'def safe():\n    eval = len\n    return eval([1])\n\nx = eval("1")',

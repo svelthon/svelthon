@@ -2717,19 +2717,47 @@ function refuseLibraryCalls(ast, table, source, lineOffset) {
     const builtin = builtinIn(table, moduleBinds(table));
     const unshipped = (name) => Object.hasOwn(UNSHIPPED_BUILTINS, name);
 
-    // The names that are the builtins module, `import builtins [as b]`, and
-    // the attributes a class of the file binds itself, by a `def`, an `async
-    // def` or an assignment, whose call is the author's and needs nothing that
-    // does not ship.
-    const modules = new Set();
+    // The names that are the builtins module, `import builtins [as b]`, by the
+    // block that binds them, and the attributes a class of the file binds
+    // itself, by a `def`, an `async def` or an assignment, whose call is the
+    // author's and needs nothing that does not ship.
+    const modules = new Map();
     const defined = new Set();
-    walkScoped(ast.body, (node) => {
+    const blockAt = (scope) => (scope === null ? table.top : table.blockOf(scope));
+    walkScoped(ast.body, (node, scope) => {
         if (node instanceof $B.ast.Import) {
-            for (const one of node.names) if (one.name === 'builtins') modules.add(one.asname ?? 'builtins');
+            for (const one of node.names) {
+                if (one.name !== 'builtins') continue;
+                if (!modules.has(blockAt(scope))) modules.set(blockAt(scope), new Set());
+                modules.get(blockAt(scope)).add(one.asname ?? 'builtins');
+            }
         }
         if (node instanceof $B.ast.ClassDef) for (const name of blockBinds(table.blockOf(node))) defined.add(name);
     });
-    const isModule = (name, scope) => modules.has(name) || (name === '__builtins__' && builtin(name, scope));
+
+    // A name means the module only where the binding it reads is the import:
+    // the block's own, the module's for a global, or for a free name the
+    // nearest enclosing function's, a class body being no enclosing scope.
+    const parents = new Map();
+    const index = (block) => {
+        for (const child of block.children) {
+            parents.set(child, block);
+            index(child);
+        }
+    };
+    index(table.top);
+    const bindingBlock = (name, block) => {
+        while (block !== table.top) {
+            const where = scopeIn(block, name);
+            if (isGlobalScope(where)) return table.top;
+            if (where !== $B.SYMBOL_FLAGS.FREE) return block;
+            do block = parents.get(block);
+            while (block.type === $B.SYMBOL_FLAGS.TYPE_CLASS);
+        }
+        return block;
+    };
+    const isModule = (name, scope) =>
+        name === '__builtins__' ? builtin(name, scope) : modules.get(bindingBlock(name, blockAt(scope)))?.has(name) === true;
     const refuseBuiltin = (name, line) => {
         throw refuse(
             `svelthon — \`${name}()\` ${UNSHIPPED_BUILTINS[name]} (${source}:${line + lineOffset})`,
