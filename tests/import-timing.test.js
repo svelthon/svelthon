@@ -7,7 +7,7 @@
 import { test, expect } from 'vitest';
 import { mount, unmount, flushSync } from 'svelte';
 import { recorded } from './fixtures/timing_log.py';
-import { later, again, retried, kept, computed } from './fixtures/timing_imports.py';
+import { later, again, retried, kept, computed, read_kept } from './fixtures/timing_imports.py';
 import { store } from './fixtures/timing_store.svelte.py';
 import TimingImport from './fixtures/TimingImport.svelte';
 import TimingLate from './fixtures/TimingLate.svelte';
@@ -49,6 +49,16 @@ test('a module whose body raised runs again in a new module', () => {
 // into a reactive module holding a list of modules.
 test('a derived of a failed or watched module is never run unread', () => {
     expect(computed()).toBe(0);
+});
+
+// And what the failed module keeps reads as it did: a derived is computed
+// when read, from its own names, and its functions find the helpers the
+// compiler lends it.
+test('a failed module still reads its derived and calls its helpers', () => {
+    expect(read_kept()).toEqual([
+        [20, 40, 'hello-world'],
+        [20, 40, 'hello-world']
+    ]);
 });
 
 test('an import in a branch not taken runs nothing, in a module, a reactive module or a component', () => {

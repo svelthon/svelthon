@@ -62,5 +62,12 @@ def kept():
     return rows
 
 
+def read_kept():
+    return [
+        [modules[0].doubled, modules[-1].doubled, modules[0].slug()]
+        for modules in (timing_log.flaky_modules, timing_log.flaky_store_modules)
+    ]
+
+
 def computed():
     return timing_log.hidden_runs

@@ -3218,7 +3218,7 @@ function authorBindings(c) {
         // derived on `===`, so the reader subscribes to the object instead.
         ...c.deriveds.map(
             (d) =>
-                `__bind(__proto, '${d.name}', () => __follow(${d.name}), (${NEXT_VALUE}) => { ${fn(d.name)} = ${NEXT_VALUE}; }, () => ${fn(d.name)});`
+                `__bind(__proto, '${d.name}', () => __follow(${d.name}), (${NEXT_VALUE}) => { ${fn(d.name)} = ${NEXT_VALUE}; }, () => ${fn(d.name)}, true, true);`
         )
     ];
 }
@@ -3636,7 +3636,7 @@ function plainBindings(c) {
         ),
         ...c.plainDeriveds.map(
             (d) =>
-                `__bind(__proto, '${d.name}', () => __invoke(${fn(d.name)}), (${NEXT_VALUE}) => { ${fn(d.name)} = ${NEXT_VALUE}; }, () => ${fn(d.name)});`
+                `__bind(__proto, '${d.name}', () => __invoke(${fn(d.name)}), (${NEXT_VALUE}) => { ${fn(d.name)} = ${NEXT_VALUE}; }, () => ${fn(d.name)}, true, true);`
         ),
         ...injections(c.declared, false, c.names),
 

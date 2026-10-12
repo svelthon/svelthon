@@ -7018,26 +7018,50 @@ function typedModule($B, namespace) {
 }
 
 // The namespace of an attempt that raised, left as it was to whoever holds it,
-// the module itself or an import cycle, and sharing nothing with the next one:
-// each name it holds is kept on it as its own, as held at its source, a
-// derived's definition and not its value, so nothing is computed; and it
-// leaves the accessors it shared, so a name the next attempt binds is not one
-// of its own, and a name written on it is written on it alone. And the new
-// namespace the next attempt runs in, on those accessors, where what the
-// failed one bound is deleted as `del` deletes it.
+// the module itself or an import cycle, and sharing nothing with the next one.
+// It leaves the accessors it shared, so a name the next attempt binds is not
+// one of its own, and a name written on it is written on it alone; it keeps
+// what is not a name of the module, the helpers the compiler lends it, which
+// read no cell. Each name it holds is kept as held at its source, so nothing is
+// computed: a value as its own, and a derived as its definition, computed
+// again in it when read, as it was. And the new namespace the next attempt
+// runs in, on the shared accessors, where what the failed one bound is deleted
+// as `del` deletes it.
 function abandoned($B, namespace, before) {
     const held = Object.keys(namespace[$B.DICT]);
     const shared = Object.getPrototypeOf(namespace);
+    const computed = COMPUTED.get(shared);
+    const kept = Object.create(Object.getPrototypeOf(shared));
+    const sources = new Map();
+
+    for (const key of Reflect.ownKeys(shared)) {
+        const descriptor = Object.getOwnPropertyDescriptor(shared, key);
+
+        if (!descriptor.enumerable || !moduleName(key)) Object.defineProperty(kept, key, descriptor);
+    }
 
     for (const name of held) {
         if (Object.hasOwn(namespace, name)) continue;
 
         const value = heldAtSource(namespace, name);
 
-        Object.defineProperty(namespace, name, { value, writable: true, enumerable: true, configurable: true });
+        if (computed?.has(name)) {
+            sources.set(name, () => value);
+            Object.defineProperty(kept, name, {
+                get: () => invoke(value),
+                set(next) {
+                    Object.defineProperty(this, name, { value: next, writable: true, enumerable: true, configurable: true });
+                },
+                enumerable: true,
+                configurable: true
+            });
+        } else {
+            Object.defineProperty(namespace, name, { value, writable: true, enumerable: true, configurable: true });
+        }
     }
 
-    Object.setPrototypeOf(namespace, Object.getPrototypeOf(shared));
+    STORED.set(kept, sources);
+    Object.setPrototypeOf(namespace, kept);
 
     const next = Object.create(shared);
 
@@ -7883,6 +7907,10 @@ export function ticking(after) {
 // derived's body run. It is what `del` watches; without one, `get` is it.
 const STORED = new WeakMap();
 
+// The names whose reading computes what they hold, a derived's: what a failed
+// module keeps of one is its definition, still computed when read.
+const COMPUTED = new WeakMap();
+
 // What a namespace holds under `name`, asked at its source: a derived's
 // definition and not its value, so a question about a name, `del`, the keys of
 // `globals()` or what a failed module keeps, runs no computation. `undefined`
@@ -7928,11 +7956,17 @@ const inBindingOrder = (namespace, names) => {
 // `listed` is false for a helper the compiler injects: a word of the framework,
 // readable like a builtin, and no name of the module's own, so `globals()` does
 // not list it.
-export function bind(proto, key, get, set, source, listed = true) {
+export function bind(proto, key, get, set, source, listed = true, computed = false) {
     if (source !== undefined) {
         let sources = STORED.get(proto);
         if (sources === undefined) STORED.set(proto, (sources = new Map()));
         sources.set(key, source);
+    }
+
+    if (computed) {
+        let names = COMPUTED.get(proto);
+        if (names === undefined) COMPUTED.set(proto, (names = new Set()));
+        names.add(key);
     }
 
     // No setter means the name is a *default*: an injected helper, or a
@@ -8136,6 +8170,10 @@ export const handOver = (written, write) => {
 // `withNamespace`), which is where `from m import *` reads a module with no
 // `__all__`, and `from m import name` the name.
 const COMPILER_NAME = /^__(?!.*__$)/;
+
+// A key that may be a name of the module's: not the engine's `$` fields, and
+// not a word of the compiler's.
+const moduleName = (key) => typeof key === 'string' && !key.startsWith('$') && !COMPILER_NAME.test(key);
 const DICTS = new WeakMap();
 // Each of those dicts, to the namespace it is a view of.
 const NAMESPACE_DICTS = new WeakMap();
@@ -8214,16 +8252,18 @@ function namespaceDict(namespace) {
     if (known !== undefined) return known;
 
     // A name is there by what it holds at its source, so listing or counting
-    // the names runs no derived; its value is read when it is asked for.
-    const proto = Object.getPrototypeOf(namespace);
+    // the names runs no derived; its value is read when it is asked for. The
+    // prototype asked as it is now: a failed module's leaves the shared one.
     const named = (key) =>
-        typeof key === 'string' &&
-        !key.startsWith('$') &&
-        !COMPILER_NAME.test(key) &&
-        (Object.hasOwn(namespace, key) || Object.getOwnPropertyDescriptor(proto, key)?.enumerable === true) &&
+        moduleName(key) &&
+        (Object.hasOwn(namespace, key) ||
+            Object.getOwnPropertyDescriptor(Object.getPrototypeOf(namespace), key)?.enumerable === true) &&
         holdsName(namespace, key);
     const names = () =>
-        inBindingOrder(namespace, [...new Set([...Object.keys(namespace), ...Object.keys(proto)])].filter(named));
+        inBindingOrder(
+            namespace,
+            [...new Set([...Object.keys(namespace), ...Object.keys(Object.getPrototypeOf(namespace))])].filter(named)
+        );
 
     const dict = new Proxy($B.empty_dict(), {
         get(target, key) {
