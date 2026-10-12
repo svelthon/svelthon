@@ -7,7 +7,7 @@
 import { test, expect } from 'vitest';
 import { mount, unmount, flushSync } from 'svelte';
 import { recorded } from './fixtures/timing_log.py';
-import { later, again } from './fixtures/timing_imports.py';
+import { later, again, retried } from './fixtures/timing_imports.py';
 import { store } from './fixtures/timing_store.svelte.py';
 import TimingImport from './fixtures/TimingImport.svelte';
 import { early, late } from './fixtures/cycle_a.py';
@@ -26,6 +26,15 @@ test('a module imported in a function runs when the function does, once', () => 
 test('a module whose body raised runs again at the next import', () => {
     again();
     expect(recorded()).toBe('before first after fails caught later fails caught again');
+});
+
+// And from a module as new as the first attempt's: a name the failed attempt
+// bound is not there, in a module or a reactive module.
+test('a module whose body raised runs again from a fresh module', () => {
+    expect(retried()).toEqual([
+        ['failed', true, true],
+        ['failed', true, true]
+    ]);
 });
 
 test('an import in a branch not taken runs nothing, in a module, a reactive module or a component', () => {

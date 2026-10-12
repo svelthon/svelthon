@@ -26,3 +26,27 @@ def again():
         import timing_fails
     except ValueError:
         timing_log.entries.append("caught again")
+
+
+def attempts(load):
+    outcomes = []
+    for _ in range(3):
+        try:
+            outcomes.append(load())
+        except ValueError:
+            outcomes.append("failed")
+    return outcomes
+
+
+def flaky():
+    import timing_flaky
+    return timing_flaky.fresh()
+
+
+def flaky_store():
+    import timing_flaky_store
+    return timing_flaky_store.fresh
+
+
+def retried():
+    return [attempts(flaky), attempts(flaky_store)]

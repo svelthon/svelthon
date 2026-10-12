@@ -6942,7 +6942,7 @@ const importsRunBodies = ($B) => {
 //
 // The namespace is published before the body runs, so an import cycle finds
 // the module half made rather than running it twice. A body that raises is
-// taken back out, and the next import runs it again.
+// taken back out with what it bound, and the next import runs it again.
 export function pythonModule(namespace, published, run) {
     const $B = globalThis.__BRYTHON__;
     let state = 'waiting';
@@ -6965,12 +6965,20 @@ export function pythonModule(namespace, published, run) {
         state = 'running';
         if (published !== null) registerModule(published, namespace);
 
+        const before = new Set(Object.keys(namespace[$B.DICT]));
+
         try {
             run();
             state = 'done';
         } catch (error) {
             state = 'waiting';
             if (published !== null && $B.imported[published] === namespace) delete $B.imported[published];
+
+            // What the attempt bound goes with it, deleted as `del` deletes
+            // it: the next import starts from a module as new as the one it
+            // would have made.
+            for (const name of Object.keys(namespace[$B.DICT])) if (!before.has(name)) $B.$delete(name, namespace);
+
             throw error;
         }
 
