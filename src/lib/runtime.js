@@ -5002,14 +5002,22 @@ const urlish = (value) =>
 // found along their prototypes: not a class of the same name, and not a
 // function that prints as native code, which a bound function or a proxy does
 // while running the author's.
+//
+// A URL or a Request of another context, an iframe's, carries that context's
+// getters, which are other functions. It is asked by ours instead: the
+// platform's own getter, applied to it, checks that it holds the platform's
+// slots, and reads them, or throws for anything else, before any code of the
+// author's could run.
 const NO_FIELD = Symbol();
 const PLATFORM = ['Request', 'Response', 'URL', 'Headers'];
-const platformGetter = (getter, name) =>
-    PLATFORM.some((one) => {
+const platformGetters = (name) =>
+    PLATFORM.flatMap((one) => {
+        const found = [];
         for (let proto = globalThis[one]?.prototype; proto; proto = Object.getPrototypeOf(proto)) {
-            if (Object.getOwnPropertyDescriptor(proto, name)?.get === getter) return true;
+            const getter = Object.getOwnPropertyDescriptor(proto, name)?.get;
+            if (getter !== undefined) found.push(getter);
         }
-        return false;
+        return found;
     });
 //
 // A member described nowhere along the prototypes is no field: an event's are
@@ -5021,8 +5029,24 @@ const member = (value, name, answered = false) => {
         const own = Object.getOwnPropertyDescriptor(at, name);
         if (own === undefined) continue;
         if ('value' in own) return own.value;
+        if (own.get === undefined) return NO_FIELD;
 
-        return own.get !== undefined && platformGetter(own.get, name) ? value[name] : NO_FIELD;
+        const ours = platformGetters(name);
+        if (ours.includes(own.get)) return value[name];
+
+        // One of our classes with the getter replaced: the author's.
+        const local = PLATFORM.some((one) => globalThis[one]?.prototype?.isPrototypeOf(value) === true);
+        if (local) return NO_FIELD;
+
+        for (const getter of ours) {
+            try {
+                return Reflect.apply(getter, value, []);
+            } catch {
+                // Not the platform's object: the next class, or no field.
+            }
+        }
+
+        return NO_FIELD;
     }
     return answered ? value[name] : NO_FIELD;
 };

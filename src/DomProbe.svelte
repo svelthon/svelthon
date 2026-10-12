@@ -21,6 +21,10 @@ step("doc", lambda: type(document).__name__)
 step("create", lambda: type(document.createElement("input")).__name__)
 step("tagName", lambda: document.createElement("input").tagName)
 
+# A route event built of an iframe's URL and Request, handed to a Python
+# function by `probe.js` before this component mounted.
+step("realm", lambda: js.__realmProbe)
+
 report = " | ".join(steps)
 </script>
 

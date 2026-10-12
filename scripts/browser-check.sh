@@ -7,7 +7,7 @@ set -uo pipefail
 
 PORT=${PORT:-5199}
 URL="http://localhost:$PORT/probe.html"
-EXPECTED='preloaded=OK True | doc=OK DOMNode | create=OK INPUT | tagName=OK INPUT'
+EXPECTED='preloaded=OK True | doc=OK DOMNode | create=OK INPUT | tagName=OK INPUT | realm=OK GET|peps'
 
 # One profile per launch: two Chromiums back to back fight over the default
 # profile's lock, and the second renders an incomplete page — at random.
