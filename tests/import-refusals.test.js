@@ -149,7 +149,7 @@ test.for([
     // And only while the import is its one binding.
     ['the module name bound again', 'import builtins as tools\n\nclass Reader:\n    def open(self):\n        return "ok"\n\ntools = Reader()\nresult = tools.open()'],
     ['the module name bound again in a function', 'def read():\n    import builtins as tools\n    tools = 1\n    return tools.open()'],
-    ['the module name bound again through global', 'import builtins as tools\n\ndef bind():\n    global tools\n    tools = 1\n\nresult = tools.open()']
+    ['the module name bound again through global', 'import builtins as tools\n\ndef bind():\n    global tools\n    tools = 1\n\nbind()\nresult = tools.open()']
 ])('%s is theirs', ([, written]) => {
     expect(() => compile(`${written}\n`, 'C', 'src/C.svelte', { plain: true })).not.toThrow();
     expect(() => compile(`${written}\n`, 'C', 'src/C.svelte')).not.toThrow();
@@ -182,6 +182,27 @@ test.for([
         'beside a local of that name',
         'def safe():\n    eval = len\n    return eval([1])\n\nx = eval("1")',
         /`eval\(\)` parses its text.*\(src\/C\.svelte:5\)/
+    ],
+    // A binding made after the read does not change what the read found.
+    [
+        'through the module read before it is bound again',
+        'import builtins as tools\nx = tools.eval("1")\ntools = None',
+        /`eval\(\)` parses its text.*\(src\/C\.svelte:2\)/
+    ],
+    [
+        'through the module a function bound again but never runs',
+        'import builtins as tools\n\ndef bind():\n    global tools\n    tools = None\n\nx = tools.eval("1")',
+        /`eval\(\)` parses its text.*\(src\/C\.svelte:7\)/
+    ],
+    [
+        'through the module read in a function before it is bound again there',
+        'def run():\n    import builtins as tools\n    x = tools.eval("1")\n    tools = None',
+        /`eval\(\)` parses its text.*\(src\/C\.svelte:3\)/
+    ],
+    [
+        'through the module read before a loop binds it',
+        'import builtins as tools\nx = tools.eval("1")\nfor tools in []:\n    pass',
+        /`eval\(\)` parses its text.*\(src\/C\.svelte:2\)/
     ]
 ])('the builtin %s is refused', ([, written, message]) => {
     expect(() => compile(`${written}\n`, 'C', 'src/C.svelte', { plain: true })).toThrow(message);

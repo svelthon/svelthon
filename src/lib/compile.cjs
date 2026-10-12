@@ -2760,9 +2760,15 @@ function refuseLibraryCalls(ast, table, source, lineOffset) {
         if (!modules.has(block)) modules.set(block, new Set());
         modules.get(block).add(name);
     }
-    // And only while the import is its one binding: another, in its block or
-    // through a `global` or a `nonlocal` elsewhere, leaves what it holds at a
-    // given read unknown here.
+    // And only while the import is the binding the read finds. Each binding of
+    // an alias is dated where Python makes it: an assignment once its value is
+    // computed, a loop's or a `with`'s target before its body, a `def` or a
+    // `class` once built. Within the block that binds the name, a read finds
+    // the last binding before it. One made from another block, through a
+    // `global` or a `nonlocal`, happens whenever that block runs, so it leaves
+    // the read unknown here, unless the block is a function nothing names,
+    // which never runs. So does a binding of a kind not dated here, which the
+    // symbol table still sees.
     const rebound = new Map();
     const bound = $B.SYMBOL_FLAGS.DEF_LOCAL | $B.SYMBOL_FLAGS.DEF_PARAM;
     const visit = (block) => {
@@ -2775,10 +2781,71 @@ function refuseLibraryCalls(ast, table, source, lineOffset) {
         block.children.forEach(visit);
     };
     visit(table.top);
-    const isModule = (name, scope) => {
+
+    const aliases = new Set(imports.map(([name]) => name));
+    const events = [];
+    const named = new Set();
+    const start = (node) => [node.lineno, node.col_offset];
+    const end = (node) => [node.end_lineno, node.end_col_offset];
+    const before = (a, b) => a[0] < b[0] || (a[0] === b[0] && a[1] < b[1]);
+    const SEQUENCES = ['Tuple', 'List', 'Starred'];
+    const bindAt = (name, scope, at, isImport) => {
+        if (!aliases.has(name)) return;
+        const from = blockAt(scope);
+        events.push({ name, from, target: bindingBlock(name, from), at, isImport });
+    };
+    walkScoped(ast.body, (node, scope, line, parent, grand) => {
+        if (node instanceof $B.ast.Name && !(node.ctx instanceof $B.ast.Store)) named.add(node.id);
+        if (node instanceof $B.ast.Attribute) named.add(node.attr);
+
+        if (node instanceof $B.ast.Import || node instanceof $B.ast.ImportFrom) {
+            for (const one of node.names) {
+                const local = one.asname ?? one.name.split('.')[0];
+                bindAt(local, scope, end(node), node instanceof $B.ast.Import && one.name === 'builtins');
+            }
+        }
+        if (node instanceof $B.ast.FunctionDef || node instanceof $B.ast.AsyncFunctionDef || node instanceof $B.ast.ClassDef) {
+            bindAt(node.name, scope, end(node), false);
+        }
+        if (node instanceof $B.ast.ExceptHandler && node.name) bindAt(node.name, scope, start(node.body[0]), false);
+
+        if (node instanceof $B.ast.Name && node.ctx instanceof $B.ast.Store) {
+            const owner = SEQUENCES.some((one) => parent instanceof $B.ast[one]) ? grand : parent;
+            const at =
+                owner instanceof $B.ast.For || owner instanceof $B.ast.AsyncFor
+                    ? start(owner.body[0])
+                    : owner instanceof $B.ast.withitem || owner === null
+                      ? end(node)
+                      : end(owner);
+            bindAt(node.id, scope, at, false);
+        }
+    });
+
+    // A function nothing names never runs, nor anything inside it.
+    const dead = (block) => {
+        for (; block !== table.top && block !== undefined; block = parents.get(block)) {
+            if (block.type === $B.SYMBOL_FLAGS.TYPE_FUNCTION && !named.has(block.name)) return true;
+        }
+        return false;
+    };
+
+    const isModule = (name, scope, read) => {
         if (name === '__builtins__') return builtin(name, scope);
         const block = bindingBlock(name, blockAt(scope));
-        return modules.get(block)?.has(name) === true && rebound.get(block)?.has(name) !== true;
+        if (modules.get(block)?.has(name) !== true) return false;
+
+        const all = events.filter((one) => one.name === name && one.target === block);
+        if (rebound.get(block)?.has(name) && !all.some((one) => !one.isImport)) return false;
+
+        // Every binding an import, the read finds the module whichever ran.
+        // Otherwise only a read in the block itself, with every binding made
+        // there, is dated.
+        const live = all.filter((one) => one.from === block || !dead(one.from));
+        if (live.every((one) => one.isImport)) return true;
+        if (blockAt(scope) !== block || live.some((one) => one.from !== block)) return false;
+
+        const found = live.filter((one) => before(one.at, read)).sort((a, b) => (before(a.at, b.at) ? -1 : 1));
+        return found.at(-1)?.isImport === true;
     };
     const refuseBuiltin = (name, line) => {
         throw refuse(
@@ -2796,8 +2863,8 @@ function refuseLibraryCalls(ast, table, source, lineOffset) {
         if (
             node instanceof $B.ast.Attribute &&
             node.value instanceof $B.ast.Name &&
-            isModule(node.value.id, scope) &&
-            unshipped(node.attr)
+            unshipped(node.attr) &&
+            isModule(node.value.id, scope, start(node))
         ) {
             refuseBuiltin(node.attr, line);
         }
