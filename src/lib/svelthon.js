@@ -16,7 +16,7 @@ import {
 import { parse } from 'svelte/compiler';
 
 const require = createRequire(import.meta.url);
-const { compile, VIRTUAL_PREFIX, virtualId, pythonModuleName, elementProps, PY_NAME, componentImports, componentAliases } = require('./compile.cjs');
+const { compile, VIRTUAL_PREFIX, virtualId, pythonModuleName, elementProps, PY_NAME, componentImports, importedNames } = require('./compile.cjs');
 
 // Generated modules, keyed by project and component name. Filled by the preprocessor when
 // Svelte transforms a component, read back when Vite resolves the import that
@@ -465,11 +465,12 @@ export function python(options = {}) {
             // handed to one is the Python value itself, a `Price(float)` with
             // its class, where a JavaScript child is handed JavaScript's
             // number. Imported by `importjs` or in the `<script module>`, the
-            // way the README writes a composition, and named again by plain
-            // assignment, `Alias = Child`. A child the file system cannot
-            // name, a package, or one an expression picks, is taken for a
-            // JavaScript one. Each file read is a dependency of this one, so a
-            // child that changes language recompiles its parent.
+            // way the README writes a composition. Any other import is a
+            // JavaScript one, a package's included. A tag under a name no
+            // import binds, one the script assigned, holds whichever child it
+            // is handed, and is told apart when it is mounted. Each file read
+            // is a dependency of this one, so a child that changes language
+            // recompiles its parent.
             const read = [];
             const children = [...componentImports(python, filename ?? 'component'), ...moduleComponents(content)]
                 .filter(({ from }) => {
@@ -484,16 +485,18 @@ export function python(options = {}) {
                     return pythonScript(readFileSync(path, 'utf8')) !== null;
                 })
                 .map(({ local }) => local);
-            const pythonChildren = new Set([...children, ...componentAliases(python, children)]);
-            // Registered by the script, for a tag a template name holds, a
-            // snippet's parameter, which may be handed one of them.
+            const pythonChildren = new Set(children);
+            const imported = new Set([...importedNames(python, filename ?? 'component'), ...moduleImports(content)]);
+            // Registered by the script, for a tag that holds a child rather
+            // than names an import, which may be handed one of them.
             file.pythonImports = children;
 
             const code = overMarkup(
                 content,
                 // The markup, and where it starts, so a refusal can name a
                 // line and a column in the file the author is looking at.
-                (markup, offset) => pythonExpressions(markup, collect, undefined, { filename, content, offset, pythonChildren })
+                (markup, offset) =>
+                    pythonExpressions(markup, collect, undefined, { filename, content, offset, pythonChildren, imported })
             );
 
             return { code: tagged(elementOptions(code, python), calls.open(file)), dependencies: read };

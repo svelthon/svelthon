@@ -2669,7 +2669,9 @@ if(!(type.tp_flags & TPFLAGS.HEAPTYPE)){return shape_differs(type,base)? type :b
 try{
 var slots=$B.search_in_dict(type,'__slots__',$B.NULL)}catch(err){console.log('error searching __slots__ in type',type)
 throw err}
-if(slots !==$B.NULL && slots.length > 0){return type}
+if(slots !==$B.NULL && slots.length > 0){
+var names=typeof slots=='string' ?[slots]:Array.from(slots)
+if(names.some(name=> name !='__dict__' && name !='__weakref__')){return type}}
 return base}
 function best_base(bases,ctx){var test=false 
 var n=bases.length
@@ -2969,11 +2971,11 @@ break}}}}
 function reset_setattr(cls){$B.make_setattr(cls)
 if(cls.tp_subclasses===undefined){console.log('no subclasses',cls)}
 for(var kls of cls.tp_subclasses){reset_setattr(kls)}}
-function dict_from_base(class_obj){
-for(var base of $B.get_mro(class_obj).slice(1)){if((base.tp_flags & TPFLAGS.HEAPTYPE)&&
-($B.get_from_dict(base,'__slots__',$B.NULL)===$B.NULL ||
-base.$slots_has_dict)){return true}}
-return false}
+function gives_dict(cls){
+if(!(cls.tp_flags & TPFLAGS.HEAPTYPE)){return $B.search_in_mro(cls,'__dict__',$B.NULL)!==$B.NULL}
+return $B.get_from_dict(cls,'__slots__',$B.NULL)===$B.NULL ||
+cls.$slots_has_dict===true ||
+cls.tp_bases.some(gives_dict)}
 function set_slots(cl_dict,class_obj){let slots=$B.str_dict_get(cl_dict,'__slots__',$B.NULL)
 if(slots !==$B.NULL){class_obj.$slots=[]
 if($B.is_str(slots)){slots=[slots]}
@@ -2988,7 +2990,7 @@ if(! _b_.str.tp_funcs.isidentifier(key)){$B.RAISE(_b_.TypeError,'__slots__ must 
 if(MARKERS.includes(key)&& class_obj.$slots.includes(key)){$B.RAISE(_b_.TypeError,`${key} slot disallowed: we already got one`)}
 if(key.startsWith('__')&& ! key.endsWith('__')){key='_'+$B.get_name(class_obj).replace(/^_+/,'')+key}
 class_obj.$slots.push(key)
-if(key=='__dict__' ||key=='__weakref__'){if(key=='__dict__'){if(class_obj.$slots_has_dict ||dict_from_base(class_obj)){$B.RAISE(_b_.TypeError,"__dict__ slot disallowed: we already got one")}
+if(key=='__dict__' ||key=='__weakref__'){if(key=='__dict__'){if(class_obj.$slots_has_dict ||gives_dict(class_obj.tp_base)){$B.RAISE(_b_.TypeError,"__dict__ slot disallowed: we already got one")}
 class_obj.$slots_has_dict=true}
 continue}
 var found=$B.str_dict_get(cl_dict,key,$B.NULL)
@@ -7284,9 +7286,9 @@ return type.tp_funcs.rjust(ljust,$.width,$.fillbyte)}
 function search_bounds(self,start,end){
 var len=self.source.length
 var bounds=[start,end].map(function(bound,rank){if(bound===_b_.None){return rank==0 ? 0 :len}
-try{
-bound=Number($B.PyNumber_Index(bound))}catch(err){$B.RAISE(_b_.TypeError,"slice indices must be integers "+
+if($B.search_in_mro($B.get_class(bound),'__index__',$B.NULL)===$B.NULL){$B.RAISE(_b_.TypeError,"slice indices must be integers "+
 "or None or have an __index__ method")}
+bound=Number($B.PyNumber_Index(bound))
 return bound < 0 ? Math.max(0,bound+len):bound})
 return[bounds[0],Math.min(bounds[1],len)]}
 function matches(self,seq,pos){for(var j=0;j < seq.length;j++){if(self.source[pos+j]!=seq[j]){return false}}
@@ -17009,7 +17011,9 @@ prefix+`locals.__firstlineno__ = ${this.lineno}\n`
 js+=prefix+`var frame = [name, locals, ${JSON.stringify(glob)}, ${globals_name}]\n`+
 prefix+`$B.enter_frame(frame, __file__, ${this.lineno})\n`+
 prefix+`var _frame_obj = $B.frame_obj\n`+
-prefix+`if (frame.$f_trace !== _b_.None) {\n`+
+prefix+'try {\n'
+indent()
+js+=prefix+`if (frame.$f_trace !== _b_.None) {\n`+
 prefix+tab+`$B.trace_line()\n`+
 prefix+`}\n`
 if(has_type_params){var tp_refs=[]
@@ -17032,6 +17036,12 @@ js+=prefix+`var kls = $B.$class_constructor('${this.name}', `+
 `keywords)\n`+
 prefix+'$B.trace_return_and_leave(frame, _b_.None)\n'+
 prefix+'return kls\n'
+dedent()
+js+=prefix+`} catch (err) {\n`
+indent()
+js+=prefix+`$B.set_exc_and_leave(frame, err)\n`
+dedent()
+js+=prefix+'}\n'
 dedent()
 js+=prefix+`})('${this.name}', `+
 `$B.fast_tuple([${bases}]), {${kwds.join(', ')}})\n`

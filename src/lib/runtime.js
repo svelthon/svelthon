@@ -291,6 +291,7 @@ const keyFor = (repr) => {
 
 // The components written in Python, as their Python parents import them.
 const PYTHON_COMPONENTS = new WeakSet();
+let CROSSING_PAIR = null;
 
 export const __pybridge = {
     // Registered by a Python parent's script: the components it imports from
@@ -299,9 +300,10 @@ export const __pybridge = {
         for (const one of components) if (one !== null && (typeof one === 'function' || typeof one === 'object')) PYTHON_COMPONENTS.add(one);
     },
 
-    // A prop handed to a component a template name holds, a snippet's
-    // parameter: the Python value itself to one written in Python, and
-    // JavaScript's to any other, as a child named by its import gets it.
+    // A prop handed to a component a tag holds rather than names by its
+    // import, a snippet's parameter or a name the script assigned: the Python
+    // value itself to one written in Python, and JavaScript's to any other, as
+    // a child named by its import gets it.
     child(component, value, kind = '') {
         // Handed through a `{@render}` argument, which is Python, it comes
         // back as the adapter made for it, which knows the component.
@@ -309,6 +311,24 @@ export const __pybridge = {
         if (kind === 'spread') return python ? __pybridge.spreadPython(value) : __pybridge.spread(value);
         if (python) return value;
         return kind === 'scalar' ? scalarOnly(value) : pyNumbers(value);
+    },
+
+    // A binding's read/write pair, for the binding Svelte takes no pair for,
+    // `bind:group` on a component, written
+    // `__pybridge.crossing[__pybridge.pair(read, write)]`. Svelte asks there
+    // for a member of a name, and reads or writes it right after computing
+    // its key, which is when the pair is handed over.
+    pair(read, write) {
+        CROSSING_PAIR = [read, write];
+        return 'value';
+    },
+    crossing: {
+        get value() {
+            return CROSSING_PAIR[0]();
+        },
+        set value(value) {
+            CROSSING_PAIR[1](value);
+        }
     },
 
     // The value of `class={…}` on an element, which Svelte hands to `clsx`: a

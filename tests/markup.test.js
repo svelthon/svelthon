@@ -962,7 +962,7 @@ describe('the attribute pass', () => {
     // directive there as the prop of that name. The rewrite was applied to the
     // tag kind it was never written for, and Svelte refused its own output.
     test('bind:group on a component is a prop binding, not an action', () => {
-        const pair = /bind:group=\{__py\.chosen\}/;
+        const pair = /bind:group=\{__pybridge\.crossing\[__pybridge\.pair\(/;
 
         expect(rewrite('<Card bind:group={chosen} />').out).toMatch(pair);
         expect(rewrite('<Card bind:group={chosen} />').out).not.toContain('use:__group');

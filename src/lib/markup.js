@@ -1832,8 +1832,11 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     // them, scope by scope.
     const snippets = new Set([...seed.values()].flat());
 
-    // The tag being read, so that its closing `>` knows what it closed.
+    // The tag being read, so that its closing `>` knows what it closed, and
+    // what is written after that `>`.
     let tag = null;
+    let ended = false;
+    let ending = '';
 
     // The current tag as written, up to where the walk stands. An attribute name
     // never reaches back past its own tag and is copied through unchanged, so
@@ -2174,22 +2177,36 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     // the Python value itself, a `Price(float)` with its class and a `15.0`
     // still a float, by every way a prop is written: by name, short, spread,
     // bound, and under a name beginning with `on`, which may be a callback or
-    // data. A JavaScript child is handed JavaScript's own. The tag is the child
-    // imported under its name only while the markup binds no name of that
-    // spelling: a snippet's parameter, an `{#each}` item, holds whatever
-    // component it is handed.
-    const toPythonChild = () =>
-        isComponent(tag) && where?.pythonChildren?.has(tag.name) === true && scoped(tag.name.split('.')[0]) === null;
+    // data. A JavaScript child is handed JavaScript's own.
+    const toPythonChild = () => isComponent(tag) && tag.held === undefined && where?.pythonChildren?.has(tag.name) === true;
 
-    // The JavaScript name of the component a template name holds, when the tag
-    // is one: its language is known only once it is handed, so its props are
-    // made Python and converted then, `__pybridge.child`. Null otherwise.
-    const heldChild = () => {
-        if (!isComponent(tag)) return null;
-        const [head, ...rest] = tag.name.split('.');
-        const held = scoped(head);
-        return held === null ? null : [held, ...rest].join('.');
+    // Whether a tag holds its child rather than names an import: under a name
+    // the markup binds, a snippet's parameter, an `{#each}` item, or one the
+    // script assigned, `Selected = Child if wide else Native`. Its language
+    // is known only once it is handed. The child is then read once, as Svelte
+    // reads a tag, into a name of its own (`heldTag`), and each prop is made
+    // Python and converted for that child, `__pybridge.child`.
+    const holdsChild = (one) => {
+        if (!isComponent(one) || one.name.includes(':')) return false;
+        const head = one.name.split('.')[0];
+        return scoped(head) !== null || (where?.imported !== undefined && !where.imported.has(head));
     };
+    const taken = new Set(identifiers(markup));
+    let heldCount = 0;
+    const heldTag = () => {
+        let name;
+        do name = `SvelthonChild${heldCount++}`;
+        while (taken.has(name));
+        return name;
+    };
+    const heldRead = (name) => {
+        const [head, ...rest] = name.split('.');
+        return [scoped(head) ?? head, ...rest].join('.');
+    };
+    // The open elements that bound their child, by scope.
+    const heldOwners = new Map();
+
+    const heldChild = () => tag?.held ?? null;
     const forChild = (read, kind = '') => `__pybridge.child(${heldChild()}, ${read}, ${JSON.stringify(kind)})`;
 
     // The iterations a group binding stands in, as Svelte finds them: every
@@ -2298,18 +2315,14 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     // there: its check is on the *name* of the binding, wherever it is written,
     // and answers `bind:group can only bind to an Identifier or MemberExpression`.
     //
-    // The namespace is a member expression, which it accepts, and reading or
-    // writing through it goes through the same accessor the pair would have
-    // called. A name the markup declared is Svelte's own and stays as it is.
+    // So the pair any other binding has, crossing as it does, is handed over
+    // as a member of a name, which it accepts, see `__pybridge.pair`.
     //
-    // Anything else is refused rather than guessed: `__py.row.pick` would be a
-    // JavaScript member access on a Python object, which finds a property and
-    // not a key, so the write would land nowhere and say nothing.
+    // Anything but a name is refused rather than guessed.
     const componentGroup = (target) => {
-        const name = bareName(target);
-
-        if (declaredHere(target)) return scoped(name);
-        if (name !== null) return `${NAMESPACE}.${name}`;
+        if (bareName(target) !== null) {
+            return `__pybridge.crossing[__pybridge.pair(${boundPair('bind:group', target)})]`;
+        }
 
         throw refuse(
             new SyntaxError(
@@ -2678,17 +2691,17 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 // A void element has no body, and the list is HTML's: `<Input>`
                 // is a component, with a body, and its closing tag pops a scope
                 // its opening must have pushed.
+                const selfClosing = markup[index - 1] === '/';
+
                 if (tag && tag.closing) closeElement(tag.name);
-                else if (
-                    tag &&
-                    (isComponent(tag) || !VOID.has(tag.name.toLowerCase())) &&
-                    markup[index - 1] !== '/'
-                ) {
+                else if (tag && (isComponent(tag) || !VOID.has(tag.name.toLowerCase())) && !selfClosing) {
                     push([]);
                     owners[owners.length - 1] = tag.name;
+                    if (tag.held !== undefined) heldOwners.set(ids.at(-1), tag.held);
                 }
 
-                tag = null;
+                if (tag?.held !== undefined && (tag.closing || selfClosing)) ending = '{/each}';
+                ended = true;
             }
 
             // `bind:value` on its own ends here, at a space, a slash or the
@@ -2719,7 +2732,13 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 }
             }
 
-            out += char;
+            // The tag ends only now, its last shorthand having been read
+            // against it.
+            if (ended) tag = null;
+
+            out += char + ending;
+            ended = false;
+            ending = '';
             index++;
             continue;
         }
@@ -2750,6 +2769,25 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
 
             inTag = true;
             tagIn = index;
+
+            // A tag that holds its child is read once, in a block of one
+            // iteration, and named by that iteration's item, closing tag
+            // included.
+            const held = !tag
+                ? null
+                : tag.closing
+                  ? (heldOwners.get(ids[closedAt(owners, tag.name, null)]) ?? null)
+                  : holdsChild(tag)
+                    ? heldTag()
+                    : null;
+
+            if (held !== null) {
+                tag.held = held;
+                out += tag.closing ? `</${held}` : `{#each [${heldRead(tag.name)}] as ${held}}<${held}`;
+                index += named[0].length;
+                continue;
+            }
+
             out += char;
             index++;
             continue;
