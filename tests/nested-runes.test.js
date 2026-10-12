@@ -122,6 +122,20 @@ describe('a rune written below the top level', () => {
         }
     });
 
+    // And one a function binds itself, a parameter or a local, which is the
+    // author's there whatever it is spelled: `def play(sound, effect):
+    // effect(sound)` calls the parameter, alone or assigned. The marker itself,
+    // in a function that binds no such name, is still refused.
+    test('while a parameter or a local named effect or derived is called', () => {
+        for (const marker of ['effect', 'derived']) {
+            expect(script(`def run(${marker}):\n    ${marker}(41)\n`)).not.toThrow();
+            expect(script(`def run(${marker}):\n    x = ${marker}(41)\n    return x\n`)).not.toThrow();
+            expect(script(`def run():\n    ${marker} = print\n    ${marker}(41)\n`)).not.toThrow();
+        }
+
+        expect(script('def run():\n    effect(lambda: 1)\n')).toThrow('written alone declares nothing');
+    });
+
     // A sign is written with its marker, and the marker would be the import:
     // refused, with the alias that frees it.
     test.for([

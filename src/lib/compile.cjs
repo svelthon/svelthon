@@ -2004,14 +2004,13 @@ const bareMarker = (node, theirs) => {
               ? callee.value.id
               : null;
 
-    if (!BARE_MARKERS.has(name) || theirs.has(name)) return null;
+    if (!BARE_MARKERS.has(name) || theirs(name)) return null;
 
     return callee instanceof $B.ast.Name ? `${name}(…)` : `${name}.${callee.attr}(…)`;
 };
 
-// A call to either name is ours unless the author imported a function under it,
-// `importjs {effect} from …`, which is theirs to call alone, as every other
-// check of the runes already reads it (`theirs`).
+// A call to either name is ours unless the name is the author's where it is
+// read (`theirs`, see `refuseNestedRunes`), which is theirs to call alone.
 function refuseBareMarker(node, source, lineOffset, theirs) {
     const spelling = bareMarker(node, theirs);
     if (spelling === null) return;
@@ -2029,21 +2028,35 @@ function refuseBareMarker(node, source, lineOffset, theirs) {
     );
 }
 
-function refuseNestedRunes(body, source, lineOffset, theirs = new Set()) {
-    const called = (node, names) =>
+// Whether a name is the author's where it is read: one the module imported or
+// declared (`theirs`), or one the function or the class `block` binds itself, a
+// parameter or a local, which Python reads there whatever it is spelled. `def
+// play(sound, effect): effect(sound)` calls the parameter.
+const authorsName = (theirs, block) => (name) =>
+    theirs.has(name) || (block !== null && block !== undefined && !isGlobalScope(scopeIn(block, name)));
+
+function refuseNestedRunes(body, source, lineOffset, theirs = new Set(), table = null) {
+    const authors = (block) => authorsName(theirs, block);
+
+    const called = (node, names, mine) =>
         node.value instanceof $B.ast.Call &&
         node.value.func instanceof $B.ast.Name &&
         names.has(node.value.func.id) &&
-        !theirs.has(node.value.func.id);
+        !mine(node.value.func.id);
 
-    const scoped = (statements) => {
+    const isScope = (node) =>
+        node instanceof $B.ast.FunctionDef || node instanceof $B.ast.AsyncFunctionDef || node instanceof $B.ast.ClassDef;
+
+    const scoped = (statements, block) => {
+        const mine = authors(block);
+
         for (const node of statements) {
-            refuseBareMarker(node, source, lineOffset, theirs);
+            refuseBareMarker(node, source, lineOffset, mine);
 
             const spelling =
                 decoratorSpelling(node) ||
-                (((node instanceof $B.ast.Assign || node instanceof $B.ast.AnnAssign) && called(node, RUNE_NAMES)) ||
-                (node instanceof $B.ast.Expr && called(node, STATEMENT_RUNES))
+                (((node instanceof $B.ast.Assign || node instanceof $B.ast.AnnAssign) && called(node, RUNE_NAMES, mine)) ||
+                (node instanceof $B.ast.Expr && called(node, STATEMENT_RUNES, mine))
                     ? `${node.value.func.id}()`
                     : null);
 
@@ -2056,7 +2069,9 @@ function refuseNestedRunes(body, source, lineOffset, theirs = new Set()) {
                 );
             }
 
-            for (const key of BODIES) if (node[key]) scoped(node[key]);
+            const inner = isScope(node) ? table?.blockOf(node) : block;
+
+            for (const key of BODIES) if (node[key]) scoped(node[key], inner);
         }
     };
 
@@ -2065,18 +2080,14 @@ function refuseNestedRunes(body, source, lineOffset, theirs = new Set()) {
     // wired whether it ran or not. At the top level these are the mechanism
     // itself, since `x => expr` compiles to `x = derived(lambda: …)`.
     for (const node of body) {
-        refuseBareMarker(node, source, lineOffset, theirs);
+        refuseBareMarker(node, source, lineOffset, authors(null));
 
-        if (
-            node instanceof $B.ast.FunctionDef ||
-            node instanceof $B.ast.AsyncFunctionDef ||
-            node instanceof $B.ast.ClassDef
-        ) {
-            scoped(node.body || []);
+        if (isScope(node)) {
+            scoped(node.body || [], table?.blockOf(node));
             continue;
         }
 
-        for (const key of BODIES) if (node[key]) scoped(node[key]);
+        for (const key of BODIES) if (node[key]) scoped(node[key], null);
     }
 }
 
@@ -2107,11 +2118,12 @@ const markerCalled = (node) => {
     return null;
 };
 
-// `theirs` names what the author took, an `importjs {inspect}` among them.
-function refuseMisplacedMarkers(body, source, lineOffset, theirs, component) {
+// `theirs` names what the author took, an `importjs {inspect}` among them; and
+// a name the function the call is in binds is the author's too (`authorsName`).
+function refuseMisplacedMarkers(body, source, lineOffset, theirs, component, table = null) {
     walkScoped(body, (node, scope, line, parent) => {
         const marker = markerCalled(node);
-        if (marker === null || theirs.has(marker)) return;
+        if (marker === null || authorsName(theirs, scope === null ? null : table?.blockOf(scope))(marker)) return;
 
         const at = line + lineOffset;
         const fail = (sentence) => {
@@ -4120,8 +4132,8 @@ function compile(
     refuseRemarked(remarked, source, lines, lineOffset);
     // What the author took, an `importjs {inspect}` among them, is no rune.
     const theirs = new Set([...declared, ...jsImported]);
-    refuseNestedRunes(root._ast.body, source, lineOffset, theirs);
-    refuseMisplacedMarkers(root._ast.body, source, lineOffset, theirs, component);
+    refuseNestedRunes(root._ast.body, source, lineOffset, theirs, table);
+    refuseMisplacedMarkers(root._ast.body, source, lineOffset, theirs, component, table);
 
     // Functions by default, what a framework calls by name. A module that wants
     // to export values says so with `__all__`, exactly as it would to a Python
