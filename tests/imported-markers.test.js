@@ -9,6 +9,19 @@ import ImportedMarkers from './fixtures/ImportedMarkers.svelte';
 import ImportedMarkersNative from './fixtures/ImportedMarkersNative.svelte';
 import { seen } from './fixtures/imported_markers.js';
 import './fixtures/ImportedInspectElement.svelte';
+import ImportedDecorators from './fixtures/ImportedDecorators.svelte';
+
+// And used as decorators, `@derived` and `@effect` over a `def`: the library's
+// decorators, which hand the function back. They were read as the markers, and
+// the component emitted `$derived.by` and `$effect` beside the imports, which
+// Svelte read as stores, and did not mount.
+test('a decorator imported under a marker name is the library s', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+    mount(ImportedDecorators, { target });
+    flushSync();
+
+    expect(['answer', 'ran'].map((k) => target.querySelector(`p[data-k="${k}"]`).textContent)).toEqual(['42', '0']);
+});
 
 // The props a custom element observes are read by a second pass over the
 // script, which did not know the imports: it took `start: int = inspect(41)`

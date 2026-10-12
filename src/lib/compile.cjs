@@ -1938,15 +1938,18 @@ const isCallTo = (node, name) =>
 
 const isBindable = (node) => isCallTo(node, 'bindable');
 
-const hasDecorator = (node, name) =>
-    (node.decorator_list || []).some((d) => d instanceof $B.ast.Name && d.id === name);
+// `theirs` says a name is the author's where it is read, an `importjs
+// {derived}` among them: a decorator of theirs is no marker of ours.
+const hasDecorator = (node, name, theirs = () => false) =>
+    !theirs(name) && (node.decorator_list || []).some((d) => d instanceof $B.ast.Name && d.id === name);
 
 // `@effect.pre`, a dotted decorator, which is a different AST node: an
 // `Attribute` over a `Name`, not a `Name`. The dotted form is PEP 318's original
 // grammar, and the one Python uses to name a variant of something: `@property`
 // and `@x.setter`. A standalone `@pre` would promise a composability that does
 // not exist.
-const hasDottedDecorator = (node, name, attribute) =>
+const hasDottedDecorator = (node, name, attribute, theirs = () => false) =>
+    !theirs(name) &&
     (node.decorator_list || []).some(
         (d) =>
             d instanceof $B.ast.Attribute &&
@@ -1968,13 +1971,14 @@ const BODIES = ['body', 'orelse', 'finalbody', 'handlers', 'cases', 'items'];
 // vanished under the other, which is worse than either rule on its own.
 const RUNE_NAMES = new Set(['effect', 'derived', 'inspect', 'inspect_with']);
 
-const decoratorSpelling = (node) => {
+const decoratorSpelling = (node, theirs = () => false) => {
     for (const one of node.decorator_list || []) {
-        if (one instanceof $B.ast.Name && RUNE_NAMES.has(one.id)) return `@${one.id}`;
+        if (one instanceof $B.ast.Name && RUNE_NAMES.has(one.id) && !theirs(one.id)) return `@${one.id}`;
         if (
             one instanceof $B.ast.Attribute &&
             one.value instanceof $B.ast.Name &&
-            RUNE_NAMES.has(one.value.id)
+            RUNE_NAMES.has(one.value.id) &&
+            !theirs(one.value.id)
         ) {
             return `@${one.value.id}.${one.attr}`;
         }
@@ -2054,7 +2058,7 @@ function refuseNestedRunes(body, source, lineOffset, theirs = new Set(), table =
             refuseBareMarker(node, source, lineOffset, mine);
 
             const spelling =
-                decoratorSpelling(node) ||
+                decoratorSpelling(node, mine) ||
                 (((node instanceof $B.ast.Assign || node instanceof $B.ast.AnnAssign) && called(node, RUNE_NAMES, mine)) ||
                 (node instanceof $B.ast.Expr && called(node, STATEMENT_RUNES, mine))
                     ? `${node.value.func.id}()`
@@ -2171,7 +2175,8 @@ const MARKERS = ['derived', 'effect', 'inspect', 'inspect_with', 'export'];
 // `theirs` names what the author imported from JavaScript, an `importjs
 // {inspect}` among them: a call to it is theirs, and its value is data.
 function surface(body, theirs = new Set()) {
-    const marked = (node, name) => !theirs.has(name) && isCallTo(node, name);
+    const mine = (name) => theirs.has(name);
+    const marked = (node, name) => !mine(name) && isCallTo(node, name);
     const props = [];
     const bindables = [];
     const state = [];
@@ -2416,7 +2421,7 @@ function surface(body, theirs = new Set()) {
             ) {
                 bind(node.name);
 
-                const decorated = decoratorSpelling(node) ?? (hasDecorator(node, 'export') ? '@export' : null);
+                const decorated = decoratorSpelling(node, mine) ?? (hasDecorator(node, 'export', mine) ? '@export' : null);
                 if (decorated !== null && seen.has(node.name)) {
                     // The decorator's own line: it is the marker being refused.
                     const line = Math.min(node.lineno, ...node.decorator_list.map((one) => one.lineno));
@@ -2429,8 +2434,8 @@ function surface(body, theirs = new Set()) {
                 // gets the result, exactly like a property. @effect re-runs it
                 // whenever something it read has changed, and @effect.pre does the
                 // same before the DOM is updated rather than after.
-                const pre = hasDottedDecorator(node, 'effect', 'pre');
-                const root = hasDottedDecorator(node, 'effect', 'root');
+                const pre = hasDottedDecorator(node, 'effect', 'pre', mine);
+                const root = hasDottedDecorator(node, 'effect', 'root', mine);
                 const entry = {
                     name: node.name,
                     arity: arityOf(node.args),
@@ -2439,11 +2444,11 @@ function surface(body, theirs = new Set()) {
                     // `@export` leaves the function where it was: it is an
                     // ordinary function that is *also* reachable from a parent
                     // holding the instance.
-                    ...(hasDecorator(node, 'export') ? { exported: true } : {})
+                    ...(hasDecorator(node, 'export', mine) ? { exported: true } : {})
                 };
-                const bucket = hasDecorator(node, 'derived')
+                const bucket = hasDecorator(node, 'derived', mine)
                     ? deriveds
-                    : hasDecorator(node, 'effect') || pre || root
+                    : hasDecorator(node, 'effect', mine) || pre || root
                       ? effects
                       : funcs;
 
