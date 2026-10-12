@@ -36,6 +36,22 @@ test.skipIf(!canSpawn)('a dropped callback bound to a string is collected', () =
     expect(out.answer).toBe('HELD');
 });
 
+// The relay of `bind:group` on a component kept the last pair it was handed,
+// and with it whatever the pair closed over, a component's state after the
+// component was gone.
+test.skipIf(!canSpawn)('the pair a component binding hands over is let go once read or written', () => {
+    for (const use of ['read', 'write']) {
+        const out = JSON.parse(
+            execFileSync(process.execPath, ['--expose-gc', 'tests/fixtures/crossing-retention.mjs', use], {
+                encoding: 'utf8'
+            })
+        );
+
+        expect(out.closures).toBe(0);
+        expect(out.held).toBe(0);
+    }
+});
+
 // A symbol's hash was kept in a Map that nobody emptied (branch `symbol-hash`),
 // so every symbol that once was the key of a dict, the rest of a JavaScript row
 // among them, stayed alive. Kept in a WeakMap now; the plain objects, which

@@ -317,17 +317,23 @@ export const __pybridge = {
     // `bind:group` on a component, written
     // `__pybridge.crossing[__pybridge.pair(read, write)]`. Svelte asks there
     // for a member of a name, and reads or writes it right after computing
-    // its key, which is when the pair is handed over.
+    // its key, which is when the pair is handed over. It is taken off the
+    // slot before it is called, so the slot holds nothing of a component once
+    // used, and a read the call makes in turn hands its own.
     pair(read, write) {
         CROSSING_PAIR = [read, write];
         return 'value';
     },
     crossing: {
         get value() {
-            return CROSSING_PAIR[0]();
+            const [read] = CROSSING_PAIR;
+            CROSSING_PAIR = null;
+            return read();
         },
         set value(value) {
-            CROSSING_PAIR[1](value);
+            const [, write] = CROSSING_PAIR;
+            CROSSING_PAIR = null;
+            write(value);
         }
     },
 
@@ -4975,20 +4981,29 @@ const urlish = (value) =>
 // **no**, for the same reason as one member down, since refusing a genuine
 // event is loud and admitting a business object is silent.
 //
-// And it must not run what it asks of: the four names are looked for first,
-// which calls no getter, so an object lacking one, a business object with a
-// lazy `fetch` and no `url`, is handed over with nothing of it read.
-const EVENT_MEMBERS = ['fetch', 'url', 'request', 'params'];
+// And it must not run what it asks of. SvelteKit builds an event as a plain
+// object, every one of these four a field of it, so each is read as a field
+// holds it, by its descriptor: a getter in its place, a business object's lazy
+// `fetch`, is not an event's, and is not run to find that out.
+const NO_FIELD = Symbol();
+const field = (value, name) => {
+    for (let at = value; at !== null; at = Object.getPrototypeOf(at)) {
+        const own = Object.getOwnPropertyDescriptor(at, name);
+        if (own !== undefined) return 'value' in own ? own.value : NO_FIELD;
+    }
+    return NO_FIELD;
+};
 const routeEvent = (value) => {
     try {
+        const [fetch, url, request, params] = ['fetch', 'url', 'request', 'params'].map((name) => field(value, name));
+
         return (
-            EVENT_MEMBERS.every((name) => name in value) &&
-            typeof value.fetch === 'function' &&
-            urlish(value.url) &&
-            typeof value.request?.method === 'string' &&
-            typeof value.request?.headers?.get === 'function' &&
-            value.params !== null &&
-            typeof value.params === 'object'
+            typeof fetch === 'function' &&
+            urlish(url) &&
+            typeof request?.method === 'string' &&
+            typeof request?.headers?.get === 'function' &&
+            params !== null &&
+            typeof params === 'object'
         );
     } catch {
         return false;

@@ -285,6 +285,25 @@ describe('what crosses as a request event', () => {
         expect(reads).toBe(0);
     });
 
+    // Even one that carries the four names of an event: a getter where an
+    // event has a field is not run to find that it is not one.
+    test('and ordinary data with the names of an event has none of its getters run', () => {
+        let reads = 0;
+        const value = {
+            payload: 42,
+            url: 'https://example.test/data',
+            request: { name: 'business request' },
+            params: {},
+            get fetch() {
+                reads += 1;
+                return () => 'ok';
+            }
+        };
+
+        expect(given(value)).toEqual({ kind: 'JSObject', payload: 42 });
+        expect(reads).toBe(0);
+    });
+
     // And a URL that refuses the member the recognition itself reads. No version
     // of SvelteKit guards `pathname` today, and the rule held here is what the
     // boundary does when one does: the throw must not **escape** — that was the
