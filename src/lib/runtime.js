@@ -7902,6 +7902,29 @@ const heldAtSource = (namespace, name) => {
 
 const holdsName = (namespace, name) => heldAtSource(namespace, name) !== undefined;
 
+// When each name of a namespace was bound, which is the order `globals()` lists
+// them in, as a dict lists its keys: the accessors sit on the prototype in the
+// order the compiler declared them, all values and then all functions. A name
+// bound again keeps its place; a name deleted and bound again goes last. A
+// name no write stamped, `__name__` among them, was there before the body.
+const BOUND_AT = new WeakMap();
+let bindings = 0;
+
+const stampBound = (namespace, name) => {
+    let stamps = BOUND_AT.get(namespace);
+
+    if (stamps === undefined) BOUND_AT.set(namespace, (stamps = new Map()));
+    if (!stamps.has(name)) stamps.set(name, ++bindings);
+};
+
+const unstampBound = (namespace, name) => BOUND_AT.get(namespace)?.delete(name);
+
+const inBindingOrder = (namespace, names) => {
+    const stamps = BOUND_AT.get(namespace);
+
+    return stamps === undefined ? names : names.sort((one, other) => (stamps.get(one) ?? 0) - (stamps.get(other) ?? 0));
+};
+
 // `listed` is false for a helper the compiler injects: a word of the framework,
 // readable like a builtin, and no name of the module's own, so `globals()` does
 // not list it.
@@ -7912,28 +7935,32 @@ export function bind(proto, key, get, set, source, listed = true) {
         sources.set(key, source);
     }
 
+    // No setter means the name is a *default*: an injected helper, or a
+    // JavaScript name published for Python to read. The author may still take
+    // that word: Brython writes a global as a plain property assignment on the
+    // namespace, which would walk the prototype chain, find `() => {}` and go
+    // nowhere, so `class date: …` would leave no class behind.
+    //
+    // Writing an own property on the receiver is what a prototype is for: the
+    // default answers until someone assigns, and then theirs shadows it. Not an
+    // arrow, because `this` has to be the namespace being written to.
+    const write =
+        set ??
+        function (value) {
+            Object.defineProperty(this, key, {
+                value,
+                writable: true,
+                enumerable: true,
+                configurable: true
+            });
+        };
+
     Object.defineProperty(proto, key, {
         get,
-        // No setter means the name is a *default*: an injected helper, or a
-        // JavaScript name published for Python to read. The author may still
-        // take that word: Brython writes a global as a plain property assignment
-        // on the namespace, which would walk the prototype chain, find
-        // `() => {}` and go nowhere, so `class date: …` would leave no class
-        // behind.
-        //
-        // Writing an own property on the receiver is what a prototype is for:
-        // the default answers until someone assigns, and then theirs shadows it.
-        // Not an arrow, because `this` has to be the namespace being written to.
-        set:
-            set ??
-            function (value) {
-                Object.defineProperty(this, key, {
-                    value,
-                    writable: true,
-                    enumerable: true,
-                    configurable: true
-                });
-            },
+        set(value) {
+            write.call(this, value);
+            if (value !== undefined) stampBound(this, key);
+        },
         enumerable: listed,
         configurable: true
     });
@@ -8016,6 +8043,9 @@ export const handOver = (written, write) => {
             namespace?.$proxy === true && !Object.hasOwn(namespace, name)
                 ? Object.getOwnPropertyDescriptor(proto, name)
                 : undefined;
+
+        // Bound again, it goes last (`BOUND_AT`).
+        if (namespace !== null && typeof namespace === 'object') unstampBound(namespace, name);
 
         // Asked at its source, which runs no derived's body.
         if (accessor?.get === undefined || !holdsName(namespace, name)) {
@@ -8192,7 +8222,8 @@ function namespaceDict(namespace) {
         !COMPILER_NAME.test(key) &&
         (Object.hasOwn(namespace, key) || Object.getOwnPropertyDescriptor(proto, key)?.enumerable === true) &&
         holdsName(namespace, key);
-    const names = () => [...new Set([...Object.keys(namespace), ...Object.keys(proto)])].filter(named);
+    const names = () =>
+        inBindingOrder(namespace, [...new Set([...Object.keys(namespace), ...Object.keys(proto)])].filter(named));
 
     const dict = new Proxy($B.empty_dict(), {
         get(target, key) {
@@ -8221,7 +8252,12 @@ function namespaceDict(namespace) {
                 const added = !named(key);
 
                 namespace[key] = value;
-                if (added) changedShape(dict);
+                if (added) {
+                    // A name the compiler did not declare is written as the
+                    // namespace's own, past the accessors that stamp.
+                    stampBound(namespace, key);
+                    changedShape(dict);
+                }
 
                 return true;
             }
