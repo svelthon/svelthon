@@ -4957,8 +4957,8 @@ export function pyData(value, made) {
 const urlish = (value) =>
     value !== null &&
     typeof value === 'object' &&
-    typeof member(value, 'pathname') === 'string' &&
-    typeof member(value, 'protocol') === 'string' &&
+    typeof member(value, 'pathname', true) === 'string' &&
+    typeof member(value, 'protocol', true) === 'string' &&
     !plainObject(value);
 
 // A SvelteKit request event, recognised by what its members *are*.
@@ -4994,12 +4994,11 @@ const urlish = (value) =>
 // getter the author wrote, a business object's lazy `fetch` or `method`, is
 // not an event's, and is not run to find that out.
 //
-// The platform's getters are those its own classes carry, the very functions
-// and not a class of the same name, which a server writes in JavaScript (Node's
-// `Request` and `URL`), and those written in no language at all, a browser's,
-// from any context.
+// The platform's getters are those its own classes carry, the very functions,
+// found along their prototypes: not a class of the same name, and not a
+// function that prints as native code, which a bound function or a proxy does
+// while running the author's.
 const NO_FIELD = Symbol();
-const NATIVE = /\{\s*\[native code\]\s*\}\s*$/;
 const PLATFORM = ['Request', 'Response', 'URL', 'Headers'];
 const platformGetter = (getter, name) =>
     PLATFORM.some((one) => {
@@ -5007,8 +5006,13 @@ const platformGetter = (getter, name) =>
             if (Object.getOwnPropertyDescriptor(proto, name)?.get === getter) return true;
         }
         return false;
-    }) || NATIVE.test(Function.prototype.toString.call(getter));
-const member = (value, name) => {
+    });
+//
+// A member described nowhere along the prototypes is no field: an event's are
+// all described, and a business object that is a proxy is not read through
+// its trap. Only a URL's path and scheme, `answered`, are then asked of the
+// URL itself, which a URL handed over from another context answers.
+const member = (value, name, answered = false) => {
     for (let at = value; at !== null; at = Object.getPrototypeOf(at)) {
         const own = Object.getOwnPropertyDescriptor(at, name);
         if (own === undefined) continue;
@@ -5016,9 +5020,7 @@ const member = (value, name) => {
 
         return own.get !== undefined && platformGetter(own.get, name) ? value[name] : NO_FIELD;
     }
-    // Described nowhere: an ordinary object reads nothing, and a proxy, a URL
-    // handed over from another context or while prerendering, answers.
-    return value[name];
+    return answered ? value[name] : NO_FIELD;
 };
 const routeEvent = (value) => {
     try {

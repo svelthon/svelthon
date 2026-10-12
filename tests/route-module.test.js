@@ -355,6 +355,29 @@ describe('what crosses as a request event', () => {
         expect(reads).toBe(0);
     });
 
+    // Nor for printing as native code, which a bound function and a proxy of a
+    // function do while running the author's.
+    test.for([
+        ['bound', (run) => run.bind(null)],
+        ['a proxy of a function', (run) => new Proxy(run, {})]
+    ])('and a getter that is %s is not run', ([, wrap]) => {
+        let reads = 0;
+        const run = () => {
+            reads += 1;
+            return 'GET';
+        };
+        const request = Object.defineProperty({ headers: { get: () => null } }, 'method', { get: wrap(run) });
+        const lazy = { payload: 42, url: new URL('https://example.test/'), params: {}, request: { method: 'GET', headers: { get: () => null } } };
+        Object.defineProperty(lazy, 'fetch', { get: wrap(() => (reads += 1, () => null)), enumerable: true });
+
+        expect(given({ payload: 42, fetch() {}, url: new URL('https://example.test/'), params: {}, request })).toEqual({
+            kind: 'JSObject',
+            payload: 42
+        });
+        expect(given(lazy)).toEqual({ kind: 'JSObject', payload: 42 });
+        expect(reads).toBe(0);
+    });
+
     // And a URL that refuses the member the recognition itself reads. No version
     // of SvelteKit guards `pathname` today, and the rule held here is what the
     // boundary does when one does: the throw must not **escape** — that was the
