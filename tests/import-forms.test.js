@@ -52,6 +52,18 @@ describe('the four shapes of importjs', () => {
         expect(script(`importjs "./O'Brien.css"\n`)).toContain(`import "./O'Brien.css";`);
     });
 
+    // A Python comment may follow, as on any line; a `#` in the string is the
+    // path's own.
+    test('followed by a comment', () => {
+        expect(script('importjs {fly} from "svelte/transition"  # the fly in\n')).toContain(
+            'import { fly } from "svelte/transition";'
+        );
+        expect(script('importjs Card from "./Card.svelte" # a card\n')).toContain('import Card from "./Card.svelte";');
+        expect(script('importjs * as all from "./all.js" #\n')).toContain('import * as all from "./all.js";');
+        expect(script('importjs "./app.css" # styles\n')).toContain('import "./app.css";');
+        expect(script('importjs Card from "./C#ard.svelte"\n')).toContain('import Card from "./C#ard.svelte";');
+    });
+
     test('default and named together', () => {
         const out = script('importjs Card, {fly} from "./Card.svelte"\n');
 

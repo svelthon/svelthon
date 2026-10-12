@@ -780,9 +780,11 @@ function declaredJsImports(ast, table, source, lineOffset = 0) {
 const IMPORTJS = /^importjs\b/;
 const IMPORTJS_ANYWHERE = /^[ \t]+importjs\b/;
 // The module's string as JavaScript writes one: anything but its own quote, so
-// `"./O'Brien.svelte"` is a path. An escape is not read, and is refused.
-const IMPORTJS_CLAUSE = /^importjs\s+([\s\S]*?)\s+from\s+(?:"([^"\\\n]+)"|'([^'\\\n]+)')\s*$/;
-const IMPORTJS_EFFECT = /^importjs\s+(?:"([^"\\\n]+)"|'([^'\\\n]+)')\s*$/;
+// `"./O'Brien.svelte"` is a path. An escape is not read, and is refused. A
+// Python comment may follow it, as it may follow any line; a `#` inside the
+// string is the path's.
+const IMPORTJS_CLAUSE = /^importjs\s+([\s\S]*?)\s+from\s+(?:"([^"\\\n]+)"|'([^'\\\n]+)')\s*(?:#.*)?$/;
+const IMPORTJS_EFFECT = /^importjs\s+(?:"([^"\\\n]+)"|'([^'\\\n]+)')\s*(?:#.*)?$/;
 // Two questions, two patterns. `JS_NAME` is what an `importjs` clause may
 // contain, and ASCII is a defensible line there even though JavaScript takes
 // `let élève = 1`: the name is one the author copies out of a JavaScript
