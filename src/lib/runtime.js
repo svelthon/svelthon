@@ -199,6 +199,20 @@ const boundText = (self, operation) => {
     return `method(${object ? identityOf(self, 'self') : keyText(self)}, ${operation})`;
 };
 
+// A bound method is read anew each time, and two are equal when they bind the
+// same object to the same operation: a method of the author's class, `{ob_type:
+// method, im_self, im_func}`, a builtin's, a function carrying `m_self` and
+// `ml`, or a special method read off a builtin, a `method_wrapper` (the one
+// `declared` also reads). Its text, or null for a value that is not one.
+function boundKey(value) {
+    if (boundMethod(value)) return boundText(value.im_self, identityOf(value.im_func, 'function'));
+    if (typeof value === 'function' && value.m_self !== undefined && value.ml?.ml_name !== undefined) {
+        return boundText(value.m_self, value.ml.ml_name);
+    }
+    if (wrapperMethod(value)) return boundText(value.self, identityOf(value.wrapped.original ?? value.wrapped, 'function'));
+    return null;
+}
+
 function keyText(value) {
     if (value === null || value === undefined || value === NONE) return 'None';
     if (ownEquality(value)) return identityOf(value, quietPyType(value).tp_name);
@@ -208,15 +222,10 @@ function keyText(value) {
 
     if (typeof value === 'string') return _b_.repr(value);
     // A function is equal to itself alone, as an instance is: two built by one
-    // factory print alike and are two keys.
-    // A bound method is read anew each time, and two are equal when they bind
-    // the same object to the same function: a method of the author's class,
-    // `{ob_type: method, im_self, im_func}`, or a builtin's, a function carrying
-    // `m_self` and `ml`.
-    if (boundMethod(value)) return boundText(value.im_self, identityOf(value.im_func, 'function'));
-    if (typeof value === 'function' && value.m_self !== undefined && value.ml?.ml_name !== undefined) {
-        return boundText(value.m_self, value.ml.ml_name);
-    }
+    // factory print alike and are two keys. A bound method is equal by what it
+    // binds (`boundKey`).
+    const bound = boundKey(value);
+    if (bound !== null) return bound;
     if (typeof value === 'function') return identityOf(value, 'function');
     // A symbol is equal to itself alone, whatever it prints: two made with one
     // description print alike and are two keys. Named by the hash the engine
@@ -335,9 +344,8 @@ export const __pybridge = {
         if (number !== null) return number;
 
         // A bound method is rebuilt on every read, and equal by what it binds.
-        if (boundMethod(value) || (typeof value === 'function' && value.m_self !== undefined && value.ml?.ml_name !== undefined)) {
-            return keyFor(keyText(value));
-        }
+        const bound = boundKey(value);
+        if (bound !== null) return keyFor(bound);
 
         if (value === null || typeof value !== 'object') return value;
 

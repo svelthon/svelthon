@@ -14,7 +14,7 @@ import FunctionKey from './fixtures/FunctionKey.svelte';
 import BoundMethodKey from './fixtures/BoundMethodKey.svelte';
 import { __pybridge } from '../src/lib/runtime.js';
 
-test.for([['alone'], ['tuple'], ['builtin']])('%s: an equal bound method keeps the block, another makes one', ([kind]) => {
+test.for([['alone'], ['tuple'], ['builtin'], ['special'], ['special in a tuple']])('%s: an equal bound method keeps the block, another makes one', ([kind]) => {
     const target = document.body.appendChild(document.createElement('div'));
     const instance = mount(BoundMethodKey, { target, props: { kind } });
     flushSync();

@@ -1,7 +1,8 @@
 <script lang="python">
 # A bound method is read anew each time, and two are equal when they bind the
 # same object to the same function: the same one again keeps the block, one on
-# another object makes a new one. Alone, in a tuple, and a builtin's.
+# another object makes a new one. Alone, in a tuple, a builtin's, and a
+# special method read off a builtin, alone and in a tuple.
 kind: str = "alone"
 
 
@@ -19,6 +20,10 @@ others = []
 def make(target):
     if kind == "builtin":
         return ((rows if target is row else others).append,)
+    if kind == "special":
+        return (rows if target is row else others).__len__
+    if kind == "special in a tuple":
+        return ((rows if target is row else others).__repr__,)
     method = target.act
     return method if kind == "alone" else (method,)
 
