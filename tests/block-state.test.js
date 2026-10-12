@@ -3,8 +3,11 @@
 // by the script repainted, and so did Svelte's own `{let rows = $state([1])}`.
 // The block's value is followed as the script's is.
 import { test, expect } from 'vitest';
+import { mount as mountSvelte, unmount } from 'svelte';
 import { mount, flushSync } from './mounted.js';
+import { __pybridge, marks, track } from '../src/lib/runtime.js';
 import BlockState from './fixtures/BlockState.svelte';
+import BlockLease from './fixtures/BlockLease.svelte';
 
 const setup = () => {
     const target = document.body.appendChild(document.createElement('div'));
@@ -44,4 +47,44 @@ test('a container a block declares repaints when it changes inside', () => {
 
     click('append');
     expect(shown()).toEqual(['before', '2', '1', '1']);
+});
+
+// A list the parent shares, declared by a block made and destroyed over and
+// over: the block signs one callback onto the list while it reads it, and
+// signs it off when it goes, as the script's own names do. Each block signed
+// one and kept it, after the component was gone too. One subscriber, signed
+// first, is the list's own and stays.
+test('a block signs off the list it declared when it goes', async () => {
+    const settle = async () => {
+        flushSync();
+        await Promise.resolve();
+        flushSync();
+    };
+    const shared = __pybridge.list([1]);
+    track(shared, () => {}, () => {});
+    const counted = () => marks(shared).bumps.length;
+
+    const target = document.body.appendChild(document.createElement('div'));
+    let instance;
+    flushSync(() => {
+        instance = mountSvelte(BlockLease, { target, props: { shared } });
+    });
+    await settle();
+
+    const counts = [counted()];
+    for (let i = 0; i < 3; i++) {
+        instance.toggle();
+        await settle();
+        counts.push(counted());
+        instance.toggle();
+        await settle();
+        counts.push(counted());
+    }
+
+    await unmount(instance);
+    await settle();
+    counts.push(counted());
+    target.remove();
+
+    expect(counts).toEqual([2, 1, 2, 1, 2, 1, 2, 1]);
 });

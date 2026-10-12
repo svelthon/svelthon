@@ -292,6 +292,10 @@ const keyFor = (repr) => {
 
 // The components written in Python, as their Python parents import them.
 const PYTHON_COMPONENTS = new WeakSet();
+
+// Each value a block declares, to the revision its readers subscribe to
+// (`__pybridge.state`).
+const BLOCK_STATE = new WeakMap();
 let CROSSING_PAIR = null;
 
 export const __pybridge = {
@@ -301,21 +305,35 @@ export const __pybridge = {
     },
 
     // The value a block declares, `{rows = [1]}`, followed as a name the
-    // script declares is: its own revision, which every read of the name
-    // subscribes to through `follow`, and which a change made inside it moves.
-    // `$state.raw` alone follows the name being written, and a list appended
-    // to repainted nothing.
+    // script declares is: a revision every read of the name subscribes to
+    // through `follow`, and which a change made inside it moves. `$state.raw`
+    // alone follows the name being written, and a list appended to repainted
+    // nothing.
+    //
+    // One revision per value, whatever the blocks that declare it, signed onto
+    // the value's watch while something reads it and off it when nothing
+    // does: a block made a hundred times over one list signed a hundred
+    // callbacks onto it, and kept them after the component was gone.
     state(value) {
-        let update;
-        const changed = createSubscriber((one) => {
-            update = one;
+        if (watchable(value) && !BLOCK_STATE.has(value)) {
+            let update;
+            const bump = () => update?.();
+            const read = createSubscriber((one) => {
+                update = one;
+                track(value, bump, read);
 
-            return () => {
-                update = undefined;
-            };
-        });
+                return () => {
+                    update = undefined;
 
-        return track(value, () => update?.(), changed);
+                    const marker = MARKS.get(value);
+                    if (marker !== undefined) leave(marker, bump);
+                };
+            });
+
+            BLOCK_STATE.set(value, read);
+        }
+
+        return value;
     },
 
     // A prop handed to a component a tag holds rather than names by its
@@ -2864,6 +2882,10 @@ export function follow(value) {
     if (watchable(value)) {
         const marker = MARKS.get(value);
         if (marker !== undefined) marker.follow();
+
+        // A value a block declares, read again after nothing read it: its
+        // revision left the watch then, and is signed on again here.
+        BLOCK_STATE.get(value)?.();
     }
 
     return value;
