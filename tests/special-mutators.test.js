@@ -12,6 +12,7 @@
 import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import SpecialMutators from './fixtures/SpecialMutators.svelte';
+import ExceptionNotes from './fixtures/ExceptionNotes.svelte';
 
 const setup = () => {
     const target = document.body.appendChild(document.createElement('div'));
@@ -73,4 +74,22 @@ test('a child put in by __init__ is watched', () => {
     expect(read()).toBe('[[]]');
     click('grow');
     expect(read()).toBe('[[1]]');
+});
+
+// An exception's `add_note()` writes its notes inside the engine, past every
+// write the page is told of.
+test.for([
+    ['by the method', 'method', 'error', '1'],
+    ['to notes it already has', 'existing', 'noted', '2'],
+    ['by the method kept as a value', 'detached', 'error', '1'],
+    ['by the method reached through the type', 'type', 'error', '1']
+])('a note added %s repaints its readers', ([, way, key, shown]) => {
+    const target = document.body.appendChild(document.createElement('div'));
+    const instance = mount(ExceptionNotes, { target });
+    flushSync();
+
+    instance.note(way);
+    flushSync();
+
+    expect(target.querySelector(`p[data-k="${key}"]`).textContent).toBe(shown);
 });

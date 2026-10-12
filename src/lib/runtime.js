@@ -752,13 +752,17 @@ function spreadOf(value, convert) {
 //
 // And a view's life ending, `release()` or the exit of `with view:`: its
 // buffer does not change, the view does, and every read of it now raises.
+//
+// And an exception's own: `add_note()` writes `__notes__`, `with_traceback()`
+// `__traceback__`, each inside the engine.
 const MUTATORS = new Set([
     '__setitem__', '__delitem__', '__init__', '__setattr__', '__delattr__',
     '__iadd__', '__imul__', '__ior__', '__iand__', '__isub__', '__ixor__',
     'append', 'extend', 'insert', 'remove', 'pop', 'clear', 'sort', 'reverse',
     'add', 'discard', 'update', 'setdefault', 'popitem', 'appendleft',
     'extendleft', 'popleft', 'rotate', 'intersection_update',
-    'difference_update', 'symmetric_difference_update', 'release', '__exit__'
+    'difference_update', 'symmetric_difference_update', 'release', '__exit__',
+    'add_note', 'with_traceback'
 ]);
 
 // Methods that hand out a container the caller can then mutate, without any
