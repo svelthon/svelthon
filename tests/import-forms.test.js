@@ -42,6 +42,16 @@ describe('the four shapes of importjs', () => {
         );
     });
 
+    // A module's string holds the other quote, as JavaScript allows.
+    test('from a path that holds the other quote', () => {
+        expect(script(`importjs Card from "./O'Brien.svelte"\n`)).toContain(`import Card from "./O'Brien.svelte";`);
+        expect(script(`importjs {value} from './Double"Quote.js'\n`)).toContain(
+            'import { value } from "./Double\\"Quote.js";'
+        );
+        expect(script(`importjs * as all from "./O'Brien.js"\n`)).toContain(`from "./O'Brien.js";`);
+        expect(script(`importjs "./O'Brien.css"\n`)).toContain(`import "./O'Brien.css";`);
+    });
+
     test('default and named together', () => {
         const out = script('importjs Card, {fly} from "./Card.svelte"\n');
 

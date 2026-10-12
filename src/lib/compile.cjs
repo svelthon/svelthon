@@ -780,8 +780,10 @@ function declaredJsImports(body, source, lineOffset = 0) {
 // default import and a named one.
 const IMPORTJS = /^importjs\b/;
 const IMPORTJS_ANYWHERE = /^[ \t]+importjs\b/;
-const IMPORTJS_CLAUSE = /^importjs\s+([\s\S]*?)\s+from\s+(['"])([^'"]+)\2\s*$/;
-const IMPORTJS_EFFECT = /^importjs\s+(['"])([^'"]+)\1\s*$/;
+// The module's string as JavaScript writes one: anything but its own quote, so
+// `"./O'Brien.svelte"` is a path. An escape is not read, and is refused.
+const IMPORTJS_CLAUSE = /^importjs\s+([\s\S]*?)\s+from\s+(?:"([^"\\\n]+)"|'([^'\\\n]+)')\s*$/;
+const IMPORTJS_EFFECT = /^importjs\s+(?:"([^"\\\n]+)"|'([^'\\\n]+)')\s*$/;
 // Two questions, two patterns. `JS_NAME` is what an `importjs` clause may
 // contain, and ASCII is a defensible line there even though JavaScript takes
 // `let élève = 1`: the name is one the author copies out of a JavaScript
@@ -1200,7 +1202,7 @@ function takeArrows(src, where, lineOffset, allowed, theirs = new Set()) {
 // facts as fields, which is what an editor reads.
 function importJsClause(line, where, source, lineno) {
     const bare = line.match(IMPORTJS_EFFECT);
-    if (bare) return { from: bare[2], kind: 'effect', entries: [] };
+    if (bare) return { from: bare[1] ?? bare[2], kind: 'effect', entries: [] };
 
     const found = line.match(IMPORTJS_CLAUSE);
     if (!found) {
@@ -1213,7 +1215,7 @@ function importJsClause(line, where, source, lineno) {
     }
 
     const clause = found[1].trim();
-    const from = found[3];
+    const from = found[2] ?? found[3];
 
     // Every name the clause binds, whatever its shape: `__js__` asks the same.
     // The name it imports may be any word, `{default as player}`; the one it
