@@ -7678,6 +7678,22 @@ export function ticking(after) {
 // derived's body run. It is what `del` watches; without one, `get` is it.
 const STORED = new WeakMap();
 
+// Whether a namespace holds `name`, asked at its source: a derived's
+// definition and not its value, so a question about a name, `del` or the keys
+// of `globals()`, runs no computation.
+const holdsName = (namespace, name) => {
+    if (Object.hasOwn(namespace, name)) return namespace[name] !== undefined;
+
+    const proto = Object.getPrototypeOf(namespace);
+    const accessor = proto === null ? undefined : Object.getOwnPropertyDescriptor(proto, name);
+
+    if (accessor === undefined) return false;
+
+    const source = STORED.get(proto)?.get(name) ?? accessor.get;
+
+    return source === undefined ? accessor.value !== undefined : source.call(namespace) !== undefined;
+};
+
 // `listed` is false for a helper the compiler injects: a word of the framework,
 // readable like a builtin, and no name of the module's own, so `globals()` does
 // not list it.
@@ -7793,7 +7809,8 @@ export const handOver = (written, write) => {
                 ? Object.getOwnPropertyDescriptor(proto, name)
                 : undefined;
 
-        if (accessor?.get === undefined || namespace[name] === undefined) {
+        // Asked at its source, which runs no derived's body.
+        if (accessor?.get === undefined || !holdsName(namespace, name)) {
             return deleteName.call(this, name, locals, inum);
         }
 
@@ -7801,12 +7818,24 @@ export const handOver = (written, write) => {
 
         // What the name still holds once deleted, read at its source: nothing,
         // or the value a parent passes a prop, which the child does not own.
-        const source = STORED.get(proto)?.get(name) ?? accessor.get;
+        const sources = STORED.get(proto);
+        const stored = sources?.get(name);
+        const source = stored ?? accessor.get;
         const left = source.call(namespace);
         const restore = (target) => {
             Object.defineProperty(proto, name, accessor);
+            if (stored === undefined) sources?.delete(name);
+            else sources.set(name, stored);
             DELETED.get(target)?.delete(name);
         };
+
+        // Absent at its source too, until the source holds something else.
+        if (sources !== undefined) {
+            sources.set(name, function () {
+                const now = source.call(this);
+                return Object.is(now, left) ? undefined : now;
+            });
+        }
 
         // Absent to Python, still read by the page: the source is a signal,
         // which keeps the page subscribed, and the getter hands back

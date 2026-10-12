@@ -14,6 +14,7 @@
 import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import DelMatrixHost from './fixtures/DelMatrixHost.svelte';
+import LazyDelete from './fixtures/LazyDelete.svelte';
 import store from './fixtures/del_matrix.svelte.py';
 
 const host = () => {
@@ -118,4 +119,14 @@ test("in a store, a state comes back through the store's setter", () => {
 
     store.state = 9;
     expect(store.seen('state')).toBe('9 True');
+});
+
+// Deleting a derived nothing read yet: asking whether the name is there read
+// its value, which ran the body, and a body that raises stopped the deletion.
+test('deleting a derived never read runs nothing', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+    const instance = mount(LazyDelete, { target });
+    flushSync();
+
+    expect(instance.drop()).toBe('deleted');
 });
