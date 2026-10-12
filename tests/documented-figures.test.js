@@ -37,7 +37,7 @@ describe('the sizes the documents claim', () => {
     });
 
     // The bundle it is cut from, named in the same sentence, does not ship and
-    // is not in the repository: its figure is held by a private test.
+    // is not in the repository, so its figure is not held here.
 
     // The two documents have to agree with each other, which is the drift an
     // outside reading found first: one said 250, the other 255.
