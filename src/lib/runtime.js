@@ -7899,10 +7899,16 @@ const COMPILER_NAME = /^__(?!.*__$)/;
 const DICTS = new WeakMap();
 const NAMESPACE_DICTS = new WeakSet();
 
+// How many keys a namespace's dict has added or removed, the version Brython
+// keeps on a dict of its own.
+const NAMESPACE_VERSIONS = new WeakMap();
+const changedShape = (dict) => NAMESPACE_VERSIONS.set(dict, (NAMESPACE_VERSIONS.get(dict) ?? 0) + 1);
+
 // Brython walks a dict as items, each with its value read, whether the keys
 // alone are wanted, `list(globals())`, or the pairs. A namespace's value may
 // be a derived, run by being read, so its items read their value only when
-// it is asked for.
+// it is asked for. A key added or removed meanwhile ends the walk, as it ends
+// Brython's.
 (function lazyNamespaceItems(dict) {
     const iterItems = dict.$iter_items;
 
@@ -7912,6 +7918,8 @@ const NAMESPACE_DICTS = new WeakSet();
             return;
         }
 
+        const version = NAMESPACE_VERSIONS.get(d);
+
         for (const key of Object.keys(d)) {
             yield {
                 key,
@@ -7919,6 +7927,10 @@ const NAMESPACE_DICTS = new WeakSet();
                     return d[key];
                 }
             };
+
+            if (NAMESPACE_VERSIONS.get(d) !== version) {
+                globalThis.__BRYTHON__.RAISE(globalThis.__BRYTHON__.builtins.RuntimeError, 'dictionary changed size during iteration');
+            }
         }
     };
 })(globalThis.__BRYTHON__.builtins.dict);
@@ -7964,7 +7976,10 @@ function namespaceDict(namespace) {
         },
         set(target, key, value) {
             if (typeof key === 'string') {
+                const added = !named(key);
+
                 namespace[key] = value;
+                if (added) changedShape(dict);
 
                 return true;
             }
@@ -7976,7 +7991,10 @@ function namespaceDict(namespace) {
             return Reflect.set(target, key, value);
         },
         deleteProperty(target, key) {
-            if (named(key)) $B.$delete(key, namespace);
+            if (named(key)) {
+                $B.$delete(key, namespace);
+                changedShape(dict);
+            }
 
             return true;
         }
