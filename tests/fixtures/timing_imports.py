@@ -53,7 +53,10 @@ def retried():
 
 
 def kept():
-    return [
-        [modules[0] is modules[-1], getattr(modules[0], "first", "missing")]
-        for modules in (timing_log.flaky_modules, timing_log.flaky_store_modules)
-    ]
+    rows = []
+    for modules in (timing_log.flaky_modules, timing_log.flaky_store_modules):
+        old, new = modules[0], modules[-1]
+        shared = hasattr(old, "late")
+        old.late = "written on the old one"
+        rows.append([old is new, getattr(old, "first", "missing"), shared, new.late])
+    return rows

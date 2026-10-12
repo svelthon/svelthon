@@ -30,16 +30,17 @@ test('a module whose body raised runs again at the next import', () => {
 });
 
 // And in a new module: a name the failed attempt bound is not there, in a
-// module or a reactive module, and the failed one, which held on to itself,
-// is another object and keeps what it bound.
+// module or a reactive module. The failed one, which held on to itself, is
+// another object, keeps what it bound and nothing the next one binds, and is
+// written on alone.
 test('a module whose body raised runs again in a new module', () => {
     expect(retried()).toEqual([
         ['failed', true, true],
         ['failed', true, true]
     ]);
     expect(kept()).toEqual([
-        [false, true],
-        [false, true]
+        [false, true, false, true],
+        [false, true, false, true]
     ]);
 });
 

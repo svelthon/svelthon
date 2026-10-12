@@ -7000,29 +7000,28 @@ function typedModule($B, namespace) {
 }
 
 // The namespace of an attempt that raised, left as it was to whoever holds it,
-// the module itself or an import cycle: each name it holds is kept on it as
-// its own, over the accessor it shares with the next one, its value read once
-// and a value that raises left to the accessor. And the new namespace the next
-// attempt runs in, on the same accessors, where what the failed one bound is
-// deleted as `del` deletes it.
+// the module itself or an import cycle, and sharing nothing with the next one:
+// each name it holds is kept on it as its own, as held at its source, a
+// derived's definition and not its value, so nothing is computed; and it
+// leaves the accessors it shared, so a name the next attempt binds is not one
+// of its own, and a name written on it is written on it alone. And the new
+// namespace the next attempt runs in, on those accessors, where what the
+// failed one bound is deleted as `del` deletes it.
 function abandoned($B, namespace, before) {
     const held = Object.keys(namespace[$B.DICT]);
+    const shared = Object.getPrototypeOf(namespace);
 
     for (const name of held) {
         if (Object.hasOwn(namespace, name)) continue;
 
-        let value;
-
-        try {
-            value = namespace[name];
-        } catch {
-            continue;
-        }
+        const value = heldAtSource(namespace, name);
 
         Object.defineProperty(namespace, name, { value, writable: true, enumerable: true, configurable: true });
     }
 
-    const next = Object.create(Object.getPrototypeOf(namespace));
+    Object.setPrototypeOf(namespace, Object.getPrototypeOf(shared));
+
+    const next = Object.create(shared);
 
     next.$proxy = true;
     next.__name__ = namespace.__name__;
@@ -7866,21 +7865,24 @@ export function ticking(after) {
 // derived's body run. It is what `del` watches; without one, `get` is it.
 const STORED = new WeakMap();
 
-// Whether a namespace holds `name`, asked at its source: a derived's
-// definition and not its value, so a question about a name, `del` or the keys
-// of `globals()`, runs no computation.
-const holdsName = (namespace, name) => {
-    if (Object.hasOwn(namespace, name)) return namespace[name] !== undefined;
+// What a namespace holds under `name`, asked at its source: a derived's
+// definition and not its value, so a question about a name, `del`, the keys of
+// `globals()` or what a failed module keeps, runs no computation. `undefined`
+// when it holds nothing.
+const heldAtSource = (namespace, name) => {
+    if (Object.hasOwn(namespace, name)) return namespace[name];
 
     const proto = Object.getPrototypeOf(namespace);
     const accessor = proto === null ? undefined : Object.getOwnPropertyDescriptor(proto, name);
 
-    if (accessor === undefined) return false;
+    if (accessor === undefined) return undefined;
 
     const source = STORED.get(proto)?.get(name) ?? accessor.get;
 
-    return source === undefined ? accessor.value !== undefined : source.call(namespace) !== undefined;
+    return source === undefined ? accessor.value : source.call(namespace);
 };
+
+const holdsName = (namespace, name) => heldAtSource(namespace, name) !== undefined;
 
 // `listed` is false for a helper the compiler injects: a word of the framework,
 // readable like a builtin, and no name of the module's own, so `globals()` does
