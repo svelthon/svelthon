@@ -6310,8 +6310,17 @@ const outbound = (value, made) => {
 // (`pyHandler`): SvelteKit's `query()` returns a function carrying `__.type`,
 // and `accepted = query(_accepted)` in a `.remote.py` exports the object
 // SvelteKit built.
+//
+// Except a function Python handed out (`PUBLISHED`), which comes back as the
+// callable it stands for: a library that keeps a callback and hands it back,
+// `identity(callback)`, gives the very callback, the one a set holds. It came
+// back as an adapter around its own wrapper, still callable and no longer it.
 const inbound = (value) =>
-    typeof value === 'function' ? jsCall(value) : (bytesIn(value) ?? globalThis.__BRYTHON__.jsobj2pyobj(value));
+    typeof value === 'function'
+        ? PUBLISHED.has(value)
+            ? PUBLISHED.get(value)
+            : jsCall(value)
+        : (bytesIn(value) ?? globalThis.__BRYTHON__.jsobj2pyobj(value));
 
 // **Brython's own refusal, which this proxy was going around.**
 //

@@ -32,6 +32,20 @@ import {
     async_runs,
     handed_back
 } from './fixtures/js_calls.py';
+import { returned } from './fixtures/returned_callbacks.py';
+
+// A callback a library hands straight back is the callback Python gave it: the
+// same object, the one a set holds, by a named import as through an object.
+// The named import's return was adapted as a new JavaScript function, around
+// the callback's own wrapper: callable, and no longer it.
+test('a Python callback handed back by JavaScript is the callback itself', () => {
+    expect(returned()).toEqual([
+        [true, true, 7],
+        [true, true, 7],
+        [true, true, 7],
+        [true, true, 7]
+    ]);
+});
 
 describe('a Python callback handed to JavaScript', () => {
     // `pyHandler` built a fresh wrapper per crossing, so `off(handler)` passed a
