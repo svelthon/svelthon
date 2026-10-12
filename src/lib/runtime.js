@@ -7897,6 +7897,31 @@ export const handOver = (written, write) => {
 // `__all__`, and `from m import name` the name.
 const COMPILER_NAME = /^__(?!.*__$)/;
 const DICTS = new WeakMap();
+const NAMESPACE_DICTS = new WeakSet();
+
+// Brython walks a dict as items, each with its value read, whether the keys
+// alone are wanted, `list(globals())`, or the pairs. A namespace's value may
+// be a derived, run by being read, so its items read their value only when
+// it is asked for.
+(function lazyNamespaceItems(dict) {
+    const iterItems = dict.$iter_items;
+
+    dict.$iter_items = function* (d) {
+        if (!NAMESPACE_DICTS.has(d)) {
+            yield* iterItems.call(this, d);
+            return;
+        }
+
+        for (const key of Object.keys(d)) {
+            yield {
+                key,
+                get value() {
+                    return d[key];
+                }
+            };
+        }
+    };
+})(globalThis.__BRYTHON__.builtins.dict);
 
 function namespaceDict(namespace) {
     const $B = globalThis.__BRYTHON__;
@@ -7904,13 +7929,15 @@ function namespaceDict(namespace) {
 
     if (known !== undefined) return known;
 
+    // A name is there by what it holds at its source, so listing or counting
+    // the names runs no derived; its value is read when it is asked for.
     const proto = Object.getPrototypeOf(namespace);
     const named = (key) =>
         typeof key === 'string' &&
         !key.startsWith('$') &&
         !COMPILER_NAME.test(key) &&
         (Object.hasOwn(namespace, key) || Object.getOwnPropertyDescriptor(proto, key)?.enumerable === true) &&
-        namespace[key] !== undefined;
+        holdsName(namespace, key);
     const names = () => [...new Set([...Object.keys(namespace), ...Object.keys(proto)])].filter(named);
 
     const dict = new Proxy($B.empty_dict(), {
@@ -7925,7 +7952,14 @@ function namespaceDict(namespace) {
         },
         getOwnPropertyDescriptor(target, key) {
             return named(key)
-                ? { value: namespace[key], writable: true, enumerable: true, configurable: true }
+                ? {
+                      get: () => namespace[key],
+                      set: (value) => {
+                          namespace[key] = value;
+                      },
+                      enumerable: true,
+                      configurable: true
+                  }
                 : Reflect.getOwnPropertyDescriptor(target, key);
         },
         set(target, key, value) {
@@ -7949,6 +7983,7 @@ function namespaceDict(namespace) {
     });
 
     DICTS.set(namespace, dict);
+    NAMESPACE_DICTS.add(dict);
 
     return dict;
 }
