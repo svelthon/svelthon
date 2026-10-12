@@ -8,6 +8,34 @@ import { mount, flushSync } from './mounted.js';
 import { __pybridge, marks, track } from '../src/lib/runtime.js';
 import BlockState from './fixtures/BlockState.svelte';
 import BlockLease from './fixtures/BlockLease.svelte';
+import BlockReplace from './fixtures/BlockReplace.svelte';
+
+// A list a child put in the block's name through a binding, and then left there
+// when it went: the block follows it as it follows what it declared. It was
+// followed only through the child's own names, and once the child was gone a
+// change to it repainted nothing.
+test('a container a binding writes in a block is followed after its writer goes', async () => {
+    const target = document.body.appendChild(document.createElement('div'));
+    mount(BlockReplace, { target });
+    flushSync();
+
+    const click = async (key) => {
+        target.querySelector(`button[data-k="${key}"]`).click();
+        flushSync();
+        await Promise.resolve();
+        flushSync();
+    };
+    const shown = () => target.querySelector('output').textContent;
+
+    expect(shown()).toBe('0');
+
+    await click('replace');
+    expect(shown()).toBe('1');
+
+    await click('hide');
+    await click('append');
+    expect(shown()).toBe('2');
+});
 
 const setup = () => {
     const target = document.body.appendChild(document.createElement('div'));

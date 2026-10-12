@@ -703,13 +703,14 @@ describe('the blocks that declare names', () => {
     // setter: the generated `def` receives that name as a *parameter*, so the
     // write would land on the parameter and die with the call. Svelte knows how
     // to write those, so the setter writes the name itself; the read still goes
-    // through Python, since the cell holds a Python value.
+    // through Python, since the cell holds a Python value. What it writes is
+    // followed as what the declaration put there is (`__pybridge.state`).
     test('a bind: on a markup name is written by Svelte and read through Python', () => {
         expect(rewrite('{draft = name}<input bind:value={draft} />').out).toMatch(
-            /bind:value=\{\(\) => __expr_scalar_\d+\(__follow\(draft\)\), \(__value\) => draft = __pyBind\(__value\)\}/
+            /bind:value=\{\(\) => __expr_scalar_\d+\(__follow\(draft\)\), \(__value\) => draft = __pybridge\.state\(__pyBind\(__value\)\)\}/
         );
         expect(rewrite('{value = ""}<input bind:value />').out).toContain(
-            '(__value) => value = __pyBind(__value)'
+            '(__value) => value = __pybridge.state(__pyBind(__value))'
         );
     });
 
@@ -718,7 +719,7 @@ describe('the blocks that declare names', () => {
     // runes mode, the pair's as it does the bare binding's.
     test('and so is one on a block s own alias', () => {
         expect(rewrite('{#each xs as row}<input bind:value={row} />{/each}').out).toContain(
-            '(__value) => row = __pyBind(__value)'
+            '(__value) => row = __pybridge.state(__pyBind(__value))'
         );
     });
 

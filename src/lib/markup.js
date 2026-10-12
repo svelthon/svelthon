@@ -2163,7 +2163,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     const boundPair = (directive, expr) => {
         const multiple = directive === 'bind:value' && tag?.name === 'select' && tagNames(markup, tag.start).has('multiple');
         const crossing = multiple ? SELECTED_VALUE : BIND_VALUE;
-        const write = declaredHere(expr) ? `${scoped(bareName(expr))} = ${crossing}(${BOUND_VALUE})` : assign(expr, crossing);
+        const write = declaredHere(expr) ? declaredWrite(expr, crossing) : assign(expr, crossing);
         if (heldChild() !== null) {
             return `() => ${forChild(call(expr, '__bound', undefined, 'python'), 'scalar')}, (${BOUND_VALUE}) => ${write}`;
         }
@@ -2283,7 +2283,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         // itself: `assign` would hand it to a `def` as a parameter and write
         // that. The value still crosses into Python on the way.
         const own = declaredHere(expr);
-        const write = own ? `${scoped(bareName(expr))} = ${BIND_VALUE}(${BOUND_VALUE})` : assign(expr);
+        const write = own ? declaredWrite(expr, BIND_VALUE) : assign(expr);
         const found = tag === null ? null : tagValue(markup, tag.start);
         const outer = region;
 
@@ -2393,6 +2393,13 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
 
         return name !== null && scoped(name) !== null;
     };
+
+    // A binding's write to a name the markup declared, Svelte's cell: the value
+    // crossed into Python, and followed as the declaration's is
+    // (`__pybridge.state`), or a list a child put there and then let go of
+    // repainted nothing when it changed.
+    const declaredWrite = (expr, crossing) =>
+        `${scoped(bareName(expr))} = __pybridge.state(${crossing}(${BOUND_VALUE}))`;
 
     // `(x := …)` writes through the namespace, which holds the module's names
     // and nothing else. A name the markup declared is not there, so the write
