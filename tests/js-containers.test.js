@@ -17,7 +17,11 @@ test.for([
     // The method read as a value and called later, which a check at the call
     // alone missed.
     ['kept method', ['0', '1', '2']],
-    ['method taken by getattr', ['0', '1', '2']]
+    ['method taken by getattr', ['0', '1', '2']],
+    // Kept by a factory before the container came under watch: whether
+    // anybody watches is asked at the call, not at the read.
+    ['set method kept before the watch', ['0', '1', '2']],
+    ['map method kept before the watch', ['0', '1', '2']]
 ])('a JavaScript container changed from Python repaints: %s', ([kind, sizes]) => {
     const { models, pages } = mounted(JsContainers, kind, (instance, target, step) => instance.change(step));
 

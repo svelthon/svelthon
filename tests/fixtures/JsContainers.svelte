@@ -29,6 +29,21 @@ class Tags:
 
 tags = Tags()
 
+
+# A factory that keeps the method before the state receives the container.
+def kept_set():
+    one = js.Set.new()
+    return one, one.add
+
+
+def kept_map():
+    one = js.Map.new()
+    return one, one.set
+
+
+early_members, early_add = kept_set()
+early_pairs, early_set = kept_map()
+
 if kind in ("set delete", "set clear"):
     members.add(1)
     members.add(2)
@@ -38,6 +53,10 @@ if kind == "map delete":
 
 
 def read():
+    if kind == "set method kept before the watch":
+        return early_members.size
+    if kind == "map method kept before the watch":
+        return early_pairs.size
     if kind.startswith("map"):
         return pairs.size
     if kind == "set held by an instance":
@@ -74,6 +93,10 @@ def change(step):
         add(step)
     elif kind == "method taken by getattr":
         getattr(members, "add")(step)
+    elif kind == "set method kept before the watch":
+        early_add(step)
+    elif kind == "map method kept before the watch":
+        early_set(step, step)
     else:
         tags.tag(step)
 </script>

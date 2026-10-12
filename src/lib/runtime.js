@@ -972,7 +972,10 @@ function installMutationTracking($B) {
     // by its own method: nothing of the engine's runs, so the method read off
     // it under the name of one of JavaScript's mutators notifies once called,
     // in place, kept as `add = seen.add` or taken by `getattr`. One wrapper per
-    // object and method, so two reads are one method.
+    // object and method, so two reads are one method. Whether anybody watches
+    // is the call's question, as at `afterCall`: a factory that keeps
+    // `obj.add` and hands `obj` to the state later keeps a method that
+    // notifies once the object is watched.
     const JS_MUTATORS = new Set(['add', 'delete', 'clear', 'set', 'push', 'pop', 'shift', 'unshift', 'splice', 'sort', 'reverse', 'fill', 'copyWithin']);
     const JS_WRAPPERS = new WeakMap();
 
@@ -1007,7 +1010,7 @@ function installMutationTracking($B) {
 
         read(obj, attr, result);
 
-        return JS_MUTATORS.has(attr) && typeof result === 'function' && MARKS.has(obj) && javascriptOwn(obj) ? jsMutator(obj, result) : result;
+        return JS_MUTATORS.has(attr) && typeof result === 'function' && javascriptOwn(obj) ? jsMutator(obj, result) : result;
     };
 
     // A read that found its value, however it was written: `box.x`,
