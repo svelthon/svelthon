@@ -2760,14 +2760,18 @@ function refuseLibraryCalls(ast, table, source, lineOffset) {
         if (!modules.has(block)) modules.set(block, new Set());
         modules.get(block).add(name);
     }
-    // And only while the import is the binding the read finds. Each binding of
-    // an alias is dated where Python makes it: an assignment once its value is
-    // computed, a loop's or a `with`'s target before its body, a `def` or a
-    // `class` once built. Within the block that binds the name, a read finds
-    // the last binding before it. One made from another block, through a
-    // `global` or a `nonlocal`, runs whenever that block does, which a call
-    // written nowhere can make it do: a constructor, `__setattr__`, a function
-    // found in `globals()`. So it leaves the read unknown here, and so does a
+    // And only where the read certainly finds the import: a refusal stops a
+    // program from compiling, so a binding the read may find otherwise leaves
+    // it to the author. Certain when every binding of the name is an import of
+    // the module. Otherwise only a read in the block that binds the name is
+    // looked at, and only bindings made there: each is dated where Python
+    // makes it, an assignment once its value is computed, a loop's or a
+    // `with`'s target before its body, a `def` or a `class` once built, and
+    // the read is certain when every one before it is the import, whichever
+    // branch it is in, since the branches taken are not known. A binding made
+    // from another block, through a `global` or a `nonlocal`, runs whenever
+    // that block does, which a call written nowhere can make it do: a
+    // constructor, `__setattr__`, a function found in `globals()`. So does a
     // binding of a kind not dated here, which the symbol table still sees.
     const rebound = new Map();
     const bound = $B.SYMBOL_FLAGS.DEF_LOCAL | $B.SYMBOL_FLAGS.DEF_PARAM;
@@ -2824,15 +2828,13 @@ function refuseLibraryCalls(ast, table, source, lineOffset) {
 
         const all = events.filter((one) => one.name === name && one.target === block);
         if (rebound.get(block)?.has(name) && !all.some((one) => !one.isImport)) return false;
-
-        // Every binding an import, the read finds the module whichever ran.
-        // Otherwise only a read in the block itself, with every binding made
-        // there, is dated.
         if (all.every((one) => one.isImport)) return true;
-        if (blockAt(scope) !== block || all.some((one) => one.from !== block)) return false;
+        if (blockAt(scope) !== block || all.some((one) => !one.isImport && one.from !== block)) return false;
 
-        const found = all.filter((one) => before(one.at, read)).sort((a, b) => (before(a.at, b.at) ? -1 : 1));
-        return found.at(-1)?.isImport === true;
+        // Before it in the block, every binding the import; none there, the
+        // name is whatever another block's imports made it.
+        const prior = all.filter((one) => one.from === block && before(one.at, read));
+        return prior.length > 0 ? prior.every((one) => one.isImport) : all.some((one) => one.from !== block);
     };
     const refuseBuiltin = (name, line) => {
         throw refuse(

@@ -153,9 +153,9 @@ test.for([
     ['the module name bound again in a function', 'def read():\n    import builtins as tools\n    tools = 1\n    return tools.open()'],
     ['the module name bound again through global', 'import builtins as tools\n\ndef bind():\n    global tools\n    tools = 1\n\nbind()\nresult = tools.open()'],
     // A refusal needs the read to find the import for certain. Whether a
-    // function runs is not known: Python calls one no line names. So a binding
-    // one may make leaves the read theirs, even where, as in the first, nothing
-    // does run it.
+    // function runs is not known: Python calls one no line names, and a branch
+    // may not be taken. So a binding either may make leaves the read theirs,
+    // even where, as in the first, nothing does run it.
     [
         'the module name bound again by a function nothing calls',
         `import builtins as tools\n${READER}\ndef bind():\n    global tools\n    tools = Reader()\n\nresult = tools.open()`
@@ -167,6 +167,14 @@ test.for([
     [
         'the module name bound again by a function found in globals()',
         `import builtins as tools\n${READER}\ndef install():\n    global tools\n    tools = Reader()\n\nglobals()["install"]()\nresult = tools.open()`
+    ],
+    [
+        'the module name imported again in a branch not taken',
+        `import builtins as tools\n${READER}\ntools = Reader()\nif False:\n    import builtins as tools\n\nresult = tools.open()`
+    ],
+    [
+        'the module name imported again in an else not taken',
+        `import builtins as tools\n${READER}\nif True:\n    tools = Reader()\nelse:\n    import builtins as tools\n\nresult = tools.open()`
     ]
 ])('%s is theirs', ([, written]) => {
     expect(() => compile(`${written}\n`, 'C', 'src/C.svelte', { plain: true })).not.toThrow();
