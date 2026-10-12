@@ -1039,6 +1039,12 @@ function installMutationTracking($B) {
     // (`set_exc`). The changes `add_note` and `with_traceback` make by name,
     // which `MUTATORS` follows, made here with no method called. In a
     // `finally`, since `$raise` ends by throwing what it changed.
+    //
+    // Untracked: a function the template calls, or a derived, raises and
+    // catches an exception the script keeps as an ordinary part of reading,
+    // and the engine's writes on it are no write of the author's, which
+    // Svelte refuses during a read (`state_unsafe_mutation`). The page that
+    // shows the exception is told all the same.
     for (const name of ['$raise', 'set_exc']) {
         const engine = $B[name];
 
@@ -1046,7 +1052,7 @@ function installMutationTracking($B) {
             try {
                 return Reflect.apply(engine, this, [exc, ...rest]);
             } finally {
-                notify(exc);
+                untrack(() => notify(exc));
             }
         };
     }

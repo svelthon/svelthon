@@ -17,6 +17,25 @@ def chain(one):
     return f"{type(one.__cause__).__name__} {type(one.__context__).__name__} {one.__traceback__ is not None}"
 
 
+# And one the script keeps, raised and caught while the page reads.
+held = ValueError("kept")
+
+
+def check():
+    try:
+        raise held
+    except ValueError:
+        return "caught"
+
+
+@derived
+def checked():
+    try:
+        raise held
+    except ValueError:
+        return "derived caught"
+
+
 @export
 def note(way):
     if way == "method":
@@ -46,3 +65,5 @@ def chained(way):
 <p data-k="error">{shown(error)}</p>
 <p data-k="noted">{shown(noted)}</p>
 <p data-k="raised">{chain(raised)}</p>
+<p data-k="check">{check()}</p>
+<p data-k="checked">{checked}</p>

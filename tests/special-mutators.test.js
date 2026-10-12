@@ -111,3 +111,18 @@ test.for([
 
     expect(target.querySelector('p[data-k="raised"]').textContent).toBe(shown);
 });
+
+// An exception the script keeps, raised and caught while the page reads, by a
+// function the template calls and by a derived: the engine's writes on it are
+// told to the page untracked, where Svelte refused them as a write during a
+// read, and the component did not mount.
+test('an exception raised and caught while the page reads lets it mount', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+    mount(ExceptionNotes, { target });
+    flushSync();
+
+    expect(['check', 'checked'].map((k) => target.querySelector(`p[data-k="${k}"]`).textContent)).toEqual([
+        'caught',
+        'derived caught'
+    ]);
+});
