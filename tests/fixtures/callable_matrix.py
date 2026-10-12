@@ -26,6 +26,9 @@ __all__ = [
     "rounding",
     "builtin_held",
     "bound_by_getter",
+    "getter_nothing",
+    "property_nothing",
+    "resolutions",
     "mapped",
     "order",
     "listed",
@@ -210,6 +213,41 @@ class BoundByGetter:
 
 
 bound_by_getter = BoundByGetter()
+
+
+# And what `__get__` hands back takes nothing, by a descriptor of the author's
+# and by a `property`: the caller's argument is trimmed to that. `__get__` is
+# asked once per call.
+resolved = 0
+
+
+def nothing():
+    return VALUE
+
+
+class NothingGetter:
+    def __get__(self, obj, owner=None):
+        global resolved
+        resolved += 1
+        return nothing
+
+
+class ByGetterNothing:
+    __call__ = NothingGetter()
+
+
+class ByPropertyNothing:
+    @property
+    def __call__(self):
+        return nothing
+
+
+getter_nothing = ByGetterNothing()
+property_nothing = ByPropertyNothing()
+
+
+def resolutions():
+    return resolved
 
 mapped = {
     "fn": fn,

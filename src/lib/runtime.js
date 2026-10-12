@@ -5657,6 +5657,7 @@ function declared(value) {
     const call = method === null ? finalCall(callDescriptor(value)) : null;
 
     if (method === null && call === null && typeof value !== 'function') return slotDeclared(value);
+    if (call !== null && boundByGet(call)) return descriptorCall(value, call);
 
     // `@staticmethod def __call__` is kept in the class dictionary as the
     // descriptor Brython builds for it, `{ob_type, sm_callable}`, the function
@@ -5759,6 +5760,58 @@ function declared(value) {
     }
 
     return instanceCall(value, where, fn);
+}
+
+// A class's `__call__` that is neither a function nor a method but an object
+// whose type has `__get__`: a `property`, or a descriptor of the author's. What
+// Python calls is what that `__get__` hands back for the instance.
+const boundByGet = (call) => {
+    const $B = globalThis.__BRYTHON__;
+
+    return (
+        typeof call !== 'function' &&
+        !boundMethod(call) &&
+        call.sm_callable === undefined &&
+        call.cm_callable === undefined &&
+        $B.search_slot($B.get_class(call), 'tp_descr_get', $B.NULL) !== $B.NULL
+    );
+};
+
+// Such an instance, its call resolved through the descriptor once per call: the
+// arity, which the wrapper asks first, resolves it and keeps what it found, and
+// the call uses that. So the arguments are trimmed to what is called, as they
+// are for the function handed over directly: a `property` handing back a
+// function that takes nothing was handed the click, and raised.
+function descriptorCall(value, origin) {
+    const $B = globalThis.__BRYTHON__;
+    let resolved;
+
+    const resolve = () => {
+        const call = callDescriptor(value);
+
+        resolved = call === null ? null : $B.$call($B.$getattr(call, '__get__'), value, pyType(value));
+        return resolved;
+    };
+
+    return {
+        fn: (...args) => {
+            const target = resolved === undefined ? resolve() : resolved;
+            resolved = undefined;
+
+            return $B.$call(target, ...args);
+        },
+        where: `${$B.class_name(value)}()`,
+        arity: () => {
+            const target = resolve();
+            const inner = target === null ? null : declared(target);
+
+            return inner === null ? Infinity : arityNow(inner.arity);
+        },
+        origin,
+        self: value,
+        named: labelled(value),
+        instance: true
+    };
 }
 
 // The instance, whose call is looked up **at every call** and whose contract

@@ -303,6 +303,18 @@ test('a __call__ bound by its __get__ receives what the call hands it', () => {
     expect(mod.bound_by_getter(0.125)).toBe(0.25);
 });
 
+// And the trim is to what `__get__` hands back: a function that takes nothing,
+// handed back by a descriptor or a `property`, is handed no event, as it is
+// when it crosses directly. The descriptor was read for a signature it does not
+// carry, everything was passed, and the click raised `TypeError`. Resolved once
+// per call.
+test('a __call__ bound by its __get__ is trimmed to what it hands back', () => {
+    const before = mod.resolutions();
+
+    expect([mod.getter_nothing('event'), mod.property_nothing('event')]).toEqual([0.25, 0.25]);
+    expect(mod.resolutions() - before).toBe(1);
+});
+
 // And one that is a builtin, `staticmethod(abs)`, which has no signature to read
 // and is called through Python's own protocol: what it answers is what CPython
 // answers, `round(-0.5)` the int 0 and not a negative zero.
