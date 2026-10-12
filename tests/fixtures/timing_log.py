@@ -2,6 +2,8 @@
 entries = []
 flaky_runs = 0
 flaky_store_runs = 0
+flaky_modules = []
+flaky_store_modules = []
 
 
 def recorded():

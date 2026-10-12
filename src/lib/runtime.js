@@ -6950,22 +6950,14 @@ const importsRunBodies = ($B) => {
 //
 // The namespace is published before the body runs, so an import cycle finds
 // the module half made rather than running it twice. A body that raises is
-// taken back out with what it bound, and the next import runs it again.
-export function pythonModule(namespace, published, run) {
+// taken back out, and the next import runs it again in a new namespace, which
+// `renew` hands to the generated code (`moduleLoad`).
+export function pythonModule(first, published, renew, run) {
     const $B = globalThis.__BRYTHON__;
     let state = 'waiting';
+    let namespace = typedModule($B, first);
 
     importsRunBodies($B);
-
-    // A module to Python, and not a JavaScript object: `module.name`,
-    // `from module import name`, `getattr` and `hasattr` read the names
-    // through its dict, which holds the names the namespace holds now. A name
-    // the module has not bound yet, in an import cycle, or has deleted, is
-    // missing there, where its accessor read `None`. Under the engine's own
-    // symbol, which it reads before the field: `ob_type` may be a name of the
-    // module's.
-    Object.defineProperty(namespace, $B.OB_TYPE, { value: $B.module });
-    namespace[$B.DICT] = namespaceDict(namespace);
 
     const load = () => {
         if (state !== 'waiting') return;
@@ -6982,10 +6974,8 @@ export function pythonModule(namespace, published, run) {
             state = 'waiting';
             if (published !== null && $B.imported[published] === namespace) delete $B.imported[published];
 
-            // What the attempt bound goes with it, deleted as `del` deletes
-            // it: the next import starts from a module as new as the one it
-            // would have made.
-            for (const name of Object.keys(namespace[$B.DICT])) if (!before.has(name)) $B.$delete(name, namespace);
+            namespace = abandoned($B, namespace, before);
+            renew(namespace);
 
             throw error;
         }
@@ -6996,6 +6986,52 @@ export function pythonModule(namespace, published, run) {
     if (published !== null) WAITING.set(published, load);
 
     return load;
+}
+
+// A module to Python, and not a JavaScript object: `module.name`, `from module
+// import name`, `getattr` and `hasattr` read the names through its dict, which
+// holds the names the namespace holds now. A name the module has not bound
+// yet, in an import cycle, or has deleted, is missing there, where its accessor
+// read `None`. Under the engine's own symbol, which it reads before the field:
+// `ob_type` may be a name of the module's.
+function typedModule($B, namespace) {
+    Object.defineProperty(namespace, $B.OB_TYPE, { value: $B.module });
+    namespace[$B.DICT] = namespaceDict(namespace);
+    return namespace;
+}
+
+// The namespace of an attempt that raised, left as it was to whoever holds it,
+// the module itself or an import cycle: each name it holds is kept on it as
+// its own, over the accessor it shares with the next one, its value read once
+// and a value that raises left to the accessor. And the new namespace the next
+// attempt runs in, on the same accessors, where what the failed one bound is
+// deleted as `del` deletes it.
+function abandoned($B, namespace, before) {
+    const held = Object.keys(namespace[$B.DICT]);
+
+    for (const name of held) {
+        if (Object.hasOwn(namespace, name)) continue;
+
+        let value;
+
+        try {
+            value = namespace[name];
+        } catch {
+            continue;
+        }
+
+        Object.defineProperty(namespace, name, { value, writable: true, enumerable: true, configurable: true });
+    }
+
+    const next = Object.create(Object.getPrototypeOf(namespace));
+
+    next.$proxy = true;
+    next.__name__ = namespace.__name__;
+    typedModule($B, next);
+
+    for (const name of held) if (!before.has(name) && holdsName(next, name)) $B.$delete(name, next);
+
+    return next;
 }
 
 // Hand Brython our namespace instead of the one it would have made for itself.

@@ -7,7 +7,7 @@
 import { test, expect } from 'vitest';
 import { mount, unmount, flushSync } from 'svelte';
 import { recorded } from './fixtures/timing_log.py';
-import { later, again, retried } from './fixtures/timing_imports.py';
+import { later, again, retried, kept } from './fixtures/timing_imports.py';
 import { store } from './fixtures/timing_store.svelte.py';
 import TimingImport from './fixtures/TimingImport.svelte';
 import TimingLate from './fixtures/TimingLate.svelte';
@@ -29,12 +29,17 @@ test('a module whose body raised runs again at the next import', () => {
     expect(recorded()).toBe('before first after fails caught later fails caught again');
 });
 
-// And from a module as new as the first attempt's: a name the failed attempt
-// bound is not there, in a module or a reactive module.
-test('a module whose body raised runs again from a fresh module', () => {
+// And in a new module: a name the failed attempt bound is not there, in a
+// module or a reactive module, and the failed one, which held on to itself,
+// is another object and keeps what it bound.
+test('a module whose body raised runs again in a new module', () => {
     expect(retried()).toEqual([
         ['failed', true, true],
         ['failed', true, true]
+    ]);
+    expect(kept()).toEqual([
+        [false, true],
+        [false, true]
     ]);
 });
 

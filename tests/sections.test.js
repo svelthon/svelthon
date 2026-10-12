@@ -125,7 +125,7 @@ describe('and in a plain module', () => {
         // imported, the last thing in the file.
         expect(script.indexOf('__export_load = __pyExport(')).toBeGreaterThan(init);
         expect(script).toContain('export { __export_load as load };');
-        const load = script.indexOf('export default __pythonModule(__py, "route", () => {');
+        const load = script.indexOf('export default __pythonModule(__py, "route", (__next) => { __py = __next; }, () => {');
 
         expect(load).toBeGreaterThan(script.lastIndexOf('export {'));
         expect(init).toBeGreaterThan(load);

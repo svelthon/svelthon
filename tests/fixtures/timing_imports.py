@@ -50,3 +50,10 @@ def flaky_store():
 
 def retried():
     return [attempts(flaky), attempts(flaky_store)]
+
+
+def kept():
+    return [
+        [modules[0] is modules[-1], getattr(modules[0], "first", "missing")]
+        for modules in (timing_log.flaky_modules, timing_log.flaky_store_modules)
+    ]

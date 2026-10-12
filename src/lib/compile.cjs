@@ -3226,7 +3226,8 @@ function authorBindings(c) {
 function namespaceObject(c) {
     return [
         ``,
-        `const ${NS} = Object.create(__proto);`,
+        // A module's is replaced by a new one when its body raises (`moduleLoad`).
+        `${c.store ? 'let' : 'const'} ${NS} = Object.create(__proto);`,
         // Reading a global goes through $B.resolve_global → resolve_in_namespace,
         // which demands an *own* property unless the namespace is flagged
         // $proxy, in which case it reads the property normally and therefore
@@ -3647,7 +3648,8 @@ function plainBindings(c) {
 
 function plainInit(c) {
     return [
-        `const ${NS} = Object.create(__proto);`,
+        // Replaced by a new one when its body raises (`moduleLoad`).
+        `let ${NS} = Object.create(__proto);`,
         `${NS}.$proxy = true;`,
         `${NS}.__name__ = ${JSON.stringify(pythonModuleName(c.source))};`,
         ``
@@ -3694,6 +3696,9 @@ const liveExports = (c) =>
 //
 // The default export, which `export *` leaves out: what JavaScript imports by
 // name is what `__all__` says, and nothing of ours beside it.
+//
+// A body that raises leaves its namespace to whoever holds it, and the next
+// import runs in a new one, which the function hands back to be the module's.
 function moduleLoad(c) {
     if (!c.store && !c.plain) return [];
 
@@ -3702,7 +3707,8 @@ function moduleLoad(c) {
 
     return [
         ``,
-        `export default __pythonModule(${NS}, ${PY_NAME.test(name) ? JSON.stringify(name) : 'null'}, () => {`,
+        `export default __pythonModule(${NS}, ${PY_NAME.test(name) ? JSON.stringify(name) : 'null'}, ` +
+            `(${NEXT_VALUE}) => { ${NS} = ${NEXT_VALUE}; }, () => {`,
         ...run.map((line) => (line === '' ? line : `    ${line}`)),
         `});`
     ];
