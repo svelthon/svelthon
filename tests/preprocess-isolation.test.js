@@ -144,7 +144,7 @@ describe('one Python file shared by two projects', () => {
                 process.chdir(root);
 
                 const plugin = svelthon();
-                const script = plugin.load.call({ addWatchFile() {} }, file);
+                const script = plugin.load.call({ addWatchFile() {} }, `${file}?python`);
                 const id = script.match(/from "(virtual:svelthon\/\w+)"/)[1];
 
                 loads.push({ id, module: plugin.load('\0' + id) });
@@ -296,7 +296,7 @@ describe('an edit reaches its module, whatever the process is in', () => {
         try {
             process.chdir(first.root);
             const plugin = svelthon();
-            const id = String(plugin.load.call({ addWatchFile() {} }, file)).match(/virtual:svelthon\/\w+/)[0];
+            const id = String(plugin.load.call({ addWatchFile() {} }, `${file}?python`)).match(/virtual:svelthon\/\w+/)[0];
 
             if (moved) process.chdir(second.root);
             const environment = graph();
@@ -327,7 +327,8 @@ describe('a relative path is the project’s, whatever the process is in', () =>
         writeFileSync(join(root, 'src', 'routes', 'data.py'), 'import peps\n__all__ = ["peps"]\n');
         return root;
     };
-    const imported = (body) => body.match(/import "([^"]*peps\.py)"/)?.[1];
+    // The module as Python reaches it, its body left to the import statement.
+    const imported = (body) => body.match(/import "([^"]*peps\.py)\?python"/)?.[1];
     const source = '<script lang="python">\nimport peps\n</script>\n<p>{peps.answer}</p>\n';
 
     test.for([[false], [true]])('the preprocessor’s search path, moved: %s', async ([moved]) => {
@@ -360,7 +361,7 @@ describe('a relative path is the project’s, whatever the process is in', () =>
             const plugin = svelthon({ path: ['src/lib'] });
 
             if (moved) process.chdir(second);
-            const script = plugin.load.call({ addWatchFile() {} }, join(first, 'src', 'routes', 'data.py'));
+            const script = plugin.load.call({ addWatchFile() {} }, `${join(first, 'src', 'routes', 'data.py')}?python`);
             const id = String(script).match(/virtual:svelthon\/\w+/)[0];
 
             expect(imported(plugin.load('\0' + id).code)).toBe(join(first, 'src', 'lib', 'peps.py'));

@@ -10,10 +10,10 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { svelthon } from '../src/lib/svelthon.js';
 
-// The compiled module a file is served as: the wrapper names its virtual
-// module, and loading that gives the code.
+// The compiled module a file is served as: the wrapper, the module as Python
+// reaches it, names its virtual module, and loading that gives the code.
 const served = (plugin, file) => {
-    const wrapper = plugin.load.call({ addWatchFile() {} }, file);
+    const wrapper = plugin.load.call({ addWatchFile() {} }, `${file}?python`);
     const id = wrapper.match(/from "([^"]*virtual[^"]*)"/)[1];
     const out = plugin.load.call({}, `\0${id}`);
 

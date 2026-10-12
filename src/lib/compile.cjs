@@ -1436,7 +1436,7 @@ const RUNTIME = {
     kept: '__kept',
     unproxied: '__unproxied',
     handOver: '__handOver',
-    registerModule: '__registerModule',
+    pythonModule: '__pythonModule',
     withNamespace: '__withNamespace',
     __pybridge: '__pybridge',
     group: '__group',
@@ -2974,7 +2974,7 @@ function preamble(c) {
             'ticking', 'pyBind', 'NONE', 'helpers',
             'directiveAction', 'directiveTransition', 'directiveAnimate',
             'plainScalar', 'storeMember', 'invoke',
-            ...(c.store ? ['registerModule'] : SUBSCRIBING(c) ? ['unsubscribe'] : []),
+            ...(c.store ? ['pythonModule'] : SUBSCRIBING(c) ? ['unsubscribe'] : []),
             ...(c.store && c.funcs.some((f) => c.published(f.name)) ? ['liveExport'] : []),
             ...(c.bindables.length ? ['kept', 'unproxied', 'handOver'] : []),
             // Only an effect and `on_mount` hand a value back to be called
@@ -3339,6 +3339,9 @@ const unboundRefusals = (c) =>
     );
 
 function initCall(c) {
+    // A module's body runs when it is imported (`moduleLoad`).
+    if (c.store) return [];
+
     return [
         ``,
         `__init(${NS});`,
@@ -3390,8 +3393,6 @@ function instanceExports(c) {
         ...(c.store
             ? [
                   ``,
-                  ...registration(c),
-                  ``,
                   // Module-scope signals live once for the whole app. Exported
                   // through getters because Svelte forbids exporting a reassigned
                   // $state binding directly, and a getter is what keeps the read
@@ -3436,8 +3437,9 @@ function instanceExports(c) {
                       .filter((f) => c.published(f.name))
                       .map((f) => `    get ${f.name}() { return ${storeRead(c, f.name, `${NS}.${f.name}`, wrapperName(f.name))}; },`),
                   `};`,
-                  ``,
-                  `export default store;`,
+                  // Its default export too, made by the module JavaScript
+                  // imports (`svelthon.js`, `eagerModule`).
+                  //
                   // Named exports too: a `.py` is not only a store. SvelteKit
                   // looks for `load`, `actions`, `GET`, by name, on the module.
                   // Live, as a `.py` publishes its own: the value the name holds
@@ -3449,13 +3451,7 @@ function instanceExports(c) {
                   ...(c.funcs.filter((f) => c.published(f.name)).length
                       ? [
                             ``,
-                            ...c.funcs
-                                .filter((f) => c.published(f.name))
-                                .flatMap((f) => [
-                                    `let __export_${f.name};`,
-                                    `__liveExport(${NS}, ${JSON.stringify(f.name)}, (__value) => { __export_${f.name} = ` +
-                                        `${storeRead(c, f.name, '__value', wrapperName(f.name))}; });`
-                                ]),
+                            ...c.funcs.filter((f) => c.published(f.name)).map((f) => `let __export_${f.name};`),
                             `export { ${c.funcs
                                 .filter((f) => c.published(f.name))
                                 .map((f) => `__export_${f.name} as ${f.name}`)
@@ -3468,8 +3464,13 @@ function instanceExports(c) {
 }
 
 // Last, because an effect runs its body the moment it is created: anything it
-// reads has to exist, and that means every wrapper above it.
+// reads has to exist, and that means every wrapper above it. A module's run
+// with its body, when it is imported (`moduleLoad`).
 function effectBlocks(c) {
+    return c.store ? [] : effectLines(c);
+}
+
+function effectLines(c) {
     return [
         // Deliberately *not* untracked: discovering what the body read is the
         // whole point. A Python function that returns a callable hands back a
@@ -3599,7 +3600,7 @@ function plainPreamble(c) {
         `import { ${runtimeAliases([
             'bind', '__pybridge', 'pyCall', 'pyError', 'plainData', 'pyArg',
             'pyData', 'pyExport', 'jsCall', 'ticking', 'pyBind', 'NONE', 'helpers',
-            'registerModule', 'group', 'invoke', 'liveExport', 'readOnlyImport'
+            'pythonModule', 'group', 'invoke', 'liveExport', 'readOnlyImport'
         ])} } from 'svelthon/runtime';`,
         ...c.jsImports.map(jsImportLine),
         ``
@@ -3636,25 +3637,62 @@ function plainBindings(c) {
     ];
 }
 
-// A module published under its Python name. A name no `import` can write,
-// `+page.server`, is never looked up, and the module only learns its name.
-const registration = (c) => {
-    const name = JSON.stringify(pythonModuleName(c.source));
-
-    return PY_NAME.test(pythonModuleName(c.source))
-        ? [`__registerModule(${name}, ${NS});`]
-        : [`${NS}.__name__ = ${name};`];
-};
-
 function plainInit(c) {
     return [
         `const ${NS} = Object.create(__proto);`,
         `${NS}.$proxy = true;`,
-        ``,
-        ...registration(c),
-        `__init(${NS});`,
-        ...unboundRefusals(c),
+        `${NS}.__name__ = ${JSON.stringify(pythonModuleName(c.source))};`,
         ``
+    ];
+}
+
+// What a module exports by name, filled as its body binds it: a `.py` hands
+// JavaScript every name through the boundary, a `.svelte.py` its functions,
+// the rest through `store`.
+const liveExports = (c) =>
+    c.store
+        ? c.funcs
+              .filter((f) => c.published(f.name))
+              .map(
+                  (f) =>
+                      `__liveExport(${NS}, ${JSON.stringify(f.name)}, (__value) => { __export_${f.name} = ` +
+                      `${storeRead(c, f.name, '__value', wrapperName(f.name))}; });`
+              )
+        : c.exported
+              .filter((n) => !jsOnly(c, n))
+              .map(
+                  (n) =>
+                      `__liveExport(${NS}, ${JSON.stringify(n)}, (__value) => { __export_${n} = ` +
+                      `__pyExport(__value, ${JSON.stringify(`${n} — ${c.source}`)}); });`
+              );
+
+// The function that runs a module's body, which an import calls and the
+// evaluation of the module does not: `import optional` under an `if` not
+// taken, in a function never called or in a `try` runs `optional` at that
+// statement, in its order and with its exception (`pythonModule`). JavaScript
+// that imports the file reaches it through a module that calls it as it is
+// evaluated (`svelthon.js`, `eagerModule`).
+//
+// What runs moves inside, in the order it ran in: the body, the refusals that
+// read what it bound, the exports it filled, and a module's effect roots. The
+// declarations and the `export` statements stay where they were, and the
+// function is called once the module is evaluated, so it finds all of them.
+// Published under the module's Python name; a name no `import` can write,
+// `+page.server`, is never looked up.
+//
+// The default export, which `export *` leaves out: what JavaScript imports by
+// name is what `__all__` says, and nothing of ours beside it.
+function moduleLoad(c) {
+    if (!c.store && !c.plain) return [];
+
+    const name = pythonModuleName(c.source);
+    const run = [`__init(${NS});`, ...unboundRefusals(c), ...liveExports(c), ...(c.store ? effectLines(c) : [])];
+
+    return [
+        ``,
+        `export default __pythonModule(${NS}, ${PY_NAME.test(name) ? JSON.stringify(name) : 'null'}, () => {`,
+        ...run.map((line) => (line === '' ? line : `    ${line}`)),
+        `});`
     ];
 }
 
@@ -3696,13 +3734,9 @@ function plainExports(c) {
         // it, or nothing after `del`, as data. Made once at import, it went on
         // being a function after Python had made the name a number, and
         // stayed a number after Python had made it a function again.
-        ...c.exported
-            .filter((n) => !jsOnly(c, n))
-            .flatMap((n) => [
-                `let __export_${n};`,
-                `__liveExport(${NS}, ${JSON.stringify(n)}, (__value) => { __export_${n} = ` +
-                    `__pyExport(__value, ${JSON.stringify(`${n} — ${c.source}`)}); });`
-            ]),
+        //
+        // Filled by the body as it binds them (`liveExports`, `moduleLoad`).
+        ...c.exported.filter((n) => !jsOnly(c, n)).map((n) => `let __export_${n};`),
         ...(c.exported.length
             ? [`export { ${c.exported.map((n) => (jsOnly(c, n) ? n : `__export_${n} as ${n}`)).join(', ')} };`]
             : [])
@@ -3731,6 +3765,9 @@ function counterStart(text) {
 //   3. the exported wrappers come after init(), so they call something;
 //   4. the effects come last, since an effect runs its body on creation.
 //
+// A module keeps the same order inside the function that runs its body when it
+// is imported (`moduleLoad`), last, so that it finds every declaration.
+//
 // Nothing breaks if a section moves. Something subtle stops working.
 const COMPONENT_SECTIONS = [
     preamble,
@@ -3741,7 +3778,8 @@ const COMPONENT_SECTIONS = [
     injectedBindings,
     initCall,
     instanceExports,
-    effectBlocks
+    effectBlocks,
+    moduleLoad
 ];
 
 const PLAIN_SECTIONS = [
@@ -3749,7 +3787,8 @@ const PLAIN_SECTIONS = [
     plainDeclarations,
     plainBindings,
     plainInit,
-    plainExports
+    plainExports,
+    moduleLoad
 ];
 
 function compile(
@@ -4138,6 +4177,7 @@ function compile(
         lines: exprLines.length ? { offset: lineOffset, ranges: exprLines } : lineOffset,
         templateLine,
         store,
+        plain,
         namespace,
         js,
         // Every name the module reads as a global. What decides whether `host`

@@ -75,7 +75,7 @@ reste de cette configuration et ce que chaque ligne apporte.
 npm install
 npm run dev          # la démo, sous /demo/
 
-npm test             # 1 817 tests : sémantique, props, réactivité, surface Svelte
+npm test             # 1 822 tests : sémantique, props, réactivité, surface Svelte
 npm run test:quiet   # la sortie de la suite : un run vert ne doit rien dire
 npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
@@ -940,10 +940,12 @@ def bump():
 
 `import counter_store` cherche `counter_store.svelte.py`, puis `counter_store.py`,
 dans le répertoire du fichier importateur puis le long de
-`python({ path: [...] })`, qui joue le rôle de PYTHONPATH. Le namespace est
-publié dans `$B.imported` sous son nom de module, et le module virtuel de
-l'importateur l'importe en premier, si bien qu'il est enregistré quand le corps
-s'exécute.
+`python({ path: [...] })`, qui joue le rôle de PYTHONPATH. Le module virtuel de
+l'importateur importe son code en premier, si bien qu'il est à portée de main, et
+son corps s'exécute à l'instruction `import`, comme en CPython : un import sous un
+`if` non pris ou dans une fonction jamais appelée n'exécute rien, et l'exception
+du module est levée là où un `except` peut la prendre. Le namespace est alors
+publié dans `$B.imported` sous son nom de module.
 
 ## Effets
 
@@ -1564,7 +1566,7 @@ part jamais.
 
 ## État
 
-Validé par `npm test`, 1 817 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 1 822 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;

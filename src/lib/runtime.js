@@ -6910,6 +6910,68 @@ export function registerModule(name, namespace) {
     globalThis.__BRYTHON__.imported[name] = namespace;
 }
 
+// The bodies of the modules Python imports by name, which run at the import
+// statement and not when their code is evaluated. A component or a module
+// that imports `optional` under an `if` not taken, in a function never called
+// or in a `try` has its code at hand, evaluated in front of its own, and the
+// body of `optional` runs when, and if, the statement does: in its order among
+// the importer's effects, and with its exception raised there, where an
+// `except` can take it.
+const WAITING = new Map();
+
+// `import x`, `from x import y` and `__import__("x")` all reach the engine's
+// `$__import__`, which looks the name up in `$B.imported`: a body still
+// waiting runs first, so the lookup finds its namespace.
+const importsRunBodies = ($B) => {
+    if ($B.$svelthonImports) return;
+    $B.$svelthonImports = true;
+
+    const engine = $B.$__import__;
+
+    $B.$__import__ = function (name, ...rest) {
+        WAITING.get(name)?.();
+        return Reflect.apply(engine, this, [name, ...rest]);
+    };
+};
+
+// The module's body, `run`, behind the function that runs it once: an import
+// statement calls it through the engine, and the module JavaScript imports
+// calls it as it is evaluated (`svelthon.js`, `eagerModule`). `published`
+// is the name it is imported by, or null for a name no `import` can write,
+// `+page.server`.
+//
+// The namespace is published before the body runs, so an import cycle finds
+// the module half made rather than running it twice. A body that raises is
+// taken back out, and the next import runs it again.
+export function pythonModule(namespace, published, run) {
+    const $B = globalThis.__BRYTHON__;
+    let state = 'waiting';
+
+    importsRunBodies($B);
+
+    const load = () => {
+        if (state !== 'waiting') return;
+
+        state = 'running';
+        if (published !== null) registerModule(published, namespace);
+
+        try {
+            run();
+            state = 'done';
+        } catch (error) {
+            state = 'waiting';
+            if (published !== null && $B.imported[published] === namespace) delete $B.imported[published];
+            throw error;
+        }
+
+        if (WAITING.get(published) === load) WAITING.delete(published);
+    };
+
+    if (published !== null) WAITING.set(published, load);
+
+    return load;
+}
+
 // Hand Brython our namespace instead of the one it would have made for itself.
 //
 // The codegen opens every module body with `locals_X = $B.namespace('X')`, so

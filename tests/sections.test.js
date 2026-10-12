@@ -110,7 +110,7 @@ describe('and in a plain module', () => {
         expect(injected.filter((at) => at < author)).toEqual([]);
     });
 
-    test('init() comes after every binding, and the exports after init()', () => {
+    test('init() comes after every binding, and the exports are filled after init()', () => {
         const init = script.indexOf('init(__py);');
 
         expect(init).toBeGreaterThan(script.lastIndexOf('bind(__proto, '));
@@ -119,7 +119,15 @@ describe('and in a plain module', () => {
         // added to it holds on this route too. It was spelled out inline, and a
         // callback returned by one of these functions then crossed with no
         // policy at all. Published live, as every exported name is.
+        //
+        // The `export` statement is a declaration, wherever it stands; what
+        // runs in order is the function that runs the body when the module is
+        // imported, the last thing in the file.
         expect(script.indexOf('__export_load = __pyExport(')).toBeGreaterThan(init);
-        expect(script.indexOf('export { __export_load as load };')).toBeGreaterThan(init);
+        expect(script).toContain('export { __export_load as load };');
+        const load = script.indexOf('export default __pythonModule(__py, "route", () => {');
+
+        expect(load).toBeGreaterThan(script.lastIndexOf('export {'));
+        expect(init).toBeGreaterThan(load);
     });
 });

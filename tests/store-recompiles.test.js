@@ -42,13 +42,14 @@ describe('a .py served twice', () => {
     // `load` runs as a Rollup plugin, so it is given the one hook it reaches
     // for: the watcher a `.py` import registers itself with.
     //
-    // And what comes back for the file is a **wrapper**, the same text whatever
-    // the Python says: the compiled body lives in the virtual module the
-    // wrapper imports. So the wrapper is read for that id and the id is served
-    // in turn, which is the pair Vite itself asks for.
+    // And what comes back for the module as Python reaches it is a
+    // **wrapper**, the same text whatever the Python says: the compiled body
+    // lives in the virtual module the wrapper imports. So the wrapper is read
+    // for that id and the id is served in turn, which is the pair Vite itself
+    // asks for.
     const served = (plugin, file) => {
         const rollup = { addWatchFile: () => {} };
-        const wrapper = plugin.load.call(rollup, file);
+        const wrapper = plugin.load.call(rollup, `${file}?python`);
         const id = (typeof wrapper === 'string' ? wrapper : wrapper.code).match(
             /from "([^"]*virtual[^"]*)"/
         )[1];

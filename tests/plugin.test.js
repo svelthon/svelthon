@@ -390,10 +390,20 @@ describe('the plugin loads a .py itself', () => {
     const context = { watched: [], addWatchFile(one) { this.watched.push(one); } };
 
     test('a module compiles to a component script', () => {
-        const code = plugin.load.call(context, file);
+        const code = plugin.load.call(context, `${file}?python`);
 
         expect(code).toContain('init');
         expect(context.watched).toContain(file);
+    });
+
+    // What JavaScript imports runs the body as it is evaluated, and hands on
+    // the module's names, and nothing but them.
+    test('and its own path runs the module JavaScript imports', () => {
+        const code = plugin.load.call(context, file);
+
+        expect(code).toContain(`import load from ${JSON.stringify(`${file}?python`)};\nload();`);
+        expect(code).toContain(`export * from ${JSON.stringify(`${file}?python`)};`);
+        expect(code).not.toContain('default');
     });
 
     test('and its generated body is then served on demand', () => {
@@ -510,20 +520,20 @@ describe('a store takes the other branch of the compiler', () => {
     const file = resolve(fixtures, 'root_store.svelte.py');
 
     test('its names are signals, reachable through a store object', () => {
-        const code = plugin.load.call({ addWatchFile() {} }, file);
+        const code = plugin.load.call({ addWatchFile() {} }, `${file}?python`);
 
         expect(code).toContain('$state');
         expect(code).toContain('export const store');
     });
 
     test('and a default export, which a route module does not have', () => {
-        expect(plugin.load.call({ addWatchFile() {} }, file)).toContain('export default store');
+        expect(plugin.load.call({ addWatchFile() {} }, file)).toContain('export { store as default }');
     });
 });
 
-// A component that imports a sibling `.py` gets a prelude: the module has to be
-// evaluated before init() runs, so its namespace is registered by the time
-// Brython looks it up.
+// A component that imports a sibling `.py` gets a prelude: the module's code has
+// to be evaluated before init() runs, so the import statement finds it, and its
+// body is left to that statement.
 describe('a component importing a module', () => {
     test('is served with the import ahead of its own body', async () => {
         const filename = resolve(fixtures, 'RootStore.svelte');
@@ -533,7 +543,7 @@ describe('a component importing a module', () => {
         const name = relative(process.cwd(), filename).replace(/\W/g, '_');
         const served = svelthon().load('\0' + VIRTUAL_PREFIX + name);
 
-        expect(served.code).toMatch(/^import ".*root_store/m);
+        expect(served.code).toMatch(/^import ".*root_store\.svelte\.py\?python";$/m);
 
         // The prelude pays for its own lines, or every mapping points one line
         // above where it came from.

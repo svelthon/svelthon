@@ -148,7 +148,7 @@ describe('a component whose Python starts far down the file', () => {
 });
 
 // A module that imports Python gets a prelude prepended, one `import` line per
-// module, evaluated before init() so the namespaces exist. The source map has to
+// module, evaluated before init() so its import statements find them. The source map has to
 // move down by as many, or a debugger opens the file that many lines off.
 
 describe('a generated module behind its prelude', () => {

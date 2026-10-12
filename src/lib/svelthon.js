@@ -550,9 +550,9 @@ export function python(options = {}) {
             });
 
             // `import counter_store` in a component resolves to a .py file, its
-            // own directory first, then `path`. The module has to be evaluated
-            // before init() runs, so its namespace is registered by the time
-            // Brython looks it up.
+            // own directory first, then `path`. The module's code has to be
+            // evaluated before init() runs, so the import statement finds it;
+            // its body runs at that statement (`pythonImports`).
             const prelude = pythonImports(imports, directory, searchPath);
 
             generated.set(generatedKey(root, virtualId(name)), withPrelude(module, map, prelude));
@@ -776,11 +776,35 @@ export function withPrelude(module, map, prelude) {
 // `import peps` names a file, looked up in the importer's own directory first,
 // then along the configured path. Both spellings are tried, since the statement
 // says nothing about whether the module it names is reactive.
+//
+// The module as Python reaches it, `PYTHON_QUERY`: evaluated in front of the
+// importer, so its code is at hand, and its body left to the import
+// statement, which runs it when, and if, it is reached.
 function pythonImports(names, fromDirectory, path) {
     return names
         .flatMap((mod) => moduleFile(mod, fromDirectory, path) || [])
-        .map((path) => `import ${JSON.stringify(path)};`)
+        .map((path) => `import ${JSON.stringify(path + PYTHON_QUERY)};`)
         .join('\n');
+}
+
+// A `.py` is served twice. Under the query, the module itself, whose body waits
+// for an import (`moduleLoad` in compile.cjs). Under its own path, what
+// JavaScript and SvelteKit import: the same module, its body run as this one is
+// evaluated, as importing a JavaScript module runs it. One module behind both,
+// so a name Python changes is the name JavaScript reads.
+const PYTHON_QUERY = '?python';
+
+function eagerModule(file) {
+    const body = JSON.stringify(file + PYTHON_QUERY);
+
+    return [
+        // The module's default export is the function that runs its body.
+        `import load from ${body};`,
+        `load();`,
+        `export * from ${body};`,
+        // A store is also its own default export.
+        ...(isReactive(file) ? [`export { store as default } from ${body};`] : [])
+    ].join('\n');
 }
 
 // What `compile()` asks through `resolves`: `'file'` when the name stands for
@@ -856,6 +880,25 @@ export function svelthon(options = {}) {
     // made in. Never the directory the process happens to be in when it asks.
     let routes = root;
 
+    const pyFile = (id, importer) => {
+        const direct = importer ? resolve(dirname(importer), id) : resolve(routes, id);
+        if (existsSync(direct)) return direct;
+
+        // A leading slash means two different things. An alias has already
+        // produced a real filesystem path; SvelteKit's own route entries are
+        // relative to the **project root**, `/src/routes/+page.server.py`,
+        // which no filesystem has. Note that `resolve(dir, '/x')` ignores `dir`
+        // entirely, so having an importer does not help here: only trying the
+        // file tells the two apart, and getting it wrong reads as
+        // `ENOENT: stat '/src/routes/+page.server.py'`.
+        if (id.startsWith('/')) {
+            const fromRoot = resolve(routes, `.${id}`);
+            if (existsSync(fromRoot)) return fromRoot;
+        }
+
+        return direct;
+    };
+
     return {
         name: 'svelthon:modules',
         // 'pre', or Vite's own resolver claims `./store.py` as a plain file and
@@ -864,32 +907,20 @@ export function svelthon(options = {}) {
         configResolved(config) {
             routes = config.root;
         },
-        resolveId(id, importer) {
-            if (isVirtual(id)) return '\0' + id;
+        resolveId(specifier, importer) {
+            if (isVirtual(specifier)) return '\0' + specifier;
+
+            // The module as Python reaches it is resolved as its file is, and
+            // keeps its query.
+            const query = specifier.endsWith(`.py${PYTHON_QUERY}`) ? PYTHON_QUERY : '';
+            const id = specifier.slice(0, specifier.length - query.length);
+
             // Without an importer either: SvelteKit hands its route modules to
             // Vite as already-resolved entries, with nobody to resolve against.
             // Only a path we can resolve ourselves. A bare or aliased specifier
             // such as `#lib/peps.py` belongs to whoever defined the alias, and
             // reaches load() as an absolute path once they have.
-            if (id.endsWith('.py') && (id.startsWith('.') || id.startsWith('/'))) {
-                const direct = importer ? resolve(dirname(importer), id) : resolve(routes, id);
-                if (existsSync(direct)) return direct;
-
-                // A leading slash means two different things. An alias has
-                // already produced a real filesystem path; SvelteKit's own route
-                // entries are relative to the **project root**,
-                // `/src/routes/+page.server.py`, which no filesystem has. Note
-                // that `resolve(dir, '/x')` ignores `dir` entirely, so having an
-                // importer does not help here: only trying the file tells the
-                // two apart, and getting it wrong reads as
-                // `ENOENT: stat '/src/routes/+page.server.py'`.
-                if (id.startsWith('/')) {
-                    const fromRoot = resolve(routes, `.${id}`);
-                    if (existsSync(fromRoot)) return fromRoot;
-                }
-
-                return direct;
-            }
+            if (id.endsWith('.py') && (id.startsWith('.') || id.startsWith('/'))) return pyFile(id, importer) + query;
         },
         load(id) {
             if (id === '\0' + STATS_ID) return `export const tests = ${countTests(root)};`;
@@ -898,9 +929,13 @@ export function svelthon(options = {}) {
                 const entry = generated.get(key(id.slice(1)));
                 return entry && (entry.map ? { code: entry.code, map: entry.map } : entry.code);
             }
-            if (!id.endsWith('.py')) return;
 
-            const file = id;
+            const deferred = id.endsWith(`.py${PYTHON_QUERY}`);
+            if (!deferred && !id.endsWith('.py')) return;
+
+            // Compiled under either id, so a refusal is reported against the
+            // file JavaScript imported, the first one asked.
+            const file = deferred ? id.slice(0, -PYTHON_QUERY.length) : id;
             const name = nameFor(file, root);
             const { script, module, map, imports } = compilePython(file, searchPath, root);
 
@@ -911,7 +946,9 @@ export function svelthon(options = {}) {
             generated.set(key(virtualId(name)), withPrelude(module, map, prelude));
 
             this.addWatchFile(file);
-            return script;
+
+            // JavaScript's import of the file, which runs the module's body.
+            return deferred ? script : eagerModule(file);
         },
 
         // A component's generated code lives in its own module, which Vite has
@@ -959,7 +996,10 @@ export function svelthon(options = {}) {
             // be invalidated too, otherwise its load() never reruns and
             // `generated` keeps the previous body, exactly the staleness this
             // hook exists to prevent.
-            if (file.endsWith('.py')) forget(file);
+            if (file.endsWith('.py')) {
+                forget(file);
+                forget(file + PYTHON_QUERY);
+            }
 
             return [...modules, ...stale];
         }

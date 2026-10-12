@@ -83,7 +83,7 @@ describe('compiler', () => {
 
         expect(script).not.toContain('$props()'); // a store has no parent
         expect(script).toContain('let n = $state.raw');
-        expect(script).toContain('registerModule("shop"');
+        expect(script).toContain('__pythonModule(__py, "shop"');
     });
 
     // Brython scatters `$B.set_lineno(frame, N)` through its output, which is

@@ -77,7 +77,7 @@ rest of that configuration and what each line buys.
 npm install
 npm run dev          # the demo, at /demo/
 
-npm test             # 1 817 tests: semantics, props, reactivity, Svelte surface
+npm test             # 1 822 tests: semantics, props, reactivity, Svelte surface
 npm run test:quiet   # the suite's own output: a green run must say nothing
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
@@ -898,9 +898,11 @@ def bump():
 
 `import counter_store` looks for `counter_store.svelte.py`, then `counter_store.py`,
 in the importing file's own directory and then along `python({ path: [...] })`,
-which plays the part of PYTHONPATH. The namespace is published in `$B.imported`
-under its module name, and the importer's virtual module imports it first, so it
-is registered by the time the body runs.
+which plays the part of PYTHONPATH. The importer's virtual module imports its code
+first, so it is at hand, and its body runs at the `import` statement, as in
+CPython: an import under an `if` not taken or in a function never called runs
+nothing, and the module's exception is raised where an `except` can catch it. The
+namespace is then published in `$B.imported` under its module name.
 
 ## Effects
 
@@ -1544,7 +1546,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 1 817 tests as written (vitest reports more, one per
+Validated by `npm test`, 1 822 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;
