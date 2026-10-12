@@ -2765,10 +2765,10 @@ function refuseLibraryCalls(ast, table, source, lineOffset) {
     // computed, a loop's or a `with`'s target before its body, a `def` or a
     // `class` once built. Within the block that binds the name, a read finds
     // the last binding before it. One made from another block, through a
-    // `global` or a `nonlocal`, happens whenever that block runs, so it leaves
-    // the read unknown here, unless the block is a function nothing names,
-    // which never runs. So does a binding of a kind not dated here, which the
-    // symbol table still sees.
+    // `global` or a `nonlocal`, runs whenever that block does, which a call
+    // written nowhere can make it do: a constructor, `__setattr__`, a function
+    // found in `globals()`. So it leaves the read unknown here, and so does a
+    // binding of a kind not dated here, which the symbol table still sees.
     const rebound = new Map();
     const bound = $B.SYMBOL_FLAGS.DEF_LOCAL | $B.SYMBOL_FLAGS.DEF_PARAM;
     const visit = (block) => {
@@ -2784,7 +2784,6 @@ function refuseLibraryCalls(ast, table, source, lineOffset) {
 
     const aliases = new Set(imports.map(([name]) => name));
     const events = [];
-    const named = new Set();
     const start = (node) => [node.lineno, node.col_offset];
     const end = (node) => [node.end_lineno, node.end_col_offset];
     const before = (a, b) => a[0] < b[0] || (a[0] === b[0] && a[1] < b[1]);
@@ -2795,9 +2794,6 @@ function refuseLibraryCalls(ast, table, source, lineOffset) {
         events.push({ name, from, target: bindingBlock(name, from), at, isImport });
     };
     walkScoped(ast.body, (node, scope, line, parent, grand) => {
-        if (node instanceof $B.ast.Name && !(node.ctx instanceof $B.ast.Store)) named.add(node.id);
-        if (node instanceof $B.ast.Attribute) named.add(node.attr);
-
         if (node instanceof $B.ast.Import || node instanceof $B.ast.ImportFrom) {
             for (const one of node.names) {
                 const local = one.asname ?? one.name.split('.')[0];
@@ -2821,14 +2817,6 @@ function refuseLibraryCalls(ast, table, source, lineOffset) {
         }
     });
 
-    // A function nothing names never runs, nor anything inside it.
-    const dead = (block) => {
-        for (; block !== table.top && block !== undefined; block = parents.get(block)) {
-            if (block.type === $B.SYMBOL_FLAGS.TYPE_FUNCTION && !named.has(block.name)) return true;
-        }
-        return false;
-    };
-
     const isModule = (name, scope, read) => {
         if (name === '__builtins__') return builtin(name, scope);
         const block = bindingBlock(name, blockAt(scope));
@@ -2840,11 +2828,10 @@ function refuseLibraryCalls(ast, table, source, lineOffset) {
         // Every binding an import, the read finds the module whichever ran.
         // Otherwise only a read in the block itself, with every binding made
         // there, is dated.
-        const live = all.filter((one) => one.from === block || !dead(one.from));
-        if (live.every((one) => one.isImport)) return true;
-        if (blockAt(scope) !== block || live.some((one) => one.from !== block)) return false;
+        if (all.every((one) => one.isImport)) return true;
+        if (blockAt(scope) !== block || all.some((one) => one.from !== block)) return false;
 
-        const found = live.filter((one) => before(one.at, read)).sort((a, b) => (before(a.at, b.at) ? -1 : 1));
+        const found = all.filter((one) => before(one.at, read)).sort((a, b) => (before(a.at, b.at) ? -1 : 1));
         return found.at(-1)?.isImport === true;
     };
     const refuseBuiltin = (name, line) => {

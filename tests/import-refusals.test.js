@@ -131,6 +131,8 @@ test.for([
 // however the class binds it, and `builtins` is the module only when the file
 // imports it under that name. Run against CPython's answers in
 // `own-reduce.test.js`.
+const READER = 'class Reader:\n    def open(self):\n        return "ok"\n';
+
 test.for([
     ['an own __reduce__', 'class Box:\n    def __reduce__(self):\n        return 42\n\nanswer = Box().__reduce__()'],
     ['an own __reduce_ex__', 'class Box:\n    def __reduce_ex__(self, p):\n        return 42\n\nanswer = Box().__reduce_ex__(2)'],
@@ -149,7 +151,23 @@ test.for([
     // And only while the import is its one binding.
     ['the module name bound again', 'import builtins as tools\n\nclass Reader:\n    def open(self):\n        return "ok"\n\ntools = Reader()\nresult = tools.open()'],
     ['the module name bound again in a function', 'def read():\n    import builtins as tools\n    tools = 1\n    return tools.open()'],
-    ['the module name bound again through global', 'import builtins as tools\n\ndef bind():\n    global tools\n    tools = 1\n\nbind()\nresult = tools.open()']
+    ['the module name bound again through global', 'import builtins as tools\n\ndef bind():\n    global tools\n    tools = 1\n\nbind()\nresult = tools.open()'],
+    // A refusal needs the read to find the import for certain. Whether a
+    // function runs is not known: Python calls one no line names. So a binding
+    // one may make leaves the read theirs, even where, as in the first, nothing
+    // does run it.
+    [
+        'the module name bound again by a function nothing calls',
+        `import builtins as tools\n${READER}\ndef bind():\n    global tools\n    tools = Reader()\n\nresult = tools.open()`
+    ],
+    [
+        'the module name bound again by a constructor',
+        `import builtins as tools\n${READER}\nclass Install:\n    def __init__(self):\n        global tools\n        tools = Reader()\n\nInstall()\nresult = tools.open()`
+    ],
+    [
+        'the module name bound again by a function found in globals()',
+        `import builtins as tools\n${READER}\ndef install():\n    global tools\n    tools = Reader()\n\nglobals()["install"]()\nresult = tools.open()`
+    ]
 ])('%s is theirs', ([, written]) => {
     expect(() => compile(`${written}\n`, 'C', 'src/C.svelte', { plain: true })).not.toThrow();
     expect(() => compile(`${written}\n`, 'C', 'src/C.svelte')).not.toThrow();
@@ -188,11 +206,6 @@ test.for([
         'through the module read before it is bound again',
         'import builtins as tools\nx = tools.eval("1")\ntools = None',
         /`eval\(\)` parses its text.*\(src\/C\.svelte:2\)/
-    ],
-    [
-        'through the module a function bound again but never runs',
-        'import builtins as tools\n\ndef bind():\n    global tools\n    tools = None\n\nx = tools.eval("1")',
-        /`eval\(\)` parses its text.*\(src\/C\.svelte:7\)/
     ],
     [
         'through the module read in a function before it is bound again there',
