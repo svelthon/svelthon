@@ -108,6 +108,7 @@ describe('every interception that notifies, notifies on the raising path too', (
         expect(wrappers.map((one) => one.name)).toEqual([
             'const sourced',
             'const notified',
+            '$B[name]',
             '$B.$getattr',
             '$B.builtins.dir',
             '$B.$setitem',

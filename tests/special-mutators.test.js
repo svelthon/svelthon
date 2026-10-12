@@ -93,3 +93,21 @@ test.for([
 
     expect(target.querySelector(`p[data-k="${key}"]`).textContent).toBe(shown);
 });
+
+// And what the engine writes on an exception as it raises it, with no method
+// called: its cause by `raise … from`, its context by a raise inside an
+// `except`, its traceback once it is caught.
+test.for([
+    ['from a cause', 'from', 'KeyError NoneType True'],
+    ['inside an except', 'context', 'NoneType KeyError True']
+])('an exception raised %s repaints its readers', ([, way, shown]) => {
+    const target = document.body.appendChild(document.createElement('div'));
+    const instance = mount(ExceptionNotes, { target });
+    flushSync();
+    expect(target.querySelector('p[data-k="raised"]').textContent).toBe('NoneType NoneType False');
+
+    instance.chained(way);
+    flushSync();
+
+    expect(target.querySelector('p[data-k="raised"]').textContent).toBe(shown);
+});

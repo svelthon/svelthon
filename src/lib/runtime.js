@@ -997,6 +997,24 @@ function installMutationTracking($B) {
         return wrappers.get(method);
     };
 
+    // An exception the engine changes in place as it raises it: `raise error
+    // from cause` writes its `__cause__` and a raise inside an `except` its
+    // `__context__` (`$raise`), and catching it writes its `__traceback__`
+    // (`set_exc`). The changes `add_note` and `with_traceback` make by name,
+    // which `MUTATORS` follows, made here with no method called. In a
+    // `finally`, since `$raise` ends by throwing what it changed.
+    for (const name of ['$raise', 'set_exc']) {
+        const engine = $B[name];
+
+        $B[name] = function (exc, ...rest) {
+            try {
+                return Reflect.apply(engine, this, [exc, ...rest]);
+            } finally {
+                notify(exc);
+            }
+        };
+    }
+
     const getattr = $B.$getattr;
     $B.$getattr = function (obj, attr, ...rest) {
         let result;

@@ -156,6 +156,7 @@ that carries no marker pays one property miss.
 | `$B.$getitem(obj, key)` | every indexed read, the hottest of them |
 | `$B.$setattr(obj, name, value)` / `$B.$setattr1` | attribute writes; Brython emits one or the other depending on the statement, and both have to be covered |
 | `$B.$delattr(obj, name)` | `del obj.attr` |
+| `$B.$raise(exc, cause)` / `$B.set_exc(exc, frame)` | `raise`, which writes the exception's `__cause__` and `__context__` before throwing it, and the catch, which writes its `__traceback__`: an exception changed in place with no method called |
 
 A container reached out of a watched one is watched too, and that is settled on
 the way **in** rather than on the way out: marking a container walks what is
