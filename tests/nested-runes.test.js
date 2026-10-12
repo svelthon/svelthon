@@ -111,6 +111,17 @@ describe('a rune written below the top level', () => {
         expect(script(body)().script).not.toMatch(/\$inspect|__inspect_/);
     });
 
+    // And one named `effect` or `derived`, called alone, which was refused as
+    // the marker that declares nothing, at the top level and in a function.
+    test('while an import named effect or derived is called alone', () => {
+        for (const marker of ['effect', 'derived']) {
+            expect(script(`importjs {${marker}} from "./foreign.js"\n${marker}(41)\n`)).not.toThrow();
+            expect(
+                script(`importjs {${marker}} from "./foreign.js"\n\ndef run():\n    ${marker}(41)\n`)
+            ).not.toThrow();
+        }
+    });
+
     // A sign is written with its marker, and the marker would be the import:
     // refused, with the alias that frees it.
     test.for([

@@ -1993,7 +1993,7 @@ const STATEMENT_RUNES = new Set(['inspect', 'inspect_with']);
 // of nothing, and the effect would never run.
 const BARE_MARKERS = new Set(['effect', 'derived']);
 
-const bareMarker = (node) => {
+const bareMarker = (node, theirs) => {
     if (!(node instanceof $B.ast.Expr) || !(node.value instanceof $B.ast.Call)) return null;
 
     const callee = node.value.func;
@@ -2004,14 +2004,16 @@ const bareMarker = (node) => {
               ? callee.value.id
               : null;
 
-    if (!BARE_MARKERS.has(name)) return null;
+    if (!BARE_MARKERS.has(name) || theirs.has(name)) return null;
 
     return callee instanceof $B.ast.Name ? `${name}(…)` : `${name}.${callee.attr}(…)`;
 };
 
-// Both names are locked words, so a call to either is always ours.
-function refuseBareMarker(node, source, lineOffset) {
-    const spelling = bareMarker(node);
+// A call to either name is ours unless the author imported a function under it,
+// `importjs {effect} from …`, which is theirs to call alone, as every other
+// check of the runes already reads it (`theirs`).
+function refuseBareMarker(node, source, lineOffset, theirs) {
+    const spelling = bareMarker(node, theirs);
     if (spelling === null) return;
 
     const line = node.lineno + lineOffset;
@@ -2036,7 +2038,7 @@ function refuseNestedRunes(body, source, lineOffset, theirs = new Set()) {
 
     const scoped = (statements) => {
         for (const node of statements) {
-            refuseBareMarker(node, source, lineOffset);
+            refuseBareMarker(node, source, lineOffset, theirs);
 
             const spelling =
                 decoratorSpelling(node) ||
@@ -2063,7 +2065,7 @@ function refuseNestedRunes(body, source, lineOffset, theirs = new Set()) {
     // wired whether it ran or not. At the top level these are the mechanism
     // itself, since `x => expr` compiles to `x = derived(lambda: …)`.
     for (const node of body) {
-        refuseBareMarker(node, source, lineOffset);
+        refuseBareMarker(node, source, lineOffset, theirs);
 
         if (
             node instanceof $B.ast.FunctionDef ||
