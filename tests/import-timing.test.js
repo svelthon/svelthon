@@ -7,7 +7,7 @@
 import { test, expect } from 'vitest';
 import { mount, unmount, flushSync } from 'svelte';
 import { recorded } from './fixtures/timing_log.py';
-import { later, again, retried, kept } from './fixtures/timing_imports.py';
+import { later, again, retried, kept, computed } from './fixtures/timing_imports.py';
 import { store } from './fixtures/timing_store.svelte.py';
 import TimingImport from './fixtures/TimingImport.svelte';
 import TimingLate from './fixtures/TimingLate.svelte';
@@ -42,6 +42,13 @@ test('a module whose body raised runs again in a new module', () => {
         [false, true, false, true],
         [false, true, false, true]
     ]);
+});
+
+// A derived nobody read is never run: not by what the failure keeps of the
+// module, and not by the watch that reaches the module, `timing_log` imported
+// into a reactive module holding a list of modules.
+test('a derived of a failed or watched module is never run unread', () => {
+    expect(computed()).toBe(0);
 });
 
 test('an import in a branch not taken runs nothing, in a module, a reactive module or a component', () => {

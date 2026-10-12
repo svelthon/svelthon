@@ -886,7 +886,7 @@ function installMutationTracking($B) {
             // properties and everything else in a hash table, so walking the
             // properties handed the watch to the children of `{"one": []}` and
             // not to those of `{1: []}`.
-            for (const [key, child] of pyEntries(obj)) {
+            for (const [key, child] of heldEntries(obj)) {
                 inherit(obj, key);
                 inherit(obj, child, key);
             }
@@ -2098,7 +2098,7 @@ function stores(base, holder, child, marker) {
             }
         }
 
-        for (const [one, value] of pyEntries(holder)) if (one === child || value === child) return true;
+        for (const [one, value] of heldEntries(holder)) if (one === child || value === child) return true;
         return false;
     }
 
@@ -2601,7 +2601,7 @@ function adoptOne(value) {
         // object whose attributes change under a watch that never reached it.
         // `inherit` steps over a string or a number on its own, so this costs
         // nothing on the dicts that have ordinary keys.
-        for (const [key, child] of pyEntries(value)) {
+        for (const [key, child] of heldEntries(value)) {
             inherit(value, key);
             inherit(value, child, key);
         }
@@ -8089,7 +8089,20 @@ export const handOver = (written, write) => {
 // `__all__`, and `from m import name` the name.
 const COMPILER_NAME = /^__(?!.*__$)/;
 const DICTS = new WeakMap();
-const NAMESPACE_DICTS = new WeakSet();
+// Each of those dicts, to the namespace it is a view of.
+const NAMESPACE_DICTS = new WeakMap();
+
+// The entries a watch walks, which hands the watch to what a mapping holds: a
+// namespace's names as held at their source, a derived's definition and not
+// its value, which watching has no reason to compute; any other dict's own.
+// A module a watched value reaches, a list of modules or one imported into a
+// reactive module, was walked through its values, and every derived of it was
+// run, read or not.
+const heldEntries = (value) => {
+    const namespace = NAMESPACE_DICTS.get(value);
+
+    return namespace === undefined ? pyEntries(value) : Object.keys(value).map((key) => [key, heldAtSource(namespace, key)]);
+};
 
 // How many keys a namespace's dict has added or removed, the version Brython
 // keeps on a dict of its own.
@@ -8212,7 +8225,7 @@ function namespaceDict(namespace) {
     });
 
     DICTS.set(namespace, dict);
-    NAMESPACE_DICTS.add(dict);
+    NAMESPACE_DICTS.set(dict, namespace);
 
     return dict;
 }

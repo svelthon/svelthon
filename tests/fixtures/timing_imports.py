@@ -60,3 +60,7 @@ def kept():
         old.late = "written on the old one"
         rows.append([old is new, getattr(old, "first", "missing"), shared, new.late])
     return rows
+
+
+def computed():
+    return timing_log.hidden_runs
