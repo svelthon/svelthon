@@ -589,6 +589,15 @@ function elementObject(code) {
     return expression?.type === 'ObjectExpression' ? expression : null;
 }
 
+// The tag `customElement="…"` names, as Svelte reads it: the attribute's text
+// with its character references decoded, `sol-&#97;` being `sol-a`.
+function elementTag(code) {
+    const value = parse(blankBodies(code), { modern: true })
+        .options?.attributes.find((one) => one.name === 'customElement')?.value;
+
+    return Array.isArray(value) ? value.map((one) => one.data ?? '').join('') : null;
+}
+
 function elementOptions(code, python) {
     const key = (one) => (one.type === 'Property' ? (one.key.name ?? one.key.value) : undefined);
     const entry = ({ name, type }) => `${name}: {${type ? ` type: ${JSON.stringify(type)} ` : ''}}`;
@@ -638,7 +647,7 @@ function elementOptions(code, python) {
 
     return (
         code.slice(0, at) +
-        `customElement={{ tag: ${JSON.stringify(found[2])}, props: { ${props()} } }}` +
+        `customElement={{ tag: ${JSON.stringify(elementTag(code) ?? found[2])}, props: { ${props()} } }}` +
         code.slice(at + attribute.length)
     );
 }

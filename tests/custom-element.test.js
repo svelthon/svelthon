@@ -9,10 +9,16 @@ import './fixtures/PartialPropsElement.svelte';
 import './fixtures/PartialPropsElementNative.svelte';
 import './fixtures/ReflectElement.svelte';
 import './fixtures/ReflectElementNative.svelte';
+import './fixtures/EntityNamedElement.svelte';
 
 // A prop declared `reflect` is written back to its attribute, as Svelte writes
 // it: its default, a value the page sets, an attribute the page writes, and a
 // value the component computes itself, a float made JavaScript's number.
+// The tag is the attribute as Svelte reads it, character references decoded.
+test('an element named with a character reference registers under the decoded name', () => {
+    expect(customElements.get('entity-a')).toBeDefined();
+});
+
 test('a reflected prop follows its value onto the attribute, as Svelte does', async () => {
     const settle = async () => {
         flushSync();
