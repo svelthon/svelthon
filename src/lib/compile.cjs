@@ -2724,13 +2724,10 @@ function refuseLibraryCalls(ast, table, source, lineOffset) {
     const modules = new Map();
     const defined = new Set();
     const blockAt = (scope) => (scope === null ? table.top : table.blockOf(scope));
+    const imports = [];
     walkScoped(ast.body, (node, scope) => {
         if (node instanceof $B.ast.Import) {
-            for (const one of node.names) {
-                if (one.name !== 'builtins') continue;
-                if (!modules.has(blockAt(scope))) modules.set(blockAt(scope), new Set());
-                modules.get(blockAt(scope)).add(one.asname ?? 'builtins');
-            }
+            for (const one of node.names) if (one.name === 'builtins') imports.push([one.asname ?? 'builtins', scope]);
         }
         if (node instanceof $B.ast.ClassDef) for (const name of blockBinds(table.blockOf(node))) defined.add(name);
     });
@@ -2756,8 +2753,33 @@ function refuseLibraryCalls(ast, table, source, lineOffset) {
         }
         return block;
     };
-    const isModule = (name, scope) =>
-        name === '__builtins__' ? builtin(name, scope) : modules.get(bindingBlock(name, blockAt(scope)))?.has(name) === true;
+    // Each alias under the block it binds, the module's for one a function
+    // declares `global`.
+    for (const [name, scope] of imports) {
+        const block = bindingBlock(name, blockAt(scope));
+        if (!modules.has(block)) modules.set(block, new Set());
+        modules.get(block).add(name);
+    }
+    // And only while the import is its one binding: another, in its block or
+    // through a `global` or a `nonlocal` elsewhere, leaves what it holds at a
+    // given read unknown here.
+    const rebound = new Map();
+    const bound = $B.SYMBOL_FLAGS.DEF_LOCAL | $B.SYMBOL_FLAGS.DEF_PARAM;
+    const visit = (block) => {
+        for (const { key, value } of $B.builtins.dict.$iter_items(block.symbols)) {
+            if (!(value & bound)) continue;
+            const target = bindingBlock(key, block);
+            if (!rebound.has(target)) rebound.set(target, new Set());
+            rebound.get(target).add(key);
+        }
+        block.children.forEach(visit);
+    };
+    visit(table.top);
+    const isModule = (name, scope) => {
+        if (name === '__builtins__') return builtin(name, scope);
+        const block = bindingBlock(name, blockAt(scope));
+        return modules.get(block)?.has(name) === true && rebound.get(block)?.has(name) !== true;
+    };
     const refuseBuiltin = (name, line) => {
         throw refuse(
             `svelthon — \`${name}()\` ${UNSHIPPED_BUILTINS[name]} (${source}:${line + lineOffset})`,

@@ -145,7 +145,11 @@ test.for([
         'a parameter named like the module',
         'import builtins as tools\n\nclass Reader:\n    def open(self):\n        return "ok"\n\ndef read(tools):\n    return tools.open()'
     ],
-    ['a name the module is imported under in another function', 'def other():\n    import builtins as tools\n\ndef read(tools):\n    return tools.eval()']
+    ['a name the module is imported under in another function', 'def other():\n    import builtins as tools\n\ndef read(tools):\n    return tools.eval()'],
+    // And only while the import is its one binding.
+    ['the module name bound again', 'import builtins as tools\n\nclass Reader:\n    def open(self):\n        return "ok"\n\ntools = Reader()\nresult = tools.open()'],
+    ['the module name bound again in a function', 'def read():\n    import builtins as tools\n    tools = 1\n    return tools.open()'],
+    ['the module name bound again through global', 'import builtins as tools\n\ndef bind():\n    global tools\n    tools = 1\n\nresult = tools.open()']
 ])('%s is theirs', ([, written]) => {
     expect(() => compile(`${written}\n`, 'C', 'src/C.svelte', { plain: true })).not.toThrow();
     expect(() => compile(`${written}\n`, 'C', 'src/C.svelte')).not.toThrow();
@@ -164,6 +168,11 @@ test.for([
     ['handed on', 'run = eval\nx = run("1 + 1")', /`eval\(\)` parses its text.*\(src\/C\.svelte:1\)/],
     ['through builtins', 'import builtins\nx = builtins.eval("1 + 1")', /`eval\(\)` parses its text.*\(src\/C\.svelte:2\)/],
     ['imported from builtins', 'from builtins import open', /`open\(\)` reads a file.*\(src\/C\.svelte:1\)/],
+    [
+        'through the module a function imports as a global',
+        'def load():\n    global b\n    import builtins as b\n\ndef read():\n    return b.open("x")',
+        /`open\(\)` reads a file.*\(src\/C\.svelte:6\)/
+    ],
     [
         'through the module a nested function closes over',
         'def outer():\n    import builtins as b\n    def inner():\n        return b.open("x")\n    return inner',
