@@ -77,7 +77,7 @@ rest of that configuration and what each line buys.
 npm install
 npm run dev
 
-npm test             # 1 801 tests: semantics, props, reactivity, Svelte surface
+npm test             # 1 802 tests: semantics, props, reactivity, Svelte surface
 npm run test:quiet   # the suite's own output: a green run must say nothing
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
@@ -253,9 +253,10 @@ supplies nothing, which is Svelte's own rule for non-`$bindable` props.
 
 A Python parent hands a Python child the value itself, a `float` subclass with
 its class, and a JavaScript child JavaScript's number or string. The compiler
-tells the two apart by reading the child's file, and follows the child through
-a plain assignment, `Alias = Child`. A child it cannot name, one imported
-through a path alias or chosen at runtime, is handed what a JavaScript child is.
+tells the two apart by reading the child's file. A tag under a name the script
+assigned, `Picked = Child if wide else Native`, or one a template name holds, is
+told apart once mounted, among the children imported. A child it cannot name,
+one imported through a path alias, is handed what a JavaScript child is.
 
 ### A prop that travels back up
 
@@ -1542,7 +1543,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 1 801 tests as written (vitest reports more, one per
+Validated by `npm test`, 1 802 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;

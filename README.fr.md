@@ -75,7 +75,7 @@ reste de cette configuration et ce que chaque ligne apporte.
 npm install
 npm run dev
 
-npm test             # 1 801 tests : sémantique, props, réactivité, surface Svelte
+npm test             # 1 802 tests : sémantique, props, réactivité, surface Svelte
 npm run test:quiet   # la sortie de la suite : un run vert ne doit rien dire
 npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
@@ -255,9 +255,10 @@ fournit pas : c'est la règle de Svelte pour les props non `$bindable`.
 
 Un parent Python donne à un enfant Python la valeur elle-même, une sous-classe
 de `float` avec sa classe, et à un enfant JavaScript le nombre ou la chaîne de
-JavaScript. Le compilateur les distingue en lisant le fichier de l'enfant, et
-suit l'enfant à travers une affectation simple, `Alias = Child`. Un enfant qu'il
-ne peut pas nommer, importé par un alias de chemin ou choisi à l'exécution,
+JavaScript. Le compilateur les distingue en lisant le fichier de l'enfant. Une
+balise sous un nom que le script affecte, `Picked = Child if wide else Native`,
+ou que tient un nom du gabarit, est départagée au montage, parmi les enfants
+importés. Un enfant qu'il ne peut pas nommer, importé par un alias de chemin,
 reçoit ce que reçoit un enfant JavaScript.
 
 ### Un prop qui remonte
@@ -1562,7 +1563,7 @@ part jamais.
 
 ## État
 
-Validé par `npm test`, 1 801 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 1 802 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
