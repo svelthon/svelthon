@@ -7,18 +7,23 @@ def middle():
     return 0
 
 
+class Middle:
+    pass
+
+
 last = 2
 
 
 def listed():
     mapping = globals()
     views = (mapping, reversed(mapping), mapping.copy())
-    return [[name for name in view if name in ("first", "middle", "last")] for view in views]
+    return [[name for name in view if name in ("first", "middle", "Middle", "last")] for view in views]
 
 
 def moved():
     mapping = globals()
     mapping["first"] = mapping.pop("first")
+    mapping["Middle"] = mapping.pop("Middle")
     return listed()
 
 

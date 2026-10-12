@@ -31,10 +31,10 @@ test.each([
 });
 
 // The order the names were bound in, which the accessors of a module are not
-// in: the compiler declares its values, then its functions. Read forwards,
-// backwards and copied; then with a name popped and put back, which goes last,
-// and with a name written again, which keeps its place. `python3` on the same
-// file.
+// in: the compiler declares its values, then its functions, and a class has
+// none, written on the namespace itself. Read forwards, backwards and copied;
+// then with a value and a class popped and put back, which go last, and with a
+// name written again, which keeps its place. `python3` on the same file.
 test.each([
     ['a module', ordered],
     ['a reactive module', orderedStore]
@@ -42,15 +42,15 @@ test.each([
     // A reactive module hands its Python list over itself.
     const rows = (lists) => Array.from(lists, (row) => Array.from(row));
     const moved = [
-        ['middle', 'last', 'first'],
-        ['first', 'last', 'middle'],
-        ['middle', 'last', 'first']
+        ['middle', 'last', 'first', 'Middle'],
+        ['Middle', 'first', 'last', 'middle'],
+        ['middle', 'last', 'first', 'Middle']
     ];
 
     expect(rows(one.listed())).toEqual([
-        ['first', 'middle', 'last'],
-        ['last', 'middle', 'first'],
-        ['first', 'middle', 'last']
+        ['first', 'middle', 'Middle', 'last'],
+        ['last', 'Middle', 'middle', 'first'],
+        ['first', 'middle', 'Middle', 'last']
     ]);
     expect(rows(one.moved())).toEqual(moved);
     expect(rows(one.replaced())).toEqual(moved);

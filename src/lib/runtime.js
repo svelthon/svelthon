@@ -7933,24 +7933,40 @@ const holdsName = (namespace, name) => heldAtSource(namespace, name) !== undefin
 // When each name of a namespace was bound, which is the order `globals()` lists
 // them in, as a dict lists its keys: the accessors sit on the prototype in the
 // order the compiler declared them, all values and then all functions. A name
-// bound again keeps its place; a name deleted and bound again goes last. A
-// name no write stamped, `__name__` among them, was there before the body.
+// bound again keeps its place; a name deleted and bound again goes last.
+//
+// A name with no accessor, a class, is written as the namespace's own, which
+// no setter sees; JavaScript keeps own keys in the order they were made. So
+// before each new stamp, and before a listing, the own keys not stamped yet
+// are stamped in that order: each was made since the last stamp, and before
+// the one being made.
 const BOUND_AT = new WeakMap();
 let bindings = 0;
 
-const stampBound = (namespace, name) => {
+const stampsOf = (namespace) => {
     let stamps = BOUND_AT.get(namespace);
 
     if (stamps === undefined) BOUND_AT.set(namespace, (stamps = new Map()));
-    if (!stamps.has(name)) stamps.set(name, ++bindings);
+    for (const key of Object.keys(namespace)) if (!stamps.has(key)) stamps.set(key, ++bindings);
+
+    return stamps;
+};
+
+const stampBound = (namespace, name) => {
+    const stamps = BOUND_AT.get(namespace);
+
+    if (stamps === undefined || !stamps.has(name)) {
+        const current = stampsOf(namespace);
+        if (!current.has(name)) current.set(name, ++bindings);
+    }
 };
 
 const unstampBound = (namespace, name) => BOUND_AT.get(namespace)?.delete(name);
 
 const inBindingOrder = (namespace, names) => {
-    const stamps = BOUND_AT.get(namespace);
+    const stamps = stampsOf(namespace);
 
-    return stamps === undefined ? names : names.sort((one, other) => (stamps.get(one) ?? 0) - (stamps.get(other) ?? 0));
+    return names.sort((one, other) => (stamps.get(one) ?? 0) - (stamps.get(other) ?? 0));
 };
 
 // `listed` is false for a helper the compiler injects: a word of the framework,
