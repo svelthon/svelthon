@@ -7,6 +7,8 @@ import RootOutlives, { held } from './fixtures/RootOutlives.svelte';
 import RootEarly from './fixtures/RootEarly.svelte';
 import './fixtures/root_early.svelte.py';
 import { runs } from './fixtures/root_early_log.js';
+import { attempt, stop_first, bump, same } from './fixtures/root_retry_driver.py';
+import { runs as retried } from './fixtures/root_retry_log.js';
 import { events } from './fixtures/lifecycle_log.js';
 import { unmount } from './mounted.js';
 
@@ -110,6 +112,22 @@ test('a root can be stopped or kept while the body runs', () => {
 test('and so in a module, by its name or another', () => {
     flushSync();
     expect(runs).toEqual([]);
+});
+
+// A module whose first attempt stopped its root, kept its destructor and
+// failed: the attempt that succeeds has a root of its own, which runs, and
+// which the failed attempt's destructor does not stop. The two shared one, so
+// the root never started, or the old destructor stopped the new one.
+test('each attempt of a module has a root of its own', () => {
+    expect([attempt(), attempt()]).toEqual(['failed', 'loaded']);
+    flushSync();
+    expect(retried).toEqual([0]);
+
+    stop_first();
+    bump();
+    flushSync();
+    expect(retried).toEqual([0, 1]);
+    expect(same()).toBe(false);
 });
 
 // `root` is a scope and `pre` is a moment: in JavaScript they nest —

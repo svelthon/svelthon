@@ -3083,7 +3083,7 @@ function declarations(c) {
         ...c.inspects.map((i) => `let ${fn(i.name)} = $state.raw(undefined);`),
         ...c.effects.flatMap((e) =>
             e.root
-                ? [`let ${fn(e.name)} = $state.raw(undefined);`, `const ${destroyer(e.name)} = ${RUNTIME.laterRoot}();`]
+                ? [`let ${fn(e.name)} = $state.raw(undefined);`, `let ${destroyer(e.name)} = ${RUNTIME.laterRoot}();`]
                 : [`let ${fn(e.name)} = $state.raw(undefined);`]
         ),
         // A @derived name reads as its result, on both sides. The body runs
@@ -3702,17 +3702,20 @@ const liveExports = (c) =>
 // name is what `__all__` says, and nothing of ours beside it.
 //
 // A body that raises leaves its namespace to whoever holds it, and the next
-// import runs in a new one, which the function hands back to be the module's.
+// import runs in a new one, which the function hands back to be the module's;
+// and with roots of its own, so a destructor the failed attempt handed out, or
+// called, is that attempt's.
 function moduleLoad(c) {
     if (!c.store && !c.plain) return [];
 
     const name = pythonModuleName(c.source);
     const run = [`__init(${NS});`, ...unboundRefusals(c), ...liveExports(c), ...(c.store ? effectLines(c) : [])];
+    const roots = c.effects.filter((e) => e.root).map((e) => ` ${destroyer(e.name)} = ${RUNTIME.laterRoot}();`);
 
     return [
         ``,
         `export default __pythonModule(${NS}, ${PY_NAME.test(name) ? JSON.stringify(name) : 'null'}, ` +
-            `(${NEXT_VALUE}) => { ${NS} = ${NEXT_VALUE}; }, () => {`,
+            `(${NEXT_VALUE}) => { ${NS} = ${NEXT_VALUE};${roots.join('')} }, () => {`,
         ...run.map((line) => (line === '' ? line : `    ${line}`)),
         `});`
     ];
