@@ -4952,9 +4952,13 @@ export function pyData(value, made) {
 // params beside it, keeps its own fields. Every URL a framework hands over
 // carries its own prototype, our realm's or another's; only an imitation is
 // built out of Object.
+//
+// Its members are read by `member`, which runs no getter of the author's.
 const urlish = (value) =>
-    typeof value?.pathname === 'string' &&
-    typeof value?.protocol === 'string' &&
+    value !== null &&
+    typeof value === 'object' &&
+    typeof member(value, 'pathname') === 'string' &&
+    typeof member(value, 'protocol') === 'string' &&
     !plainObject(value);
 
 // A SvelteKit request event, recognised by what its members *are*.
@@ -4981,27 +4985,50 @@ const urlish = (value) =>
 // **no**, for the same reason as one member down, since refusing a genuine
 // event is loud and admitting a business object is silent.
 //
-// And it must not run what it asks of. SvelteKit builds an event as a plain
-// object, every one of these four a field of it, so each is read as a field
-// holds it, by its descriptor: a getter in its place, a business object's lazy
-// `fetch`, is not an event's, and is not run to find that out.
+// And it must not run what it asks of, at any depth. SvelteKit builds an event
+// as a plain object, every one of these four a field of it, and the platform
+// gives the rest: a Request's `method` and `headers`, a URL's path, through
+// getters of its own. So a member is read only where it is a field, or a
+// getter the platform wrote, which runs no code of anyone's, and is read then
+// as the object answers it, a prerendered page's proxied URL included. A
+// getter the author wrote, a business object's lazy `fetch` or `method`, is
+// not an event's, and is not run to find that out.
+//
+// The platform's getters are those of its own classes, which a server writes
+// in JavaScript (Node's `Request` and `URL`), from whichever context handed
+// them over, and those written in no language at all, a browser's.
 const NO_FIELD = Symbol();
-const field = (value, name) => {
+const NATIVE = /\{\s*\[native code\]\s*\}\s*$/;
+const PLATFORM = new Set(['Request', 'Response', 'URL', 'Headers']);
+const member = (value, name) => {
     for (let at = value; at !== null; at = Object.getPrototypeOf(at)) {
         const own = Object.getOwnPropertyDescriptor(at, name);
-        if (own !== undefined) return 'value' in own ? own.value : NO_FIELD;
+        if (own === undefined) continue;
+        if ('value' in own) return own.value;
+
+        const platform =
+            (Object.hasOwn(at, 'constructor') && PLATFORM.has(at.constructor?.name)) ||
+            (own.get !== undefined && NATIVE.test(Function.prototype.toString.call(own.get)));
+        return platform ? value[name] : NO_FIELD;
     }
-    return NO_FIELD;
+    // Described nowhere: an ordinary object reads nothing, and a proxy, a URL
+    // handed over from another context or while prerendering, answers.
+    return value[name];
 };
 const routeEvent = (value) => {
     try {
-        const [fetch, url, request, params] = ['fetch', 'url', 'request', 'params'].map((name) => field(value, name));
+        const [fetch, url, request, params] = ['fetch', 'url', 'request', 'params'].map((name) => member(value, name));
+        if (request === null || typeof request !== 'object') return false;
+
+        const headers = member(request, 'headers');
 
         return (
             typeof fetch === 'function' &&
             urlish(url) &&
-            typeof request?.method === 'string' &&
-            typeof request?.headers?.get === 'function' &&
+            typeof member(request, 'method') === 'string' &&
+            headers !== null &&
+            typeof headers === 'object' &&
+            typeof member(headers, 'get') === 'function' &&
             params !== null &&
             typeof params === 'object'
         );

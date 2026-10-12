@@ -304,6 +304,35 @@ describe('what crosses as a request event', () => {
         expect(reads).toBe(0);
     });
 
+    // At any depth: a request whose `method`, `headers` or `headers.get` is a
+    // getter of the author's is not a Request's, whatever it would answer, and
+    // the getter is not run; a real Request's own are the platform's.
+    test.for(['method', 'headers', 'get'])(
+        'and ordinary data whose request has a getter for %s has none of them run',
+        (lazy) => {
+            let reads = 0;
+            const getter = (answer) => ({
+                get() {
+                    reads += 1;
+                    return answer;
+                },
+                enumerable: true
+            });
+            const headers = lazy === 'get' ? Object.defineProperty({}, 'get', getter(() => null)) : { get: () => null };
+            const request =
+                lazy === 'method'
+                    ? Object.defineProperty({ headers }, 'method', getter('GET'))
+                    : lazy === 'headers'
+                      ? Object.defineProperty({ method: 'GET' }, 'headers', getter(headers))
+                      : { method: 'GET', headers };
+            const value = { payload: 42, fetch() {}, url: new URL('https://example.test/'), params: {}, request };
+
+            expect(given(value)).toEqual({ kind: 'JSObject', payload: 42 });
+            expect(reads).toBe(0);
+            expect(given(event())).toMatchObject({ kind: 'dict' });
+        }
+    );
+
     // And a URL that refuses the member the recognition itself reads. No version
     // of SvelteKit guards `pathname` today, and the rule held here is what the
     // boundary does when one does: the throw must not **escape** — that was the
