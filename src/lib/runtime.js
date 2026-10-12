@@ -5777,36 +5777,29 @@ const boundByGet = (call) => {
     );
 };
 
-// Such an instance, its call resolved through the descriptor once per call: the
-// arity, which the wrapper asks first, resolves it and keeps what it found, and
-// the call uses that. So the arguments are trimmed to what is called, as they
-// are for the function handed over directly: a `property` handing back a
-// function that takes nothing was handed the click, and raised.
+// Such an instance, its call resolved through the descriptor at each call, and
+// only then: making the wrapper, publishing it or handing it back runs no
+// `__get__` of the author's, which may not be ready to answer. What it takes is
+// unknown until then, so everything is passed in, and the call trims it to what
+// `__get__` handed back, as the function handed over directly is trimmed: a
+// `property` handing back a function that takes nothing was handed the click,
+// and raised.
 function descriptorCall(value, origin) {
     const $B = globalThis.__BRYTHON__;
-    let resolved;
-
-    const resolve = () => {
-        const call = callDescriptor(value);
-
-        resolved = call === null ? null : $B.$call($B.$getattr(call, '__get__'), value, pyType(value));
-        return resolved;
-    };
 
     return {
         fn: (...args) => {
-            const target = resolved === undefined ? resolve() : resolved;
-            resolved = undefined;
+            const call = callDescriptor(value);
 
-            return $B.$call(target, ...args);
+            if (call === null) return $B.$call(value, ...args);
+
+            const target = $B.$call($B.$getattr(call, '__get__'), value, pyType(value));
+            const inner = declared(target);
+
+            return $B.$call(target, ...(inner === null ? args : args.slice(0, arityNow(inner.arity))));
         },
         where: `${$B.class_name(value)}()`,
-        arity: () => {
-            const target = resolve();
-            const inner = target === null ? null : declared(target);
-
-            return inner === null ? Infinity : arityNow(inner.arity);
-        },
+        arity: Infinity,
         origin,
         self: value,
         named: labelled(value),

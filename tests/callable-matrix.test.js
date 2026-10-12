@@ -315,6 +315,17 @@ test('a __call__ bound by its __get__ is trimmed to what it hands back', () => {
     expect(mod.resolutions() - before).toBe(1);
 });
 
+// Resolved at the call and only then: publishing one, as this module does,
+// asks its `property` nothing, which raised here before it was prepared and
+// took the whole module's import down with it.
+test('a __call__ bound by its __get__ is not resolved before it is called', () => {
+    expect(mod.lazy_resolutions()).toBe(0);
+
+    mod.prepare();
+    expect(mod.not_yet('event')).toBe(0.25);
+    expect(mod.lazy_resolutions()).toBe(1);
+});
+
 // And one that is a builtin, `staticmethod(abs)`, which has no signature to read
 // and is called through Python's own protocol: what it answers is what CPython
 // answers, `round(-0.5)` the int 0 and not a negative zero.

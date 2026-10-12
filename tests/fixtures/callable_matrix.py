@@ -29,6 +29,9 @@ __all__ = [
     "getter_nothing",
     "property_nothing",
     "resolutions",
+    "not_yet",
+    "prepare",
+    "lazy_resolutions",
     "mapped",
     "order",
     "listed",
@@ -248,6 +251,34 @@ property_nothing = ByPropertyNothing()
 
 def resolutions():
     return resolved
+
+
+# And one whose `property` cannot answer before it is prepared: publishing it,
+# here, asks it nothing.
+ready = False
+lazy_reads = 0
+
+
+class NotYet:
+    @property
+    def __call__(self):
+        global lazy_reads
+        lazy_reads += 1
+        if not ready:
+            raise RuntimeError("callback has not been prepared")
+        return nothing
+
+
+not_yet = NotYet()
+
+
+def prepare():
+    global ready
+    ready = True
+
+
+def lazy_resolutions():
+    return lazy_reads
 
 mapped = {
     "fn": fn,
