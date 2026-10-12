@@ -3,6 +3,7 @@
 // starts it.
 import './globals.js';
 import './boot.js';
+import { untrack } from 'svelte';
 import { createSubscriber } from 'svelte/reactivity';
 // What `$effect.tracking()` compiles to: a plain module has no runes.
 import { effect_tracking } from 'svelte/internal/client';
@@ -6628,12 +6629,21 @@ const forJavaScript = (args) => {
     );
 };
 
-// Svelte's `safe_not_equal`, asked of what the value is to JavaScript: a Python
+// Svelte's `safe_not_equal`, asked of what the action is handed. A Python
 // float is an object, and would always count as changed where the number it
-// stands for does not. A container still always counts, as an object does.
-const changed = (before, after) => {
-    const a = before === NONE ? undefined : (pyScalar(before) ?? before);
-    const b = after === NONE ? undefined : (pyScalar(after) ?? after);
+// stands for does not. To a JavaScript action every scalar is handed as its
+// number or its string; to a Python action only a float, an int or a str is,
+// and an instance of a subclass is itself, an object with fields of its own,
+// which a new one may change. A container always counts, as an object does.
+const PLAIN_SCALARS = [_b_.float, _b_.int, _b_.bool, _b_.str];
+const changed = (before, after, python) => {
+    const handed = (value) => {
+        if (value === NONE) return undefined;
+        const scalar = pyScalar(value);
+        return scalar === undefined || (python && !PLAIN_SCALARS.includes(ownType(value))) ? value : scalar;
+    };
+    const a = handed(before);
+    const b = handed(after);
 
     // eslint-disable-next-line no-self-compare
     return a != a ? b == b : a !== b || (a !== null && typeof a === 'object') || typeof a === 'function';
@@ -6647,6 +6657,11 @@ const changed = (before, after) => {
 // value. Both are called on the result, as Svelte calls them, so a method
 // reading `this` finds it. A function is a result like an object, since Svelte
 // reads the two methods off whatever it is handed.
+//
+// `update` answers the value, and nothing else it reads: run in Svelte's
+// effect, a log it appends to would subscribe that effect to the log, and
+// each append would update the action again, a value that is an object always
+// counting as changed.
 const actionPayload = (python, result, given) => {
     if (result === null || (typeof result !== 'object' && typeof result !== 'function')) return result;
 
@@ -6656,10 +6671,10 @@ const actionPayload = (python, result, given) => {
         update:
             given.length && typeof result.update === 'function'
                 ? ([, , ...next]) => {
-                      if (!changed(held, next[0])) return;
+                      if (!changed(held, next[0], python)) return;
 
                       held = next[0];
-                      result.update(python ? held : forJavaScript([held])[0]);
+                      untrack(() => result.update(python ? held : forJavaScript([held])[0]));
                   }
                 : undefined,
         destroy: typeof result.destroy === 'function' ? () => result.destroy() : undefined
