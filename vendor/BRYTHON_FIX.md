@@ -1,7 +1,7 @@
 # Patches applied to the vendored Brython
 
 `brython_runtime.js` and `brython_compiler.js` are cut from one bundle, built
-from Brython's master of 11 September 2026 plus one hundred and thirty-five proposed commits
+from Brython's master of 11 September 2026 plus one hundred and thirty-seven proposed commits
 (`metaclass-getattribute-args`, `iterator-setstate` and `getitem-binding` in two, as amended for their PRs) and four merged
 upstream since (#3022, #2996, #2989, #2982), with **four** edits
 made in the file itself afterwards. The wrapper, the integer format and the
@@ -111,9 +111,11 @@ written against:
 | `round-exact` | `round()` calls the `__round__` of the type; `int.__round__` rounds in integers, `float.__round__` from the exact binary value, a float with `ndigits`, `ndigits` read through `__index__` |
 | `isinstance-reported-class` | `isinstance()` reads the `__class__` an object reports when its class redefines it, as a proxy does |
 | `isinstance-list-refused` | `isinstance()` refuses a list where it takes a tuple of types (and `Lib/os.py` passes a tuple) |
-| `slots-marker-redeclared` | `__slots__` cannot ask for a `__dict__` a base written in Python already gives; `__weakref__` is left alone, Brython having no weak references and emulating builtin types in Python |
+| `slots-marker-redeclared` | `__slots__` cannot ask for a `__dict__` the base that sets the layout already gives (`gives_dict`: a builtin type with a `__dict__` descriptor, a class without `__slots__`, with `__dict__` in them, or over a base that gives one); `__weakref__` is left alone, Brython having no weak references and emulating builtin types in Python |
+| `solid-base-slot-markers` | `__dict__` and `__weakref__` in `__slots__` do not make a class a solid base, so they no longer conflict with a base that has slots |
+| `class-frame-left` | a class statement that raises leaves the frame of its body, where the frame stayed on the stack and the caller read its locals in it |
 | `list-copy-not-mapped` | the copy `pyobj2jsobj` makes of a list is not mapped back to the list in `PYOBJ_MAP`, so JavaScript and Python share it (Brython's test 2474 no longer stops on an `alert`). Upstream reached that test by reading arrays before the map (354c98df0), which would send a runtime view back as a JavaScript array; this keeps the map first |
-| `bytes-search-bounds` | `count`, `find`, `rfind`, `index`, `rindex`, `startswith` and `endswith` of bytes and bytearray adjust their bounds as CPython does (`search_bounds`), where `count` ignored them, `index` dropped the last byte and `startswith` took no end |
+| `bytes-search-bounds` | `count`, `find`, `rfind`, `index`, `rindex`, `startswith` and `endswith` of bytes and bytearray adjust their bounds as CPython does (`search_bounds`), where `count` ignored them, `index` dropped the last byte and `startswith` took no end; the error of an `__index__` passes through |
 | `enumerate-start` | the start of `enumerate` is an index (`__index__`, bool, big int) counted as a Python int, where it was kept as given and incremented in JavaScript |
 | `builtin-iterator-subclass` | a subclass of `enumerate`, `filter`, `map`, `zip` or `reversed` makes instances of the subclass, with a `__dict__`, where `enumerate` and `filter` made base instances |
 | `zip-no-argument` | `zip()` with no iterable is empty, where it raised a JavascriptError |
@@ -251,6 +253,7 @@ than by a build-time check, and going upstream retires none of them:
 | the engine's copy of a list is not mapped back to the list (branch `list-copy-not-mapped`) | `tests/vendor.test.js`, with the runtime's hook set aside |
 | `hasattr()` lets errors through, a dict subclass copies and updates by its protocol, `round()` is exact, `isinstance()` reads a proxy's class and refuses a list, an iterator state is an int, `__slots__` cannot ask twice for a `__dict__` (branches `hasattr-attribute-error`, `dict-subclass-copy`, `dict-update-arg`, `round-exact`, `isinstance-reported-class`, `isinstance-list-refused`, `iterator-setstate`, `slots-marker-redeclared`) | `tests/vendor.test.js`, each answer computed apart |
 | a `__getitem__` iterator keeps its position, `__getitem__` is bound, `enumerate` counts from an index, a builtin iterator's subclass makes its own instances, `zip()` is empty, str and bytes searches keep to their bounds (branches `sequence-iterator-position`, `getitem-binding`, `enumerate-start`, `builtin-iterator-subclass`, `zip-no-argument`, `str-search-bounds`, `bytes-search-bounds`) | `tests/vendor.test.js`, each answer computed apart |
+| a class statement that raises leaves its frame, `__slots__` asks for a `__dict__` against the base that sets the layout, the slot markers do not fix a layout, and a bytes search lets an `__index__` error through (branches `class-frame-left`, `slots-marker-redeclared`, `solid-base-slot-markers`, `bytes-search-bounds`) | `tests/vendor.test.js`, each answer computed apart |
 | a method-wrapper compares and hashes by its function and its receiver (master's `e2e990dd6`, #2989) | `tests/vendor.test.js`, and `tests/method-identity.test.js`, `box.__setattr__` read twice through the runtime's wrapper |
 | the `__dict__` attribute is read as Python reads it, through `vars()`, on a slotted instance and through `super(C, C)`, and `__init_subclass__` is a classmethod (branches `init-subclass-classmethod`, `super-type-no-instance`, `slots-no-dict-descriptor`, `vars-dict-attribute`) | `tests/vendor.test.js`, and `tests/oracle-attributes.test.js`, the model and the page held against CPython |
 

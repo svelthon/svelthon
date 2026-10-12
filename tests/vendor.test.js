@@ -1185,6 +1185,17 @@ test('attributes, dicts and rounding answer as in CPython: hasattr-attribute-err
     ]);
 });
 
+// A class statement that raised left its frame on the stack, and the caller
+// then read its locals in the wrong frame; __slots__ asked for a __dict__
+// against every base instead of the one that sets the layout, and took the
+// '__dict__' marker for a slot; a bytes search turned the error of an
+// __index__ into a TypeError.
+test('class frames, layouts and search bounds answer as in CPython: class-frame-left, slots-marker-redeclared, solid-base-slot-markers, bytes-search-bounds', async () => {
+    const { answers } = await import('./fixtures/class_frames_and_layouts.py');
+
+    expect([...answers()]).toEqual(["'refused'", "'B'", 'TypeError', "'B'", 'ValueError']);
+});
+
 // The console's write() returned None where CPython gives the number of
 // characters written. A component cannot import `sys`; the runtime's stdout
 // is read where Brython keeps it.
