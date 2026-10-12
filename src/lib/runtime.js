@@ -5780,10 +5780,15 @@ const boundByGet = (call) => {
 // Such an instance, its call resolved through the descriptor at each call, and
 // only then: making the wrapper, publishing it or handing it back runs no
 // `__get__` of the author's, which may not be ready to answer. What it takes is
-// unknown until then, so everything is passed in, and the call trims it to what
-// `__get__` handed back, as the function handed over directly is trimmed: a
-// `property` handing back a function that takes nothing was handed the click,
-// and raised.
+// unknown until then, so everything is passed in, and the call hands it to the
+// adaptation of what it calls now, which trims it as it trims the same callable
+// handed over directly: a `property` handing back a function that takes nothing
+// was handed the click, and raised.
+//
+// What it calls now is asked of the class at each call, as Python asks it: a
+// descriptor's `__get__` hands it back, a descriptor in turn adapted as this one
+// is; a `__call__` the class has since made an ordinary one is the instance's
+// call like any other, and never asked for a `__get__` it does not have.
 function descriptorCall(value, origin) {
     const $B = globalThis.__BRYTHON__;
 
@@ -5793,7 +5798,7 @@ function descriptorCall(value, origin) {
 
             if (call === null) return $B.$call(value, ...args);
 
-            const target = $B.$call($B.$getattr(call, '__get__'), value, pyType(value));
+            const target = boundByGet(call) ? $B.$call($B.$getattr(call, '__get__'), value, pyType(value)) : value;
             const inner = declared(target);
 
             return $B.$call(target, ...(inner === null ? args : args.slice(0, arityNow(inner.arity))));

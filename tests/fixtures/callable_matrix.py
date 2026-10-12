@@ -32,6 +32,8 @@ __all__ = [
     "not_yet",
     "prepare",
     "lazy_resolutions",
+    "strategy",
+    "make_ordinary",
     "mapped",
     "order",
     "listed",
@@ -279,6 +281,26 @@ def prepare():
 
 def lazy_resolutions():
     return lazy_reads
+
+
+# One whose class later makes its `__call__` an ordinary callable instance, with
+# no `__get__`: the callback kept from before calls what the class holds now.
+class Strategy:
+    @property
+    def __call__(self):
+        return nothing
+
+
+class Ordinary:
+    def __call__(self):
+        return VALUE * 2
+
+
+strategy = Strategy()
+
+
+def make_ordinary():
+    Strategy.__call__ = Ordinary()
 
 mapped = {
     "fn": fn,

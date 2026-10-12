@@ -326,6 +326,17 @@ test('a __call__ bound by its __get__ is not resolved before it is called', () =
     expect(mod.lazy_resolutions()).toBe(1);
 });
 
+// What the class holds is asked at each call: a descriptor its class replaced
+// with an ordinary callable instance is called as that, trimmed to it, and
+// never asked for a `__get__` it does not have, which raised `AttributeError`.
+test('a __call__ descriptor is called as what the class holds now', () => {
+    const kept = mod.strategy;
+
+    expect(kept('event')).toBe(0.25);
+    mod.make_ordinary();
+    expect(kept('event')).toBe(0.5);
+});
+
 // And one that is a builtin, `staticmethod(abs)`, which has no signature to read
 // and is called through Python's own protocol: what it answers is what CPython
 // answers, `round(-0.5)` the int 0 and not a negative zero.
