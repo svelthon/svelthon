@@ -1,3 +1,5 @@
+<img src="img/svelthon-512.png" alt="Svelthon" width="128">
+
 # Svelthon
 
 **Svelte components written in Python, compiled at build time.**
@@ -21,8 +23,6 @@ every other Python-in-the-browser approach, nothing is transcompiled while the
 page loads.
 
 *[Version française](README.fr.md).*
-
-![The Svelthon demo page: Python source next to the running component](docs/demo.png)
 
 ## Why
 
