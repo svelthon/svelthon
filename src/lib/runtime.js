@@ -295,8 +295,7 @@ const PYTHON_COMPONENTS = new WeakSet();
 let CROSSING_PAIR = null;
 
 export const __pybridge = {
-    // Registered by a Python parent's script: the components it imports from
-    // Python files.
+    // Called by each component written in Python, first of all, with itself.
     python(...components) {
         for (const one of components) if (one !== null && (typeof one === 'function' || typeof one === 'object')) PYTHON_COMPONENTS.add(one);
     },

@@ -2180,16 +2180,35 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     // data. A JavaScript child is handed JavaScript's own.
     const toPythonChild = () => isComponent(tag) && tag.held === undefined && where?.pythonChildren?.has(tag.name) === true;
 
-    // Whether a tag holds its child rather than names an import: under a name
-    // the markup binds, a snippet's parameter, an `{#each}` item, or one the
-    // script assigned, `Selected = Child if wide else Native`. Its language
-    // is known only once it is handed. The child is then read once, as Svelte
-    // reads a tag, into a name of its own (`heldTag`), and each prop is made
-    // Python and converted for that child, `__pybridge.child`.
-    const holdsChild = (one) => {
-        if (!isComponent(one) || one.name.includes(':')) return false;
-        const head = one.name.split('.')[0];
-        return scoped(head) !== null || (where?.imported !== undefined && !where.imported.has(head));
+    // What a tag holds its child by, when it holds it rather than names an
+    // import: a name the markup binds, a snippet's parameter, an `{#each}`
+    // item, one the script assigned, `Selected = Child if wide else Native`,
+    // or the `this` of `<svelte:component>`. Null for a tag that names its
+    // child. Its language is known only once it is handed. The child is then
+    // read once, as Svelte reads a tag, into a name of its own (`heldTag`), and
+    // each prop is made Python and converted for that child,
+    // `__pybridge.child`.
+    const heldSource = (one) => {
+        if (!isComponent(one)) return null;
+
+        if (one.name === 'svelte:component') {
+            const value = tagValue(markup, one.start, 'this');
+            if (value === null || !value.braced) return null;
+
+            one.thisAt = value.start;
+            region = { start: value.start, end: value.end };
+            const read = call(markup.slice(value.start, value.end), '__bound');
+            region = null;
+            return read;
+        }
+
+        if (one.name.includes(':')) return null;
+
+        const [head, ...rest] = one.name.split('.');
+        const local = scoped(head);
+
+        if (local === null && (where?.imported === undefined || where.imported.has(head))) return null;
+        return [local ?? head, ...rest].join('.');
     };
     const taken = new Set(identifiers(markup));
     let heldCount = 0;
@@ -2198,10 +2217,6 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         do name = `SvelthonChild${heldCount++}`;
         while (taken.has(name));
         return name;
-    };
-    const heldRead = (name) => {
-        const [head, ...rest] = name.split('.');
-        return [scoped(head) ?? head, ...rest].join('.');
     };
     // The open elements that bound their child, by scope.
     const heldOwners = new Map();
@@ -2589,6 +2604,15 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
 
                     region = { start: index + 1, end };
 
+                    // The `this` of a `<svelte:component>` that holds its child:
+                    // read once already, where the child was bound.
+                    if (tag?.held !== undefined && tag.thisAt === index + 1) {
+                        out = out.replace(ATTRIBUTE_ASSIGN, '');
+                        region = null;
+                        index = end + 1;
+                        continue;
+                    }
+
                     if (attribute) {
                         if (LET_DIRECTIVE.test(attribute[1])) refuseLet(attribute[1]);
 
@@ -2773,19 +2797,24 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
             // A tag that holds its child is read once, in a block of one
             // iteration, and named by that iteration's item, closing tag
             // included.
-            const held = !tag
-                ? null
-                : tag.closing
-                  ? (heldOwners.get(ids[closedAt(owners, tag.name, null)]) ?? null)
-                  : holdsChild(tag)
-                    ? heldTag()
-                    : null;
+            if (tag?.closing) {
+                const held = heldOwners.get(ids[closedAt(owners, tag.name, null)]);
 
-            if (held !== null) {
-                tag.held = held;
-                out += tag.closing ? `</${held}` : `{#each [${heldRead(tag.name)}] as ${held}}<${held}`;
-                index += named[0].length;
-                continue;
+                if (held !== undefined) {
+                    tag.held = held;
+                    out += `</${held}`;
+                    index += named[0].length;
+                    continue;
+                }
+            } else if (tag) {
+                const source = heldSource(tag);
+
+                if (source !== null) {
+                    tag.held = heldTag();
+                    out += `{#each [${source}] as ${tag.held}}<${tag.held}`;
+                    index += named[0].length;
+                    continue;
+                }
             }
 
             out += char;

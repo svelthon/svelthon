@@ -7,8 +7,34 @@ import { mount, flushSync } from './mounted.js';
 import AssignedChildParent from './fixtures/AssignedChildParent.svelte';
 import HeldChildGetter from './fixtures/HeldChildGetter.svelte';
 import GroupPropParent from './fixtures/GroupPropParent.svelte';
+import GivenChildHost from './fixtures/GivenChildHost.svelte';
+import GivenPythonChild from './fixtures/GivenPythonChild.svelte';
+import ComponentThisParent from './fixtures/ComponentThisParent.svelte';
 import ShadowedPythonChild from './fixtures/ShadowedPythonChild.svelte';
 import ShadowedNativeChild from './fixtures/ShadowedNativeChild.svelte';
+
+// First, before any other mounts a Python child: a child handed by JavaScript
+// is told apart by what it says of itself, not by a parent that imported it.
+test.for([
+    ['Python', GivenPythonChild, 'float|15.0'],
+    ['JavaScript', ShadowedNativeChild, 'number|15']
+])('a %s child handed by JavaScript gets the values of its language', ([, Given, shown]) => {
+    const target = document.body.appendChild(document.createElement('div'));
+    mount(GivenChildHost, { target, props: { Given } });
+    flushSync();
+
+    expect(target.querySelector('[data-k="prop"]').textContent).toBe(shown);
+    expect(target.querySelector('[data-k="snippet"]').textContent).toBe(shown);
+});
+
+test('<svelte:component> hands each child the values of its language', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+    mount(ComponentThisParent, { target });
+    flushSync();
+
+    expect(target.querySelector('[data-k="python"]').textContent).toBe('float|15.0');
+    expect(target.querySelector('[data-k="native"]').textContent).toBe('number|15');
+});
 
 test('a name the script assigned hands each child the values of its language', () => {
     const target = document.body.appendChild(document.createElement('div'));

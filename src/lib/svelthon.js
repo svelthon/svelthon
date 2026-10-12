@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module';
-import { relative, resolve, dirname } from 'node:path';
+import { relative, resolve, dirname, basename } from 'node:path';
 import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
 
 import {
@@ -487,9 +487,6 @@ export function python(options = {}) {
                 .map(({ local }) => local);
             const pythonChildren = new Set(children);
             const imported = new Set([...importedNames(python, filename ?? 'component'), ...moduleImports(content)]);
-            // Registered by the script, for a tag that holds a child rather
-            // than names an import, which may be handed one of them.
-            file.pythonImports = children;
 
             const code = overMarkup(
                 content,
@@ -560,9 +557,17 @@ export function python(options = {}) {
             // way, but every tool downstream reads the attribute and refuses:
             // `svelte-check`, installed by 93% of SvelteKit projects, would
             // report dozens of parse errors per component.
-            const registered = about.pythonImports?.length ? `;__pybridge.python(${about.pythonImports.join(', ')});` : '';
+            //
+            // A component written in Python says so itself, first of all, before
+            // it reads a prop: a parent that holds it rather than imports it, by
+            // a prop, a snippet's parameter or `<svelte:component>`, hands each
+            // prop to `__pybridge.child`, which asks. It names itself through
+            // its own module, which is the identity every importer holds.
+            const registered = filename
+                ? `import __svelthon_self from ${JSON.stringify(`./${basename(filename)}`)};__pybridge.python(__svelthon_self);`
+                : '';
 
-            return { code: sameLines(script + registered, content), attributes: rest };
+            return { code: sameLines(registered + script, content), attributes: rest };
         }
     };
 }
