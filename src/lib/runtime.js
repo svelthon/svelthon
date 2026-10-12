@@ -7083,7 +7083,7 @@ function typedModule($B, namespace) {
 // It leaves the accessors it shared, so a name the next attempt binds is not
 // one of its own, and a name written on it is written on it alone; it keeps
 // what is not a name of the module, the helpers the compiler lends it, which
-// read no cell. Each name it holds is kept as held at its source, so nothing is
+// read no cell. Each name it holds is kept as it reads, and nothing is
 // computed: a value as its own, and a derived as its definition, computed
 // again in it when read, as it was. And the new namespace the next attempt
 // runs in, on the shared accessors, where what the failed one bound is deleted
@@ -7104,9 +7104,9 @@ function abandoned($B, namespace, before) {
     for (const name of held) {
         if (Object.hasOwn(namespace, name)) continue;
 
-        const value = heldAtSource(namespace, name);
-
         if (computed?.has(name)) {
+            const value = heldAtSource(namespace, name);
+
             sources.set(name, () => value);
             Object.defineProperty(kept, name, {
                 get: () => invoke(value),
@@ -7117,6 +7117,10 @@ function abandoned($B, namespace, before) {
                 configurable: true
             });
         } else {
+            // What the name reads as, which only a derived computes: a root's
+            // name reads as its destructor, held at its source as the `def`.
+            const value = namespace[name];
+
             Object.defineProperty(namespace, name, { value, writable: true, enumerable: true, configurable: true });
         }
     }

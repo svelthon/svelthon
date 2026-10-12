@@ -7,7 +7,7 @@ import RootOutlives, { held } from './fixtures/RootOutlives.svelte';
 import RootEarly from './fixtures/RootEarly.svelte';
 import './fixtures/root_early.svelte.py';
 import { runs } from './fixtures/root_early_log.js';
-import { attempt, stop_first, bump, same } from './fixtures/root_retry_driver.py';
+import { attempt, stop_first, bump, same, kept_name, stop_kept } from './fixtures/root_retry_driver.py';
 import { runs as retried } from './fixtures/root_retry_log.js';
 import { events } from './fixtures/lifecycle_log.js';
 import { unmount } from './mounted.js';
@@ -128,6 +128,13 @@ test('each attempt of a module has a root of its own', () => {
     flushSync();
     expect(retried).toEqual([0, 1]);
     expect(same()).toBe(false);
+
+    // And the failed module, kept, still names its destructor: the name read
+    // as the effect's `def`, and calling it ran the effect's body.
+    expect(kept_name()).toBe(true);
+    stop_kept();
+    flushSync();
+    expect(retried).toEqual([0, 1]);
 });
 
 // `root` is a scope and `pre` is a moment: in JavaScript they nest —
