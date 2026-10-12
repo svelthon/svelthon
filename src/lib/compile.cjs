@@ -1418,6 +1418,7 @@ const RUNTIME = {
     pyData: '__pyData',
     pyCall: '__pyCall',
     pyTeardown: '__pyTeardown',
+    laterRoot: '__laterRoot',
     pyComponent: '__pyComponent',
     pyExpression: '__pyExpression',
     invoke: '__invoke',
@@ -2984,6 +2985,7 @@ function preamble(c) {
             // Only an effect and `on_mount` hand a value back to be called
             // later, so only a component with one needs the name.
             ...(c.effects.length || c.lifecycle('on_mount') ? ['pyTeardown'] : []),
+            ...(c.effects.some((e) => e.root) ? ['laterRoot'] : []),
             // Three that keep the spelling the markup pass emits, and the read
             // half of the dot, which `templateDots` writes.
             'group', 'readAttr', 'restOf', 'unpackStarred', 'writeAttr', 'writeItem',
@@ -3081,7 +3083,7 @@ function declarations(c) {
         ...c.inspects.map((i) => `let ${fn(i.name)} = $state.raw(undefined);`),
         ...c.effects.flatMap((e) =>
             e.root
-                ? [`let ${fn(e.name)} = $state.raw(undefined);`, `let ${destroyer(e.name)};`]
+                ? [`let ${fn(e.name)} = $state.raw(undefined);`, `const ${destroyer(e.name)} = ${RUNTIME.laterRoot}();`]
                 : [`let ${fn(e.name)} = $state.raw(undefined);`]
         ),
         // A @derived name reads as its result, on both sides. The body runs
@@ -3206,11 +3208,13 @@ function authorBindings(c) {
         ...c.inspects.map(
             (i) => `__bind(__proto, '${i.name}', () => ${fn(i.name)}, (${NEXT_VALUE}) => { ${fn(i.name)} = ${NEXT_VALUE}; });`
         ),
-        // A root's name reads as its destructor; the setter still takes the
+        // A root's name reads as its destructor, once its `def` has run and
+        // before the root is made (`laterRoot`); the setter still takes the
         // function, since that is what Brython writes when the `def` runs.
         ...c.effects.map((e) =>
             e.root
-                ? `__bind(__proto, '${e.name}', () => ${destroyer(e.name)}, (${NEXT_VALUE}) => { ${fn(e.name)} = ${NEXT_VALUE}; }, () => ${fn(e.name)});`
+                ? `__bind(__proto, '${e.name}', () => (${fn(e.name)} === undefined ? undefined : ${destroyer(e.name)}.stop), ` +
+                  `(${NEXT_VALUE}) => { ${fn(e.name)} = ${NEXT_VALUE}; }, () => ${fn(e.name)});`
                 : `__bind(__proto, '${e.name}', () => ${fn(e.name)}, (${NEXT_VALUE}) => { ${fn(e.name)} = ${NEXT_VALUE}; });`
         ),
         // __follow(): a @derived that hands back a container it was given is the one
@@ -3525,7 +3529,7 @@ function effectLines(c) {
             // than exclude each other, which is what stacking the two
             // decorators says, and what the nesting emits.
             e.root
-                ? `${destroyer(e.name)} = $effect.root(() => { $effect${e.pre ? '.pre' : ''}(() => {`
+                ? `${destroyer(e.name)}.start(() => $effect.root(() => { $effect${e.pre ? '.pre' : ''}(() => {`
                 : `$effect${e.pre ? '.pre' : ''}(() => {`,
             `    let teardown;`,
             `    try { teardown = __invoke(${fn(e.name)}); }` +
@@ -3539,7 +3543,7 @@ function effectLines(c) {
             // `async def` hands back a coroutine, which it starts instead.
             `    const __cleanup = ${RUNTIME.pyTeardown}(teardown, ${JSON.stringify(`${e.name}() — ${c.source}`)});`,
             `    if (__cleanup) return () => { __cleanup(); };`,
-            e.root ? (holders(c) ? `}); __holders += 1; return __release; });` : `}); });`) : `});`
+            e.root ? (holders(c) ? `}); __holders += 1; return __release; }));` : `}); }));`) : `});`
         ]),
         // The other end of `track`, through Svelte's `onDestroy`, which the
         // server's renderer calls when a render closes: an effect never runs

@@ -4,6 +4,9 @@ import { mount, flushSync } from './mounted.js';
 import EffectRoot from './fixtures/EffectRoot.svelte';
 import RootStore from './fixtures/RootStore.svelte';
 import RootOutlives, { held } from './fixtures/RootOutlives.svelte';
+import RootEarly from './fixtures/RootEarly.svelte';
+import './fixtures/root_early.svelte.py';
+import { runs } from './fixtures/root_early_log.js';
 import { events } from './fixtures/lifecycle_log.js';
 import { unmount } from './mounted.js';
 
@@ -77,6 +80,36 @@ describe('@effect.root', () => {
         click('bump');
         expect(ran()).toBe('r');
     });
+});
+
+// And its destructor is the name's as soon as the `def` has run, as Svelte
+// hands it back at once: called while the body runs, the root never runs its
+// effect, and kept under another name, it stops the root later. The roots are
+// made after the body, which read `undefined` there and raised `NameError`.
+test('a root can be stopped or kept while the body runs', () => {
+    events.length = 0;
+    const target = document.body.appendChild(document.createElement('div'));
+    mount(RootEarly, { target });
+    flushSync();
+
+    const click = (k) => {
+        target.querySelector(`button[data-k="${k}"]`).click();
+        flushSync();
+    };
+
+    expect(events).toEqual(['kept']);
+
+    click('bump');
+    expect(events).toEqual(['kept', 'kept']);
+
+    click('finish');
+    click('bump');
+    expect(events).toEqual(['kept', 'kept']);
+});
+
+test('and so in a module, by its name or another', () => {
+    flushSync();
+    expect(runs).toEqual([]);
 });
 
 // `root` is a scope and `pre` is a moment: in JavaScript they nest —

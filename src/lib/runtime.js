@@ -5967,6 +5967,27 @@ export function pyAttach(value) {
     return attach;
 }
 
+// The root an `@effect.root` names, which its name hands Python as the
+// destructor. The roots are made after the body has run, since an effect runs
+// what the body defines, and the destructor is the name's as soon as its `def`
+// has run, as Svelte's `$effect.root` hands it back at once: `stop()` in the
+// body, or `saved = stop`, before the root is made. Stopped before it is made,
+// it is never made, as Svelte's root stopped at once never runs its effect.
+export function laterRoot() {
+    let destroy;
+    let stopped = false;
+
+    return {
+        stop() {
+            if (destroy === undefined) stopped = true;
+            else destroy();
+        },
+        start(make) {
+            if (!stopped) destroy = make();
+        }
+    };
+}
+
 export function pyTeardown(value, where) {
     if (pyAwaitable(value)) {
         schedule(value, where);
