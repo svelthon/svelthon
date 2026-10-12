@@ -8,6 +8,7 @@ __all__ = [
     "nested",
     "fresh",
     "count",
+    "clear",
     "reset",
     "nested_broken",
     "direct_broken",
@@ -31,7 +32,13 @@ async def failing():
     raise ValueError("no such page")
 
 
+def clear():
+    calls.clear()
+
+
 def reset():
+    # Every caller awaits the coroutine made here: one built and dropped is
+    # what Brython's `RuntimeWarning` is for, said whenever the collector runs.
     global pending
     calls.clear()
     pending = work()
@@ -71,6 +78,3 @@ def fresh():
 
 def count():
     return len(calls)
-
-
-reset()

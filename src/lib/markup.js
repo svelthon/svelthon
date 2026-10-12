@@ -2177,8 +2177,12 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     // the Python value itself, a `Price(float)` with its class and a `15.0`
     // still a float, by every way a prop is written: by name, short, spread,
     // bound, and under a name beginning with `on`, which may be a callback or
-    // data. A JavaScript child is handed JavaScript's own.
-    const toPythonChild = () => isComponent(tag) && tag.held === undefined && where?.pythonChildren?.has(tag.name) === true;
+    // data. A JavaScript child is handed JavaScript's own. `<svelte:self>` is
+    // the component being compiled, which is written in Python.
+    const toPythonChild = () =>
+        isComponent(tag) &&
+        tag.held === undefined &&
+        (tag.name === 'svelte:self' || where?.pythonChildren?.has(tag.name) === true);
 
     // What a tag holds its child by, when it holds it rather than names an
     // import: a name the markup binds, a snippet's parameter, an `{#each}`

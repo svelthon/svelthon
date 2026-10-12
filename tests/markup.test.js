@@ -961,6 +961,12 @@ describe('the attribute pass', () => {
     // about `<input>`. A component has no group machinery: Svelte reads the
     // directive there as the prop of that name. The rewrite was applied to the
     // tag kind it was never written for, and Svelte refused its own output.
+    // `<svelte:self>` in a component written in Python is that component, and is
+    // handed the Python value, a float as a float, as any Python child is.
+    test('<svelte:self> is handed the Python values', () => {
+        expect(rewrite('<svelte:self value={x} />').out).toBe('<svelte:self value={__expr_py_0()} />');
+    });
+
     test('bind:group on a component is a prop binding, not an action', () => {
         const pair = /bind:group=\{__pybridge\.crossing\[__pybridge\.pair\(/;
 

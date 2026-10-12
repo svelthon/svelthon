@@ -18,6 +18,7 @@ import {
     nested,
     fresh,
     count,
+    clear,
     reset,
     nested_broken,
     direct_broken,
@@ -64,7 +65,7 @@ describe('the same coroutine handed over twice', () => {
 
     // The witness: two coroutine objects are two runs, and must stay so.
     test('while two coroutines are two runs', async () => {
-        reset();
+        clear();
 
         expect(await Promise.all([fresh(), fresh()])).toEqual([42, 42]);
         expect(count()).toBe(2);
