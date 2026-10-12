@@ -3091,9 +3091,11 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 // before it, never itself.
                 const value = call(declared.expression, '', undefined, 'python');
 
+                // A value the block declares is followed through what is
+                // inside it (`__pybridge.state`).
                 out +=
                     declared.rune === 'state'
-                        ? `{let ${declared.name} = $state.raw(${value})}`
+                        ? `{let ${declared.name} = $state.raw(__pybridge.state(${value}))}`
                         : `{const ${declared.name} = $derived(${value})}`;
 
                 scopes[scopes.length - 1]?.push(...refuseCompilerName([declared.name]));

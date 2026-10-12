@@ -300,6 +300,24 @@ export const __pybridge = {
         for (const one of components) if (one !== null && (typeof one === 'function' || typeof one === 'object')) PYTHON_COMPONENTS.add(one);
     },
 
+    // The value a block declares, `{rows = [1]}`, followed as a name the
+    // script declares is: its own revision, which every read of the name
+    // subscribes to through `follow`, and which a change made inside it moves.
+    // `$state.raw` alone follows the name being written, and a list appended
+    // to repainted nothing.
+    state(value) {
+        let update;
+        const changed = createSubscriber((one) => {
+            update = one;
+
+            return () => {
+                update = undefined;
+            };
+        });
+
+        return track(value, () => update?.(), changed);
+    },
+
     // A prop handed to a component a tag holds rather than names by its
     // import, a snippet's parameter or a name the script assigned: the Python
     // value itself to one written in Python, and JavaScript's to any other, as
