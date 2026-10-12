@@ -10,6 +10,7 @@ import GroupPropParent from './fixtures/GroupPropParent.svelte';
 import GivenChildHost from './fixtures/GivenChildHost.svelte';
 import GivenPythonChild from './fixtures/GivenPythonChild.svelte';
 import ComponentThisParent from './fixtures/ComponentThisParent.svelte';
+import IndirectChildParent from './fixtures/IndirectChildParent.svelte';
 import ShadowedPythonChild from './fixtures/ShadowedPythonChild.svelte';
 import ShadowedNativeChild from './fixtures/ShadowedNativeChild.svelte';
 
@@ -34,6 +35,18 @@ test('<svelte:component> hands each child the values of its language', () => {
 
     expect(target.querySelector('[data-k="python"]').textContent).toBe('float|15.0');
     expect(target.querySelector('[data-k="native"]').textContent).toBe('number|15');
+    expect(target.querySelector('[data-k="double quotes"]').textContent).toBe('float|15.0');
+    expect(target.querySelector('[data-k="single quotes"]').textContent).toBe('float|15.0');
+});
+
+test('a child re-exported or reached through a namespace gets the values of its language', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+    mount(IndirectChildParent, { target });
+    flushSync();
+
+    expect(target.querySelector('[data-k="re-exported python"]').textContent).toBe('float|15.0');
+    expect(target.querySelector('[data-k="re-exported native"]').textContent).toBe('number|15');
+    expect(target.querySelector('[data-k="namespace"]').textContent).toBe('float|15.0');
 });
 
 test('a name the script assigned hands each child the values of its language', () => {

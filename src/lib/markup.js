@@ -2184,26 +2184,43 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         tag.held === undefined &&
         (tag.name === 'svelte:self' || where?.pythonChildren?.has(tag.name) === true);
 
-    // What a tag holds its child by, when it holds it rather than names an
-    // import: a name the markup binds, a snippet's parameter, an `{#each}`
-    // item, one the script assigned, `Selected = Child if wide else Native`,
-    // or the `this` of `<svelte:component>`. Null for a tag that names its
-    // child. Its language is known only once it is handed. The child is then
-    // read once, as Svelte reads a tag, into a name of its own (`heldTag`), and
-    // each prop is made Python and converted for that child,
-    // `__pybridge.child`.
+    // What a tag holds its child by, when its file does not tell its language:
+    // a name the markup binds, a snippet's parameter, an `{#each}` item, one
+    // the script assigned, `Selected = Child if wide else Native`, an import
+    // from a package, a module that re-exports it or a namespace, or the
+    // `this` of `<svelte:component>`. Null for a tag its file names. Its
+    // language is known only once it is handed: each prop is made Python and
+    // converted for that child, `__pybridge.child`. The child is read once, as
+    // Svelte reads a tag, into a name of its own (`heldTag`), unless it is an
+    // import's own name, which reads again with nothing run (`wrap`).
     const heldSource = (one) => {
         if (!isComponent(one)) return null;
 
+        // `this={X}`, or `this="{X}"`, a lone interpolation between quotes,
+        // which Svelte reads as the same expression. The attribute is skipped
+        // whole where the walk meets it (`thisFrom`, `thisTo`).
         if (one.name === 'svelte:component') {
             const value = tagValue(markup, one.start, 'this');
-            if (value === null || !value.braced) return null;
+            if (value === null) return null;
 
-            one.thisAt = value.start;
-            region = { start: value.start, end: value.end };
-            const read = call(markup.slice(value.start, value.end), '__bound');
+            let start = value.start;
+            let end = value.end;
+
+            if (!value.braced) {
+                const open = markup.indexOf('{', start);
+                const lone = open !== -1 && !markup.slice(start, open).trim() && closingBrace(markup, open);
+
+                if (!lone || lone === -1 || lone > end || markup.slice(lone + 1, end).trim()) return null;
+                start = open + 1;
+                end = lone;
+            }
+
+            one.thisFrom = value.start - 1;
+            one.thisTo = value.end;
+            region = { start, end };
+            const read = call(markup.slice(start, end), '__bound');
             region = null;
-            return read;
+            return { read, wrap: true };
         }
 
         if (one.name.includes(':')) return null;
@@ -2211,8 +2228,13 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         const [head, ...rest] = one.name.split('.');
         const local = scoped(head);
 
-        if (local === null && (where?.imported === undefined || where.imported.has(head))) return null;
-        return [local ?? head, ...rest].join('.');
+        if (local !== null) return { read: [local, ...rest].join('.'), wrap: true };
+        if (where?.imported === undefined) return null;
+
+        // A child named by its own file is known; an import read again is
+        // the same binding, with nothing run, so it needs no block.
+        if (rest.length === 0 && (where.pythonChildren.has(head) || where.javascriptChildren.has(head))) return null;
+        return { read: one.name, wrap: rest.length > 0 || !where.imported.has(head) };
     };
     const taken = new Set(identifiers(markup));
     let heldCount = 0;
@@ -2466,6 +2488,14 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         const char = markup[index];
 
         if (inTag) {
+            // The `this` of a `<svelte:component>` that holds its child: read
+            // once already, where the child was bound.
+            if (tag?.held !== undefined && tag.thisFrom === index) {
+                out = out.replace(ATTRIBUTE_ASSIGN, '');
+                index = tag.thisTo + 1;
+                continue;
+            }
+
             if (quote) {
                 // `class="badge {statut.lower()}"`, an interpolation inside a
                 // quoted attribute value. Svelte concatenates it into a string,
@@ -2608,15 +2638,6 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
 
                     region = { start: index + 1, end };
 
-                    // The `this` of a `<svelte:component>` that holds its child:
-                    // read once already, where the child was bound.
-                    if (tag?.held !== undefined && tag.thisAt === index + 1) {
-                        out = out.replace(ATTRIBUTE_ASSIGN, '');
-                        region = null;
-                        index = end + 1;
-                        continue;
-                    }
-
                     if (attribute) {
                         if (LET_DIRECTIVE.test(attribute[1])) refuseLet(attribute[1]);
 
@@ -2725,10 +2746,10 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 else if (tag && (isComponent(tag) || !VOID.has(tag.name.toLowerCase())) && !selfClosing) {
                     push([]);
                     owners[owners.length - 1] = tag.name;
-                    if (tag.held !== undefined) heldOwners.set(ids.at(-1), tag.held);
+                    if (tag.wrapped) heldOwners.set(ids.at(-1), tag.held);
                 }
 
-                if (tag?.held !== undefined && (tag.closing || selfClosing)) ending = '{/each}';
+                if (tag?.wrapped && (tag.closing || selfClosing)) ending = '{/each}';
                 ended = true;
             }
 
@@ -2806,6 +2827,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
 
                 if (held !== undefined) {
                     tag.held = held;
+                    tag.wrapped = true;
                     out += `</${held}`;
                     index += named[0].length;
                     continue;
@@ -2813,9 +2835,11 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
             } else if (tag) {
                 const source = heldSource(tag);
 
-                if (source !== null) {
+                if (source !== null && !source.wrap) tag.held = source.read;
+                else if (source !== null) {
                     tag.held = heldTag();
-                    out += `{#each [${source}] as ${tag.held}}<${tag.held}`;
+                    tag.wrapped = true;
+                    out += `{#each [${source.read}] as ${tag.held}}<${tag.held}`;
                     index += named[0].length;
                     continue;
                 }

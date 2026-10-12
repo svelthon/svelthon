@@ -268,6 +268,23 @@ describe('what crosses as a request event', () => {
         expect(given(value)).toEqual({ kind: 'JSObject', payload: 42 });
     });
 
+    // Nor run it: a lazy `fetch` on an object that lacks the other members of
+    // an event is not read at all, so the Python function that reads it finds
+    // its first read still there.
+    test('and ordinary data has none of its getters run by the recognition', () => {
+        let reads = 0;
+        const value = {
+            payload: 42,
+            get fetch() {
+                reads += 1;
+                return () => 'ok';
+            }
+        };
+
+        expect(given(value)).toEqual({ kind: 'JSObject', payload: 42 });
+        expect(reads).toBe(0);
+    });
+
     // And a URL that refuses the member the recognition itself reads. No version
     // of SvelteKit guards `pathname` today, and the rule held here is what the
     // boundary does when one does: the throw must not **escape** — that was the

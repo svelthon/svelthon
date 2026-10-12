@@ -461,31 +461,30 @@ export function python(options = {}) {
 
             const python = content.slice(open, declaring.end);
 
-            // The children written in Python, read off their own file: a prop
-            // handed to one is the Python value itself, a `Price(float)` with
-            // its class, where a JavaScript child is handed JavaScript's
-            // number. Imported by `importjs` or in the `<script module>`, the
-            // way the README writes a composition. Any other import is a
-            // JavaScript one, a package's included. A tag under a name no
-            // import binds, one the script assigned, holds whichever child it
-            // is handed, and is told apart when it is mounted. Each file read
-            // is a dependency of this one, so a child that changes language
-            // recompiles its parent.
+            // The children whose language their own file tells: a prop handed
+            // to one written in Python is the Python value itself, a
+            // `Price(float)` with its class, where a JavaScript child is handed
+            // JavaScript's number. A `.svelte` file imported by `importjs` or in
+            // the `<script module>`, the way the README writes a composition.
+            // Any other child, one a package, a module that re-exports it or a
+            // namespace gives, or one the script assigned, is told apart when it
+            // is mounted. Each file read is a dependency of this one, so a child
+            // that changes language recompiles its parent.
             const read = [];
-            const children = [...componentImports(python, filename ?? 'component'), ...moduleComponents(content)]
-                .filter(({ from }) => {
-                    if (!filename || !from.startsWith('.')) return false;
+            const pythonChildren = new Set();
+            const javascriptChildren = new Set();
 
-                    const path = resolve(dirname(filename), from);
+            for (const { local, from } of [...componentImports(python, filename ?? 'component'), ...moduleComponents(content)]) {
+                if (!filename || !from.startsWith('.')) continue;
 
-                    if (!existsSync(path)) return false;
+                const path = resolve(dirname(filename), from);
 
-                    read.push(path);
+                if (!existsSync(path)) continue;
 
-                    return pythonScript(readFileSync(path, 'utf8')) !== null;
-                })
-                .map(({ local }) => local);
-            const pythonChildren = new Set(children);
+                read.push(path);
+                (pythonScript(readFileSync(path, 'utf8')) !== null ? pythonChildren : javascriptChildren).add(local);
+            }
+
             const imported = new Set([...importedNames(python, filename ?? 'component'), ...moduleImports(content)]);
 
             const code = overMarkup(
@@ -493,7 +492,14 @@ export function python(options = {}) {
                 // The markup, and where it starts, so a refusal can name a
                 // line and a column in the file the author is looking at.
                 (markup, offset) =>
-                    pythonExpressions(markup, collect, undefined, { filename, content, offset, pythonChildren, imported })
+                    pythonExpressions(markup, collect, undefined, {
+                        filename,
+                        content,
+                        offset,
+                        pythonChildren,
+                        javascriptChildren,
+                        imported
+                    })
             );
 
             return { code: tagged(elementOptions(code, python), calls.open(file)), dependencies: read };

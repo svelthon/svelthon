@@ -4974,9 +4974,15 @@ const urlish = (value) =>
 // what something is must not be able to fail: a throw is a
 // **no**, for the same reason as one member down, since refusing a genuine
 // event is loud and admitting a business object is silent.
+//
+// And it must not run what it asks of: the four names are looked for first,
+// which calls no getter, so an object lacking one, a business object with a
+// lazy `fetch` and no `url`, is handed over with nothing of it read.
+const EVENT_MEMBERS = ['fetch', 'url', 'request', 'params'];
 const routeEvent = (value) => {
     try {
         return (
+            EVENT_MEMBERS.every((name) => name in value) &&
             typeof value.fetch === 'function' &&
             urlish(value.url) &&
             typeof value.request?.method === 'string' &&
