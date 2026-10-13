@@ -8605,5 +8605,23 @@ function namespaceDict(namespace) {
 
         return namespaceDict(frame[1]);
     });
+
+    // **A namespace of ours outlives the frame that fills it.** Leaving a
+    // frame that made a generator, the engine walks the frame's locals and
+    // closes the context managers of the generators among them, as if they
+    // died with it. A module's namespace lives on with its component or its
+    // store: walking it read every name, a `@derived` computed included, so an
+    // unused one ran, and raised, at mount; and the generators it still holds
+    // are not the frame's to close, as a module's globals outlive its body in
+    // CPython.
+    const leave = $B.leave_frame;
+
+    $B.leave_frame = function (...args) {
+        const frame = $B.frame_obj?.frame;
+
+        if (frame?.$has_generators && ours(frame[1])) frame.$has_generators = false;
+
+        return leave.apply(this, args);
+    };
 })(globalThis.__BRYTHON__);
 
