@@ -792,12 +792,15 @@ describe('{@render}', () => {
         expect(defs.filter((one) => one.includes('__bound(half)'))).toHaveLength(1);
     });
 
-    // Beside one, a name may hold it under an alias: the snippet rendered
-    // decides, handed Python values.
-    test('a name beside the markup snippets is decided by the snippet rendered', () => {
-        const { out } = rewrite('{#snippet row(x)}{x}{/snippet}{@render other?.(half)}');
+    // Beside one, a name may hold it under an alias, and an attribute may hold
+    // it too: the snippet rendered decides, handed Python values, and the
+    // attribute is read as Python reads one.
+    test('a name beside the markup snippets, or an attribute, is decided by the snippet rendered', () => {
+        const { out } = rewrite('{#snippet row(x)}{x}{/snippet}{@render other?.(half)}{@render holder.fn(half)}');
 
-        expect(out).toMatch(/\{@render __pybridge\.snippet\(other, \[row\]\)\?\.\(__expr_py_\d+\(\)\)\}$/);
+        expect(out).toMatch(
+            /\{@render __pybridge\.snippet\(other, \[row\]\)\?\.\(__expr_py_\d+\(\)\)\}\{@render __pybridge\.snippet\(__expr_py_\d+\(\), \[row\]\)\(__expr_py_\d+\(\)\)\}$/
+        );
     });
 
     test('a snippet rendered without arguments crosses whole', () => {

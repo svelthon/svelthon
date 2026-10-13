@@ -10,6 +10,8 @@ import SnippetAlias from './fixtures/SnippetAlias.svelte';
 import SnippetAliasNative from './fixtures/SnippetAliasNative.svelte';
 import SnippetAliasTypes from './fixtures/SnippetAliasTypes.svelte';
 import SnippetForeignAliasHost from './fixtures/SnippetForeignAliasHost.svelte';
+import SnippetAttribute from './fixtures/SnippetAttribute.svelte';
+import SnippetAttributeNative from './fixtures/SnippetAttributeNative.svelte';
 
 const shown = async (Component, props) => {
     const target = document.body.appendChild(document.createElement('div'));
@@ -78,6 +80,18 @@ test('a snippet rendered through an alias keeps a whole float and subclasses', a
 // under an alias beside the markup's own, is still the parent's.
 test('a snippet a JavaScript parent gave, through an alias, is handed a number', async () => {
     expect(await shown(SnippetForeignAliasHost)).toBe('own=float:1.0 parent=number:0.50');
+});
+
+// `{@render holder.fn()}` read `holder.fn` as a JavaScript property, which a
+// Python instance does not have: the snippet it holds was not found. Read as
+// Python reads it, by a key too, absent through `?.`, and the markup's own
+// snippet under an attribute still handed Python values.
+test('a snippet held by an attribute renders as Svelte renders it', async () => {
+    expect(await shown(SnippetAttribute)).toBe('raw=ok raw=ok raw=ok own=float:1.0');
+});
+
+test('the Svelte markup is the rule for attributes', async () => {
+    expect(await shown(SnippetAttributeNative)).toBe('raw=ok raw=ok raw=ok own=number:1');
 });
 
 // A Python parent's snippet rendered by a Python child still reads Python

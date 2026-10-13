@@ -3054,9 +3054,12 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 //
                 // Whose it is is told by its name only when the name is one of
                 // the markup's snippets, or when the markup declares none here
-                // and a bare name can only be someone else's. Another name, an
-                // alias, is decided at the render by the snippet itself
-                // (`__pybridge.snippet`), its arguments handed as Python.
+                // and a bare name can only be someone else's. Anything else, an
+                // alias, an attribute or a key, is decided at the render by the
+                // snippet itself (`__pybridge.snippet`), its arguments handed as
+                // Python. And a callee that is not a bare name is a Python
+                // expression, read as Python reads it: `holder.fn` is an
+                // attribute, not a JavaScript property.
                 const called = written.rest.trim();
                 const opens = called.indexOf('(');
                 const closes = opens === -1 ? -1 : closingPair(called, opens);
@@ -3067,12 +3070,12 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 const named = new RegExp(`^${SHORT_NAME}$`, 'u').test(spelled);
                 const owns = [...snippets].filter((name) => inScope().includes(name));
                 const ours = named && owns.includes(callee);
-                const decided = ours || !named || owns.length === 0;
+                const decided = ours || (named && owns.length === 0);
                 const given = (one) =>
                     !one.trim() ? one : ours || !decided ? call(one, '', undefined, 'python') : call(one, '__bound');
                 const rendered = decided
                     ? head.replace(spelled, callee)
-                    : `__pybridge.snippet(${callee}, [${owns.join(', ')}])${optional ? '?.' : ''}`;
+                    : `__pybridge.snippet(${named ? callee : call(spelled, '', undefined, 'python')}, [${owns.join(', ')}])${optional ? '?.' : ''}`;
 
                 out += closes === -1
                     ? markup.slice(index, end + 1)
