@@ -14,6 +14,8 @@ import SnippetAttribute from './fixtures/SnippetAttribute.svelte';
 import SnippetAttributeNative from './fixtures/SnippetAttributeNative.svelte';
 import SnippetCallee from './fixtures/SnippetCallee.svelte';
 import SnippetCalleeNative from './fixtures/SnippetCalleeNative.svelte';
+import SnippetPythonParent from './fixtures/SnippetPythonParent.svelte';
+import SnippetPythonChildHost from './fixtures/SnippetPythonChildHost.svelte';
 
 const shown = async (Component, props) => {
     const target = document.body.appendChild(document.createElement('div'));
@@ -108,6 +110,15 @@ test('the Svelte markup is the rule for callees', async () => {
     expect(await shown(SnippetCalleeNative)).toBe(
         'first=number:1 first=number:1 first=number:1 first=boolean:true'
     );
+});
+
+// A Python parent's snippet is Python's wherever a Python child renders it
+// from: it says so as it runs, and is handed what the child handed it, a whole
+// float and two subclasses, where it was handed an int, a float and a str. A
+// JavaScript parent's, beside it, is handed JavaScript's.
+test.for(['bare', 'alias', 'dict'])('a Python parent snippet a Python child renders %s keeps its values', async (kind) => {
+    expect(await shown(SnippetPythonParent, { kind })).toBe('parent=float:1.0|Price|Label');
+    expect(await shown(SnippetPythonChildHost, { kind })).toBe('parent=number:1|number|string');
 });
 
 // A Python parent's snippet rendered by a Python child still reads Python

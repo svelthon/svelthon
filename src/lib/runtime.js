@@ -300,6 +300,12 @@ const BLOCK_STATE = new WeakMap();
 // Each snippet from elsewhere, to the function that renders it with its
 // arguments crossed (`__pybridge.snippet`).
 const CROSSING_SNIPPETS = new WeakMap();
+
+// Each snippet a Python markup declared, as it announced itself
+// (`__pybridge.pythonSnippet`), and the calls in progress on a server that
+// hand one values: what it was handed, before crossing.
+const PYTHON_SNIPPETS = new WeakSet();
+const SERVED_ARGUMENTS = [];
 let CROSSING_PAIR = null;
 
 export const __pybridge = {
@@ -589,15 +595,20 @@ export const __pybridge = {
     },
 
     // The snippet a `{@render}` renders when its spelling does not say whose it
-    // is: an alias, an attribute, a key. One the markup declares, among `owns`,
-    // the ones in scope there, reads its arguments as Python values; any other
-    // comes from elsewhere, maybe JavaScript, and its arguments cross as a
-    // prop's do (`bound`). Decided by the snippet rendered rather than by its
-    // name: `{alias = row}` rendered an `int` where `row` rendered `1.0`.
+    // is: `children`, an alias, an attribute, a key. One a Python markup
+    // declares reads its arguments as Python values: this markup's own, among
+    // `owns`, the ones in scope there, and any other once it has announced
+    // itself (`pythonSnippet`), a Python parent's. Any other comes from
+    // elsewhere, maybe JavaScript, and its arguments cross as a prop's do
+    // (`bound`). Decided by the snippet rendered rather than by its name:
+    // `{alias = row}` rendered an `int` where `row` rendered `1.0`, and so did a
+    // Python parent's snippet rendered by a Python child.
     //
-    // One crossing function per snippet, since Svelte renders again when the
-    // function it is handed changes. A browser hands a snippet a read of each
-    // argument, a server the values themselves.
+    // One crossing function per snippet, kept, since Svelte renders again when
+    // the function it is handed changes. A browser hands a snippet a read of
+    // each argument, read once the snippet has announced itself, which is the
+    // first thing it does; a server hands it the values themselves, crossed
+    // before the call, so the ones it was handed are kept for it meanwhile.
     snippet(value, owns) {
         const fn = __pybridge.bound(value);
 
@@ -605,16 +616,39 @@ export const __pybridge = {
 
         let crossing = CROSSING_SNIPPETS.get(fn);
 
+        if (crossing === undefined && PYTHON_SNIPPETS.has(fn)) return fn;
+
         if (crossing === undefined) {
             const crossed = (one) => pyNumbers(__pybridge.bound(one));
-            const served = typeof document === 'undefined';
 
-            crossing = (anchor, ...args) =>
-                fn(anchor, ...args.map((one) => (served ? crossed(one) : () => crossed(one()))));
+            crossing =
+                typeof document === 'undefined'
+                    ? (renderer, ...values) => {
+                          SERVED_ARGUMENTS.push({ fn, values });
+
+                          try {
+                              return fn(renderer, ...values.map(crossed));
+                          } finally {
+                              SERVED_ARGUMENTS.pop();
+                          }
+                      }
+                    : (anchor, ...args) =>
+                          fn(anchor, ...args.map((one) => () => (PYTHON_SNIPPETS.has(fn) ? one() : crossed(one()))));
             CROSSING_SNIPPETS.set(fn, crossing);
         }
 
         return crossing;
+    },
+
+    // What a snippet a Python markup declares does first of all: it says so,
+    // and on a server, called by a crossing, takes back the values it was
+    // handed before they crossed, which its parameters read by position.
+    pythonSnippet(fn) {
+        PYTHON_SNIPPETS.add(fn);
+
+        const call = SERVED_ARGUMENTS[SERVED_ARGUMENTS.length - 1];
+
+        return call !== undefined && call.fn === fn ? call.values : null;
     },
 
     // A `bind:group` control's `checked`, written by the server, where no action
@@ -658,9 +692,11 @@ export const __pybridge = {
 
     // A value handed into Python by a door that may be JavaScript's, a context
     // or a snippet's parameter: read as `pyBind` reads every door's, a
-    // function as `functionIn` takes it and a view its container.
-    received(value) {
-        return pyBind(value);
+    // function as `functionIn` takes it and a view its container. A
+    // parameter a server's crossing handed a Python snippet is the value it
+    // was given, kept by its announcement (`pythonSnippet`) at its position.
+    received(value, served = null, at = 0) {
+        return served !== null && at < served.length ? served[at] : pyBind(value);
     },
 
     // `set_context` and `get_context`. A scalar is set as JavaScript's own, for

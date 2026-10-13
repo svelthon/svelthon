@@ -783,6 +783,10 @@ const FOLLOW = '__follow';
 // context's value in `get_context`.
 const RECEIVED = '__pybridge.received';
 
+// What a snippet's announcement is held under, numbered per snippet, since a
+// snippet inside another reads the outer one's parameters too.
+const SNIPPET_FRAME = '__snippet_';
+
 // A handler takes a *callable*, and Python's is `lambda`. So its value is
 // compiled as Python like everything else, and what the expression yields is
 // wrapped for JavaScript: `pyHandler` reads the signature Brython recorded,
@@ -1379,11 +1383,17 @@ const destructured = (text, declare, call, tuple, refuse) => {
 };
 
 // `{#snippet row(one, value=True)}` read apart: the names go to `declare`,
-// which opens the block's scope, and what comes back is the declaration
-// rewritten with each default compiled as the Python expression it is. The
-// split is at top level, so a comma or an `=` inside a string or a call belongs
-// to the default and not to the list.
-function snippetParameters(trimmed, declare, call, refuse) {
+// which opens the block's scope, with the position of each one a parameter
+// holds whole, and what comes back is the declaration rewritten with each
+// default compiled as the Python expression it is. The split is at top level,
+// so a comma or an `=` inside a string or a call belongs to the default and not
+// to the list.
+//
+// **And the snippet says it is Python's, first of all** (`frame`), which is how
+// a Python child rendering it from another component knows to hand it Python
+// values: on a server, where it is handed values rather than reads, the ones
+// it was meant to receive come back there, by position.
+function snippetParameters(trimmed, declare, call, refuse, frame) {
     const open = trimmed.indexOf('(');
     const head = open === -1 ? trimmed : trimmed.slice(0, open);
     const close = open === -1 ? -1 : closingPair(trimmed, open);
@@ -1391,18 +1401,28 @@ function snippetParameters(trimmed, declare, call, refuse) {
     // Named as Python names it, `ﬁeld` being `field`, the spelling every
     // `{@render}` of it is given too.
     const name = pythonName(head.replace(/^#snippet\s*/, '').trim());
+    const announced = `{let ${frame} = __pybridge.pythonSnippet(${name})}`;
 
     // No parameter list, or one Svelte will refuse in its own words: nothing is
     // declared.
     if (close === -1) {
-        declare([], []);
+        declare([], [], new Map());
 
         return `${trimmed.replace(/^#snippet\s*/, '')}}`;
     }
 
-    const { pattern, consts } = destructured(trimmed.slice(open + 1, close), declare, call, false, refuse);
+    const list = trimmed.slice(open + 1, close);
+    const positions = new Map();
 
-    return `${name}(${pattern})${trimmed.slice(close + 1)}}${consts}`;
+    arguments_(list).forEach((part, at) => {
+        const whole = part.split('=')[0].trim();
+
+        if (new RegExp(`^${NAME}$`, 'u').test(whole)) positions.set(whole, at);
+    });
+
+    const { pattern, consts } = destructured(list, (names, aliases) => declare(names, aliases, positions), call, false, refuse);
+
+    return `${name}(${pattern})${trimmed.slice(close + 1)}}${announced}${consts}`;
 }
 
 // The key that trails an `{#each}` target: `[target, key]`, or null when the line
@@ -1859,6 +1879,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     // Every snippet this markup declares, wherever: the first walk recorded
     // them, scope by scope.
     const snippets = new Set([...seed.values()].flat());
+    let snippetCount = 0;
 
     // The tag being read, so that its closing `>` knows what it closed, and
     // what is written after that `>`.
@@ -1972,10 +1993,20 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     // every value coming into Python is (`__pybridge.received`), so a callable
     // Python handed out is itself again. The innermost scope holding the name
     // says whether it is one.
+    //
+    // A parameter the snippet holds whole is read with its position and the
+    // values its announcement returned, which a server rendering it from a
+    // Python child fills (`snippetParameters`).
     const received = (name) => {
         for (let at = scopes.length - 1; at >= 0; at--) {
             if (scopes[at].includes(name)) {
-                return scopes[at].parameters?.has(name) ? `${RECEIVED}(${name})` : name;
+                const scope = scopes[at];
+
+                if (!scope.parameters?.has(name)) return name;
+
+                return scope.positions?.has(name)
+                    ? `${RECEIVED}(${name}, ${scope.frame}, ${scope.positions.get(name)})`
+                    : `${RECEIVED}(${name})`;
             }
         }
 
@@ -3012,15 +3043,24 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 // `push` goes *into* the function rather than after it, because
                 // a default reads the parameters beside it: `(j, k = j)` is
                 // ordinary JavaScript and Svelte compiles it as one.
+                const frame = `${SNIPPET_FRAME}${snippetCount++}`;
+                let positions = new Map();
+
                 out += `{#snippet ${snippetParameters(
                     trimmed,
-                    (names, aliases) => {
+                    (names, aliases, at) => {
                         push(names, aliases);
                         scopes[scopes.length - 1].parameters = new Set([...names, ...aliases]);
+                        positions = at;
                     },
                     call,
-                    refusePattern
+                    refusePattern,
+                    frame
                 )}`;
+
+                // Read by position in the body only: a default is evaluated
+                // with the parameters, before the announcement exists.
+                Object.assign(scopes[scopes.length - 1], { positions, frame });
             } else {
                 throw refuse(unknownTag(trimmed, 'block', BLOCKS, said()));
             }
@@ -3072,23 +3112,22 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 // The snippet itself is a JavaScript function and stays one.
                 // Its call is the last group of the expression (`renderedCall`),
                 // and its arguments are split at depth zero, so a comma inside a
-                // call or a literal stays put.
+                // call or a literal stays put. Each argument is Python.
                 //
-                // What it is *given* depends on whose snippet it is. One this
-                // markup declares is Python, and reads its arguments as Python
-                // values. Any other, a `children` or a snippet prop, comes from
-                // the parent, which may be JavaScript: its arguments cross as a
-                // prop's do, a float made a number, None made `undefined` and a
-                // callable adapted.
+                // What it is *given* depends on whose snippet it is. One a
+                // Python markup declares reads its arguments as Python values.
+                // Any other, a snippet a JavaScript parent gave, may be
+                // JavaScript: its arguments cross as a prop's do, a float made a
+                // number, None made `undefined` and a callable adapted.
                 //
                 // Whose it is is told by its name only when the name is one of
-                // the markup's snippets, or when the markup declares none here
-                // and a bare name can only be someone else's. Anything else, an
-                // alias, an attribute or a key, is decided at the render by the
-                // snippet itself (`__pybridge.snippet`), its arguments handed as
-                // Python. And a callee that is not a bare name is a Python
-                // expression, read as Python reads it: `holder.fn` is an
-                // attribute, not a JavaScript property.
+                // this markup's snippets. Anything else, `children`, an alias, an
+                // attribute or a key, is decided at the render by the snippet
+                // itself (`__pybridge.snippet`): a parent written in Python
+                // declared its own, which say so as they run. And a callee that
+                // is not a bare name is a Python expression, read as Python
+                // reads it: `holder.fn` is an attribute, not a JavaScript
+                // property.
                 const found = renderedCall(written.rest.trim());
                 const head = found === null ? '' : found.head;
                 const optional = /\?\.\s*$/.test(head);
@@ -3096,13 +3135,11 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 const callee = pythonName(spelled);
                 const named = new RegExp(`^${SHORT_NAME}$`, 'u').test(spelled);
                 const owns = [...snippets].filter((name) => inScope().includes(name));
-                const ours = named && owns.includes(callee);
-                const decided = ours || (named && owns.length === 0);
-                const given = (one) =>
-                    !one.trim() ? one : ours || !decided ? call(one, '', undefined, 'python') : call(one, '__bound');
-                const rendered = decided
-                    ? head.replace(spelled, callee)
-                    : `__pybridge.snippet(${named ? callee : call(spelled, '', undefined, 'python')}, [${owns.join(', ')}])${optional ? '?.' : ''}`;
+                const rendered =
+                    named && owns.includes(callee)
+                        ? head.replace(spelled, callee)
+                        : `__pybridge.snippet(${named ? callee : call(spelled, '', undefined, 'python')}, [${owns.join(', ')}])${optional ? '?.' : ''}`;
+                const given = (one) => (!one.trim() ? one : call(one, '', undefined, 'python'));
 
                 out += found === null
                     ? markup.slice(index, end + 1)

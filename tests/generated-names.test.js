@@ -38,6 +38,9 @@ const MARKUP_LOCAL = new Set([
     '__cell_',
     // The row a pattern unpacks by key stands under, `{#each rows as {id}}`.
     '__unpacked_',
+    // What a snippet's announcement hands back, its parameters read by
+    // position on a server.
+    '__snippet_',
     // The index an `{#each}` is given for a `bind:group` inside it, which
     // Svelte declares.
     '__index_',

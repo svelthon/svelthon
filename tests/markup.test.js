@@ -766,35 +766,33 @@ describe('{@render}', () => {
     test('each argument is compiled separately', () => {
         const { out } = rewrite('{@render row(item, index)}');
 
-        expect(out).toMatch(/\{@render row\(__expr_\d+\(\), __expr_\d+\(\)\)\}/);
+        expect(out).toMatch(/\(__expr_py_\d+\(\), __expr_py_\d+\(\)\)\}$/);
     });
 
     test('a comma inside an argument is not a separator', () => {
         const { out, defs } = rewrite('{@render row(f(a, b))}');
 
-        expect(out).toMatch(/\{@render row\(__expr_\d+\(\)\)\}/);
+        expect(out).toMatch(/\(__expr_py_\d+\(\)\)\}$/);
         expect(defs.some((one) => one.includes('f(a, b)'))).toBe(true);
     });
 
-    // A snippet the markup declares is Python and is handed Python values; any
-    // other, `children` or a snippet prop, may be JavaScript's and is handed
-    // what a prop is.
+    // A snippet the markup declares is Python and is handed Python values,
+    // called by its name.
     test('a snippet the markup declares keeps its arguments Python', () => {
         const { out } = rewrite('{#snippet row(x)}{x}{/snippet}{@render row(half)}');
 
         expect(out).toMatch(/\{@render row\(__expr_py_\d+\(\)\)\}$/);
     });
 
-    test('a name where the markup declares no snippet is handed what a prop is', () => {
-        const { out, defs } = rewrite('{@render other?.(half)}');
+    // Any other may be a Python parent's or a JavaScript one's, so the snippet
+    // rendered decides, handed Python values: `children`, an alias, and an
+    // attribute, read as Python reads one.
+    test('a name the markup does not declare is decided by the snippet rendered', () => {
+        const { out } = rewrite('{@render other?.(half)}');
 
-        expect(out).toMatch(/^\{@render other\?\.\(__expr_\d+\(\)\)\}$/);
-        expect(defs.filter((one) => one.includes('__bound(half)'))).toHaveLength(1);
+        expect(out).toMatch(/^\{@render __pybridge\.snippet\(other, \[\]\)\?\.\(__expr_py_\d+\(\)\)\}$/);
     });
 
-    // Beside one, a name may hold it under an alias, and an attribute may hold
-    // it too: the snippet rendered decides, handed Python values, and the
-    // attribute is read as Python reads one.
     test('a name beside the markup snippets, or an attribute, is decided by the snippet rendered', () => {
         const { out } = rewrite('{#snippet row(x)}{x}{/snippet}{@render other?.(half)}{@render holder.fn(half)}');
 
@@ -816,8 +814,18 @@ describe('{@render}', () => {
         expect(defs.some((one) => one.includes('True'))).toBe(true);
     });
 
-    test('a snippet rendered without arguments crosses whole', () => {
-        expect(rewrite('{@render row()}').out).toBe('{@render row()}');
+    test('a snippet rendered without arguments is called with none', () => {
+        expect(rewrite('{@render row()}').out).toBe('{@render __pybridge.snippet(row, [])()}');
+    });
+
+    // A snippet this markup declares says it is Python's first of all, and its
+    // parameters are read with their position, which a server rendering it
+    // from another Python component fills.
+    test('a snippet the markup declares announces itself, and reads its parameters by position', () => {
+        const { out } = rewrite('{#snippet row(x, y=1)}{y}{/snippet}');
+
+        expect(out).toContain('{let __snippet_0 = __pybridge.pythonSnippet(row)}');
+        expect(out).toContain('__pybridge.received(y, __snippet_0, 1)');
     });
 
     // The names it takes are the JavaScript ones the compiler emits, not Python
