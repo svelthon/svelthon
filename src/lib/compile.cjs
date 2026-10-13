@@ -1936,8 +1936,6 @@ const isCallTo = (node, name) =>
     node.value.func instanceof $B.ast.Name &&
     node.value.func.id === name;
 
-const isBindable = (node) => isCallTo(node, 'bindable');
-
 // `theirs` says a name is the author's where it is read, an `importjs
 // {derived}` among them: a decorator of theirs is no marker of ours.
 const hasDecorator = (node, name, theirs = () => false) =>
@@ -2410,8 +2408,11 @@ function surface(body, theirs = new Set()) {
                 // field: `name: str` is a prop, `count: int = 0` a prop with a
                 // default. A bare assignment stays internal state.
                 if (node.target instanceof $B.ast.Name) bind(node.target.id);
+                // `bindable(…)` is the marker unless the author imported a
+                // `bindable` of their own, which computes the default like any
+                // other call, as `derived` and `effect` above.
                 if (node.target instanceof $B.ast.Name && take(node.target.id)) {
-                    (isBindable(node) ? bindables : props).push(node.target.id);
+                    (marked(node, 'bindable') ? bindables : props).push(node.target.id);
                 }
             } else if (
                 // `async def` is a different AST node, and an async handler is a
