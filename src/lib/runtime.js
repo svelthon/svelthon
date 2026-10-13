@@ -5429,24 +5429,34 @@ export function pyNumbers(value) {
 // an export; both leave the right word in front.
 const nameOf = (where) => where.split(' — ')[0].replace(/\(\)$/, '');
 
-// What a caller may hand a Python function: trimmed to what the signature
-// declares, and converted.
+// A call of what `declared` found, with what a caller hands it: trimmed to what
+// the signature declares, converted, and passed.
 //
 // The trim is the boundary's contract (it is what lets a framework hand an
 // event to a callback that never asked for one), and `pyArg` is the conversion
-// every call boundary owes, written here once for the three wrappers below.
+// every call boundary owes, written here once for every wrapper below.
 //
 // **Trimmed first, then converted, and only what is passed.** An argument the
 // callable does not take is never read: converting it means asking whether it is
-// awaitable, which reads its `then`, and a payload the callback discards must
-// not be able to fail the call or be observed by it.
+// a route event, which reads its fields and copies its `params`, and a payload
+// the callback discards must not be able to fail the call or be observed by it.
+//
+// **And resolved before either.** An instance whose `__call__` is a descriptor
+// learns what it calls, and so what it takes, only when its `__get__` answers,
+// once per call: `resolve` asks it, and the trim reads the answer. Converted
+// against the instance's own `Infinity` and trimmed afterwards, an argument the
+// callback discards had already been read.
 //
 // `arity` is a number, or a function answering it at the call: a callable
 // instance trims against whatever its class holds now, so its arity is a
 // question asked each time, not a number fixed once.
 const arityNow = (arity) => (typeof arity === 'function' ? arity() : arity);
 
-const taken = (args, arity, convert = pyArg) => args.slice(0, arityNow(arity)).map(convert);
+const calling = (found, args, convert = pyArg) => {
+    const { fn, arity } = found.resolve?.() ?? found;
+
+    return fn(...args.slice(0, arityNow(arity)).map(convert));
+};
 
 // The two own properties every JavaScript function has, told the truth about the
 // Python one behind them.
@@ -5484,11 +5494,12 @@ const handedBack = (value, where) => {
     return out;
 };
 
-export function pyCall(fn, where, arity = Infinity, named, convert = pyArg) {
+export function pyCall(found, named, convert = pyArg) {
+    const { fn, where, arity } = found;
+
     const wrapper = (...args) => {
         try {
-            const given = taken(args, arity, convert);
-            const result = scheduleAsync(fn(...given), where);
+            const result = scheduleAsync(calling(found, args, convert), where);
 
             // The result crosses under the same rule as an export, callbacks
             // included: a callable *returned by* an exported function is adapted
@@ -5816,23 +5827,28 @@ function boundCall(value) {
 // whatever depth and whenever the class made it one: what its `__get__` hands
 // back is asked at the call, and only then, so making the wrapper or handing it
 // over runs no getter that may not be ready to answer. What it takes is unknown
-// until then, so everything is passed in, and the call hands it to the
-// adaptation of what it calls, which trims it as it trims the same callable
-// handed over directly: a `property` handing back a function that takes
-// nothing was handed the click, and raised.
+// until then, so `resolve` answers, at the call, the adaptation of what it
+// calls, which trims as the same callable handed over directly does: a
+// `property` handing back a function that takes nothing was handed the click,
+// and raised. `calling` asks it before converting anything.
 function instanceCall(value, where, origin) {
     const $B = globalThis.__BRYTHON__;
 
+    const resolve = () => {
+        const bound = boundCall(value);
+
+        if (bound === null) return { fn: (...args) => $B.$call(value, ...args), arity: liveArity(value) };
+
+        const inner = declared(bound);
+
+        if (inner === null) return { fn: (...args) => $B.$call(bound, ...args), arity: Infinity };
+
+        return inner.resolve?.() ?? inner;
+    };
+
     return {
-        fn: (...args) => {
-            const bound = boundCall(value);
-
-            if (bound === null) return $B.$call(value, ...args);
-
-            const inner = declared(bound);
-
-            return inner === null ? $B.$call(bound, ...args) : inner.fn(...args.slice(0, arityNow(inner.arity)));
-        },
+        fn: (...args) => calling({ resolve }, args, (one) => one),
+        resolve,
         where,
         arity: () => liveArity(value),
         origin,
@@ -5965,14 +5981,14 @@ export function pyEvent(value) {
     // `onboarding`, which Svelte 5 makes defensible for a component prop.
     if (found === null) return __pybridge.bound(value);
 
-    const { fn: called, where, arity } = found;
+    const { where } = found;
 
     // The line of an error is placed by the file its frame is in (`fileLines`),
     // which is not always the component setting the handler: `onclick={store.boom}`
     // runs a `.py`'s function.
     return (...args) => {
         try {
-            return schedule(called(...taken(args, arity)), where);
+            return schedule(calling(found, args), where);
         } catch (error) {
             throw thrown(pyError(error, where));
         } finally {
@@ -5992,8 +6008,8 @@ export function pyEvent(value) {
 // Keyed on `found.fn`, the function Brython recorded the signature of, and not
 // on the object that arrived: reading `helpers.click` twice gives two interop
 // wrappers around one function, and Python calls them the same name. Every
-// wrapper this site builds has the same contract (`pyCall(fn, where, 0,
-// arity)`, all three read from `fn` itself), so one per function is the whole
+// wrapper this site builds has the same contract (`pyCall(found)`, its name,
+// label and arity all read from `fn` itself), so one per function is the whole
 // of it. A bound method rebuilt at each read is a different question and is not
 // answered here.
 const HANDLERS = new WeakMap();
@@ -6047,13 +6063,13 @@ export function pyAttach(value) {
     let attach = ATTACHED.get(identity);
 
     if (attach === undefined) {
-        const { fn: called, where, arity } = found;
+        const { where } = found;
 
         // Exports flushed as the handler flushes them, before Svelte reads on:
         // a `bytearray` the attachment changed is an export already copied.
         attach = (...args) => {
             try {
-                return pyTeardown(called(...taken(args, arity)), where);
+                return pyTeardown(calling(found, args), where);
             } catch (error) {
                 throw thrown(pyError(error, where));
             } finally {
@@ -6167,9 +6183,7 @@ export function pyHandler(value) {
     // The arguments a JavaScript caller hands are converted the whole way, which
     // a framework calling with raw numbers needs beyond the scalars `pyArg`
     // converts, and only once trimmed to what the callable takes.
-    const wrapped = pyCall(found.fn, found.where, found.arity, found.named ?? undefined, (one) =>
-        pyArg(inbound(one))
-    );
+    const wrapped = pyCall(found, found.named ?? undefined, (one) => pyArg(inbound(one)));
 
     // An instance trims at the call, against whatever its class holds now, so its
     // wrapper announces `Infinity` and would report an arity of 0. What a library
@@ -6662,14 +6676,9 @@ export const pyComponent = (read, where, exported = false) => {
     return identified(
         (...args) => {
             const value = read();
-            const found = declared(value);
-            const given = taken(args, found === null ? Infinity : found.arity);
+            const found = declared(value) ?? { fn: value, arity: Infinity };
 
-            return running(
-                () => (found === null ? value(...given) : found.fn(...given)),
-                where,
-                exported ? published : returned
-            );
+            return running(() => calling(found, args), where, exported ? published : returned);
         },
         nameOf(where),
         first === null ? 0 : arityNow(first.arity)
@@ -7022,8 +7031,7 @@ function directiveCallable(member, path) {
         // leaves `self` out of the arguments, for every shape. It answers null
         // for a function JavaScript built, which keeps the reading it always
         // had: no signature, so no trim.
-        const called = found === null ? member : found.fn;
-        const arity = found === null ? Infinity : found.arity;
+        const target = found ?? { fn: member, arity: Infinity };
         const where = found === null ? `${path}()` : found.where;
 
         // Converted on the way in, like every other call boundary: Svelte hands
@@ -7033,10 +7041,9 @@ function directiveCallable(member, path) {
         // Run through `running`, the wrapper of a component's own functions: an
         // `async def` is started, and an error placed.
         wrapped = identified(
-            (...args) =>
-                running(() => called(...taken(args, arity)), where, (value) => directiveResult(value, where)),
+            (...args) => running(() => calling(target, args), where, (value) => directiveResult(value, where)),
             nameOf(where),
-            arityNow(arity)
+            arityNow(target.arity)
         );
 
         directives.set(member, wrapped);
