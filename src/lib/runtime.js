@@ -7933,7 +7933,18 @@ export function group(node, [current, write, chosen, fielded, binding, scope, wh
     // are all registered and in order, as Svelte's own `bind_group` does;
     // showing the model first would erase the click. A fresh mount makes the two
     // agree, so it shows the model as before.
-    if (node.defaultChecked === node.checked) show(current);
+    //
+    // A `checked` the markup writes as an expression is Svelte's, not the
+    // reader's: Svelte sets the property and leaves the default to the template,
+    // at a fresh mount as at hydration, where it has just overwritten any click.
+    // Svelte's own group asks whether it is hydrating; what it wrote, in the
+    // cache `value` reads, answers the same question here. The `checked` this
+    // pass adds for the server is `undefined` in a browser, which Svelte never
+    // writes.
+    const written = attributesOf(node);
+    const reader = node.defaultChecked !== node.checked && written?.checked === undefined;
+
+    if (!reader) show(current);
     else queueMicrotask(() => (boxes || node.checked) && changed());
 
     return {

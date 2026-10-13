@@ -2,12 +2,14 @@
 // Svelte keeps the server's nodes, says nothing about a mismatch, and the
 // Python is wired to what it kept: the same page, then alive.
 import { test, expect, vi, afterEach } from 'vitest';
-import { hydrate, flushSync, unmount } from 'svelte';
+import { hydrate, mount, flushSync, unmount } from 'svelte';
 import PythonTruthAttributes from './fixtures/PythonTruthAttributes.svelte';
 import KeyIdentity from './fixtures/KeyIdentity.svelte';
 import SvelteConstructs from './fixtures/SvelteConstructs.svelte';
 import ScalarProps from './fixtures/ScalarProps.svelte';
 import GroupHydrate from './fixtures/GroupHydrate.svelte';
+import GroupCheckedWritten from './fixtures/GroupCheckedWritten.svelte';
+import GroupCheckedWrittenNative from './fixtures/GroupCheckedWrittenNative.svelte';
 import * as html from './fixtures/python-ssr-html.js';
 
 const hydrated = [];
@@ -88,6 +90,28 @@ test('a group the reader changed before hydrating keeps the change', async () =>
         true
     ]);
     expect(target.querySelector('[data-k="model"]').textContent).toBe('yes|yes');
+});
+
+// And a `checked` the markup writes is no click: Svelte sets the property and
+// leaves the default to the template, so a fresh mount found the two apart and
+// rebuilt an empty group from the control. Svelte's own group keeps its model,
+// the witness beside it.
+test.for([
+    ['Python', GroupCheckedWritten],
+    ['Svelte', GroupCheckedWrittenNative]
+])('%s: a fresh mount keeps an empty group under a checked the markup writes', async ([, Component]) => {
+    const target = document.body.appendChild(document.createElement('div'));
+
+    hydrated.push(mount(Component, { target }));
+    flushSync();
+    await Promise.resolve();
+    flushSync();
+
+    expect([target.querySelector('[data-k="box"]').checked, target.querySelector('[data-k="radio"]').checked]).toEqual([
+        false,
+        false
+    ]);
+    expect(target.querySelector('[data-k="model"]').textContent).toBe('|');
 });
 
 test('bind:this takes the node once hydrated, and the window its events', () => {
