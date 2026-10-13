@@ -657,15 +657,10 @@ export const __pybridge = {
     },
 
     // A value handed into Python by a door that may be JavaScript's, a context
-    // or a snippet's parameter: what Python published is its own callable
-    // again, so a Python reader holds what a Python writer held; a JavaScript
-    // function is the adapter an import of it gets (`jsCall`), which converts
-    // what Python hands it and what it answers; anything else is read as
-    // `pyBind` reads it, a view its container.
+    // or a snippet's parameter: read as `pyBind` reads every door's, a
+    // function as `functionIn` takes it and a view its container.
     received(value) {
-        if (typeof value !== 'function') return pyBind(value);
-
-        return PUBLISHED.get(value) ?? (declared(value) === null ? jsCall(value) : value);
+        return pyBind(value);
     },
 
     // `set_context` and `get_context`. A scalar is set as JavaScript's own, for
@@ -6363,11 +6358,18 @@ const outbound = (value, made) => {
 // `identity(callback)`, gives the very callback, the one a set holds. It came
 // back as an adapter around its own wrapper, still callable and no longer it.
 const inbound = (value) =>
-    typeof value === 'function'
-        ? PUBLISHED.has(value)
-            ? PUBLISHED.get(value)
-            : jsCall(value)
-        : (bytesIn(value) ?? globalThis.__BRYTHON__.jsobj2pyobj(value));
+    typeof value === 'function' ? functionIn(value) : (bytesIn(value) ?? globalThis.__BRYTHON__.jsobj2pyobj(value));
+
+// A function entering Python by a door that may be JavaScript's, whichever door:
+// what Python published is its own callable again, so a Python reader holds
+// what a Python writer held; a JavaScript function is the adapter an import of
+// it gets (`jsCall`), which converts what Python hands it and what it answers;
+// a Python one is itself. A callback a JavaScript parent hands as a prop, or as
+// an argument to a component's or a store's function, received the float
+// Brython builds where it expected a number.
+function functionIn(value) {
+    return PUBLISHED.get(value) ?? (declared(value) === null ? jsCall(value) : value);
+}
 
 // **Brython's own refusal, which this proxy was going around.**
 //
@@ -7606,12 +7608,15 @@ export const pyBind = (value) => {
     if (handed !== null && Object.is(value, handed.js)) return handed.py;
     if (typeof value === 'number') return globalThis.__BRYTHON__.jsobj2pyobj(value);
 
+    // A function as every door takes one (`functionIn`): a function
+    // `pyHandler` published is its callable, a JavaScript one is adapted.
+    if (typeof value === 'function') return functionIn(value);
+
     // A view a JavaScript reader was handed (`viewOf`) is its container again,
-    // a function `pyHandler` published its callable, and a copy of bytes the
-    // bytes it holds.
+    // and a copy of bytes the bytes it holds.
     if (VIEWED.has(value)) return globalThis.__BRYTHON__.PYOBJ_MAP.get(value);
 
-    return PUBLISHED.get(value) ?? bytesIn(value) ?? value;
+    return bytesIn(value) ?? value;
 };
 
 // Whether a read through the dot would find an attribute, answered without
