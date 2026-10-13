@@ -89,6 +89,8 @@ describe('what a destructuring default may read', () => {
             nested: '1:1',
             snippet: '1:1',
             unpacked: '1:1',
+            'unpacked-spelling': '1:1',
+            'unpacked-pattern': '1:1',
             'snippet-unpacked': '1:1',
             'snippet-starred': '1:2',
             key: '42',
@@ -107,6 +109,18 @@ describe('what a destructuring default may read', () => {
             unpacked: '1:1',
             'snippet-unpacked': '1:1',
             'snippet-starred': '1:2'
+        });
+    });
+
+    // Whatever the default reads and whatever it fills: waiting was decided by
+    // comparing the names as written, where Python reads `ﬁrst` as `first`, and
+    // only for a target that is a name, where `{second}={"second": first}`
+    // fills a pattern. Both raised the same error. Every default after a row
+    // unpacked waits now.
+    test('a default after a row unpacked waits, whatever it reads and fills', () => {
+        expect(rendered(PatternScope)).toMatchObject({
+            'unpacked-spelling': '1:1',
+            'unpacked-pattern': '1:1'
         });
     });
 

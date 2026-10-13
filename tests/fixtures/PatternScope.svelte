@@ -28,6 +28,8 @@ async def broken():
 <!-- A default reading a name a row before it unpacks by key or around a star,
      in a target and in a snippet's parameters. -->
 {#each [[{"first": 1}]] as [{first}, second=first]}<i data-k="unpacked">{first}:{second}</i>{/each}
+{#each [[{"first": 1}]] as [{ﬁrst}, second=first]}<i data-k="unpacked-spelling">{ﬁrst}:{second}</i>{/each}
+{#each [[{"first": 1}]] as [{first}, {second}={"second": first}]}<i data-k="unpacked-pattern">{first}:{second}</i>{/each}
 {#snippet rowed({first}, second=first)}<i data-k="snippet-unpacked">{first}:{second}</i>{/snippet}
 {@render rowed({"first": 1})}
 {#snippet starred([head, *rest], count=len(rest))}<i data-k="snippet-starred">{head}:{count}</i>{/snippet}

@@ -26,6 +26,8 @@ async function broken() {
 {@render row(1)}
 
 {#each [[{ first: 1 }]] as [{ first }, second = first]}<i data-k="unpacked">{first}:{second}</i>{/each}
+{#each [[{ first: 1 }]] as [{ first }, second = first]}<i data-k="unpacked-spelling">{first}:{second}</i>{/each}
+{#each [[{ first: 1 }]] as [{ first }, { second } = { second: first }]}<i data-k="unpacked-pattern">{first}:{second}</i>{/each}
 {#snippet rowed({ first }, second = first)}<i data-k="snippet-unpacked">{first}:{second}</i>{/snippet}
 {@render rowed({ first: 1 })}
 {#snippet starred([head, ...rest], count = rest.length)}<i data-k="snippet-starred">{head}:{count}</i>{/snippet}

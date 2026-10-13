@@ -14,7 +14,13 @@ test.for([
 ])('%s: a default may read a name a row before it unpacks, on a server', ([, Component]) => {
     const { body } = render(Component);
 
-    for (const one of ['unpacked">1:1<', 'snippet-unpacked">1:1<', 'snippet-starred">1:2<']) {
+    for (const one of [
+        'unpacked">1:1<',
+        'unpacked-spelling">1:1<',
+        'unpacked-pattern">1:1<',
+        'snippet-unpacked">1:1<',
+        'snippet-starred">1:2<'
+    ]) {
         expect(body).toContain(`data-k="${one}`);
     }
 });

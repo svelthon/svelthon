@@ -1127,22 +1127,36 @@ function parameterPattern(part, call, names, tuple, unpack) {
         const left = part.slice(0, at);
         const fallback = part.slice(at + 1);
 
-        // **A default that reads a name a row before it unpacks** waits for
-        // it. `[{first}, second=first]` unpacks `first` by key into a
-        // `{@const}` after the pattern, while JavaScript takes the default as
-        // it takes the pattern apart, before: `Cannot access 'first' before
+        // **A default after a row unpacked by key or around a star** waits for
+        // it. `[{first}, second=first]` unpacks `first` into a `{@const}` after
+        // the pattern, while JavaScript takes the default as it takes the
+        // pattern apart, before: `Cannot access 'first' before
         // initialization`, where Svelte's own pattern gives `7|7`. So the
         // element stands under an alias, and its default is a `{@const}` in
         // its turn, taken where the alias is `undefined`, as JavaScript takes
-        // one.
-        if (new RegExp(`^\\s*${NAME}\\s*$`, 'u').test(left) && identifiers(fallback).some((one) => unpack.bound.has(one))) {
+        // one; a target that is a pattern is taken apart from what that holds,
+        // after it.
+        //
+        // Every default after such a row, whatever it reads: what it reads is
+        // a Python expression, whose names are compared the way Python
+        // compares them (`ﬁrst` is `first`) only once compiled, and a default
+        // read in its turn answers the same as one read with the pattern.
+        if (unpack.bound.size > 0) {
             const alias = unpack.alias();
-            const target = left.trim();
+            const before = names.length;
+            const slot = unpack.consts.length;
 
             unpack.aliases.push(alias);
-            unpack.consts.push({ target, missing: alias, fallback });
-            unpack.bound.add(target);
-            names.push(target);
+            unpack.consts.push(null);
+
+            const named = new RegExp(`^\\s*${NAME}\\s*$`, 'u').test(left);
+            const target = named ? left.trim() : parameterPattern(left, call, names, tuple, unpack).trim();
+
+            if (named) names.push(target);
+
+            unpack.consts[slot] = { target, missing: alias, fallback };
+
+            for (const one of names.slice(before)) unpack.bound.add(one);
 
             return `${left.slice(0, left.length - left.trimStart().length)}${alias}`;
         }
