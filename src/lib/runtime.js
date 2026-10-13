@@ -296,6 +296,10 @@ const PYTHON_COMPONENTS = new WeakSet();
 // Each value a block declares, to the revision its readers subscribe to
 // (`__pybridge.state`).
 const BLOCK_STATE = new WeakMap();
+
+// Each snippet from elsewhere, to the function that renders it with its
+// arguments crossed (`__pybridge.snippet`).
+const CROSSING_SNIPPETS = new WeakMap();
 let CROSSING_PAIR = null;
 
 export const __pybridge = {
@@ -582,6 +586,35 @@ export const __pybridge = {
         return value !== null && (typeof value === 'object' || typeof value === 'function') && callable(value)
             ? pyHandler(value)
             : viewOf(value);
+    },
+
+    // The snippet a `{@render}` renders when its spelling does not say whose it
+    // is: an alias, an attribute, a key. One the markup declares, among `owns`,
+    // the ones in scope there, reads its arguments as Python values; any other
+    // comes from elsewhere, maybe JavaScript, and its arguments cross as a
+    // prop's do (`bound`). Decided by the snippet rendered rather than by its
+    // name: `{alias = row}` rendered an `int` where `row` rendered `1.0`.
+    //
+    // One crossing function per snippet, since Svelte renders again when the
+    // function it is handed changes. A browser hands a snippet a read of each
+    // argument, a server the values themselves.
+    snippet(value, owns) {
+        const fn = __pybridge.bound(value);
+
+        if (typeof fn !== 'function' || owns.includes(fn)) return fn;
+
+        let crossing = CROSSING_SNIPPETS.get(fn);
+
+        if (crossing === undefined) {
+            const crossed = (one) => pyNumbers(__pybridge.bound(one));
+            const served = typeof document === 'undefined';
+
+            crossing = (anchor, ...args) =>
+                fn(anchor, ...args.map((one) => (served ? crossed(one) : () => crossed(one()))));
+            CROSSING_SNIPPETS.set(fn, crossing);
+        }
+
+        return crossing;
     },
 
     // A `bind:group` control's `checked`, written by the server, where no action

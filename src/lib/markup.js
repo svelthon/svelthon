@@ -3051,20 +3051,32 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 // the parent, which may be JavaScript: its arguments cross as a
                 // prop's do, a float made a number, None made `undefined` and a
                 // callable adapted.
+                //
+                // Whose it is is told by its name only when the name is one of
+                // the markup's snippets, or when the markup declares none here
+                // and a bare name can only be someone else's. Another name, an
+                // alias, is decided at the render by the snippet itself
+                // (`__pybridge.snippet`), its arguments handed as Python.
                 const called = written.rest.trim();
                 const opens = called.indexOf('(');
                 const closes = opens === -1 ? -1 : closingPair(called, opens);
-                const spelled = opens === -1 ? '' : called.slice(0, opens).replace(/\?\.\s*$/, '').trim();
+                const head = opens === -1 ? '' : called.slice(0, opens);
+                const optional = /\?\.\s*$/.test(head);
+                const spelled = head.replace(/\?\.\s*$/, '').trim();
                 const callee = pythonName(spelled);
-                const ours = snippets.has(callee) && inScope().includes(callee);
+                const named = new RegExp(`^${SHORT_NAME}$`, 'u').test(spelled);
+                const owns = [...snippets].filter((name) => inScope().includes(name));
+                const ours = named && owns.includes(callee);
+                const decided = ours || !named || owns.length === 0;
+                const given = (one) =>
+                    !one.trim() ? one : ours || !decided ? call(one, '', undefined, 'python') : call(one, '__bound');
+                const rendered = decided
+                    ? head.replace(spelled, callee)
+                    : `__pybridge.snippet(${callee}, [${owns.join(', ')}])${optional ? '?.' : ''}`;
 
                 out += closes === -1
                     ? markup.slice(index, end + 1)
-                    : `{@render ${called.slice(0, opens).replace(spelled, callee)}(${arguments_(called.slice(opens + 1, closes))
-                          .map((one) =>
-                              !one.trim() ? one : ours ? call(one, '', undefined, 'python') : call(one, '__bound')
-                          )
-                          .join(', ')})${called.slice(closes + 1)}}`;
+                    : `{@render ${rendered}(${arguments_(called.slice(opens + 1, closes)).map(given).join(', ')})${called.slice(closes + 1)}}`;
             } else if (written !== null && written.name === 'debug') {
                 // `{@debug}` takes names rather than an expression, and the
                 // names it takes are the JavaScript ones the compiler emits.

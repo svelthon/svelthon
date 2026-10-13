@@ -780,10 +780,24 @@ describe('{@render}', () => {
     // other, `children` or a snippet prop, may be JavaScript's and is handed
     // what a prop is.
     test('a snippet the markup declares keeps its arguments Python', () => {
-        const { out, defs } = rewrite('{#snippet row(x)}{x}{/snippet}{@render row(half)}{@render other?.(half)}');
+        const { out } = rewrite('{#snippet row(x)}{x}{/snippet}{@render row(half)}');
 
-        expect(out).toMatch(/\{@render row\(__expr_py_\d+\(\)\)\}\{@render other\?\.\(__expr_\d+\(\)\)\}/);
+        expect(out).toMatch(/\{@render row\(__expr_py_\d+\(\)\)\}$/);
+    });
+
+    test('a name where the markup declares no snippet is handed what a prop is', () => {
+        const { out, defs } = rewrite('{@render other?.(half)}');
+
+        expect(out).toMatch(/^\{@render other\?\.\(__expr_\d+\(\)\)\}$/);
         expect(defs.filter((one) => one.includes('__bound(half)'))).toHaveLength(1);
+    });
+
+    // Beside one, a name may hold it under an alias: the snippet rendered
+    // decides, handed Python values.
+    test('a name beside the markup snippets is decided by the snippet rendered', () => {
+        const { out } = rewrite('{#snippet row(x)}{x}{/snippet}{@render other?.(half)}');
+
+        expect(out).toMatch(/\{@render __pybridge\.snippet\(other, \[row\]\)\?\.\(__expr_py_\d+\(\)\)\}$/);
     });
 
     test('a snippet rendered without arguments crosses whole', () => {

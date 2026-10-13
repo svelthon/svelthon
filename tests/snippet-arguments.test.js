@@ -8,6 +8,8 @@ import SnippetArgsPythonHost from './fixtures/SnippetArgsPythonHost.svelte';
 import SnippetLocalWhole from './fixtures/SnippetLocalWhole.svelte';
 import SnippetAlias from './fixtures/SnippetAlias.svelte';
 import SnippetAliasNative from './fixtures/SnippetAliasNative.svelte';
+import SnippetAliasTypes from './fixtures/SnippetAliasTypes.svelte';
+import SnippetForeignAliasHost from './fixtures/SnippetForeignAliasHost.svelte';
 
 const shown = async (Component, props) => {
     const target = document.body.appendChild(document.createElement('div'));
@@ -60,6 +62,22 @@ test('a snippet rendered through an alias is handed what its name is handed', as
 
 test('the Svelte markup is the rule', async () => {
     expect(await shown(SnippetAliasNative)).toBe('row=true|7|number row=true|7|number');
+});
+
+// And values a JavaScript number cannot carry, which `0.5` above could not
+// tell: the alias was decided by its name, not one of the markup's snippets,
+// and its arguments crossed as a prop's, `1.0` an int and a subclass its base.
+// What the name renders, CPython's `type(1.0)` among them, is the rule.
+test('a snippet rendered through an alias keeps a whole float and subclasses', async () => {
+    expect(await shown(SnippetAliasTypes)).toBe(
+        'row=float:1.0 row=float:1.0 row=Price:0.5 row=Price:0.5 row=Label:a row=Label:a'
+    );
+});
+
+// The other half, which the same decision must keep: a snippet the parent gave,
+// under an alias beside the markup's own, is still the parent's.
+test('a snippet a JavaScript parent gave, through an alias, is handed a number', async () => {
+    expect(await shown(SnippetForeignAliasHost)).toBe('own=float:1.0 parent=number:0.50');
 });
 
 // A Python parent's snippet rendered by a Python child still reads Python
