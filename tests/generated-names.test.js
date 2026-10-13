@@ -41,6 +41,9 @@ const MARKUP_LOCAL = new Set([
     // What a snippet's announcement hands back, its parameters read by
     // position on a server.
     '__snippet_',
+    // The plain parameter Svelte hands a snippet's argument by, one per
+    // position, which the snippet takes apart itself.
+    '__argument_',
     // The index an `{#each}` is given for a `bind:group` inside it, which
     // Svelte declares.
     '__index_',

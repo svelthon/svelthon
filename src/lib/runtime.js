@@ -640,9 +640,10 @@ export const __pybridge = {
         return crossing;
     },
 
-    // What a snippet a Python markup declares does first of all: it says so,
-    // and on a server, called by a crossing, takes back the values it was
-    // handed before they crossed, which its parameters read by position.
+    // What a snippet a Python markup declares does first of all, before it
+    // takes its arguments apart: it says so, and on a server, called by a
+    // crossing, takes back the values it was handed before they crossed, which
+    // its parameters read by position (`param`).
     pythonSnippet(fn) {
         PYTHON_SNIPPETS.add(fn);
 
@@ -692,11 +693,20 @@ export const __pybridge = {
 
     // A value handed into Python by a door that may be JavaScript's, a context
     // or a snippet's parameter: read as `pyBind` reads every door's, a
-    // function as `functionIn` takes it and a view its container. A
-    // parameter a server's crossing handed a Python snippet is the value it
-    // was given, kept by its announcement (`pythonSnippet`) at its position.
-    received(value, served = null, at = 0) {
-        return served !== null && at < served.length ? served[at] : pyBind(value);
+    // function as `functionIn` takes it and a view its container.
+    received(value) {
+        return pyBind(value);
+    },
+
+    // The argument at a position of a snippet a Python markup declares, which
+    // the snippet takes apart itself (`snippetParameters`): the value a
+    // server's crossing kept for it before crossing, which its announcement took
+    // back, or what the call handed it, read as every door's is; its default
+    // when nothing was handed, as Svelte reads one on `undefined`.
+    param(value, served, at, fallback) {
+        const given = served !== null && at < served.length ? served[at] : value;
+
+        return given === undefined && fallback !== undefined ? fallback() : pyBind(given);
     },
 
     // `set_context` and `get_context`. A scalar is set as JavaScript's own, for

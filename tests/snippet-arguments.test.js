@@ -16,6 +16,8 @@ import SnippetCallee from './fixtures/SnippetCallee.svelte';
 import SnippetCalleeNative from './fixtures/SnippetCalleeNative.svelte';
 import SnippetPythonParent from './fixtures/SnippetPythonParent.svelte';
 import SnippetPythonChildHost from './fixtures/SnippetPythonChildHost.svelte';
+import SnippetPythonParentShapes from './fixtures/SnippetPythonParentShapes.svelte';
+import SnippetPythonChildShapesHost from './fixtures/SnippetPythonChildShapesHost.svelte';
 
 const shown = async (Component, props) => {
     const target = document.body.appendChild(document.createElement('div'));
@@ -119,6 +121,20 @@ test('the Svelte markup is the rule for callees', async () => {
 test.for(['bare', 'alias', 'dict'])('a Python parent snippet a Python child renders %s keeps its values', async (kind) => {
     expect(await shown(SnippetPythonParent, { kind })).toBe('parent=float:1.0|Price|Label');
     expect(await shown(SnippetPythonChildHost, { kind })).toBe('parent=number:1|number|string');
+});
+
+// And a snippet that takes its arguments apart, by a pattern or a default read
+// off the parameters before it, rendered first by the child: Svelte took them
+// apart before the snippet could say it was Python's (at once, in development),
+// and they had crossed. It takes them apart itself now, after saying so.
+test('a Python parent snippet taking its arguments apart keeps their values', async () => {
+    expect(await shown(SnippetPythonParentShapes, { shape: 'pattern' })).toBe('parent=float:1.0|Price|Label');
+    expect(await shown(SnippetPythonParentShapes, { shape: 'default' })).toBe('parent=float|Price|Label');
+});
+
+test('a JavaScript parent snippet taking its arguments apart is handed JavaScript values', async () => {
+    expect(await shown(SnippetPythonChildShapesHost, { shape: 'pattern' })).toBe('parent=number:1|number|string');
+    expect(await shown(SnippetPythonChildShapesHost, { shape: 'default' })).toBe('parent=number|number|string');
 });
 
 // A Python parent's snippet rendered by a Python child still reads Python

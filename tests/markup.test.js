@@ -655,7 +655,8 @@ describe('the blocks that declare names', () => {
     test('{#snippet} declares its parameters and holds no expression', () => {
         const { out, defs } = rewrite('{#snippet row(item, index)}<li>{item}</li>{/snippet}');
 
-        expect(out).toContain('{#snippet row(item, index)}');
+        expect(out).toContain('{#snippet row(__argument_0, __argument_1)}');
+        expect(out).toContain('{@const item = __pybridge.param(__argument_0, __snippet_0, 0)}');
 
         // Its own name comes first: it lives in the scope that encloses the
         // block, and an enclosing scope reaches into it.
@@ -818,14 +819,15 @@ describe('{@render}', () => {
         expect(rewrite('{@render row()}').out).toBe('{@render __pybridge.snippet(row, [])()}');
     });
 
-    // A snippet this markup declares says it is Python's first of all, and its
-    // parameters are read with their position, which a server rendering it
-    // from another Python component fills.
-    test('a snippet the markup declares announces itself, and reads its parameters by position', () => {
-        const { out } = rewrite('{#snippet row(x, y=1)}{y}{/snippet}');
+    // A snippet this markup declares says it is Python's first of all, and only
+    // then takes its arguments apart, by position, a pattern and a default
+    // included: Svelte is handed plain parameters and reads none of them first.
+    test('a snippet the markup declares announces itself, then takes its arguments apart', () => {
+        const { out } = rewrite('{#snippet row([x, z], y=1)}{y}{/snippet}');
 
-        expect(out).toContain('{let __snippet_0 = __pybridge.pythonSnippet(row)}');
-        expect(out).toContain('__pybridge.received(y, __snippet_0, 1)');
+        expect(out).toMatch(
+            /^\{#snippet row\(__argument_0, __argument_1\)\}\{let __snippet_0 = __pybridge\.pythonSnippet\(row\)\}\{@const \[x, z\] = __pybridge\.param\(__argument_0, __snippet_0, 0\)\}\{@const y = __pybridge\.param\(__argument_1, __snippet_0, 1, \(\) => __expr_lazy_\d+\(/
+        );
     });
 
     // The names it takes are the JavaScript ones the compiler emits, not Python
