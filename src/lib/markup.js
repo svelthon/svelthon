@@ -105,6 +105,34 @@ function atTopLevel(text, visit) {
     return -1;
 }
 
+// The call a `{@render}` makes, `callee(arguments)`: the last group at top
+// level, when it closes the expression. The first parenthesis is not it:
+// `(first)(1.0)` groups its callee, and `pick(a, b)(1.0)` calls a factory
+// first. Null for anything else, which Svelte refuses in its own words.
+function renderedCall(text) {
+    let depth = 0;
+    let last = -1;
+
+    for (let i = 0; i < text.length; i++) {
+        const skip = atomic(text, i);
+
+        if (skip > 0) {
+            i += skip - 1;
+            continue;
+        }
+
+        const c = text[i];
+
+        if (c === '(' && depth === 0) last = i;
+        if (c === '(' || c === '[' || c === '{') depth++;
+        else if (c === ')' || c === ']' || c === '}') depth--;
+    }
+
+    return last > 0 && closingPair(text, last) === text.length - 1
+        ? { head: text.slice(0, last), args: text.slice(last + 1, -1) }
+        : null;
+}
+
 // `f(a, b)` → ['a', 'b'], with a comma inside a literal or a call left alone.
 function arguments_(text) {
     const parts = [];
@@ -3042,8 +3070,9 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 out += `{@html ${call(written.rest, '__text')}}`;
             } else if (holds('render')) {
                 // The snippet itself is a JavaScript function and stays one.
-                // Arguments are split at depth zero, so a comma inside a call or
-                // a literal stays put.
+                // Its call is the last group of the expression (`renderedCall`),
+                // and its arguments are split at depth zero, so a comma inside a
+                // call or a literal stays put.
                 //
                 // What it is *given* depends on whose snippet it is. One this
                 // markup declares is Python, and reads its arguments as Python
@@ -3060,10 +3089,8 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 // Python. And a callee that is not a bare name is a Python
                 // expression, read as Python reads it: `holder.fn` is an
                 // attribute, not a JavaScript property.
-                const called = written.rest.trim();
-                const opens = called.indexOf('(');
-                const closes = opens === -1 ? -1 : closingPair(called, opens);
-                const head = opens === -1 ? '' : called.slice(0, opens);
+                const found = renderedCall(written.rest.trim());
+                const head = found === null ? '' : found.head;
                 const optional = /\?\.\s*$/.test(head);
                 const spelled = head.replace(/\?\.\s*$/, '').trim();
                 const callee = pythonName(spelled);
@@ -3077,9 +3104,9 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                     ? head.replace(spelled, callee)
                     : `__pybridge.snippet(${named ? callee : call(spelled, '', undefined, 'python')}, [${owns.join(', ')}])${optional ? '?.' : ''}`;
 
-                out += closes === -1
+                out += found === null
                     ? markup.slice(index, end + 1)
-                    : `{@render ${rendered}(${arguments_(called.slice(opens + 1, closes)).map(given).join(', ')})${called.slice(closes + 1)}}`;
+                    : `{@render ${rendered}(${arguments_(found.args).map(given).join(', ')})}`;
             } else if (written !== null && written.name === 'debug') {
                 // `{@debug}` takes names rather than an expression, and the
                 // names it takes are the JavaScript ones the compiler emits.

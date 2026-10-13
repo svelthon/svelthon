@@ -12,6 +12,8 @@ import SnippetAliasTypes from './fixtures/SnippetAliasTypes.svelte';
 import SnippetForeignAliasHost from './fixtures/SnippetForeignAliasHost.svelte';
 import SnippetAttribute from './fixtures/SnippetAttribute.svelte';
 import SnippetAttributeNative from './fixtures/SnippetAttributeNative.svelte';
+import SnippetCallee from './fixtures/SnippetCallee.svelte';
+import SnippetCalleeNative from './fixtures/SnippetCalleeNative.svelte';
 
 const shown = async (Component, props) => {
     const target = document.body.appendChild(document.createElement('div'));
@@ -92,6 +94,20 @@ test('a snippet held by an attribute renders as Svelte renders it', async () => 
 
 test('the Svelte markup is the rule for attributes', async () => {
     expect(await shown(SnippetAttributeNative)).toBe('raw=ok raw=ok raw=ok own=number:1');
+});
+
+// The call is the last group of the expression, not its first parenthesis: a
+// grouped callee was read as an empty one, and a factory's own call as the
+// render's, its arguments left JavaScript (`True` was undefined) or crossed.
+// What Svelte renders is the rule, CPython's `type(1.0)` and `True` beside it.
+test('a snippet reached by a grouped, chosen or returned callee is handed Python values', async () => {
+    expect(await shown(SnippetCallee)).toBe('first=float:1.0 first=float:1.0 first=float:1.0 first=bool:True');
+});
+
+test('the Svelte markup is the rule for callees', async () => {
+    expect(await shown(SnippetCalleeNative)).toBe(
+        'first=number:1 first=number:1 first=number:1 first=boolean:true'
+    );
 });
 
 // A Python parent's snippet rendered by a Python child still reads Python

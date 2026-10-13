@@ -803,6 +803,19 @@ describe('{@render}', () => {
         );
     });
 
+    // The call is the last group, not the first parenthesis: a grouped callee
+    // and a factory's call are the callee, compiled whole, and what follows them
+    // are the arguments, Python too.
+    test('a grouped callee and a factory are read whole, and the last group is the call', () => {
+        const { out, defs } = rewrite('{@render (first)(x)}{@render pick(a, b)(True)}');
+
+        expect(out).toMatch(
+            /^\{@render __pybridge\.snippet\(__expr_py_\d+\(\), \[\]\)\(__expr_py_\d+\(\)\)\}\{@render __pybridge\.snippet\(__expr_py_\d+\(\), \[\]\)\(__expr_py_\d+\(\)\)\}$/
+        );
+        expect(defs.some((one) => one.includes('pick(a, b)'))).toBe(true);
+        expect(defs.some((one) => one.includes('True'))).toBe(true);
+    });
+
     test('a snippet rendered without arguments crosses whole', () => {
         expect(rewrite('{@render row()}').out).toBe('{@render row()}');
     });
