@@ -25,6 +25,12 @@ async function broken() {
 {#snippet row(j, k = j)}<i data-k="snippet">{j}:{k}</i>{/snippet}
 {@render row(1)}
 
+{#each [[{ first: 1 }]] as [{ first }, second = first]}<i data-k="unpacked">{first}:{second}</i>{/each}
+{#snippet rowed({ first }, second = first)}<i data-k="snippet-unpacked">{first}:{second}</i>{/snippet}
+{@render rowed({ first: 1 })}
+{#snippet starred([head, ...rest], count = rest.length)}<i data-k="snippet-starred">{head}:{count}</i>{/snippet}
+{@render starred([1, 2, 3])}
+
 {#each [{ A: 42 }] as {[field.toUpperCase()]: got}}<i data-k="key">{got}</i>{/each}
 
 {#snippet keyed({[field.toUpperCase()]: got})}<i data-k="snippet-key">{got}</i>{/snippet}

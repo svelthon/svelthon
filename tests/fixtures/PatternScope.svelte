@@ -25,6 +25,14 @@ async def broken():
 {#snippet row(j, k=j)}<i data-k="snippet">{j}:{k}</i>{/snippet}
 {@render row(1)}
 
+<!-- A default reading a name a row before it unpacks by key or around a star,
+     in a target and in a snippet's parameters. -->
+{#each [[{"first": 1}]] as [{first}, second=first]}<i data-k="unpacked">{first}:{second}</i>{/each}
+{#snippet rowed({first}, second=first)}<i data-k="snippet-unpacked">{first}:{second}</i>{/snippet}
+{@render rowed({"first": 1})}
+{#snippet starred([head, *rest], count=len(rest))}<i data-k="snippet-starred">{head}:{count}</i>{/snippet}
+{@render starred([1, 2, 3])}
+
 <!-- The other place a pattern holds an expression: a computed key. Its names
      are read, never bound, so `field` stays the module's. -->
 {#each [{"A": 42}] as {[field.upper()]: got}}<i data-k="key">{got}</i>{/each}

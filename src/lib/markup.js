@@ -1124,9 +1124,32 @@ function parameterPattern(part, call, names, tuple, unpack) {
     // itself, so the left half goes back through this walk rather than to
     // `identifiers`.
     if (at !== -1) {
-        const target = parameterPattern(part.slice(0, at), call, names, tuple, unpack);
+        const left = part.slice(0, at);
+        const fallback = part.slice(at + 1);
 
-        return `${target}= ${call(part.slice(at + 1), '', undefined, 'lazy')}`;
+        // **A default that reads a name a row before it unpacks** waits for
+        // it. `[{first}, second=first]` unpacks `first` by key into a
+        // `{@const}` after the pattern, while JavaScript takes the default as
+        // it takes the pattern apart, before: `Cannot access 'first' before
+        // initialization`, where Svelte's own pattern gives `7|7`. So the
+        // element stands under an alias, and its default is a `{@const}` in
+        // its turn, taken where the alias is `undefined`, as JavaScript takes
+        // one.
+        if (new RegExp(`^\\s*${NAME}\\s*$`, 'u').test(left) && identifiers(fallback).some((one) => unpack.bound.has(one))) {
+            const alias = unpack.alias();
+            const target = left.trim();
+
+            unpack.aliases.push(alias);
+            unpack.consts.push({ target, missing: alias, fallback });
+            unpack.bound.add(target);
+            names.push(target);
+
+            return `${left.slice(0, left.length - left.trimStart().length)}${alias}`;
+        }
+
+        const target = parameterPattern(left, call, names, tuple, unpack);
+
+        return `${target}= ${call(fallback, '', undefined, 'lazy')}`;
     }
 
     // The spacing the author wrote is theirs, and only the middle is rebuilt.
@@ -1343,10 +1366,15 @@ function unpackByKey(inside, call, names, tuple, unpack) {
 
 // The `{@const}` lines a declaration list unpacks into, compiled once every
 // name of the block is in scope. A default goes through `lazy`, so a later key
-// it reads is read only when the default is taken.
+// it reads is read only when the default is taken; one an element waited for
+// is taken where its alias is `undefined` (`parameterPattern`).
 const unpacked = (unpack, call) =>
     unpack.consts
-        .map(({ target, read, source, lazy }) => `{@const ${target} = ${call(read, '', source, lazy ? 'lazy' : 'python')}}`)
+        .map(({ target, read, source, lazy, missing, fallback }) =>
+            missing === undefined
+                ? `{@const ${target} = ${call(read, '', source, lazy ? 'lazy' : 'python')}}`
+                : `{@const ${target} = ${missing} === undefined ? ${call(fallback, '', undefined, 'lazy')} : ${missing}}`
+        )
         .join('');
 
 // The names a declaration binds, read without compiling anything.
@@ -1428,22 +1456,30 @@ function snippetParameters(trimmed, declare, call, refuse, frame) {
     const given = [];
     const reads = [];
 
+    // **Each position read and unpacked before the next**, as JavaScript reads
+    // a parameter list: a default reads the names the parameters before it
+    // bound, `({first}, second=first)` the `first` of the row before it, which
+    // a row unpacked after every read had not bound yet.
     parts.forEach((part, at) => {
         // What follows a trailing comma, `(a, b,)`: no parameter.
         if (part.trim() === '') return;
 
         const argument = `${SNIPPET_ARGUMENT}${at}`;
         const equals = atTopLevel(part, (i) => part[i] === '=');
+        const from = unpack.consts.length;
         const target = parameterPattern(equals === -1 ? part : part.slice(0, equals), call, [], false, unpack).trim();
         const fallback = equals === -1 ? '' : `, () => ${call(part.slice(equals + 1), '', undefined, 'lazy')}`;
 
         given.push(argument);
-        reads.push(`{@const ${target} = __pybridge.param(${argument}, ${frame}, ${at}${fallback})}`);
+        reads.push(
+            `{@const ${target} = __pybridge.param(${argument}, ${frame}, ${at}${fallback})}` +
+                unpacked({ consts: unpack.consts.slice(from) }, call)
+        );
     });
 
     return (
         `${name}(${given.join(', ')})${trimmed.slice(close + 1)}}` +
-        `{let ${frame} = __pybridge.pythonSnippet(${name})}${reads.join('')}${unpacked(unpack, call)}`
+        `{let ${frame} = __pybridge.pythonSnippet(${name})}${reads.join('')}`
     );
 }
 

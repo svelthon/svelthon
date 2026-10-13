@@ -88,9 +88,25 @@ describe('what a destructuring default may read', () => {
             'reads-index': '0:0',
             nested: '1:1',
             snippet: '1:1',
+            unpacked: '1:1',
+            'snippet-unpacked': '1:1',
+            'snippet-starred': '1:2',
             key: '42',
             'snippet-key': '7',
             literal: 'total:0'
+        });
+    });
+
+    // **A default reading a name a row before it unpacks**, by key or around a
+    // star: those names are bound by `{@const}` after the pattern, and the
+    // default was taken with the pattern, before, so the component did not mount
+    // (`Cannot access 'first' before initialization`). The server half is in
+    // `pattern-scope-ssr.test.js`.
+    test('a default may read a name a row before it unpacks', () => {
+        expect(rendered(PatternScope)).toMatchObject({
+            unpacked: '1:1',
+            'snippet-unpacked': '1:1',
+            'snippet-starred': '1:2'
         });
     });
 
