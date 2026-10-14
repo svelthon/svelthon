@@ -1987,12 +1987,33 @@ const pyFunction = (value) => typeof value === 'function' && quietPyType(value) 
 // What a watch may reach: an object, or a Python function.
 const watchable = (value) => value !== null && (typeof value === 'object' || pyFunction(value));
 
+// A tuple changes only through what it holds: one holding nothing that can
+// change, `(0, 0)` or `("a", (1, 2))`, has nothing to watch. Watched, it
+// gathered as parents every container it was put in, which each read of it
+// climbed: an option value shared by a thousand rows cost a thousand links per
+// read. Asked once of each tuple, whose items never change. A subclass may
+// hold attributes, and is watched as an instance is.
+const STILL_TUPLES = new WeakMap();
+
+function stillTuple(value) {
+    if (quietPyType(value) !== _b_.tuple) return false;
+
+    let still = STILL_TUPLES.get(value);
+
+    if (still === undefined) {
+        still = !value.some(mutable);
+        STILL_TUPLES.set(value, still);
+    }
+
+    return still;
+}
+
 // Only a container can be mutated in place; a scalar propagates by rebinding,
 // which the accessor already handles.
 function mutable(value) {
     if (pyFunction(value)) return true;
     if (value === null || value === undefined || typeof value !== 'object') return false;
-    if (Array.isArray(value)) return true; // list, and a tuple is one too
+    if (Array.isArray(value)) return !stillTuple(value); // list, and a tuple is one too
     if (value === NONE) return false; // a singleton shared by the whole program
 
     try {
