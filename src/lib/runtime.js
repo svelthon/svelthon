@@ -59,6 +59,18 @@ const raised = (error) =>
     pyClass(ownType(error)) &&
     error.__traceback__ !== undefined;
 
+// The items of an array read by index into a plain array, each through `fn`, as
+// Svelte and Python read them: whatever the array holds as data, a `map`, a
+// `constructor` or a species of its own, which the standard methods would ask
+// for the copy they make.
+function byIndex(array, fn = (one) => one) {
+    const out = [];
+
+    for (let at = 0; at < array.length; at++) out.push(fn(array[at]));
+
+    return out;
+}
+
 // An array-shaped Python value, as *its class* says it iterates.
 //
 // A Brython list is a JavaScript array, so anywhere this file walks elements it
@@ -244,7 +256,7 @@ function keyText(value) {
     // `__iter__` a subclass redefines: that says what iterating yields, not
     // what the value is.
     if (mro.includes(_b_.tuple)) {
-        const members = Array.prototype.slice.call(value).map(keyText);
+        const members = byIndex(value, keyText);
         return `(${members.join(', ')}${members.length === 1 ? ',' : ''})`;
     }
     if (mro.includes(_b_.frozenset)) {
@@ -430,9 +442,9 @@ export const __pybridge = {
         // The names the list yields, which for a subclass with its own
         // `__iter__` are not the ones it stores: the loop beside it reads the
         // same ones. A set is the natural type for a set of classes, and is
-        // read the same way.
+        // read the same way. Read by index into a plain array (`byIndex`).
         if (Array.isArray(value) || isSet(value)) {
-            return iterated(value)
+            return byIndex(iterated(value))
                 .filter((one) => __pybridge.truthy(one))
                 .map((one) => __pybridge.klass(one));
         }
@@ -6859,14 +6871,15 @@ const choice = (value) => {
 
 // What Svelte compares crosses into JavaScript as everything else does: a value
 // that is a number is its number, a NaN and an instance of a subclass of float,
-// int or str among them, as a JavaScript child is handed it. A None among a
-// list's items, which its view reads as `null`, is the `undefined` an option's
-// None is (`bound`).
+// int or str among them, as a JavaScript child is handed it. A list's items are
+// read by index, as Svelte's `includes` reads them (`byIndex`); a None among
+// them, which a list's view reads as `null`, is the `undefined` an option's None
+// is (`bound`).
 const item = (one) => (one === null ? undefined : scalarOnly(one));
 
 const COMPARED = {
     scalar: scalarOnly,
-    selection: (value) => (Array.isArray(value) ? value.map(item) : scalarOnly(value)),
+    selection: (value) => (Array.isArray(value) ? byIndex(value, item) : scalarOnly(value)),
     choice
 };
 

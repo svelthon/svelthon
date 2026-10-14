@@ -433,6 +433,13 @@ export function from_json(text) {
     return parseJson(text);
 }
 
+// The items of a sequence as Python's loop yields them, read once (`seq`) into
+// an array of the helper's own: a subclass whose `__iter__` filters or rewrites
+// its rows is read by it, and a JavaScript array by its iterator, never through
+// a `slice`, a `constructor` or a species it holds as data, which the standard
+// methods would ask for the copy they make.
+const yielded = (value) => Array.from(__pybridge.seq(value));
+
 // Jinja's `|batch(3)`. A list of lists, not a lazy iterator: an `{#each}` reads
 // its rows again on every update, and an iterator would come back empty the
 // second time, silently, with the table simply gone.
@@ -453,7 +460,7 @@ export function batch(xs, size, fill) {
         throw refuse('batch(): n must be an integer of at least one');
     }
 
-    const items = __pybridge.seq(xs);
+    const items = yielded(xs);
     const padded = fill !== undefined && fill !== NONE;
 
     // A padded row holds `size` items, which no JavaScript array can past this.
@@ -694,13 +701,11 @@ export function urlencode(value) {
     // key twice: `dict(pairs)` keeps the last `tag`.
     //
     // The pairs are what Python's loop yields, of the sequence and of each
-    // pair, read once (`seq`): a subclass whose `__iter__` filters or rewrites
-    // its rows is read by it, and what it raises reaches the template. Read
-    // from the storage, the link carried the filters the class no longer
-    // yields. A mapping's are its `items()`, which is what CPython asks of it
+    // pair (`yielded`), and what it raises reaches the template. Read from the
+    // storage, the link carried the filters a class no longer yields. A
+    // mapping's are its `items()`, which is what CPython asks of it
     // (`pyItems`), for the same reason.
-    const walked = (one) => Array.from(__pybridge.seq(one));
-    const rows = Array.isArray(value) ? walked(value).map((one) => (Array.isArray(one) ? walked(one) : one)) : null;
+    const rows = Array.isArray(value) ? yielded(value).map((one) => (Array.isArray(one) ? yielded(one) : one)) : null;
     const entries = mapping(value)
         ? pyItems(value, unpackedPair)
         : rows !== null && rows.every((one) => Array.isArray(one) && one.length === 2)
