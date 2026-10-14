@@ -1204,7 +1204,7 @@ test('class frames, layouts and search bounds answer as in CPython: class-frame-
 // storage of a list subclass instead of its __iter__. dict() and bytes() read a
 // JavaScript array's storage too: a pair of floats made a key no float found,
 // and bytes() of a float made a byte of it.
-test('dicts and list subclasses answer as in CPython: dict-has-own-property-key, dict-literal-big-hash, dict-str-key-removed, dict-lookup-after-popitem, list-subclass-iter, min-max-subclass-iter, dict-pair-subclass-iter, bytes-subclass-iter', async () => {
+test('dicts and list subclasses answer as in CPython: dict-has-own-property-key, attribute-has-own-property, dict-literal-big-hash, dict-str-key-removed, dict-lookup-after-popitem, list-subclass-iter, min-max-subclass-iter, dict-pair-subclass-iter, bytes-subclass-iter', async () => {
     const { answers, from_javascript } = await import('./fixtures/dicts_and_subclass_iteration.py');
 
     expect([...answers()]).toEqual([

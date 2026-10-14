@@ -1,7 +1,7 @@
 # Patches applied to the vendored Brython
 
 `brython_runtime.js` and `brython_compiler.js` are cut from one bundle, built
-from Brython's master of 11 September 2026 plus one hundred and forty-five proposed commits
+from Brython's master of 11 September 2026 plus one hundred and forty-six proposed commits
 (`metaclass-getattribute-args`, `iterator-setstate` and `getitem-binding` in two, as amended for their PRs) and four merged
 upstream since (#3022, #2996, #2989, #2982), with **four** edits
 made in the file itself afterwards. The wrapper, the integer format and the
@@ -128,7 +128,8 @@ written against:
 | `super-type-no-instance` | a `super()` whose second argument is its own start type hands what it finds no instance: `super(C, C).prop` is the property, where its getter ran with the class as `self`, `super(C, C).method` the function, where it was bound to the class, and `super(C, C).__dict__` the descriptor. On `init-subclass-classmethod`, which the class statement's own `super()` call relied on |
 | `slots-no-dict-descriptor` | a class whose `__slots__` leave out `'__dict__'` gets no `__dict__` descriptor, so its instance raises `AttributeError` for `__dict__`, where it answered a JavaScript `undefined` |
 | `vars-dict-attribute` | `vars(obj)` reads the `__dict__` attribute, where it read the engine's dictionary: `vars(C)` of a class is its mappingproxy, where it was a dict anyone could write the class through, and a read of a class's names through `vars()` is a read Svelthon follows. On `slots-no-dict-descriptor`, without which `vars()` of a slotted instance answered `undefined` |
-| `dict-has-own-property-key` | a dict asks its own properties through `Object.hasOwn`, where `self.hasOwnProperty(key)` called the value of a key `"hasOwnProperty"` and raised a JavascriptError, a class, an instance and a function with such an attribute included |
+| `dict-has-own-property-key` | a dict asks its own properties through `Object.hasOwn`, where `self.hasOwnProperty(key)` called the value of a key `"hasOwnProperty"` and raised a JavascriptError, a class with such an attribute included |
+| `attribute-has-own-property` | an attribute lookup asks the instance's dict through `Object.hasOwn`, where `own_dict.hasOwnProperty(attr)` raised for an instance or a function holding an attribute `hasOwnProperty`. On `dict-has-own-property-key`, through which the attribute is written |
 | `dict-literal-big-hash` | the hash the compiler writes for a constant key of a dict display is a BigInt when it is one, where it was written as a number rounded past 2 ** 53: `{1.5: 2.5}[1.5]` raised KeyError |
 | `dict-str-key-removed` | a str key taken out of a dict that has other keys, by `del`, `pop()` or `popitem()`, leaves the property it was also stored as, where `get()` still found it |
 | `dict-lookup-after-popitem` | a lookup that meets the entry `popitem()` left in its bucket removes it by its index, where it spliced an undeclared `i` and raised a JavascriptError, `3 in d` after `d.popitem()` |
@@ -264,7 +265,7 @@ than by a build-time check, and going upstream retires none of them:
 | a class statement that raises leaves its frame, `__slots__` asks for a `__dict__` against the base that sets the layout, the slot markers do not fix a layout, and a bytes search lets an `__index__` error through (branches `class-frame-left`, `slots-marker-redeclared`, `solid-base-slot-markers`, `bytes-search-bounds`) | `tests/vendor.test.js`, each answer computed apart |
 | a method-wrapper compares and hashes by its function and its receiver (master's `e2e990dd6`, #2989) | `tests/vendor.test.js`, and `tests/method-identity.test.js`, `box.__setattr__` read twice through the runtime's wrapper |
 | the `__dict__` attribute is read as Python reads it, through `vars()`, on a slotted instance and through `super(C, C)`, and `__init_subclass__` is a classmethod (branches `init-subclass-classmethod`, `super-type-no-instance`, `slots-no-dict-descriptor`, `vars-dict-attribute`) | `tests/vendor.test.js`, and `tests/oracle-attributes.test.js`, the model and the page held against CPython |
-| a dict keyed by `"hasOwnProperty"` and an attribute of that name answer, a float key of a dict display is found, a str key taken out of a dict with other keys is gone, a lookup after `popitem()` finds what is there, and `list()`, `max()`, `dict()` and `bytes()` iterate a list subclass (branches `dict-has-own-property-key`, `dict-literal-big-hash`, `dict-str-key-removed`, `dict-lookup-after-popitem`, `list-subclass-iter`, `min-max-subclass-iter`, `dict-pair-subclass-iter`, `bytes-subclass-iter`) | `tests/vendor.test.js`, each answer computed apart |
+| a dict keyed by `"hasOwnProperty"` and an attribute of that name answer, a float key of a dict display is found, a str key taken out of a dict with other keys is gone, a lookup after `popitem()` finds what is there, and `list()`, `max()`, `dict()` and `bytes()` iterate a list subclass (branches `dict-has-own-property-key`, `attribute-has-own-property`, `dict-literal-big-hash`, `dict-str-key-removed`, `dict-lookup-after-popitem`, `list-subclass-iter`, `min-max-subclass-iter`, `dict-pair-subclass-iter`, `bytes-subclass-iter`) | `tests/vendor.test.js`, each answer computed apart |
 
 `scripts/browser-check.sh` covers the DOM node path as well, which is where
 identity across the boundary is observable.
