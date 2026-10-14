@@ -1481,9 +1481,10 @@ const componentWrapper = (f) => (f.name.startsWith(EXPR_PREFIX) ? '__pyExpressio
 // default inside a pattern (`lazy_`). Their value is handed back as it is.
 const KEPT_PYTHON = /^__expr_(?:py|lazy)_/;
 // An expression whose value a binding compares, named by how: `scalar_`, a
-// container keeping its identity and a scalar made JavaScript's, and
-// `selection_`, the list of a `<select multiple>`, item by item.
-const COMPARED = /^__expr_(scalar|selection)_/;
+// container keeping its identity and a scalar made JavaScript's,
+// `selection_`, the list of a `<select multiple>`, item by item, and
+// `choice_`, the value of a control a `bind:group` binds.
+const COMPARED = /^__expr_(scalar|selection|choice)_/;
 // The write half of a binding, `set_`, which an input event calls and not the
 // render.
 const WRITES = /^__expr_set_/;
@@ -3329,6 +3330,8 @@ function injectedBindings(c) {
                   `__bind(__proto, '__class', () => __pybridge.klass);`,
                   // A handler in a spread is adapted as one written by name.
                   `__bind(__proto, '__spreadElement', () => (value) => __pybridge.spreadElement(value, __event));`,
+                  // And on a control a `bind:group` binds, its `value` as the group reads it.
+                  `__bind(__proto, '__spreadChoice', () => (value) => __pybridge.spreadElement(value, __event, true));`,
                   `__bind(__proto, '__spread', () => __pybridge.spread);`,
                   `__bind(__proto, '__spreadPython', () => __pybridge.spreadPython);`,
                   `__bind(__proto, '__bound', () => __pybridge.bound);`,

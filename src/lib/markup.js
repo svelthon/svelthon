@@ -2171,6 +2171,9 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     //             is, so an option finds its select and a group its list.
     //   'selection' the read of a `<select multiple>`'s binding: the same, item
     //             by item, for the list whose items meet the options' values.
+    //   'choice'  the `value` of a control a `bind:group` binds, which only the
+    //             group reads, as Python does: the same, save a value only
+    //             itself is equal to, which the group gets back as it is.
     // `bound` names the block's names the expression binds for itself, which
     // are therefore not handed in: the key of an `{#each}`, see `eachKey`.
     const call = (expr, wrapper, source = expr, kind = '', bound = []) => {
@@ -2233,7 +2236,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     //
     // A lone interpolation keeps its typed value. A value with no interpolation
     // is left to the node: it is static text and nothing can move it.
-    const quotedValue = (text, quote) => {
+    const quotedValue = (text, quote, kind = '') => {
         const pieces = [];
         let at = 0;
         let literal = 0;
@@ -2258,7 +2261,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         if (literal < text.length) pieces.push({ literal: text.slice(literal) });
 
         if (!pieces.some((one) => one.expression !== undefined)) return 'undefined';
-        if (pieces.length === 1) return call(pieces[0].expression, '');
+        if (pieces.length === 1) return call(pieces[0].expression, '', undefined, kind);
 
         return pieces
             .map((one) =>
@@ -2413,12 +2416,16 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         // range a second time, the two texts being the same.
         region = null;
 
+        // The value stays the Python one, which the group compares as Python
+        // does: the attribute makes it a JavaScript scalar for the DOM, and a
+        // NaN, or an instance of a subclass of float, int or str, is then
+        // another value.
         const value =
             found === null
                 ? 'undefined'
                 : found.braced
-                  ? call(markup.slice(found.start, found.end), '')
-                  : quotedValue(markup.slice(found.start, found.end), markup[found.start - 1]);
+                  ? call(markup.slice(found.start, found.end), '', undefined, 'python')
+                  : quotedValue(markup.slice(found.start, found.end), markup[found.start - 1], 'python');
 
         region = outer;
 
@@ -2592,13 +2599,18 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         //
         // A `value` is what a binding compares by identity, an `<option>`
         // against its `<select>`, so a container keeps its own, and a scalar
-        // is still compared by value.
+        // is still compared by value. The `value` of a control a `bind:group`
+        // binds is read by the group alone, which compares it as Python does
+        // (`choice`).
         //
         if (heldChild() !== null) {
             return `{${forChild(call(inner, '__bound', undefined, 'python'), name === 'value' ? 'scalar' : '')}}`;
         }
 
-        return `{${call(inner, '__bound', undefined, toPythonChild() ? 'python' : name === 'value' ? 'scalar' : '')}}`;
+        const grouped = !isComponent(tag) && tag !== null && tagNames(markup, tag.start).has('bind:group');
+        const kind = toPythonChild() ? 'python' : name !== 'value' ? '' : grouped ? 'choice' : 'scalar';
+
+        return `{${call(inner, '__bound', undefined, kind)}}`;
     };
 
     const refuseLet = (name) => {
@@ -2811,15 +2823,22 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                         // previous render sees a mutation: that is what a
                         // JavaScript spread does by itself.
                         // On an element, each key is read by its name as the
-                        // attribute it becomes. On a child written in Python,
-                        // each value is handed over as a prop written by name
-                        // is, the Python value itself.
+                        // attribute it becomes, the `value` of a control a
+                        // `bind:group` binds as the group reads it. On a child
+                        // written in Python, each value is handed over as a
+                        // prop written by name is, the Python value itself.
+                        const spreadWrapper = !onElement(tag)
+                            ? '__spread'
+                            : tagNames(markup, tag.start).has('bind:group')
+                              ? '__spreadChoice'
+                              : '__spreadElement';
+
                         out +=
                             heldChild() !== null
                                 ? `{...${forChild(call(trimmed.slice(2), '', undefined, 'python'), 'spread')}}`
                                 : toPythonChild()
                                   ? `{...${call(trimmed.slice(2), '__spreadPython', undefined, 'python')}}`
-                                  : `{...${call(trimmed.slice(2), onElement(tag) ? '__spreadElement' : '__spread')}}`;
+                                  : `{...${call(trimmed.slice(2), spreadWrapper)}}`;
                     } else if (trimmed.startsWith('...')) {
                         throw refuse(
                             new SyntaxError(
@@ -3413,7 +3432,7 @@ export function collector(defs, lines, columns) {
               ? 'lazy_'
               : kind === 'python'
                 ? 'py_'
-                : kind === 'scalar' || kind === 'selection'
+                : kind === 'scalar' || kind === 'selection' || kind === 'choice'
                   ? `${kind}_`
                   : '';
         const name = `__expr_${infix}${defs.length}`;

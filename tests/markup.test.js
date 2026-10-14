@@ -1031,10 +1031,11 @@ describe('the attribute pass', () => {
     // whether written longhand, as the shorthand or as a lone interpolation
     // between quotes, each marked as the field's own, which the browser reads
     // off the element; text between quotes is not, and static text is the
-    // node's.
+    // node's. The value goes as Python's, which the group compares as Python
+    // does.
     test('and takes the tag value with it', () => {
-        const served = /checked=\{__pybridge\.groupChecked\(\(\) => __expr_py_\d+\(\), \(\) => __expr_\d+\(\), (?:true|false)\)\}/;
-        const action = /use:__group=\{\[.+, __expr_\d+\(\), true, "(?:[^"\\]|\\.)*", __py, \[\]\]\}/;
+        const served = /checked=\{__pybridge\.groupChecked\(\(\) => __expr_py_\d+\(\), \(\) => __expr_py_\d+\(\), (?:true|false)\)\}/;
+        const action = /use:__group=\{\[.+, __expr_py_\d+\(\), true, "(?:[^"\\]|\\.)*", __py, \[\]\]\}/;
 
         for (const tag of [
             '<input bind:group={choix} value={n}>',

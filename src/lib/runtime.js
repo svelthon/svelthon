@@ -801,7 +801,10 @@ export const __pybridge = {
     // A spread on an element: each key is the attribute it becomes, read the
     // way that attribute is read when written by name. Only None is converted
     // first, as the direct path converts it: an object stays the object, which
-    // is how an `<option>`'s value finds its `<select>`.
+    // is how an `<option>`'s value finds its `<select>`. A `value` is then made
+    // JavaScript's as `value={…}` is (`COMPARED`): a float its number, which
+    // the `<select>` it is compared with holds too, and on a control a
+    // `bind:group` binds (`grouped`), what the group reads (`choice`).
     //
     // A key Svelte takes for a handler, one beginning with `on`, is adapted as
     // a handler written by name is, by the component's `event`: a raise reaches
@@ -811,7 +814,7 @@ export const __pybridge = {
     //
     // Each property is read once, as a JavaScript spread reads it: a getter
     // asked again may answer otherwise, or refuse.
-    spreadElement(value, event = (one) => pyEvent(one)) {
+    spreadElement(value, event = (one) => pyEvent(one), grouped = false) {
         if (value === null || value === undefined) return value;
 
         const read = spreadOf(value, (one) => one);
@@ -823,6 +826,7 @@ export const __pybridge = {
             else if (wrapper === '__class') out[key] = __pybridge.klass(read[key]);
             else if (wrapper === '__truthy') out[key] = __pybridge.truthy(read[key]);
             else if (wrapper === '__hidden') out[key] = __pybridge.hidden(read[key]);
+            else if (key === 'value') out[key] = (grouped ? COMPARED.choice : COMPARED.scalar)(out[key]);
         }
 
         return out;
@@ -6820,9 +6824,50 @@ const scalarOnly = (value) => {
     return alone === undefined ? value : alone;
 };
 
+// The `value` of a control a `bind:group` binds is read by the group alone,
+// which compares it as Python does (`group`), while the field shows its text. A
+// value only itself is equal to, a NaN or an instance of a subclass of float,
+// int or str, would be another value once made JavaScript's: it is handed over
+// as a boxed scalar, one per value, which shows the same text and which the
+// group takes back as the value it stands for.
+const CHOICES = new WeakMap();
+const CHOSEN = new WeakMap();
+
+const choice = (value) => {
+    // A JavaScript scalar, a NaN among them, is its own value already.
+    if (value === null || typeof value !== 'object') return value;
+
+    const alone = scalarOnly(value);
+
+    if (alone === value) return alone;
+
+    const type = ownType(value);
+    const plain = type === _b_.float || type === _b_.int || type === _b_.str || type === _b_.bool || value instanceof String;
+
+    if (plain && alone === alone) return alone;
+
+    let box = CHOICES.get(value);
+
+    if (box === undefined) {
+        box = Object(alone);
+        CHOICES.set(value, box);
+        CHOSEN.set(box, value);
+    }
+
+    return box;
+};
+
+// What Svelte compares crosses into JavaScript as everything else does: a value
+// that is a number is its number, a NaN and an instance of a subclass of float,
+// int or str among them, as a JavaScript child is handed it. A None among a
+// list's items, which its view reads as `null`, is the `undefined` an option's
+// None is (`bound`).
+const item = (one) => (one === null ? undefined : scalarOnly(one));
+
 const COMPARED = {
     scalar: scalarOnly,
-    selection: (value) => (Array.isArray(value) ? value.map(scalarOnly) : scalarOnly(value))
+    selection: (value) => (Array.isArray(value) ? value.map(item) : scalarOnly(value)),
+    choice
 };
 
 //
@@ -7907,13 +7952,16 @@ export function group(node, [current, write, chosen, fielded, binding, scope, wh
     // spread's value, its own or an attribute's it overrides, then a braced
     // value as the field evaluated it, then what the tag's text compiled to (a
     // lone interpolation keeps its type there, as in Svelte, where the field
-    // holds its text).
+    // holds its text). A value only itself is equal to was handed over boxed
+    // (`choice`), and is taken back as itself.
+    const applied = (written) => CHOSEN.get(written) ?? pyBind(written);
+
     const value = () => {
-        if ('__value' in node) return pyBind(node.__value);
+        if ('__value' in node) return applied(node.__value);
 
         const written = fielded ? attributesOf(node) : undefined;
 
-        if (written !== undefined && 'value' in written) return pyBind(written.value);
+        if (written !== undefined && 'value' in written) return applied(written.value);
 
         return picked === undefined ? node.value : pyBind(picked);
     };
