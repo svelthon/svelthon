@@ -1734,8 +1734,7 @@ var keys=$B.$call($B.$getattr(klass,'keys'),obj)
 for(var key of $B.make_js_iterator(keys)){if(! $B.is_str(key)){$B.RAISE(_b_.TypeError,'keywords must be strings')}
 items.push({key,value:$B.$getitem1(obj,key)})}
 return items}
-$B.make_js_iterator_no_trace=function(iterator){if(Array.isArray(iterator)){if(iterator.ob_type){return iterator[Symbol.iterator]()}else{
-return iterator.map($B.jsobj2pyobj)[Symbol.iterator]()}}
+$B.make_js_iterator_no_trace=function(iterator){if(Array.isArray(iterator)){if(iterator.ob_type===_b_.list ||iterator.ob_type===_b_.tuple){return iterator[Symbol.iterator]()}else if(! iterator.ob_type){return iterator.map($B.jsobj2pyobj)[Symbol.iterator]()}}
 return $B.make_js_iterator(iterator,$B.NULL)}
 $B.clip_index=function(state,low,high){
 if(! $B.is_int(state)){$B.RAISE(_b_.TypeError,"an integer is required")}
@@ -7254,7 +7253,8 @@ for(var i=0;i < size;i++){source[i]=0}}else if($B.$isinstance(source,[_b_.bytes,
 $B.$isinstance(source,$B.module_getattr($B.imported.array,'array'))){var array=$B.module_getattr($B.imported.array,'array')
 source=array.tp_funcs.tobytes(source).source}else{
 var int_list
-if(Array.isArray(source)){int_list=source}else{
+if(Array.isArray(source)&&(! source.ob_type ||
+source.ob_type===_b_.list ||source.ob_type===_b_.tuple)){int_list=source}else{
 try{
 int_list=_b_.list.$factory(source)}catch(err){var bytes_method=$B.$getattr(source,'__bytes__',_b_.None)
 if(bytes_method===_b_.None){$B.RAISE(_b_.TypeError,"cannot convert "+
@@ -7852,7 +7852,8 @@ if(typeof source=="string" ||$B.is_str(source)){if(encoding===undefined){$B.RAIS
 int_list=encode(source,encoding ||"utf-8",errors ||"strict")}else{
 if(encoding !==undefined){console.log('encoding',encoding)
 $B.RAISE(_b_.TypeError,"encoding without a string argument")}
-if(Array.isArray(source)){int_list=source}else{
+if(Array.isArray(source)&&(! source.ob_type ||
+source.ob_type===_b_.list ||source.ob_type===_b_.tuple)){int_list=source}else{
 try{
 int_list=_b_.list.$factory(source)}catch(err){var bytes_method=$B.$getattr(source,'__bytes__',_b_.None)
 if(bytes_method===_b_.None){$B.RAISE(_b_.TypeError,"cannot convert "+
@@ -11626,12 +11627,12 @@ if(! flag){items.push(y)}}
 return items}}
 var dict=_b_.dict
 dict.$match_mapping_pattern=true 
-$B.str_dict_contains=function(d,key){return d.hasOwnProperty(key)}
-$B.str_dict_get=function(d,key,_default){if(d.hasOwnProperty(key)){return d[key]}
+$B.str_dict_contains=function(d,key){return Object.hasOwn(d,key)}
+$B.str_dict_get=function(d,key,_default){if(Object.hasOwn(d,key)){return d[key]}
 return _default===undefined ? $B.NULL :_default}
 $B.str_dict_set=function(d,attr,value){d[attr]=value}
 $B.str_dict_del=function(d,attr){delete d[attr]}
-$B.str_dict_pop=function(d,attr){if(! d.hasOwnProperty(attr)){return $B.NULL}
+$B.str_dict_pop=function(d,attr){if(! Object.hasOwn(d,attr)){return $B.NULL}
 delete d[attr]}
 $B.str_dict_empty=function(d){return Object.keys(d).length==0}
 $B.str_dict_length=function(d){return Object.keys(d).length}
@@ -11667,8 +11668,10 @@ if(right[VERSION]!=right_version){$B.RAISE(_b_.RuntimeError,"dict mutated during
 function index_by_key(d,key,hash){
 hash=hash ?? $B.hash_for(key,'a dict key')
 var indices=d[TABLE][hash],index
-if(indices !==undefined){for(var index of indices){var v=d[KEYS][index]
-if(v===undefined){d[TABLE][hash].splice(i,1)
+if(indices !==undefined){for(var i=0;i < indices.length;i++){index=indices[i]
+var v=d[KEYS][index]
+if(v===undefined){
+d[TABLE][hash].splice(i--,1)
 if(d[TABLE][hash].length==0){delete d[TABLE][hash]
 return null}
 continue}
@@ -11686,14 +11689,14 @@ if($B.is_or_equals(d[KEYS][index],key)){return{
 found:true,key:d[KEYS][index],value:d[VALUES][index],hash,rank:i,index}}}}
 return{
 found:false,hash}}
-dict.$contains=function(self,key,hash){if(! self[KEYS]){if(typeof key=='string'){return self.hasOwnProperty(key)}
+dict.$contains=function(self,key,hash){if(! self[KEYS]){if(typeof key=='string'){return Object.hasOwn(self,key)}
 var hash_method=$B.$getattr($B.get_class(key),'__hash__')
 if(hash_method===$B.str_dict_get($B.get_dict(_b_.object),'__hash__')){return false}
 var hash=$B.hash_for(key,'a dict key')
 convert_all_str(self)}
 return index_by_key(self,key,hash)!==null}
 dict.$delitem=function(self,key,hash){if(self[$B.JSOBJ]){delete self[$B.JSOBJ][key]}
-if(! self[KEYS]){if(typeof key=='string'){if(self.hasOwnProperty(key)){delete self[key]
+if(! self[KEYS]){if(typeof key=='string'){if(Object.hasOwn(self,key)){delete self[key]
 return _b_.None}else{
 $B.RAISE(_b_.KeyError,key)}}
 if(! dict.$contains(self,key,hash)){$B.RAISE(_b_.KeyError,_b_.str.$factory(key))}}
@@ -11703,13 +11706,14 @@ if(self[TABLE][lookup.hash].length==0){delete self[TABLE][lookup.hash]}
 delete self[VALUES][lookup.index]
 delete self[KEYS][lookup.index]
 delete self[HASHES][lookup.index]
+if(typeof lookup.key=='string'){delete self[lookup.key]}
 self[VERSION]++
 return _b_.None}
 $B.RAISE(_b_.KeyError,_b_.str.$factory(key))}
 $B.dict_delitem=dict.$delitem
 function dict_eq(self,other){if(! $B.$isinstance(other,dict)){return _b_.NotImplemented}
 if(! self[KEYS]&& ! other[KEYS]){if(dict.mp_length(self)!==dict.mp_length(other)){return false}
-for(let k in self){if(! other.hasOwnProperty(k)){return false}
+for(let k in self){if(! Object.hasOwn(other,k)){return false}
 if(! $B.is_or_equals(self[k],other[k])){return false}}
 return true}
 if(! self[KEYS]){let d=dict.tp_funcs.copy(self)
@@ -11751,7 +11755,7 @@ if(self[TABLE]){delete self[TABLE][_b_.hash(key)]}}
 dict.$getitem=function(self,key,ignore_missing){
 if(Object.hasOwn(self,$B.JSOBJ)){if(Object.hasOwn(self[$B.JSOBJ],key)){return $B.jsobj2pyobj(self[$B.JSOBJ][key])}
 $B.RAISE(_b_.KeyError,key)}
-if(fast_string_key(key)){if(self.hasOwnProperty(key)){return self[key]}}else{
+if(fast_string_key(key)){if(Object.hasOwn(self,key)){return self[key]}}else{
 if(! self[TABLE]){var hash_method=$B.$getattr($B.get_class(key),'__hash__')
 if(hash_method !==$B.str_dict_get($B.get_dict(_b_.object),'__hash__')){convert_all_str(self)
 let index=index_by_key(self,key)
@@ -11766,7 +11770,8 @@ $B.RAISE(_b_.KeyError,key)}
 dict.tp_hash=_b_.None
 function init_from_list(self,args){var i=0
 for(var item of args){
-var pair=Array.isArray(item)? item :
+var pair=Array.isArray(item)&&(! item.ob_type ||
+item.ob_type===_b_.list ||item.ob_type===_b_.tuple)? item :
 Array.from($B.make_js_iterator_no_trace(item))
 if(pair.length !=2){$B.RAISE(_b_.ValueError,"dictionary "+
 `update sequence element #${i} has length ${pair.length}; 2 is required`)}
@@ -11968,6 +11973,7 @@ self[VERSION]++
 return res}
 var index=self[KEYS].length-1
 while(index >=0){if(self[KEYS][index]!==undefined){let res=$B.fast_tuple([self[KEYS][index],self[VALUES][index]])
+if(typeof self[KEYS][index]=='string'){delete self[self[KEYS][index]]}
 delete self[KEYS][index]
 delete self[VALUES][index]
 self[VERSION]++
@@ -11976,7 +11982,7 @@ index--}}
 dict_funcs.setdefault=function(self){var $=$B.args("setdefault",3,{self:null,key:null,_default:null},arguments,{_default:_b_.None})
 var self=$.self,key=$.key,_default=$._default
 _default=_default===undefined ? _b_.None :_default
-if(! self[TABLE]){if(fast_string_key(key)){if(! self.hasOwnProperty(key)){self[key]=_default}
+if(! self[TABLE]){if(fast_string_key(key)){if(! Object.hasOwn(self,key)){self[key]=_default}
 return self[key]}else{
 convert_all_str(self)}}
 var lookup=dict.$lookup_by_key(self,key)
@@ -12430,7 +12436,7 @@ var klass=this
 if(args.length==0){return $B.$list([])}else if(args.length > 1){$B.RAISE(_b_.TypeError,`${this.tp_name} expected at most 1 argument, got ${args.length}`
 )}
 var obj=args[0]
-if(Array.isArray(obj)&& obj.ob_type){
+if(Array.isArray(obj)&&(obj.ob_type===list ||obj.ob_type===tuple)){
 obj=obj.slice()
 obj.ob_type=klass
 return obj}

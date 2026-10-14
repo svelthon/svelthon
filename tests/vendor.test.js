@@ -1196,6 +1196,17 @@ test('class frames, layouts and search bounds answer as in CPython: class-frame-
     expect([...answers()]).toEqual(["'refused'", "'B'", 'TypeError', "'B'", 'ValueError']);
 });
 
+// A dict keyed by "hasOwnProperty" called that key as a method; a str key taken
+// out of a dict with other keys stayed behind as a property, which get() read;
+// a lookup after popitem spliced an undeclared index and threw; and list(),
+// max(), dict() and bytes() read the storage of a list subclass instead of its
+// __iter__.
+test('dicts and list subclasses answer as in CPython: dict-has-own-property-key, dict-str-key-removed, dict-lookup-after-popitem, list-subclass-iter, min-max-subclass-iter, dict-pair-subclass-iter, bytes-subclass-iter', async () => {
+    const { answers } = await import('./fixtures/dicts_and_subclass_iteration.py');
+
+    expect([...answers()]).toEqual(['1', "'absent'", 'False', '[10, 20]', '20', '{10: 20}', "b'\\n\\x14'"]);
+});
+
 // The console's write() returned None where CPython gives the number of
 // characters written. A component cannot import `sys`; the runtime's stdout
 // is read where Brython keeps it.
