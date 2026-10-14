@@ -1009,6 +1009,27 @@ function tagNames(markup, from) {
     return new Set(names.match(new RegExp(`${ATTRIBUTE_CHAR}+`, 'g'))?.map((name) => name.toLowerCase()));
 }
 
+// Whether a tag holds a spread, `{**attrs}`, which may give it any attribute.
+function tagSpreads(markup, from) {
+    for (let at = from; at < markup.length && markup[at] !== '>'; ) {
+        const char = markup[at];
+
+        if (char !== '"' && char !== "'" && char !== '{') {
+            at += 1;
+            continue;
+        }
+
+        const end = valueEnd(markup, at);
+
+        if (end === -1) return false;
+        if (char === '{' && ATTRIBUTE_START.test(markup[at - 1]) && SPREAD(markup.slice(at + 1, end).trim())) return true;
+
+        at = end + 1;
+    }
+
+    return false;
+}
+
 // The elements HTML closes by itself, which therefore open no body and no
 // scope. A component is never one of them.
 const VOID = new Set([
@@ -2284,7 +2305,40 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     //
     // A name the markup declared is read the same way, its cell holding the
     // Python value, and written by the setter itself, see `declaredHere`.
+    //
+    // A `<select>` whose `multiple` a spread may give is read and written as
+    // Svelte reads it, by what the element is. The read asks `select.multiple`
+    // of the select an action registers, written before it (`spreadSelect`),
+    // under its place in the markup; the read is a function of its own per
+    // element, which claims its element the first time it runs, so two selects
+    // sharing a binding, the rows of an `{#each}` and the renders of a snippet
+    // each keep theirs. The write, which Svelte hands no element, is told by the
+    // options of the selects at that place (`selectWrite`).
+    const spreadSelect = (directive, expr) => {
+        if (directive !== 'bind:value' || tag?.name !== 'select' || tagNames(markup, tag.start).has('multiple')) return null;
+        if (!tagSpreads(markup, tag.start)) return null;
+
+        tag.select ??= selects++;
+
+        const key = `${NAMESPACE}, ${tag.select}`;
+
+        return { action: `use:__pybridge.selectShape={[${key}]}`, key, read: `__select_${tag.select}` };
+    };
+
     const boundPair = (directive, expr) => {
+        const shaped = spreadSelect(directive, expr);
+
+        if (shaped !== null) {
+            const crossing = `__pybridge.selectWrite(${shaped.key})`;
+            const write = declaredHere(expr) ? declaredWrite(expr, crossing) : assign(expr, crossing);
+            const value = call(expr, '__bound', undefined, 'python');
+
+            return (
+                `function ${shaped.read}() { return __pybridge.selectRead(${value}, ${shaped.key}, ${shaped.read}); }, ` +
+                `(${BOUND_VALUE}) => ${write}`
+            );
+        }
+
         const multiple = directive === 'bind:value' && tag?.name === 'select' && tagNames(markup, tag.start).has('multiple');
         const crossing = multiple ? SELECTED_VALUE : BIND_VALUE;
         const write = declaredHere(expr) ? declaredWrite(expr, crossing) : assign(expr, crossing);
@@ -2370,6 +2424,9 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     };
     // The open elements that bound their child, by scope.
     const heldOwners = new Map();
+
+    // The selects a spread may make multiple, numbered in markup order.
+    let selects = 0;
 
     const heldChild = () => tag?.held ?? null;
     const forChild = (read, kind = '') => `__pybridge.child(${heldChild()}, ${read}, ${JSON.stringify(kind)})`;
@@ -2798,6 +2855,9 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                         } else if (GROUP_DIRECTIVE.test(attribute[1])) {
                             out += `{${componentGroup(trimmed)}}`;
                         } else if (DIRECTIVE.test(attribute[1])) {
+                            const shaped = spreadSelect(attribute[1], inner);
+
+                            if (shaped !== null) out = `${out.replace(ATTRIBUTE_ASSIGN, '')}${shaped.action} ${attribute[1]}=`;
                             out += `{${boundPair(attribute[1], inner)}}`;
                         } else {
                             out += attributeValue(attribute[1], inner);
@@ -2923,6 +2983,9 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                     } else if (GROUP_DIRECTIVE.test(short[1])) {
                         out += `={${componentGroup(name)}}`;
                     } else {
+                        const shaped = spreadSelect(short[1], name);
+
+                        if (shaped !== null) out = `${out.slice(0, out.length - short[1].length)}${shaped.action} ${short[1]}`;
                         out += `={${boundPair(short[1], name)}}`;
                     }
                 }

@@ -342,6 +342,55 @@ const PYTHON_SNIPPETS = new WeakSet();
 const SERVED_ARGUMENTS = [];
 let CROSSING_PAIR = null;
 
+// The `<select>` elements of each instance a spread may make multiple, by their
+// place in the markup (`__pybridge.selectShape`), and the one each binding's
+// read holds. A place may stand for many elements, every row of an `{#each}`
+// and every render of a snippet; each registers as Svelte creates it, before
+// its binding first reads, and that read claims the first one unclaimed, so
+// every read holds its own element. A server has no element, and its select is
+// the single one written.
+const SELECT_SHAPES = new WeakMap();
+const SELECT_READS = new WeakMap();
+
+const shapesOf = (scope, place) => {
+    let places = SELECT_SHAPES.get(scope);
+
+    if (places === undefined) SELECT_SHAPES.set(scope, (places = new Map()));
+
+    let shapes = places.get(place);
+
+    if (shapes === undefined) places.set(place, (shapes = []));
+
+    return shapes;
+};
+
+const multipleSelect = (scope, place, read) => {
+    let shape = SELECT_READS.get(read);
+
+    if (shape === undefined) {
+        shape = shapesOf(scope, place).find((one) => !one.claimed);
+
+        if (shape === undefined) return false;
+
+        shape.claimed = true;
+        SELECT_READS.set(read, shape);
+    }
+
+    return shape.node.multiple === true;
+};
+
+// Whether a value is the value of an option of a select registered at a place,
+// read as Svelte reads it (`get_option_value`): its own options and those a
+// child or a snippet put there.
+const optionValue = (scope, place, value) =>
+    shapesOf(scope, place).some(({ node }) => {
+        for (const option of node.options) {
+            if (('__value' in option ? option.__value : option.value) === value) return true;
+        }
+
+        return false;
+    });
+
 export const __pybridge = {
     // Called by the module of each component written in Python as it loads,
     // with a function that reads the component (`pythonComponent`).
@@ -545,6 +594,37 @@ export const __pybridge = {
     // value crossing as a binding's does.
     selected(value) {
         return Array.isArray(value) ? _b_.list.$factory(value.map(pyBind)) : pyBind(value);
+    },
+
+    // A `<select>` bound by `bind:value` that a spread may make multiple:
+    // Svelte reads `select.multiple` as it binds, and so does the read, through
+    // the select this action registers under its place. Written before the
+    // binding, it runs before Svelte first reads it.
+    selectShape(node, [scope, place]) {
+        const shapes = shapesOf(scope, place);
+        const shape = { node, claimed: false };
+
+        shapes.push(shape);
+
+        return {
+            destroy() {
+                const at = shapes.indexOf(shape);
+
+                if (at !== -1) shapes.splice(at, 1);
+            }
+        };
+    },
+    // `read` is the binding's read itself, one per element, which holds the
+    // element it first claims (`multipleSelect`).
+    selectRead(value, scope, place, read) {
+        return (multipleSelect(scope, place, read) ? COMPARED.selection : COMPARED.scalar)(value);
+    },
+    // The write of the same binding, which Svelte hands no element: what a
+    // single select writes is the value of one of its options, as Svelte reads
+    // it off the option, and a multiple one an array Svelte made of them, which
+    // is none of their values.
+    selectWrite(scope, place) {
+        return (value) => (Array.isArray(value) && !optionValue(scope, place, value) ? __pybridge.selected(value) : pyBind(value));
     },
 
     // `{#each}` walks a JavaScript array. A Python list or tuple already is one,

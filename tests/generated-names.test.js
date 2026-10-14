@@ -44,6 +44,9 @@ const MARKUP_LOCAL = new Set([
     // The plain parameter Svelte hands a snippet's argument by, one per
     // position, which the snippet takes apart itself.
     '__argument_',
+    // The read of a select a spread may make multiple, a function of its own
+    // per element, named so it hands itself over.
+    '__select_',
     // The index an `{#each}` is given for a `bind:group` inside it, which
     // Svelte declares.
     '__index_',
