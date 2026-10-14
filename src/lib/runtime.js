@@ -7530,20 +7530,26 @@ export function unpackStarred(row, before, after) {
 export function readAttr(target, name, otherwise) {
     const $B = globalThis.__BRYTHON__;
 
-    // A JavaScript record whose own data has a field called `ob_type`: the
-    // engine reads that field to know what an object is, takes `"business"` for
-    // a class, and fails inside its attribute lookup. It is data, the rule every
-    // other boundary of this file applies, so its member is read as JavaScript
-    // and handed over the way the engine hands over any JavaScript member.
+    // A JavaScript record, an object no Python type marks, is read as
+    // JavaScript, once, a getter too, and its member handed over the way the
+    // engine hands over any JavaScript member, in two cases. A key with a
+    // default, `{value=7}`, which Svelte takes for a member that is missing or
+    // `undefined`: crossed, `undefined` is None, as a `null` given on purpose
+    // is, so the default is decided before. And a record whose own data has a
+    // field called `ob_type`: the engine reads that field to know what an
+    // object is, takes `"business"` for a class, and fails inside its
+    // attribute lookup.
     if (
         target !== null &&
         typeof target === 'object' &&
-        Object.hasOwn(target, 'ob_type') &&
-        !pyClass(quietly(target, 'ob_type')) &&
-        !$B.is_dict(target)
+        pyType(target) === undefined &&
+        (otherwise !== undefined || Object.hasOwn(target, 'ob_type'))
     ) {
-        if (name in target) return $B.jsobj2pyobj(target[name], target);
-        if (otherwise !== undefined) return $B.$call(otherwise);
+        const present = name in target;
+        const member = present ? target[name] : undefined;
+
+        if (member === undefined && otherwise !== undefined) return $B.$call(otherwise);
+        if (present) return $B.jsobj2pyobj(member, target);
 
         $B.RAISE(_b_.AttributeError, `'${name}'`);
     }
