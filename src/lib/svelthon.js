@@ -9,6 +9,7 @@ import {
     pythonExpressions,
     collector,
     moduleScript,
+    moduleScriptStart,
     withoutComments,
     markupOnly,
     blankBodies
@@ -400,6 +401,28 @@ function tagged(code, key) {
 // imports, after its own. Without it, `import counter_store` only ever resolves
 // to a sibling file, and a component that reached the module some other way
 // would appear to work purely by load order.
+//
+// A component written in Python says so when its module loads, before any
+// parent hands it a prop: a parent that holds it rather than imports it, by a
+// prop, a snippet's parameter or `<svelte:component>`, hands each prop to
+// `__pybridge.child`, which asks, and a server prepares the props before the
+// component's own script runs. It names itself through its own module, which is
+// the identity every importer holds, handed as a function read when a parent
+// asks, since Svelte sets `export default` last when it wraps the component for
+// hot reload. Said in the `<script module>`, at its start, or in one of its own
+// after the file's last line, so nothing the author wrote moves.
+const announced = (code, filename) => {
+    if (!filename) return code;
+
+    const statement =
+        `import __svelthon_self from ${JSON.stringify(`./${basename(filename)}`)};` +
+        `import { __pybridge as __svelthon_bridge } from 'svelthon/runtime';` +
+        `__svelthon_bridge.python(() => __svelthon_self);`;
+    const at = moduleScriptStart(code);
+
+    return at === -1 ? `${code}<script module>${statement}</script>` : code.slice(0, at) + statement + code.slice(at);
+};
+
 export function python(options = {}) {
     const calls = perCall();
 
@@ -502,7 +525,7 @@ export function python(options = {}) {
                     })
             );
 
-            return { code: tagged(elementOptions(code, python), calls.open(file)), dependencies: read };
+            return { code: announced(tagged(elementOptions(code, python), calls.open(file)), filename), dependencies: read };
         },
         script({ content, attributes, filename }) {
             // Read as `pythonScript` reads the tag, by names in any case: Svelte
@@ -563,17 +586,7 @@ export function python(options = {}) {
             // way, but every tool downstream reads the attribute and refuses:
             // `svelte-check`, installed by 93% of SvelteKit projects, would
             // report dozens of parse errors per component.
-            //
-            // A component written in Python says so itself, first of all, before
-            // it reads a prop: a parent that holds it rather than imports it, by
-            // a prop, a snippet's parameter or `<svelte:component>`, hands each
-            // prop to `__pybridge.child`, which asks. It names itself through
-            // its own module, which is the identity every importer holds.
-            const registered = filename
-                ? `import __svelthon_self from ${JSON.stringify(`./${basename(filename)}`)};__pybridge.python(__svelthon_self);`
-                : '';
-
-            return { code: sameLines(registered + script, content), attributes: rest };
+            return { code: sameLines(script, content), attributes: rest };
         }
     };
 }

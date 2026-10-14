@@ -3368,6 +3368,11 @@ export function moduleScript(content) {
     return componentScript(content, declaresModule)?.text ?? null;
 }
 
+// Where the body of the `<script module>` begins, past its tag's `>`, or -1.
+export function moduleScriptStart(content) {
+    return componentScript(content, declaresModule)?.body[0] ?? -1;
+}
+
 
 
 // The hidden Python functions a template needs, one per distinct expression.

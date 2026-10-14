@@ -77,7 +77,7 @@ rest of that configuration and what each line buys.
 npm install
 npm run dev          # the demo, at /demo/
 
-npm test             # 1 862 tests: semantics, props, reactivity, Svelte surface
+npm test             # 1 863 tests: semantics, props, reactivity, Svelte surface
 npm run test:quiet   # the suite's own output: a green run must say nothing
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
@@ -257,7 +257,7 @@ tells the two apart by reading the child's file when the import names one. Any
 other child, from a package, a path alias, a module that re-exports it or a
 namespace, under a name the script assigned, `Picked = Child if wide else
 Native`, a prop, a template name or `<svelte:component this={…}>`, is told
-apart once mounted: a child written in Python says so itself.
+apart when its module loads: a child written in Python says so itself.
 
 ### A prop that travels back up
 
@@ -1548,7 +1548,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 1 862 tests as written (vitest reports more, one per
+Validated by `npm test`, 1 863 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;

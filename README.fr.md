@@ -75,7 +75,7 @@ reste de cette configuration et ce que chaque ligne apporte.
 npm install
 npm run dev          # la démo, sous /demo/
 
-npm test             # 1 862 tests : sémantique, props, réactivité, surface Svelte
+npm test             # 1 863 tests : sémantique, props, réactivité, surface Svelte
 npm run test:quiet   # la sortie de la suite : un run vert ne doit rien dire
 npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
@@ -259,8 +259,8 @@ JavaScript. Le compilateur les distingue en lisant le fichier de l'enfant quand
 l'import en nomme un. Tout autre enfant, venu d'un paquet, d'un alias de
 chemin, d'un module qui le réexporte ou d'un namespace, sous un nom que le
 script affecte, `Picked = Child if wide else Native`, un prop, un nom du
-gabarit ou `<svelte:component this={…}>`, est départagé au montage : un enfant
-écrit en Python le dit lui-même.
+gabarit ou `<svelte:component this={…}>`, est départagé au chargement de son
+module : un enfant écrit en Python le dit lui-même.
 
 ### Un prop qui remonte
 
@@ -1568,7 +1568,7 @@ part jamais.
 
 ## État
 
-Validé par `npm test`, 1 862 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 1 863 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;

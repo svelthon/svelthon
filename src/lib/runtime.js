@@ -290,8 +290,30 @@ const keyFor = (repr) => {
     return key;
 };
 
-// The components written in Python, as their Python parents import them.
+// The components written in Python, as their Python parents import them. Each
+// says so as its module loads, by a function that reads it, since its module's
+// `export default` may not be set yet then; the functions are read when a
+// parent first asks, and kept for the next time while their module still loads.
 const PYTHON_COMPONENTS = new WeakSet();
+const ANNOUNCED = [];
+
+const pythonComponent = (component) => {
+    for (let at = ANNOUNCED.length - 1; at >= 0; at--) {
+        let one;
+
+        try {
+            one = ANNOUNCED[at]();
+        } catch (error) {
+            if (error instanceof ReferenceError) continue;
+            throw error;
+        }
+
+        ANNOUNCED.splice(at, 1);
+        if (one !== null && (typeof one === 'function' || typeof one === 'object')) PYTHON_COMPONENTS.add(one);
+    }
+
+    return PYTHON_COMPONENTS.has(component) || PYTHON_COMPONENTS.has(ADAPTERS.get(component));
+};
 
 // Each value a block declares, to the revision its readers subscribe to
 // (`__pybridge.state`).
@@ -309,9 +331,10 @@ const SERVED_ARGUMENTS = [];
 let CROSSING_PAIR = null;
 
 export const __pybridge = {
-    // Called by each component written in Python, first of all, with itself.
-    python(...components) {
-        for (const one of components) if (one !== null && (typeof one === 'function' || typeof one === 'object')) PYTHON_COMPONENTS.add(one);
+    // Called by the module of each component written in Python as it loads,
+    // with a function that reads the component (`pythonComponent`).
+    python(read) {
+        ANNOUNCED.push(read);
     },
 
     // The value a block declares, `{rows = [1]}`, followed as a name the
@@ -353,7 +376,7 @@ export const __pybridge = {
     child(component, value, kind = '') {
         // Handed through a `{@render}` argument, which is Python, it comes
         // back as the adapter made for it, which knows the component.
-        const python = PYTHON_COMPONENTS.has(component) || PYTHON_COMPONENTS.has(ADAPTERS.get(component));
+        const python = pythonComponent(component);
         if (kind === 'spread') return python ? __pybridge.spreadPython(value) : __pybridge.spread(value);
         if (python) return value;
         return kind === 'scalar' ? scalarOnly(value) : pyNumbers(value);

@@ -444,9 +444,11 @@ describe('two versions of one file preprocessed at once', () => {
         const modules = [];
         const script = pre.script;
 
+        // The Python block's; the `<script module>` that announces the
+        // component is JavaScript, which the hook leaves alone.
         pre.script = (args) => {
             const out = script(args);
-            modules.push({ alpha: args.content.includes('alpha'), body: served(plugin, out.code) });
+            if (out !== undefined) modules.push({ alpha: args.content.includes('alpha'), body: served(plugin, out.code) });
             return out;
         };
 
