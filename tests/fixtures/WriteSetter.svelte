@@ -1,7 +1,17 @@
 <script lang="python">
 # A property whose getter counts its reads and can refuse them, and whose
 # setter records how many reads came before it. The witness is
-# `WriteSetterNative.svelte`, the same model in JavaScript.
+# `WriteSetterNative.svelte`, the same model in JavaScript, which counts in a
+# plain `let`: here the count is a class attribute, which is state, so the
+# getter counts untracked, or the binding reading it would write what it reads
+# and loop, as Svelte does.
+importjs { untrack } from "svelte"
+
+
+def count_read():
+    Model.reads += 1
+
+
 class Model:
     reads = 0
     reads_at_write = -1
@@ -12,7 +22,7 @@ class Model:
 
     @property
     def value(self):
-        Model.reads += 1
+        untrack(count_read)
         if Model.blocked:
             raise ValueError("a read is refused, a write is not")
         return self._value

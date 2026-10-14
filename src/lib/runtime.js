@@ -1344,10 +1344,9 @@ function installMutationTracking($B) {
         return entry;
     };
 
-    // Not while the template renders: a write made then, a getter counting its
-    // reads on its class, is a side effect of the reading, which
-    // Svelte refuses to make of its own state, and waking the reader would run
-    // the expression that wrote it again, without end.
+    // A write made while the template renders wakes the readers too, and Svelte
+    // refuses it there, `state_unsafe_mutation`, as it refuses a write to its
+    // own state: a reader already painted is never left showing the old value.
     const classNameChanged = (cls, attr) => {
         if (typeof attr !== 'string' || !pyClass(cls)) return;
 
@@ -1357,8 +1356,6 @@ function installMutationTracking($B) {
         const marker = NAME_MARKERS.get(cls)?.get(attr);
 
         if (marker !== undefined) marker.stamp = ++changes;
-
-        if (rendering > 0) return;
 
         const names = CLASS_NAMES.get(cls);
 
