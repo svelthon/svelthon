@@ -653,11 +653,11 @@ export const __pybridge = {
     },
 
     // A `bind:group` control's `checked`, written by the server, where no action
-    // runs: whether the model holds the control's value, by Python's `==`, as
-    // Svelte's server writes it for its own group. In the browser the action
-    // keeps the control, and this answers nothing, which Svelte leaves alone;
-    // the model and the value are handed over as reads, so the browser reads
-    // neither.
+    // runs: whether the model holds the control's value, by the rules the
+    // browser's group follows (`groupHolds`, `sameChoice`), as Svelte's server
+    // writes it for its own group. In the browser the action keeps the control,
+    // and this answers nothing, which Svelte leaves alone; the model and the
+    // value are handed over as reads, so the browser reads neither.
     groupChecked(model, chosen, boxes) {
         if (typeof document !== 'undefined') return undefined;
 
@@ -667,17 +667,8 @@ export const __pybridge = {
 
         const mine = pyBind(value);
         const current = model();
-        const same = (one) => {
-            try {
-                return __pybridge.truthy(globalThis.__BRYTHON__.rich_comp('__eq__', one, mine));
-            } catch (error) {
-                if (raised(error)) throw error;
 
-                return one === mine;
-            }
-        };
-
-        return boxes ? Array.from(current === NONE ? [] : (current ?? [])).some(same) : same(current);
+        return boxes ? groupHolds(current, mine) : sameChoice(current, mine);
     },
 
     // What a context holds, written by Python. Either end may be JavaScript's,
@@ -7811,6 +7802,35 @@ const sameTarget = (a, b) =>
     a.where.length === b.where.length &&
     a.where.every((one, i) => one === b.where[i] || (one !== one && b.where[i] !== b.where[i]));
 
+// **One choice of a group is an equal value**: Python's `==`, because a Brython
+// float is an object, so `value={0.5}` evaluated twice is two objects. An
+// `__eq__` that raises is not a "no", and its error goes on; a value Python
+// cannot compare at all, a foreign JavaScript one, is only itself.
+const sameChoice = (one, mine) => {
+    try {
+        return __pybridge.truthy(globalThis.__BRYTHON__.rich_comp('__eq__', one, mine));
+    } catch (error) {
+        if (raised(error)) throw error;
+
+        return one === mine;
+    }
+};
+
+// **A checkbox group's model holds a value as Python's `in` says**: a selection
+// whose class defines `__contains__` answers for itself, as Svelte asks its
+// array's `includes`. None, or no model, holds nothing.
+const groupHolds = (model, value) => {
+    if (model === undefined || model === null || model === NONE) return false;
+
+    try {
+        return __pybridge.truthy(globalThis.__BRYTHON__.$is_member(value, model));
+    } catch (error) {
+        if (raised(error)) throw error;
+
+        return Array.from(model).some((one) => one === value);
+    }
+};
+
 function groupToken(scope, binding) {
     // No scope to share a token through: a token of its own, the one shape the
     // rest of `group` knows. The binding itself is a string, which holds no
@@ -7918,35 +7938,21 @@ export function group(node, [current, write, chosen, fielded, binding, scope, wh
     // registered after the last sort is at the end until the next one runs.
     const inOrder = () => inputs.filter((one) => sameTarget(one.$svelthonGroup, node.$svelthonGroup));
 
-    // Python's `==`, not JavaScript's `===`. A Brython float is an object
-    // `{ob_type, value}`, so `value={0.5}` evaluated twice is two objects and
-    // identity answers false for what the author wrote as one value. `==` and
-    // `in` are also what a Python author reads in a group.
-    // Python's comparison, read as Python reads it. Asking `=== true` of the
-    // answer is a narrower question than the one that was asked: `__eq__` may
-    // return anything, and `return int(self.n == other.n)` gives 1, true to
-    // Python and not the JavaScript boolean.
-    const alike = (one, mine) => {
+    // What the author's `__eq__` or `__contains__` raises is told at the binding.
+    const located = (read) => {
         try {
-            return __pybridge.truthy(globalThis.__BRYTHON__.rich_comp('__eq__', one, mine));
+            return read();
         } catch (error) {
-            // An `__eq__` of the author's that raises is not a "no". The fall
-            // back to identity is for a value Python cannot compare at all, a
-            // foreign JavaScript one; for a failed protocol it would answer
-            // *plausibly and wrongly*. Same rule as `__pybridge.truthy` one file
-            // up.
-            if (raised(error)) throw pyError(error, `bind:group={${binding}}`);
-
-            return one === mine;
+            throw pyError(error, `bind:group={${binding}}`);
         }
     };
 
-    const same = (one) => alike(one, value());
+    const alike = (one, mine) => located(() => sameChoice(one, mine));
 
     // **A value goes into a group's list once.** Two controls may stand for one
-    // choice (a form showing the same option in two sections), and Python
-    // equality is what says they are one choice, since two Brython values that
-    // are equal are rarely the same object.
+    // choice (a form showing the same option in two sections), and `sameChoice`
+    // is what says they are one choice, since two Brython values that are equal
+    // are rarely the same object.
     const include = (into, held) => {
         if (!into.some((already) => alike(already, held))) into.push(held);
     };
@@ -7956,7 +7962,7 @@ export function group(node, [current, write, chosen, fielded, binding, scope, wh
 
     const show = (held) => {
         model = held;
-        node.checked = boxes ? Array.from(held ?? []).some(same) : same(held);
+        node.checked = located(() => (boxes ? groupHolds(held, value()) : sameChoice(held, value())));
     };
 
     // Svelte writes a new value of the field in the same turn as the action
@@ -7996,7 +8002,7 @@ export function group(node, [current, write, chosen, fielded, binding, scope, wh
         //
         // Svelte's own `get_binding_group_value` is these two lines: a `Set` of
         // the checked values, then a `delete` of the one whose control just went
-        // off. Read here with Python's `==` rather than a JavaScript `Set`,
+        // off. Read here with `sameChoice`, the same object or an equal one,
         // because two Brython values that are equal are rarely the same object.
         const picked = [];
 

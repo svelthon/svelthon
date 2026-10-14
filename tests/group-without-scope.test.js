@@ -10,13 +10,13 @@ test('a group action with no scope mounts', () => {
     node.type = 'checkbox';
     node.value = 'a';
 
+    // The model itself, as the compiled markup hands it (`__expr_py_N()`).
     let chosen = [];
-    const current = () => chosen;
     const write = (value) => {
         chosen = value;
     };
 
-    expect(() => group(node, [current, write, undefined, false, '"picked"', undefined])).not.toThrow();
+    expect(() => group(node, [chosen, write, undefined, false, '"picked"', undefined])).not.toThrow();
 
     node.remove();
 });
