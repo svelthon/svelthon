@@ -5040,7 +5040,7 @@ try{
 var in_klass_dict=$B.search_in_mro(klass,attr,$B.NULL)
 var own_dict=$B.get_dict(obj)
 var in_own_dict=own_dict
-? own_dict.hasOwnProperty(attr)
+? Object.hasOwn(own_dict,attr)
 ? own_dict[attr]
 :$B.NULL
 :$B.NULL
@@ -17144,7 +17144,7 @@ if(this.keys[i]instanceof $B.ast.Constant){var v=this.keys[i].value
 if(typeof v=='string'){item+=', '+$B.$hash(string_from_ast_value(v))}else{
 try{
 var hash=$B.$hash(this.keys[i].value)
-item+=`, ${hash}`}catch(err){}}}
+item+=`, ${hash}${typeof hash == 'bigint' ? 'n' : ''}`}catch(err){}}}
 items.push(item+']')}}
 if(! has_packed){return `_b_.dict.$literal([${items}])`}
 var first=no_key(0)? items[0]:`[${items[0]}]`,js='_b_.dict.$literal('+first

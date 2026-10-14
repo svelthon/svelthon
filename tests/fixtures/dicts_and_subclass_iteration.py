@@ -1,5 +1,6 @@
-# A dict keyed by "hasOwnProperty", a str key taken out of a dict with other
-# keys, a key looked up after popitem, and a list subclass whose __iter__ yields
+# A dict keyed by "hasOwnProperty", an attribute of that name, a float key
+# written in a dict display, a str key taken out of a dict with other keys, a
+# key looked up after popitem, and a list subclass whose __iter__ yields
 # other items, handed to list(), max(), dict() and bytes(); and JavaScript
 # arrays the test hands in, read by dict() and bytes() as Python values.
 # `python3` on this module gives the lines the test expects for `answers`.
@@ -15,6 +16,15 @@ def deleted():
     d = {"a": 1, 2: "x"}
     del d["a"]
     return d.get("a", "absent")
+
+
+def own_attribute():
+    class HasOwn:
+        pass
+
+    held = HasOwn()
+    held.hasOwnProperty = 13
+    return [held.hasOwnProperty, vars(held)]
 
 
 def after_popitem():
@@ -33,6 +43,8 @@ def answer(question):
 def answers():
     return [answer(one) for one in [
         lambda: {"hasOwnProperty": 1}["hasOwnProperty"],
+        own_attribute,
+        lambda: {1.5: 2.5}[1.5],
         deleted,
         after_popitem,
         lambda: list(Tens([1, 2])),
