@@ -7802,13 +7802,15 @@ const sameTarget = (a, b) =>
     a.where.length === b.where.length &&
     a.where.every((one, i) => one === b.where[i] || (one !== one && b.where[i] !== b.where[i]));
 
-// **One choice of a group is an equal value**: Python's `==`, because a Brython
-// float is an object, so `value={0.5}` evaluated twice is two objects. An
-// `__eq__` that raises is not a "no", and its error goes on; a value Python
-// cannot compare at all, a foreign JavaScript one, is only itself.
+// **One choice of a group is the same value or an equal one**: identity, then
+// Python's `==`, as Python's `in` and `list.remove` take an item, and as
+// Svelte's own group takes it with a `Set`. `==` because a Brython float is an
+// object, so `value={0.5}` evaluated twice is two objects. An `__eq__` that
+// raises is not a "no", and its error goes on; a value Python cannot compare at
+// all, a foreign JavaScript one, is only itself.
 const sameChoice = (one, mine) => {
     try {
-        return __pybridge.truthy(globalThis.__BRYTHON__.rich_comp('__eq__', one, mine));
+        return __pybridge.truthy(globalThis.__BRYTHON__.is_or_equals(one, mine));
     } catch (error) {
         if (raised(error)) throw error;
 
@@ -7818,7 +7820,8 @@ const sameChoice = (one, mine) => {
 
 // **A checkbox group's model holds a value as Python's `in` says**: a selection
 // whose class defines `__contains__` answers for itself, as Svelte asks its
-// array's `includes`. None, or no model, holds nothing.
+// array's `includes`, and a list's own `in` is `sameChoice` along its items.
+// None, or no model, holds nothing.
 const groupHolds = (model, value) => {
     if (model === undefined || model === null || model === NONE) return false;
 
