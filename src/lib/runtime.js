@@ -1115,6 +1115,120 @@ function installMutationTracking($B) {
         }
     };
 
+    // **Whether a call on a watched set or dict changed it**, told as Svelte's
+    // own collections tell it: a `SvelteSet` adding a member it holds, deleting
+    // one it lacks or clearing itself empty, and a `SvelteMap` setting a key to
+    // the value it holds, write nothing, and neither do these. A list is
+    // Svelte's array, which writes on any of its mutators, `push()` with
+    // nothing included.
+    //
+    // Two halves. What the author's code does to the container while the call
+    // runs, a `__hash__`, an `__eq__` or a source's `__iter__` calling one of
+    // its mutators, is seen as it happens (`atSource`), and such a call
+    // changed it. What the call does itself is told off the storage alone,
+    // never by asking a key or a member anything: a set's size, which its own
+    // `add` or `update` can only grow and its own `discard` or
+    // `difference_update` only shrink, and where it may do both, its count of
+    // members added as well, `$version`, which a removal leaves alone; a dict's
+    // count of keys added and removed, `VERSION`, and its string keys, which a
+    // dict of string keys alone holds as its own properties. A call it
+    // cannot tell, `null`, changed: `intersection_update` among them, which
+    // rebuilds the set from the other one's objects, equal members held anew,
+    // which a walk in flight follows.
+    const SET_SIZED = new Set(['add', 'discard', 'remove', 'pop', 'clear', 'update', 'difference_update']);
+
+    // The engine's own fields of a dict, found on one it made: `VERSION`, the
+    // count of keys added and removed, and `KEYS`, held once its keys are no
+    // longer all strings. Without them, every call changed.
+    const dictField = (() => {
+        const made = _b_.dict.$factory();
+
+        _b_.dict.$setitem(made, 'key', 1);
+        _b_.dict.$setitem(made, 1, 1);
+
+        const fields = new Map(Object.getOwnPropertySymbols(made).map((one) => [one.description, one]));
+
+        return (name) => fields.get(name);
+    })();
+    const VERSION = dictField('VERSION');
+    const KEYS = dictField('KEYS');
+
+    const changeOf = (name, target, args) => {
+        if (!MARKS.has(target)) return null;
+
+        if (isSet(target)) {
+            const size = target.$used;
+
+            if (name === 'symmetric_difference_update') {
+                const version = target.$version;
+
+                return () => target.$used !== size || target.$version !== version;
+            }
+
+            return SET_SIZED.has(name) ? () => target.$used !== size : null;
+        }
+
+        if (!$B.is_dict(target) || NAMESPACE_DICTS.has(target) || VERSION === undefined || KEYS === undefined) return null;
+
+        const version = target[VERSION] ?? 0;
+        const stringKeyed = target[KEYS] === undefined;
+        const key = args[0];
+
+        // A string key of a dict of string keys alone is its own property,
+        // which a call may add or remove without counting it in `VERSION`.
+        if (name === 'setdefault' || name === 'pop' || name === '__delitem__') {
+            const own = stringKeyed && typeof key === 'string';
+            const held = own && Object.hasOwn(target, key);
+
+            return () => (target[VERSION] ?? 0) !== version || (own && held !== Object.hasOwn(target, key));
+        }
+
+        // And a key written, read there before and after; any other key is
+        // hashed by the call alone, which a second look would hash again.
+        if (name === '__setitem__') {
+            if (!stringKeyed || typeof key !== 'string') return null;
+
+            const held = Object.hasOwn(target, key);
+            const before = target[key];
+
+            return () => (target[VERSION] ?? 0) !== version || Object.hasOwn(target, key) !== held || target[key] !== before;
+        }
+
+        if (name === 'popitem') return (result) => result !== undefined;
+
+        if (name === 'clear') {
+            const size = _b_.dict.mp_length(target);
+
+            return () => size > 0;
+        }
+
+        // An update that writes nothing, or writes to a dict of string keys
+        // the very values it holds, read off its own properties: no key is
+        // hashed but by the call. A source of pairs, or keywords, can be read
+        // only once, by the call; any other may run the author's code.
+        if (name === 'update') {
+            const [source, ...others] = args;
+
+            if (others.length > 0 || (source !== undefined && source !== null && source[$B.KW] !== undefined)) return null;
+
+            let writes;
+
+            if (source === undefined) writes = [];
+            else if (quietPyType(source) === _b_.dict) writes = pyEntries(source);
+            else if ((quietPyType(source) === _b_.list || quietPyType(source) === _b_.tuple) && source.length === 0) writes = [];
+            else return null;
+
+            if (writes.length === 0) return () => false;
+            if (!stringKeyed || writes.some(([one]) => typeof one !== 'string')) return null;
+
+            const unchanged = writes.every(([one, value]) => Object.hasOwn(target, one) && target[one] === value);
+
+            return () => !unchanged || (target[VERSION] ?? 0) !== version;
+        }
+
+        return null;
+    };
+
     // A builtin method that changes its object is followed where the engine
     // keeps it, once: the function behind `list.append`, `dict.update` or
     // `object.__setattr__`, which every call reaches however it is written,
@@ -1131,7 +1245,11 @@ function installMutationTracking($B) {
     // The objects a builtin method is running on: the engine's own methods
     // call one another, `intersection_update` through `clear` and `add`, and
     // the outer call is the one mutation the author made. A call on another
-    // object, a `key=` that appends to a list of its own, is its own.
+    // object, a `key=` that appends to a list of its own, is its own. A
+    // mutator called on the same object meanwhile, by the engine or by the
+    // author's `__hash__`, `__eq__` or `__iter__`, is told as the outer call
+    // is, by its own effect (`changeOf`), and if it changed the object it
+    // `touched` it: the outer call changed it.
     const mutating = new Map();
 
     const atSource = (name, method) => {
@@ -1142,20 +1260,24 @@ function installMutationTracking($B) {
             // who caught the exception, saw the old value on the page for ever.
             // `result` stays undefined on that path; `afterCall` reads it only
             // to hand a returned container the watch.
-            const inner = mutating.has(target);
+            const outer = mutating.get(target);
+            const nested = outer !== undefined && MUTATORS.has(name);
+            const changed = outer === undefined || nested ? changeOf(name, target, args) : null;
+            const running = outer ?? { depth: 0, touched: false };
             let result;
 
-            mutating.set(target, (mutating.get(target) ?? 0) + 1);
+            running.depth += 1;
+            mutating.set(target, running);
             try {
                 result = Reflect.apply(method, this, [target, ...args]);
                 return result;
             } finally {
-                const depth = mutating.get(target) - 1;
+                running.depth -= 1;
 
-                if (depth === 0) mutating.delete(target);
-                else mutating.set(target, depth);
+                if (running.depth === 0) mutating.delete(target);
 
-                if (!inner) afterCall(target, name, result, args);
+                if (nested && (changed === null || changed(result))) outer.touched = true;
+                if (outer === undefined && (changed === null || running.touched || changed(result))) afterCall(target, name, result, args);
             }
         };
 
@@ -1190,24 +1312,111 @@ function installMutationTracking($B) {
 
     // A JavaScript object Python holds, a `js.Set.new()` or a `Map`, changed
     // by its own method: nothing of the engine's runs, so the method read off
-    // it under the name of one of JavaScript's mutators notifies once called,
-    // in place, kept as `add = seen.add` or taken by `getattr`. One wrapper per
-    // object and method, so two reads are one method. Whether anybody watches
-    // is the call's question, as at `afterCall`: a factory that keeps
-    // `obj.add` and hands `obj` to the state later keeps a method that
-    // notifies once the object is watched.
+    // it under the name of one of JavaScript's mutators notifies once called
+    // if it changed it (`nativeChange`), in place, kept as `add = seen.add` or
+    // taken by `getattr`. One wrapper per object and method, so two reads are
+    // one method. Whether anybody watches is the call's question, as at
+    // `afterCall`: a factory that keeps `obj.add` and hands `obj` to the state
+    // later keeps a method that notifies once the object is watched.
     const JS_MUTATORS = new Set(['add', 'delete', 'clear', 'set', 'push', 'pop', 'shift', 'unshift', 'splice', 'sort', 'reverse', 'fill', 'copyWithin']);
     const JS_WRAPPERS = new WeakMap();
+
+    // What a native method of a `Set` or a `Map` changed, told as Svelte's
+    // `SvelteSet` and `SvelteMap` tell it: adding a member held, deleting one
+    // absent, clearing an empty one, and setting a key to the value it holds
+    // write nothing. Any other method, a class's own `add` among them, changed
+    // its object, as an array's mutators do Svelte's array.
+    //
+    // Told without running anything of the author's, whose code the call runs
+    // once and the call alone: the method by its text, which a built-in
+    // function of any window has and nothing else, the object by the slot a
+    // `Set` or a `Map` of any window holds and a proxy does not, and the change
+    // by its size, read before and after. A key set again is told by its value,
+    // both as the method receives them (`crossed`); one whose crossing could
+    // run the author's code is taken for a change.
+    const NATIVE = /^function (add|delete|clear|set)\(\) \{\s*\[native code\]\s*\}$/;
+    const UNCROSSED = Symbol('uncrossed');
+
+    // What the engine hands a native method for a Python argument, when finding
+    // it reads nothing of the author's and makes nothing: a scalar of
+    // JavaScript's and the engine's null as they are, an `int` past 2⁵³, a
+    // `float` and None as the converter gives them (`pyobj2jsobj`), a
+    // JavaScript object as itself. A `float` is an object of the engine's, and
+    // an `int` past 2⁵³ another, so a key or a value of either, set again as it
+    // was read, looked new.
+    //
+    // Anything else of Python's crosses as the engine's hook makes it
+    // (`pyobj2jsobj_hook`), in its order: a callable as the function published
+    // for it, told by `crossesAs`, bytes as a copy, made anew, and a list, a
+    // dict, a set or an instance as its view, the one `viewOf` keeps, read
+    // here and not made. A JavaScript array crosses as a copy.
+    const crossed = (one) => {
+        if (one === null || (typeof one !== 'object' && typeof one !== 'function')) return one;
+        if (typeof one === 'object' && javascriptOwn(one) && !Array.isArray(one)) return one;
+
+        const type = quietPyType(one);
+
+        if (type === _b_.float || type === _b_.int || one === NONE) return $B.pyobj2jsobj(one);
+        if (type === undefined || callable(one) || pyBytes(one)) return UNCROSSED;
+
+        return VIEW_OF.get(one) ?? UNCROSSED;
+    };
+
+    // Whether `one` crosses as `stored`, what a map holds: a callable as the
+    // function published for it (`PUBLISHED`), which `pyHandler` hands again
+    // for the same callable, and anything else as `crossed` tells.
+    const crossesAs = (one, stored) => {
+        if (typeof stored === 'function' && PUBLISHED.get(stored) === one) return true;
+
+        const native = crossed(one);
+
+        return native !== UNCROSSED && native === stored;
+    };
+
+    const holds = (proto, obj) => {
+        try {
+            proto.has.call(obj);
+            return true;
+        } catch {
+            return false;
+        }
+    };
+
+    const nativeChange = (method, obj, [key, value]) => {
+        const name = NATIVE.exec(Function.prototype.toString.call(method.$js_func ?? method))?.[1];
+        const proto = holds(Set.prototype, obj) ? Set.prototype : holds(Map.prototype, obj) ? Map.prototype : null;
+
+        if (name === undefined || proto === null || name === (proto === Set.prototype ? 'set' : 'add')) return null;
+
+        const native = name === 'set' ? crossed(key) : undefined;
+
+        if (native === UNCROSSED) return null;
+
+        // A key the map holds, set again: changed unless to the value it holds.
+        if (name === 'set' && Map.prototype.has.call(obj, native)) {
+            const same = crossesAs(value, Map.prototype.get.call(obj, native));
+
+            return () => !same;
+        }
+
+        const size = Reflect.get(proto, 'size', obj);
+
+        return () => Reflect.get(proto, 'size', obj) !== size;
+    };
 
     const jsMutator = (obj, method) => {
         const wrappers = JS_WRAPPERS.get(obj) ?? JS_WRAPPERS.set(obj, new WeakMap()).get(obj);
 
         if (!wrappers.has(method)) {
             const notified = function (...args) {
+                const changed = nativeChange(method, obj, args);
+                let result;
+
                 try {
-                    return Reflect.apply(method, this, args);
+                    result = Reflect.apply(method, this, args);
+                    return result;
                 } finally {
-                    notify(obj);
+                    if (changed === null || changed(result)) notify(obj);
                 }
             };
 
@@ -1552,6 +1761,13 @@ function installMutationTracking($B) {
         // exception does not take the entry back out, as at `extend`, at `|=`,
         // and at `__setattr__`. The shape is the one every mutation path has,
         // and `tests/mutation-notifies-in-finally` reads it.
+        //
+        // A watched dict's write is told as its own `__setitem__` is
+        // (`changeOf`), a dict's alone: the class of any other may write it
+        // anywhere. Asked of a watched object only, as below, since every
+        // write by subscript in the program comes through here.
+        const changed = MARKS.has(obj) && quietPyType(obj) === _b_.dict ? changeOf('__setitem__', obj, [key, value]) : null;
+
         try {
             return setitem(obj, key, value, ...rest);
         } finally {
@@ -1563,7 +1779,7 @@ function installMutationTracking($B) {
                 // began left the key outside it, and mutating it repainted
                 // nothing.
                 stored(obj, key, value);
-                MARKS.get(obj)();
+                if (changed === null || changed()) MARKS.get(obj)();
             }
         }
     };
@@ -1583,11 +1799,13 @@ function installMutationTracking($B) {
     $B.$delitem = function (obj, ...rest) {
         // In a `finally`, like the write above it and the deleter below: a
         // `__delitem__` of the author's may remove the entry and then raise,
-        // and nothing puts it back.
+        // and nothing puts it back. A dict's is told as the write above.
+        const changed = MARKS.has(obj) && quietPyType(obj) === _b_.dict ? changeOf('__delitem__', obj, rest) : null;
+
         try {
             return delitem(obj, ...rest);
         } finally {
-            notify(obj);
+            if (changed === null || changed()) notify(obj);
         }
     };
 
