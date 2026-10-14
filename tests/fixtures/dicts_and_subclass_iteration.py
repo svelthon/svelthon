@@ -1,8 +1,9 @@
 # A dict keyed by "hasOwnProperty", a str key taken out of a dict with other
 # keys, a key looked up after popitem, and a list subclass whose __iter__ yields
-# other items, handed to list(), max(), dict() and bytes().
-# `python3` on this module gives the lines the test expects.
-__all__ = ["answers"]
+# other items, handed to list(), max(), dict() and bytes(); and JavaScript
+# arrays the test hands in, read by dict() and bytes() as Python values.
+# `python3` on this module gives the lines the test expects for `answers`.
+__all__ = ["answers", "from_javascript"]
 
 
 class Tens(list):
@@ -38,6 +39,14 @@ def answers():
         lambda: max(Tens([1, 2])),
         lambda: dict([Tens([1, 2])]),
         lambda: bytes(Tens([1, 2])),
+    ]]
+
+
+def from_javascript(pair, ints, floats):
+    return [answer(one) for one in [
+        lambda: [(type(key).__name__, value) for key, value in dict([pair]).items()],
+        lambda: bytes(ints),
+        lambda: bytes(floats),
     ]]
 
 

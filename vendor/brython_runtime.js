@@ -7252,9 +7252,8 @@ source=[]
 for(var i=0;i < size;i++){source[i]=0}}else if($B.$isinstance(source,[_b_.bytes,_b_.bytearray])){source=source.source}else if($B.$isinstance(source,_b_.memoryview)){source=_b_.memoryview.tp_funcs.tobytes(source).source}else if($B.imported.array &&
 $B.$isinstance(source,$B.module_getattr($B.imported.array,'array'))){var array=$B.module_getattr($B.imported.array,'array')
 source=array.tp_funcs.tobytes(source).source}else{
-var int_list
-if(Array.isArray(source)&&(! source.ob_type ||
-source.ob_type===_b_.list ||source.ob_type===_b_.tuple)){int_list=source}else{
+var int_list,klass=$B.get_class(source)
+if(klass===_b_.list ||klass===_b_.tuple){int_list=source}else{
 try{
 int_list=_b_.list.$factory(source)}catch(err){var bytes_method=$B.$getattr(source,'__bytes__',_b_.None)
 if(bytes_method===_b_.None){$B.RAISE(_b_.TypeError,"cannot convert "+
@@ -7852,8 +7851,8 @@ if(typeof source=="string" ||$B.is_str(source)){if(encoding===undefined){$B.RAIS
 int_list=encode(source,encoding ||"utf-8",errors ||"strict")}else{
 if(encoding !==undefined){console.log('encoding',encoding)
 $B.RAISE(_b_.TypeError,"encoding without a string argument")}
-if(Array.isArray(source)&&(! source.ob_type ||
-source.ob_type===_b_.list ||source.ob_type===_b_.tuple)){int_list=source}else{
+var klass=$B.get_class(source)
+if(klass===_b_.list ||klass===_b_.tuple){int_list=source}else{
 try{
 int_list=_b_.list.$factory(source)}catch(err){var bytes_method=$B.$getattr(source,'__bytes__',_b_.None)
 if(bytes_method===_b_.None){$B.RAISE(_b_.TypeError,"cannot convert "+
@@ -11770,8 +11769,8 @@ $B.RAISE(_b_.KeyError,key)}
 dict.tp_hash=_b_.None
 function init_from_list(self,args){var i=0
 for(var item of args){
-var pair=Array.isArray(item)&&(! item.ob_type ||
-item.ob_type===_b_.list ||item.ob_type===_b_.tuple)? item :
+var klass=$B.get_class(item)
+var pair=klass===_b_.list ||klass===_b_.tuple ? item :
 Array.from($B.make_js_iterator_no_trace(item))
 if(pair.length !=2){$B.RAISE(_b_.ValueError,"dictionary "+
 `update sequence element #${i} has length ${pair.length}; 2 is required`)}

@@ -133,8 +133,8 @@ written against:
 | `dict-lookup-after-popitem` | a lookup that meets the entry `popitem()` left in its bucket removes it by its index, where it spliced an undeclared `i` and raised a JavascriptError, `3 in d` after `d.popitem()` |
 | `list-subclass-iter` | `list()` and `tuple()`, and so `sorted()`, `[*r]` and `f(*r)`, copy the storage of an exact list or tuple only, and iterate a subclass, whose `__iter__` may yield other items |
 | `min-max-subclass-iter` | `max()` and `min()` read the storage of an exact list or tuple only, and iterate a subclass |
-| `dict-pair-subclass-iter` | `dict()` takes a pair as it is only for an exact list or tuple, and iterates a subclass. On `min-max-subclass-iter`, whose iterator it reads the pair with |
-| `bytes-subclass-iter` | `bytes()` and `bytearray()` take the items of an exact list or tuple as they are, and iterate a subclass. On `list-subclass-iter`, which they read it through |
+| `dict-pair-subclass-iter` | `dict()` takes a pair as it is only for an exact list or tuple, and iterates anything else: a subclass, and a JavaScript array, whose items it converts, where a float stayed a JavaScript number no float key found. On `min-max-subclass-iter`, whose iterator it reads the pair with |
+| `bytes-subclass-iter` | `bytes()` and `bytearray()` take the items of an exact list or tuple as they are, and iterate anything else: a subclass, and a JavaScript array, whose float is now refused, where it made a byte of it. On `list-subclass-iter`, which they read it through |
 
 The first one reaches Svelthon at `importjs`: a value handed to a JavaScript
 function, or handed back by one, crosses through `pyobj2jsobj` and
