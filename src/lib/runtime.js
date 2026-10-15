@@ -20,9 +20,32 @@ export const NONE = globalThis.__BRYTHON__.builtins.None;
 // reading a `.py` module's objects is followed all the same.
 let inReaction = () => true;
 
+// A write Svelte checks and that changes nothing, handed over the same way
+// (`__pybridge.refusing`): it raises where Svelte refuses a write, in a
+// derived or a block, and does nothing anywhere else. Null until a component
+// or a store has loaded, and nothing is refused before then.
+let refusal = null;
+
+const refusing = () => {
+    if (refusal === null) return false;
+
+    try {
+        refusal();
+        return false;
+    } catch {
+        return true;
+    }
+};
+
 // How a set's view takes out the member its own lookup found, and tells it
 // (`SetView.delete`): the mutation tracking's, which sets it.
 let removeFound;
+
+// The classes something may read: one read by a name (`className`), one whose
+// name holds a watched value (`nameMarker`), one watched (`mark`). A write to
+// any other class, or to an object that is no class, tells nobody, and is
+// asked nothing more (`beforeClassWrite`, `classNameChanged`).
+const READ_CLASSES = new WeakSet();
 
 // The template helpers, re-exported so a generated component has one specifier
 // to import rather than two, and so every satellite repo keeps the single
@@ -715,6 +738,12 @@ export const __pybridge = {
         inReaction = answer;
     },
 
+    // A write Svelte checks and that changes nothing, handed over the same way
+    // (`refusal` above).
+    refusing(write) {
+        refusal = write;
+    },
+
     // The rows an `{#each}` walks, and whether they are still the ones its
     // block holds. The block runs again on a change of the rows themselves, a
     // row added, removed, moved or replaced, and not on a change inside a row,
@@ -1150,6 +1179,48 @@ function installMutationTracking($B) {
         if (MARKS.has(obj)) MARKS.get(obj)();
     };
 
+    // **A write Svelte refuses changes nothing**, as in Svelte, whose state
+    // refuses a write before it stores it (`state_unsafe_mutation`, a write
+    // made while a derived or a block reads). A write of Python's is made
+    // before anything is told, and the refusal came from telling the readers:
+    // the model kept what the page refused, and an author who caught the
+    // error read two answers. So where writes are refused (`refusing`), what
+    // a watched container stores is copied before the write (`saving`), and
+    // put back if telling its readers is refused (`settle`). A write that
+    // changes nothing tells nobody, and passes, as Svelte's own collections
+    // let it; one allowed tells its readers as it did, in a `finally`. A write
+    // known beforehand to change nothing, the call's name and arguments given,
+    // copies nothing (`unchanging`).
+    //
+    // A class is told first instead (`beforeClassWrite`): written, it changes
+    // more than itself, the caches of its subclasses, their order of lookup
+    // and the bases' lists of subclasses, which no copy of the class puts
+    // back. Told first, a refused write is never made; and a write to a class
+    // tells its readers whatever it writes, so telling them first decides
+    // what telling them after would.
+    const saving = (target, name, args) =>
+        MARKS.has(target) && refusing() && !(name !== undefined && unchanging(name, target, args)) ? storageOf(target) : undefined;
+
+    const beforeClassWrite = (obj, attr) => {
+        // Asked first whether anything could read it, one lookup an object
+        // nobody reads misses, since every attribute write comes through here.
+        if (!READ_CLASSES.has(obj) || !refusing()) return;
+
+        classNameChanged(obj, attr);
+        notify(obj);
+    };
+
+    const settle = (target, saved, tell) => {
+        if (saved === undefined) return tell();
+
+        try {
+            return tell();
+        } catch (error) {
+            putBack(target, saved);
+            throw error;
+        }
+    };
+
     // What a call on a watched container leaves to do, wherever the call came
     // from. `obj` is known watched and `attr` known followed by both callers.
     const afterCall = (obj, attr, result, args) => {
@@ -1233,9 +1304,11 @@ function installMutationTracking($B) {
 
     // A member a set's view found by its own lookup (`SetView.delete`), taken
     // out as the engine's `discard` takes it out, `set_remove` then
-    // `$version`, and told as that call is told.
+    // `$version`, and told as that call is told: copied first where a write is
+    // refused, put back if its readers refuse it.
     removeFound = (set, hash, at, asked) => {
         const member = set.$store[hash]?.[at] ?? asked;
+        const saved = saving(set);
 
         if (set.$store[hash] !== undefined) {
             set.$store[hash].splice(at, 1);
@@ -1244,7 +1317,7 @@ function installMutationTracking($B) {
         }
 
         set.$version += 1;
-        afterCall(set, 'discard', NONE, [member]);
+        settle(set, saved, () => afterCall(set, 'discard', NONE, [member]));
     };
 
     // **Whether a call on a watched set or dict changed it**, told as Svelte's
@@ -1284,6 +1357,141 @@ function installMutationTracking($B) {
     })();
     const VERSION = dictField('VERSION');
     const KEYS = dictField('KEYS');
+    const VALUES = dictField('VALUES');
+    const TABLE = dictField('TABLE');
+
+    // A value the engine alone hashes and compares: a number, a string, bytes,
+    // None, and a tuple or a frozenset of them.
+    const PLAIN = [_b_.int, _b_.float, _b_.complex, _b_.str, _b_.bytes, _b_.bool, $B.get_class(NONE)];
+    const plain = (one) => {
+        if (one === null || typeof one !== 'object') return ['number', 'string', 'boolean', 'bigint'].includes(typeof one);
+
+        const type = quietPyType(one);
+
+        if (type === _b_.tuple) return one.every(plain);
+        if (type === _b_.frozenset) return Object.values(one.$store).flat().every(plain);
+
+        return PLAIN.includes(type);
+    };
+
+    // What a dict holds for a key, or a set for a member, found as the engine
+    // finds it, by its hash and then by equality with what is filed under it,
+    // and without running anything of the author's: the value held (a set's
+    // member itself), `MISSING` if there is none, and undefined when finding it
+    // would hash or compare a value that is not plain.
+    const heldPlainly = (target, one) => {
+        if (!plain(one)) return undefined;
+
+        const hash = $B.$hash(one);
+        const found = (keys, at) => {
+            for (const index of at ?? []) {
+                const key = keys(index);
+
+                if (key === undefined) continue;
+                if (!plain(key)) return undefined;
+                if ($B.is_or_equals(key, one)) return index;
+            }
+
+            return MISSING;
+        };
+
+        if (isSet(target)) return found((member) => member, target.$store[hash]);
+
+        if (!$B.is_dict(target) || NAMESPACE_DICTS.has(target) || TABLE === undefined || VALUES === undefined) return undefined;
+        if (target[KEYS] === undefined) return typeof one === 'string' && Object.hasOwn(target, one) ? target[one] : MISSING;
+
+        const at = found((index) => target[KEYS][index], target[TABLE][hash]);
+
+        return at === undefined || at === MISSING ? at : target[VALUES][at];
+    };
+
+    // Whether a value written is the one held, as a `SvelteMap` tells it: the
+    // same object, or the same value as both cross (`crossed`), a float of
+    // the engine's by its number, of the same type and the same sign: `1.0`
+    // written over `1`, or `-0.0` over `0.0`, are one number to JavaScript and
+    // two to the page, which shows each as Python writes it.
+    const sameValue = (one, held) => {
+        if (one === held) return true;
+
+        const native = crossed(one);
+
+        return native !== UNCROSSED && quietPyType(one) === quietPyType(held) && Object.is(native, crossed(held));
+    };
+
+    // The entries an `update` writes, in order, when reading them runs nothing
+    // of the author's and spends nothing: a dict's, the pairs of a list or a
+    // tuple, each a list or a tuple of two, and keywords given by name.
+    // Undefined for anything else: an iterator is read once, by the call, and
+    // a mapping of the author's may answer anything.
+    const updateWrites = (args) => {
+        const writes = [];
+
+        for (const one of args) {
+            if (one !== null && typeof one === 'object' && one[$B.KW] !== undefined) {
+                const [named, ...spread] = one[$B.KW];
+
+                if (spread.length > 0) return undefined;
+
+                for (const key of Object.keys(named ?? {})) writes.push([key, named[key]]);
+                continue;
+            }
+
+            const type = quietPyType(one);
+
+            if (type === _b_.dict) {
+                writes.push(...pyEntries(one));
+            } else if (type === _b_.list || type === _b_.tuple) {
+                for (const pair of one) {
+                    const kind = quietPyType(pair);
+
+                    if ((kind !== _b_.list && kind !== _b_.tuple) || pair.length !== 2) return undefined;
+
+                    writes.push([pair[0], pair[1]]);
+                }
+            } else {
+                return undefined;
+            }
+        }
+
+        return writes;
+    };
+
+    // Whether a dict holds every entry a write puts in it already
+    // (`heldPlainly`, `sameValue`): undefined when a key is not plain.
+    const holdsAlready = (target, writes) => {
+        for (const [key, value] of writes) {
+            const held = heldPlainly(target, key);
+
+            if (held === undefined) return undefined;
+            if (held === MISSING || !sameValue(value, held)) return false;
+        }
+
+        return true;
+    };
+
+    // A write known beforehand to change nothing (`heldPlainly`), which no copy
+    // has to put back: a member added that is held, one discarded that is
+    // not, a key set by `setdefault` that is held, keys set to the values they
+    // hold, by subscript or by `update`. Copied, it paid the whole container at
+    // each such write, and `counts.setdefault(name, 0)` once a row a cost
+    // growing with the square of the rows.
+    const unchanging = (name, target, args) => {
+        if (name === 'update') {
+            const writes = updateWrites(args);
+
+            return writes !== undefined && holdsAlready(target, writes) === true;
+        }
+
+        if (name === '__setitem__') return holdsAlready(target, [args]) === true;
+        if (name !== 'setdefault' && name !== 'add' && name !== 'discard') return false;
+
+        const held = heldPlainly(target, args[0]);
+
+        if (held === undefined) return false;
+        if (name === 'discard') return held === MISSING;
+
+        return held !== MISSING;
+    };
 
     const changeOf = (name, target, args) => {
         if (!MARKS.has(target)) return null;
@@ -1315,15 +1523,23 @@ function installMutationTracking($B) {
             return () => (target[VERSION] ?? 0) !== version || (own && held !== Object.hasOwn(target, key));
         }
 
-        // And a key written, read there before and after; any other key is
-        // hashed by the call alone, which a second look would hash again.
+        // And a key written, read there before and after: a string key of a
+        // dict of string keys alone as its own property, and any other plain
+        // key as the engine finds it (`heldPlainly`). Any other key is hashed
+        // by the call alone, which a second look would hash again.
         if (name === '__setitem__') {
-            if (!stringKeyed || typeof key !== 'string') return null;
+            if (!stringKeyed || typeof key !== 'string') {
+                const before = heldPlainly(target, key);
+
+                if (before === undefined) return null;
+
+                return () => (target[VERSION] ?? 0) !== version || !sameValue(heldPlainly(target, key), before);
+            }
 
             const held = Object.hasOwn(target, key);
             const before = target[key];
 
-            return () => (target[VERSION] ?? 0) !== version || Object.hasOwn(target, key) !== held || target[key] !== before;
+            return () => (target[VERSION] ?? 0) !== version || Object.hasOwn(target, key) !== held || !sameValue(target[key], before);
         }
 
         if (name === 'popitem') return (result) => result !== undefined;
@@ -1334,26 +1550,19 @@ function installMutationTracking($B) {
             return () => size > 0;
         }
 
-        // An update that writes nothing, or writes to a dict of string keys
-        // the very values it holds, read off its own properties: no key is
-        // hashed but by the call. A source of pairs, or keywords, can be read
-        // only once, by the call; any other may run the author's code.
+        // An update that writes nothing, or writes the values held already, as
+        // a run of `SvelteMap.set` would (`updateWrites`, `holdsAlready`): no
+        // key is hashed but by the call, and a source read only once, or a
+        // key that is not plain, is left to it.
         if (name === 'update') {
-            const [source, ...others] = args;
+            const writes = updateWrites(args);
 
-            if (others.length > 0 || (source !== undefined && source !== null && source[$B.KW] !== undefined)) return null;
-
-            let writes;
-
-            if (source === undefined) writes = [];
-            else if (quietPyType(source) === _b_.dict) writes = pyEntries(source);
-            else if ((quietPyType(source) === _b_.list || quietPyType(source) === _b_.tuple) && source.length === 0) writes = [];
-            else return null;
-
+            if (writes === undefined) return null;
             if (writes.length === 0) return () => false;
-            if (!stringKeyed || writes.some(([one]) => typeof one !== 'string')) return null;
 
-            const unchanged = writes.every(([one, value]) => Object.hasOwn(target, one) && target[one] === value);
+            const unchanged = holdsAlready(target, writes);
+
+            if (unchanged === undefined) return null;
 
             return () => !unchanged || (target[VERSION] ?? 0) !== version;
         }
@@ -1392,10 +1601,16 @@ function installMutationTracking($B) {
             // who caught the exception, saw the old value on the page for ever.
             // `result` stays undefined on that path; `afterCall` reads it only
             // to hand a returned container the watch.
+            if (name === '__setattr__' || name === '__delattr__') beforeClassWrite(target, args[0]);
+
             const outer = mutating.get(target);
             const nested = outer !== undefined && MUTATORS.has(name);
             const changed = outer === undefined || nested ? changeOf(name, target, args) : null;
             const running = outer ?? { depth: 0, touched: false };
+            // Copied before a call that writes alone: a read, `get` among
+            // them, writes nothing, and a getter that writes is told by its
+            // own write.
+            const saved = outer === undefined && MUTATORS.has(name) ? saving(target, name, args) : undefined;
             let result;
 
             running.depth += 1;
@@ -1409,7 +1624,9 @@ function installMutationTracking($B) {
                 if (running.depth === 0) mutating.delete(target);
 
                 if (nested && (changed === null || changed(result))) outer.touched = true;
-                if (outer === undefined && (changed === null || running.touched || changed(result))) afterCall(target, name, result, args);
+                if (outer === undefined && (changed === null || running.touched || changed(result))) {
+                    settle(target, saved, () => afterCall(target, name, result, args));
+                }
             }
         };
 
@@ -1542,13 +1759,14 @@ function installMutationTracking($B) {
         if (!wrappers.has(method)) {
             const notified = function (...args) {
                 const changed = nativeChange(method, obj, args);
+                const saved = saving(obj);
                 let result;
 
                 try {
                     result = Reflect.apply(method, this, args);
                     return result;
                 } finally {
-                    if (changed === null || changed(result)) notify(obj);
+                    if (changed === null || changed(result)) settle(obj, saved, () => notify(obj));
                 }
             };
 
@@ -1719,7 +1937,10 @@ function installMutationTracking($B) {
     const nameMarker = (cls, attr) => {
         let markers = NAME_MARKERS.get(cls);
 
-        if (markers === undefined) NAME_MARKERS.set(cls, (markers = new Map()));
+        if (markers === undefined) {
+            NAME_MARKERS.set(cls, (markers = new Map()));
+            READ_CLASSES.add(cls);
+        }
 
         let marker = markers.get(attr);
 
@@ -1775,7 +1996,10 @@ function installMutationTracking($B) {
     const className = (cls, attr) => {
         let names = CLASS_NAMES.get(cls);
 
-        if (names === undefined) CLASS_NAMES.set(cls, (names = new Map()));
+        if (names === undefined) {
+            CLASS_NAMES.set(cls, (names = new Map()));
+            READ_CLASSES.add(cls);
+        }
 
         let entry = names.get(attr);
 
@@ -1799,7 +2023,10 @@ function installMutationTracking($B) {
     // refuses it there, `state_unsafe_mutation`, as it refuses a write to its
     // own state: a reader already painted is never left showing the old value.
     const classNameChanged = (cls, attr) => {
-        if (typeof attr !== 'string' || !pyClass(cls)) return;
+        // A class nothing reads has nothing to tell (`READ_CLASSES`), and an
+        // object that is no class is not one of them: one lookup, since every
+        // attribute write of the program comes through here.
+        if (typeof attr !== 'string' || !READ_CLASSES.has(cls)) return;
 
         // The value the name held is asked again the next time a mutation of
         // it climbs to the name (`attributeHolds`), as a container's links are
@@ -1896,9 +2123,12 @@ function installMutationTracking($B) {
         //
         // A watched dict's write is told as its own `__setitem__` is
         // (`changeOf`), a dict's alone: the class of any other may write it
-        // anywhere. Asked of a watched object only, as below, since every
+        // anywhere. Asked of a watched object only, the copy too, since every
         // write by subscript in the program comes through here.
-        const changed = MARKS.has(obj) && quietPyType(obj) === _b_.dict ? changeOf('__setitem__', obj, [key, value]) : null;
+        const watched = MARKS.has(obj);
+        const dict = watched && quietPyType(obj) === _b_.dict;
+        const changed = dict ? changeOf('__setitem__', obj, [key, value]) : null;
+        const saved = !watched ? undefined : dict ? saving(obj, '__setitem__', [key, value]) : saving(obj);
 
         try {
             return setitem(obj, key, value, ...rest);
@@ -1911,7 +2141,7 @@ function installMutationTracking($B) {
                 // began left the key outside it, and mutating it repainted
                 // nothing.
                 stored(obj, key, value);
-                if (changed === null || changed()) MARKS.get(obj)();
+                if (changed === null || changed()) settle(obj, saved, () => MARKS.get(obj)());
             }
         }
     };
@@ -1933,11 +2163,12 @@ function installMutationTracking($B) {
         // `__delitem__` of the author's may remove the entry and then raise,
         // and nothing puts it back. A dict's is told as the write above.
         const changed = MARKS.has(obj) && quietPyType(obj) === _b_.dict ? changeOf('__delitem__', obj, rest) : null;
+        const saved = saving(obj);
 
         try {
             return delitem(obj, ...rest);
         } finally {
-            if (changed === null || changed()) notify(obj);
+            if (changed === null || changed()) settle(obj, saved, () => notify(obj));
         }
     };
 
@@ -1983,27 +2214,33 @@ function installMutationTracking($B) {
             // exception does not undo the write. `object.__setattr__(self,
             // name, value)` followed by a `raise` left the model at 1 and the
             // page at 0, with the handler catching the error and carrying on.
+            beforeClassWrite(obj, attr);
+
+            const saved = saving(obj);
             let result;
 
             try {
                 result = setattr(obj, attr, value, ...rest);
                 return result;
             } finally {
-                classNameChanged(obj, attr);
+                settle(obj, saved, () => {
+                    classNameChanged(obj, attr);
 
-                if (MARKS.has(obj)) {
-                    // What the write *stored*, and not only what it was handed:
-                    // a `__setattr__` of the author's may normalise, copy or wrap
-                    // its argument, `object.__setattr__(self, name, list(value))`
-                    // being an ordinary way to defend an invariant, and the list
-                    // the object holds is the one the page reads.
-                    //
-                    // Read off the instance's own storage, never through
-                    // `$getattr`: a property of the author's must not run
-                    // because something was written.
-                    rewalk(obj, value, attr);
-                    MARKS.get(obj)();
-                }
+                    if (MARKS.has(obj)) {
+                        // What the write *stored*, and not only what it was
+                        // handed: a `__setattr__` of the author's may normalise,
+                        // copy or wrap its argument, `object.__setattr__(self,
+                        // name, list(value))` being an ordinary way to defend an
+                        // invariant, and the list the object holds is the one
+                        // the page reads.
+                        //
+                        // Read off the instance's own storage, never through
+                        // `$getattr`: a property of the author's must not run
+                        // because something was written.
+                        rewalk(obj, value, attr);
+                        MARKS.get(obj)();
+                    }
+                });
             }
         };
     }
@@ -2027,12 +2264,16 @@ function installMutationTracking($B) {
             member,
             name,
             $B.wrapper_descriptor.$factory(member, name, (self, obj, ...value) => {
+                const saved = saving(obj);
+
                 try {
                     return built(self, obj, ...value);
                 } finally {
                     if (MARKS.has(obj)) {
-                        if (value.length > 0) rewalk(obj, value[0]);
-                        MARKS.get(obj)();
+                        settle(obj, saved, () => {
+                            if (value.length > 0) rewalk(obj, value[0]);
+                            MARKS.get(obj)();
+                        });
                     }
                 }
             })
@@ -2050,11 +2291,17 @@ function installMutationTracking($B) {
         // author's may remove the attribute and *then* raise, and the exception
         // does not put it back. The page showed `True` for a `hasattr` the model
         // answered `False` to.
+        beforeClassWrite(obj, attr);
+
+        const saved = saving(obj);
+
         try {
             return Reflect.apply(delattr, this, arguments);
         } finally {
-            classNameChanged(obj, attr);
-            notify(obj);
+            settle(obj, saved, () => {
+                classNameChanged(obj, attr);
+                notify(obj);
+            });
         }
     };
 
@@ -2071,6 +2318,7 @@ function installMutationTracking($B) {
     const augmAssign = $B.augm_assign;
     $B.augm_assign = function (left, op, right, ...rest) {
         const watched = MARKS.has(left);
+        const saved = saving(left);
         let result;
 
         // An exception is not proof that nothing changed. `d |= values()` keeps
@@ -2088,8 +2336,10 @@ function installMutationTracking($B) {
             result = augmAssign(left, op, right, ...rest);
         } catch (error) {
             if (watched) {
-                adopt(left);
-                MARKS.get(left)();
+                settle(left, saved, () => {
+                    adopt(left);
+                    MARKS.get(left)();
+                });
             }
 
             throw error;
@@ -2100,9 +2350,11 @@ function installMutationTracking($B) {
             // items()` cannot: the generator kept nothing, and neither does a
             // class whose `__iter__` makes its rows as it goes. The same two answers
             // as the method paths above, and the same question decides.
-            if (!keeps(right) || !inheritContents(left, right)) adopt(left);
+            settle(left, saved, () => {
+                if (!keeps(right) || !inheritContents(left, right)) adopt(left);
 
-            MARKS.get(left)();
+                MARKS.get(left)();
+            });
         }
 
         return result;
@@ -2177,6 +2429,105 @@ const seenUnder = (row) => {
 
     return quietPyType(row) === _b_.tuple ? row.reduce((last, one) => Math.max(last, seenUnder(one)), seen) : seen;
 };
+
+// What an object stores, copied deep enough to put it back (`settle` in the
+// mutation tracking): its own fields, each as its descriptor and in its order,
+// so that no getter runs to copy one, a hole stays a hole, and a key put back
+// takes its place again; the attribute dict any object of Python's may carry,
+// the same way; and the entries of a `Map` or a `Set` of JavaScript's, which
+// no descriptor holds. The values are the author's and kept as they are, and
+// so is whatever the engine keeps beside them, the class a dict names among
+// them. A table the engine changes in place is put back in place, its fields
+// the same way, and so are the arrays a table of fields holds: a dict's
+// tables, a set's buckets, a bytearray's bytes and a function's `__name__`,
+// `__doc__` and `__defaults__`.
+const TABLES = ['TABLE', 'KEYS', 'VALUES', 'HASHES'];
+
+const inPlace = (obj, key) => {
+    if (isSet(obj)) return key === '$store';
+    if (key === 'source') return ownType(obj)?.tp_mro.includes(_b_.bytearray) === true;
+
+    return key === '$function_infos' || key === '$infos' || (typeof key === 'symbol' && TABLES.includes(key.description) && globalThis.__BRYTHON__.is_dict(obj));
+};
+
+// Each field as `[key, descriptor]`, and a table's with its own fields after.
+const fieldsOf = (obj, table = false) =>
+    Reflect.ownKeys(obj).map((key) => {
+        const held = Object.getOwnPropertyDescriptor(obj, key);
+        const value = held.value;
+        const holds = value !== null && typeof value === 'object' && (table ? !Array.isArray(obj) && Array.isArray(value) : inPlace(obj, key));
+
+        return holds ? [key, held, fieldsOf(value, true)] : [key, held];
+    });
+
+const DESCRIBED = ['value', 'get', 'set', 'writable', 'enumerable', 'configurable'];
+
+// Fields put back as they were, each by its descriptor: one added since goes,
+// one gone comes back, one changed takes its own again, and from the first one
+// out of its place on, each is defined again in turn, so that they come back in
+// the order they had. A field that cannot be redefined, an array's length, is
+// written.
+const fieldsBack = (target, fields) => {
+    const kept = new Set(fields.map(([key]) => key));
+
+    for (const key of Reflect.ownKeys(target)) {
+        if (!kept.has(key) && Object.getOwnPropertyDescriptor(target, key).configurable) delete target[key];
+    }
+
+    const order = Reflect.ownKeys(target);
+    let moved = false;
+
+    fields.forEach(([key, held, inner], at) => {
+        const now = Object.getOwnPropertyDescriptor(target, key);
+
+        moved ||= order[at] !== key;
+
+        if (now === undefined || (moved && now.configurable) || !DESCRIBED.every((one) => Object.is(now[one], held[one]))) {
+            if (now === undefined || now.configurable) {
+                if (now !== undefined && moved) delete target[key];
+                Object.defineProperty(target, key, held);
+            } else if (now.writable && 'value' in held) {
+                target[key] = held.value;
+            }
+        }
+
+        if (inner !== undefined) fieldsBack(held.value, inner);
+    });
+};
+
+const nativeHolds = (proto, obj) => {
+    try {
+        proto.has.call(obj);
+        return true;
+    } catch {
+        return false;
+    }
+};
+
+function storageOf(target) {
+    const $B = globalThis.__BRYTHON__;
+    const attributes = ownAttributes(target);
+    const saved = { fields: fieldsOf(target), attributes: $B.is_dict(attributes) ? fieldsOf(attributes) : undefined };
+
+    if (nativeHolds(Map.prototype, target)) saved.map = [...Map.prototype.entries.call(target)];
+    else if (nativeHolds(Set.prototype, target)) saved.set = [...Set.prototype.values.call(target)];
+
+    return saved;
+}
+
+function putBack(target, saved) {
+    if (saved.map !== undefined) {
+        Map.prototype.clear.call(target);
+        for (const [key, value] of saved.map) Map.prototype.set.call(target, key, value);
+    } else if (saved.set !== undefined) {
+        Set.prototype.clear.call(target);
+        for (const one of saved.set) Set.prototype.add.call(target, one);
+    }
+
+    fieldsBack(target, saved.fields);
+
+    if (saved.attributes !== undefined) fieldsBack(ownAttributes(target), saved.attributes);
+}
 
 // Only a container can be mutated in place; a scalar propagates by rebinding,
 // which the accessor already handles.
@@ -3142,6 +3493,8 @@ function mark(value) {
     marker.target = new WeakRef(value);
 
     MARKS.set(value, marker);
+
+    if (pyClass(value)) READ_CLASSES.add(value);
 
     adopt(value);
 

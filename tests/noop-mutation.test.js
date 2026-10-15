@@ -15,11 +15,21 @@
 // instance or a function of Python's, which cross as their view or their
 // handler. A real change is still refused, and so is a list's `extend([])`,
 // which Svelte's array refuses too.
+//
+// The same write passes whatever its spelling, as a run of `SvelteMap.set`
+// does: an update by keywords or by pairs, one to a dict whose keys are not all
+// strings, and a float written equal to the one held, which were refused where
+// `d["x"] = d["x"]` passed.
+//
+// Equal as Python shows it, though: `1.0` over `1`, `2` over `2.0` and `-0.0`
+// over `0.0` are one number to JavaScript and two on the page, which kept the
+// old one where the model held the new.
 import { test, expect } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import NoopMutation from './fixtures/NoopMutation.svelte';
 import NoopMutationNative from './fixtures/NoopMutationNative.svelte';
 import SymmetricFill from './fixtures/SymmetricFill.svelte';
+import TypedWrite from './fixtures/TypedWrite.svelte';
 
 const shown = (Component, kind) => {
     const target = document.body.appendChild(document.createElement('div'));
@@ -47,6 +57,10 @@ test.for(
             ['dict update empty', 'yes'],
             ['dict update same', 'yes'],
             ['dict setitem same', 'yes'],
+            ['dict update keywords', 'yes'],
+            ['dict update pairs', 'yes'],
+            ['dict mixed update', 'yes'],
+            ['dict setitem same float', 'yes'],
             ['dict del absent', 'yes'],
             ['js set add present', '1'],
             ['js set delete absent', '1'],
@@ -96,3 +110,19 @@ test('toggling 10,000 members of a set one call at a time is linear', () => {
     expect(target.querySelector('p').textContent).toBe('10000');
     expect(spent).toBeLessThan(1000);
 });
+
+// The page shows what the model holds after each write, the witness being the
+// model itself: a `SvelteMap` holds `1` and `1.0` as one number.
+test.for(['float for int', 'int for float', 'negative zero', 'update float for int', 'mixed float for int'])(
+    'a write of %s, the same number to JavaScript, repaints',
+    (kind) => {
+        const target = document.body.appendChild(document.createElement('div'));
+        const instance = mount(TypedWrite, { target });
+        flushSync();
+
+        flushSync(() => instance.write(kind));
+
+        expect(target.querySelector('output').textContent).toBe(instance.model());
+        expect(target.querySelector('output').textContent).not.toBe('1 2.0 0.0 1');
+    }
+);

@@ -8,6 +8,8 @@ kind: str = "set add present"
 flags = {1}
 empty = set()
 labels = {"x": "yes"}
+mixed = {1: "yes", "b": 1}
+measures = {"x": 2.5}
 items = []
 held = jsSet(1)
 bare = jsSet()
@@ -81,6 +83,19 @@ def read():
     if kind == "dict setitem same":
         labels["x"] = labels["x"]
         return labels["x"]
+    if kind == "dict update keywords":
+        labels.update(x=labels["x"])
+        return labels["x"]
+    if kind == "dict update pairs":
+        labels.update([("x", labels["x"])])
+        return labels["x"]
+    if kind == "dict mixed update":
+        mixed.update({1: mixed[1]})
+        return mixed[1]
+    if kind == "dict setitem same float":
+        before = measures["x"]
+        measures["x"] = 2.5
+        return "yes" if measures["x"] == before else "no"
     if kind == "dict del absent":
         try:
             del labels["missing"]

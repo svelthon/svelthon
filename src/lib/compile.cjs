@@ -3021,9 +3021,14 @@ function preamble(c) {
             .concat(c.lifecycle('on_mount') || c.lifecycle('on_destroy') ? ['untrack as __untrack'] : [])
             .concat(c.lifecycle('on_destroy') || releases(c) ? ['onDestroy as __onDestroy'] : [])
             .join(', ')} } from 'svelte';`,
-        // The one question the runtime asks of Svelte, answered by a rune: a
-        // plain module has none (`inReaction` in the runtime).
+        // The two questions the runtime asks of Svelte, answered by runes: a
+        // plain module has none. Whether a reaction is reading
+        // (`inReaction` in the runtime), and whether a write would be refused
+        // here, asked by a write of the value a state already holds, which
+        // Svelte checks and which changes nothing (`refusal`).
         `__pybridge.tracking(() => $effect.tracking());`,
+        `let __unchanged = $state.raw(0);`,
+        `__pybridge.refusing(() => { __unchanged = 0; });`,
         ``
     ];
 }

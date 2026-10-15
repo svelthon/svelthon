@@ -22,6 +22,11 @@
     const flags = new SvelteSet([1]);
     const empty = new SvelteSet();
     const labels = new SvelteMap([['x', 'yes']]);
+    const mixed = new SvelteMap([
+        [1, 'yes'],
+        ['b', 1]
+    ]);
+    const measures = new SvelteMap([['x', 2.5]]);
     const keyed = new SvelteSet([1, 'key']);
     const held = new SvelteSet([1]);
     const bare = new SvelteSet();
@@ -43,6 +48,9 @@
         if (kind === 'dict update empty') return labels.get('x');
         if (kind === 'dict update same') return (labels.set('x', labels.get('x')), labels.get('x'));
         if (kind === 'dict setitem same') return (labels.set('x', labels.get('x')), labels.get('x'));
+        if (kind === 'dict update keywords' || kind === 'dict update pairs') return (labels.set('x', labels.get('x')), labels.get('x'));
+        if (kind === 'dict mixed update') return (mixed.set(1, mixed.get(1)), mixed.get(1));
+        if (kind === 'dict setitem same float') return (measures.get('x'), measures.set('x', 2.5), measures.get('x') === 2.5 ? 'yes' : 'no');
         if (kind === 'dict del absent') return (labels.delete('missing'), labels.get('x'));
         if (kind === 'dict setitem new value') return (labels.set('x', 'no'), labels.get('x'));
         if (kind === 'set add absent') return flags.add(2).size;
