@@ -3021,6 +3021,9 @@ function preamble(c) {
             .concat(c.lifecycle('on_mount') || c.lifecycle('on_destroy') ? ['untrack as __untrack'] : [])
             .concat(c.lifecycle('on_destroy') || releases(c) ? ['onDestroy as __onDestroy'] : [])
             .join(', ')} } from 'svelte';`,
+        // The one question the runtime asks of Svelte, answered by a rune: a
+        // plain module has none (`inReaction` in the runtime).
+        `__pybridge.tracking(() => $effect.tracking());`,
         ``
     ];
 }

@@ -5,13 +5,20 @@ import './globals.js';
 import './boot.js';
 import { untrack } from 'svelte';
 import { createSubscriber } from 'svelte/reactivity';
-// What `$effect.tracking()` compiles to: a plain module has no runes.
-import { effect_tracking } from 'svelte/internal/client';
 import { attributeWrapper } from './attributes.js';
 
 // Python's None, so a prop the parent never passed reads as None rather than
 // leaking JavaScript's undefined into Python.
 export const NONE = globalThis.__BRYTHON__.builtins.None;
+
+// Whether the code running is a reaction that follows what it reads, as Svelte
+// answers `$effect.tracking()`. A plain module has no runes, so the answer is
+// handed over by the first component or store that loads, whose script Svelte
+// compiles (`__pybridge.tracking`), and the runtime asks nothing of Svelte's
+// internals. Until one has, every read is taken for a reaction's, which costs
+// a walk and subscribes nothing outside one: a page of JavaScript components
+// reading a `.py` module's objects is followed all the same.
+let inReaction = () => true;
 
 // The template helpers, re-exported so a generated component has one specifier
 // to import rather than two, and so every satellite repo keeps the single
@@ -696,6 +703,12 @@ export const __pybridge = {
         }
 
         return rows;
+    },
+
+    // The answer to `$effect.tracking()`, handed over by a component or a
+    // store as it loads (`inReaction` above).
+    tracking(answer) {
+        inReaction = answer;
     },
 
     // The rows an `{#each}` walks, and whether they are still the ones its
@@ -1640,7 +1653,7 @@ function installMutationTracking($B) {
     // Only in a reaction that follows its reads: a handler or the script's own
     // run subscribes nothing, and what a reaction reads it links itself.
     const lookedUp = (obj, attr) => {
-        if (typeof attr !== 'string' || !effect_tracking()) return undefined;
+        if (typeof attr !== 'string' || !inReaction()) return undefined;
 
         if (pyClass(obj)) {
             const meta = namesRead(quietPyType(obj)?.tp_mro, attr);
@@ -1817,7 +1830,7 @@ function installMutationTracking($B) {
     // descriptor }`, or null for a read nothing of a class answers. Only in a
     // reaction, as `lookedUp`.
     const providers = (obj, attr) => {
-        if (typeof attr !== 'string' || !effect_tracking()) return null;
+        if (typeof attr !== 'string' || !inReaction()) return null;
 
         const own = pyClass(obj) ? obj : undefined;
 
