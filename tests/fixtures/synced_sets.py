@@ -1,6 +1,6 @@
 # Sets a module exports and writes into a JavaScript object, changed in place.
 __all__ = ["tags", "frozen", "pairs", "box", "mutate", "seen", "walked", "refill", "fill_cells", "drop_next",
-           "put_back", "keep_only"]
+           "put_back", "keep_only", "clear_then_add"]
 
 tags = {"a"}
 frozen = frozenset({1, 2})
@@ -45,6 +45,13 @@ def put_back(clear, member):
     else:
         walked.discard(member)
     walked.add(member)
+
+
+# Emptied, then given its members back one at a time, in the order given.
+def clear_then_add(*members):
+    walked.clear()
+    for member in members:
+        walked.add(member)
 
 
 # The members kept, the others removed, in one call that rebuilds the buckets

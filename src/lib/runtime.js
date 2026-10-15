@@ -4756,6 +4756,11 @@ function instanceView(value) {
 // of them removes, in a class that redefines it, goes through a call of its own.
 const ARRIVING = new Set(['add', 'update', '__ior__']);
 
+// The calls that only take members away, which no walk has to read again for
+// a member they may have added: a member put back after them arrives by an
+// `add` of its own, in its turn.
+const REMOVING = new Set(['discard', 'remove', 'pop', 'clear']);
+
 // The classes whose hash runs nothing of the author's, beside an object hashed
 // by its identity: a walk may ask them for the bucket a member is filed under.
 // A JavaScript object is hashed by its identity too, through a slot of its own.
@@ -5014,27 +5019,55 @@ class SetView extends Set {
                 return undefined;
             }
         };
+        // Members by the hash they are filed under, and the members under each
+        // hash: those visited, and those due, not reached yet.
+        const ledger = () => ({
+            at: new Map(),
+            under: new Map(),
+            add(one, hash) {
+                this.at.set(one, hash);
+                if (!this.under.has(hash)) this.under.set(hash, new Set());
+                this.under.get(hash).add(one);
+            },
+            delete(one) {
+                const hash = this.at.get(one);
+                const group = this.under.get(hash);
+
+                this.at.delete(one);
+                group?.delete(one);
+                if (group?.size === 0) this.under.delete(hash);
+            },
+            // The members a removal may have taken: those filed under its hash,
+            // or all of them.
+            asked(hash) {
+                return hash === undefined ? [...this.at.keys()] : [...(this.under.get(hash) ?? [])];
+            }
+        });
         const walk = {
-            // Each member visited, by the hash it is filed under, and the
-            // members visited under each hash.
-            visited: new Map(),
-            filed: new Map(),
+            visited: ledger(),
+            // The members of the pass not reached yet, filed only once a call
+            // that removes asks for them: a walk nothing removes from pays
+            // nothing for them.
+            due: null,
+            entries: [],
+            reached: 0,
             // What arrived since the last pass, and whether the set changed in
             // a way that only reading it all again tells.
             arrivals: [],
             rescan: false,
-            visit(one, hash) {
-                this.visited.set(one, hash);
-                if (!this.filed.has(hash)) this.filed.set(hash, new Set());
-                this.filed.get(hash).add(one);
+            pass(entries) {
+                this.entries = entries;
+                this.reached = 0;
+                this.due = null;
+                return entries;
             },
-            forget(one) {
-                const hash = this.visited.get(one);
-                const group = this.filed.get(hash);
+            pending() {
+                if (this.due === null) {
+                    this.due = ledger();
+                    for (let at = this.reached; at < this.entries.length; at++) this.due.add(...this.entries[at]);
+                }
 
-                this.visited.delete(one);
-                group.delete(one);
-                if (group.size === 0) this.filed.delete(hash);
+                return this.due;
             },
             changed(name, args, result) {
                 // A member added is what the set now holds for it, met at its
@@ -5045,31 +5078,40 @@ class SetView extends Set {
                     const one = hash === undefined ? MISSING : kept(args[0], hash);
 
                     if (hash === undefined) this.rescan = true;
-                    else if (one !== MISSING && !this.visited.has(one)) this.arrivals.push([one, hash]);
+                    else if (one !== MISSING && !this.visited.at.has(one)) this.arrivals.push([one, hash]);
 
                     return;
                 }
 
-                if (name !== 'discard' && name !== 'remove' && name !== 'pop') this.rescan = true;
+                // A call that only takes members away adds none to read again.
+                if (!REMOVING.has(name)) this.rescan = true;
                 if (ARRIVING.has(name)) return;
 
                 // A single removal takes a member equal to the one it names,
-                // filed under the same hash, so only those visited under it
-                // are asked; any other change asks every member visited.
+                // filed under the same hash, so only those under it are asked;
+                // any other change asks every member.
                 const named = name === 'pop' ? result : name === 'discard' || name === 'remove' ? args[0] : MISSING;
-                const hash = named === MISSING ? undefined : this.visited.get(named) ?? filed(named);
-                const asked = hash === undefined ? [...this.visited.keys()] : [...(this.filed.get(hash) ?? [])];
+                const due = this.pending();
+                const hash = named === MISSING ? undefined : (this.visited.at.get(named) ?? due.at.get(named) ?? filed(named));
 
-                // A member that left is forgotten; one the set now holds as
-                // another object stayed, and its visit goes to that object.
-                for (const one of asked) {
-                    const filedUnder = this.visited.get(one);
+                // A member visited that left is forgotten; one the set now
+                // holds as another object stayed, and its visit goes to that
+                // object.
+                for (const one of this.visited.asked(hash)) {
+                    const filedUnder = this.visited.at.get(one);
                     const same = kept(one, filedUnder);
 
                     if (same === one) continue;
 
-                    this.forget(one);
-                    if (same !== MISSING) this.visit(same, filedUnder);
+                    this.visited.delete(one);
+                    if (same !== MISSING) this.visited.add(same, filedUnder);
+                }
+
+                // A member not reached yet that left is due no more: added
+                // back, it arrives as any member does, after the others, and
+                // not where it stood.
+                for (const one of due.asked(hash)) {
+                    if (kept(one, due.at.get(one)) !== one) due.delete(one);
                 }
             }
         };
@@ -5079,7 +5121,7 @@ class SetView extends Set {
             const entries = [];
 
             for (const [hash, bucket] of Object.entries(value.$store)) {
-                for (const one of bucket) if (!walk.visited.has(one)) entries.push([one, hash]);
+                for (const one of bucket) if (!walk.visited.at.has(one)) entries.push([one, hash]);
             }
 
             return entries;
@@ -5088,17 +5130,23 @@ class SetView extends Set {
         (marker.walks ??= new Set()).add(ref);
 
         try {
-            let entries = members();
+            let entries = walk.pass(members());
 
             while (entries.length > 0) {
-                for (const [one, hash] of entries) {
-                    if (walk.visited.has(one) || !present(one, hash)) continue;
+                for (let at = 0; at < entries.length; at++) {
+                    const [one, hash] = entries[at];
+                    const waiting = walk.due === null || walk.due.at.has(one);
 
-                    walk.visit(one, hash);
+                    walk.reached = at + 1;
+                    walk.due?.delete(one);
+
+                    if (!waiting || walk.visited.at.has(one) || !present(one, hash)) continue;
+
+                    walk.visited.add(one, hash);
                     yield forReader(one);
                 }
 
-                entries = walk.rescan ? members() : walk.arrivals;
+                entries = walk.pass(walk.rescan ? members() : walk.arrivals);
                 walk.arrivals = [];
                 walk.rescan = false;
             }

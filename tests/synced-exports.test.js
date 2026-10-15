@@ -368,6 +368,88 @@ test('a walk of a set visits a member added back, whoever adds it', () => {
     );
 });
 
+// A member the walk has not reached yet that leaves and comes back arrives as a
+// new one does, after the others, as in a `Set`. It was met where it stood,
+// its presence taken for its never having left, and so after `clear` and the
+// members added back one by one. The witness is a `Set` holding the view's
+// members in the order the view walks them.
+test('a walk of a set meets a member not reached yet, put back, after the others', () => {
+    const walk = (set, change) => {
+        const order = [...set];
+        const visited = [];
+        let changed = false;
+
+        for (const one of set) {
+            visited.push(one);
+            if (!changed) {
+                changed = true;
+                change(order);
+            }
+        }
+
+        return visited;
+    };
+    const byJavaScript = (set) => [
+        ([, second]) => (set.delete(second), set.add(second)),
+        ([, second, third]) => (set.clear(), set.add(third), set.add(second))
+    ];
+    const byPython = [([, second]) => sets.put_back(false, second), ([, second, third]) => sets.clear_then_add(third, second)];
+
+    const mine = [...byJavaScript(sets.walked), ...byPython].map((change) => {
+        sets.refill();
+        return walk(sets.walked, change);
+    });
+    const witness = [0, 1, 0, 1].map((at) => {
+        sets.refill();
+        const native = new Set([...sets.walked]);
+
+        return walk(native, byJavaScript(native)[at]);
+    });
+
+    expect(mine).toEqual(witness);
+    expect(mine.map((visited) => visited.length)).toEqual([3, 3, 3, 3]);
+});
+
+// The members not reached yet are filed only once a call that removes asks for
+// them: a walk nothing removes from files each member once, as it visits it.
+// Filed as due at the start of each pass too, every walk paid twice, measured
+// at twice the time of a `for...of` over 100,000 members. Counted as the
+// members filed, keys of a `Map`, against a walk that removes one, which files
+// those it has not reached, and against a `Set` for what is visited.
+test('a walk of a set nothing removes from files each member once', () => {
+    const walk = (set, remove) => {
+        const store = Map.prototype.set;
+        const visited = [];
+        let filed = 0;
+
+        Map.prototype.set = function (key, value) {
+            if (typeof key === 'number') filed += 1;
+            return store.call(this, key, value);
+        };
+
+        try {
+            for (const one of set) {
+                visited.push(one);
+                if (remove && one === 1) set.delete(3);
+            }
+        } finally {
+            Map.prototype.set = store;
+        }
+
+        return { visited, filed };
+    };
+    const native = (remove) => walk(new Set([1, 2, 3, 4]), remove).visited;
+
+    sets.refill([1, 2, 3, 4]);
+    expect(walk(sets.walked, false)).toEqual({ visited: native(false), filed: 4 });
+
+    sets.refill([1, 2, 3, 4]);
+    const removing = walk(sets.walked, true);
+
+    expect(removing.visited).toEqual(native(true));
+    expect(removing.filed).toBeGreaterThan(removing.visited.length);
+});
+
 // A subclass that redefines `__iter__` is walked by it, as a list's view is:
 // every walk of the view yields what Python's own loop yields, and what the
 // class raises, or a protocol it breaks, reaches JavaScript in Python's words.
