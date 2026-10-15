@@ -3228,7 +3228,19 @@ function adoptOne(value) {
     // user class is hashable by default and its attributes are mutable, so
     // `{Box()}` holds exactly what this walk exists for.
     if (Array.isArray(value)) {
-        for (let i = 0; i < value.length; i++) inherit(value, value[i], i);
+        // A JavaScript array may hold an element behind a getter, the author's
+        // code, which watching must not run: read by its descriptor, a value
+        // held is watched now and a getter's result when Python reads it
+        // (`$getitem`). A list holds values alone, and is read as stored.
+        if (ownType(value) === undefined) {
+            for (let i = 0; i < value.length; i++) {
+                const held = Object.getOwnPropertyDescriptor(value, i);
+
+                if (held !== undefined && 'value' in held) inherit(value, held.value, i);
+            }
+        } else {
+            for (let i = 0; i < value.length; i++) inherit(value, value[i], i);
+        }
     } else if (globalThis.__BRYTHON__.is_dict(value)) {
         // Asked of Python, not of the properties. A dict keeps its string keys
         // as ordinary properties and everything else in a hash table, so a walk
