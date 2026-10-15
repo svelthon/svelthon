@@ -40,7 +40,7 @@
     "node": ">=20.19"
   },
   "peerDependencies": {
-    "svelte": "^5.0.0"
+    "svelte": "^5.56.0"
   },
   "scripts": {
     "test": "vitest run",
