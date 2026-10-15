@@ -3901,8 +3901,15 @@ function viewOf(value) {
 
         return named;
     };
-    const keyFor = (name) => {
-        const own = (typeof name === 'string' || typeof name === 'symbol') && $B.$is_member(name, value);
+    // Found in the dict's storage (`dict.$contains`), which a read, a write and
+    // a deletion need, and never by its class's `__contains__`, which Python's
+    // `bag["x"]`, `bag["x"] = v` and `del bag["x"]` do not ask: asked, a class
+    // whose `in` answers otherwise read as empty, kept a key deleted, or
+    // raised. JavaScript's `in` is Python's, and asks it (`asked`).
+    const keyFor = (name, asked = false) => {
+        const own =
+            (typeof name === 'string' || typeof name === 'symbol') &&
+            (asked ? $B.$is_member(name, value) : _b_.dict.$contains(value, name));
 
         if (typeof name !== 'string' || $B.hasOnlyStringKeys(value)) return own ? name : MISSING;
 
@@ -3912,14 +3919,14 @@ function viewOf(value) {
 
         return own ? name : other === undefined ? MISSING : value[dictKeys()][other];
     };
-    const holds = (key) => {
+    const holds = (key, asked = false) => {
         if (sequence) {
             const at = index(key);
 
             return at !== undefined && at < length();
         }
 
-        return keyFor(key) !== MISSING;
+        return keyFor(key, asked) !== MISSING;
     };
     const read = (key) => forReader($B.$getitem(value, sequence ? index(key) : keyFor(key)));
     // Whether a read is the author's: a subclass's own `__getitem__`.
@@ -4037,7 +4044,7 @@ function viewOf(value) {
         has(shell, key) {
             follow(value);
 
-            return holds(key) || Reflect.has(shell, key);
+            return holds(key, true) || Reflect.has(shell, key);
         },
         ownKeys(shell) {
             follow(value);
