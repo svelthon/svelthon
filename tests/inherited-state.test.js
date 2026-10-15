@@ -12,6 +12,15 @@ import InheritedState from './fixtures/InheritedState.svelte';
 import DescriptorState from './fixtures/DescriptorState.svelte';
 import ClassSettingsBind from './fixtures/ClassSettingsBind.svelte';
 import BasesChange from './fixtures/BasesChange.svelte';
+import SpecialMethodSwap from './fixtures/SpecialMethodSwap.svelte';
+import SpecialMethodSwapNative from './fixtures/SpecialMethodSwapNative.svelte';
+import RebasedMethod from './fixtures/RebasedMethod.svelte';
+import RebasedMethodNative from './fixtures/RebasedMethodNative.svelte';
+import ClassLeft from './fixtures/ClassLeft.svelte';
+import ClassLeftNative from './fixtures/ClassLeftNative.svelte';
+import { runs } from './fixtures/class_runs.js';
+import MetaClassRead from './fixtures/MetaClassRead.svelte';
+import MetaClassReadNative from './fixtures/MetaClassReadNative.svelte';
 
 // A property or a method is looked up through the classes as a constant is, and
 // replacing it on one of them, or shadowing it from one between, changes what
@@ -161,3 +170,112 @@ test.for(['instance', 'subclass'])('read through %s, a shadow made, replaced and
         ['0|0', '0|0']
     ]);
 });
+
+// A special method given anew, `Base.__len__ = …`, changes what an operation
+// answers for an instance of the class or of a subclass, `len(one)`, `one()`,
+// a walk of it or a name its `__getattr__` answers, and none of them reads the
+// method by its name: the model answered 99 and the page kept 1. The witness
+// is the same reads of a class that answers from Svelte's state.
+const swapped = (Component, kind, subclassed) => {
+    const target = document.body.appendChild(document.createElement('div'));
+    const instance = mount(Component, { target, props: { kind, subclassed } });
+    flushSync();
+
+    const before = target.querySelector('output').textContent;
+
+    flushSync(() => instance.change());
+
+    return { shown: [before, target.querySelector('output').textContent], model: instance.model() };
+};
+
+test.for(['len', 'call', 'iter', 'getattr'].flatMap((kind) => [false, true].map((subclassed) => [kind, subclassed])))(
+    'a new __%s__ on the class repaints what an instance answers, of a subclass %s',
+    ([kind, subclassed]) => {
+        const mine = swapped(SpecialMethodSwap, kind, subclassed);
+
+        expect(mine).toEqual(swapped(SpecialMethodSwapNative, kind, subclassed));
+        expect(mine).toEqual({ shown: ['1', '99'], model: 99 });
+    }
+);
+
+// And after new bases: `Holder.__bases__ = (Second,)` repainted 2, and a
+// `__len__` given to `Second` afterwards left the page at 2, the object being
+// known to the classes it was looked up through when it came under watch.
+const rebased = (Component, subclassed) => {
+    const target = document.body.appendChild(document.createElement('div'));
+    const instance = mount(Component, { target, props: { subclassed } });
+    const shown = () => target.querySelector('output').textContent;
+    flushSync();
+
+    const first = shown();
+
+    flushSync(() => instance.migrate());
+
+    const second = shown();
+
+    flushSync(() => instance.change());
+
+    return { shown: [first, second, shown()], model: instance.model() };
+};
+
+test.for([false, true])('a method given to a new base repaints what an object answers, of a subclass %s', (subclassed) => {
+    const mine = rebased(RebasedMethod, subclassed);
+
+    expect(mine).toEqual(rebased(RebasedMethodNative, subclassed));
+    expect(mine).toEqual({ shown: ['1', '2', '99'], model: 99 });
+});
+
+// And a class it left, by new bases or by a new `__class__`, wakes it no more:
+// an effect that read the object and wrote the class it had left ran again at
+// each write, four times here where a guard stops it, a thousand and one
+// without one, until Svelte gave up. A method its new class is given later
+// still reaches it.
+const left = (Component, how) => {
+    const target = document.body.appendChild(document.createElement('div'));
+
+    runs.length = 0;
+
+    const instance = mount(Component, { target, props: { how } });
+    flushSync();
+
+    const first = target.querySelector('output').textContent;
+
+    flushSync(() => instance.change());
+
+    return { shown: [first, target.querySelector('output').textContent], runs: [...runs] };
+};
+
+test.for(['bases', 'class'])('an object that left a class by its %s is not woken by that class', (how) => {
+    const mine = left(ClassLeft, how);
+
+    expect(mine).toEqual(left(ClassLeftNative, how));
+    expect(mine).toEqual({ shown: ['2', '99'], runs: [2, 99] });
+});
+
+// A class read directly for a special method its metaclass gives it, the
+// metaclass being the author's: `len(Subject)` after `Meta.__len__ = …`. One
+// the script declares by `class` binds no state, and the page kept 1 where the
+// model answered 99; its read now follows its metaclass's special methods, and
+// nothing else of it. One imported binds as `=` does, and one a function of a
+// reactive module reads is read through that module's names, the same way.
+const metaRead = (Component, kind) => {
+    const target = document.body.appendChild(document.createElement('div'));
+    const instance = mount(Component, { target, props: { kind } });
+    flushSync();
+
+    const before = target.querySelector('output').textContent;
+
+    flushSync(() => instance.change());
+
+    return { shown: [before, target.querySelector('output').textContent], model: instance.model() };
+};
+
+test.for(['declared', 'imported', 'module function'])(
+    'a class read %s for a special method follows its metaclass given a new one',
+    (kind) => {
+        const mine = metaRead(MetaClassRead, kind);
+
+        expect(mine).toEqual(metaRead(MetaClassReadNative, kind));
+        expect(mine).toEqual({ shown: ['1', '99'], model: 99 });
+    }
+);

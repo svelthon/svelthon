@@ -41,10 +41,15 @@ const refusing = () => {
 // (`SetView.delete`): the mutation tracking's, which sets it.
 let removeFound;
 
+// How a read of a declared class follows its metaclass's special methods
+// (`__pybridge.declared`): the mutation tracking's, which sets it.
+let followMetaclass;
+
 // The classes something may read: one read by a name (`className`), one whose
-// name holds a watched value (`nameMarker`), one watched (`mark`). A write to
-// any other class, or to an object that is no class, tells nobody, and is
-// asked nothing more (`beforeClassWrite`, `classNameChanged`).
+// name holds a watched value (`nameMarker`), one an object is looked up through
+// (`enrol`), one watched (`mark`). A write to any other class, or to an object
+// that is no class, tells nobody, and is asked nothing more
+// (`beforeClassWrite`, `classNameChanged`).
 const READ_CLASSES = new WeakSet();
 
 // The template helpers, re-exported so a generated component has one specifier
@@ -461,6 +466,30 @@ export const __pybridge = {
         if (watchable(value)) BLOCK_STATE.add(value);
 
         return value;
+    },
+
+    // A class the script declares, read: a reaction follows the special
+    // methods its metaclass gives it, when the metaclass is the author's
+    // (`followMetaclass`), and nothing else of it.
+    declared(value) {
+        followMetaclass?.(value);
+
+        return value;
+    },
+
+    // A declared class bound by its statement: one whose metaclass is the
+    // author's keeps the accessor that follows it (`declared`); any other is
+    // written as the namespace's own property, read as any other name is, for
+    // nothing more.
+    declare(namespace, name, value, classes) {
+        const meta = pyClass(value) ? quietPyType(value) : undefined;
+
+        if (meta !== undefined && (meta.tp_flags & globalThis.__BRYTHON__.TPFLAGS.HEAPTYPE) !== 0) {
+            classes[name] = value;
+            return;
+        }
+
+        Object.defineProperty(namespace, name, { value, writable: true, enumerable: true, configurable: true });
     },
 
     // A prop handed to a component a tag holds rather than names by its
@@ -1975,6 +2004,23 @@ function installMutationTracking($B) {
     const CLASS_NAMES = new WeakMap();
     const EVERY = Symbol('every name');
 
+    // And on the special methods a metaclass gives the classes it makes,
+    // `PROTOCOLS`, which an operation on a class looks up and no read names:
+    // `Subject()`, `len(Subject)`, `for row in Subject`. A reaction that reads
+    // a declared class follows them, through every metaclass of the author's
+    // the class is looked up through (`followMetaclass`).
+    const PROTOCOLS = Symbol('special methods');
+
+    followMetaclass = (value) => {
+        if (!inReaction()) return;
+
+        const meta = pyClass(value) ? quietPyType(value) : undefined;
+
+        if (meta === undefined || (meta.tp_flags & $B.TPFLAGS.HEAPTYPE) === 0) return;
+
+        for (const cls of meta.tp_mro) if ((cls.tp_flags & $B.TPFLAGS.HEAPTYPE) !== 0) className(cls, PROTOCOLS).subscribe();
+    };
+
     // `dir(box)` lists the names of every class the object is looked up
     // through, and of a class's metaclass: any of them gaining or losing one
     // changes the listing. The object's own names are its watch's.
@@ -2040,9 +2086,19 @@ function installMutationTracking($B) {
         // New bases are a new lookup for every name read through the class,
         // or through a subclass or an instance of it, all of which followed
         // the name on it: `C.__bases__ = (B,)` wakes them all.
-        const woken = attr === '__bases__' ? [...(names?.values() ?? [])] : [names?.get(attr), names?.get(EVERY)];
+        const woken =
+            attr === '__bases__'
+                ? [...(names?.values() ?? [])]
+                : [names?.get(attr), names?.get(EVERY), /^__.+__$/.test(attr) ? names?.get(PROTOCOLS) : undefined];
 
         for (const update of woken.flatMap((entry) => [...(entry?.updates ?? [])])) update();
+
+        // A special method is looked up by an operation, `len(box)`,
+        // `box()`, `for row in box`, or by a name's fallback,
+        // `__getattr__`, none of which reads it by its name: given anew, it
+        // wakes the readers of every watched object it answers for. New bases
+        // enrol them under the classes they are looked up through now.
+        if (/^__.+__$/.test(attr)) wakeInstances(cls, attr === '__bases__');
     };
 
     // What depends on the order a class is searched in, with no name read
@@ -3496,9 +3552,67 @@ function mark(value) {
 
     if (pyClass(value)) READ_CLASSES.add(value);
 
+    enrol(value, marker);
     adopt(value);
 
     return marker;
+}
+
+// The watched objects of each class of the author's, held weakly through their
+// markers, under every class they are looked up through. A special method a
+// class is given anew, `Base.__len__ = …`, changes what `len()` answers for
+// each of them, and for each of its subclasses', and the read that called it
+// read no name (`classNameChanged`, `wakeInstances`). Swept as a link's
+// parents are, so that the dead do not pile up; each marker enrolled once
+// under a class (`classes`).
+//
+// New bases are new classes looked up through, for the objects of a class and
+// of its subclasses alike, all enrolled under it: they are enrolled again under
+// what they are looked up through now, so that a method the new base is given
+// later wakes them too. A class an object is no longer looked up through, by
+// new bases or by a new `__class__`, wakes it no more: the enrolment is dropped
+// as it is met, and the object enrolled again should it come back.
+const WATCHED_OF_CLASS = new WeakMap();
+
+function enrol(value, marker) {
+    const classes = (marker.classes ??= new WeakSet());
+
+    for (const cls of quietPyType(value)?.tp_mro ?? []) {
+        if ((cls.tp_flags & globalThis.__BRYTHON__.TPFLAGS.HEAPTYPE) === 0 || classes.has(cls)) continue;
+
+        classes.add(cls);
+        READ_CLASSES.add(cls);
+
+        let held = WATCHED_OF_CLASS.get(cls);
+
+        if (held === undefined) WATCHED_OF_CLASS.set(cls, (held = { refs: new Set(), sweepAt: SWEEP_FROM }));
+
+        held.refs.add(new WeakRef(marker));
+
+        if (held.refs.size >= held.sweepAt) {
+            for (const ref of held.refs) if (ref.deref() === undefined) held.refs.delete(ref);
+            held.sweepAt = Math.max(SWEEP_FROM, 2 * held.refs.size);
+        }
+    }
+}
+
+function wakeInstances(cls, rebased) {
+    const held = WATCHED_OF_CLASS.get(cls);
+
+    for (const ref of [...(held?.refs ?? [])]) {
+        const marker = ref.deref();
+        const value = marker?.target.deref();
+
+        if (value === undefined || !(quietPyType(value)?.tp_mro ?? []).includes(cls)) {
+            held.refs.delete(ref);
+            marker?.classes.delete(cls);
+            continue;
+        }
+
+        if (rebased) enrol(value, marker);
+
+        marker();
+    }
 }
 
 // Everything already inside a watched value: an attribute written in __init__,

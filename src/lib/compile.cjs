@@ -2180,6 +2180,7 @@ function surface(body, theirs = new Set()) {
     const bindables = [];
     const state = [];
     const funcs = [];
+    const classes = [];
     const deriveds = [];
     const effects = [];
     const inspects = [];
@@ -2459,6 +2460,7 @@ function surface(body, theirs = new Set()) {
                 // A class is a scope, so nothing inside it is module state, and
                 // the descent stops here. The *name* is still the author's.
                 bind(node.name);
+                if (!classes.includes(node.name)) classes.push(node.name);
             } else {
                 // A block is not a scope in Python: a name bound inside `if`,
                 // `for`, `try`, `with` or `match` belongs to the module exactly
@@ -2527,7 +2529,7 @@ function surface(body, theirs = new Set()) {
     globals(body);
     walruses(body);
 
-    return { props, bindables, state, funcs, deriveds, effects, inspects, reserved, bound, lines, remarked, starred };
+    return { props, bindables, state, funcs, classes, deriveds, effects, inspects, reserved, bound, lines, remarked, starred };
 }
 
 // The modules the source imports, `import x` and `from x import y` alike.
@@ -3194,6 +3196,14 @@ function templateBridge(c) {
 // follows *rebinding a name*, and a revision signal beside it follows a
 // mutation in place: `__track` marks the container, and `items.append(x)` bumps
 // the revision every reader also reads, the object keeping its identity.
+//
+// The names `class` binds that no other binding of the module takes.
+const declaredClasses = (c) => {
+    const taken = new Set([...c.props, ...c.bindables, ...c.state, ...[...c.funcs, ...c.deriveds, ...c.effects, ...c.inspects].map((one) => one.name)]);
+
+    return c.classes.filter((name) => !taken.has(name));
+};
+
 function authorBindings(c) {
     return [
         `const __proto = {};`,
@@ -3246,6 +3256,17 @@ function authorBindings(c) {
             (n) =>
                 `__bind(__proto, '${n}', () => (${rev(n)}, ${n}), (${NEXT_VALUE}) => { ${n} = __track(${NEXT_VALUE}, ${bump(n)}${c.store ? '' : `, ${SUBS}`}); });`
         ),
+        // A name bound by `class` is declared, no state: no revision, no watch.
+        // Its accessor follows, in a reaction, the special methods its
+        // metaclass gives it when the metaclass is the author's
+        // (`__pybridge.declared`), which an operation on the class looks up and
+        // no read names; any other class is written as the namespace's own
+        // property as its statement runs (`__pybridge.declare`), and read as
+        // any name is. A name another binding gives an accessor keeps that one.
+        ...declaredClasses(c).flatMap((n, at) => [
+            ...(at === 0 ? ['const __classes = {};'] : []),
+            `__bind(__proto, '${n}', () => __pybridge.declared(__classes[${JSON.stringify(n)}]), function (${NEXT_VALUE}) { __pybridge.declare(this, '${n}', ${NEXT_VALUE}, __classes); });`
+        ]),
         ...c.funcs.map(
             (f) =>
                 `__bind(__proto, '${f.name}', () => ` +
@@ -4021,7 +4042,7 @@ function compile(
     ];
     const jsImported = jsImports.flatMap((one) => one.entries.map((e) => e.local));
 
-    let { props, bindables, state, funcs, deriveds, effects, inspects, reserved, bound, lines, remarked, starred } =
+    let { props, bindables, state, funcs, classes, deriveds, effects, inspects, reserved, bound, lines, remarked, starred } =
         surface(root._ast.body, new Set(jsImported));
 
     // A custom element's props belong to its element, which reads each back,
@@ -4267,6 +4288,7 @@ function compile(
         bindables,
         state,
         funcs,
+        classes,
         deriveds,
         effects,
         inspects,
