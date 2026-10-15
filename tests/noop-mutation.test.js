@@ -19,7 +19,8 @@
 // The same write passes whatever its spelling, as a run of `SvelteMap.set`
 // does: an update by keywords or by pairs, one to a dict whose keys are not all
 // strings, and a float written equal to the one held, which were refused where
-// `d["x"] = d["x"]` passed.
+// `d["x"] = d["x"]` passed. And `intersection_update` keeping every member,
+// which the set makes through calls of its own.
 //
 // Equal as Python shows it, though: `1.0` over `1`, `2` over `2.0` and `-0.0`
 // over `0.0` are one number to JavaScript and two on the page, which kept the
@@ -30,6 +31,8 @@ import NoopMutation from './fixtures/NoopMutation.svelte';
 import NoopMutationNative from './fixtures/NoopMutationNative.svelte';
 import SymmetricFill from './fixtures/SymmetricFill.svelte';
 import TypedWrite from './fixtures/TypedWrite.svelte';
+import IntersectOutside from './fixtures/IntersectOutside.svelte';
+import { flags, keep_all } from './fixtures/intersect_outside.py';
 
 const shown = (Component, kind) => {
     const target = document.body.appendChild(document.createElement('div'));
@@ -52,6 +55,7 @@ test.for(
             ['set clear empty', '0'],
             ['set symmetric empty', '1'],
             ['set add nested present', '2'],
+            ['set intersection all', '1'],
             ['dict setdefault present', 'yes'],
             ['dict pop absent', 'absent'],
             ['dict update empty', 'yes'],
@@ -126,3 +130,39 @@ test.for(['float for int', 'int for float', 'negative zero', 'update float for i
         expect(target.querySelector('output').textContent).not.toBe('1 2.0 0.0 1');
     }
 );
+
+// Telling an `intersection_update` that keeps every member reads every member
+// before the call, which only a write Svelte refuses needs: outside rendering
+// the call is told as a change, as any call that may change the set is, and
+// reads nothing before it. Read at every call, it cost 55 % more on 80,000
+// members. Counted as the reads of the set's storage around the call, against
+// the same call made while rendering, which makes them.
+test('an intersection_update outside rendering reads no member before it', () => {
+    const set = globalThis.__BRYTHON__.jsobj2pyobj(flags);
+    const storeReads = (call) => {
+        const values = Object.values;
+        let read = 0;
+
+        Object.values = (one) => {
+            if (one === set.$store) read += 1;
+            return values(one);
+        };
+
+        try {
+            call();
+        } finally {
+            Object.values = values;
+        }
+
+        return read;
+    };
+    const target = document.body.appendChild(document.createElement('div'));
+    const during = storeReads(() => {
+        mount(IntersectOutside, { target, props: { during: true } });
+        flushSync();
+    });
+
+    expect(target.querySelector('output').textContent).toBe('3');
+    expect(during).toBeGreaterThan(0);
+    expect(storeReads(() => expect(keep_all()).toBe(3))).toBe(0);
+});

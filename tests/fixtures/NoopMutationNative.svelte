@@ -40,6 +40,7 @@
         if (kind === 'set discard absent') return (flags.delete(2), flags.size);
         if (kind === 'set clear empty') return (empty.clear(), empty.size);
         if (kind === 'set symmetric empty') return flags.size;
+        if (kind === 'set intersection all') return flags.size;
         if (kind === 'set symmetric swap') return (flags.delete(1), flags.add(2), flags.size);
         if (kind === 'set add nested present') return (keyed.add(1), keyed.add('key'), keyed.size);
         if (kind === 'set add nested absent') return (keyed.add(3), keyed.add('key'), keyed.size);

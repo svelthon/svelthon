@@ -61,6 +61,9 @@ def read():
     if kind == "set clear empty":
         empty.clear()
         return len(empty)
+    if kind == "set intersection all":
+        flags.intersection_update({1})
+        return len(flags)
     if kind == "set symmetric empty":
         flags.symmetric_difference_update(set())
         return len(flags)

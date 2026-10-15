@@ -1365,10 +1365,10 @@ function installMutationTracking($B) {
     // `difference_update` only shrink, and where it may do both, its count of
     // members added as well, `$version`, which a removal leaves alone; a dict's
     // count of keys added and removed, `VERSION`, and its string keys, which a
-    // dict of string keys alone holds as its own properties. A call it
-    // cannot tell, `null`, changed: `intersection_update` among them, which
-    // rebuilds the set from the other one's objects, equal members held anew,
-    // which a walk in flight follows.
+    // dict of string keys alone holds as its own properties; and
+    // `intersection_update`, which rebuilds the set from the other one's
+    // objects, by the members the set holds after, one by one. A call it
+    // cannot tell, `null`, changed.
     const SET_SIZED = new Set(['add', 'discard', 'remove', 'pop', 'clear', 'update', 'difference_update']);
 
     // The engine's own fields of a dict, found on one it made: `VERSION`, the
@@ -1534,6 +1534,22 @@ function installMutationTracking($B) {
                 return () => target.$used !== size || target.$version !== version;
             }
 
+            // Rebuilt from the other one's objects, an equal member held anew
+            // by another object, and through the set's own `clear` and `add`:
+            // told by the whole set, unchanged when it holds the very members
+            // it held, which the calls it makes inside do not overrule
+            // (`whole`). Only where Svelte refuses a write: anywhere else the
+            // call is told as a change, and does not pay a read of every
+            // member before it.
+            if (name === 'intersection_update') {
+                if (!refusing()) return null;
+
+                const held = new Set(Object.values(target.$store).flat());
+                const changed = () => target.$used !== held.size || Object.values(target.$store).some((bucket) => bucket.some((one) => !held.has(one)));
+
+                return Object.assign(changed, { whole: true });
+            }
+
             return SET_SIZED.has(name) ? () => target.$used !== size : null;
         }
 
@@ -1653,7 +1669,7 @@ function installMutationTracking($B) {
                 if (running.depth === 0) mutating.delete(target);
 
                 if (nested && (changed === null || changed(result))) outer.touched = true;
-                if (outer === undefined && (changed === null || running.touched || changed(result))) {
+                if (outer === undefined && (changed === null || (running.touched && !changed.whole) || changed(result))) {
                     settle(target, saved, () => afterCall(target, name, result, args));
                 }
             }
