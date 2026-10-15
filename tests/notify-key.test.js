@@ -58,7 +58,7 @@ describe('a container whose data collides with the marker', () => {
     test('the marker is outside the value, not a property of it', () => {
         const rows = [];
 
-        track(rows, () => {}, () => {}, []);
+        track(rows, () => {}, []);
 
         expect(typeof marks(rows)).toBe('function');
         expect(Object.keys(rows)).toHaveLength(0);

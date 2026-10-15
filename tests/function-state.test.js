@@ -46,7 +46,7 @@ test('a class watched is still the class', () => {
 test('a JavaScript function a name holds is not watched', () => {
     const handler = () => {};
 
-    track(handler, () => {}, () => {});
+    track(handler, () => {});
 
     expect(marks(handler)).toBeUndefined();
 });
@@ -55,7 +55,7 @@ test('a JavaScript function a name holds is not watched', () => {
 test("a class of the engine's a name holds is not watched", () => {
     const list = globalThis.__BRYTHON__.builtins.list;
 
-    track(list, () => {}, () => {});
+    track(list, () => {});
 
     expect(marks(list)).toBeUndefined();
 });

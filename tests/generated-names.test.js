@@ -47,9 +47,11 @@ const MARKUP_LOCAL = new Set([
     // The read of a select a spread may make multiple, a function of its own
     // per element, named so it hands itself over.
     '__select_',
-    // The index an `{#each}` is given for a `bind:group` inside it, which
-    // Svelte declares.
+    // The index an `{#each}` is given for a `bind:group` or a key inside it,
+    // which Svelte declares.
     '__index_',
+    // What an `{#each}` walks, declared beside it.
+    '__rows_',
     // A stand-in used by the first, throwaway walk that only collects snippet
     // names; nothing it returns is emitted.
     '__probe'

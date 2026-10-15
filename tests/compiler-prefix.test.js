@@ -1,7 +1,7 @@
 // @vitest-environment node
 //
-// The compiler builds seven families of name out of the author's own — `__fn_x`,
-// `__rev_x`, `__bump_x`, `__read_x`, `__local_x`, `__js_x`, `__root_x` — and
+// The compiler builds six families of name out of the author's own — `__fn_x`,
+// `__rev_x`, `__bump_x`, `__local_x`, `__js_x`, `__root_x` — and
 // declares them in the same scope, beside `__proto`. A name of that shape
 // therefore collides with one of them, and what the author saw was `Identifier
 // '__fn_go' has already been declared`, at a line and column inside the emitted

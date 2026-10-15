@@ -42,7 +42,7 @@ function updates(load) {
     const owner = [];
     let bumps = 0;
 
-    track(parent, () => bumps++, () => {}, owner);
+    track(parent, () => bumps++, owner);
     load(parent, children);
 
     const counter = counting(parent);
@@ -92,7 +92,7 @@ test('a list reordered behind the watch is searched once', () => {
     const parent = list([]);
     const owner = [];
 
-    track(parent, () => {}, () => {}, owner);
+    track(parent, () => {}, owner);
     call(parent, 'extend', list(children));
     Array.prototype.reverse.call(parent);
 

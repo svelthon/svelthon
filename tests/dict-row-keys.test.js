@@ -28,7 +28,7 @@ function updates(fill) {
     const owner = [];
     let bumps = 0;
 
-    track(parent, () => bumps++, () => {}, owner);
+    track(parent, () => bumps++, owner);
     const rows = fill(parent, children);
 
     const original = $B.builtins.dict.$iter_items;
@@ -65,7 +65,7 @@ test.each([
     const parent = $B.empty_dict();
     const owner = [];
 
-    track(parent, () => {}, () => {}, owner);
+    track(parent, () => {}, owner);
 
     const original = $B.builtins.dict.$iter_items;
     let scanned = 0;

@@ -105,10 +105,26 @@ function iterated(value) {
     // `{ob_type: "business"}` among them. The loop, `batch`, the export,
     // `tojson`, the argument boundary and `plainData` all ask it this way.
     const type = ownType(value);
-
-    if (!pyClass(type) || type === _b_.list || type === _b_.tuple) return value;
-
     const $B = globalThis.__BRYTHON__;
+
+    // A JavaScript array whose iteration is its own, a generator set as its
+    // `Symbol.iterator`, yields what Python's `for` yields from it, walked
+    // once here: handed on as the array, it was walked again by each reader,
+    // the rows a stateful iterator gave a second time, or none at all. The
+    // property is read once, a getter's choice made once, and an iterator that
+    // is no function refuses as Python's `for` refuses it.
+    if (!pyClass(type)) {
+        if (!Array.isArray(value)) return value;
+
+        const iterator = value[Symbol.iterator];
+
+        if (iterator === Array.prototype[Symbol.iterator]) return value;
+        if (typeof iterator !== 'function') throw new TypeError('obj[Symbol.iterator] is not a function');
+
+        return $B.$list(Array.from({ [Symbol.iterator]: () => Reflect.apply(iterator, value, []) }));
+    }
+
+    if (type === _b_.list || type === _b_.tuple) return value;
 
     return $B.$list(Array.from($B.make_js_iterator(value, $B.NULL)));
 }
@@ -327,9 +343,8 @@ const pythonComponent = (component) => {
     return PYTHON_COMPONENTS.has(component) || PYTHON_COMPONENTS.has(ADAPTERS.get(component));
 };
 
-// Each value a block declares, to the revision its readers subscribe to
-// (`__pybridge.state`).
-const BLOCK_STATE = new WeakMap();
+// Each value a block declares (`__pybridge.state`).
+const BLOCK_STATE = new WeakSet();
 
 // Each snippet from elsewhere, to the function that renders it with its
 // arguments crossed (`__pybridge.snippet`).
@@ -399,33 +414,17 @@ export const __pybridge = {
     },
 
     // The value a block declares, `{rows = [1]}`, followed as a name the
-    // script declares is: a revision every read of the name subscribes to
-    // through `follow`, and which a change made inside it moves. `$state.raw`
-    // alone follows the name being written, and a list appended to repainted
-    // nothing.
+    // script declares is: every read of the name subscribes through `follow`
+    // to the value's own revision, which a change made inside it moves.
+    // `$state.raw` alone follows the name being written, and a list appended to
+    // repainted nothing.
     //
     // One revision per value, whatever the blocks that declare it, signed onto
     // the value's watch while something reads it and off it when nothing
     // does: a block made a hundred times over one list signed a hundred
     // callbacks onto it, and kept them after the component was gone.
     state(value) {
-        if (watchable(value) && !BLOCK_STATE.has(value)) {
-            let update;
-            const bump = () => update?.();
-            const read = createSubscriber((one) => {
-                update = one;
-                track(value, bump, read);
-
-                return () => {
-                    update = undefined;
-
-                    const marker = MARKS.get(value);
-                    if (marker !== undefined) leave(marker, bump);
-                };
-            });
-
-            BLOCK_STATE.set(value, read);
-        }
+        if (watchable(value)) BLOCK_STATE.add(value);
 
         return value;
     },
@@ -643,8 +642,11 @@ export const __pybridge = {
             try {
                 // Everything else Python calls iterable, materialised once. A
                 // generator is spent by this and the walk below reads the list,
-                // never the iterator again.
+                // never the iterator again. The pairs `enumerate()`, `zip()` and
+                // `.items()` make are noted as theirs (`sameRow`).
                 rows = _b_.list.$factory(value);
+
+                if (makesPairs(value)) for (const row of rows) MADE_ANEW.add(row);
             } catch (error) {
                 // Told apart by the *error*, the way `truthy` and `str` above
                 // are, and for the same reason: the value itself cannot say
@@ -680,11 +682,108 @@ export const __pybridge = {
         // and a plain class with an `__iter__`, a collection by composition,
         // has rows too. Once the rows exist the question is the same for every
         // shape, so it is asked once, here.
-        if (MARKS.has(value)) {
+        //
+        // Once per change of a list walked as it is stored: what it holds was
+        // handed down when it was last walked, and a change inside a row, which
+        // evaluates the block's iterable again (`collection`), changes nothing
+        // of that. Walked every time, a thousand rows each written as they
+        // mount made a million links checked.
+        const marker = MARKS.get(value);
+
+        if (marker !== undefined && (rows !== value || marker.handed !== marker.stamp)) {
             for (const item of rows) inherit(value, item);
+            if (rows === value) marker.handed = marker.stamp;
         }
 
         return rows;
+    },
+
+    // The rows an `{#each}` walks, and whether they are still the ones its
+    // block holds. The block runs again on a change of the rows themselves, a
+    // row added, removed, moved or replaced, and not on a change inside a row,
+    // which reaches only what reads that row. Svelte's proxies give its own
+    // block exactly that.
+    //
+    // The iterable is Python, read through names that follow everything under
+    // them, so it is evaluated again on a change inside a row, and `refresh`
+    // compares what it yields with what the block holds: the same list,
+    // unchanged since (its `stamp`), with nothing to compare; otherwise row by
+    // row, by identity, and a tuple, which `enumerate()` and `.items()` make
+    // anew each time, by what it holds. Each component's `__collection`
+    // carries the result to the block with Svelte's own runes, which this
+    // file, made for any host, does not hold.
+    //
+    // A copy, since a list changes in place and the next comparison is with
+    // what it held.
+    //
+    // A keyed block runs again, too, when a change in a row moves its key: the
+    // block reads its keys with the rows unfollowed (`eachKey`) and notes each
+    // (`noted`), and the key of a row something changed under since is read
+    // again here, unfollowed, against the one noted. One read per row changed,
+    // where Svelte, whose key reads the one field it names, needs none: a
+    // container is the finest a change is known at here.
+    walk(keyOf) {
+        let held;
+        let source;
+        let stamp;
+        let moved;
+        let keys = [];
+
+        const rekeyed = () => {
+            let changed = false;
+
+            for (let at = 0; at < held.length; at++) {
+                const seen = seenUnder(held[at]);
+
+                if (seen === moved[at]) continue;
+
+                moved[at] = seen;
+
+                if (at in keys && untrack(() => keyOf(held[at], at)) !== keys[at]) changed = true;
+            }
+
+            return changed;
+        };
+
+        return {
+            // What the block walks, undefined until the first `refresh`.
+            get held() {
+                return held;
+            },
+
+            // Whether `rows` differ from the rows the block holds, which they
+            // then become.
+            refresh(rows) {
+                const walked = Array.isArray(held);
+
+                // A foreign iterable is walked as Svelte walks one.
+                if (!Array.isArray(rows)) {
+                    held = rows;
+                    return true;
+                }
+
+                const marker = MARKS.get(rows);
+                const unchanged =
+                    walked && ((rows === source && marker !== undefined && marker.stamp === stamp) || sameRows(held, rows));
+
+                source = rows;
+                stamp = marker?.stamp;
+
+                if (unchanged && !(keyOf !== undefined && rekeyed())) return false;
+
+                held = Array.from(unchanged ? held : rows);
+                keys = [];
+                if (keyOf !== undefined) moved = held.map(seenUnder);
+
+                return true;
+            },
+
+            // The key the block read for the row at `at`, handed back.
+            noted(at, key) {
+                keys[at] = key;
+                return key;
+            }
+        };
     },
 
     // What Python hands *out* to a DOM boundary: a `bind:`, and an attribute
@@ -2008,6 +2107,44 @@ function stillTuple(value) {
     return still;
 }
 
+// Whether two walks of an `{#each}` yield the same rows (`walk`): each the same
+// object, or a pair the iterable makes anew at each walk, `enumerate()`'s,
+// `.items()`'s or `zip()`'s, holding the same ones.
+const sameRows = (held, rows) => held.length === rows.length && held.every((one, at) => sameRow(one, rows[at]));
+
+const sameRow = (one, other) => one === other || (MADE_ANEW.has(one) && MADE_ANEW.has(other) && samePair(one, other));
+
+// Such a pair, told by where it came from (`seq`), and not by what it is: a
+// tuple the author's code makes at each call, `[(row,)]`, has the shape of
+// one, a tuple nobody watches holding a row, and is a new row however equal, as
+// in Svelte, whose key and whose reads see the new one: `id(pair)` kept the
+// old block.
+const MADE_ANEW = new WeakSet();
+const PAIR_MAKERS = new Set(['enumerate', 'zip', 'dict_items', 'dict_itemiterator']);
+
+const makesPairs = (iterable) => {
+    const type = quietPyType(iterable);
+
+    return type !== undefined && (type.tp_flags & globalThis.__BRYTHON__.TPFLAGS.HEAPTYPE) === 0 && PAIR_MAKERS.has(type.tp_name);
+};
+
+// Inside such a pair, a member is the same row's, or a pair nested in it and
+// made the same way, `enumerate(d.items())`'s: a tuple nobody watches that
+// holds something watched.
+const samePair = (one, other) =>
+    one.length === other.length && one.every((member, at) => member === other[at] || (nested(member) && nested(other[at]) && samePair(member, other[at])));
+
+const nested = (row) => quietPyType(row) === _b_.tuple && !MARKS.has(row) && row.some((one) => MARKS.has(one) || nested(one));
+
+// The last walk a change made under a row climbed through (`seen`), or under
+// what a tuple holds: the pairs `enumerate()` makes are watched by no one, and
+// the row inside is.
+const seenUnder = (row) => {
+    const seen = MARKS.get(row)?.seen ?? 0;
+
+    return quietPyType(row) === _b_.tuple ? row.reduce((last, one) => Math.max(last, seenUnder(one)), seen) : seen;
+};
+
 // Only a container can be mutated in place; a scalar propagates by rebinding,
 // which the accessor already handles.
 function mutable(value) {
@@ -2359,11 +2496,11 @@ let changes = 0;
 //
 // Climbed with a stack of its own rather than by recursion, for the reason
 // `adopt` gives: a mutation at the tail of a long chain climbs every link of it.
-const upwards = (start, stamp, key) => {
+const upwards = (start, stamp) => {
     if (start.seen === stamp) return;
     start.seen = stamp;
 
-    for (const one of start[key]) one();
+    for (const one of start.bumps) one();
 
     if (start.parents === undefined) return;
 
@@ -2410,7 +2547,7 @@ const upwards = (start, stamp, key) => {
         if (parent.seen === stamp) continue;
         parent.seen = stamp;
 
-        for (const one of parent[key]) one();
+        for (const one of parent.bumps) one();
 
         if (parent.parents !== undefined) frames.push(climbing(parent));
     }
@@ -2427,10 +2564,7 @@ const climbing = (marker) => ({
     climbed: null
 });
 
-const dead = (marker) =>
-    marker.bumps.length === 0 &&
-    marker.reads.length === 0 &&
-    (marker.parents === undefined || marker.parents.length === 0);
+const dead = (marker) => marker.bumps.length === 0 && (marker.parents === undefined || marker.parents.length === 0);
 
 // An item written, `obj[key] = value`: both halves are inside. Except a slice,
 // `rows[:] = [child]`, whose value is a source: what it yields is inside.
@@ -2965,14 +3099,12 @@ function mark(value) {
             else walk.changed(...change);
         }
 
-        upwards(marker, ++walked, 'bumps');
+        upwards(marker, ++walked);
     };
 
     marker.stamp = 0;
 
     marker.bumps = [];
-    marker.reads = [];
-    marker.follow = () => upwards(marker, ++walked, 'reads');
     // Weak, so a child's link does not keep a container it has left alive.
     marker.target = new WeakRef(value);
 
@@ -3125,11 +3257,10 @@ const viewed = (value) => {
 // Sign one subscriber onto one marker, and tell `owner` about it so the same
 // subscriber can sign off. `owner` is the component's list; a store has none,
 // since its subscription lives as long as the module does.
-const join = (marker, bump, read, owner) => {
+const join = (marker, bump, owner) => {
     if (marker.bumps.includes(bump)) return;
 
     marker.bumps.push(bump);
-    marker.reads.push(read);
 
     if (owner !== undefined) owner.push(marker, bump);
 };
@@ -3141,7 +3272,6 @@ const leave = (marker, bump, owner) => {
     if (at === -1) return;
 
     marker.bumps.splice(at, 1);
-    marker.reads.splice(at, 1);
 
     if (owner === undefined) return;
 
@@ -3157,7 +3287,7 @@ const leave = (marker, bump, owner) => {
 // a value the name no longer holds would still notify it. Kept on the name's
 // `bump` rather than read off the name: that is a signal, and reading it inside
 // an effect that writes the name would subscribe the effect to it.
-export function track(value, bump, read, owner) {
+export function track(value, bump, owner) {
     const previous = bump.held;
     bump.held = value;
 
@@ -3175,7 +3305,7 @@ export function track(value, bump, read, owner) {
         // A container with nobody listening may have lost the links from its
         // children, pruned as a dead end: listened to again, it takes them back.
         const revived = dead(own);
-        join(own, bump, read, owner);
+        join(own, bump, owner);
         if (revived) adopt(value);
         return value;
     }
@@ -3185,7 +3315,7 @@ export function track(value, bump, read, owner) {
     // A frozen object refuses the marker and comes back without one.
     const marker = mark(value);
 
-    if (marker !== undefined) join(marker, bump, read, owner);
+    if (marker !== undefined) join(marker, bump, owner);
 
     return value;
 }
@@ -3201,10 +3331,7 @@ export function unsubscribe(owner) {
         const marker = owner[i];
         const at = marker.bumps.indexOf(owner[i + 1]);
 
-        if (at !== -1) {
-            marker.bumps.splice(at, 1);
-            marker.reads.splice(at, 1);
-        }
+        if (at !== -1) marker.bumps.splice(at, 1);
     }
 
     owner.length = 0;
@@ -3296,26 +3423,44 @@ function linked(marker, parent, child, key, loose, name) {
     return child;
 }
 
-// Subscribe the caller to the value it is being handed.
+// Subscribe the caller to the value it is being handed: to a change of the
+// value or of anything under it, and to nothing else.
 //
 // Every other accessor reads the revision of its own name, which is enough. A
-// `@derived` is not: Svelte memoises it on `===`, so a derived that returns the
-// very object it was given propagates nothing when that object is mutated in
-// place: the computation re-runs, the value compares equal, and the chain stops
-// there. Reading the marker re-establishes it at the far end, where the reader
-// is, rather than trying to defeat the memoisation.
+// value handed over is not: a row of an `{#each}` and a snippet's parameter are
+// plain JavaScript values, not signals, and a `@derived` is memoised on `===`,
+// so one that returns the very object it was given propagates nothing when that
+// object is mutated in place. Reading the value's own revision re-establishes
+// the chain at the far end, where the reader is.
+//
+// The value's, and not the revision of a name above it: through the name, a
+// change in one row reached what read every other row, as Svelte's per-object
+// signals do not, and a thousand bound selects, each written as it mounts, read
+// each other a thousand times.
 export function follow(value) {
     if (watchable(value)) {
-        const marker = MARKS.get(value);
-        if (marker !== undefined) marker.follow();
+        // A value a block declares comes under watch when it is first read.
+        const marker = MARKS.get(value) ?? (BLOCK_STATE.has(value) && mutable(value) ? mark(value) : undefined);
 
-        // A value a block declares, read again after nothing read it: its
-        // revision left the watch then, and is signed on again here.
-        BLOCK_STATE.get(value)?.();
+        if (marker !== undefined) (marker.watch ??= watcher(marker))();
     }
 
     return value;
 }
+
+// A value's own revision, signed onto its marker while something reads it and
+// off it when nothing does, so a container nobody reads stays a dead end. A
+// marker left as one may have lost the links from its children, and takes them
+// back as it is read again.
+const watcher = (marker) =>
+    createSubscriber((update) => {
+        const revived = dead(marker);
+
+        join(marker, update);
+        if (revived) adopt(marker.target.deref());
+
+        return () => leave(marker, update);
+    });
 
 // A Python line as a line of the file. `lines` is a number, the count of lines
 // before the `<script>` body, or that number with the ranges of Python lines
@@ -6962,7 +7107,7 @@ export function liveExport(namespace, name, update) {
     const refresh = () => update(read());
     const stale = () => markStale(refresh);
     const watch = (value) => {
-        if (stale.held !== undefined || (pyBytes(value) && mutableBytes(value))) track(value, stale, () => {});
+        if (stale.held !== undefined || (pyBytes(value) && mutableBytes(value))) track(value, stale);
     };
 
     Object.defineProperty(prototype, name, {
@@ -7746,7 +7891,7 @@ function starred(namespace, name) {
         };
     });
     const bump = () => update?.();
-    let held = track(namespace[name], bump, changed, owner);
+    let held = track(namespace[name], bump, owner);
 
     delete namespace[name];
 
@@ -7755,7 +7900,7 @@ function starred(namespace, name) {
         name,
         () => (changed(), held),
         (value) => {
-            held = track(value, bump, changed, owner);
+            held = track(value, bump, owner);
             bump();
         },
         () => held

@@ -50,8 +50,8 @@ test('a subscriber that arrives late still hears about the children', () => {
     let first = 0;
     let second = 0;
 
-    track(rows, () => first++, () => {});
-    track(rows, () => second++, () => {});
+    track(rows, () => first++);
+    track(rows, () => second++);
 
     marks(rows[0])();
 

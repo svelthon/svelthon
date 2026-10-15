@@ -753,6 +753,10 @@ const CELL = '__cell_';
 // which the values they hold cannot tell apart.
 const EACH_INDEX = '__index_';
 
+// What an `{#each}` walks, declared beside it under this prefix and the block's
+// scope (`__collection`, which the compiler writes).
+const EACH_ROWS = '__rows_';
+
 // The names a `bind:group` writes as a whole, `bind:group={picked}` or the
 // shorthand `bind:group`, read off the markup before the walk: a declaration
 // comes before the binding that writes it, and has to know.
@@ -1563,10 +1567,18 @@ function trailingKey(text) {
     return null;
 }
 
-// `loop` is what the walk asks of the block for `bind:group`: `index()`, the
-// name to give the iteration's index when the author wrote none, and
+// `loop` is what the walk asks of the block: `rows()`, the name of what it
+// walks, `index(keyed)`, the name to give the iteration's index when the author
+// wrote none and a key or a `bind:group` needs one, and for `bind:group`
 // `noted(index, from)`, told the index the block has and the names its
 // iterable reads.
+//
+// **The block walks what a name declared beside it hands over**, `{const
+// __rows_… = __collection(…)}`, and not its iterable: the iterable is Python,
+// and reads each name it mentions with everything under it, so a change inside
+// one row ran the block again over every row. The walk tells the block only
+// when the rows are no longer the same (`__pybridge.walk`), and the block runs
+// again on a change of the list itself, as Svelte's does.
 function eachBlock(trimmed, declare, call, refuse, loop) {
     const head = trimmed.match(/^#each\s+([\s\S]+)$/);
 
@@ -1587,7 +1599,7 @@ function eachBlock(trimmed, declare, call, refuse, loop) {
         const iterable = call(body, '__seq', undefined, 'python');
 
         declare([]);
-        return `{#each ${iterable}}`;
+        return `${walked(loop.rows(), iterable, null)}{#each ${loop.rows()}()}`;
     }
 
     const named = body.slice(at).replace(/^\s+as\s+/, '');
@@ -1618,28 +1630,49 @@ function eachBlock(trimmed, declare, call, refuse, loop) {
     const { pattern, unpack, consts } = destructured(target, declare, call, true, refuse);
 
     // Svelte's index is the second of two, `as row, at`; one the author did
-    // not write is added when a group needs it, under the walk's name.
+    // not write is added when a group needs it, or a key, under the walk's
+    // name.
     const parts = arguments_(target.trim());
     const written = parts.length === 2 ? parts[1].trim() : null;
-    const index = written ?? loop.index();
+    const index = written ?? loop.index(keyed !== null);
 
     loop.noted(index, referenced(body.slice(0, at)));
 
     const declared = written === null && index !== null ? `${pattern}, ${index}` : pattern;
+    const key = keyed ? eachKey(keyed[1], unpack, call) : null;
 
-    return `{#each ${iterable} as ${declared}` + (keyed ? ` (${eachKey(keyed[1], unpack, call)})` : '') + `}${consts}`;
+    // The key twice: as Svelte reads it, in the block, noted at its row's
+    // place, and as the walk reads it again for a row that changed
+    // (`__pybridge.walk`), in a function taking what Svelte's takes, the row
+    // and its index.
+    return (
+        walked(loop.rows(), iterable, key === null ? null : `(${declared}) => ${key}`) +
+        `{#each ${loop.rows()}() as ${declared}` +
+        (key === null ? '' : ` (${loop.rows()}.noted(${index}, ${key}))`) +
+        `}${consts}`
+    );
 }
+
+const walked = (rows, iterable, key) =>
+    `{const ${rows} = __collection(() => ${iterable}${key === null ? '' : `, ${key}`})}`;
 
 // The key of an `{#each}` is computed outside the block, from the pattern's own
 // names, and a key unpacked by key is a `{@const}` of the block. So such a name
 // is bound again in the key's own expression, by a comprehension over the row,
 // and is not handed in from a scope the key does not see.
+//
+// **The rows are handed in unfollowed.** Svelte computes every key at each run
+// of the block, inside it, so what a key reads, the block reads: a row followed
+// there made a change anywhere in any row run the block again over all of them,
+// where Svelte's key reads the one field it names. A name the key reads is
+// still the block's, as in Svelte, and a key a change in its row moves is told
+// by what the block walks.
 function eachKey(key, unpack, call) {
-    if (unpack.consts.length === 0) return call(key, '__key');
+    if (unpack.consts.length === 0) return call(key, '__key', key, '', [], false);
 
     const loops = unpack.consts.map(({ target, read }) => ` for ${target} in [${read}]`).join('');
 
-    return call(`[(${key})${loops}][0]`, '__key', key, '', [...unpack.bound]);
+    return call(`[(${key})${loops}][0]`, '__key', key, '', [...unpack.bound], false);
 }
 
 // What Svelte's template language holds, named here so that anything else stops
@@ -2197,7 +2230,8 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     //             itself is equal to, which the group gets back as it is.
     // `bound` names the block's names the expression binds for itself, which
     // are therefore not handed in: the key of an `{#each}`, see `eachKey`.
-    const call = (expr, wrapper, source = expr, kind = '', bound = []) => {
+    // `followed` is false for that key alone, which `eachKey` says why.
+    const call = (expr, wrapper, source = expr, kind = '', bound = [], followed = true) => {
         const trimmed = expr.trim();
         const args = mentioned(trimmed).filter((one) => !bound.includes(one));
         const lazy = kind === 'lazy';
@@ -2211,7 +2245,8 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         // follow() on the block's own names: a row of an {#each} is a plain
         // JavaScript value, not a signal, so reading `it.label` registers
         // nothing by itself. This is what subscribes the row's block to the row.
-        const handed = (arg) => (lazy ? `() => ${FOLLOW}(${received(arg)})` : `${FOLLOW}(${received(arg)})`);
+        const value = (arg) => (followed ? `${FOLLOW}(${received(arg)})` : received(arg));
+        const handed = (arg) => (lazy ? `() => ${value(arg)}` : value(arg));
 
         return `${name}(${args.map(handed).join(', ')})`;
     };
@@ -3112,7 +3147,8 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 };
 
                 out += eachBlock(trimmed, declare, call, refusePattern, {
-                    index: () => (indexed.has(id) ? `${EACH_INDEX}${id}` : null),
+                    rows: () => `${EACH_ROWS}${id}`,
+                    index: (keyed) => (keyed || indexed.has(id) ? `${EACH_INDEX}${id}` : null),
                     noted: (index, from) => loops.set(id, { index, from })
                 });
             } else if (opens('key')) {

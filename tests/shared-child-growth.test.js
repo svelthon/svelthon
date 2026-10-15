@@ -30,7 +30,7 @@ test('linking a child shared by n containers grows with n', () => {
             const row = $B.$list([shared]);
 
             rows.push(row);
-            track(row, () => {}, () => {});
+            track(row, () => {});
         }
 
         return performance.now() - start;

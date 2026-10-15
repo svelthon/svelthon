@@ -1773,8 +1773,8 @@ const injectable = (one, declared, component, names) =>
 // component-only word is free in a plain `.py`.
 // The compiler's own prefix, and the one rule that keeps it.
 //
-// Seven families of name are built out of the author's (`__fn_go`, `__rev_c`,
-// `__bump_c`, `__read_c`, `__local_n`, `__js_mount`, `__root_loop`) and
+// Six families of name are built out of the author's (`__fn_go`, `__rev_c`,
+// `__bump_c`, `__local_n`, `__js_mount`, `__root_loop`) and
 // declared in the same scope as the author's names, beside `__proto`: an
 // author's name of that shape collides with the construct that emits it,
 // `Identifier '__fn_go' has already been declared`, inside the emitted script.
@@ -2979,7 +2979,6 @@ const SUBSCRIBING = (c) =>
 
 const rev = (name) => `__rev_${name}`;
 const bump = (name) => `__bump_${name}`;
-const read = (name) => `__read_${name}`;
 
 // The component script, one function per section.
 //
@@ -3035,8 +3034,7 @@ function declarations(c) {
                   ...c.bindables.flatMap((b) => [
                       `let ${crossed(b)} = null;`,
                       `let ${rev(b)} = $state.raw(0);`,
-                      `const ${bump(b)} = () => { ${rev(b)} += 1; };`,
-                      `const ${read(b)} = () => { ${rev(b)}; };`
+                      `const ${bump(b)} = () => { ${rev(b)} += 1; };`
                   ]),
                   // The module body applies the annotation's default by writing
                   // to the name, and that write must not travel up to the
@@ -3072,7 +3070,6 @@ function declarations(c) {
             `let ${rev(n)} = $state.raw(0);`,
             `const ${fallback(n)} = { value: undefined, due: false };`,
             `const ${bump(n)} = () => { ${rev(n)} += 1; };`,
-            `const ${read(n)} = () => { ${rev(n)}; };`,
             `let ${given(n)} = $derived(__props.${n});`,
             `const ${pick(n)} = () => {` +
                 ` const __passed = ${given(n)};` +
@@ -3090,16 +3087,14 @@ function declarations(c) {
         ...c.state.flatMap((n) => [
             `let ${n} = $state.raw(undefined);`,
             `let ${rev(n)} = $state.raw(0);`,
-            `const ${bump(n)} = () => { ${rev(n)} += 1; };`,
-            `const ${read(n)} = () => { ${rev(n)}; };`
+            `const ${bump(n)} = () => { ${rev(n)} += 1; };`
         ]),
         // A `def`'s cell is a state cell: a decorator or a later line may put a
         // list there, and its mutations are followed as any name's are.
         ...c.funcs.flatMap((f) => [
             `let ${fn(f.name)} = $state.raw(undefined);`,
             `let ${rev(f.name)} = $state.raw(0);`,
-            `const ${bump(f.name)} = () => { ${rev(f.name)} += 1; };`,
-            `const ${read(f.name)} = () => { ${rev(f.name)}; };`
+            `const ${bump(f.name)} = () => { ${rev(f.name)} += 1; };`
         ]),
         ...c.inspects.map((i) => `let ${fn(i.name)} = $state.raw(undefined);`),
         ...c.effects.flatMap((e) =>
@@ -3146,6 +3141,29 @@ function templateBridge(c) {
     return [
         `const __event = (fn) => __pyEvent(fn);`,
         `const __attach = (fn) => __pyAttach(fn);`,
+        // What an `{#each}` walks, declared beside it by the markup, `{const
+        // __rows_… = __collection(…)}` read as `{#each __rows_…() as row}`:
+        // the iterable evaluated in a derived, as Svelte evaluates a block's
+        // collection, so a write made while the template walks is refused
+        // there too, and wrapped, so a list changed in place, the same object,
+        // still reaches the effect placed before the block, which
+        // moves the block's revision only when the rows differ
+        // (`__pybridge.walk`). A derived alone would not do: Svelte runs a
+        // block again, unasked, whenever an effect writes something it reaches
+        // through deriveds, and a thousand selects written as they mount ran it
+        // a thousand times. Written here, in runes, since the runtime knows no
+        // host; a server, which has no effect, takes the rows as the block
+        // reads them.
+        `const __collection = (compute, keyOf) => {`,
+        `    const walk = __pybridge.walk(keyOf);`,
+        `    const yielded = $derived.by(() => ({ rows: compute() }));`,
+        `    let revision = $state.raw(0);`,
+        `    let count = 0;`,
+        `    $effect.pre(() => { if (walk.refresh(yielded.rows)) revision = ++count; });`,
+        `    const rows = () => (revision, walk.held === undefined && walk.refresh(yielded.rows), walk.held);`,
+        `    rows.noted = walk.noted;`,
+        `    return rows;`,
+        `};`,
         // What `(name := value)` in a handler compiles to. The write goes
         // through the namespace, so through the accessor, so the signal fires:
         // the whole reason the walrus can mean this here.
@@ -3198,7 +3216,7 @@ function authorBindings(c) {
         ...c.props.map(
             (n) =>
                 `__bind(__proto, '${n}', () => (${rev(n)}, __follow(__pyBind(${pick(n)}()))),` +
-                ` (${NEXT_VALUE}) => { const __written = __track(${NEXT_VALUE}, ${bump(n)}, ${read(n)}, ${SUBS});` +
+                ` (${NEXT_VALUE}) => { const __written = __track(${NEXT_VALUE}, ${bump(n)}, ${SUBS});` +
                 ` if (__initialising) { ${fallback(n)}.value = __written; ${local(n)} = __written; return; }` +
                 ` if (${given(n)} !== undefined) ${given(n)} = __OVERRIDDEN; else ${fallback(n)}.due = false;` +
                 ` ${local(n)} = __written; ${bump(n)}(); },` +
@@ -3211,20 +3229,20 @@ function authorBindings(c) {
         ...c.bindables.map(
             (b) =>
                 `__bind(__proto, '${b}', () => (${rev(b)}, __follow(__pyBind(__unproxied(${b}, ${crossed(b)})))),` +
-                ` (${NEXT_VALUE}) => { if (!__initialising || ${b} === undefined) { const __written = __track(${NEXT_VALUE}, ${bump(b)}, ${read(b)}${c.store ? '' : `, ${SUBS}`}); ${crossed(b)} = __handOver(__written, (__crossing) => { ${b} = __crossing; }); __kept(${b}, __written); } }, () => ${b});`
+                ` (${NEXT_VALUE}) => { if (!__initialising || ${b} === undefined) { const __written = __track(${NEXT_VALUE}, ${bump(b)}${c.store ? '' : `, ${SUBS}`}); ${crossed(b)} = __handOver(__written, (__crossing) => { ${b} = __crossing; }); __kept(${b}, __written); } }, () => ${b});`
         ),
         // Reading the revision alongside the value is what registers the
         // dependency: an in-place mutation then invalidates every reader,
         // without the value ever changing identity.
         ...c.state.map(
             (n) =>
-                `__bind(__proto, '${n}', () => (${rev(n)}, ${n}), (${NEXT_VALUE}) => { ${n} = __track(${NEXT_VALUE}, ${bump(n)}, ${read(n)}${c.store ? '' : `, ${SUBS}`}); });`
+                `__bind(__proto, '${n}', () => (${rev(n)}, ${n}), (${NEXT_VALUE}) => { ${n} = __track(${NEXT_VALUE}, ${bump(n)}${c.store ? '' : `, ${SUBS}`}); });`
         ),
         ...c.funcs.map(
             (f) =>
                 `__bind(__proto, '${f.name}', () => ` +
                 `(${rev(f.name)}, ${fn(f.name)}), ` +
-                `(${NEXT_VALUE}) => { ${fn(f.name)} = __track(${NEXT_VALUE}, ${bump(f.name)}, ${read(f.name)}${c.store ? '' : `, ${SUBS}`}); }, () => ${fn(f.name)});`
+                `(${NEXT_VALUE}) => { ${fn(f.name)} = __track(${NEXT_VALUE}, ${bump(f.name)}${c.store ? '' : `, ${SUBS}`}); }, () => ${fn(f.name)});`
         ),
         ...c.inspects.map(
             (i) => `__bind(__proto, '${i.name}', () => ${fn(i.name)}, (${NEXT_VALUE}) => { ${fn(i.name)} = ${NEXT_VALUE}; });`

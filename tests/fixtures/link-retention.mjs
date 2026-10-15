@@ -19,7 +19,7 @@ const batch = () => {
         const owner = [];
 
         $B.$setitem(dict, key, shared);
-        track(dict, () => {}, () => {}, owner);
+        track(dict, () => {}, owner);
         unsubscribe(owner);
         keys.push(new WeakRef(key));
 

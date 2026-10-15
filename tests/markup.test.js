@@ -626,7 +626,7 @@ describe('the blocks that declare names', () => {
     test('{#each} keyed evaluates the key in the row’s scope', () => {
         const { out, defs } = rewrite('{#each rows as row (row.id)}<li>{row}</li>{/each}');
 
-        expect(out).toContain('(__expr_');
+        expect(out).toContain('(__rows_1.noted(__index_1, __expr_');
         expect(defs.some((one) => one.includes('__key(row.id)'))).toBe(true);
     });
 

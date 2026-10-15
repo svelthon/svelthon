@@ -89,7 +89,7 @@ test('a block signs off the list it declared when it goes', async () => {
         flushSync();
     };
     const shared = __pybridge.list([1]);
-    track(shared, () => {}, () => {});
+    track(shared, () => {});
     const counted = () => marks(shared).bumps.length;
 
     const target = document.body.appendChild(document.createElement('div'));

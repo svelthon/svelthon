@@ -14,7 +14,7 @@ test('a method read off a watched instance is not watched itself', () => {
     const js = $B.py2js({ src: source, filename: 'bound_method.py' }, 'bound_method', ['bound_method']).to_js();
     const module = new Function(`${js}\nreturn locals_bound_method_py;`)();
 
-    track(module.tile, () => {}, () => {});
+    track(module.tile, () => {});
 
     expect(marks(module.tile)).toBeDefined();
     expect(marks($B.$call(module.method))).toBeUndefined();

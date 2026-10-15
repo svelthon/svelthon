@@ -100,17 +100,24 @@ describe('walrusTarget reads through a string', () => {
 describe('trailingKey reads through a string', () => {
     const each = (line) => rewrite(`{#each ${line}}x{/each}`);
 
+    // What the block becomes: the rows a walk declared beside it hands over
+    // (`__collection`), and the key, when there is one, read with the row and
+    // its index.
+    const walked = (target, key) =>
+        key === undefined
+            ? `{const __rows_1 = __collection(() => __expr_py_0())}{#each __rows_1() as ${target}}x{/each}`
+            : `{const __rows_1 = __collection(() => __expr_py_0(), (${target}, __index_1) => ${key})}` +
+              `{#each __rows_1() as ${target}, __index_1 (__rows_1.noted(__index_1, ${key}))}x{/each}`;
+
     // The key is compiled like any other expression, so what proves the scanner
     // found the *whole* group is that the target ends where it should: one
     // expression for the rows, one for the key, and nothing left over.
     test('a key holding a parenthesis inside a string is one key', () => {
-        expect(each('rows as row ("a)b")')).toBe('{#each __expr_py_0() as row (__expr_1())}x{/each}');
+        expect(each('rows as row ("a)b")')).toBe(walked('row', '__expr_1()'));
     });
 
     test('and one behind an escaped quote too', () => {
-        expect(each('rows as row ("a\\")b")')).toBe(
-            '{#each __expr_py_0() as row (__expr_1())}x{/each}'
-        );
+        expect(each('rows as row ("a\\")b")')).toBe(walked('row', '__expr_1()'));
     });
 
     // Python's strings, read as `atomic` reads them: a field that reuses its
@@ -121,12 +128,12 @@ describe('trailingKey reads through a string', () => {
         ['an f-string whose field reuses its quote', 'rows as row (f"{"("}{row.id}")'],
         ['a triple-quoted string holding a lone quote', 'rows as row ("""an "(" quote""" + str(row.id))']
     ])('%s is one key', ([, line]) => {
-        expect(each(line)).toBe('{#each __expr_py_0() as row (__expr_1(__follow(row)))}x{/each}');
+        expect(each(line)).toBe(walked('row', '__expr_1(row)'));
     });
 
     // The three shapes that are *not* a key, each for its own reason.
     test('a tuple target is a target, not a key with nothing before it', () => {
-        expect(each('pairs as (name, count)')).toBe('{#each __expr_py_0() as [name, count]}x{/each}');
+        expect(each('pairs as (name, count)')).toBe(walked('[name, count]'));
     });
 
     // A tuple target *followed by an index*: the parentheses are the target's,
@@ -135,11 +142,11 @@ describe('trailingKey reads through a string', () => {
     // that belonged to the target. Here `(key)` is followed by an index, so it
     // is not the key and the whole tail crosses untouched.
     test('a group with something after it belonged to the target', () => {
-        expect(each('rows as row (key), i')).toBe('{#each __expr_py_0() as row (key), i}x{/each}');
+        expect(each('rows as row (key), i')).toBe(walked('row (key), i'));
     });
 
     test('and an unbalanced line is left for Svelte to report', () => {
-        expect(each('rows as row)')).toBe('{#each __expr_py_0() as row)}x{/each}');
+        expect(each('rows as row)')).toBe(walked('row)'));
     });
 });
 
