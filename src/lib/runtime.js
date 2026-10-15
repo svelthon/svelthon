@@ -20,6 +20,10 @@ export const NONE = globalThis.__BRYTHON__.builtins.None;
 // reading a `.py` module's objects is followed all the same.
 let inReaction = () => true;
 
+// How a set's view takes out the member its own lookup found, and tells it
+// (`SetView.delete`): the mutation tracking's, which sets it.
+let removeFound;
+
 // The template helpers, re-exported so a generated component has one specifier
 // to import rather than two, and so every satellite repo keeps the single
 // `svelthon/runtime` alias it already resolves.
@@ -1225,6 +1229,22 @@ function installMutationTracking($B) {
         } else {
             inherit(obj, result); // `get`
         }
+    };
+
+    // A member a set's view found by its own lookup (`SetView.delete`), taken
+    // out as the engine's `discard` takes it out, `set_remove` then
+    // `$version`, and told as that call is told.
+    removeFound = (set, hash, at, asked) => {
+        const member = set.$store[hash]?.[at] ?? asked;
+
+        if (set.$store[hash] !== undefined) {
+            set.$store[hash].splice(at, 1);
+            if (set.$store[hash].length === 0) delete set.$store[hash];
+            set.$used -= 1;
+        }
+
+        set.$version += 1;
+        afterCall(set, 'discard', NONE, [member]);
     };
 
     // **Whether a call on a watched set or dict changed it**, told as Svelte's
@@ -4246,6 +4266,16 @@ const ARRIVING = new Set(['add', 'update', '__ior__']);
 // A JavaScript object is hashed by its identity too, through a slot of its own.
 const BUILTIN_HASHED = [_b_.int, _b_.float, _b_.str, _b_.bool, globalThis.__BRYTHON__.JSObj];
 
+// Whether two values are one member of a JavaScript `Set` (SameValueZero): a
+// number or a string of Python's, a subclass's among them, as the scalar it
+// crosses as (`pyScalar`), which is what a reader of the view was handed, and
+// anything else as itself. Nothing of the author's runs.
+const sameMember = (a, b) => {
+    const [x, y] = [pyScalar(a) ?? a, pyScalar(b) ?? b];
+
+    return x === y || (x !== x && y !== y);
+};
+
 class SetView extends Set {
     #value;
 
@@ -4329,12 +4359,77 @@ class SetView extends Set {
         return this.#published;
     }
 
+    // Python's `discard`, and whether the member asked for went, never by
+    // asking the set again. Asked first whether it held the member, the view
+    // hashed it a second time, and a class whose `in` answers otherwise kept
+    // it. JavaScript's `delete` answers any value, where a set's own `discard`
+    // refuses one whose class has no hash: told by the class, before anything
+    // runs. A frozenset has no `discard`, and refuses the write.
+    //
+    // A set's own `discard` is looked up here, as the engine's lookup does it
+    // (`set_lookkey`): the member hashed once, a set as the frozenset of its
+    // members, then each member filed under that hash, in turn, until one is
+    // it or equal to it. The answer is the lookup's, decided where it finds the
+    // member: whatever the author's `__hash__` or `__eq__` adds or removes in
+    // passing, and whatever it raises, is theirs, as in Python's `discard`.
+    // The member found is taken out and told as `discard` takes it out and
+    // tells it (`removeFound`).
+    //
+    // The set's own `discard` is the one Python reads off it, `bag.discard`:
+    // its class declares the builtin's, reads its names the builtin way, with
+    // no `__getattribute__` of the author's, and the object holds no `discard`
+    // of its own, which an instance's dict would give before the class's.
+    //
+    // Any other `discard` decides what it removes, and only it knows what the
+    // value asked for names: the view calls it as Python reads it, asks it
+    // nothing more, and answers as a JavaScript `Set` would, whether the value
+    // itself went (`sameMember`), running nothing of the author's.
     delete(one) {
-        const held = this.#has(one);
+        const $B = globalThis.__BRYTHON__;
+        const bound = pyBind(one);
+        const value = this.#value;
+        const type = ownType(value);
+        const attributes = ownAttributes(value);
+        const own =
+            declares(type, 'discard') === declares(_b_.set, 'discard') &&
+            declares(type, '__getattribute__') === declares(_b_.set, '__getattribute__') &&
+            !($B.is_dict(attributes) && _b_.dict.$contains(attributes, 'discard'));
 
-        if (held) this.#call('discard', pyBind(one));
+        if (own) {
+            if (!isSet(bound) && !hashable(bound)) return false;
 
-        return held;
+            try {
+                let hash;
+
+                try {
+                    hash = $B.hash_for(bound, 'a set element');
+                } catch (error) {
+                    if (quietPyType(bound)?.tp_mro.includes(_b_.set) !== true) throw error;
+                    hash = $B.$hash(_b_.frozenset.$factory(bound));
+                }
+
+                const filed = value.$store[hash] ?? [];
+
+                for (let at = 0, size = filed.length; at < size; at++) {
+                    if ($B.is_or_equals(bound, filed[at])) {
+                        removeFound(value, hash, at, bound);
+                        return true;
+                    }
+                }
+            } catch (error) {
+                throw pyError(error, `${type.tp_name}.discard()`);
+            }
+
+            return false;
+        }
+
+        const held = Object.values(value.$store).flat();
+
+        this.#call('discard', bound);
+
+        const left = new Set(Object.values(value.$store).flat());
+
+        return held.some((member) => !left.has(member) && sameMember(member, bound));
     }
 
     clear() {

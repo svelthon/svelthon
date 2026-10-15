@@ -469,9 +469,11 @@ test('what Python raises under a view reaches the reader, in Python’s words', 
     expect(iteratedSets.SETS.named.has([])).toBe(false);
     expect(iteratedSets.SETS.named.has(viewErrors.compared)).toBe(false);
     // A class that redefines `__contains__` is asked whatever the value: a row
-    // it reads a key from is found and deleted, and what it raises arrives.
+    // it reads a key from is found, and its `discard` deletes the key, and what
+    // it raises arrives. `delete` answers for the row itself, which the set
+    // never held: no member equal to it went.
     expect(viewErrors.row_bag.has(viewErrors.query)).toBe(true);
-    expect(viewErrors.row_bag.delete(viewErrors.query)).toBe(true);
+    expect(viewErrors.row_bag.delete(viewErrors.query)).toBe(false);
     expect([...viewErrors.row_bag]).toEqual([2]);
     expect(read(() => viewErrors.type_bag.has([]))).toEqual(expect.stringContaining('TypeError: membership failed'));
     expect(viewErrors.caught()).toEqual([
