@@ -8158,6 +8158,12 @@ const changed = (before, after, python) => {
     const a = handed(before);
     const b = handed(after);
 
+    // What JavaScript makes one number, `1` and `1.0` or `0.0` and `-0.0`, is
+    // two values to a Python action, which reads its type and its sign: a
+    // scalar is compared with the type it has, the engine's or the
+    // primitive's, and by `Object.is`.
+    if (python && a === b && ((quietPyType(before) ?? typeof before) !== (quietPyType(after) ?? typeof after) || !Object.is(a, b))) return true;
+
     // eslint-disable-next-line no-self-compare
     return a != a ? b == b : a !== b || (a !== null && typeof a === 'object') || typeof a === 'function';
 };
