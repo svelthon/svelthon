@@ -697,8 +697,12 @@ export const __pybridge = {
     // `{#each}` walks a JavaScript array. A Python list or tuple already is one,
     // but a dict, a set, a range, a generator or the result of .items() is not,
     // and iterating those is the whole point of writing the loop in Python.
+    //
+    // None walks nothing, as Svelte walks nothing of `null`: None is absence in
+    // the template, as for a value it renders and an attribute it writes, and a
+    // list a prop or a fetch has not handed over yet renders as no rows.
     seq(value) {
-        if (value === undefined || value === null) return [];
+        if (value === undefined || value === null || value === NONE) return [];
 
         let rows;
 

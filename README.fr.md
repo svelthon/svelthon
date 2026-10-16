@@ -75,7 +75,7 @@ reste de cette configuration et ce que chaque ligne apporte.
 npm install
 npm run dev          # la démo, sous /demo/
 
-npm test             # 1 903 tests : sémantique, props, réactivité, surface Svelte
+npm test             # 1 904 tests : sémantique, props, réactivité, surface Svelte
 npm run test:quiet   # la sortie de la suite : un run vert ne doit rien dire
 npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
@@ -391,7 +391,9 @@ interpolations :
 ```
 
 L'itérable d'un `{#each}` est évalué *hors* du bloc et sa clé *dedans* : chacun
-est donc compilé avec les noms qu'il peut réellement voir.
+est donc compilé avec les noms qu'il peut réellement voir. None ne parcourt rien
+et montre le `{:else}`, comme Svelte avec `null` : une liste pas encore fournie
+ne fait aucune ligne, là où le `for` de Python lèverait.
 
 **Les directives prennent du Python aussi.** Un gestionnaire est un `lambda`,
 `class:` se lit avec la vérité de Python, et une liaison nomme quelque chose à
@@ -1573,7 +1575,7 @@ part jamais.
 
 ## État
 
-Validé par `npm test`, 1 903 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 1 904 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;

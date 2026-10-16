@@ -77,7 +77,7 @@ rest of that configuration and what each line buys.
 npm install
 npm run dev          # the demo, at /demo/
 
-npm test             # 1 903 tests: semantics, props, reactivity, Svelte surface
+npm test             # 1 904 tests: semantics, props, reactivity, Svelte surface
 npm run test:quiet   # the suite's own output: a green run must say nothing
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
@@ -384,7 +384,9 @@ Every site the markup *reads* goes through Python, not only interpolations:
 ```
 
 The `{#each}` iterable is evaluated *outside* the block and the key inside it, so
-each is compiled against the names it can actually see.
+each is compiled against the names it can actually see. None walks nothing and
+shows the `{:else}`, as Svelte does with `null`: a list not handed over yet is
+no rows, where Python's `for` would raise.
 
 **Directives take Python as well.** A handler is a `lambda`, `class:` is read for
 Python's truthiness, and a binding names something Python can assign to:
@@ -1555,7 +1557,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 1 903 tests as written (vitest reports more, one per
+Validated by `npm test`, 1 904 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;
