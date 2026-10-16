@@ -3206,7 +3206,10 @@ const declaredClasses = (c) => {
 
 function authorBindings(c) {
     return [
-        `const __proto = {};`,
+        // The namespace inherits its bindings' accessors and nothing else: a
+        // name the program never bound, `constructor` or `toString`, is
+        // unbound, where `Object.prototype` answered it with a function.
+        `const __proto = Object.create(null);`,
         // The names a `from m import *` binds get their accessors at run time,
         // in a component unsubscribed with its own list; a store keeps its
         // subscriptions for as long as the page.
@@ -3264,7 +3267,7 @@ function authorBindings(c) {
         // property as its statement runs (`__pybridge.declare`), and read as
         // any name is. A name another binding gives an accessor keeps that one.
         ...declaredClasses(c).flatMap((n, at) => [
-            ...(at === 0 ? ['const __classes = {};'] : []),
+            ...(at === 0 ? ['const __classes = Object.create(null);'] : []),
             `__bind(__proto, '${n}', () => __pybridge.declared(__classes[${JSON.stringify(n)}]), function (${NEXT_VALUE}) { __pybridge.declare(this, '${n}', ${NEXT_VALUE}, __classes); });`
         ]),
         ...c.funcs.map(
@@ -3701,8 +3704,9 @@ function plainDeclarations(c) {
 function plainBindings(c) {
     return [
         // No markup here, so none of what a template expression calls (`__event`,
-        // `__assign`, `__group`, `__truthy` and the rest) is emitted.
-        `const __proto = {};`,
+        // `__assign`, `__group`, `__truthy` and the rest) is emitted. Nothing
+        // of `Object.prototype` is a name, as in `authorBindings`.
+        `const __proto = Object.create(null);`,
         ...c.state.map((n) => `__bind(__proto, '${n}', () => ${n}, (${NEXT_VALUE}) => { ${n} = ${NEXT_VALUE}; });`),
         ...c.funcs.map(
             (f) =>
