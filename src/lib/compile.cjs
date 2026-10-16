@@ -499,6 +499,75 @@ const blockBinds = (block) => {
 
 const moduleBinds = (table) => blockBinds(table.top);
 
+// `:=` in the markup writes a name of the component in a handler's `lambda`
+// alone, which the markup pass has rewritten by then (`walrus`). Anywhere else
+// Python binds the name in the function the expression compiles to, or in a
+// `lambda` inside it, and the write dies with the call: `{(n := 1)}` showed 1
+// and left the component's `n` as it was. A name of the module so written is
+// refused at the markup that wrote it. One of the block's own, a parameter of
+// the function, binds as CPython binds it, a `lambda`'s parameter is its own,
+// and a temporary handed to a call is one by its form, as in a handler.
+function refuseTemplateWalrus(ast, table, source, ranges) {
+    const names = moduleBinds(table);
+
+    for (const def of ast.body) {
+        if (!(def instanceof $B.ast.FunctionDef) || !def.name.startsWith(EXPR_PREFIX) || def.name.startsWith(`${EXPR_PREFIX}set_`)) continue;
+
+        const walked = new WeakSet();
+        const visit = (node, own) => {
+            if (node === null || typeof node !== 'object' || walked.has(node)) return;
+            walked.add(node);
+            if (Array.isArray(node)) return node.forEach((one) => visit(one, own));
+
+            if (node instanceof $B.ast.Lambda) {
+                const params = [...node.args.posonlyargs, ...node.args.args, ...node.args.kwonlyargs, node.args.vararg, node.args.kwarg];
+
+                visit(node.args.defaults, own);
+                visit(node.args.kw_defaults, own);
+                visit(node.body, new Set([...own, ...params.filter(Boolean).map((one) => one.arg)]));
+                return;
+            }
+
+            // The wrapper the markup pass puts around the expression,
+            // `__text(…)`, is the compiler's call and not the author's: its
+            // argument is the expression itself.
+            const authors = node instanceof $B.ast.Call && !(node.func instanceof $B.ast.Name && COMPILER_PREFIX.test(node.func.id));
+
+            if (authors) {
+                visit(node.func, own);
+                for (const one of node.args) visit(one instanceof $B.ast.NamedExpr ? one.value : one, own);
+                visit(node.keywords, own);
+                return;
+            }
+
+            if (node instanceof $B.ast.NamedExpr && names.has(node.target.id) && !own.has(node.target.id)) {
+                const range = ranges.find(([from, to]) => node.lineno >= from && node.lineno <= to);
+                const [line, column] = range === undefined ? [undefined, undefined] : [range[2], range[3]];
+                const at = line === undefined ? '' : ` (${source}:${line}:${column + 1})`;
+                const name = node.target.id;
+
+                throw refuse(
+                    `svelthon — \`${name} := …\` in the markup writes the component's \`${name}\` only in a ` +
+                        `handler's \`lambda\`, \`onclick={lambda: (${name} := …)}\`, run on an event${at}. ` +
+                        `Here the expression runs while the page renders, which must not write state, and ` +
+                        `Python would bind a \`${name}\` of its own that dies with it.`,
+                    source,
+                    line,
+                    column
+                );
+            }
+
+            // A node's `$parent` leads back up to the module, the script's own
+            // walruses among it.
+            for (const key of Object.keys(node)) {
+                if (!key.startsWith('$') && (key !== 'target' || !(node instanceof $B.ast.NamedExpr))) visit(node[key], own);
+            }
+        };
+
+        visit(def.body, new Set(def.args.args.map((one) => one.arg)));
+    }
+}
+
 // The builtins a statement of `__all__` may call: each reads what it is given
 // and keeps nothing, so the call answers the same on every run.
 const PURE_BUILTINS = new Set([...READS_ONLY].filter((name) => name !== 'print'));
@@ -4033,6 +4102,8 @@ function compile(
 
     // Python's symbol table, which says what every name means in every scope.
     const table = symbolTable(root._ast, source);
+
+    if (component) refuseTemplateWalrus(root._ast, table, source, exprLines);
 
     // The two declarations meet here, in one shape: `__js__` is the module's and
     // only ever names, `importjs` is the component's and covers the four forms.

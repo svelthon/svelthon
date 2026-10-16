@@ -12,6 +12,7 @@
 // because the plumbing is the part that broke: the markup, its offset in the
 // file, and the filename all have to arrive together.
 import { test, expect, describe } from 'vitest';
+import { preprocess } from 'svelte/compiler';
 
 import { python } from '../src/lib/svelthon.js';
 import { pythonExpressions, collector } from '../src/lib/markup.js';
@@ -90,6 +91,41 @@ describe('a markup refusal names a position', () => {
 
         expect(error.start.line).toBe(12);
     });
+});
+
+// `:=` writes a name of the component in a handler's `lambda` alone. Anywhere
+// else the expression runs while the page renders, and Python bound a name the
+// call dropped: `{(x := 1)}` showed 1 and left `x` as it was, in silence.
+// Refused there, at its brace. A handler's `lambda`, a temporary handed to a
+// call, a name of the expression's own and one of its block bind as they did.
+test('a walrus onto a name of the component outside a handler is refused where it was written', async () => {
+    const compiled = (markup) => preprocess(around(markup), [python()], { filename: FILE });
+
+    for (const [markup, column] of [
+        ['<p>{(x := 1)}</p>', 4],
+        ['<p title={(x := 2)}>a</p>', 10],
+        ['{#if (x := 1)}a{/if}', 1],
+        ['<p>{[(rows := y) for y in [1]]}</p>', 4],
+        ['<p>{(lambda: (x := 3))()}</p>', 4]
+    ]) {
+        const error = await compiled(markup).then(
+            () => null,
+            (thrown) => thrown
+        );
+
+        expect(error?.message).toMatch(/`(x|rows) := …` in the markup writes the component's .* only in a handler's `lambda`/);
+        expect(error.message).toContain(`(${FILE}:6:${column})`);
+    }
+
+    for (const markup of [
+        '<b onclick={lambda: (x := 2)}>x</b>',
+        '<p>{print(x := 1)}</p>',
+        '<p>{len((y := rows))}</p>',
+        '<p>{(lambda x: (x := 3))(1)}</p>',
+        '{#each rows as row}<p>{(row := 2)}</p>{/each}'
+    ]) {
+        await expect(compiled(markup)).resolves.toBeDefined();
+    }
 });
 
 // A Python script Svelte reads as an element of the page, and not as the

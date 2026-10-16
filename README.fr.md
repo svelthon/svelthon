@@ -75,7 +75,7 @@ reste de cette configuration et ce que chaque ligne apporte.
 npm install
 npm run dev          # la démo, sous /demo/
 
-npm test             # 1 892 tests : sémantique, props, réactivité, surface Svelte
+npm test             # 1 893 tests : sémantique, props, réactivité, surface Svelte
 npm run test:quiet   # la sortie de la suite : un run vert ne doit rien dire
 npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
@@ -477,7 +477,8 @@ fonction englobante et un `lambda` en étant une : la lecture habituelle n'y ser
 ```
 
 Gestionnaires seulement : un rendu ne doit pas écrire d'état, et Svelte le dit
-lui-même.
+lui-même. Un `:=` sur un nom du composant ailleurs dans le gabarit est refusé à
+sa ligne, là où Python lierait un nom à lui qui meurt avec l'expression.
 
 C'est tout. Tout le reste est du Python tel qu'écrit : les opérateurs, les
 tranches, les compréhensions, les f-strings, la vérité d'un objet qui définit
@@ -1568,7 +1569,7 @@ part jamais.
 
 ## État
 
-Validé par `npm test`, 1 892 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 1 893 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;

@@ -77,7 +77,7 @@ rest of that configuration and what each line buys.
 npm install
 npm run dev          # the demo, at /demo/
 
-npm test             # 1 892 tests: semantics, props, reactivity, Svelte surface
+npm test             # 1 893 tests: semantics, props, reactivity, Svelte surface
 npm run test:quiet   # the suite's own output: a green run must say nothing
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
@@ -463,7 +463,9 @@ reading is useless here and the template gives it the only one worth having:
 {/each}
 ```
 
-Handlers only: a render must not write state, and Svelte says so itself.
+Handlers only: a render must not write state, and Svelte says so itself. A `:=`
+onto a name of the component anywhere else in the markup is refused at its line,
+where Python would bind a name of its own that dies with the expression.
 
 That is the whole of it. Everything else is Python as written: the operators,
 the slices, the comprehensions, the f-strings, the truth of an object with
@@ -1548,7 +1550,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 1 892 tests as written (vitest reports more, one per
+Validated by `npm test`, 1 893 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;
