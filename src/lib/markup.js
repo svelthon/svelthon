@@ -133,15 +133,28 @@ function renderedCall(text) {
         : null;
 }
 
-// `f(a, b)` → ['a', 'b'], with a comma inside a literal or a call left alone.
+// `f(a, b)` → ['a', 'b'], with a comma inside a literal or a call left alone,
+// and the two that Python writes inside an element at its top level: a
+// lambda's parameters, up to its colon, and the target of a generator's `for`,
+// up to its `in`. `item(lambda x, y: x + y)` passes one callback, and
+// `sum(x for x, y in pairs)` one generator.
 function arguments_(text) {
     const parts = [];
+    const awaited = [];
     let from = 0;
 
     atTopLevel(text, (i) => {
-        if (text[i] !== ',') return false;
-        parts.push(text.slice(from, i));
-        from = i + 1;
+        KEYWORD_AT.lastIndex = i;
+        const keyword = KEYWORD_AT.exec(text)?.[1];
+
+        if (keyword === 'lambda') awaited.push(':');
+        else if (keyword === 'for') awaited.push('in');
+        else if (keyword === 'in' && awaited.at(-1) === 'in') awaited.pop();
+        else if (text[i] === ':' && text[i + 1] !== '=' && awaited.at(-1) === ':') awaited.pop();
+        else if (text[i] === ',' && awaited.length === 0) {
+            parts.push(text.slice(from, i));
+            from = i + 1;
+        }
         return false;
     });
 
@@ -172,6 +185,10 @@ const KEYWORD_BEFORE = new RegExp(
         `del|elif|while|for|from|import|raise|with|as|None|True|False)$`,
     'u'
 );
+
+// The keywords that hold a comma until their own end, starting at `lastIndex`
+// and spelled whole, with the same boundary: `x.lambda` and `info` are none.
+const KEYWORD_AT = new RegExp(`(?<![${NAME_CHAR}.])(lambda|for|in)(?![${NAME_CHAR}])`, 'uy');
 
 // A name, spelled the way Python spells one, and the single source every pattern
 // in this file that reads a name is built from.
