@@ -10,3 +10,6 @@ value = None
 <input data-k="space" bind:value >
 <input data-k="slash" bind:value/>
 <input data-k="close" bind:value>
+
+<!-- With a modifier, which is no part of the name. -->
+<input data-k="important" bind:value|important>

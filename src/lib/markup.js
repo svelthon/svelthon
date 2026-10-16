@@ -728,9 +728,12 @@ const GROUP_DIRECTIVE = /^bind:group\b/;
 // JavaScript's truth of the raw cell: None and `[]` are objects, so both set
 // the class.
 // The name a shorthand holds, `{name}` or `bind:name`: a name, or Svelte's with
-// its `$`.
+// its `$`. The directive is the whole attribute, after what ends the one before
+// it, a space, a quote or a brace (`ATTRIBUTE_CHAR`, written out since it comes
+// later): `data-bind:group` is an attribute of that name to Svelte, and was made
+// a group action.
 const SHORT_NAME = `[\\p{XID_Start}_$][${NAME_CHAR}$]*`;
-const SHORTHAND = new RegExp(`\\b((bind|class|style):(${SHORT_NAME}))(\\|important)?$`, 'u');
+const SHORTHAND = new RegExp(`(?<=^|[\\s=/>"'}])((bind|class|style):(${SHORT_NAME}))(\\|important)?$`, 'u');
 const SHORTHAND_ATTRIBUTE = new RegExp(`^${SHORT_NAME}$`, 'u');
 
 // The action the generated script defines for it. Named here and emitted there,
@@ -3011,20 +3014,23 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 const short = tagText().match(SHORTHAND);
                 if (short && short[2] !== 'bind') {
                     out += `=${attributeValue(short[1], short[3])}`;
-                } else if (short && short[4] === undefined) {
+                } else if (short) {
+                    // `bind:value|important` too, whose modifier Svelte reads
+                    // past: left as written, Svelte bound its own `let`.
                     const name = short[3];
+                    const written = short[0];
 
                     // The same test the long form makes, against the same
                     // pattern: `bind:group` refuses the pair for the reason
                     // written above `GROUP_DIRECTIVE`, in both its spellings.
                     if (GROUP_DIRECTIVE.test(short[1]) && !isComponent(tag)) {
-                        out = out.slice(0, out.length - short[1].length) + groupAction(name);
+                        out = out.slice(0, out.length - written.length) + groupAction(name);
                     } else if (GROUP_DIRECTIVE.test(short[1])) {
                         out += `={${componentGroup(name)}}`;
                     } else {
                         const shaped = spreadSelect(short[1], name);
 
-                        if (shaped !== null) out = `${out.slice(0, out.length - short[1].length)}${shaped.action} ${short[1]}`;
+                        if (shaped !== null) out = `${out.slice(0, out.length - written.length)}${shaped.action} ${written}`;
                         out += `={${boundPair(short[1], name)}}`;
                     }
                 }

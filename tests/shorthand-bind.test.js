@@ -2,6 +2,7 @@ import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import Shorthand from './fixtures/Shorthand2.svelte';
 import ShorthandEnds from './fixtures/ShorthandEnds.svelte';
+import { pythonExpressions, collector } from '../src/lib/markup.js';
 
 // `bind:value` with no `={…}` is Svelte's shorthand for `bind:value={value}`.
 // It used to slip past the pair — the scanner looks for an `=` and finds none —
@@ -84,6 +85,19 @@ describe('where the shorthand ends', () => {
             expect(setup()(key).value).toBe('');
         }
     );
+
+    // A modifier is no part of the name: `bind:value|important` was left as
+    // written, so Svelte bound its own `let` and the field showed "None". And a
+    // `data-` attribute spelled like a directive is an attribute, as Svelte
+    // reads it (warning about its colon), where it was made a group action on a
+    // name nobody bound.
+    test('a modifier is no part of the shorthand, and a data- attribute is no directive', () => {
+        expect(setup()('important').value).toBe('');
+
+        for (const markup of ['<input data-bind:group>', '<p data-class:on data-style:color>x</p>']) {
+            expect(pythonExpressions(markup, collector([]))).toBe(markup);
+        }
+    });
 });
 
 // The one the shorthand tests above do *not* catch, and the reason the wrapper
