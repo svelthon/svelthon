@@ -1213,6 +1213,19 @@ test('dicts and list subclasses answer as in CPython: dict-has-own-property-key,
     expect([...from_javascript([1.5, 2.5], [1, 2], [1.5])]).toEqual(["[('float', 2.5)]", "b'\\x01\\x02'", 'TypeError']);
 });
 
+// A namespace binding "hasOwnProperty" called that name as a method when a
+// name was assigned again, read unbound or deleted unbound, and so did the
+// arguments of a function with such a parameter and a builtin given such a
+// keyword, and a class pattern given such a keyword; and a keyword unpacked
+// into a builtin and spelled like a property of every JavaScript object,
+// "constructor" or "valueOf", was taken for one given twice. Each answer is
+// read on its own, so each commit is held by its own.
+test('names spelled like JavaScript methods answer as in CPython: variable-has-own-property, argument-has-own-property, pattern-keyword-has-own-property, unpacked-keyword-inherited-name', async () => {
+    const { answers } = await import('./fixtures/has_own_names.py');
+
+    expect([...answers()]).toEqual(['12', "'UnboundLocalError'", '5', 'TypeError', "'x'", "'1'", "'1'"]);
+});
+
 // The console's write() returned None where CPython gives the number of
 // characters written. A component cannot import `sys`; the runtime's stdout
 // is read where Brython keeps it.

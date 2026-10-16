@@ -1562,7 +1562,7 @@ slots[arg_name]=arg}}else if(vararg){varargs.push(arg)}else{
 throw too_many_pos_args(
 fname,kwarg,arg_names,nb_kwonly,defaults,args,slots)}}}
 for(var j=nb_passed_pos;j < nb_pos_or_kw;j++){var arg_name=arg_names[j]
-if(kw && kw.hasOwnProperty(arg_name)){
+if(kw && Object.hasOwn(kw,arg_name)){
 if(j < nb_posonly){
 if(! kwarg){throw pos_only_passed_as_keyword(fname,arg_name)}}else{
 slots[arg_name]=kw[arg_name]
@@ -1571,13 +1571,13 @@ if(slots[arg_name]===empty){
 var def_value=defaults[j-(nb_pos_or_kw-nb_def)]
 if(def_value !==undefined){slots[arg_name]=def_value
 if(j < nb_posonly){
-if(kw && kw.hasOwnProperty(arg_name)&& kwarg){extra_kw[arg_name]=kw[arg_name]
+if(kw && Object.hasOwn(kw,arg_name)&& kwarg){extra_kw[arg_name]=kw[arg_name]
 kw[arg_name]=empty}}}else{
 var missing_pos=arg_names.slice(j,nb_pos_or_kw-nb_def)
 throw missing_required_pos(fname,missing_pos)}}}
 var missing_kwonly
 for(var i=nb_pos_or_kw;i < nb_expected;i++){var arg_name=arg_names[i]
-if(kw && kw.hasOwnProperty(arg_name)){slots[arg_name]=kw[arg_name]
+if(kw && Object.hasOwn(kw,arg_name)){slots[arg_name]=kw[arg_name]
 kw[arg_name]=empty}else{
 var kw_def=$B.str_dict_get(kwdefaults,arg_name)
 if(kw_def !==$B.NULL){slots[arg_name]=kw_def}else{
@@ -1600,7 +1600,7 @@ $B.parse_kwargs=function(kw_args,fname){var kwa=kw_args[0]
 for(var i=1,len=kw_args.length;i < len;i++){var kw_arg=kw_args[i],key,value
 if($B.get_class(kw_arg)===_b_.dict){for(var entry of _b_.dict.$iter_items(kw_arg)){key=$B.is_str(entry.key)? to_str(entry.key):entry.key
 if(typeof key !=='string'){$B.RAISE(_b_.TypeError,fname+
-"() keywords must be strings")}else if(kwa[key]!==undefined){$B.RAISE(_b_.TypeError,fname+
+"() keywords must be strings")}else if(Object.hasOwn(kwa,key)){$B.RAISE(_b_.TypeError,fname+
 "() got multiple values for argument '"+
 key+"'")}else{
 kwa[key]=entry.value}}}else{
@@ -1612,7 +1612,7 @@ var keys_iter=$B.make_js_iterator($B.$call(keys_method,kw_arg)),getitem
 for(var k of keys_iter){k=$B.is_str(k)? to_str(k):k
 if(typeof k !=="string"){$B.RAISE(_b_.TypeError,fname+
 "() keywords must be strings")}
-if(kwa[k]!==undefined){$B.RAISE(_b_.TypeError,fname+
+if(Object.hasOwn(kwa,k)){$B.RAISE(_b_.TypeError,fname+
 "() got multiple values for argument '"+
 k+"'")}
 if(! getitem){try{
@@ -1890,7 +1890,7 @@ if(delitem===$B.NULL){$B.RAISE(_b_.TypeError,"'"+$B.class_name(obj)+
 return $B.$call(delitem,obj,item)}
 $B.delete_for_reassign=function(name,namespace){
 if(namespace.$is_namespace){return $B.$delitem(namespace,name)}
-if(namespace.hasOwnProperty && namespace.hasOwnProperty(name)){try{
+if(Object.hasOwn(namespace,name)){try{
 var value=namespace[name]}catch(err){
 return}
 var klass=$B.get_class(value)
@@ -4142,7 +4142,7 @@ if(index==-1){if(kwarg){add_to_kwargs(locals[kwarg],key,value)
 return}else{
 $B.RAISE(_b_.TypeError,name+
 `() got an unexpected keyword argument '${param}'`)}}
-if(locals.hasOwnProperty(param)){if(kwarg && index < posonly_length){$B.str_dict_set(locals[kwarg],param,value)
+if(Object.hasOwn(locals,param)){if(kwarg && index < posonly_length){$B.str_dict_set(locals[kwarg],param,value)
 return}
 $B.RAISE(_b_.TypeError,name+
 `() got multiple values for argument '${param}'`)}
@@ -4174,13 +4174,13 @@ if(posonly_as_keywords){$B.RAISE(_b_.TypeError,`${name}() got some positional-on
 `arguments: '${posonly_as_keywords.join(', ')}'`)}
 if(nb_formal==0){
 return locals}
-if(filled_pos < nb_formal){for(let key in def_obj){if(! locals.hasOwnProperty(key)){locals[key]=def_obj[key]
+if(filled_pos < nb_formal){for(let key in def_obj){if(! Object.hasOwn(locals,key)){locals[key]=def_obj[key]
 filled_pos++}}
 if(filled_pos < nb_formal){
 var missing_positional=[]
 var missing_kwonly=[]
 for(let i=0;i < nb_formal;i++){let arg_name=arg_names[i]
-if(! locals.hasOwnProperty(arg_name)){if(i < positional_length){missing_positional.push(`'${arg_name}'`)}else{
+if(! Object.hasOwn(locals,arg_name)){if(i < positional_length){missing_positional.push(`'${arg_name}'`)}else{
 missing_kwonly.push(`'${arg_name}'`)}}}
 var missing
 var missing_type
@@ -4864,10 +4864,10 @@ var del_method=$B.search_in_mro($B.get_class(obj),'__del__')
 if(del_method){$B.$call(del_method,obj)}}
 var found=false
 if(locals_id==='local'){var frame=$B.frame_obj.frame
-if(frame[1].hasOwnProperty(name)){found=true
+if(Object.hasOwn(frame[1],name)){found=true
 del(frame[1][name])
 delete frame[1][name]}}else if(locals_id==='global'){var frame=$B.frame_obj.frame
-if(frame[3].hasOwnProperty(name)){found=true
+if(Object.hasOwn(frame[3],name)){found=true
 del(frame[3][name])
 delete frame[3][name]}}else if(locals_id !==null && locals_id[name]!==undefined){found=true
 del(locals_id[name])
@@ -6210,7 +6210,7 @@ frame_obj=frame_obj.prev}
 if(frame_obj.prev !==null){return frame_obj.prev.frame}
 return _b_.None}
 frame_funcs.f_back_set=_b_.None
-frame_funcs.f_builtins_get=function(self){if(self[3].hasOwnProperty('__builtins__')){return $B.get_dict(self[3].__builtins__)}
+frame_funcs.f_builtins_get=function(self){if(Object.hasOwn(self[3],'__builtins__')){return $B.get_dict(self[3].__builtins__)}
 return $B.obj_dict(_b_)}
 frame_funcs.f_builtins_set=_b_.None
 frame_funcs.f_code_get=function(self){var res
@@ -14153,7 +14153,7 @@ for(let i=0,len=pattern.args.length;i < len;i++){
 let pattern_arg=pattern.args[i],klass_arg=match_args[i]
 if(typeof klass_arg !=="string"){$B.RAISE(_b_.TypeError,'item in __match_args__ '+
 'is not a string: '+klass_arg)}
-if(pattern.keywords.hasOwnProperty(klass_arg)){$B.RAISE(_b_.TypeError,'__match_arg__ item '+
+if(Object.hasOwn(pattern.keywords,klass_arg)){$B.RAISE(_b_.TypeError,'__match_arg__ item '+
 klass_arg+' was passed as keyword pattern')}
 pattern.keywords[klass_arg]=pattern_arg}}}
 for(let key in pattern.keywords){let v=$B.$getattr(subject,key,null)
@@ -16442,13 +16442,13 @@ if(scopes[i].has_import_star){return{found:false,resolve:'all'}}}
 if(builtins_scope.locals.has(name)){return{found:builtins_scope}}
 var scope_names=make_search_namespaces(scopes)
 return{found:false,resolve:scope_names}}
-function resolve_in_namespace(name,ns){if(ns.$proxy){
+function resolve_in_namespace(name,ns){if(ns.$proxy ||ns[$B.LOCALS_PROXY]){
 return ns[name]===undefined ?{found:false}:
 {found:true,value:ns[name]}}
 if($B.exact_type(ns,$B.module)){var res=$B.module.tp_getattro(ns,name)
 if(res !==$B.NULL){return{found:true,value:res}}else{
 return{found:false}}}
-if(! ns.hasOwnProperty){if(ns[name]!==undefined){return{found:true,value:ns[name]}}}else if(ns.hasOwnProperty(name)){return{found:true,value:ns[name]}}else if(ns.$dict){try{
+if(Object.hasOwn(ns,name)){return{found:true,value:ns[name]}}else if(ns.$dict){try{
 return{found:true,value:ns.$getitem(ns.$dict,name)}}catch(err){if(ns.$missing){try{
 return{
 found:true,value:$B.$call(ns.$missing,ns.$dict,name)}}catch(err){if(! $B.is_exc(err,[_b_.KeyError])){throw err}}}}}
@@ -16468,9 +16468,9 @@ if(builtins_scope.locals.has(name)){return _b_[name]}
 throw $B.name_error(name)}
 $B.resolve_local=function(name,inum){
 if($B.frame_obj !==null){var frame=$B.frame_obj.frame
-if(frame[1].hasOwnProperty){if(frame[1].hasOwnProperty(name)){return frame[1][name]}}else{
+if(frame[1][$B.LOCALS_PROXY]){
 var value=frame[1][name]
-if(value !==undefined){return value}}}
+if(value !==undefined){return value}}else if(Object.hasOwn(frame[1],name)){return frame[1][name]}}
 var exc=$B.EXC(_b_.UnboundLocalError,`cannot access local variable `+
 `'${name}' where it is not associated with a value`)
 exc.name=name
