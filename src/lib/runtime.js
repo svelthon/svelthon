@@ -793,6 +793,11 @@ export const __pybridge = {
         return stateProbe();
     },
 
+    // And how to make an object a state of Svelte's (`proxied`).
+    proxying(make) {
+        proxied = make;
+    },
+
     // The rows an `{#each}` walks, and whether they are still the ones its
     // block holds. The block runs again on a change of the rows themselves, a
     // row added, removed, moved or replaced, and not on a change inside a row,
@@ -4410,6 +4415,23 @@ const stateProbe = () =>
           )
         : undefined;
 
+// Whether a property the copy would read is a getter or a setter: an own
+// enumerable one of `value`, under a string or a symbol, read off its
+// descriptors and running neither. One the copy does not read, as a spread
+// does not, leaves the object a dict to Python, as it leaves any other.
+const behaves = (value) =>
+    Reflect.ownKeys(value).some((key) => {
+        const one = Reflect.getOwnPropertyDescriptor(value, key);
+
+        return one !== undefined && one.enumerable && (one.get !== undefined || one.set !== undefined);
+    });
+
+// What makes an object Svelte's own state, as a component or a store hands it
+// over in a rune as it loads (`proxying`): Svelte's proxy of the object, which
+// reads and writes through its getters and setters and follows its other
+// properties. Null until one has, and the object is then kept as it is.
+let proxied = null;
+
 // Whether a Svelte state owns `value`, asked as Svelte asks it of what is put
 // into its state: whether the value holds its mark. Asked of the object and
 // nothing else: a guess from how a proxy behaves took a proxy of anyone's for
@@ -6267,6 +6289,13 @@ export function pyData(value, made, live = false) {
 
     // Written into a view, an object a state owns is itself (`entering`).
     if (live && stateOwned(value)) return pyBind(value);
+
+    // And one whose properties are a getter or a setter becomes Svelte's state,
+    // as Svelte makes it when it is put into a state: its getters and setters
+    // read and write through Svelte's proxy, which follows its other
+    // properties too. Copied, the getter was read once and the setter never
+    // called; kept as it was, nothing followed what it held.
+    if (live && behaves(value)) return pyBind(proxied === null ? value : proxied(value));
 
     // A Brython list and a Brython tuple are JavaScript arrays too, told apart
     // from a foreign one by the `ob_type` they carry, and kept as they are: a

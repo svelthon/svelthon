@@ -17,7 +17,7 @@ const mounted = (Component) => {
     const shown = () =>
         Object.fromEntries([...target.querySelectorAll('output')].map((one) => [one.dataset.k, one.textContent]));
 
-    return { values: instance.values(), shown };
+    return { values: instance.values(), shown, instance };
 };
 
 const STEPS = [
@@ -157,4 +157,141 @@ test('a property under a symbol is taken in with the others, as in Svelte', () =
 
     expect(kept(ViewInsertedData)).toEqual(kept(ViewInsertedDataNative));
     expect(kept(ViewInsertedData)).toEqual(['kept', true, 'kept', true, 2]);
+});
+
+// An object whose property is a getter and a setter forwards what it holds,
+// here to a Svelte state: put in, it reads and writes through them, as
+// Svelte's proxy of it does. Copied, it read its getter once and kept that
+// value, and a write never reached its setter. A change of the source, then a
+// write, in a list and in a dict.
+test.for([['list'], ['dict']])('an object of a getter and a setter put in a %s reads and writes through them, as in Svelte', ([kind]) => {
+    const forwarded = (Component) => {
+        const source = mounted(ViewInsertedDataNative).values.record.nested;
+        const child = mounted(Component);
+        const values = child.values;
+        let writes = 0;
+        const item = {
+            get n() {
+                return source.n;
+            },
+            set n(value) {
+                writes += 1;
+                source.n = value;
+            }
+        };
+        const read = () => (kind === 'list' ? values.rows.at(-1) : values.record.nested);
+        const seen = () => [source.n, read().n, child.shown()[kind === 'list' ? 'rows' : 'record'], writes];
+
+        if (kind === 'list') values.rows.push(item);
+        else values.record.nested = item;
+        flushSync();
+
+        source.n = 9;
+        flushSync();
+        const changed = seen();
+
+        read().n = 5;
+        flushSync();
+
+        return [changed, seen()];
+    };
+
+    expect(forwarded(ViewInsertedData)).toEqual(forwarded(ViewInsertedDataNative));
+    expect(forwarded(ViewInsertedData)).toEqual([
+        [9, 9, '9', 0],
+        [5, 5, '5', 1]
+    ]);
+});
+
+// And what else such an object holds is followed, as Svelte's proxy of it
+// follows it: kept as it was, its getter read and forwarded, but a field of its
+// own written by JavaScript never reached the page. An accessor under a
+// symbol is an accessor too, and one nothing reads makes the object one.
+const KEY = Symbol('forwarded');
+const SHAPES = {
+    'a getter reading a field of its own': () => ({
+        m: 1,
+        get n() {
+            return this.m;
+        },
+        set n(value) {
+            this.m = value;
+        }
+    }),
+    'an accessor nothing reads': () =>
+        Object.defineProperty({ n: 1 }, 'unused', {
+            get() {
+                return 99;
+            }
+        }),
+    'an accessor under a symbol': () => {
+        const item = { n: 1, writes: 0 };
+
+        return Object.defineProperty(item, KEY, {
+            get() {
+                return item.n;
+            },
+            set(value) {
+                item.writes += 1;
+                item.n = value;
+            },
+            enumerable: true
+        });
+    }
+};
+
+test.for(Object.keys(SHAPES).flatMap((shape) => [[shape, 'list'], [shape, 'dict']]))(
+    '%s, put in a %s, is followed as Svelte follows it',
+    ([shape, kind]) => {
+        const followed = (Component) => {
+            const child = mounted(Component);
+            const values = child.values;
+            const read = () => (kind === 'list' ? values.rows.at(-1) : values.record.nested);
+            const shown = () => child.shown()[kind === 'list' ? 'rows' : 'record'];
+
+            if (kind === 'list') values.rows.push(SHAPES[shape]());
+            else values.record.nested = SHAPES[shape]();
+            flushSync();
+            const first = shown();
+
+            if (shape === 'a getter reading a field of its own') read().m = 7;
+            else read().n = 7;
+            flushSync();
+            const second = shown();
+
+            if (shape === 'an accessor under a symbol') read()[KEY] = 5;
+            else read().n = 5;
+            flushSync();
+
+            return [first, second, shown(), read().writes];
+        };
+
+        expect(followed(ViewInsertedData)).toEqual(followed(ViewInsertedDataNative));
+    }
+);
+
+// Only a getter or a setter the copy would read makes the object Svelte's
+// state: one that is not enumerable, which neither the copy nor a spread
+// reads, leaves it a dict to Python, its API with it, as the same object
+// without that property is. It made it a JavaScript object, which has no
+// `get`, `items` or `len`.
+test('an object whose only getter is not enumerable is a dict to Python, as the same object without it', () => {
+    const readBack = (make) => {
+        const { values, instance } = mounted(ViewInsertedData);
+
+        values.rows.push(make());
+        values.record.nested = make();
+        flushSync();
+
+        return instance.read_back();
+    };
+    const hidden = () =>
+        Object.defineProperty({ n: 2 }, 'hidden', {
+            get() {
+                return 99;
+            }
+        });
+
+    expect(readBack(hidden)).toEqual(readBack(() => ({ n: 2 })));
+    expect(readBack(() => ({ n: 2 }))).toBe('dict:2 dict:2');
 });

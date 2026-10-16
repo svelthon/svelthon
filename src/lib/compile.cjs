@@ -3148,6 +3148,12 @@ function preamble(c) {
         `let __unchanged = $state.raw(0);`,
         `__pybridge.refusing(() => { __unchanged = 0; });`,
         `let __stateProbe = $state(__pybridge.stateProbe());`,
+        // And Svelte's own state of an object, which an object whose
+        // properties are a getter or a setter is made into as it enters a
+        // container (`proxying`): a box of its own at each call, so a write
+        // to it is allowed wherever the call is made.
+        `class __StateBox { value = $state(); }`,
+        `__pybridge.proxying((value) => { const box = new __StateBox(); box.value = value; return box.value; });`,
         ``
     ];
 }
