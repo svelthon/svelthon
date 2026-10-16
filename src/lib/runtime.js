@@ -111,6 +111,10 @@ lent.schedule = scheduleAsync;
 // does, `bound` and then the floats of a config made numbers (`pyNumbers`).
 doors.out('spread', (value) => spreadOf(value, (one) => pyNumbers(__pybridge.bound(one))));
 
+// A spread to a Python child: each value the Python value itself, None among
+// them None, and not the absence that reads the child's default.
+doors.out('spread-python', (value) => spreadOf(value, (one) => (one === NONE ? NONE : __pybridge.bound(one))));
+
 // The global object, for the generated code to reach `Object`, `Symbol` and
 // `Error` through: a module that binds one of those names binds it in the
 // generated module's own scope, where the generated code read it in its place.
@@ -1156,7 +1160,7 @@ export const __pybridge = {
     // itself, as one written by name is handed to it: None among them is None,
     // and not the absence that reads the child's default.
     spreadPython(value) {
-        return spreadOf(value, (one) => (one === NONE ? NONE : __pybridge.bound(one)));
+        return toJs(value, 'spread-python');
     },
 
     // A spread on an element: each key is the attribute it becomes, read the
