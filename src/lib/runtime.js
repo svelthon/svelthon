@@ -42,13 +42,64 @@ const {
     lent,
     pyBind,
     pyData,
-    entering
+    entering,
+    iterated,
+    javascriptOwn,
+    opaque,
+    boxed,
+    unboxed,
+    rawJSON,
+    pyCoroutine,
+    pyAwaitable,
+    thenable,
+    slotValues,
+    callDescriptor,
+    callable,
+    slotDeclared,
+    wrapperMethod,
+    boundMethod,
+    pyItems,
+    unpackedPair,
+    define,
+    crossedAs,
+    jsonCopy,
+    plainData,
+    sequence,
+    propertyKey,
+    propertyName,
+    twoKeys
 } = core;
 
-export { NONE, pyClass, ownType, pyScalar, plainScalar, plainObject, pyEntries, pyBytes, isSet, pyBind, pyData };
+export {
+    NONE,
+    pyClass,
+    ownType,
+    pyScalar,
+    plainScalar,
+    plainObject,
+    pyEntries,
+    pyBytes,
+    isSet,
+    pyBind,
+    pyData,
+    opaque,
+    boxed,
+    unboxed,
+    rawJSON,
+    pyCoroutine,
+    pyAwaitable,
+    thenable,
+    callable,
+    pyItems,
+    unpackedPair,
+    jsonCopy,
+    plainData
+};
 
 // What the crossing borrows of this module until it moves there too.
 lent.functionIn = functionIn;
+lent.seq = (value) => __pybridge.seq(value);
+lent.schedule = scheduleAsync;
 
 // The global object, for the generated code to reach `Object`, `Symbol` and
 // `Error` through: a module that binds one of those names binds it in the
@@ -150,64 +201,6 @@ function byIndex(array, fn = (one) => one) {
     for (let at = 0; at < array.length; at++) out.push(fn(array[at]));
 
     return out;
-}
-
-// An array-shaped Python value, as *its class* says it iterates.
-//
-// A Brython list is a JavaScript array, so anywhere this file walks elements it
-// can walk the storage with no conversion at all, and for a list or a tuple that
-// is exactly right. It stops being right the moment a subclass redefines
-// `__iter__`: `[x for x in rows]` may answer `[3, 2, 1]` for a storage of
-// `[1, 2, 3]`, and the template's loop, the crossing and `tojson` answer what
-// Python answers. The storage is not the sequence when the author has said
-// otherwise, and this is the one place that knows it.
-//
-// `list()` is not the road: Brython's constructor copies the storage of anything
-// array-shaped, so asking it answers the question with the question.
-// `make_js_iterator` is, and it carries both of the other obligations. It runs
-// `iter()`, the only call that *validates* the protocol: an `__iter__` that
-// returns a plain list is a TypeError in the script and in the template alike.
-// And it keeps the storage fast path
-// exactly where it is still true, since Brython copies that path onto a subclass
-// only when the subclass leaves `__iter__` alone.
-//
-// `$B.NULL` as the frame is how the engine itself calls this from JavaScript:
-// there is no Python line to attribute here, and the alternative writes a line
-// number into whatever frame happens to be current.
-//
-// The one walk that does **not** come through here is `mark`, which hands the
-// watch to the children an object already holds. Asking a class what it yields
-// means running the author's code, and marking happens on the path of every
-// mutation; `seq` asks instead, at the one moment the rows are about to be
-// rendered, which is where a row that only the iterator yields becomes visible.
-function iterated(value) {
-    // Asked of the *class*, as the two converters ask it: `ob_type` is a field
-    // name, and a JavaScript array is as free to carry one as an object is,
-    // `{ob_type: "business"}` among them. The loop, `batch`, the export,
-    // `tojson`, the argument boundary and `plainData` all ask it this way.
-    const type = ownType(value);
-    const $B = globalThis.__BRYTHON__;
-
-    // A JavaScript array whose iteration is its own, a generator set as its
-    // `Symbol.iterator`, yields what Python's `for` yields from it, walked
-    // once here: handed on as the array, it was walked again by each reader,
-    // the rows a stateful iterator gave a second time, or none at all. The
-    // property is read once, a getter's choice made once, and an iterator that
-    // is no function refuses as Python's `for` refuses it.
-    if (!pyClass(type)) {
-        if (!Array.isArray(value)) return value;
-
-        const iterator = value[Symbol.iterator];
-
-        if (iterator === Array.prototype[Symbol.iterator]) return value;
-        if (typeof iterator !== 'function') throw new TypeError('obj[Symbol.iterator] is not a function');
-
-        return $B.$list(Array.from({ [Symbol.iterator]: () => Reflect.apply(iterator, value, []) }));
-    }
-
-    if (type === _b_.list || type === _b_.tuple) return value;
-
-    return $B.$list(Array.from($B.make_js_iterator(value, $B.NULL)));
 }
 
 // The same rows, for a JavaScript walk of a view. What the class raises, or a
@@ -2850,94 +2843,6 @@ function keeps(value) {
 // Anything holding the value can subscribe to it just by handing it through.
 
 
-// An object no Python type marks is JavaScript's, and leaves Python as itself,
-// as it leaves a JavaScript function that returns it. What Python writes into
-// a JavaScript array or object crosses as it is written, through
-// `pyobj2jsobj_hook` and the engine behind it: a number, a str and None as
-// JavaScript's, a callable as its handler, a list, a tuple or a dict converted,
-// a set and an instance of the author's as their view, bytes as a
-// `Uint8Array`. What stays itself is what has no JavaScript face at any door,
-// a complex, a range, and a copy left those as they were too. So nothing in one is Python's to convert, and a
-// copy would lose its identity and run its getters before whoever reads it has
-// asked. The serialiser alone reads one, at its own turn.
-const javascriptOwn = (value) => quietPyType(value) === undefined;
-
-// A native object `JSON.stringify` has nothing to write of: a class of its own,
-// no `toJSON` to ask, and no enumerable own property to copy. Its answer is
-// `{}`, valid JSON that drops everything the value held: `tojson(new
-// Map([["answer", 42]]))` would say `{}`.
-//
-// Asked as a behaviour and not as a list of names: the question is *what will
-// the serialiser do with it*, and the answer covers a Map, a Set, a Headers, a Response and whatever
-// the platform adds next. A Date and a URL carry a `toJSON`, which `plainData`
-// reads once and hands on before asking this; a `toJSON` that gives no
-// function is no hook and keeps nothing from here. A Brython instance is a
-// plain object here and never reaches this.
-//
-// Asked inside a `try` for the reason every recognition is: a value nobody
-// vouched for may throw from `ownKeys`, and a question must not be the place
-// where that happens.
-export const opaque = (value) => {
-    try {
-        return (
-            !Array.isArray(value) &&
-            !plainObject(value) &&
-            boxed(value) === undefined
-        );
-    } catch {
-        return false;
-    }
-};
-
-// What `JSON.stringify` writes of an object by an internal slot rather than by
-// its properties: a String, a Number, a Boolean or a BigInt object stands for
-// its primitive, and `JSON.rawJSON` hands back a text written as it is.
-//
-// Which of the four an object is, asked of the slot: each type's own `valueOf`
-// answers for its slot alone and throws for any other object, whatever tag the
-// object shows, and from whichever JavaScript context it was built in. Nothing
-// is read: not the tag, which a getter or a proxy's trap may give, and no
-// property at all, so no code of the author's runs. Four throws for an
-// ordinary object, which is why a JavaScript object's turn asks the serialiser
-// instead, and why nothing asks it of a Python value nor of what a walk built.
-const SLOTS = [
-    ['number', Number.prototype.valueOf],
-    ['string', String.prototype.valueOf],
-    ['boolean', Boolean.prototype.valueOf],
-    ['bigint', BigInt.prototype.valueOf]
-];
-
-export const boxed = (value) => {
-    if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined;
-
-    for (const [kind, slot] of SLOTS) {
-        try {
-            slot.call(value);
-            return kind;
-        } catch {
-            // not this one
-        }
-    }
-
-    return undefined;
-};
-
-// `{ value }`, what the serialiser writes of one of the four, or undefined. A
-// Number and a String are converted as `JSON.stringify` converts them, by
-// `ToNumber` and `ToString`, so the author's `valueOf`, `toString` or
-// `Symbol.toPrimitive` decides; a Boolean and a BigInt are their slot.
-export const unboxed = (value) => {
-    const kind = boxed(value);
-
-    if (kind === undefined) return undefined;
-    if (kind === 'number') return { value: +value };
-    if (kind === 'string') return { value: `${value}` };
-
-    return { value: SLOTS.find(([one]) => one === kind)[1].call(value) };
-};
-
-export const rawJSON = (value) => typeof JSON.isRawJSON === 'function' && JSON.isRawJSON(value);
-
 // A watch runs from the object that was named to every container under it, and
 // a mutation anywhere under a name has to reach whoever is reading that name.
 //
@@ -3336,39 +3241,6 @@ const MARKS = new WeakMap();
 // rule the project already follows for an internal it depends on: when the code
 // reads a name, a test names it too.
 export const marks = (value) => MARKS.get(value);
-
-// The slots of an instance, read through their member descriptors, each from
-// the storage it names (`d_member.attr`), so a slot a subclass redeclares is
-// its own: by name, the first descriptor of a name along the MRO, as `box.x`
-// reads it, for the slots that hold a value; with `all`, every value stored,
-// a shadowed slot's too; with `only`, that one name, looked up in each class
-// rather than read off all its entries, since a view asks it once per key.
-// The one reader of a slot's storage.
-function slotValues(value, all = false, only = null) {
-    const $B = globalThis.__BRYTHON__;
-    const named = new Map();
-    const stored = [];
-    const seen = new Set();
-    const mro = declaresSlots(value) ? quietPyType(value)?.tp_mro : undefined;
-
-    for (const cls of Array.isArray(mro) ? mro : []) {
-        if ((cls.tp_flags & $B.TPFLAGS.HEAPTYPE) === 0) continue;
-
-        const entries = only === null ? pyEntries($B.get_dict(cls)) : [[only, $B.search_in_dict(cls, only, $B.NULL)]];
-
-        for (const [name, member] of entries) {
-            if (member === $B.NULL || $B.get_class(member) !== $B.member_descriptor) continue;
-
-            const held = Object.hasOwn(value, member.d_member.attr);
-
-            if (held) stored.push(value[member.d_member.attr]);
-            if (!seen.has(name) && held) named.set(name, value[member.d_member.attr]);
-            seen.add(name);
-        }
-    }
-
-    return all ? stored : named;
-}
 
 // A text signature that declares no positional parameter but the receiver:
 // `($self, /, *, key=None, reverse=False)`, `list.sort`'s.
@@ -3984,38 +3856,7 @@ export function pyError(error, where) {
     return error;
 }
 
-// A call that has been made and not finished.
-//
-// Asked in four places, one of them in `helpers.js`, so it is written once and
-// shared. Compared in JavaScript rather than
-// through `aio.iscoroutine()`: this runs on every call into Python, template
-// expressions included, and a Brython call here costs more than the check saves.
-//
-// Asked of the class the value carries as data (`pyType`), not through
-// `$B.get_class`, which reads an `ob_type` getter of a JavaScript object, and
-// every value a conversion walks is asked.
-export const pyCoroutine = (value) => pyType(value) === globalThis.__BRYTHON__.coroutine;
 
-// What Python hands JavaScript to wait on: a coroutine, which runs once asked
-// (`started`), or an `aio.Future`, a promise of Brython's already under way.
-// Either crosses as a promise, whatever it resolves to crossing as a value
-// returned at once does, and whatever it rejects with as an error raised. The
-// class is asked of its module once, and only for a promise.
-let futures;
-
-export const pyAwaitable = (value) => {
-    if (pyCoroutine(value)) return true;
-    if (!(value instanceof Promise)) return false;
-
-    const $B = globalThis.__BRYTHON__;
-    const aio = $B.imported['browser.aio'];
-
-    if (aio === undefined) return false;
-
-    futures ??= $B.$getattr(aio, 'Future');
-
-    return pyType(value) === futures;
-};
 
 // The key the originals of a context's Python values are kept under, in the
 // context itself (`provide`).
@@ -5276,21 +5117,6 @@ function thrown(error) {
 // that asks stays satisfied: it is still an instance of Promise.
 class Waited extends Promise {}
 
-// Awaitable, as the serialiser asks it before writing a value out: a `then` that
-// can be called, read off the descriptors as `quietly` reads them. A `then`
-// getter is the author's code and `JSON.stringify` never runs it, so the
-// question does not either; a promise's `then` is a method, which this finds.
-// The call boundary asks `awaited` below, which reads `then` as `await` does.
-//
-// A Python value is never one: Brython keeps an instance's attributes under a
-// symbol, so a plain `.then` read finds nothing on it, and a dict, which keeps
-// its string keys as its own properties, is asked by name, since `{"then": f}`
-// is a dict of callbacks and not a promise.
-export const thenable = (value) =>
-    value !== null &&
-    (typeof value === 'object' || typeof value === 'function') &&
-    typeof quietly(value, 'then') === 'function' &&
-    !globalThis.__BRYTHON__.is_dict(value);
 
 // What `await` makes of a value, asked as `await` asks it: a promise is awaited
 // as it is, and anything else has its `then` read once, a getter or a proxy's
@@ -5385,572 +5211,6 @@ export function schedule(result, where, convert = undefined) {
     };
 
     return promise;
-}
-
-// A key written, and not assigned. `out[key] = value` runs the setter that
-// `__proto__` has on `Object.prototype`, so a dict holding that key would lose
-// it, and the object's prototype would be whatever the key held. A key is data
-// here, wherever it came from.
-// The pairs of a mapping as Python code outside the dict reads them,
-// `value.items()`, which is what CPython's `urlencode` and `json.dumps` ask: an
-// exact dict's own, and a subclass's through its `items`, which may filter,
-// rewrite or refuse. Each row is read by `pair`, the caller's own rule.
-// `pyEntries` is the storage, which the tracking needs and which a subclass's
-// `items` is not.
-export function pyItems(value, pair) {
-    const $B = globalThis.__BRYTHON__;
-
-    if (!$B.is_dict(value) || (quietPyType(value) ?? $B.get_class(value)) === _b_.dict) return pyEntries(value);
-
-    return __pybridge.seq($B.$call($B.$getattr(value, 'items'))).map(pair);
-}
-
-// `for key, one in rows`, which is how `urlencode` reads a row: any iterable
-// of two.
-export function unpackedPair(row) {
-    const pair = __pybridge.seq(row);
-
-    if (pair.length !== 2) {
-        const told = pair.length > 2 ? 'too many' : 'not enough';
-
-        globalThis.__BRYTHON__.RAISE(_b_.ValueError, `${told} values to unpack (expected 2, got ${pair.length})`);
-    }
-
-    return pair;
-}
-
-// What `json.dumps` takes of a row: a tuple of two, and nothing else.
-function tuplePair(row) {
-    if (!Array.isArray(row) || !globalThis.__BRYTHON__.is_tuple(row) || row.length !== 2) {
-        globalThis.__BRYTHON__.RAISE(_b_.ValueError, 'items must return 2-tuples');
-    }
-
-    return [row[0], row[1]];
-}
-
-const define = (target, key, value) =>
-    Object.defineProperty(target, key, {
-        value,
-        enumerable: true,
-        writable: true,
-        configurable: true
-    });
-
-// What a coroutine became, kept against the coroutine itself so that a second
-// reference to it is a second reference and not a second run.
-//
-// Two things, and keeping them apart is the point. `run` is the execution, and
-// there is exactly one per coroutine object, forever. `views` holds the
-// converted promise per conversion policy, because what the body resolves to
-// still has to cross, and how it crosses is the caller's to say: the same
-// options dict wants its callbacks wrapped when a JavaScript function is going
-// to call them and left alone when `tojson` is going to serialise them. One run,
-// one view per policy.
-const CROSSED = new WeakMap();
-
-// The promise a coroutine crosses as under one policy, its run shared with every
-// other: `convert` is what its result goes through, `policy` the key that says
-// which conversion it was.
-const crossedAs = (coroutine, policy, convert) => {
-    let crossing = CROSSED.get(coroutine);
-
-    if (crossing === undefined) {
-        crossing = { run: scheduleAsync(coroutine, 'coroutine'), views: new Map() };
-
-        CROSSED.set(coroutine, crossing);
-    }
-
-    let view = crossing.views.get(policy);
-
-    if (view === undefined) {
-        view = crossing.run.then(convert);
-
-        crossing.views.set(policy, view);
-    }
-
-    return view;
-};
-
-// What an exported function hands back to the framework.
-//
-// SvelteKit serialises whatever `load()` returns, and a Brython dict carries
-// symbol-keyed internals (`Symbol(OB_TYPE)`) that its serialiser refuses
-// outright. So the boundary converts: Python containers become plain JavaScript
-// data, which is the only shape anything outside Python can read anyway.
-// `adapt` is the third caller-said rule, beside the two `seen` carries, and only
-// one caller passes it: the arguments of a JavaScript call. A Python callable is
-// the one value JavaScript genuinely cannot use, and `outbound` wrapped the ones
-// handed over *directly* while this walk handed the ones inside a container
-// across untouched. `direct(done)` worked and `nested({"done": done})` raised on
-// a positional argument the author never declared, for the same function. It is
-// a parameter and not a change of policy because the other five consumers must
-// not get it: `tojson` has no use for a wrapper, and JSON cannot hold one.
-// A JavaScript object's turn in `JSON.stringify`, which is what the serialiser
-// does there: its `toJSON` read once and called with the object and the key,
-// then what came of it written. A primitive, a raw text, a boxed scalar and a
-// Python value are written as they always are. An array or an object comes out
-// as a copy whose every part is read when the serialiser reaches it, by a
-// getter, so a hook still sees what the hooks before it changed. What has no
-// JSON is refused: an object of a class of its own that gave no hook, and one a
-// hook gave back with nothing enumerable to write, a Map. One that gave itself
-// back is written, as the serialiser writes it, by its own properties.
-//
-// The copies a turn made, already asked everything: what reads them next is the
-// serialiser, and a question of the replacer's would run their getters, which
-// read the author's, a second time. And the containers the walk built for a
-// Python value, which are ours and hold nothing to ask of them.
-const COPIES = new WeakSet();
-
-export const jsonCopy = (value) => COPIES.has(value);
-
-// The stand-in the serialiser is asked about an object through: one for every
-// turn rather than one made at each, and emptied as it is read, so it holds on
-// to nothing.
-const PROBE = {
-    held: undefined,
-    toJSON() {
-        const one = this.held;
-
-        this.held = undefined;
-
-        return one;
-    }
-};
-const NO_KEY = Object.freeze([]);
-
-// A copy is made at every turn, its keys and its length read then, as the
-// serialiser reads them for each occurrence. `chain` is the objects being
-// written around this one, so a loop raises as the serialiser raises.
-function turn(value, key, seen, adapt, chain) {
-    const hook = value.toJSON;
-    const hooked = typeof hook === 'function';
-    const result = hooked ? Reflect.apply(hook, value, [key]) : value;
-
-    if (result === null || typeof result !== 'object' || quietPyType(result) !== undefined) {
-        return plainData(result, seen, adapt);
-    }
-
-    if (rawJSON(result)) return result;
-
-    // A Number, a String, a Boolean or a BigInt object is written by its slot,
-    // and the serialiser tells one from any other object without reading it:
-    // told to write no key, it writes `{}` of any other object, with no read and
-    // no trap, and converts one of the four as it does at its turn, once. What
-    // it wrote is the value. A number with no JSON is handed on for the refusal
-    // to name, and a BigInt object, which it refuses, is a big integer here as
-    // a BigInt is.
-    if (!Array.isArray(result)) {
-        let written;
-
-        try {
-            PROBE.held = result;
-            written = JSON.stringify(PROBE, NO_KEY);
-        } catch (error) {
-            if (boxed(result) === 'bigint') return result;
-            throw error;
-        }
-
-        if (written === 'null') return result;
-        if (written !== '{}') return JSON.parse(written);
-    }
-
-    if (chain.includes(result)) throw new TypeError('Converting circular structure to JSON');
-    if (thenable(result)) return adapt(result);
-
-    // Neither ordinary nor one of the four is an object of a class of its own,
-    // refused unless a hook gave it back with something enumerable to write.
-    // Its keys are read once, as the serialiser reads them, and the copy is
-    // made of those.
-    const ordinary = Array.isArray(result) || plainObject(result);
-
-    if (!ordinary && !hooked) return adapt(result);
-
-    const names = Array.isArray(result) ? Array.from({ length: result.length }, (_, i) => i) : Object.keys(result);
-
-    if (!ordinary && names.length === 0) return adapt(result);
-
-    const copy = Array.isArray(result) ? [] : {};
-
-    COPIES.add(copy);
-    const inner = [...chain, result];
-
-    for (const name of names) {
-        Object.defineProperty(copy, name, {
-            enumerable: true,
-            configurable: true,
-            get: () => {
-                const outer = seen.chain;
-
-                seen.chain = inner;
-                try {
-                    return plainData(result[name], seen, adapt);
-                } finally {
-                    seen.chain = outer;
-                }
-            }
-        });
-    }
-
-    return copy;
-}
-
-export function plainData(value, seen, adapt) {
-    if (value === undefined || value === null || value === NONE) return null;
-    if (typeof value === 'function') return adapt === undefined ? value : adapt(value);
-
-    // A view handed back is its container again, as at every other door: a
-    // value a Python function returned and JavaScript hands to `tojson` is the
-    // Python value it reads, not a JavaScript object.
-    if (VIEWED.has(value)) value = globalThis.__BRYTHON__.PYOBJ_MAP.get(value);
-
-    // Under the serialiser's rule, a JavaScript object is handed on as a
-    // stand-in whose `toJSON` the serialiser calls at the object's own turn,
-    // with its key, and nothing of it is read before then: not its fields, not
-    // its hook, and not a getter that happens to be called `ob_type` or `then`,
-    // which is why it is told from a Python value by its descriptors. A raw JSON
-    // text is the serialiser's own and stays as it is; a boxed scalar takes its
-    // turn like any object, and its turn hands it back as it is.
-    if (
-        adapt !== undefined &&
-        seen instanceof Set &&
-        typeof value === 'object' &&
-        quietPyType(value) === undefined &&
-        !rawJSON(value)
-    ) {
-        const chain = seen.chain ?? [];
-
-        return { toJSON: (key) => turn(value, key, seen, adapt, chain) };
-    }
-
-    // A callable that `typeof` calls an object (a bound method, an instance
-    // whose class defines `__call__`), and only when someone asked for
-    // adaptation: with no rule there is nothing to do with it, and the walk
-    // below is what it has always had.
-    if (adapt !== undefined && callable(value)) return adapt(value);
-
-    // A **symbol**, under the serialiser's rule only, and the last silent loss
-    // of this shape: `JSON.stringify` drops one wherever it stands, so
-    // `tojson(marker)` wrote nothing at all and `{"id": marker}` wrote `{}`. It
-    // is not an object, so the arm has to stand above the line below rather than
-    // beside the other three.
-    if (adapt !== undefined && seen instanceof Set && typeof value === 'symbol') {
-        return adapt(value);
-    }
-
-    if (typeof value !== 'object') return value;
-
-    // A Brython float is an object holding a number and a reference to its
-    // type. `tojson(1 / 3)` walks the lot: 20 KB of `ob_type`. A subclass of one
-    // takes the same road, with the same answer.
-    const scalar = pyScalar(value);
-
-    if (scalar !== undefined) return scalar;
-
-
-    // The shapes with no JSON, asked before the walk and under the serialiser's
-    // rule only. Every other caller hands its result to JavaScript, where a
-    // promise is exactly what is wanted and a Map is a Map.
-    //
-    // A promise keeps its result where nothing enumerable can reach it, so it
-    // would serialise as `{}`, an empty object that looks like an answer. Here
-    // and not in the replacer, because the replacer sees a *bare* thenable only
-    // after the walk has met the `then` inside it: asked before the walk, a
-    // promise and a thenable get the same sentence, about promises.
-    //
-    // A **Python set** is here because the walk would reach its internals
-    // first: it is a plain object holding `$store` and `ob_type`, so its class
-    // would be named instead of what the author passed.
-    if (
-        adapt !== undefined &&
-        seen instanceof Set &&
-        (thenable(value) || isSet(value) || pyBytes(value) || opaque(value))
-    ) {
-        return adapt(value);
-    }
-
-    // A coroutine handed to the framework becomes a promise. That is what lets a
-    // `load()` stream: `{"lentes": chercher_lentement()}` returns a coroutine,
-    // and SvelteKit waits on the promise it turns into. An `aio.Future` is one
-    // already, whose result crosses the same way.
-    if (pyAwaitable(value)) {
-        // A walk that cannot wait must not start one.
-        //
-        // The JSON rule is a serialiser's, and a serialiser is synchronous: the
-        // branch below would schedule the body and hand `JSON.stringify` a
-        // promise, `{}`, while **running the author's coroutine**. So the
-        // caller's own rule decides, before anything is scheduled: the
-        // serialiser refuses this shape the way it refuses a class and a call.
-        // Every other caller hands its result to JavaScript, where a promise is
-        // exactly what is wanted.
-        if (adapt !== undefined && seen instanceof Set) return adapt(value);
-
-        // One coroutine object, one run. This branch sits before the graph memo,
-        // so it keeps one of its own: a coroutine held under two keys is one
-        // promise and one execution of the Python body.
-        //
-        // Memoised on the coroutine itself rather than inside a traversal,
-        // because that is the truth being told: awaiting one coroutine twice is
-        // not something Python offers, so two references to it cannot mean two
-        // runs under any rule, JSON included. Two distinct coroutine objects are
-        // two distinct keys here, and still run once each.
-        //
-        // What it resolves to is Python too, and has to make the same crossing,
-        // under the same rule, so a dict returned behind a coroutine crosses as
-        // the same dict returned directly does.
-        return crossedAs(value, adapt, (result) => plainData(result, undefined, adapt));
-    }
-
-    // Two rules, and the caller says which. Note that `map` passes an index as
-    // its second argument, so every recursive call below is written out rather
-    // than passing this function by reference.
-    //
-    // **JSON**: track the *branch being walked*. The same object twice in one
-    // list is shared, not circular, and has to come out twice; a loop answers
-    // `null`. That is the only thing a serialiser can do, and it is what `tojson`
-    // needs.
-    //
-    // **JavaScript**: keep the graph, the way `pyData` keeps it coming in. This
-    // is the default because five of the six consumers are on this side:
-    // `to_js` *is* this function, and the emitted code puts it on the return
-    // value of every Python function crossing over. JavaScript has identity, and
-    // this framework updates by mutation, so a structure handed out with its
-    // sharing undone is a write that stops arriving.
-    if (seen instanceof Set) {
-        if (seen.has(value)) return null;
-        seen.add(value);
-
-        try {
-            const out = branch(value, seen, undefined, adapt);
-
-            if (out !== value) COPIES.add(out);
-
-            return out;
-        } finally {
-            seen.delete(value);
-        }
-    }
-
-    if (javascriptOwn(value)) return value;
-    if (pyBytes(value)) return bytesOut(value);
-
-    const made = seen ?? new WeakMap();
-    const known = made.get(value);
-
-    if (known !== undefined) return known;
-
-    // Registered before the children are walked, which is what answers a cycle
-    // with the object itself rather than with `null`. The shell has to be made
-    // before it can be filled, so `branch` is given it to fill.
-    const shell = sequence(value) ? [] : {};
-
-    made.set(value, shell);
-
-    const out = branch(value, made, shell, adapt);
-
-    // `branch` hands several kinds of value straight back rather than filling the
-    // shell: a Python class, and anything carrying a prototype of its own (a
-    // Date, a Map, a Promise, a Response). Registering before the walk is what
-    // answers a cycle; the memo then holds whatever `branch` decided, so the
-    // second reference to such a value, `[d, d]`, meets the value and not the
-    // empty shell.
-    if (out !== shell) made.set(value, out);
-
-    return out;
-}
-
-// An array that holds rows: a JavaScript one, or a Python list or tuple, a
-// subclass included. Brython builds other objects on an array too, a frame
-// among them, and those are objects of their own class, whose items are not
-// what they are.
-const sequence = (value) => {
-    const $B = globalThis.__BRYTHON__;
-
-    return Array.isArray(value) && (pyType(value) === undefined || Boolean($B.is_list(value) || $B.is_tuple(value)));
-};
-
-// `shell` is the object the graph rule registered before walking, so a cycle
-// found on the way down meets the same one. The JSON rule has none and builds as
-// it goes, which is why every `fill` below takes what it was given or makes one.
-function branch(value, seen, shell, adapt) {
-    // A native object that says how it serialises keeps it, an array, a literal
-    // and a class instance alike: `JSON.stringify` calls its `toJSON`,
-    // enumerable or not, own or inherited, with the receiver and the key. A
-    // Python object with a `toJSON` key or attribute has a class, and is data.
-    // Under the serialiser's rule `plainData` has read it already, once.
-    if (!(adapt !== undefined && seen instanceof Set) && typeof value.toJSON === 'function' && pyType(value) === undefined) {
-        return value;
-    }
-
-    // So does a raw JSON text, which has no prototype and would otherwise be
-    // copied out as `{rawJSON: "…"}`, the slot that makes it raw left behind,
-    // and so does a Number, a String, a Boolean or a BigInt object given no
-    // prototype, which would be copied out as `{}`. Any other object of the four
-    // is not an ordinary one, and is handed over as it is further down. A Python
-    // value is none of the four.
-    if (rawJSON(value) || (plainObject(value) && quietPyType(value) === undefined && boxed(value) !== undefined)) {
-        return value;
-    }
-
-    if (sequence(value)) {
-        // list, tuple, and a subclass through whatever it says iterating it
-        // means: `json.dumps` of a list subclass in CPython is its `__iter__`
-        // too, and a component renders `rows` and exports it the same way.
-        //
-        // What `iterated` hands back is walked by its indices: a JavaScript
-        // array is its indexed elements, as `JSON.stringify` and a structured
-        // clone read it, and not what a `Symbol.iterator` of its own yields.
-        const out = shell ?? [];
-        const items = iterated(value);
-
-        for (let i = 0; i < items.length; i++) out.push(plainData(items[i], seen, adapt));
-
-        return out;
-    }
-
-    // A class is not data to flatten. `pyExport` already decided that at the top
-    // level; this is the same decision one level down, where a class sits in a
-    // dict a `load()` returns or in a list a component holds.
-    if (pyClass(value)) return value;
-
-    // Anything of a class of its own is not ours to flatten: a Response, a URL,
-    // a Date, a Map, a Promise: a Python `load()` may hand any of those straight
-    // back to the framework, and copying their keys would destroy them.
-    if (!plainObject(value)) return value;
-
-    // A class instance keeps its attributes under a private symbol rather than as
-    // JavaScript properties, so walking its own keys finds almost nothing and
-    // wanders into the class object instead. Its `__dict__` is what a reader
-    // wants, and it is what JavaScript itself would serialise from a class
-    // instance: the fields, not the getters on the prototype.
-    //
-    // And a class declaring `__slots__` keeps them somewhere else again: each
-    // slot is read through its descriptor (`slotValues`) under its own name,
-    // so adding `__slots__` to a model changes nothing of what crosses.
-    //
-    // Both sources and not one: `__slots__` may name `__dict__`, and then an
-    // instance has slots *and* a dict. A dict of the author's is stepped over,
-    // since `{"slot_value_x": 1}` is data and not storage.
-    const attributes = ownAttributes(value);
-    const holder = attributes !== null && typeof attributes === 'object' ? attributes : undefined;
-    const slots = slotValues(value);
-
-    // A mapping is its entries, whatever else it also is.
-    //
-    // `class Mapping(dict): pass` gets an instance `__dict__` beside its items,
-    // and `Mapping({"answer": 42})` crosses as its items, not as its attributes.
-    //
-    // Entries only, which is the rule CPython's own `json` follows for a dict
-    // subclass: an attribute on the instance describes the mapping and is not an
-    // entry of it, and merging the two would invent keys the mapping does not
-    // have.
-    const mapping = globalThis.__BRYTHON__.is_dict(value);
-    const type = ownType(value);
-
-    if (authoredInstance(value)) {
-        const fields = shell ?? {};
-
-        if (holder !== undefined) {
-            for (const key of Object.keys(holder)) {
-                define(fields, key, plainData(holder[key], seen, adapt));
-            }
-        }
-
-        // Under the name the author wrote, which is what the same class without
-        // `__slots__` hands over.
-        for (const [key, one] of slots) {
-            define(fields, key, plainData(one, seen, adapt));
-        }
-
-        return fields;
-    }
-
-    // Asked of Python, through `pyEntries`, which walks the hash table as well as
-    // the properties: a dict keeps only its string keys as properties, and
-    // `{1: "janvier", 2: "février"}`, what anyone writes for a lookup table,
-    // crosses whole, through `to_js`, through `tojson`, and through every Python
-    // function's return value.
-    //
-    // The walk touches two symbols: `$B.is_dict` reads `Symbol(OB_TYPE)`, and
-    // the iteration reads `ob_type` besides. SvelteKit wraps `event.params` in a
-    // proxy that records every key read, and `pyDict` snapshots it at the
-    // *inbound* boundary, so Python holds a plain dict and this function never
-    // meets the proxy.
-    //
-    // The key crosses through the converter too: a JavaScript property name is a
-    // string, and a Brython float is an object, so `{1.5: "x"}` would otherwise
-    // be keyed by `[object Object]`.
-    //
-    // A set has no key to copy: `list(mon_set)` is the Python way to hand one
-    // over, and it is what any serialiser would want anyway.
-    //
-    // And the floor under the two arms above, for the serialiser alone: a Python
-    // value that is **not** a mapping and keeps nothing of the author's has no
-    // representation here, and walking its properties would read the engine's.
-    // CPython refuses the same values: *Object of type range is not JSON
-    // serializable*.
-    //
-    // A question rather than a list of type names. `set` and `bytes` keep their
-    // own arms because their sentences name the way out; this one names the
-    // class.
-    if (adapt !== undefined && seen instanceof Set && !mapping && pyClass(type)) {
-        return adapt(value);
-    }
-
-    const out = shell ?? {};
-
-    // A row as the rule in force reads it: the serialiser's is `json.dumps`'s, a
-    // tuple of two; a copy for JavaScript reads it as `for key, one in
-    // value.items()` does, and a pair written as a list is a pair.
-    for (const [key, one] of pyItems(value, seen instanceof Set ? tuplePair : unpackedPair)) {
-        define(out, propertyName(key, out, seen, adapt), plainData(one, seen, adapt));
-    }
-
-    return out;
-}
-
-// The name a Python key takes as a JavaScript property, and the refusal that
-// belongs with it.
-//
-// Three sites write a mapping out, this converter, the export branch that
-// adapts a dict holding a function, and a spread, and all ask here: a key
-// handed to `define` and coerced by JavaScript would fold `{1: "numeric", "1":
-// "text"}` into a single `"1"` key, whichever of the two comes first.
-//
-// A symbol is a property key of its own and stays one: written as its
-// description, two symbols of one name became one key, and the copy no longer
-// held the key the dict was asked by. JSON has no notation for one, and under
-// the serialiser's rule it is refused as a symbol value is, where
-// `JSON.stringify` would drop it in silence.
-// The name alone, for a reader that looks a key up rather than writing a
-// mapping out: a JavaScript property name is a string, and a Brython float is an
-// object, so `{1.5: "x"}` would otherwise be keyed by `[object Object]`.
-const propertyKey = (key) => (typeof key === 'symbol' ? key : String(plainData(key)));
-
-function propertyName(key, out, seen, adapt) {
-    if (typeof key === 'symbol' && adapt !== undefined && seen instanceof Set) adapt(key);
-
-    const name = propertyKey(key);
-
-    if (Object.hasOwn(out, name)) twoKeys(name);
-
-    return name;
-}
-
-// Two keys Python keeps apart that JavaScript can only spell one way. The
-// narrowing is the destination's, but the silence would be ours, and this
-// project's own rule for the moment is written one file over: a serialiser
-// meeting something it cannot serialise owes the author a sentence.
-function twoKeys(name) {
-    const error = new Error(
-        `svelthon — this dict has two keys JavaScript cannot tell apart: ` +
-            `\`${String(name)}\` is what both of them spell as a property name. A ` +
-            `JavaScript object has string keys only, so one would silently ` +
-            `replace the other on the way out.`
-    );
-
-    error.$svelthon = true;
-
-    throw error;
 }
 
 
@@ -6524,93 +5784,6 @@ export function pyCall(found, named, convert = pyArg) {
 // interop hands back a function that carries a class untouched, so its own
 // `$function_infos` answer.
 //
-// An instance whose class defines `__call__`, which is an ordinary way to write
-// a strategy object and the third shape of *callable in Python*. Answers with
-// the `__call__` it found, since that is what carries the signature.
-//
-// Asked of the class chain, never of the instance: `declares` reads the class
-// dictionaries of the MRO, so no getter of the author's runs while a value is
-// merely being converted. As in CPython, a plain instance, a list, a dict and a
-// str answer no, and an instance of a class that defines `__call__` answers yes.
-//
-// The chain, and not one dictionary: `class Derived(Strategy): pass` is
-// callable as its base is.
-//
-// A **class** is excluded on purpose: `type` *does* carry `__call__` in
-// Brython, so every class named in `__all__` would reach `declared`. A class
-// crossing as itself rather than as a wrapper is a decision this file made, and
-// it does not rest on the shape of an engine internal.
-const callDescriptor = (value) => {
-    const $B = globalThis.__BRYTHON__;
-
-    const type = pyType(value);
-
-    if (type === undefined || pyClass(value) || boundMethod(value)) return null;
-
-    const found = declares(type, '__call__');
-
-    return found === $B.NULL ? null : found;
-};
-
-// Callable in Python, which is wider than *is a JavaScript function* and is the
-// question every boundary that promises to adapt a callback has to ask.
-//
-// Exported for the one caller outside this file that has to ask the same
-// question: the serialiser. What crosses to JavaScript as a call has no JSON,
-// and a second predicate written in `helpers.js` would answer differently the
-// day this one learns another shape.
-export const callable = (value) =>
-    typeof value === 'function' ||
-    boundMethod(value) ||
-    wrapperMethod(value) ||
-    callDescriptor(value) !== null ||
-    slotCallable(value);
-
-// Any other value Python calls: `list.index`, `list.__setitem__`, the
-// descriptors a builtin type hands out, which Brython calls through a `tp_call`
-// slot. Python's own `callable()` answers, a class excluded, since a class
-// crossing is the class. Some of those descriptors are JavaScript functions
-// carrying their type, `dict.get` among them, and are Python's all the same.
-const slotCallable = (value) =>
-    quietPyType(value) !== undefined &&
-    !pyClass(value) &&
-    _b_.callable(value) === true;
-
-// One JavaScript function per such value, so it is one callback however often
-// it crosses.
-const SLOT_CALLS = new WeakMap();
-
-// Its contract: Python on both sides, no signature to trim to, and Python's
-// own call protocol.
-const slotDeclared = (value) => {
-    if (!slotCallable(value)) return null;
-
-    const $B = globalThis.__BRYTHON__;
-    let fn = SLOT_CALLS.get(value);
-    if (fn === undefined) SLOT_CALLS.set(value, (fn = (...args) => $B.$call(value, ...args)));
-
-    return { fn, where: `${value.d_name ?? $B.class_name(value)}() — builtins`, arity: Infinity };
-};
-
-// A special method read off a builtin, `rows.__setitem__`: `{ob_type:
-// method_wrapper, self, wrapped, d_name}`, which Brython calls through its
-// `tp_call` slot rather than a `__call__`, so the class answers what it is.
-const wrapperMethod = (value) =>
-    value !== null &&
-    typeof value === 'object' &&
-    ownType(value) === globalThis.__BRYTHON__.method_wrapper &&
-    typeof value.wrapped === 'function';
-
-// A method read off an instance: `{ob_type: method, im_func, im_self}`, which
-// `typeof` calls an object. Recognised by its class the way everything else
-// here is, and not by the two field names, which are Brython's own
-// (`descriptors.js`, `$B.method.tp_new`).
-const boundMethod = (value) =>
-    value !== null &&
-    typeof value === 'object' &&
-    ownType(value) === globalThis.__BRYTHON__.method &&
-    typeof value.im_func === 'function';
-
 function declared(value) {
     // The fourth representation of a bound method, and a builtin's: no
     // signature to read, Python on both sides, called through Python's own
