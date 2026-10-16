@@ -7,6 +7,7 @@ import { test, expect, vi } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import DomHandlers from './fixtures/DomHandlers.svelte';
 import DomHandlersNative from './fixtures/DomHandlersNative.svelte';
+import CustomEventHandler from './fixtures/CustomEventHandler.svelte';
 import { seen } from './fixtures/dom_handlers.js';
 import { pythonExpressions, collector } from '../src/lib/markup.js';
 
@@ -72,6 +73,20 @@ test.for([
     const written = pythonExpressions(`<button onclick={${expression}}>x</button>`, collector([]));
 
     expect(written.includes('?? undefined')).toBe(!called);
+});
+
+// Svelte reads any attribute whose name starts with `on` as a handler, so
+// `onMyEvent` listens to `MyEvent`. Only `on` and a lowercase letter was
+// compiled as one, and `onMyEvent` was handed the Python callable as it was, its
+// `:=` writing a local of the `lambda`. The witness is the lowercase twin.
+test('a handler for an event named with a capital is a handler', () => {
+    const at = mounted(CustomEventHandler);
+
+    at('upper').dispatchEvent(new CustomEvent('MyEvent'));
+    at('lower').dispatchEvent(new CustomEvent('myevent'));
+    flushSync();
+
+    expect(at('upper').parentNode.querySelector('output').textContent).toBe('1 1');
 });
 
 // What Svelte keeps for a delegated event, called as it calls it: what is

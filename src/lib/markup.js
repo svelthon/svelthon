@@ -801,7 +801,11 @@ const SNIPPET_ARGUMENT = '__argument_';
 // trims the call to the arity the author declared and converts the arguments,
 // which is what lets `lambda: choose(pep)` ignore the DOM event it is handed
 // while `lambda e: read(e.target.value)` receives it.
-const HANDLER = /^(?:on[a-z]|on:)/;
+//
+// Which attribute is one is Svelte's rule (`is_event_attribute`): any whose name
+// starts with `on`. `onMyEvent` listens to `MyEvent` there, and was handed the
+// Python callable raw, its `:=` unwritten and its coroutine never run.
+const HANDLER = /^on/;
 
 // The wrapper the generated script defines for handlers. Named here and emitted
 // there, so the two have to agree: it exists to carry the component's line
