@@ -1205,6 +1205,35 @@ export const __pybridge = {
     }
 };
 
+// The doors `__pybridge` and the boundaries below open, under their names
+// (`doors`): each entry is its door's rule, and holds it. A child's door takes
+// the component after the value; a constant defined further down is read at
+// the call.
+doors.out('spread-element', __pybridge.spreadElement);
+doors.out('child', (value, component, kind) => __pybridge.child(component, value, kind));
+doors.out('each', __pybridge.seq);
+doors.out('debug', __pybridge.debugged);
+doors.out('context', __pybridge.toContext);
+doors.out('action', __pybridge.watched);
+doors.out('class', __pybridge.klass);
+doors.out('key', __pybridge.key);
+doors.out('truth', __pybridge.truthy);
+doors.out('hidden', __pybridge.hidden);
+doors.out('text', __pybridge.str);
+doors.out('snippet', __pybridge.snippet);
+doors.out('export', pyExport);
+doors.out('handler', pyEvent);
+doors.out('attach', pyAttach);
+doors.out('expression', pyNumbers);
+doors.out('expression-python', (value) => keptPython(value));
+doors.out('expression-scalar', (value) => COMPARED.scalar(value));
+doors.out('expression-selection', (value) => COMPARED.selection(value));
+doors.in('context', __pybridge.received);
+doors.in('snippet-param', __pybridge.param);
+doors.in('selected', __pybridge.selected);
+doors.in('list', __pybridge.list);
+doors.in('load', pyArg);
+
 // A spread's copy, each value converted: a fresh object, as a JavaScript spread
 // of a `$state` proxy is, so Svelte's diff sees a dict mutated in place.
 //

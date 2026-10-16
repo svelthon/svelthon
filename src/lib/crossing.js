@@ -1593,5 +1593,15 @@ export const doors = {
     }
 };
 
-export const toJs = (value, name) => OUT.get(name)(value);
-export const toPython = (value, name) => IN.get(name)(value);
+// A door taking more than the value, a snippet's owners or a child's
+// component, is handed the rest after it.
+export const toJs = (value, name, ...rest) => OUT.get(name)(value, ...rest);
+export const toPython = (value, name, ...rest) => IN.get(name)(value, ...rest);
+
+// The crossing's own doors: a binding's value and a copy coming in, a value
+// written into a view, and a copy and a scalar going out.
+doors.in('binding', pyBind);
+doors.in('copy', pyData);
+doors.in('view-write', entering);
+doors.out('copy', plainData);
+doors.out('scalar', plainScalar);

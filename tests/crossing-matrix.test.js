@@ -10,7 +10,8 @@
 // contract: a copy of what JavaScript otherwise reads through the view.
 import { test, expect } from 'vitest';
 import '../src/lib/compile.cjs';
-import { __pybridge, plainData, plainScalar, pyNumbers, pyExport, pyBind, pyData, pyArg, pyExpression } from '../src/lib/runtime.js';
+import { pyData, pyExpression } from '../src/lib/runtime.js';
+import { toJs, toPython } from '../src/lib/crossing.js';
 import { describeJs } from './crossing-describe.js';
 
 const $B = globalThis.__BRYTHON__;
@@ -82,14 +83,16 @@ const expression = (kept) => pyExpression((args) => kinds.get(...args), 'crossin
 // expression renders, an item read through a view, a key of a spread to a
 // JavaScript child and to a Python one, what an `@export` returns, and what a
 // template expression gives Svelte by the kind of its reader.
+// Each row opened by its door's name, so a door registered under the wrong
+// rule changes its row.
 const TO_JS = {
-    plainData: (kind) => plainData($B.$getitem(kinds.VALUES, kind)),
-    plainScalar: (kind) => plainScalar($B.$getitem(kinds.VALUES, kind)),
-    pyNumbers: (kind) => pyNumbers($B.$getitem(kinds.VALUES, kind)),
-    'view-read': (kind) => __pybridge.bound($B.$call(kinds.listed, kind))[0],
-    spread: (kind) => __pybridge.spread($B.$call(kinds.boxed, kind)).v,
-    spreadPython: (kind) => __pybridge.spreadPython($B.$call(kinds.boxed, kind)).v,
-    pyExport: (kind) => pyExport($B.$getitem(kinds.VALUES, kind), 'crossing-matrix'),
+    plainData: (kind) => toJs($B.$getitem(kinds.VALUES, kind), 'copy'),
+    plainScalar: (kind) => toJs($B.$getitem(kinds.VALUES, kind), 'scalar'),
+    pyNumbers: (kind) => toJs($B.$getitem(kinds.VALUES, kind), 'expression'),
+    'view-read': (kind) => toJs($B.$call(kinds.listed, kind), 'attribute')[0],
+    spread: (kind) => toJs($B.$call(kinds.boxed, kind), 'spread').v,
+    spreadPython: (kind) => toJs($B.$call(kinds.boxed, kind), 'spread-python').v,
+    pyExport: (kind) => toJs($B.$getitem(kinds.VALUES, kind), 'export', 'crossing-matrix'),
     expression: (kind) => expression(false)(kind),
     'expression-python': (kind) => expression(true)(kind),
     'expression-scalar': (kind) => expression('scalar')(kind),
@@ -129,14 +132,14 @@ const JS_VALUES = () => ({
 // container (`entering`), an argument of a `load` or an action, and a push
 // into a list's view.
 const TO_PY = {
-    pyBind: (value) => pyBind(value),
-    pyData: (value) => pyData(value),
-    'pyData-live': (value) => pyData(value, undefined, true),
-    pyArg: (value) => pyArg(value),
+    pyBind: (value) => toPython(value, 'binding'),
+    pyData: (value) => toPython(value, 'copy'),
+    'pyData-live': (value) => toPython(value, 'copy', undefined, true),
+    pyArg: (value) => toPython(value, 'load'),
     'view-write': (value) => {
         const list = pyData([]);
 
-        __pybridge.bound(list).push(value);
+        toJs(list, 'attribute').push(value);
 
         return list[0];
     }
