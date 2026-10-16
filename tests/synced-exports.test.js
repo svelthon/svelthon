@@ -1,5 +1,6 @@
 import { test, expect } from 'vitest';
 import { mount, flushSync } from './mounted.js';
+import { growth } from './growth.js';
 import * as python from './fixtures/synced_exports.py';
 import * as native from './fixtures/synced_exports_native.js';
 import SyncedInstanceHost from './fixtures/SyncedInstanceHost.svelte';
@@ -607,24 +608,16 @@ test('a walk of a set grows with its length when it deletes ahead or adds as it 
 
         return performance.now() - start;
     };
-    // The better of two runs, so that a garbage collection left by the walk
-    // before does not count as this one's cost, from a size whose run lasts
-    // tens of milliseconds, beyond what a pause or a shared core adds: a
-    // tuple costs ten times what an int does.
-    const best = (run, n) => Math.min(run(n), run(n));
-    const growth = (run) => {
-        let n = 2000;
+    // From a size whose run lasts tens of milliseconds, beyond what a pause or
+    // a shared core adds: a tuple costs ten times what an int does. The best
+    // of three runs (`growth`): of two, a garbage collection or the load of the
+    // whole suite still decided it, 8.27 against a bound of 8.
+    const measured = { from: 2000, most: 64000 };
 
-        run(1000);
-        while (n < 64000 && best(run, n) < 30) n *= 2;
-
-        return best(run, 4 * n) / Math.max(best(run, n), 1);
-    };
-
-    expect(growth(sieve)).toBeLessThan(8);
-    expect(growth(cells)).toBeLessThan(8);
-    expect(growth(worklist)).toBeLessThan(8);
-}, 60000);
+    expect(growth(sieve, measured)).toBeLessThan(8);
+    expect(growth(cells, measured)).toBeLessThan(8);
+    expect(growth(worklist, measured)).toBeLessThan(8);
+}, 120000);
 
 // A member that never left is not visited again, whatever became of its
 // bucket: `intersection_update` builds the buckets anew for the members it
