@@ -3,39 +3,47 @@
 // check reads the one entry the row entered under, not the whole table: 10,000
 // rows of a dict took seconds when it read them all, once per row.
 //
-// The bound is absolute and generous, as in `markup-linear.test.js`: the
-// quadratic walk is two orders of magnitude above it.
+// Measured as it grows (`growth`): four times the rows take about four times as
+// long, where reading the whole table once per row took sixteen. A bound in
+// milliseconds read the machine's load as much as the code.
 import { test, expect } from 'vitest';
-import { mount, flushSync } from './mounted.js';
+import { mount, unmount, flushSync } from './mounted.js';
+import { growth, timed } from './growth.js';
 import RowTable from './fixtures/RowTable.svelte';
 import ShapedTable from './fixtures/ShapedTable.svelte';
 
+// The table mounted, then every row marked in one click: the time of the click,
+// and what the page counts after it.
+const marking = (Component, props) => {
+    const target = document.body.appendChild(document.createElement('div'));
+    const instance = mount(Component, { target, props });
+
+    flushSync();
+
+    const spent = timed(() => {
+        target.querySelector('button').click();
+        flushSync();
+    });
+    const shown = target.querySelector('p').textContent;
+
+    unmount(instance);
+    target.remove();
+
+    return { spent, shown };
+};
+
 // The same for a grid keyed by tuples, whose hash runs no code of the author's,
 // and a set, read by the bucket each member was found in.
-test.for(['grid', 'set'])('marking every cell of a %s of 10,000 is linear', (kind) => {
-    const target = document.body.appendChild(document.createElement('div'));
-    mount(ShapedTable, { target, props: { kind } });
-    flushSync();
+test.for(['grid', 'set'])('marking every cell of a %s is linear', (kind) => {
+    const run = (n) => marking(ShapedTable, { kind, side: Math.round(Math.sqrt(n)) });
 
-    const started = performance.now();
-    target.querySelector('button').click();
-    flushSync();
-    const spent = performance.now() - started;
-
-    expect(target.querySelector('p').textContent).toBe('10000');
-    expect(spent).toBeLessThan(1000);
+    expect(run(10000).shown).toBe('10000');
+    expect(growth((n) => run(n).spent)).toBeLessThan(8);
 });
 
-test.for(['dict', 'list'])('marking every row of a %s of 10,000 is linear', (kind) => {
-    const target = document.body.appendChild(document.createElement('div'));
-    mount(RowTable, { target, props: { kind } });
-    flushSync();
+test.for(['dict', 'list'])('marking every row of a %s is linear', (kind) => {
+    const run = (n) => marking(RowTable, { kind, n });
 
-    const started = performance.now();
-    target.querySelector('button').click();
-    flushSync();
-    const spent = performance.now() - started;
-
-    expect(target.querySelector('p').textContent).toBe('10000');
-    expect(spent).toBeLessThan(1000);
+    expect(run(10000).shown).toBe('10000');
+    expect(growth((n) => run(n).spent)).toBeLessThan(8);
 });

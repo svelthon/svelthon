@@ -9,9 +9,11 @@
 // that output, which is a string built by concatenation and is copied in full
 // before it can be sliced. So the attribute patterns read the input instead.
 //
-// The bound is absolute: 400 KB of markup takes a few hundred milliseconds on a
-// linear walk and tens of seconds on a quadratic one.
+// Measured as it grows (`growth`): four times the rows take about four times as
+// long, where a quadratic walk took sixteen. 400 KB of markup took tens of
+// seconds on one.
 import { test, expect } from 'vitest';
+import { growth, timed } from './growth.js';
 import { pythonExpressions, collector } from '../src/lib/markup.js';
 // The parser a binding's target is read with, which the plugin has loaded
 // before any markup is read.
@@ -23,12 +25,11 @@ const ROW =
     '<p>plain text between the rows, as a page has</p>\n';
 
 test('a large template is rewritten in linear time', () => {
-    const markup = `{#each items as item}\n${ROW.repeat(2500)}{/each}`;
+    const rewritten = (n) => {
+        const markup = `{#each items as item}\n${ROW.repeat(n)}{/each}`;
 
-    expect(markup.length).toBeGreaterThan(400_000);
+        return timed(() => pythonExpressions(markup, collector([])));
+    };
 
-    const start = performance.now();
-    pythonExpressions(markup, collector([]));
-
-    expect(performance.now() - start).toBeLessThan(3_000);
+    expect(growth(rewritten, { from: 100 })).toBeLessThan(8);
 });

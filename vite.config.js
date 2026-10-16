@@ -84,9 +84,13 @@ export default defineConfig({
         // preprocessor and the plugin — counts only where a test calls it
         // directly. `markup.js` read 4 % while running for every file in the
         // project, until `tests/markup.test.js` called it in the open.
+        //
+        // Written when a test fails too: a run that failed said nothing of what
+        // it had covered, and the report it was asked for was missing.
         coverage: {
             include: ['src/lib/**'],
-            reporter: ['text', 'html']
+            reporter: ['text', 'html'],
+            reportOnFailure: true
         }
     }
 });

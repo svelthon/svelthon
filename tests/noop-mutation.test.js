@@ -26,7 +26,8 @@
 // over `0.0` are one number to JavaScript and two on the page, which kept the
 // old one where the model held the new.
 import { test, expect } from 'vitest';
-import { mount, flushSync } from './mounted.js';
+import { mount, unmount, flushSync } from './mounted.js';
+import { growth, timed } from './growth.js';
 import NoopMutation from './fixtures/NoopMutation.svelte';
 import NoopMutationNative from './fixtures/NoopMutationNative.svelte';
 import SymmetricFill from './fixtures/SymmetricFill.svelte';
@@ -99,20 +100,29 @@ test.for(
 
 // Telling a call that may add and remove both, `symmetric_difference_update`,
 // costs nothing per member: the set was copied before each call and compared
-// after, and a set filled one call at a time cost the square of its size. The
-// bound is absolute and generous, as in `row-updates-linear.test.js`.
-test('toggling 10,000 members of a set one call at a time is linear', () => {
-    const target = document.body.appendChild(document.createElement('div'));
-    mount(SymmetricFill, { target });
-    flushSync();
+// after, and a set filled one call at a time cost the square of its size.
+// Measured as it grows (`growth`), as in `row-updates-linear.test.js`.
+test('toggling the members of a set one call at a time is linear', () => {
+    const filled = (n) => {
+        const target = document.body.appendChild(document.createElement('div'));
+        const instance = mount(SymmetricFill, { target, props: { n } });
 
-    const started = performance.now();
-    target.querySelector('button').click();
-    flushSync();
-    const spent = performance.now() - started;
+        flushSync();
 
-    expect(target.querySelector('p').textContent).toBe('10000');
-    expect(spent).toBeLessThan(1000);
+        const spent = timed(() => {
+            target.querySelector('button').click();
+            flushSync();
+        });
+        const shown = target.querySelector('p').textContent;
+
+        unmount(instance);
+        target.remove();
+
+        return { spent, shown };
+    };
+
+    expect(filled(10000).shown).toBe('10000');
+    expect(growth((n) => filled(n).spent)).toBeLessThan(8);
 });
 
 // The page shows what the model holds after each write, the witness being the

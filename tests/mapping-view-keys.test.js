@@ -10,6 +10,7 @@
 import { test, expect } from 'vitest';
 import { flushSync } from 'svelte';
 import { mount } from './mounted.js';
+import { growth, timed } from './growth.js';
 import { __pybridge, plainData, pyBind } from '../src/lib/runtime.js';
 import MappingKeys from './fixtures/MappingKeys.svelte';
 
@@ -60,16 +61,23 @@ test('two keys of one name are refused, as the copy refuses them', () => {
 // Each name was looked for through every entry, so reading the whole view of a
 // dict keyed by numbers was quadratic: 4 000 keys took seven seconds where the
 // copy takes one millisecond. The names are found in a table built once per
-// version of the dict, and written again when a key comes or goes.
-test('a view of a dict of 4 000 int keys reads whole in linear time', () => {
-    const original = dict(Array.from({ length: 4000 }, (_, at) => [at, at]));
-    const view = __pybridge.bound(original);
-    const start = performance.now();
-    const read = JSON.parse(JSON.stringify(view));
-    const spent = performance.now() - start;
+// version of the dict, and written again when a key comes or goes. Measured as
+// it grows (`growth`): four times the keys take about four times as long.
+test('a view of a dict of int keys reads whole in linear time', () => {
+    const viewed = (n) => {
+        const original = dict(Array.from({ length: n }, (_, at) => [at, at]));
+        const view = __pybridge.bound(original);
+        let read;
+        const spent = timed(() => {
+            read = JSON.parse(JSON.stringify(view));
+        });
+
+        return { original, view, read, spent };
+    };
+    const { original, view, read } = viewed(4000);
 
     expect(read).toEqual(plainData(original));
-    expect(spent).toBeLessThan(1000);
+    expect(growth((n) => viewed(n).spent)).toBeLessThan(8);
 
     $B.$setitem(original, 4000, 4000);
     expect(view['4000']).toBe(4000);

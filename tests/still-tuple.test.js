@@ -5,22 +5,37 @@
 // holding a list, or one of a subclass, which has attributes, is watched still,
 // and what changes in it repaints the page.
 //
-// The bound is absolute and generous, as in `row-updates-linear.test.js`: the
-// quadratic climb is an order of magnitude above it.
+// Timed against the same rows in Svelte, mounted in the same run: a bound in
+// milliseconds read the machine's load as much as the code, 1 169 and 1 743 ms
+// over 1 000 under a full suite. Neither the mount nor its growth tells a
+// watched tuple from a still one any more, the walk reading each row once
+// (measured with `stillTuple` answering no: 582 ms against 569); what is kept is
+// the bound, an order of magnitude below the quadratic climb.
 import { test, expect } from 'vitest';
-import { mount, flushSync } from './mounted.js';
+import { mount, unmount, flushSync } from './mounted.js';
+import { timed } from './growth.js';
 import StillTuple from './fixtures/StillTuple.svelte';
+import StillTupleNative from './fixtures/StillTupleNative.svelte';
 
-test('reading a tuple of numbers through each of 3,000 rows is linear', () => {
-    const target = document.body.appendChild(document.createElement('div'));
+test('reading a tuple of numbers through each of 3,000 rows costs what the rows cost in Svelte', () => {
+    const mounted = (Component) => {
+        const target = document.body.appendChild(document.createElement('div'));
+        let instance;
+        const spent = timed(() => {
+            instance = mount(Component, { target, props: { kind: 'numbers', n: 3000 } });
+            flushSync();
+        });
+        const shown = target.querySelector('p').textContent;
 
-    const started = performance.now();
-    mount(StillTuple, { target, props: { kind: 'numbers' } });
-    flushSync();
-    const spent = performance.now() - started;
+        unmount(instance);
+        target.remove();
 
-    expect(target.querySelector('p').textContent).toBe('6000');
-    expect(spent).toBeLessThan(1000);
+        return { spent, shown };
+    };
+    const best = (Component) => Math.min(...[0, 1, 2].map(() => mounted(Component).spent));
+
+    expect(mounted(StillTuple).shown).toBe(mounted(StillTupleNative).shown);
+    expect(best(StillTuple)).toBeLessThan(3 * best(StillTupleNative));
 });
 
 test.for([
