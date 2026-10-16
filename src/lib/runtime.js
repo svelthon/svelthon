@@ -67,7 +67,10 @@ const {
     sequence,
     propertyKey,
     propertyName,
-    twoKeys
+    twoKeys,
+    doors,
+    toJs,
+    toPython
 } = core;
 
 export {
@@ -100,6 +103,13 @@ export {
 lent.functionIn = functionIn;
 lent.seq = (value) => __pybridge.seq(value);
 lent.schedule = scheduleAsync;
+
+// The doors this module opens, each with its rule, which the entries of
+// `__pybridge` name (`toJs`, `toPython`).
+//
+// A spread to a JavaScript child: each value crosses as a prop written by name
+// does, `bound` and then the floats of a config made numbers (`pyNumbers`).
+doors.out('spread', (value) => spreadOf(value, (one) => pyNumbers(__pybridge.bound(one))));
 
 // The global object, for the generated code to reach `Object`, `Symbol` and
 // `Error` through: a module that binds one of those names binds it in the
@@ -1139,7 +1149,7 @@ export const __pybridge = {
     // a child `config.rate` as a Brython float where `config={config}` handed
     // it a number.
     spread(value) {
-        return spreadOf(value, (one) => pyNumbers(__pybridge.bound(one)));
+        return toJs(value, 'spread');
     },
 
     // The same props handed to a child written in Python, each the Python value

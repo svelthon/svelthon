@@ -1576,3 +1576,22 @@ export function twoKeys(name) {
 
     throw error;
 }
+
+// And the doors themselves: each named where it is opened, `toJs(value,
+// 'spread')`, and its rule registered once, by the crossing for its own and by
+// the host for the ones it opens (`doors`). What crosses by a door is found
+// here, under its name, whichever site opened it.
+const OUT = new Map();
+const IN = new Map();
+
+export const doors = {
+    out(name, rule) {
+        OUT.set(name, rule);
+    },
+    in(name, rule) {
+        IN.set(name, rule);
+    }
+};
+
+export const toJs = (value, name) => OUT.get(name)(value);
+export const toPython = (value, name) => IN.get(name)(value);
