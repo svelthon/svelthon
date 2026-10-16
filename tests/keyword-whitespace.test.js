@@ -57,8 +57,9 @@ const DECLARED =
 // Our pass rebuilds a block with a single space and hands a clause through as
 // the author wrote it, so the two spellings differ by exactly the whitespace
 // the row varies. Collapsing it is what makes them comparable, and it is the
-// only difference the comparison forgives.
-const collapse = (text) => text.replace(/\s+/g, ' ');
+// only difference the comparison forgives, with the lines a rewrite gives back
+// before its closing brace, so that warnings below it keep their line.
+const collapse = (text) => text.replace(/\s+/g, ' ').replace(/ \}/g, '}');
 
 const rewrite = (markup) => pythonExpressions(markup, collector([]));
 

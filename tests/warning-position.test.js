@@ -28,6 +28,22 @@ test('a Svelte warning on the markup names the line written', async () => {
     expect(processed.code.split('\n')).toHaveLength(source.split('\n').length);
 });
 
+// And the markup's own expressions: one written over several lines was
+// rewritten on one, `{__expr_0()}`, and every warning below it named a line as
+// many too high, the image on line 17 reported on 13. The lines are given back
+// inside the rewrite's braces.
+test('a Svelte warning below an expression written over several lines names the line written', async () => {
+    const filename = fileURLToPath(new URL('./fixtures/warned/WarnedAfterExpressions.svelte', import.meta.url));
+    const source = readFileSync(filename, 'utf8');
+    const written = source.split('\n').findIndex((line) => line.startsWith('<img')) + 1;
+
+    const processed = await preprocess(source, [python()], { filename });
+    const { warnings } = compileSvelte(processed.code, { filename });
+
+    expect(warnings.find((one) => one.code === 'a11y_missing_attribute').start.line).toBe(written);
+    expect(processed.code.split('\n')).toHaveLength(source.split('\n').length);
+});
+
 // The fold itself, proven rather than argued: on every fixture, the generated
 // script and the same script with every line joined parse to one tree,
 // positions aside. No line break in it means anything, so no partial fold can.

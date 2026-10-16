@@ -2141,6 +2141,35 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     const position = () =>
         where && region ? lineColumn(where.content, where.offset + region.start - 1) : null;
 
+    // The lines an expression written over several takes back from its
+    // rewrite, a call that holds on one: Svelte places its warnings
+    // on the text it compiles, and neither vite-plugin-svelte nor svelte-check
+    // maps them back, so everything below was reported as many lines too high
+    // (`sameLines` keeps the script's). Given back inside the rewrite's last
+    // brace, where they are blank space of the expression, and all at the end
+    // (`withLines`): written in place, each would copy the whole output.
+    const owed = [];
+    const keepLines = (emitted, from, to) => {
+        const source = markup.slice(from, to + 1);
+
+        if (!source.includes('\n') || !out.endsWith('}')) return;
+
+        const lost = source.split('\n').length - out.slice(emitted).split('\n').length;
+
+        if (lost > 0) owed.push([out.length - 1, lost]);
+    };
+    const withLines = () => {
+        let given = '';
+        let at = 0;
+
+        for (const [brace, lost] of owed) {
+            given += out.slice(at, brace) + '\n'.repeat(lost);
+            at = brace;
+        }
+
+        return given + out.slice(at);
+    };
+
     // ` (src/App.svelte:14:6)`, or nothing when there is no file to name.
     const said = () => {
         const at = position();
@@ -2874,6 +2903,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                     const inner = markup.slice(index + 1, end);
                     const trimmed = inner.trim();
                     const attached = keyword(trimmed, '@');
+                    const emitted = out.length;
 
                     region = { start: index + 1, end };
 
@@ -2973,6 +3003,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                         out += markup.slice(index, end + 1);
                     }
 
+                    keepLines(emitted, index, end);
                     region = null;
                     index = end + 1;
                     continue;
@@ -3130,6 +3161,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         // reads (`{@render f(x)}` keeps its tail): a comment there has to go
         // first. Only after the sign, which for a block is itself a `#`.
         const trimmed = /^[#:@]/.test(opened) ? opened[0] + uncomment(opened.slice(1)).trim() : opened;
+        const emitted = out.length;
 
         region = { start: index + 1, end };
 
@@ -3377,11 +3409,12 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
             }
         }
 
+        keepLines(emitted, index, end);
         region = null;
         index = end + 1;
     }
 
-    return out;
+    return withLines();
 }
 
 // The source ranges of every Python expression a template holds, from the same
