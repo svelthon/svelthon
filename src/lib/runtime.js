@@ -10,9 +10,28 @@ import * as core from './crossing.js';
 
 // Held here as constants of this module: a binding imported is read through the
 // module's cell at each use, which the hot paths of a crossing paid.
-const { NONE, _b_, pyClass, pyType, quietly, ownType, quietPyType, pyScalar, plainScalar } = core;
+const {
+    NONE,
+    _b_,
+    pyClass,
+    pyType,
+    quietly,
+    ownType,
+    quietPyType,
+    pyScalar,
+    plainScalar,
+    plainObject,
+    ownAttributes,
+    authoredInstance,
+    declares,
+    declaresSlots,
+    behaves,
+    pyContainer,
+    pyEntries,
+    pyDict
+} = core;
 
-export { NONE, pyClass, ownType, pyScalar, plainScalar };
+export { NONE, pyClass, ownType, pyScalar, plainScalar, plainObject, pyEntries };
 
 // The global object, for the generated code to reach `Object`, `Symbol` and
 // `Error` through: a module that binds one of those names binds it in the
@@ -2901,85 +2920,6 @@ export const unboxed = (value) => {
 
 export const rawJSON = (value) => typeof JSON.isRawJSON === 'function' && JSON.isRawJSON(value);
 
-// Whether an object is a bag of keys, or something of a class of its own: a
-// Response, a URL, a Date, a Map, a Promise, any of which a `load()` may hand
-// straight back and whose keys copied would destroy it.
-//
-// Read on the prototype and not as `value.constructor`, which a dict may carry
-// as data: `{"constructor": "invoice"}` would answer a constructor of its own.
-// A Brython dict and a plain object both sit on `Object.prototype`, and a
-// **null** prototype is the other bag of keys: `Object.create(null)`, what
-// `Object.groupBy` returns, and a module namespace object.
-//
-// One predicate for every crossing that asks it, `branch`, `mapping()` in
-// helpers.js and `urlencode`, so `to_js`, `tojson` and a query string agree on
-// what a bag of keys is.
-//
-// And a **root** prototype rather than *our* `Object.prototype`: an object built
-// by another JavaScript context sits on that context's `Object.prototype`, and
-// is a bag of keys by every use. *Root* is what every realm's `Object.prototype`
-// has in common: a `Date` sits on `Date.prototype`, which sits on
-// `Object.prototype` in turn, so it is two steps from null and stays excluded,
-// here and in every other realm.
-//
-// Rootless is not enough on its own. `class Thing extends null {}` is valid
-// JavaScript and its prototype is rootless too, and an instance carrying a
-// method must not be flattened into its fields. What separates the two is that
-// a realm's `Object.prototype` **is** the object protocol: `hasOwnProperty` is
-// its own property, where a class prototype's own properties are the author's
-// plus `constructor`. Called generically, because the function has to work on a
-// prototype from any realm, including one whose own `hasOwnProperty` is exactly
-// what is being looked for.
-export const plainObject = (value) => {
-    const prototype = Object.getPrototypeOf(value);
-
-    if (prototype === null) return true;
-
-    return (
-        Object.getPrototypeOf(prototype) === null &&
-        Object.prototype.hasOwnProperty.call(prototype, 'hasOwnProperty')
-    );
-};
-
-// Where a Brython instance keeps the attributes an author wrote, which is a
-// symbol and therefore invisible to `Object.keys`.
-//
-// **Asked of Brython, not discovered**: `$B.DICT` is published by `py_type.js`,
-// and a list subclass, an array *and* an instance, answers it as any instance
-// does, whatever was watched before it.
-function ownAttributes(value) {
-    const dict = globalThis.__BRYTHON__.DICT;
-
-    return dict === undefined ? undefined : value[dict];
-}
-
-// An instance of a class of the author's, which is its attributes: its
-// `__dict__`, its slots, or both. What the copy writes of it and what its view
-// reads.
-//
-// A value that **descends from a builtin** is not an instance of the author's.
-// A `complex` has an instance dictionary and it is empty, so its fields would
-// be `{}`, the arm meant for what an author put on their own object; a mapping
-// is its entries and a list its rows.
-//
-// Asked of the **MRO**, not of the class by identity: `class Money(complex)`
-// is not the entry in Brython's table, and asked by identity it would come out
-// as its attributes, the number gone. Asked against Brython's own table rather
-// than a list of type names written here, and `object` is excluded because
-// every class descends from it. A class is an instance of `type`, a builtin.
-function authoredInstance(value) {
-    const type = ownType(value);
-
-    if (!pyClass(type)) return false;
-    if (Array.isArray(type.tp_mro) && type.tp_mro.some((one) => one !== _b_.object && _b_[one.tp_name] === one)) {
-        return false;
-    }
-
-    const attributes = ownAttributes(value);
-
-    return (attributes !== null && typeof attributes === 'object') || declaresSlots(value);
-}
-
 // A watch runs from the object that was named to every container under it, and
 // a mutation anywhere under a name has to reach whoever is reading that name.
 //
@@ -3412,32 +3352,6 @@ function slotValues(value, all = false, only = null) {
     return all ? stored : named;
 }
 
-// A name declared by a class **or by one of its bases**, read from the class
-// dictionaries rather than through the attribute protocol, so nothing of the
-// author's runs while a value is merely being converted.
-//
-// `$B.search_in_dict` reads one dictionary and stops, so the chain is walked
-// here: an instance whose `__call__` is defined on a base class is callable, and
-// a subclass that inherits `__slots__` without redeclaring them crosses to
-// JavaScript with its fields.
-//
-// The loop is Brython's own: `super.__getattribute__` asks `search_in_dict` once
-// per class of the MRO. `tp_mro` begins at the class itself (`[cls, ...bases,
-// object]`) and ends at `object`, which declares neither of the two names asked
-// here, so nothing is dragged in by the chain being longer. `type` does carry
-// `__call__`, and a class is turned away before the question is asked.
-const declares = (cls, name) => {
-    const $B = globalThis.__BRYTHON__;
-
-    for (const one of Array.isArray(cls.tp_mro) ? cls.tp_mro : [cls]) {
-        const found = $B.search_in_dict(one, name, $B.NULL);
-
-        if (found !== $B.NULL) return found;
-    }
-
-    return $B.NULL;
-};
-
 // A text signature that declares no positional parameter but the receiver:
 // `($self, /, *, key=None, reverse=False)`, `list.sort`'s.
 const NO_POSITIONAL = /^\(\$self(?:,\s*\/)?(?:,\s*\*\s*(?:,.*)?)?\)$/s;
@@ -3468,28 +3382,6 @@ const takesNoPositional = (value) => {
     }
 
     return false;
-};
-
-// Whether this object's *class* declares `__slots__`, which is the question, and
-// not whether the object happens to carry a property whose name begins like
-// one.
-//
-// Read from the type, for two reasons that are the same reason. A plain
-// JavaScript object `{slot_value_price: 42, currency: "EUR"}` is data, whose
-// property names say nothing about slots. And an instance whose slots are all
-// still unassigned carries no storage at all, so the object alone would say
-// "not an instance" of what is one.
-//
-// A type answers both: it declares its slots before any of them is filled, and
-// no object of the author's declares anything.
-const declaresSlots = (value) => {
-    const $B = globalThis.__BRYTHON__;
-
-    const type = pyType(value);
-
-    if (type === undefined) return false;
-
-    return declares(type, '__slots__') !== $B.NULL;
 };
 
 // The two Python sets, asked by class the way the dict above is. Anything else
@@ -4321,17 +4213,6 @@ const stateProbe = () =>
           )
         : undefined;
 
-// Whether a property the copy would read is a getter or a setter: an own
-// enumerable one of `value`, under a string or a symbol, read off its
-// descriptors and running neither. One the copy does not read, as a spread
-// does not, leaves the object a dict to Python, as it leaves any other.
-const behaves = (value) =>
-    Reflect.ownKeys(value).some((key) => {
-        const one = Reflect.getOwnPropertyDescriptor(value, key);
-
-        return one !== undefined && one.enumerable && (one.get !== undefined || one.set !== undefined);
-    });
-
 // What makes an object Svelte's own state, as a component or a store hands it
 // over in a rune as it loads (`proxying`): Svelte's proxy of the object, which
 // reads and writes through its getters and setters and follows its other
@@ -4354,10 +4235,6 @@ const stateOwned = (value) => {
 
 // The prototypes whose getters Svelte does not run as it reads an object.
 const PLAIN_PROTOTYPES = new Set([Object.prototype, Array.prototype, Map.prototype, Set.prototype, Date.prototype]);
-
-// A list, a tuple or a dict of Python's, walked as it is stored (`heldStates`).
-const pyContainer = (value) =>
-    Array.isArray(value) ? ownType(value) !== undefined : globalThis.__BRYTHON__.is_dict(value);
 
 // Svelte's `deep_read`: every object reached is read to its end, a Date by its
 // time and an instance of a class of its own by its prototype's getters, so
@@ -5656,29 +5533,6 @@ export function schedule(result, where, convert = undefined) {
 // `__proto__` has on `Object.prototype`, so a dict holding that key would lose
 // it, and the object's prototype would be whatever the key held. A key is data
 // here, wherever it came from.
-// Every pair of a mapping, which for a Python dict is not `Object.keys`.
-//
-// A Brython dict has two halves: string keys are ordinary JavaScript properties,
-// which is what makes `d["a"]` as fast as a native read, and everything else
-// lives in a hash table under symbols: a property name is always a string, and
-// Python keeps `1` and `"1"` apart. Walking the properties would read the fast
-// half and drop the rest: a table indexed by id, and an entry whose key is
-// `__proto__`, which cannot be an ordinary property either and lives in the
-// table too.
-//
-// Asked of Python, which is the only half that knows both.
-// `dict.$iter_items` rather than `items()`, and that is not an optimisation:
-// the reactive tracking intercepts `call_attr`, and `items` is one of the calls
-// it answers by handing the watch to the children, through this function. Going
-// through Python's own method would call it again, for ever.
-export function pyEntries(value) {
-    const $B = globalThis.__BRYTHON__;
-
-    if (!$B.is_dict(value)) return Object.entries(value);
-
-    return [...$B.builtins.dict.$iter_items(value)].map((entry) => [entry.key, entry.value]);
-}
-
 // The pairs of a mapping as Python code outside the dict reads them,
 // `value.items()`, which is what CPython's `urlencode` and `json.dumps` ask: an
 // exact dict's own, and a subclass's through its `items`, which may filter,
@@ -6239,28 +6093,6 @@ function twoKeys(name) {
     error.$svelthon = true;
 
     throw error;
-}
-
-// What the framework hands *in* to an exported function.
-//
-// SvelteKit's request event carries `params` and `url` wrapped in proxies that
-// record every key read, so it knows what a `load()` depended on. Brython probes
-// an object's symbols when it wraps it for Python, those symbols land in the
-// recorded set, and SvelteKit's serialiser then refuses them. Python must
-// therefore never touch the proxy: the boundary reads it here, in JavaScript,
-// and hands over a snapshot Python can rummage through freely.
-//
-// Duck-typed, and the identity for anything else: a module called from
-// ordinary JavaScript keeps its arguments untouched.
-// A JavaScript absence, `null` or `undefined`, is Python's `None` in it, as
-// `pyData` says at its root: `event["params"]["slug"] is None` has to answer the
-// way the author wrote it.
-function pyDict(entries) {
-    const $B = globalThis.__BRYTHON__;
-    const out = _b_.dict.$factory();
-
-    for (const [key, value] of entries) $B.$setitem(out, key, value ?? NONE);
-    return out;
 }
 
 // The inbound twin of `plainData`: a JavaScript value as real Python. The walk
