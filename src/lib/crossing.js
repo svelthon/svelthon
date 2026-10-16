@@ -346,3 +346,142 @@ export function pyDict(entries) {
     for (const [key, value] of entries) $B.$setitem(out, key, value ?? NONE);
     return out;
 }
+
+// Then bytes and sets, which cross as JavaScript's own kinds, and the
+// registries a view is known by.
+
+// The two Python sets, asked by class the way the dict above is. Anything else
+// carrying a `$store` is not one, and a foreign object is not walked at all.
+// Python's `bytes` and `bytearray`, which have no JSON in CPython either:
+// `json.dumps(b"hi")` answers *Object of type bytes is not JSON serializable*.
+// Here they are `{ob_type, source}`, so they are asked first, and the refusal
+// names the value rather than its class.
+//
+// Asked of the MRO rather than of the class by identity, so a subclass answers
+// too, as in `pyScalar` and `isSet`.
+export const pyBytes = (value) => {
+    const cls = ownType(value);
+    const mro = pyClass(cls) ? cls.tp_mro : undefined;
+
+    if (!Array.isArray(mro)) return false;
+
+    return mro.includes(_b_.bytes) || mro.includes(_b_.bytearray);
+};
+
+// bytes as JavaScript holds bytes, a `Uint8Array` of them: what every Web API
+// that takes binary data accepts, a `Blob`, a `fetch` body, a `TextDecoder`,
+// where the Brython object was written out as "[object Object]". No live
+// object can be one: a view is refused by those APIs or written out as text,
+// and Chrome refuses a typed array over a buffer that grows. So a copy, of the
+// bytes held at the crossing: exact for `bytes`, which never change, and for a
+// `bytearray` the bytes of that moment, which an export takes again at each
+// change (`liveExport`) and a prop at each render.
+export const mutableBytes = (value) => ownType(value).tp_mro.includes(_b_.bytearray);
+
+// The bytes each copy was made of, for the way back (`bytesIn`).
+const BYTES_OF = new WeakMap();
+
+// The way back of every object crossing from JavaScript is the engine's own
+// lookup (`PYOBJ_MAP`), a method's result among them, which `inbound` never
+// sees. A copy of bytes is told there by what it holds now (`bytesIn`): the
+// copy was registered as the bytes it was made of, and a method that wrote
+// into it handed those back unchanged. Put in place at the first copy, so a
+// program that hands JavaScript no bytes pays nothing at that lookup, which
+// every object crossing asks.
+let bytesLookedUp = false;
+
+const lookUpBytes = () => {
+    if (bytesLookedUp) return;
+
+    bytesLookedUp = true;
+
+    const get = WeakMap.prototype.get;
+
+    globalThis.__BRYTHON__.PYOBJ_MAP.get = function (key) {
+        return BYTES_OF.has(key) ? bytesIn(key) : get.call(this, key);
+    };
+};
+
+export const bytesOut = (value) => {
+    const out = Uint8Array.from(value.source);
+
+    lookUpBytes();
+    BYTES_OF.set(out, value);
+
+    return out;
+};
+
+// A copy of bytes handed back to Python: the object it was made of while the
+// two hold the same bytes, and a new one of the same kind, bytes or a
+// `bytearray`, of what the copy holds once either moved on: JavaScript writes
+// into a `Uint8Array`, and Python appends to a `bytearray`. Undefined for any
+// other value. The engine's own lookup asks it too (`lookUpBytes`).
+export const bytesIn = (value) => {
+    const original = BYTES_OF.get(value);
+
+    if (original === undefined) return undefined;
+
+    const held = original.source;
+
+    if (held.length === value.length && held.every((one, at) => one === value[at])) return original;
+
+    const mutable = mutableBytes(original);
+    const fresh = (mutable ? _b_.bytearray : _b_.bytes).$factory(globalThis.__BRYTHON__.$list(Array.from(value)));
+
+    BYTES_OF.set(value, fresh);
+
+    return fresh;
+};
+
+export const isSet = (value) => {
+    const cls = quietPyType(value);
+
+    if (cls === undefined || value.$store === undefined) return false;
+    if (cls === _b_.set || cls === _b_.frozenset) return true;
+
+    // A subclass is a set. `class Bag(set): pass` redefines nothing and is an
+    // ordinary way to name a domain type, so its members come under watch as a
+    // set's do.
+    //
+    // Read from the type's own ancestry rather than through `isinstance`, which
+    // goes through `__instancecheck__` and would run a protocol of the author's
+    // while the walk is in flight. The `$store` test above stays: a foreign
+    // object carrying that name is not a set.
+    return Array.isArray(cls.tp_mro) && (cls.tp_mro.includes(_b_.set) || cls.tp_mro.includes(_b_.frozenset));
+};
+
+// **A Python list, tuple or dict that a JavaScript component reads is read
+// through a view**, as Svelte hands a child a `$state` object: a proxy whose
+// every read subscribes the reader. Handed the container itself, a JavaScript
+// child would read a dict's keys as plain properties, which nothing follows,
+// and stay where it was when `state["count"] += 1` repaints every Python
+// reader, the dict given as a prop or through a context alike.
+//
+// A read gives what the same value gives at the other doors: None is `null`, as
+// `plainData` writes it inside a container, a scalar is JavaScript's own, a
+// callable is adapted (`pyHandler`), and a container inside is a view in its
+// turn. A write is Python's own `obj[key] = value`, `append` or `del`, so it
+// notifies as the same line written in Python does.
+//
+// One view per container, so a reader comparing what it holds finds the same
+// object. And the engine's own map hands the container back: `jsobj2pyobj` and
+// `pyBind` read it, so a view that comes back to Python, as a prop, a context, a
+// binding or an argument, is the container again.
+export const VIEW_OF = new WeakMap();
+export const VIEWED = new WeakSet();
+
+// A view's prototype is not `Array.prototype` or `Object.prototype` itself, only
+// inherits from it: Svelte wraps a plain array or object put in a `$state` in a
+// proxy of its own, which keeps every write to itself, so a JavaScript parent
+// that binds a Python list would push into a copy Python never sees, and a
+// write to a dict stopped there as well. Not being one, by identity, is what
+// tells Svelte to keep the view as it is. Every method, the iterator and
+// `Array.isArray` are the array's.
+export const LIST_VIEW = Object.create(Array.prototype);
+
+// And a dict's or an instance's carries `Object.prototype`'s own names, each
+// the same property: SvelteKit's serialiser (`devalue`) takes an object for a
+// plain one by those names, as it takes one from another realm, so a view in
+// a `load`'s data is written out as the object it reads as, where Svelte's
+// test by identity still keeps it.
+export const PLAIN_VIEW = Object.defineProperties(Object.create(Object.prototype), Object.getOwnPropertyDescriptors(Object.prototype));
