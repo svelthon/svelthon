@@ -1929,8 +1929,13 @@ function installMutationTracking($B) {
         const holder = lookedUp(obj, attr);
 
         // Data, not a method: a method read is a new bound object each time,
-        // and what replaces it is a write of the name.
-        if (holder !== undefined && !callable(result)) linked(nameMarker(holder, attr), holder, result, undefined, true, attr);
+        // and what replaces it is a write of the name. The descriptor that
+        // computed it is asked of what the class holds, whatever it handed
+        // back, a function or a bound method included.
+        if (holder !== undefined) {
+            if (!callable(result)) linked(nameMarker(holder, attr), holder, result, undefined, true, attr);
+            heldDescriptor(holder, attr);
+        }
 
         if (!MARKS.has(obj)) return;
 
@@ -1963,6 +1968,7 @@ function installMutationTracking($B) {
 
         if (found !== null) {
             for (const cls of found.through) {
+                if (found.descriptor) heldDescriptor(cls, attr);
                 if (found.descriptor || found.absent) className(cls, attr).subscribe();
                 else inherit(obj, cls, undefined, true);
             }
@@ -2059,6 +2065,23 @@ function installMutationTracking($B) {
         }
 
         return marker;
+    };
+
+    // What the name holds when the read does not hand it back: a descriptor of
+    // the author's, whose `__get__` computes the value read from what it holds.
+    // Linked under the name as a value the class holds is, so changing its
+    // state, `Row.value.n = 1`, wakes what read the name, as appending to a
+    // list the class holds does. Found in the dictionary, with no `__get__` run
+    // again; a builtin one, a function or a `property`, holds nothing that
+    // changes.
+    const heldDescriptor = (cls, attr) => {
+        const stored = $B.search_in_dict(cls, attr, $B.NULL);
+        const type = stored === $B.NULL ? undefined : quietPyType(stored);
+
+        if (type === undefined || (type.tp_flags & $B.TPFLAGS.HEAPTYPE) === 0) return;
+        if ($B.search_slot(type, 'tp_descr_get', $B.NULL) === $B.NULL) return;
+
+        linked(nameMarker(cls, attr), cls, stored, undefined, true, attr);
     };
 
     // A read that found nothing and raised, `hasattr(box, "later")`, follows
