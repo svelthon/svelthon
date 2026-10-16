@@ -75,7 +75,7 @@ reste de cette configuration et ce que chaque ligne apporte.
 npm install
 npm run dev          # la démo, sous /demo/
 
-npm test             # 1 902 tests : sémantique, props, réactivité, surface Svelte
+npm test             # 1 903 tests : sémantique, props, réactivité, surface Svelte
 npm run test:quiet   # la sortie de la suite : un run vert ne doit rien dire
 npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
@@ -407,9 +407,10 @@ et l'étalement `{**attrs}`, développés pour que la lecture passe par le
 namespace au lieu de le contourner, sans plus aucune exception. L'étalement
 prend ce que prend le `{**attrs}` de Python, les entrées d'un mapping, et une
 chose de plus : une instance, que Python refuse, donne ses attributs, comme
-`vars()` les lit. Toute autre valeur Python, None ou une str entre autres, lève
-la `TypeError` de Python ; un objet JavaScript s'étale par ses propriétés
-propres, comme en JavaScript.
+`vars()` les lit. None n'étale rien, comme Svelte n'étale rien de `null` :
+`extra: dict = None` est une prop optionnelle qu'on fait suivre. Toute autre
+valeur Python, une str ou un int entre autres, lève la `TypeError` de Python ;
+un objet JavaScript s'étale par ses propriétés propres, comme en JavaScript.
 
 `bind:group` était la dernière, et elle a pris une autre forme qu'une paire :
 Svelte n'y accepte pas de lecteur et d'écrivain, parce qu'il détermine quels
@@ -1572,7 +1573,7 @@ part jamais.
 
 ## État
 
-Validé par `npm test`, 1 902 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 1 903 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;

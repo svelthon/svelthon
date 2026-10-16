@@ -14,6 +14,7 @@ import { test, expect } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import SpreadEntries from './fixtures/SpreadEntries.svelte';
 import SpreadEntriesNative from './fixtures/SpreadEntriesNative.svelte';
+import SpreadNoneNative from './fixtures/SpreadNoneNative.svelte';
 
 const read = (Component, props) => {
     const target = document.body.appendChild(document.createElement('div'));
@@ -78,18 +79,27 @@ test.for([
 // `python3`, `{**value}` on each: `'NoneType' object is not a mapping`,
 // `'list'`, `'str'`, `'int'`, `'bool'`, `'Slotted'`.
 test.for([
-    ['none', 'NoneType'],
     ['list', 'list'],
     ['str', 'str'],
     ['number', 'int'],
     ['bool', 'bool'],
     ['slots', 'Slotted'],
-    ['element-none', 'NoneType'],
     ['element-str', 'str']
 ])('a %s spread raises as `{**value}` does', ([kind, type]) => {
     expect(() => read(SpreadEntries, { kind })).toThrow(
         `TypeError: '${type}' object is not a mapping, and has no attributes for ** to take`
     );
+});
+
+// Save None, which is absence in the template, as a value that renders nothing
+// and an attribute that is dropped: it spreads nothing, as Svelte spreads
+// nothing of `null`, so a prop `extra: dict = None` can be handed on. Refused
+// as `{**None}` is in Python, the optional prop no parent passed took the
+// component down.
+test('None spreads nothing, on a component and on an element, as Svelte spreads null', () => {
+    expect(read(SpreadEntries, { kind: 'none' })).toBe(read(SpreadNoneNative, { on: 'component' }));
+    expect(read(SpreadEntries, { kind: 'element-none' })).toBe(read(SpreadNoneNative, { on: 'element' }));
+    expect(read(SpreadEntries, { kind: 'none' })).toBe('|undefined');
 });
 
 // `{1: "a", "1": "b"}` handed its child one value and lost the other, and the

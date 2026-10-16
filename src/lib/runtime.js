@@ -1097,7 +1097,7 @@ export const __pybridge = {
     // Each property is read once, as a JavaScript spread reads it: a getter
     // asked again may answer otherwise, or refuse.
     spreadElement(value, event = (one) => pyEvent(one), grouped = false) {
-        if (value === null || value === undefined) return value;
+        if (value === null || value === undefined || value === NONE) return spreadOf(value);
 
         const read = spreadOf(value, (one) => one);
         const out = spreadOf(read, __pybridge.bound);
@@ -1128,8 +1128,14 @@ export const __pybridge = {
 // that is not a string never arrived, and a mapping that is not a dict or an
 // instance arrived empty. A str, an int and a bool are Python's, refused as a
 // rest refuses them, where JavaScript's `...` spread a string's characters.
+//
+// None is absence, as it is for a value the template renders and an attribute
+// it writes: it spreads nothing, as Svelte spreads nothing of `null` and
+// `undefined`, and `extra: dict = None` is an optional prop handed on. A rest
+// still refuses it, as Svelte refuses to take a `null` row apart.
 function spreadOf(value, convert) {
     if (value === null || value === undefined) return value;
+    if (value === NONE) return undefined;
 
     const out = {};
 
