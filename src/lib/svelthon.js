@@ -330,8 +330,15 @@ export function moduleImports(content) {
 // a `/* } */` or a nested template literal among it. Markup whose expressions
 // are Python does not parse as JavaScript, and is read by the scanner made for
 // it (`markupOnly`).
+//
+// Only where a `<svelte:options>` is written at all, which nothing else can
+// declare: the parse reads every expression of the component, each from a
+// count of the lines before it, and was the larger half of a markup pass grown
+// with the square of its expressions.
 export const compileOptionsFor = (code) => {
     let declared;
+
+    if (!code.includes('<svelte:options')) return undefined;
 
     try {
         declared = parse(blankBodies(withoutComments(code)), { modern: true }).options?.attributes.some(

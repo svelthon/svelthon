@@ -18,6 +18,7 @@
 import { test, expect } from 'vitest';
 import { growth, timed } from './growth.js';
 import { pythonExpressions, collector } from '../src/lib/markup.js';
+import { python } from '../src/lib/svelthon.js';
 // The parser a binding's target is read with, which the plugin has loaded
 // before any markup is read.
 import '../src/lib/compile.cjs';
@@ -41,4 +42,20 @@ test('a large template is rewritten in linear time', () => {
     };
 
     expect(growth(rewritten, { from: 100, until: 200 })).toBeLessThan(8);
+});
+
+// And the preprocessor's own hook, which the build runs, around the walk: it
+// parsed the whole component with Svelte's parser to learn whether it declared
+// a custom element, and that parse counts the lines before each expression.
+test('the markup hook a build runs grows with the template', () => {
+    const pre = python();
+    const script = '<script lang="python">\nrows = [1, 2]\nn = 1\n</script>\n';
+    const preprocessed = (n) => {
+        const blocks = Array.from({ length: n }, (_, i) => `{#each rows as row}{#if row > ${i}}<b>{row + n}</b>{/if}{/each}`);
+        const content = script + blocks.join('\n');
+
+        return timed(() => pre.markup({ content, filename: 'Rows.svelte' }));
+    };
+
+    expect(growth(preprocessed, { from: 100, until: 200 })).toBeLessThan(8);
 });
