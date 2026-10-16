@@ -23,6 +23,8 @@ import EachRowTuple from './fixtures/EachRowTuple.svelte';
 import EachRowTupleNative from './fixtures/EachRowTupleNative.svelte';
 import EachFreshTuple from './fixtures/EachFreshTuple.svelte';
 import EachFreshTupleNative from './fixtures/EachFreshTupleNative.svelte';
+import EachMadePairs from './fixtures/EachMadePairs.svelte';
+import EachMadePairsNative from './fixtures/EachMadePairsNative.svelte';
 
 // What a component counted and showed after mounting and after each action.
 const steps = (Component, props, ...actions) => {
@@ -71,6 +73,17 @@ test('rows walked through enumerate() run their block again on a change of the l
         '0:0 1:0 2:1 3:0 4:0',
         '0:0 1:0 2:1 3:0 4:0 5:9'
     ]);
+});
+
+// The pairs `.items()` and `enumerate()` make are theirs wherever they go: in
+// a list of the expression's own, `sorted(d.items())`, a change inside one row
+// read every row again, where Svelte reads the one that changed.
+test.for([['sorted'], ['enumerated'], ['reversed']])('pairs made by the iterable and handed on, %s, read what Svelte reads', ([kind]) => {
+    const grow = (target) => target.querySelector('.grow').click();
+    const mine = steps(EachMadePairs, { kind }, grow);
+
+    expect(mine).toEqual(steps(EachMadePairsNative, { kind }, grow));
+    expect(mine[1].rows - mine[0].rows).toBe(1);
 });
 
 // The other half: a key changed in place is a new row to Svelte, made again,

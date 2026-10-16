@@ -3281,7 +3281,7 @@ function templateBridge(c) {
         // reads them.
         `const __collection = (compute, keyOf) => {`,
         `    const walk = __pybridge.walk(keyOf);`,
-        `    const yielded = $derived.by(() => ({ rows: compute() }));`,
+        `    const yielded = $derived.by(() => ({ rows: walk.computed(compute) }));`,
         `    let revision = $state.raw(0);`,
         `    let count = 0;`,
         `    $effect.pre(() => { if (walk.refresh(yielded.rows)) revision = ++count; });`,

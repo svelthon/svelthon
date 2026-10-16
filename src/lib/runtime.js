@@ -741,6 +741,11 @@ export const __pybridge = {
             }
         }
 
+        // Rows that are tuples the iterable did not make itself, the pairs of
+        // `sorted(d.items())`, have the pairs noted as they are made at the
+        // block's next computations (`computed`); asked of the first row.
+        if (computingFor !== null) computingFor.noting = !makesPairs(value) && quietPyType(rows[0]) === _b_.tuple;
+
         // Hand the watch down to the rows: {#each} walks the array in
         // JavaScript, never through $getitem, so this is the only path by which
         // an item can come under watch before its block reads it.
@@ -829,6 +834,12 @@ export const __pybridge = {
             // What the block walks, undefined until the first `refresh`.
             get held() {
                 return held;
+            },
+
+            // The rows the iterable yields, its pairs noted as they are made
+            // when the block needs them noted (`noting`).
+            computed(compute) {
+                return computed(this, compute);
             },
 
             // Whether `rows` differ from the rows the block holds, which they
@@ -2476,11 +2487,17 @@ const sameRows = (held, rows) => held.length === rows.length && held.every((one,
 
 const sameRow = (one, other) => one === other || (MADE_ANEW.has(one) && MADE_ANEW.has(other) && samePair(one, other));
 
-// Such a pair, told by where it came from (`seq`), and not by what it is: a
-// tuple the author's code makes at each call, `[(row,)]`, has the shape of
-// one, a tuple nobody watches holding a row, and is a new row however equal, as
-// in Svelte, whose key and whose reads see the new one: `id(pair)` kept the
-// old block.
+// Such a pair, told by where it came from, and not by what it is: a tuple the
+// author's code makes at each call, `[(row,)]`, has the shape of one, a tuple
+// nobody watches holding a row, and is a new row however equal, as in Svelte,
+// whose key and whose reads see the new one: `id(pair)` kept the old block.
+//
+// Noted by `seq` when the iterable makes them itself, `enumerate(rows)`, and
+// otherwise as they are made, while the block computes its rows (`computed`),
+// so they are known wherever they go next: `sorted(d.items())` hands on the
+// very pairs `.items()` made, in a list of its own. Read off the iterable
+// alone, a list made of them was only a list, and a change inside one row read
+// every row again.
 const MADE_ANEW = new WeakSet();
 const PAIR_MAKERS = new Set(['enumerate', 'zip', 'dict_items', 'dict_itemiterator']);
 
@@ -2489,6 +2506,47 @@ const makesPairs = (iterable) => {
 
     return type !== undefined && (type.tp_flags & globalThis.__BRYTHON__.TPFLAGS.HEAPTYPE) === 0 && PAIR_MAKERS.has(type.tp_name);
 };
+
+// The iterators of `.items()`, `enumerate()` and `zip()` make their pairs in
+// `tp_iternext`, which Brython reads anew at each `__next__` (`make_next`):
+// replaced while a block computes its rows, and only for a block whose rows are
+// tuples its iterable does not make itself, which `seq` tells (`noting`). The
+// note costs a generator per pair, measured above the noise on the
+// `enumerate(rows)` of twenty thousand rows, so the common case does not pay
+// it. A block computed inside another's computation finds them replaced
+// already.
+let computing = 0;
+let computingFor = null;
+const replaced = [];
+
+function computed(walk, compute) {
+    const $B = globalThis.__BRYTHON__;
+    const noting = walk.noting !== false;
+    const outer = computingFor;
+
+    computingFor = walk;
+
+    if (noting && computing++ === 0) {
+        for (const iterator of [$B.dict_itemiterator, _b_.enumerate, _b_.zip]) {
+            const own = iterator.tp_iternext;
+
+            replaced.push([iterator, own]);
+            iterator.tp_iternext = function* (self) {
+                for (const pair of own.call(this, self)) {
+                    MADE_ANEW.add(pair);
+                    yield pair;
+                }
+            };
+        }
+    }
+
+    try {
+        return compute();
+    } finally {
+        computingFor = outer;
+        if (noting && --computing === 0) for (const [iterator, own] of replaced.splice(0)) iterator.tp_iternext = own;
+    }
+}
 
 // Inside such a pair, a member is the same row's, or a pair nested in it and
 // made the same way, `enumerate(d.items())`'s: a tuple nobody watches that
