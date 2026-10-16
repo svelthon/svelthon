@@ -1940,12 +1940,31 @@ const unknownTag = (trimmed, kind, known, at) =>
 // `filename` and `start` go on the error object too, in Svelte's own shape, so
 // vite-plugin-svelte and an editor can put the squiggle under the character
 // rather than print a sentence.
-function lineColumn(content, offset) {
-    const before = content.slice(0, offset);
-    const line = before.split('\n').length;
+//
+// `starts` is where each line of the file starts (`lineStarts`), read once for
+// the whole walk: a line counted on a copy of everything before each
+// expression made the pass quadratic in its expressions.
+function lineColumn(starts, offset) {
+    let low = 0;
+    let high = starts.length - 1;
 
-    return { line, column: offset - (before.lastIndexOf('\n') + 1), character: offset };
+    while (low < high) {
+        const middle = (low + high + 1) >> 1;
+
+        if (starts[middle] <= offset) low = middle;
+        else high = middle - 1;
+    }
+
+    return { line: low + 1, column: offset - starts[low], character: offset };
 }
+
+const lineStarts = (content) => {
+    const starts = [0];
+
+    for (let at = content.indexOf('\n'); at !== -1; at = content.indexOf('\n', at + 1)) starts.push(at + 1);
+
+    return starts;
+};
 
 // A snippet's name belongs to the scope that *encloses* the block, and to the
 // whole of it: Svelte hoists the declaration, so `<Card {row} />` may be written
@@ -2267,8 +2286,9 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
 
     // The `{` of the construct being read, as the author sees it. `region.start`
     // is the character after the brace, so this steps back onto it.
+    const starts = where ? lineStarts(where.content) : null;
     const position = () =>
-        where && region ? lineColumn(where.content, where.offset + region.start - 1) : null;
+        where && region ? lineColumn(starts, where.offset + region.start - 1) : null;
 
     // The lines an expression written over several takes back from its
     // rewrite, a call that holds on one: Svelte places its warnings
@@ -2333,7 +2353,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         if (at) {
             error.filename = where.filename;
             error.start = at;
-            error.end = where && region ? lineColumn(where.content, where.offset + region.end + 1) : at;
+            error.end = where && region ? lineColumn(starts, where.offset + region.end + 1) : at;
         }
 
         return error;

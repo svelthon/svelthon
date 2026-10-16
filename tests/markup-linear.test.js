@@ -32,7 +32,12 @@ test('a large template is rewritten in linear time', () => {
     const rewritten = (n) => {
         const markup = `{#each items as item}\n${ROW.repeat(n)}{/each}`;
 
-        return timed(() => pythonExpressions(markup, collector([])));
+        // In the file it stands in, as the preprocessor hands it, so every
+        // expression is placed at its line: a line counted on a copy of all
+        // that came before it made the walk quadratic in its expressions.
+        const where = { filename: 'Rows.svelte', content: markup, offset: 0 };
+
+        return timed(() => pythonExpressions(markup, collector([]), undefined, where));
     };
 
     expect(growth(rewritten, { from: 100, until: 200 })).toBeLessThan(8);
