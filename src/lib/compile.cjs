@@ -3185,21 +3185,37 @@ function declarations(c) {
         //
         // Svelte's own rule for the absence, read in `props.js`: the default is
         // the one declared once the parent has passed a value, and a write the
-        // child made while nothing was passed until then. So the default is
-        // kept apart from the child's writes, and `due` says which one an
-        // absence reads.
-        ...(c.props.length ? [`const __OVERRIDDEN = __global.Symbol();`] : []),
+        // child made while nothing was passed until then. So the default
+        // declared is kept beside the one an absence reads, and `dirty` says
+        // the parent passed a value since, as Svelte's `fallback_dirty` does.
+        //
+        // And the write is Svelte's: it lands on the derived without reading
+        // it, compared as Svelte compares a prop's write, `===` on what
+        // JavaScript holds, a scalar by its value. A child writing again the
+        // value it wrote leaves the derived as it was, so a parent's write not
+        // read yet still wins at the next read. Read first, the write took the
+        // parent's value in and then hid it under the child's. What the
+        // derived holds is kept beside it (`current`) and written again when
+        // the write is the same scalar: a Python parent passes its own float,
+        // None or string, never `===` to the child's.
         ...c.props.flatMap((n) => [
             `let ${local(n)} = $state.raw(undefined);`,
             `let ${rev(n)} = $state.raw(0);`,
-            `const ${fallback(n)} = { value: undefined, due: false };`,
+            `const ${fallback(n)} = { declared: undefined, value: undefined, dirty: true, overridden: false, absent: false, current: undefined };`,
             `const ${bump(n)} = () => { ${rev(n)} += 1; };`,
-            `let ${given(n)} = $derived(__props.${n});`,
+            // What JavaScript holds, as Svelte's derived holds it, which a write
+            // is compared with: the default's own Python value is kept beside
+            // it, and read when the derived stands for the absence.
+            `let ${given(n)} = $derived.by(() => {` +
+                ` ${fallback(n)}.overridden = false;` +
+                ` const __passed = __props.${n};` +
+                ` ${fallback(n)}.absent = __passed === undefined;` +
+                ` if (!${fallback(n)}.absent) { ${fallback(n)}.dirty = true; return (${fallback(n)}.current = __passed); }` +
+                ` if (${fallback(n)}.dirty) { ${fallback(n)}.dirty = false; ${fallback(n)}.value = ${fallback(n)}.declared; }` +
+                ` return (${fallback(n)}.current = __plainScalar(${fallback(n)}.value)); });`,
             `const ${pick(n)} = () => {` +
-                ` const __passed = ${given(n)};` +
-                ` if (__passed === undefined) return ${fallback(n)}.due ? ${fallback(n)}.value : ${local(n)};` +
-                ` ${fallback(n)}.due = true;` +
-                ` return __passed === __OVERRIDDEN ? ${local(n)} : __passed; };`,
+                ` const __held = ${given(n)};` +
+                ` return ${fallback(n)}.overridden ? ${local(n)} : ${fallback(n)}.absent ? ${fallback(n)}.value : __held; };`,
             // Read by Svelte's own compiler and not by ours: a snippet is a
             // prop, and `{@render name(…)}` references the bare name. Python
             // reaches the same value through the namespace accessor below, and
@@ -3352,8 +3368,11 @@ function authorBindings(c) {
             (n) =>
                 `__bind(__proto, '${n}', () => (${rev(n)}, __follow(__pyBind(${pick(n)}()))),` +
                 ` (${NEXT_VALUE}) => { const __written = __track(${NEXT_VALUE}, ${bump(n)}, ${SUBS});` +
-                ` if (__initialising) { ${fallback(n)}.value = __written; ${local(n)} = __written; return; }` +
-                ` if (${given(n)} !== undefined) ${given(n)} = __OVERRIDDEN; else ${fallback(n)}.due = false;` +
+                ` if (__initialising) { ${fallback(n)}.declared = __written; ${fallback(n)}.value = __written; ${local(n)} = __written; return; }` +
+                ` const __plain = __plainScalar(__written);` +
+                ` if (__plainScalar(${fallback(n)}.current) !== __plain) ${fallback(n)}.current = __plain;` +
+                ` ${given(n)} = ${fallback(n)}.current; ${fallback(n)}.overridden = true;` +
+                ` if (${fallback(n)}.value !== undefined) ${fallback(n)}.value = __written;` +
                 ` ${local(n)} = __written; ${bump(n)}(); },` +
                 ` () => ${pick(n)}());`
         ),
