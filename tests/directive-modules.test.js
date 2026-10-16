@@ -26,7 +26,7 @@ const rewrite = (markup) =>
 describe('a directive that names a function', () => {
     test('hands its head and value to the adapter of its kind', () => {
         expect(rewrite('<p use:a.act={v} in:b.fade out:c.fade transition:d.fade|global>x</p>')).toMatch(
-            /^<p use:__directiveAction=\{\["a\.act", \(\) => __expr_py_\d+\(\), __expr_py_\d+\(\)\]\} in:__directiveTransition=\{\["b\.fade", \(\) => __expr_py_\d+\(\)\]\} out:__directiveTransition=\{\["c\.fade", \(\) => __expr_py_\d+\(\)\]\} transition:__directiveTransition\|global=\{\["d\.fade", \(\) => __expr_py_\d+\(\)\]\}>x<\/p>$/
+            /^<p use:__directiveAction=\{\["a\.act", \(\) => __expr_py_\d+\(\), __pybridge\.watched\(__expr_py_\d+\(\)\)\]\} in:__directiveTransition=\{\["b\.fade", \(\) => __expr_py_\d+\(\)\]\} out:__directiveTransition=\{\["c\.fade", \(\) => __expr_py_\d+\(\)\]\} transition:__directiveTransition\|global=\{\["d\.fade", \(\) => __expr_py_\d+\(\)\]\}>x<\/p>$/
         );
     });
 
@@ -38,7 +38,9 @@ describe('a directive that names a function', () => {
 
     // One interpolation between quotes is the value, as Svelte reads it.
     test('with its value braced or quoted', () => {
-        expect(rewrite('<p use:act="{v}">x</p>')).toMatch(/use:__directiveAction=\{\["act", \(\) => __expr_py_\d+\(\), __expr_py_\d+\(\)\]\}>/);
+        expect(rewrite('<p use:act="{v}">x</p>')).toMatch(
+            /use:__directiveAction=\{\["act", \(\) => __expr_py_\d+\(\), __pybridge\.watched\(__expr_py_\d+\(\)\)\]\}>/
+        );
     });
 
     // An attribute may follow a quote with no space, and Svelte reads it.
@@ -52,7 +54,7 @@ describe('a directive that names a function', () => {
         'with whitespace around the equals sign: %s',
         (attribute) => {
             expect(rewrite(`<p ${attribute}>x</p>`)).toMatch(
-                /^<p use:__directiveAction=\{\["act", \(\) => __expr_py_\d+\(\), __expr_py_\d+\(\)\]\}>x<\/p>$/
+                /^<p use:__directiveAction=\{\["act", \(\) => __expr_py_\d+\(\), __pybridge\.watched\(__expr_py_\d+\(\)\)\]\}>x<\/p>$/
             );
         }
     );

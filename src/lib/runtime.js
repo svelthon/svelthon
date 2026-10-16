@@ -810,6 +810,16 @@ export const __pybridge = {
         proxied = make;
     },
 
+    // The value of a `use:`, read as Svelte reads an action's value in the
+    // effect that hands it to `update` (`readState`), and handed back as it
+    // is. It reaches Svelte inside the directive's array, which Svelte does
+    // not read into, so a change inside a state handed to the action never
+    // called `update`.
+    watched(value) {
+        readState(value);
+        return value;
+    },
+
     // The rows an `{#each}` walks, and whether they are still the ones its
     // block holds. The block runs again on a change of the rows themselves, a
     // row added, removed, moved or replaced, and not on a change inside a row,
@@ -4456,6 +4466,95 @@ const stateOwned = (value) => {
         return STATE in value;
     } catch {
         return false;
+    }
+};
+
+// The prototypes whose getters Svelte does not run as it reads an object.
+const PLAIN_PROTOTYPES = new Set([Object.prototype, Array.prototype, Map.prototype, Set.prototype, Date.prototype]);
+
+// A list, a tuple or a dict of Python's, walked as it is stored (`heldStates`).
+const pyContainer = (value) =>
+    Array.isArray(value) ? ownType(value) !== undefined : globalThis.__BRYTHON__.is_dict(value);
+
+// Svelte's `deep_read`: every object reached is read to its end, a Date by its
+// time and an instance of a class of its own by its prototype's getters, so
+// the effect reading it follows each change inside it. An object of Python's
+// is not walked, its engine's own fields with it: what Python changes in it
+// is followed already.
+const deepRead = (value, visited) => {
+    if (typeof value !== 'object' || value === null || value instanceof EventTarget || visited.has(value)) return;
+    if (VIEWED.has(value) || (!stateOwned(value) && quietPyType(value) !== undefined)) return;
+
+    visited.add(value);
+
+    if (value instanceof Date) value.getTime();
+
+    for (const key in value) {
+        try {
+            deepRead(value[key], visited);
+        } catch {
+            // Read on, as Svelte does.
+        }
+    }
+
+    const prototype = Object.getPrototypeOf(value);
+
+    if (prototype === null || PLAIN_PROTOTYPES.has(prototype)) return;
+
+    for (const one of Object.values(Object.getOwnPropertyDescriptors(prototype))) {
+        try {
+            one.get?.call(value);
+        } catch {
+            // Read on, as Svelte does.
+        }
+    }
+};
+
+// What a Python container holds, as Svelte reads what its own state holds: an
+// object of JavaScript's is read to its end (`deepRead`), and a container is
+// walked in its turn. Walked as stored and not through its view, which
+// converts each value and subscribes the reader to it, a thousand times the
+// cost on a list of two thousand rows, for changes Python follows already.
+const heldStates = (value, visited) => {
+    if (visited.has(value)) return;
+
+    visited.add(value);
+
+    const visit = (one) => {
+        if (typeof one !== 'object' || one === null) return;
+
+        if (pyContainer(one)) heldStates(one, visited);
+        else deepRead(one, visited);
+    };
+
+    if (Array.isArray(value)) for (const one of value) visit(one);
+    else for (const [, one] of heldEntries(value)) visit(one);
+};
+
+// Svelte's `deep_read_state`, which an action's effect runs on its value: a
+// state is read to its end, and any other object only for the states it holds
+// at its top, an array not at all. A Python list, tuple or dict is a state
+// here, as `$state` is there.
+const readState = (value) => {
+    if (typeof value !== 'object' || value === null || value instanceof EventTarget) return;
+
+    if (stateOwned(value)) deepRead(value, new Set());
+    else if (pyContainer(value)) heldStates(value, new Set());
+    else if (Array.isArray(value) || VIEWED.has(value)) return;
+    else if (quietPyType(value) === undefined) {
+        for (const key in value) if (stateOwned(value[key])) deepRead(value[key], new Set());
+    } else {
+        // A Python object's own fields are its attributes, in its `__dict__`
+        // and in its slots, an inherited one included, read as stored and
+        // without a property of the author's run (`slotValues`).
+        const attributes = ownAttributes(value);
+        const fields = [...slotValues(value).values()];
+
+        if (attributes !== null && globalThis.__BRYTHON__.is_dict(attributes)) {
+            for (const [, one] of heldEntries(attributes)) fields.push(one);
+        }
+
+        for (const one of fields) if (stateOwned(one)) deepRead(one, new Set());
     }
 };
 

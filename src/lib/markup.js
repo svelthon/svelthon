@@ -3006,7 +3006,10 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 const callee = call(head, '', undefined, 'python');
 
                 region = value;
-                const argument = value === null ? '' : `, ${call(markup.slice(value.start, value.end), '', undefined, 'python')}`;
+                const read = value === null ? '' : call(markup.slice(value.start, value.end), '', undefined, 'python');
+                // An action's value is read through as Svelte reads it, where
+                // Svelte watches it (`watched`): the array hides it from Svelte.
+                const argument = value === null ? '' : kind === 'use' ? `, __pybridge.watched(${read})` : `, ${read}`;
 
                 region = null;
                 // The head as a thunk: read by the adapter when the directive is
