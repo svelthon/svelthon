@@ -862,13 +862,16 @@ un état dérivé depuis un module ; on exporte une fonction qui le rend.
 
 **C'est la valeur sur laquelle le module s'arrête, telle que Python la
 calcule.** Chaque instruction du niveau du module qui l'écrit, avec des
-littéraux, `__all__` lui-même et les builtins, est exécutée par Python avant le
-module : une deuxième affectation remplace la première, `+= "bc"` ajoute `b` et
+littéraux, `__all__`, leurs méthodes (`"a b".split()`) et les builtins qui ne
+font que lire, `sorted` ou `list`, est exécutée par Python avant le module, au
+build : une deuxième affectation remplace la première, `+= "bc"` ajoute `b` et
 `c`, `del __all__[0]` et `.sort()` font ce qu'ils font, et `.append()` sur un
 tuple est refusé avec l'erreur que Python lève. Ce que la source ne décide pas
 ne peut pas se lire avant que le module tourne, et est refusé plutôt qu'ignoré
 en silence : `__all__ = sorted(noms)`, une modification sous un `if`, dans une
-boucle ou dans une fonction. La liste passée ailleurs l'est aussi,
+boucle ou dans une fonction. Un attribut d'un builtin, `str.mro()`, ou écrit
+avec `_`, `().__class__`, l'est aussi : il mène d'un littéral aux classes qui
+sont derrière, dans le processus qui construit. La liste passée ailleurs aussi,
 `noms = __all__` ou `list.clear(__all__)`, puisque ce qu'on en fait ensuite
 échappe à la lecture ; `list(__all__)` en donne une copie à manipuler.
 

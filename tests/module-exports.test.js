@@ -206,6 +206,10 @@ describe('__all__ is read as the value the module ends with', () => {
         ['built from two lists', '__all__ = ["a"] + ["b"]', ['a', 'b']],
         ['computed by a builtin', '__all__ = sorted(["b", "a"])', ['a', 'b']],
         ['appended a computed name', '__all__ = ["a"]\n__all__.append("" + "b")', ['a', 'b']],
+        // A method of a value the statement made is that value's.
+        ['split from a string', '__all__ = "a b".split()', ['a', 'b']],
+        ['joined, then split', '__all__ = ", ".join(["a", "b"]).split(", ")', ['a', 'b']],
+        ['copied from a builtin\'s answer', '__all__ = sorted(["b", "a"]).copy()', ['a', 'b']],
         // The statements are run from a parse of their own, found by where they
         // stand: a docstring, which the code generator takes out of the body,
         // used to shift them by one.
@@ -260,6 +264,20 @@ describe('__all__ is read as the value the module ends with', () => {
         ['computed by a function of the module', 'def sorted(x):\n    return x\n\n__all__ = sorted(["a"])', 'sorted']
     ])('%s is refused', ([, head, name]) => {
         expect(() => plain(`${head}${BODY}`)).toThrow(`\`__all__\` is computed from \`${name}\``);
+    });
+
+    // The statements run in the compiler's own process, at build. An attribute
+    // of a builtin, or one spelled with `_`, leads from a literal to the classes
+    // behind it, and from them to what the build machine holds: each of these
+    // ran there, and is refused before it does.
+    test.for([
+        ['a builtin\'s method', '__all__ = str.mro()', 'computed from an attribute of `str`'],
+        ['a builtin\'s method, called on a literal', '__all__ = [str.upper("a")]', 'computed from an attribute of `str`'],
+        ['a literal\'s class', '__all__ = ().__class__.__subclasses__()', 'read through `__class__`'],
+        ['a class in a format', '__all__ = [f"{().__class__}"]', 'read through `__class__`'],
+        ['the list\'s own class', '__all__ = ["a"]\n__all__.append(__all__.__class__.__name__)', 'read through `__class__`']
+    ])('%s is refused', ([, head, said]) => {
+        expect(() => plain(`${head}${BODY}`)).toThrow(`\`__all__\` is ${said}`);
     });
 });
 

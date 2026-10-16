@@ -582,10 +582,31 @@ const UNSPELLED = ['Lambda', 'NamedExpr', 'ListComp', 'SetComp', 'DictComp', 'Ge
 // `UNSPELLED`. Null when it is written with literals alone, and Python's
 // answer is then the only answer. A name it binds, `x = __all__.pop()`, binds
 // it and changes nothing about the list.
+//
+// The statement runs in the compiler's own process, so an attribute is taken
+// only as a method of a value the statement made, `"a b".split()`, or of
+// `__all__`: never of a builtin itself, `str.mro()`, and never one spelled with
+// `_`, which is the way from any value to the classes behind it. That is what
+// the tree spells: a format string reads an attribute by its name,
+// `"{0.__class__}".format(1)`, where the tree holds a string, and can show
+// what it reads but call none of it. A guard on what a statement writes, not a
+// sandbox: the build runs the author's code anyway, in a prerender or a server
+// render.
 function unspelled(node, pure) {
     if (node instanceof $B.ast.Name) {
         const read = !(node.ctx instanceof $B.ast.Store);
         return read && node.id !== '__all__' && !pure(node.id) ? `computed from \`${node.id}\`` : null;
+    }
+    if (node instanceof $B.ast.Attribute) {
+        const chain = [];
+        let root = node;
+        while (root instanceof $B.ast.Attribute || root instanceof $B.ast.Subscript) {
+            if (root instanceof $B.ast.Attribute) chain.unshift(root.attr);
+            root = root.value;
+        }
+        const hidden = chain.find((attr) => attr.startsWith('_'));
+        if (hidden !== undefined) return `read through \`${hidden}\``;
+        if (root instanceof $B.ast.Name && root.id !== '__all__') return `computed from an attribute of \`${root.id}\``;
     }
     const kind = UNSPELLED.find((one) => node instanceof $B.ast[one]);
     if (kind !== undefined) return `written with a ${kind}`;
@@ -680,8 +701,9 @@ function declaredExports(ast, table, source, lineOffset = 0, src = '') {
         throw refuse(
             `svelthon — \`__all__\` is ${what}, and the export list is read from the source ` +
                 `before the module runs: a statement at the top level of the module written ` +
-                `with literals, \`__all__\` itself and the builtins is run as Python runs it, ` +
-                `and nothing else can be followed. Write the names, or drop \`__all__\` and let ` +
+                `with literals, \`__all__\`, their methods and the builtins that only read, ` +
+                `\`sorted\` or \`list\`, is run as Python runs it, and nothing else can be ` +
+                `followed. Write the names, or drop \`__all__\` and let ` +
                 `the module export its functions.`,
             source,
             node.lineno === undefined ? undefined : node.lineno + lineOffset

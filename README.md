@@ -822,13 +822,16 @@ refused, as Svelte refuses to export derived state from a module; export a
 function returning it.
 
 **It is the value the module ends with, as Python computes it.** Each statement
-at the top level of the module that writes it, spelled with literals, `__all__`
-itself and the builtins, is run by Python before the module is: a second
+at the top level of the module that writes it, spelled with literals, `__all__`,
+their methods (`"a b".split()`) and the builtins that only read, `sorted` or
+`list`, is run by Python before the module is, at build: a second
 assignment replaces the first, `+= "bc"` adds `b` and `c`, `del __all__[0]` and
 `.sort()` do what they do, and `.append()` on a tuple is refused with the error
 Python raises. What the source does not decide cannot be read before the module
 runs, and is refused rather than quietly ignored: `__all__ = sorted(names)`, a
-change under an `if`, in a loop or in a function. So is the list handed on,
+change under an `if`, in a loop or in a function. So is an attribute of a
+builtin, `str.mro()`, or one spelled with `_`, `().__class__`: it leads from a
+literal to the classes behind it, in the process that builds. So is the list handed on,
 `names = __all__` or `list.clear(__all__)`, since what is done to it next is out
 of sight; `list(__all__)` is a copy to work on.
 
