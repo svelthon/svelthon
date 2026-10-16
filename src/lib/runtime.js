@@ -9569,25 +9569,19 @@ export function bind(proto, key, get, set, source, listed = true, computed = fal
     });
 }
 
-// What Svelte makes of a value Python writes into a `bindable` prop the parent
-// did not bind: it keeps its own copy, and wraps an array or a plain object in
-// a state proxy, which a Brython list is. A proxy around a Brython object fails
-// its type checks, `descriptor '__repr__' requires a 'list' object but received
-// a 'list'`. So the write remembers what it wrote under what Svelte hands back,
-// and the read gives Python its own object again. A bound parent's setter
-// stores the value itself, and then the two are the same.
-const WRITTEN = new WeakMap();
-
-export const kept = (seen, written) => {
-    if (seen !== written && seen !== null && typeof seen === 'object') WRITTEN.set(seen, written);
-    return written;
-};
-
-export const unproxied = (value, crossed) => {
-    if (crossed != null && Object.is(value, crossed.js)) return crossed.py;
-
-    return (value !== null && typeof value === 'object' && WRITTEN.get(value)) || value;
-};
+// What a `bindable` prop holds, read by Python: the value Python wrote when the
+// prop holds what that write handed over (`handOver`), and whatever it holds
+// otherwise. A bound parent's setter decides what the prop holds, the value
+// refused and the old one kept, or another put in its place, and the child
+// reads that, as a child in Svelte does.
+//
+// Nothing else is given back. The write remembered what it wrote under
+// whatever the prop held after it, for the day Svelte wrapped a Brython list in
+// a state proxy, and so read the parent's decision as the child's proposal. A
+// list, a dict or an instance crosses as its view now, which Svelte does not
+// wrap, and is itself again; a JavaScript object Python wrote reads back as
+// Svelte's proxy of it, as it does in a child written in Svelte.
+export const unproxied = (value, crossed) => (crossed != null && Object.is(value, crossed.js) ? crossed.py : value);
 
 // **A scalar Python writes into a `bindable` prop crosses as JavaScript's own**,
 // because the parent may be JavaScript: a float handed to it as the Brython

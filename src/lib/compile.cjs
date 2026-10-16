@@ -1549,7 +1549,6 @@ const RUNTIME = {
     NONE: '__NONE',
     helpers: '__helpers',
     unsubscribe: '__unsubscribe',
-    kept: '__kept',
     unproxied: '__unproxied',
     handOver: '__handOver',
     pythonModule: '__pythonModule',
@@ -3118,7 +3117,7 @@ function preamble(c) {
             'plainScalar', 'storeMember', 'invoke',
             ...(c.store ? ['pythonModule'] : SUBSCRIBING(c) ? ['unsubscribe'] : []),
             ...(c.store && c.funcs.some((f) => c.published(f.name)) ? ['liveExport'] : []),
-            ...(c.bindables.length ? ['kept', 'unproxied', 'handOver'] : []),
+            ...(c.bindables.length ? ['unproxied', 'handOver'] : []),
             // Only an effect and `on_mount` hand a value back to be called
             // later, so only a component with one needs the name.
             ...(c.effects.length || c.lifecycle('on_mount') ? ['pyTeardown'] : []),
@@ -3358,14 +3357,14 @@ function authorBindings(c) {
                 ` ${local(n)} = __written; ${bump(n)}(); },` +
                 ` () => ${pick(n)}());`
         ),
-        // What Svelte hands back for a write it kept for itself may be its own
-        // proxy of it: `kept` and `unproxied` give Python its object again. A
-        // scalar goes up as JavaScript's own, its original kept beside it
-        // (`handOver`).
+        // What Python writes goes up as JavaScript's own, a scalar its number
+        // and a container its view, its original kept beside it (`handOver`),
+        // which `unproxied` gives Python again while the prop still holds what
+        // the write handed over; a parent's setter may decide otherwise.
         ...c.bindables.map(
             (b) =>
                 `__bind(__proto, '${b}', () => (${rev(b)}, __follow(__pyBind(__unproxied(${b}, ${crossed(b)})))),` +
-                ` (${NEXT_VALUE}) => { if (!__initialising || ${b} === undefined) { const __written = __track(${NEXT_VALUE}, ${bump(b)}${c.store ? '' : `, ${SUBS}`}); ${crossed(b)} = __handOver(__written, (__crossing) => { ${b} = __crossing; }); __kept(${b}, __written); } }, () => ${b});`
+                ` (${NEXT_VALUE}) => { if (!__initialising || ${b} === undefined) { const __written = __track(${NEXT_VALUE}, ${bump(b)}${c.store ? '' : `, ${SUBS}`}); ${crossed(b)} = __handOver(__written, (__crossing) => { ${b} = __crossing; }); } }, () => ${b});`
         ),
         // Reading the revision alongside the value is what registers the
         // dependency: an in-place mutation then invalidates every reader,
