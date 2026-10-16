@@ -248,8 +248,8 @@ greeting = "Hello"     # internal state, invisible to the parent
 
 A prop is readable while the module body runs, a parent update flows through to
 Python, and a required prop that was not passed reads as `None`, not
-`undefined`. Writing to a prop from Python only takes effect when the parent
-supplies nothing, which is Svelte's own rule for non-`$bindable` props.
+`undefined`. Writing to a prop from Python overrides it until the parent passes
+a new value, which is Svelte's own rule for non-`$bindable` props.
 
 A Python parent hands a Python child the value itself, a `float` subclass with
 its class, and a JavaScript child JavaScript's number or string. The compiler

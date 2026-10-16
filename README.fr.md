@@ -250,8 +250,9 @@ greeting = "Bonjour"   # état interne, invisible du parent
 
 Un prop est lisible dès l'exécution du corps du module, une mise à jour du
 parent traverse jusqu'au Python, et un prop requis non fourni vaut `None`, pas
-`undefined`. Écrire dans un prop depuis Python n'a d'effet que si le parent n'en
-fournit pas : c'est la règle de Svelte pour les props non `$bindable`.
+`undefined`. Écrire dans un prop depuis Python le remplace jusqu'à ce que le
+parent passe une nouvelle valeur : c'est la règle de Svelte pour les props non
+`$bindable`.
 
 Un parent Python donne à un enfant Python la valeur elle-même, une sous-classe
 de `float` avec sa classe, et à un enfant JavaScript le nombre ou la chaîne de
