@@ -3468,11 +3468,32 @@ const mutableBytes = (value) => ownType(value).tp_mro.includes(_b_.bytearray);
 // The bytes each copy was made of, for the way back (`bytesIn`).
 const BYTES_OF = new WeakMap();
 
+// The way back of every object crossing from JavaScript is the engine's own
+// lookup (`PYOBJ_MAP`), a method's result among them, which `inbound` never
+// sees. A copy of bytes is told there by what it holds now (`bytesIn`): the
+// copy was registered as the bytes it was made of, and a method that wrote
+// into it handed those back unchanged. Put in place at the first copy, so a
+// program that hands JavaScript no bytes pays nothing at that lookup, which
+// every object crossing asks.
+let bytesLookedUp = false;
+
+const lookUpBytes = () => {
+    if (bytesLookedUp) return;
+
+    bytesLookedUp = true;
+
+    const get = WeakMap.prototype.get;
+
+    globalThis.__BRYTHON__.PYOBJ_MAP.get = function (key) {
+        return BYTES_OF.has(key) ? bytesIn(key) : get.call(this, key);
+    };
+};
+
 const bytesOut = (value) => {
     const out = Uint8Array.from(value.source);
 
+    lookUpBytes();
     BYTES_OF.set(out, value);
-    if (!mutableBytes(value)) globalThis.__BRYTHON__.PYOBJ_MAP.set(out, value);
 
     return out;
 };
@@ -3481,7 +3502,7 @@ const bytesOut = (value) => {
 // two hold the same bytes, and a new one of the same kind, bytes or a
 // `bytearray`, of what the copy holds once either moved on: JavaScript writes
 // into a `Uint8Array`, and Python appends to a `bytearray`. Undefined for any
-// other value. The engine's own lookup (`PYOBJ_MAP`) follows the newest bytes.
+// other value. The engine's own lookup asks it too (`lookUpBytes`).
 const bytesIn = (value) => {
     const original = BYTES_OF.get(value);
 
@@ -3495,7 +3516,6 @@ const bytesIn = (value) => {
     const fresh = (mutable ? _b_.bytearray : _b_.bytes).$factory(globalThis.__BRYTHON__.$list(Array.from(value)));
 
     BYTES_OF.set(value, fresh);
-    if (!mutable) globalThis.__BRYTHON__.PYOBJ_MAP.set(value, fresh);
 
     return fresh;
 };

@@ -35,6 +35,18 @@ test('and come back to Python as the bytes they hold', () => {
     expect(python.shown(python.give())).toBe("bytes:b'ab':True");
 });
 
+// And whichever way the function is called. A method's result crosses back by
+// the engine's own lookup, where the copy was registered as the bytes it was
+// made of: a library called as an object's method handed back the bytes
+// unwritten, `b'ab'` where it wrote `b'xb'`. The witness is the same function
+// imported by name.
+test('bytes a JavaScript method wrote into come back as written', () => {
+    const [imported, method, echoed, data] = python.written_back();
+
+    expect(method).toBe(imported);
+    expect([imported, echoed, data]).toEqual(["bytes:b'xb':False", "bytes:b'ab':True", "b'ab'"]);
+});
+
 // Taken again once, when JavaScript has the hand back, and not at each change:
 // a copy per `append` made filling an exported buffer quadratic, 2.7 s for
 // 16 000 bytes where the same loop on a local one takes milliseconds.

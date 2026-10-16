@@ -1,7 +1,8 @@
 # bytes and bytearray at every door: exported, handed to a JavaScript
 # function, written into a JavaScript object, returned, and handed back.
-__js__ = {"./crossing_bytes.js": ["blob_size", "decoded", "keep", "kept"]}
-__all__ = ["data", "buffer", "box", "handed", "give", "same", "back", "grow", "shown", "stream", "fill", "fill_local"]
+__js__ = {"./crossing_bytes.js": ["blob_size", "decoded", "keep", "kept", "mutate", "library"]}
+__all__ = ["data", "buffer", "box", "handed", "give", "same", "back", "grow", "shown", "stream", "fill", "fill_local",
+           "written_back"]
 
 data = b"ab"
 buffer = bytearray(b"cd")
@@ -51,3 +52,9 @@ def fill_local(n):
 # What Python receives: its kind, its bytes, and whether it is `data` itself.
 def shown(value):
     return f"{type(value).__name__}:{value!r}:{value is data}"
+
+
+# The same function imported and called as a method, writing into the copy it
+# is handed, and a method handing the copy back untouched.
+def written_back():
+    return [shown(mutate(data)), shown(library.mutate(data)), shown(library.echo(data)), repr(data)]
