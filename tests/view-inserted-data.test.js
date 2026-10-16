@@ -75,3 +75,65 @@ test('and only a plain object is taken in: an instance keeps its identity', () =
 
     expect(kept(python.values)).toEqual(kept(native.values));
 });
+
+// A proxy of anyone's but Svelte's is no state of Svelte's, whatever its
+// handlers refuse: it is taken in as data, as Svelte makes a proxy of it, and a
+// write to it is followed. It was told by asking it to take its own prototype
+// back, which a handler refusing that answered for Svelte, and which ran a
+// handler Svelte never runs.
+test.for([[true], [false]])('a proxy refusing a prototype (%s) is taken in as data, and nothing of it is run, as in Svelte', ([refuses]) => {
+    const taken = (Component) => {
+        const { values, shown } = mounted(Component);
+        let asked = 0;
+        const row = new Proxy(
+            { n: 1 },
+            {
+                setPrototypeOf() {
+                    asked += 1;
+                    return !refuses;
+                }
+            }
+        );
+
+        values.rows.push(row);
+        const same = values.rows.at(-1) === row;
+        flushSync();
+        values.rows.at(-1).n = 9;
+        flushSync();
+
+        return [same, values.rows.at(-1).n, shown().rows, asked];
+    };
+
+    expect(taken(ViewInsertedData)).toEqual(taken(ViewInsertedDataNative));
+    expect(taken(ViewInsertedData)).toEqual([false, 9, '9', 0]);
+});
+
+// An object a Svelte state already owns, put in, is that object, as Svelte
+// keeps a proxy of its own: copied into a dict, it stopped being the model it
+// was shared as, and a write through its owner never reached the page. Put
+// in a list, in a dict, and inside a new object; each read as identity, model
+// and page.
+test('an object a Svelte state owns stays that object, as in Svelte', () => {
+    const shared = (Component) => {
+        const owner = mounted(ViewInsertedDataNative).values.record.nested;
+        const child = mounted(Component);
+        const values = child.values;
+
+        values.rows.push(owner);
+        const listed = values.rows.at(-1) === owner;
+        values.record.nested = owner;
+        const keyed = values.record.nested === owner;
+        values.rows.push({ inner: owner });
+        const inner = values.rows.at(-1).inner === owner;
+        values.rows.push(owner);
+        flushSync();
+
+        owner.n = 9;
+        flushSync();
+
+        return [listed, keyed, inner, values.rows.at(-1).n, child.shown()];
+    };
+
+    expect(shared(ViewInsertedData)).toEqual(shared(ViewInsertedDataNative));
+    expect(shared(ViewInsertedData)).toEqual([true, true, true, 9, { rows: '9', record: '9' }]);
+});

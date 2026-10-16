@@ -3137,14 +3137,17 @@ function preamble(c) {
             .concat(c.lifecycle('on_mount') || c.lifecycle('on_destroy') ? ['untrack as __untrack'] : [])
             .concat(c.lifecycle('on_destroy') || releases(c) ? ['onDestroy as __onDestroy'] : [])
             .join(', ')} } from 'svelte';`,
-        // The two questions the runtime asks of Svelte, answered by runes: a
+        // The three questions the runtime asks of Svelte, answered by runes: a
         // plain module has none. Whether a reaction is reading
-        // (`inReaction` in the runtime), and whether a write would be refused
+        // (`inReaction` in the runtime), whether a write would be refused
         // here, asked by a write of the value a state already holds, which
-        // Svelte checks and which changes nothing (`refusal`).
+        // Svelte checks and which changes nothing (`refusal`), and what marks a
+        // state of Svelte's own, which `$state` looks for in the probe it is
+        // handed (`stateOwned`).
         `__pybridge.tracking(() => $effect.tracking());`,
         `let __unchanged = $state.raw(0);`,
         `__pybridge.refusing(() => { __unchanged = 0; });`,
+        `let __stateProbe = $state(__pybridge.stateProbe());`,
         ``
     ];
 }

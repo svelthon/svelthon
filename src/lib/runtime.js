@@ -787,6 +787,12 @@ export const __pybridge = {
         refusal = write;
     },
 
+    // What a component or a store hands Svelte's `$state` as it loads, so the
+    // runtime learns the mark of a state of Svelte's (`stateOwned`).
+    stateProbe() {
+        return stateProbe();
+    },
+
     // The rows an `{#each}` walks, and whether they are still the ones its
     // block holds. The block runs again on a change of the rows themselves, a
     // row added, removed, moved or replaced, and not on a change inside a row,
@@ -4371,14 +4377,52 @@ const INDEX = /^(?:0|[1-9]\d*)$/;
 // into its state. Anything else crosses as a binding's value does: a view handed
 // back is its container again, and a class instance, a Date or a DOM node keeps
 // its identity.
+//
+// And an object a Svelte state already owns is kept, at any depth (`live`), as
+// Svelte keeps a proxy of its own put into its state: copied, a model shared by
+// two components stopped being one, and a write made through its owner never
+// reached the Python reader.
 const entering = (given) =>
     given !== null &&
     typeof given === 'object' &&
     !VIEWED.has(given) &&
     quietPyType(given) === undefined &&
     (Array.isArray(given) || plainObject(given))
-        ? pyData(given)
+        ? pyData(given, undefined, true)
         : pyBind(given);
+
+// Svelte's mark of a state of its own, which it does not publish: the key its
+// `proxy` looks for first in what it is handed, found as it looks, by a probe a
+// component or a store hands it in a rune as it loads (`stateProbe`). Until
+// one has, an object written into a view is copied.
+let STATE;
+
+const stateProbe = () =>
+    STATE === undefined
+        ? new Proxy(
+              {},
+              {
+                  has(target, key) {
+                      if (STATE === undefined && typeof key === 'symbol') STATE = key;
+                      return Reflect.has(target, key);
+                  }
+              }
+          )
+        : undefined;
+
+// Whether a Svelte state owns `value`, asked as Svelte asks it of what is put
+// into its state: whether the value holds its mark. Asked of the object and
+// nothing else: a guess from how a proxy behaves took a proxy of anyone's for
+// Svelte's, and ran a handler of the author's that Svelte never runs.
+const stateOwned = (value) => {
+    if (STATE === undefined) return false;
+
+    try {
+        return STATE in value;
+    } catch {
+        return false;
+    }
+};
 
 // The counter Brython keeps on a dict and moves at each insertion and deletion
 // of a key, a symbol of its own (`py_dict.js`), found once by its description:
@@ -6210,7 +6254,7 @@ function pyDict(entries) {
 // `.items()` and `isinstance(x, dict)`. Without it, `.get` and `.keys` raise
 // AttributeError while `.items` silently returns the *value* of a key spelled
 // "items", a failure whose shape depends on the data.
-export function pyData(value, made) {
+export function pyData(value, made, live = false) {
     const $B = globalThis.__BRYTHON__;
 
     if (value === undefined || value === null) return NONE;
@@ -6220,6 +6264,9 @@ export function pyData(value, made) {
     // A view a JavaScript reader was handed is its container again, at any
     // depth: `{item: values.original}` holds the dict itself, not a copy of it.
     if (VIEWED.has(value)) return pyBind(value);
+
+    // Written into a view, an object a state owns is itself (`entering`).
+    if (live && stateOwned(value)) return pyBind(value);
 
     // A Brython list and a Brython tuple are JavaScript arrays too, told apart
     // from a foreign one by the `ob_type` they carry, and kept as they are: a
@@ -6245,7 +6292,7 @@ export function pyData(value, made) {
         const list = _b_.list.$factory([]);
 
         made.set(value, list);
-        for (const one of value) list.push(pyData(one, made));
+        for (const one of value) list.push(pyData(one, made, live));
 
         return list;
     }
@@ -6283,7 +6330,7 @@ export function pyData(value, made) {
         const dict = _b_.dict.$factory();
 
         made.set(value, dict);
-        for (const [key, one] of Object.entries(value)) $B.$setitem(dict, key, pyData(one, made));
+        for (const [key, one] of Object.entries(value)) $B.$setitem(dict, key, pyData(one, made, live));
 
         return dict;
     }
