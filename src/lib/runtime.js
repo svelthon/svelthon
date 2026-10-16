@@ -1102,9 +1102,10 @@ export const __pybridge = {
     },
 
     // The same props handed to a child written in Python, each the Python value
-    // itself, as one written by name is handed to it.
+    // itself, as one written by name is handed to it: None among them is None,
+    // and not the absence that reads the child's default.
     spreadPython(value) {
-        return spreadOf(value, __pybridge.bound);
+        return spreadOf(value, (one) => (one === NONE ? NONE : __pybridge.bound(one)));
     },
 
     // A spread on an element: each key is the attribute it becomes, read the
@@ -8192,6 +8193,11 @@ const COMPARED = {
     choice
 };
 
+// What Python reads again is handed back as it is, None included. Called from
+// JavaScript, a Python function gives `undefined` for None, which a Python
+// child handed it reads as an absence: its default, in place of None.
+const keptPython = (value) => (value === undefined ? NONE : value);
+
 //
 // `rendering` counts the template expressions running: whatever Python runs
 // inside one, a lambda or a generator it drives, runs while the template
@@ -8214,7 +8220,7 @@ export const pyExpression = (call, where, arity, kept = false, writes = false) =
                     }
                 },
                 where,
-                kept === true ? null : (COMPARED[kept] ?? pyNumbers)
+                kept === true ? keptPython : (COMPARED[kept] ?? pyNumbers)
             ),
         nameOf(where),
         arity

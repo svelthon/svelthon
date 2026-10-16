@@ -65,7 +65,7 @@ test.for([
 // string out of the BMP was never `===` to the child's write of the same value,
 // which then hid the parent's next one. The parent passes a value, then in one
 // batch another, and the child writes the first again.
-const KINDS = ['float', 'int', 'str', 'astral', 'big', 'true'];
+const KINDS = ['float', 'int', 'str', 'astral', 'big', 'true', 'none'];
 
 const written = (Host, kind) => {
     const target = document.body.appendChild(document.createElement('div'));
