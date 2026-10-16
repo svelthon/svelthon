@@ -137,3 +137,24 @@ test('an object a Svelte state owns stays that object, as in Svelte', () => {
     expect(shared(ViewInsertedData)).toEqual(shared(ViewInsertedDataNative));
     expect(shared(ViewInsertedData)).toEqual([true, true, true, 9, { rows: '9', record: '9' }]);
 });
+
+// Every own enumerable property of an object put in is taken, a symbol's
+// included, as JavaScript's spread and Svelte's proxy take them: a library's
+// metadata kept under a symbol was lost, at the root and one level down, put
+// in a list or in a dict.
+test('a property under a symbol is taken in with the others, as in Svelte', () => {
+    const metadata = Symbol('metadata');
+    const kept = (Component) => {
+        const { values } = mounted(Component);
+
+        values.rows.push({ n: 2, [metadata]: 'kept' });
+        const root = values.rows.at(-1);
+        values.record.nested = { n: 2, child: { [metadata]: 'kept' } };
+        const nested = values.record.nested.child;
+
+        return [root[metadata], Object.hasOwn(root, metadata), nested[metadata], Object.hasOwn(nested, metadata), root.n];
+    };
+
+    expect(kept(ViewInsertedData)).toEqual(kept(ViewInsertedDataNative));
+    expect(kept(ViewInsertedData)).toEqual(['kept', true, 'kept', true, 2]);
+});

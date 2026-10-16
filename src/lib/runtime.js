@@ -6330,7 +6330,13 @@ export function pyData(value, made, live = false) {
         const dict = _b_.dict.$factory();
 
         made.set(value, dict);
-        for (const [key, one] of Object.entries(value)) $B.$setitem(dict, key, pyData(one, made, live));
+
+        // Every own enumerable property, as JavaScript's spread and Svelte's
+        // proxy take them, a symbol's included: `Object.entries` reads the
+        // strings alone, and a library's metadata under a symbol was lost.
+        for (const key of Reflect.ownKeys(value)) {
+            if (Object.prototype.propertyIsEnumerable.call(value, key)) $B.$setitem(dict, key, pyData(value[key], made, live));
+        }
 
         return dict;
     }
