@@ -157,8 +157,8 @@ const MATRIX = {
     plainData: {
         none: 'null', true: 'true', int: '7', big: '1180591620717411303424n', 'float-int': '15', float: '0.5',
         str: '"a"', astral: '"😀"', 'str-sub': '"t"', bytes: 'Uint8Array', list: '[1, [2]]', tuple: '[1, 2]',
-        dict: '{2: "b", a: 1}', set: 'python set', frozenset: 'python frozenset', instance: '{n: 1}',
-        function: 'python function', method: '{}', class: 'python type', builtin: PYTHON_REFUSED
+        dict: '{2: "b", a: 1}', set: 'Set', frozenset: 'Set', instance: '{n: 1}',
+        function: 'function', method: 'function', class: 'python type', builtin: 'function'
     },
     plainScalar: {
         none: 'null', true: 'true', int: '7', big: '1180591620717411303424n', 'float-int': '15', float: '0.5',
@@ -300,17 +300,15 @@ test.for(Object.keys(MATRIX))('the %s door crosses each kind of value as it does
     expect(row(door)).toEqual(MATRIX[door]);
 });
 
-// `to_js` against its witness, the view it copies: the kinds where the copy is
-// not what JavaScript reads through the view. A set stays a Python set where
-// the view is a `Set`, a bound method becomes `{}` where the view is a
-// function, and a function stays the engine's own, which hands a callback every
-// argument, where the view's hands it only those it declares.
-const TO_JS_APART = ['set', 'frozenset', 'function', 'method', 'builtin'];
-
-test('to_js differs from the view it copies on these kinds, and these alone', () => {
+// `to_js` against its witness, the view it copies: on every kind the copy is
+// what JavaScript reads through the view, a set a `Set` and a callable a
+// function that takes the arguments it declares. A set stayed a Python set, a
+// bound method became `{}`, and a function stayed the engine's own, which took
+// every argument JavaScript passed.
+test('to_js is a copy of what the view reads, on every kind', () => {
     const copy = row('plainData');
     const view = row('view-read');
-    const unviewed = (text) => text.replaceAll('view ', '');
+    const copied = (text) => text.replaceAll('view ', '').replace('SetView', 'Set');
 
-    expect(PY_KINDS.filter((kind) => unviewed(view[kind]) !== copy[kind])).toEqual(TO_JS_APART);
+    expect(PY_KINDS.filter((kind) => copied(view[kind]) !== copy[kind])).toEqual([]);
 });

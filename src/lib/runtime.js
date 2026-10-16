@@ -101,6 +101,7 @@ export {
 
 // What the crossing borrows of this module until it moves there too.
 lent.functionIn = functionIn;
+lent.handler = pyHandler;
 lent.seq = (value) => __pybridge.seq(value);
 lent.schedule = scheduleAsync;
 

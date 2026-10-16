@@ -163,13 +163,19 @@ export const plainScalar = (value) => {
 export const host = { owns: () => false, adopt: null };
 
 // What the rest of the runtime still lends the crossing: how a function
-// crosses in (`functionIn`), the pair a Python write is handing over right
-// now (`handed`, which `handOver` sets), the number and the value it was
-// written as, the rows a Python iterable yields as the template walks them
-// (`seq`), and how a coroutine is run (`schedule`). Alone, a function crosses
-// as itself and the rows are Python's own iteration, followed by nothing; a
-// coroutine has nothing to run it.
-export const lent = { functionIn: (value) => value, handed: null, seq: (value) => iterated(value), schedule: null };
+// crosses in (`functionIn`) and out (`handler`), the pair a Python write is
+// handing over right now (`handed`, which `handOver` sets), the number and the
+// value it was written as, the rows a Python iterable yields as the template
+// walks them (`seq`), and how a coroutine is run (`schedule`). Alone, a
+// function crosses as itself both ways and the rows are Python's own
+// iteration, followed by nothing; a coroutine has nothing to run it.
+export const lent = {
+    functionIn: (value) => value,
+    handler: (value) => value,
+    handed: null,
+    seq: (value) => iterated(value),
+    schedule: null
+};
 
 // Then the shapes of what crosses: a bag of keys, an instance of the author's,
 // a class's declarations, an object of getters and setters, a container, and
@@ -1101,14 +1107,12 @@ export const crossedAs = (coroutine, policy, convert) => {
 // symbol-keyed internals (`Symbol(OB_TYPE)`) that its serialiser refuses
 // outright. So the boundary converts: Python containers become plain JavaScript
 // data, which is the only shape anything outside Python can read anyway.
-// `adapt` is the third caller-said rule, beside the two `seen` carries, and only
-// one caller passes it: the arguments of a JavaScript call. A Python callable is
-// the one value JavaScript genuinely cannot use, and `outbound` wrapped the ones
-// handed over *directly* while this walk handed the ones inside a container
-// across untouched. `direct(done)` worked and `nested({"done": done})` raised on
-// a positional argument the author never declared, for the same function. It is
-// a parameter and not a change of policy because the other five consumers must
-// not get it: `tojson` has no use for a wrapper, and JSON cannot hold one.
+// `adapt` is the third caller-said rule, beside the two `seen` carries: what a
+// callable, and under the serialiser's rule a value with no JSON, becomes.
+// With none, a callable crosses as the view hands it over, adapted
+// (`lent.handler`), so `direct(done)` and `nested({"done": done})` call it
+// alike; the arguments of a JavaScript call pass a rule of their own, and
+// `tojson` its refusal, since JSON cannot hold a call.
 // A JavaScript object's turn in `JSON.stringify`, which is what the serialiser
 // does there: its `toJSON` read once and called with the object and the key,
 // then what came of it written. A primitive, a raw text, a boxed scalar and a
@@ -1218,9 +1222,17 @@ function turn(value, key, seen, adapt, chain) {
     return copy;
 }
 
+// The builtin containers, of which no instance is callable.
+const CONTAINERS = new Set([_b_.list, _b_.tuple, _b_.dict, _b_.set, _b_.frozenset, _b_.bytes, _b_.bytearray]);
+
 export function plainData(value, seen, adapt) {
     if (value === undefined || value === null || value === NONE) return null;
-    if (typeof value === 'function') return adapt === undefined ? value : adapt(value);
+
+    // A callable crosses as the view hands one over, adapted (`lent.handler`),
+    // unless the caller has a rule of its own (`adapt`): a copy is what
+    // JavaScript reads through the view, and a raw function took every
+    // argument JavaScript passed where the view's took those it declares.
+    if (typeof value === 'function') return adapt === undefined ? lent.handler(value) : adapt(value);
 
     // A view handed back is its container again, as at every other door: a
     // value a Python function returned and JavaScript hands to `tojson` is the
@@ -1247,9 +1259,8 @@ export function plainData(value, seen, adapt) {
     }
 
     // A callable that `typeof` calls an object (a bound method, an instance
-    // whose class defines `__call__`), and only when someone asked for
-    // adaptation: with no rule there is nothing to do with it, and the walk
-    // below is what it has always had.
+    // whose class defines `__call__`), under a caller's rule; with none, it is
+    // asked below, of the values that can be one.
     if (adapt !== undefined && callable(value)) return adapt(value);
 
     // A **symbol**, under the serialiser's rule only, and the last silent loss
@@ -1354,7 +1365,14 @@ export function plainData(value, seen, adapt) {
         }
     }
 
-    if (javascriptOwn(value)) return value;
+    const type = quietPyType(value);
+
+    if (type === undefined) return value;
+
+    // A callable as the view hands one over, adapted: walked as data, a bound
+    // method came out as `{}`. Not asked of a builtin container, which is never
+    // one: asked of each, it doubled the time of a copy.
+    if (!CONTAINERS.has(type) && callable(value)) return lent.handler(value);
     if (pyBytes(value)) return bytesOut(value);
 
     const made = seen ?? new WeakMap();
@@ -1435,6 +1453,11 @@ function branch(value, seen, shell, adapt) {
     // level; this is the same decision one level down, where a class sits in a
     // dict a `load()` returns or in a list a component holds.
     if (pyClass(value)) return value;
+
+    // A set is copied as the `Set` its view reads as, each member copied in
+    // turn, and a frozenset too, which JavaScript has no frozen kind of. Handed
+    // on as the Python object, it was no set to JavaScript.
+    if (isSet(value)) return new Set(Array.from(iterated(value), (one) => plainData(one, seen, adapt)));
 
     // Anything of a class of its own is not ours to flatten: a Response, a URL,
     // a Date, a Map, a Promise: a Python `load()` may hand any of those straight
