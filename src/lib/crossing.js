@@ -166,8 +166,10 @@ export const host = { owns: () => false, adopt: null };
 // crosses in (`functionIn`), the pair a Python write is handing over right
 // now (`handed`, which `handOver` sets), the number and the value it was
 // written as, the rows a Python iterable yields as the template walks them
-// (`seq`), and how a coroutine is run (`schedule`).
-export const lent = { functionIn: (value) => value, handed: null, seq: null, schedule: null };
+// (`seq`), and how a coroutine is run (`schedule`). Alone, a function crosses
+// as itself and the rows are Python's own iteration, followed by nothing; a
+// coroutine has nothing to run it.
+export const lent = { functionIn: (value) => value, handed: null, seq: (value) => iterated(value), schedule: null };
 
 // Then the shapes of what crosses: a bag of keys, an instance of the author's,
 // a class's declarations, an object of getters and setters, a container, and
