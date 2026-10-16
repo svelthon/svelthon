@@ -81,6 +81,16 @@ function closingPair(source, start) {
     return -1;
 }
 
+// `text` without the groups that hold all of it: `((rows))` is `rows`, and
+// `(a), (b)` stays as it is.
+function ungrouped(text) {
+    let inside = text.trim();
+
+    while (inside.startsWith('(') && closingPair(inside, 0) === inside.length - 1) inside = inside.slice(1, -1).trim();
+
+    return inside;
+}
+
 // Walk `text` at depth zero, ignoring anything inside a string, a bracket or a
 // parenthesis. Used to find where an expression ends (a comma between two
 // arguments, or the `then` of an await block) without parsing Python.
@@ -221,9 +231,7 @@ const LOOSER = new RegExp(
 );
 
 function calledAtTop(expression) {
-    let text = expression.trim();
-
-    while (text.startsWith('(') && closingPair(text, 0) === text.length - 1) text = text.slice(1, -1).trim();
+    const text = ungrouped(expression);
 
     let top = '';
     let last = -1;
@@ -810,6 +818,15 @@ const RECEIVED = '__pybridge.received';
 // What a snippet's announcement is held under, numbered per snippet, since a
 // snippet inside another reads the outer one's parameters too.
 const SNIPPET_FRAME = '__snippet_';
+
+// What a `{@debug}` hands Svelte's under each name, numbered per name.
+const DEBUGGED = '__debugged_';
+
+// The whitespace from where it is asked for.
+const SPACE_AT = /\s*/y;
+
+// A `{@debug}` that names something, the one this pass rewrites.
+const NAMED_DEBUG = /^\{\s*@debug\s+[^\s}]/;
 
 // The plain parameter Svelte hands a snippet's argument by, one per position,
 // which the snippet takes apart itself (`snippetParameters`).
@@ -2260,6 +2277,9 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     // them, scope by scope.
     const snippets = new Set([...seed.values()].flat());
     let snippetCount = 0;
+    let debugCount = 0;
+    // The blocks of a run of `{@debug}` tags, held for the last one of it.
+    let debugHeld = '';
 
     // The tag being read, so that its closing `>` knows what it closed, and
     // what is written after that `>`.
@@ -3291,7 +3311,8 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
             continue;
         }
 
-        const end = closingBrace(markup, index);
+        // Moved past what a `{@debug}` takes with it, the whitespace after it.
+        let end = closingBrace(markup, index);
         if (end === -1) {
             if (swallowed(markup, index)) {
                 region = { start: index + 1, end: index + 1 };
@@ -3508,11 +3529,69 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                     ? markup.slice(index, end + 1)
                     : `{@render ${rendered}(${arguments_(found.args).map(given).join(', ')})}`;
             } else if (written !== null && written.name === 'debug') {
-                // `{@debug}` takes names rather than an expression, and the
-                // names it takes are the JavaScript ones the compiler emits.
-                // The only tag that stands alone, so it is the only one here
-                // that does not ask for something after its keyword.
-                out += markup.slice(index, end + 1);
+                // `{@debug}` takes names rather than an expression. The only
+                // tag that stands alone, so it is the only one here that does
+                // not ask for something after its keyword, and alone it is
+                // Svelte's.
+                //
+                // Each name is read as the template reads it, by Python: as
+                // Python spells it, `ﬁeld` being `field`, and through the reads
+                // that follow a list or a dict changed in place, which the cell
+                // under the name does not see. What Svelte's tag is handed is a
+                // copy made at each read (`debugged`), so a change in place is
+                // a new value to it, and it logs again, under the name the
+                // author wrote: an inner block names each copy so, once.
+                //
+                // The names are what Svelte's grammar reads: one expression,
+                // its items when it is a sequence, and each a name, grouped
+                // or not, so `{@debug (rows)}` and `{@debug (a, b)}` name rows,
+                // a and b.
+                const names = arguments_(ungrouped(written.rest)).map(ungrouped);
+                const named = [...new Set(names)];
+
+                if (!written.rest.trim() || !names.every((one) => DECLARED_NAME.test(one))) {
+                    out += debugHeld + markup.slice(index, end + 1);
+                    debugHeld = '';
+                } else {
+                    const held = named.map(() => `${DEBUGGED}${debugCount++}`);
+                    const block =
+                        `{#if true}` +
+                        named.map((one, at) => `{@const ${held[at]} = __pybridge.debugged(${call(one, '', undefined, 'python')})}`).join('') +
+                        `{#if true}` +
+                        named.map((one, at) => `{@const ${one} = ${held[at]}}`).join('') +
+                        `{@debug ${names.join(', ')}}{/if}{/if}`;
+
+                    // The block renders nothing, as the tag does, but Svelte
+                    // trims the whitespace beside a tag that renders nothing
+                    // and keeps the whitespace beside a block. So the block
+                    // touches the next node, across the whitespace after the
+                    // tag, or, at the end of what holds it, the one before,
+                    // across the whitespace written: the whitespace is then
+                    // where Svelte would have trimmed or kept it. A run of
+                    // tags hands its blocks on to the last one, so no
+                    // whitespace stands between them.
+                    SPACE_AT.lastIndex = end + 1;
+                    const space = SPACE_AT.exec(markup)[0];
+                    const next = end + 1 + space.length;
+                    const closes =
+                        next >= markup.length || markup.startsWith('{/', next) || markup.startsWith('{:', next) || markup.startsWith('</', next);
+                    const blocks = debugHeld + block;
+
+                    debugHeld = '';
+
+                    if (NAMED_DEBUG.test(markup.slice(next, next + 64))) {
+                        out += space;
+                        debugHeld = blocks;
+                        end = next - 1;
+                    } else if (closes) {
+                        let kept = 0;
+                        while (kept < out.length && /\s/.test(out[out.length - 1 - kept])) kept += 1;
+                        out = out.slice(0, out.length - kept) + blocks + out.slice(out.length - kept);
+                    } else {
+                        out += space + blocks;
+                        end = next - 1;
+                    }
+                }
             } else if (/^@const\s/.test(trimmed) && DECLARATION_KEYWORD.test(trimmed.slice(1))) {
                 // Svelte 5's own spelling of a declaration in a block, which
                 // the template rune replaces: said, rather than listed as a

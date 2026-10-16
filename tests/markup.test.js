@@ -830,10 +830,10 @@ describe('{@render}', () => {
         );
     });
 
-    // The names it takes are the JavaScript ones the compiler emits, not Python
-    // expressions.
-    test('{@debug} crosses unchanged', () => {
-        expect(rewrite('{@debug count}').out).toBe('{@debug count}');
+    // Alone it is Svelte's, and crosses unchanged; the names it takes are read
+    // by Python, which `debug-tag.test.js` runs.
+    test('{@debug} alone crosses unchanged', () => {
+        expect(rewrite('{@debug}').out).toBe('{@debug}');
     });
 });
 

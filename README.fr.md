@@ -75,7 +75,7 @@ reste de cette configuration et ce que chaque ligne apporte.
 npm install
 npm run dev          # la démo, sous /demo/
 
-npm test             # 1 909 tests : sémantique, props, réactivité, surface Svelte
+npm test             # 1 910 tests : sémantique, props, réactivité, surface Svelte
 npm run test:quiet   # la sortie de la suite : un run vert ne doit rien dire
 npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
@@ -1160,7 +1160,9 @@ la position ne suffit plus : `map(fn, *iterables)`, `filter(fn, it)`,
 l'interdit depuis un `$inspect` comme depuis un `$derived`, ce qui est la raison
 pour laquelle un journal journalise ailleurs.
 
-`{@debug user}` en est le pendant dans le balisage, et il est porté.
+`{@debug user}` en est le pendant dans le balisage, et il est porté : chaque nom
+est lu comme Python le lit, et une liste ou un dict modifiés sur place sont
+journalisés de nouveau, comme Svelte journalise un état qu'il suit.
 
 ## Cycle de vie
 
@@ -1575,7 +1577,7 @@ part jamais.
 
 ## État
 
-Validé par `npm test`, 1 909 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 1 910 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;

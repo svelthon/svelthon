@@ -77,7 +77,7 @@ rest of that configuration and what each line buys.
 npm install
 npm run dev          # the demo, at /demo/
 
-npm test             # 1 909 tests: semantics, props, reactivity, Svelte surface
+npm test             # 1 910 tests: semantics, props, reactivity, Svelte surface
 npm run test:quiet   # the suite's own output: a green run must say nothing
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
@@ -1114,7 +1114,9 @@ Note that a callback may not write to the component's own state: Svelte forbids
 it from inside `$inspect` as it does from inside a `$derived`, which is why a
 logger logs somewhere else.
 
-`{@debug user}` is the markup counterpart, and it is ported.
+`{@debug user}` is the markup counterpart, and it is ported: each name is read
+as Python reads it, and a list or a dict changed in place is logged again, as
+Svelte logs a state it follows.
 
 ## Lifecycle
 
@@ -1557,7 +1559,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 1 909 tests as written (vitest reports more, one per
+Validated by `npm test`, 1 910 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;

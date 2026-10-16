@@ -52,6 +52,8 @@ const MARKUP_LOCAL = new Set([
     '__index_',
     // What an `{#each}` walks, declared beside it.
     '__rows_',
+    // What a `{@debug}` hands Svelte's under each name it logs.
+    '__debugged_',
     // A stand-in used by the first, throwaway walk that only collects snippet
     // names; nothing it returns is emitted.
     '__probe'

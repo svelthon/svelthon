@@ -775,6 +775,18 @@ export const __pybridge = {
         return rows;
     },
 
+    // What a `{@debug}` logs of a Python value: a copy of it as JavaScript
+    // reads it, made at each read, so a list changed in place is a new value
+    // and is logged again, as Svelte logs a state it follows. A value nothing
+    // copies is logged as it is: a log never takes the page down.
+    debugged(value) {
+        try {
+            return plainData(value);
+        } catch {
+            return value;
+        }
+    },
+
     // The answer to `$effect.tracking()`, handed over by a component or a
     // store as it loads (`inReaction` above).
     tracking(answer) {
