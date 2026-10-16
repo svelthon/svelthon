@@ -412,21 +412,6 @@ describe('a relative path is the project’s, whatever the process is in', () =>
             process.chdir(original);
         }
     });
-
-    test('the demo counts the tests of its project', () => {
-        const original = process.cwd();
-        const plugin = svelthon();
-        const alone = plugin.load('\0virtual:svelthon/stats');
-
-        try {
-            process.chdir(temporary);
-
-            expect(plugin.load('\0virtual:svelthon/stats')).toBe(alone);
-            expect(alone).not.toBe('export const tests = 0;');
-        } finally {
-            process.chdir(original);
-        }
-    });
 });
 
 describe('two versions of one file preprocessed at once', () => {

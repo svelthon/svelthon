@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 import { relative, resolve, dirname, basename } from 'node:path';
-import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, existsSync, statSync } from 'node:fs';
 
 import {
     overMarkup,
@@ -699,10 +699,6 @@ function sameLines(code, content) {
     return [...lines.slice(0, count - 1), lines.slice(count - 1).join(' ')].join('\n');
 }
 
-// The demo shows how many tests back the project. Hard-coding it means letting
-// it drift on every addition, so it is counted when the module is served.
-const STATS_ID = virtualId('stats');
-
 // A store is served on every request in dev, and compiling Python is the
 // expensive half. Keyed on mtime, so an edit still recompiles.
 const compiledStores = new Map();
@@ -745,25 +741,6 @@ function compilePython(file, path, root) {
     compiledStores.set(file, { stamp, shown, result, found: found(result.imports) });
     return result;
 }
-
-// Zero where there is nothing to count, which is every project but this one:
-// without it the demo's stats module took the dev server down with `ENOENT` in
-// any tree with no `tests/`. The demo reads the number and shows it; showing
-// none is what zero is for. The `tests/` of the project the plugin serves, not
-// of the directory the process is in.
-const countTests = (root) => {
-    const tests = resolve(root, 'tests');
-
-    return (existsSync(tests) ? readdirSync(tests) : [])
-        .filter((name) => name.endsWith('.test.js'))
-        .reduce(
-            (total, name) =>
-                // Anchored: a `/re/.test(x)` elsewhere in a file is not a test,
-                // and `test.fails()`, the failures we expect, is one.
-                total + (readFileSync(resolve(tests, name), 'utf8').match(/^\s*test(\.fails)?\(/gm) || []).length,
-            0
-        );
-};
 
 // The generated module, behind the imports it needs evaluated first.
 //
@@ -936,8 +913,6 @@ export function svelthon(options = {}) {
             if (id.endsWith('.py') && (id.startsWith('.') || id.startsWith('/'))) return pyFile(id, importer) + query;
         },
         load(id) {
-            if (id === '\0' + STATS_ID) return `export const tests = ${countTests(root)};`;
-
             if (id.startsWith('\0')) {
                 const entry = generated.get(key(id.slice(1)));
                 return entry && (entry.map ? { code: entry.code, map: entry.map } : entry.code);
@@ -989,14 +964,6 @@ export function svelthon(options = {}) {
                     stale.push(mod);
                 }
             };
-
-            // The test count is read from the filesystem once, and the module
-            // holding it depends on no file Vite can see, so nothing would ever
-            // invalidate it, and the page would keep showing a stale number.
-            if (file.endsWith('.test.js')) {
-                forget('\0' + STATS_ID);
-                return [...modules, ...stale];
-            }
 
             // `mangle` and not `nameFor`: this hook sees every changed file in
             // the project and is only asking whether one of them is ours.

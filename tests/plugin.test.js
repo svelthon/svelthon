@@ -465,19 +465,6 @@ describe('hot update invalidates the generated module too', () => {
         expect(env.invalidated).toContain(file);
     });
 
-    // The test count is read from the filesystem once, and the module holding it
-    // depends on no file Vite can see.
-    test('adding a test forgets the count', () => {
-        const env = graph();
-        const out = plugin.hotUpdate.call(
-            { environment: env },
-            { file: resolve(process.cwd(), 'tests/markup.test.js'), modules: [] }
-        );
-
-        expect(env.invalidated.some((id) => id.includes('stats'))).toBe(true);
-        expect(out).toHaveLength(1);
-    });
-
     test('a file with no generated module is left alone', () => {
         const env = graph();
 
@@ -548,16 +535,5 @@ describe('a component importing a module', () => {
         // The prelude pays for its own lines, or every mapping points one line
         // above where it came from.
         expect(served.map.mappings.startsWith(';')).toBe(true);
-    });
-});
-
-// The demo shows how many tests back the project. Hard-coding it means letting
-// it drift on every addition, so it is counted when the module is served.
-describe('the test count is served, not written down', () => {
-    test('it is a number, and it is not zero', () => {
-        const code = svelthon().load('\0' + VIRTUAL_PREFIX + 'stats');
-        const count = Number(code.match(/= (\d+);/)[1]);
-
-        expect(count).toBeGreaterThan(400);
     });
 });

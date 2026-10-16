@@ -2,9 +2,10 @@ import { defineConfig, configDefaults } from 'vitest/config';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { fileURLToPath } from 'node:url';
 import { python, svelthon, compileOptionsFor } from './src/lib/svelthon.js';
+import { demoStats } from './demo/stats.js';
 
 export default defineConfig({
-    plugins: [svelthon(), svelte({
+    plugins: [demoStats(), svelthon(), svelte({
             preprocess: [python({ path: ['demo'] })],
             // vite-plugin-svelte's module filter, widened to Python: a
             // `.svelte.py` compiles as a `.svelte.ts` does, under its own name.

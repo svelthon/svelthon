@@ -7,7 +7,7 @@
     import Semantics from './Semantics.svelte';
     import StoreDemo from './StoreDemo.svelte';
     import Highlight from './Highlight.svelte';
-    import { tests } from 'virtual:svelthon/stats';
+    import { tests } from 'virtual:demo/stats';
 
     // The sources shown are the files themselves — nothing to keep in sync, and
     // the reader sees the whole component: the Python *and* the markup that
