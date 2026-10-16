@@ -860,9 +860,6 @@ const ATTRIBUTE_CHAR = '[^\\s=/>"\']';
 // `title= {x}` is the attribute `title` and not a shorthand to expand.
 const ATTRIBUTE_NAME = new RegExp(`(${ATTRIBUTE_CHAR}+)=\\s*$`);
 
-// The same, to cut the name back out of what has been written.
-const ATTRIBUTE_ASSIGN = new RegExp(`${ATTRIBUTE_CHAR}+=\\s*$`);
-
 // And the name with no value after it, which is where the shorthand and the
 // `let:` refusal read it.
 const BARE_ATTRIBUTE = new RegExp(`(${ATTRIBUTE_CHAR}+)$`);
@@ -2147,8 +2144,8 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     // maps them back, so everything below was reported as many lines too high
     // (`sameLines` keeps the script's). Given back inside the rewrite's last
     // brace, where they are blank space of the expression, and all at the end
-    // (`withLines`): written in place, each would copy the whole output.
-    const owed = [];
+    // (`edited`): written in place, each would copy the whole output.
+    const edits = [];
     const keepLines = (emitted, from, to) => {
         const source = markup.slice(from, to + 1);
 
@@ -2156,15 +2153,34 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
 
         const lost = source.split('\n').length - out.slice(emitted).split('\n').length;
 
-        if (lost > 0) owed.push([out.length - 1, lost]);
+        if (lost > 0) edits.push({ at: out.length - 1, lines: lost });
     };
-    const withLines = () => {
+
+    // The name of the attribute being read, and its `=`, taken back out of what
+    // has been written, its `length` read off the input, which it was copied
+    // from: the pass writes a name before it knows what follows it, and
+    // `bind:group` becomes an action. Taken out at the end too: cut in place,
+    // each cut copied the whole output, and a page of a thousand checkboxes
+    // copied it a thousand times.
+    const cut = (length) => {
+        edits.push({ at: out.length - length, to: out.length });
+    };
+
+    // The output with what is owed given back and what is cut taken out, each
+    // noted where the walk stood, so in the order they stand in it.
+    const edited = () => {
         let given = '';
         let at = 0;
 
-        for (const [brace, lost] of owed) {
-            given += out.slice(at, brace) + '\n'.repeat(lost);
-            at = brace;
+        for (const edit of edits) {
+            given += out.slice(at, edit.at);
+
+            if (edit.lines === undefined) {
+                at = edit.to;
+            } else {
+                given += '\n'.repeat(edit.lines);
+                at = edit.at;
+            }
         }
 
         return given + out.slice(at);
@@ -2759,7 +2775,9 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
             // The `this` of a `<svelte:component>` that holds its child: read
             // once already, where the child was bound.
             if (tag?.held !== undefined && tag.thisFrom === index) {
-                out = out.replace(ATTRIBUTE_ASSIGN, '');
+                const named = tagText().match(ATTRIBUTE_NAME);
+
+                if (named) cut(named[0].length);
                 index = tag.thisTo + 1;
                 continue;
             }
@@ -2923,13 +2941,17 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                             // On an element only: see `COMPONENT`. `type` is read
                             // off the node at run time, and `value` off the tag,
                             // which is the one attribute this rule looks at.
-                            out = out.replace(ATTRIBUTE_ASSIGN, '') + groupAction(inner);
+                            cut(attribute[0].length);
+                            out += groupAction(inner);
                         } else if (GROUP_DIRECTIVE.test(attribute[1])) {
                             out += `{${componentGroup(trimmed)}}`;
                         } else if (DIRECTIVE.test(attribute[1])) {
                             const shaped = spreadSelect(attribute[1], inner);
 
-                            if (shaped !== null) out = `${out.replace(ATTRIBUTE_ASSIGN, '')}${shaped.action} ${attribute[1]}=`;
+                            if (shaped !== null) {
+                                cut(attribute[0].length);
+                                out += `${shaped.action} ${attribute[1]}=`;
+                            }
                             out += `{${boundPair(attribute[1], inner)}}`;
                         } else {
                             out += attributeValue(attribute[1], inner);
@@ -3055,13 +3077,17 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                     // pattern: `bind:group` refuses the pair for the reason
                     // written above `GROUP_DIRECTIVE`, in both its spellings.
                     if (GROUP_DIRECTIVE.test(short[1]) && !isComponent(tag)) {
-                        out = out.slice(0, out.length - written.length) + groupAction(name);
+                        cut(written.length);
+                        out += groupAction(name);
                     } else if (GROUP_DIRECTIVE.test(short[1])) {
                         out += `={${componentGroup(name)}}`;
                     } else {
                         const shaped = spreadSelect(short[1], name);
 
-                        if (shaped !== null) out = `${out.slice(0, out.length - written.length)}${shaped.action} ${written}`;
+                        if (shaped !== null) {
+                            cut(written.length);
+                            out += `${shaped.action} ${written}`;
+                        }
                         out += `={${boundPair(short[1], name)}}`;
                     }
                 }
@@ -3414,7 +3440,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         index = end + 1;
     }
 
-    return withLines();
+    return edited();
 }
 
 // The source ranges of every Python expression a template holds, from the same
