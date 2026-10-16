@@ -1000,6 +1000,10 @@ function firstArgument(text) {
         return [text.trim(), ''];
     }
 
+    // No positional argument to take first, `inspect_with(**options)` or a call
+    // with nothing in it, or one that is a whole sequence, `*values`.
+    if (first === undefined || first instanceof $B.ast.Starred) return null;
+
     // Where the first argument ends, by its line and its column, since a call
     // laid out by a formatter puts it on a line of its own; past `f(`.
     const starts = [0];
@@ -1253,7 +1257,18 @@ function takeArrows(src, where, lineOffset, allowed, theirs = new Set()) {
             // `inspect_with(logger, *values)`: two roles Svelte evaluates apart,
             // the values when it inspects and the logger when it logs. So two
             // lambdas, handed over as a pair that costs nothing to build.
-            const [logger, values] = firstArgument(watched[2]);
+            const parts = firstArgument(watched[2]);
+
+            if (parts === null) {
+                throw refuse(
+                    `svelthon — \`inspect_with\` takes the function that logs first, then the values it ` +
+                        `watches: \`inspect_with(print, count)\` (${at})`,
+                    where,
+                    lineno
+                );
+            }
+
+            const [logger, values] = parts;
             out.push(
                 lined(`__inspect_${anonymous++} = inspect_with(lambda: (lambda: [${values}], lambda: ${logger}))`)
             );

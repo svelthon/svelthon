@@ -1,6 +1,9 @@
 import { test, expect, describe, beforeEach } from 'vitest';
+import { createRequire } from 'node:module';
 import { mount, flushSync } from './mounted.js';
 import InspectWith from './fixtures/InspectWith.svelte';
+
+const { compile } = createRequire(import.meta.url)('../src/lib/compile.cjs');
 
 // `$inspect(x).with(fn)` chains, and Python cannot spell it: `with` is a keyword
 // and `with=` is not an argument name either. A keyword argument was the first
@@ -68,4 +71,22 @@ describe('inspect_with', () => {
         expect(globalThis.__inspected).toContain('update:1,hello');
         expect(globalThis.__inspected).toContain('trimmed:update');
     });
+});
+
+// The logger is the first argument, which a call by keywords alone or a starred
+// one does not have: the compiler read the end of an argument that was not there
+// and raised a JavaScript `TypeError` of its own. Refused at the line instead.
+test('inspect_with without a logger first is refused at its line', () => {
+    for (const call of ['inspect_with(**options)', 'inspect_with(*values)']) {
+        let error;
+
+        try {
+            compile(`options = {}\nvalues = []\n${call}\n`, 'Probe', 'src/probe.svelte', {});
+        } catch (thrown) {
+            error = thrown;
+        }
+
+        expect(error?.message).toMatch(/`inspect_with` takes the function that logs first/);
+        expect(error.start.line).toBe(3);
+    }
 });
