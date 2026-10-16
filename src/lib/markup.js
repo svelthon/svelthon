@@ -1975,6 +1975,225 @@ export function pythonExpressions(markup, collect, onPython, where) {
 // what Svelte's component names allow: an ASCII letter left `<Étiquette>` no tag.
 const TAG_OPEN = /<(\/?)\s*(\p{ID_Start}[\p{ID_Continue}$‌‍:.-]*)/uy;
 
+// Two names as Python compares them (`pythonName`): `ﬁeld` declared and
+// `field` read are one name. Every question of which name an expression reads
+// is asked through this, and no spelling is compared as it was written.
+const sameName = (one, other) => pythonName(one) === pythonName(other);
+
+// The scopes the markup declares names in, from the component's own to the
+// block being read, and what a name an expression reads is in them. `seed` is
+// what the first walk recorded in each scope, `indexed` where it asked for an
+// index, and `refuseCompilerName` the refusal every declared name goes through.
+function scopeChain(seed, indexed, refuseCompilerName) {
+    // Scopes are numbered by the order they are opened in, which two walks of
+    // the same markup agree on. The base scope, the component's own, is 0.
+    let opened = 0;
+    const ids = [0];
+    const scopes = [[...(seed.get(0) || [])]];
+
+    // Each scope's names by the name Python reads, the first declared spelling
+    // of each, made when a lookup first needs them and again after the scope
+    // changes: a lookup then normalizes the one name it is asked about.
+    const keyed = [undefined];
+    const keysOf = (scope) => {
+        const keys = new Map();
+
+        for (const one of scope) if (!keys.has(pythonName(one))) keys.set(pythonName(one), one);
+
+        return keys;
+    };
+
+    // What opened each scope, an element's name or `null` for a block, so an
+    // element closes where Svelte closes it: at the tag that closes it, which
+    // closes too the elements whose closing tag was left out inside it, and at
+    // a tag HTML closes it for (`CLOSED_BY`), a `<p>` at the `<div>` after it.
+    const owners = [null];
+
+    // The `{#each}` blocks by scope: the index each iteration has, or `null`
+    // while the first walk has not asked for one, and the names its iterable
+    // reads.
+    const loops = new Map();
+
+    // `generated` are the pass's own names, the aliases of `unpackByKey`, which
+    // the prefix rule does not apply to.
+    const push = (names, generated = []) => {
+        opened += 1;
+        ids.push(opened);
+        owners.push(null);
+        scopes.push([...(seed.get(opened) || []), ...refuseCompilerName(names), ...generated]);
+        keyed.push(undefined);
+    };
+
+    // Never below the base scope: unbalanced markup is Svelte's to refuse, and
+    // popping past the bottom here would lose the snippet names it holds.
+    const pop = () => {
+        if (scopes.length > 1) {
+            scopes.pop();
+            ids.pop();
+            owners.pop();
+            keyed.pop();
+        }
+    };
+
+    const closeElement = (name) => {
+        const at = closedAt(owners, name, null);
+
+        if (at > 0) while (owners.length > at) pop();
+    };
+
+    // A clause of the open block: a new branch, numbered like a block so the
+    // snippets the first walk recorded in it come back, and holding nothing of
+    // the branch before it. Never the base scope, for the reason above.
+    //
+    // Two steps, because `{:else if}` reads its condition between them: where
+    // the branch stands, after the previous branch has closed and before its
+    // own snippets exist.
+    const branch = () => {
+        if (scopes.length > 1) {
+            opened += 1;
+            ids[ids.length - 1] = opened;
+            scopes[scopes.length - 1] = [];
+            keyed[keyed.length - 1] = undefined;
+        }
+    };
+
+    const seeded = () => {
+        if (scopes.length > 1) {
+            scopes[scopes.length - 1].push(...(seed.get(ids[ids.length - 1]) || []));
+            keyed[keyed.length - 1] = undefined;
+        }
+    };
+
+    // Names declared in the innermost scope: a branch's clause, a template
+    // rune, the cell a group binds. `generated` as for `push`.
+    const declare = (names, generated = []) => {
+        scopes[scopes.length - 1]?.push(...refuseCompilerName(names), ...generated);
+        keyed[keyed.length - 1] = undefined;
+    };
+
+    // The innermost scope's names that are a snippet's parameters.
+    const parameters = (names) => {
+        scopes[scopes.length - 1].parameters = new Set(names);
+    };
+
+    // The innermost scope holding `name`, and the spelling it was declared
+    // under, what JavaScript knows the variable by. Null when no scope holds it.
+    const found = (name) => {
+        const key = pythonName(name);
+
+        for (let at = scopes.length - 1; at >= 0; at--) {
+            const declared = (keyed[at] ??= keysOf(scopes[at])).get(key);
+
+            if (declared !== undefined) return { at, declared };
+        }
+
+        return null;
+    };
+
+    // The names in scope, one per name as Python compares names, the innermost
+    // hiding the outer ones: an inner `ﬁeld` hides an outer `field`, and is read
+    // under the spelling it was declared with, what JavaScript knows it by.
+    const inScope = () => {
+        const visible = new Map();
+
+        for (let at = scopes.length - 1; at >= 0; at--) {
+            for (const one of scopes[at]) {
+                if (!visible.has(pythonName(one))) visible.set(pythonName(one), one);
+            }
+        }
+
+        return [...visible.values()];
+    };
+
+    // A snippet's parameter is handed over by whoever renders the snippet, a
+    // JavaScript component or this markup, converted or not: it is read as
+    // every value coming into Python is (`__pybridge.received`), so a callable
+    // Python handed out is itself again. The innermost scope holding the name
+    // says whether it is one.
+    const received = (name) => {
+        const held = found(name);
+
+        return held !== null && scopes[held.at].parameters?.has(held.declared) ? `${RECEIVED}(${name})` : name;
+    };
+
+    // The block names an expression actually reads, rather than every name in
+    // scope: passed a tag-declared state the expression never mentions, Svelte
+    // warns `state_referenced_locally`, since it sees the state read outside a
+    // reactive position.
+    //
+    // It is the right shape anyway. `follow(x)` subscribes the reader to `x`,
+    // and an expression that does not read `x` has no business depending on it.
+    const mentioned = (expr) => {
+        const names = new Set(referenced(expr).map(pythonName));
+
+        return inScope().filter((one) => names.has(pythonName(one)));
+    };
+
+    // The name in scope that `name` reads, in the spelling it was declared
+    // under. Null when no scope holds it.
+    const scoped = (name) => found(name)?.declared ?? null;
+
+    // The iterations a group binding stands in, as Svelte finds them: every
+    // `{#each}` whose names the binding reads, and then those its iterable
+    // reads, from the innermost out. Their indexes keep apart two rows holding
+    // one object, which the values the binding mentions cannot. A block whose
+    // author wrote no index is noted for the second walk to give it one.
+    const iterations = (expr) => {
+        const names = new Set(referenced(expr).map(pythonName));
+        const indexes = [];
+
+        for (let at = scopes.length - 1; at > 0; at--) {
+            const loop = loops.get(ids[at]);
+
+            if (loop === undefined || !scopes[at].some((one) => names.has(pythonName(one)))) continue;
+
+            if (loop.index === null) indexed.add(ids[at]);
+            else indexes.push(loop.index);
+
+            for (const one of scopes[at]) names.delete(pythonName(one));
+            for (const one of loop.from) names.add(pythonName(one));
+        }
+
+        return indexes;
+    };
+
+    return {
+        push,
+        pop,
+        closeElement,
+        branch,
+        seeded,
+        declare,
+        parameters,
+        inScope,
+        received,
+        mentioned,
+        scoped,
+        iterations,
+
+        // Whether a scope holds `name`.
+        holds: (name) => found(name) !== null,
+
+        // The id of the innermost scope, which the first walk recorded under.
+        id: () => ids.at(-1),
+
+        // The element that opened the innermost scope.
+        own: (name) => {
+            owners[owners.length - 1] = name;
+        },
+
+        // Whether a tag of this name closes the element of the innermost scope.
+        closes: (name) => closedBy(owners.at(-1), name),
+
+        // The id of the scope the element a closing tag of this name closes
+        // opened, undefined when no open element has the name.
+        openedBy: (name) => ids[closedAt(owners, name, null)],
+
+        // An `{#each}` noted under its scope (`iterations`).
+        loop: (id, noted) => loops.set(id, noted)
+    };
+}
+
 // `indexed` holds the `{#each}` blocks, by scope, that a group binding needs the
 // iteration index of and whose author wrote none: the first walk finds them,
 // the second gives them one.
@@ -1999,11 +2218,6 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     // bare branch is about to rewrite.
     let unquoted = -1;
 
-    // Scopes are numbered by the order they are opened in, which two walks of
-    // the same markup agree on. The base scope, the component's own, is 0.
-    let opened = 0;
-    const ids = [0];
-    const scopes = [[...(seed.get(0) || [])]];
     const grouped = groupedNames(markup);
 
     // Every snippet this markup declares, wherever: the first walk recorded
@@ -2048,90 +2262,8 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         );
     };
 
-    // `generated` are the pass's own names, the aliases of `unpackByKey`, which
-    // the prefix rule does not apply to.
-    const push = (names, generated = []) => {
-        opened += 1;
-        ids.push(opened);
-        owners.push(null);
-        scopes.push([...(seed.get(opened) || []), ...refuseCompilerName(names), ...generated]);
-    };
-
-    // What opened each scope, an element's name or `null` for a block, so an
-    // element closes where Svelte closes it: at the tag that closes it, which
-    // closes too the elements whose closing tag was left out inside it, and at
-    // a tag HTML closes it for (`CLOSED_BY`), a `<p>` at the `<div>` after it.
-    const owners = [null];
-
-    // The `{#each}` blocks by scope: the index each iteration has, or `null`
-    // while the first walk has not asked for one, and the names its iterable
-    // reads.
-    const loops = new Map();
-
-    const closeElement = (name) => {
-        const at = closedAt(owners, name, null);
-
-        if (at > 0) while (owners.length > at) pop();
-    };
-
-    // A clause of the open block: a new branch, numbered like a block so the
-    // snippets the first walk recorded in it come back, and holding nothing of
-    // the branch before it. Never the base scope, for the reason below.
-    //
-    // Two steps, because `{:else if}` reads its condition between them: where
-    // the branch stands, after the previous branch has closed and before its
-    // own snippets exist.
-    const branch = () => {
-        if (scopes.length > 1) {
-            opened += 1;
-            ids[ids.length - 1] = opened;
-            scopes[scopes.length - 1] = [];
-        }
-    };
-
-    const seeded = () => {
-        if (scopes.length > 1) scopes[scopes.length - 1].push(...(seed.get(ids[ids.length - 1]) || []));
-    };
-
-    // Never below the base scope: unbalanced markup is Svelte's to refuse, and
-    // popping past the bottom here would lose the snippet names it holds.
-    const pop = () => {
-        if (scopes.length > 1) {
-            scopes.pop();
-            ids.pop();
-            owners.pop();
-        }
-    };
-
-    // The names in scope, one per name as Python compares names, the innermost
-    // hiding the outer ones: an inner `ﬁeld` hides an outer `field`, and is read
-    // under the spelling it was declared with, what JavaScript knows it by.
-    const inScope = () => {
-        const visible = new Map();
-
-        for (let at = scopes.length - 1; at >= 0; at--) {
-            for (const one of scopes[at]) {
-                if (!visible.has(pythonName(one))) visible.set(pythonName(one), one);
-            }
-        }
-
-        return [...visible.values()];
-    };
-
-    // A snippet's parameter is handed over by whoever renders the snippet, a
-    // JavaScript component or this markup, converted or not: it is read as
-    // every value coming into Python is (`__pybridge.received`), so a callable
-    // Python handed out is itself again. The innermost scope holding the name
-    // says whether it is one.
-    const received = (name) => {
-        for (let at = scopes.length - 1; at >= 0; at--) {
-            if (scopes[at].includes(name)) {
-                return scopes[at].parameters?.has(name) ? `${RECEIVED}(${name})` : name;
-            }
-        }
-
-        return name;
-    };
+    const chain = scopeChain(seed, indexed, refuseCompilerName);
+    const { push, pop, closeElement, branch, seeded, declare, parameters, received, mentioned, scoped, iterations, holds } = chain;
 
     // The `{` of the construct being read, as the author sees it. `region.start`
     // is the character after the brace, so this steps back onto it.
@@ -2212,28 +2344,6 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         throw refuse(new SyntaxError(`svelthon — ${message}${said()}`));
     };
 
-    // The block names an expression actually reads, rather than every name in
-    // scope: passed a tag-declared state the expression never mentions, Svelte
-    // warns `state_referenced_locally`, since it sees the state read outside a
-    // reactive position.
-    //
-    // It is the right shape anyway. `follow(x)` subscribes the reader to `x`,
-    // and an expression that does not read `x` has no business depending on it.
-    const mentioned = (expr) => {
-        const names = new Set(referenced(expr).map(pythonName));
-
-        return inScope().filter((one) => names.has(pythonName(one)));
-    };
-
-    // The name in scope that `name` reads, as Python compares names, in the
-    // spelling it was declared under: what JavaScript knows the variable by.
-    // Null when no scope holds it.
-    const scoped = (name) => {
-        const key = pythonName(name);
-
-        return inScope().find((one) => pythonName(one) === key) ?? null;
-    };
-
     // Where a template expression sits in the *source*, for a caller that needs
     // to point at it rather than compile it: the editor's highlighting above
     // all, which colours these ranges with the same parser as the `<script>`.
@@ -2285,7 +2395,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     // `followed` is false for that key alone, which `eachKey` says why.
     const call = (expr, wrapper, source = expr, kind = '', bound = [], followed = true) => {
         const trimmed = expr.trim();
-        const args = mentioned(trimmed).filter((one) => !bound.includes(one));
+        const args = mentioned(trimmed).filter((one) => !bound.some((name) => sameName(name, one)));
         const lazy = kind === 'lazy';
 
         locate(source.trim());
@@ -2518,30 +2628,6 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     const heldChild = () => tag?.held ?? null;
     const forChild = (read, kind = '') => `__pybridge.child(${heldChild()}, ${read}, ${JSON.stringify(kind)})`;
 
-    // The iterations a group binding stands in, as Svelte finds them: every
-    // `{#each}` whose names the binding reads, and then those its iterable
-    // reads, from the innermost out. Their indexes keep apart two rows holding
-    // one object, which the values the binding mentions cannot. A block whose
-    // author wrote no index is noted for the second walk to give it one.
-    const iterations = (expr) => {
-        const names = new Set(referenced(expr).map(pythonName));
-        const indexes = [];
-
-        for (let at = scopes.length - 1; at > 0; at--) {
-            const loop = loops.get(ids[at]);
-
-            if (loop === undefined || !scopes[at].some((one) => names.has(pythonName(one)))) continue;
-
-            if (loop.index === null) indexed.add(ids[at]);
-            else indexes.push(loop.index);
-
-            for (const one of scopes[at]) names.delete(pythonName(one));
-            for (const one of loop.from) names.add(pythonName(one));
-        }
-
-        return indexes;
-    };
-
     const groupAction = (expr) => {
         // The Python list itself: the group compares with Python's `==`, and
         // its inputs know each other by the list they share.
@@ -2592,7 +2678,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         // be handed one default list and are still two targets. A cell the
         // markup declared is its own target, told by its token.
         const cell = own ? `${CELL}${scoped(bareName(expr))}` : null;
-        const where = cell !== null && inScope().includes(cell) ? [cell] : [...mentioned(expr.trim()), ...iterations(expr)];
+        const where = cell !== null && holds(cell) ? [cell] : [...mentioned(expr.trim()), ...iterations(expr)];
 
         // And `checked` for the server, which runs no action: Svelte's server
         // writes it for its own group, from the model, when the tag has a value,
@@ -3047,8 +3133,8 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 if (tag && tag.closing) closeElement(tag.name);
                 else if (tag && (isComponent(tag) || !VOID.has(tag.name.toLowerCase())) && !selfClosing) {
                     push([]);
-                    owners[owners.length - 1] = tag.name;
-                    if (tag.wrapped) heldOwners.set(ids.at(-1), tag.held);
+                    chain.own(tag.name);
+                    if (tag.wrapped) heldOwners.set(chain.id(), tag.held);
                 }
 
                 if (tag?.wrapped && (tag.closing || selfClosing)) ending = '{/each}';
@@ -3126,7 +3212,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
             // own, and may find it on either side of the binding.
             tag = named ? { closing: named[1] === '/', name: named[2], start: index } : null;
 
-            if (tag && !tag.closing && closedBy(owners.at(-1), tag.name)) pop();
+            if (tag && !tag.closing && chain.closes(tag.name)) pop();
 
             inTag = true;
             tagIn = index;
@@ -3135,7 +3221,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
             // iteration, and named by that iteration's item, closing tag
             // included.
             if (tag?.closing) {
-                const held = heldOwners.get(ids[closedAt(owners, tag.name, null)]);
+                const held = heldOwners.get(chain.openedBy(tag.name));
 
                 if (held !== undefined) {
                     tag.held = held;
@@ -3211,13 +3297,13 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 let id;
                 const declare = (names, generated) => {
                     push(names, generated);
-                    id = ids.at(-1);
+                    id = chain.id();
                 };
 
                 out += eachBlock(trimmed, declare, call, refusePattern, {
                     rows: () => `${EACH_ROWS}${id}`,
                     index: (keyed) => (keyed || indexed.has(id) ? `${EACH_INDEX}${id}` : null),
-                    noted: (index, from) => loops.set(id, { index, from })
+                    noted: (index, from) => chain.loop(id, { index, from })
                 });
             } else if (opens('key')) {
                 // Svelte re-creates the block when the value changes, by
@@ -3277,7 +3363,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 if (declares) refuseCompilerName([declares[1]]);
 
                 if (record && declares) {
-                    const holder = ids[ids.length - 1];
+                    const holder = chain.id();
                     record.set(holder, [...(record.get(holder) || []), pythonName(declares[1])]);
                 }
 
@@ -3295,7 +3381,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                     trimmed,
                     (names, aliases) => {
                         push(names, aliases);
-                        scopes[scopes.length - 1].parameters = new Set([...names, ...aliases]);
+                        parameters([...names, ...aliases]);
                     },
                     call,
                     refusePattern,
@@ -3322,7 +3408,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
             branch();
 
             const rebind = (names, generated = []) => {
-                scopes[scopes.length - 1]?.push(...refuseCompilerName(names), ...generated);
+                declare(names, generated);
             };
 
             const elseIf = /^:else\s+if\s/.test(trimmed);
@@ -3374,9 +3460,9 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 const spelled = head.replace(/\?\.\s*$/, '').trim();
                 const callee = pythonName(spelled);
                 const named = new RegExp(`^${SHORT_NAME}$`, 'u').test(spelled);
-                const owns = [...snippets].filter((name) => inScope().includes(name));
+                const owns = [...snippets].filter((name) => chain.holds(name));
                 const rendered =
-                    named && owns.includes(callee)
+                    named && owns.some((one) => sameName(one, callee))
                         ? head.replace(spelled, callee)
                         : `__pybridge.snippet(${named ? callee : call(spelled, '', undefined, 'python')}, [${owns.join(', ')}])${optional ? '?.' : ''}`;
                 const given = (one) => (!one.trim() ? one : call(one, '', undefined, 'python'));
@@ -3424,11 +3510,11 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                         ? `{let ${declared.name} = $state.raw(__pybridge.state(${value}))}`
                         : `{const ${declared.name} = $derived(${value})}`;
 
-                scopes[scopes.length - 1]?.push(...refuseCompilerName([declared.name]));
+                declare([declared.name]);
 
                 if (declared.rune === 'state' && grouped.has(declared.name)) {
                     out += `{const ${CELL}${declared.name} = {}}`;
-                    scopes[scopes.length - 1]?.push(`${CELL}${declared.name}`);
+                    declare([], [`${CELL}${declared.name}`]);
                 }
             } else {
                 out += `{${call(inner, '__text')}}`;
