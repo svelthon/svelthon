@@ -11,6 +11,11 @@ import { attributeWrapper } from './attributes.js';
 // leaking JavaScript's undefined into Python.
 export const NONE = globalThis.__BRYTHON__.builtins.None;
 
+// The global object, for the generated code to reach `Object`, `Symbol` and
+// `Error` through: a module that binds one of those names binds it in the
+// generated module's own scope, where the generated code read it in its place.
+export const jsGlobal = globalThis;
+
 // Whether the code running is a reaction that follows what it reads, as Svelte
 // answers `$effect.tracking()`. A plain module has no runes, so the answer is
 // handed over by the first component or store that loads, whose script Svelte

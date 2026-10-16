@@ -1468,10 +1468,15 @@ const pythonModuleName = (source) => source.split('/').pop().replace(/(\.svelte)
 // are refused by `refuseReserved`, which says why and what to rename to. They
 // stay perfectly usable *inside* a `def`, where the generated module binds
 // nothing.
+//
+// And `undefined`, which JavaScript accepts as a binding and keeps for its own
+// value: the generated code writes it everywhere, and a module binding it
+// stopped loading. The other globals it reaches, `Object`, `Symbol`, `Error`
+// and the global object, it reaches through the runtime (`__global`).
 const JS_RESERVED = new Set(`break case catch class const continue debugger default delete do else
 enum export extends false function if implements in instanceof interface let new null package
 private protected public return static super switch this throw true typeof var void while with
-yield arguments eval`.split(/\s+/));
+yield arguments eval undefined`.split(/\s+/));
 
 // The hidden functions the markup pass appends, one per expression it compiled.
 // The name is chosen in `markup.js`; the two have to agree.
@@ -1528,6 +1533,7 @@ const RUNTIME = {
     pythonModule: '__pythonModule',
     withNamespace: '__withNamespace',
     __pybridge: '__pybridge',
+    jsGlobal: '__global',
     group: '__group',
     readAttr: '__getattr',
     restOf: '__rest',
@@ -1965,10 +1971,13 @@ function refuseReserved(reserved, source, lines, lineOffset = 0) {
 
     const line = lines?.get(name);
     const at = line === undefined ? source : `${source}:${line + lineOffset}`;
+    const why =
+        name === 'undefined'
+            ? `is JavaScript's own value, which the generated module writes itself, so it cannot bind the name`
+            : `is a reserved word in JavaScript, and the generated module cannot bind one`;
 
     throw refuse(
-        `svelthon — \`${name}\` is a reserved word in JavaScript, and the generated ` +
-            `module cannot bind one (${at}). It is good Python and nothing else is ` +
+        `svelthon — \`${name}\` ${why} (${at}). It is good Python and nothing else is ` +
             `wrong with it, but nothing reactive can be built on the name: the page ` +
             `would show its first value and never follow it, and a module cannot ` +
             `publish it. Rename it: Python's own convention for a name that collides ` +
@@ -3079,7 +3088,7 @@ function preamble(c) {
         // name no one would type: only generated code touches it, and `py` is a
         // name an author may want.
         `import { ${runtimeAliases([
-            'bind', '__pybridge', 'track', 'follow', 'pyError',
+            'bind', '__pybridge', 'jsGlobal', 'track', 'follow', 'pyError',
             'pyEvent', 'pyAttach', 'plainData', 'pyArg', 'pyData', 'pyComponent', 'pyExpression',
             'jsCall',
             'ticking', 'pyBind', 'NONE', 'helpers',
@@ -3158,7 +3167,7 @@ function declarations(c) {
         // child made while nothing was passed until then. So the default is
         // kept apart from the child's writes, and `due` says which one an
         // absence reads.
-        ...(c.props.length ? [`const __OVERRIDDEN = Symbol();`] : []),
+        ...(c.props.length ? [`const __OVERRIDDEN = __global.Symbol();`] : []),
         ...c.props.flatMap((n) => [
             `let ${local(n)} = $state.raw(undefined);`,
             `let ${rev(n)} = $state.raw(0);`,
@@ -3293,12 +3302,12 @@ function authorBindings(c) {
         // The namespace inherits its bindings' accessors and nothing else: a
         // name the program never bound, `constructor` or `toString`, is
         // unbound, where `Object.prototype` answered it with a function.
-        `const __proto = Object.create(null);`,
+        `const __proto = __global.Object.create(null);`,
         // The names a `from m import *` binds get their accessors at run time,
         // in a component unsubscribed with its own list; a store keeps its
         // subscriptions for as long as the page.
         ...(c.starred
-            ? [`Object.defineProperty(__proto, '$svelthonStarred', { value: { owner: ${c.store ? 'undefined' : SUBS} } });`]
+            ? [`__global.Object.defineProperty(__proto, '$svelthonStarred', { value: { owner: ${c.store ? 'undefined' : SUBS} } });`]
             : []),
         // Python may write to a prop; the write lands in the local fallback and
         // is shadowed for as long as the parent supplies a value, which is
@@ -3351,7 +3360,7 @@ function authorBindings(c) {
         // property as its statement runs (`__pybridge.declare`), and read as
         // any name is. A name another binding gives an accessor keeps that one.
         ...declaredClasses(c).flatMap((n, at) => [
-            ...(at === 0 ? ['const __classes = Object.create(null);'] : []),
+            ...(at === 0 ? ['const __classes = __global.Object.create(null);'] : []),
             `__bind(__proto, '${n}', () => __pybridge.declared(__classes[${JSON.stringify(n)}]), function (${NEXT_VALUE}) { __pybridge.declare(this, '${n}', ${NEXT_VALUE}, __classes); });`
         ]),
         ...c.funcs.map(
@@ -3386,7 +3395,7 @@ function namespaceObject(c) {
     return [
         ``,
         // A module's is replaced by a new one when its body raises (`moduleLoad`).
-        `${c.store ? 'let' : 'const'} ${NS} = Object.create(__proto);`,
+        `${c.store ? 'let' : 'const'} ${NS} = __global.Object.create(__proto);`,
         // Reading a global goes through $B.resolve_global → resolve_in_namespace,
         // which demands an *own* property unless the namespace is flagged
         // $proxy, in which case it reads the property normally and therefore
@@ -3501,7 +3510,7 @@ const neverBinds = (name, where) =>
 // on the namespace, which is what `del` leaves too.
 const unboundRefusals = (c) =>
     c.unbound.map(
-        (n) => `if (${NS}[${JSON.stringify(n)}] === undefined) throw new Error(${JSON.stringify(neverBinds(n, c.listedAt))});`
+        (n) => `if (${NS}[${JSON.stringify(n)}] === undefined) throw new __global.Error(${JSON.stringify(neverBinds(n, c.listedAt))});`
     );
 
 function initCall(c) {
@@ -3534,7 +3543,7 @@ function instanceExports(c) {
         ...c.funcs.map((f) =>
             componentWrapper(f) === RUNTIME.pyExpression
                 ? `const ${wrapperName(f.name)} = ${RUNTIME.pyExpression}((a) => ${fn(f.name)}(...a), ` +
-                  `${JSON.stringify(`${f.name}() — ${c.source}`)}, ${f.arity}, ` +
+                  `${JSON.stringify(`${f.name}() — ${c.source}`)}, ${f.arity === Infinity ? '1 / 0' : f.arity}, ` +
                   `${KEPT_PYTHON.test(f.name) ? 'true' : COMPARED.test(f.name) ? `'${f.name.match(COMPARED)[1]}'` : 'false'}` +
                   `${WRITES.test(f.name) ? ', true' : ''});`
                 : `const ${wrapperName(f.name)} = ${RUNTIME.pyComponent}(() => ${fn(f.name)}, ` +
@@ -3768,7 +3777,7 @@ function plainPreamble(c) {
     return [
         `import { init as __init } from ${JSON.stringify(virtualId(c.name))};`,
         `import { ${runtimeAliases([
-            'bind', '__pybridge', 'pyCall', 'pyError', 'plainData', 'pyArg',
+            'bind', '__pybridge', 'jsGlobal', 'pyCall', 'pyError', 'plainData', 'pyArg',
             'pyData', 'pyExport', 'jsCall', 'ticking', 'pyBind', 'NONE', 'helpers',
             'pythonModule', 'group', 'invoke', 'liveExport', 'readOnlyImport'
         ])} } from 'svelthon/runtime';`,
@@ -3790,7 +3799,7 @@ function plainBindings(c) {
         // No markup here, so none of what a template expression calls (`__event`,
         // `__assign`, `__group`, `__truthy` and the rest) is emitted. Nothing
         // of `Object.prototype` is a name, as in `authorBindings`.
-        `const __proto = Object.create(null);`,
+        `const __proto = __global.Object.create(null);`,
         ...c.state.map((n) => `__bind(__proto, '${n}', () => ${n}, (${NEXT_VALUE}) => { ${n} = ${NEXT_VALUE}; });`),
         ...c.funcs.map(
             (f) =>
@@ -3811,7 +3820,7 @@ function plainBindings(c) {
 function plainInit(c) {
     return [
         // Replaced by a new one when its body raises (`moduleLoad`).
-        `let ${NS} = Object.create(__proto);`,
+        `let ${NS} = __global.Object.create(__proto);`,
         `${NS}.$proxy = true;`,
         `${NS}.__name__ = ${JSON.stringify(pythonModuleName(c.source))};`,
         ``

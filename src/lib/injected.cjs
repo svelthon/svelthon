@@ -59,7 +59,7 @@ const INJECTED = [
     // without one would raise before the compiler's own wiring ever ran.
     {
         name: 'effect',
-        value: '() => Object.assign((f) => f, { pre: (f) => f, root: (f) => f })',
+        value: '() => __global.Object.assign((f) => f, { pre: (f) => f, root: (f) => f })',
         locked: true
     },
 
@@ -84,8 +84,9 @@ const INJECTED = [
     // with the parse attached.
     { name: 'from_json', value: '() => __helpers.from_json' },
 
-    // The inbound bridge: the JavaScript globals, as they are.
-    { name: 'js', value: '() => globalThis' },
+    // The inbound bridge: the JavaScript globals, as they are, through the
+    // runtime's name for them, which no name of the module's shadows.
+    { name: 'js', value: '() => __global' },
 
     // Jinja's `|batch(3)`, kept under its own name because that is the word a
     // Django or Flask author searches for. It is the one grouping an index
