@@ -37,10 +37,18 @@ const {
     VIEW_OF,
     VIEWED,
     LIST_VIEW,
-    PLAIN_VIEW
+    PLAIN_VIEW,
+    host,
+    lent,
+    pyBind,
+    pyData,
+    entering
 } = core;
 
-export { NONE, pyClass, ownType, pyScalar, plainScalar, plainObject, pyEntries, pyBytes, isSet };
+export { NONE, pyClass, ownType, pyScalar, plainScalar, plainObject, pyEntries, pyBytes, isSet, pyBind, pyData };
+
+// What the crossing borrows of this module until it moves there too.
+lent.functionIn = functionIn;
 
 // The global object, for the generated code to reach `Object`, `Symbol` and
 // `Error` through: a module that binds one of those names binds it in the
@@ -834,9 +842,10 @@ export const __pybridge = {
         return stateProbe();
     },
 
-    // And how to make an object a state of Svelte's (`proxied`).
+    // And how to make an object a state of Svelte's, the crossing's
+    // `host.adopt`.
     proxying(make) {
-        proxied = make;
+        host.adopt = make;
     },
 
     // The value of a `use:`, read as Svelte reads an action's value in the
@@ -4045,27 +4054,6 @@ const forReader = (one) => {
 
 const INDEX = /^(?:0|[1-9]\d*)$/;
 
-// What JavaScript writes into a view. A plain object or an array of its own is
-// data, made Python's the way `to_py` makes it, so that a later write to it goes
-// through a view of its own and is followed: after `rows.push({n: 2})`,
-// `rows.at(-1).n = 3` reaches the page as well as the data. Svelte draws the
-// same line, making a proxy of exactly those two kinds when one is put
-// into its state. Anything else crosses as a binding's value does: a view handed
-// back is its container again, and a class instance, a Date or a DOM node keeps
-// its identity.
-//
-// And an object a Svelte state already owns is kept, at any depth (`live`), as
-// Svelte keeps a proxy of its own put into its state: copied, a model shared by
-// two components stopped being one, and a write made through its owner never
-// reached the Python reader.
-const entering = (given) =>
-    given !== null &&
-    typeof given === 'object' &&
-    !VIEWED.has(given) &&
-    quietPyType(given) === undefined &&
-    (Array.isArray(given) || plainObject(given))
-        ? pyData(given, undefined, true)
-        : pyBind(given);
 
 // Svelte's mark of a state of its own, which it does not publish: the key its
 // `proxy` looks for first in what it is handed, found as it looks, by a probe a
@@ -4086,16 +4074,11 @@ const stateProbe = () =>
           )
         : undefined;
 
-// What makes an object Svelte's own state, as a component or a store hands it
-// over in a rune as it loads (`proxying`): Svelte's proxy of the object, which
-// reads and writes through its getters and setters and follows its other
-// properties. Null until one has, and the object is then kept as it is.
-let proxied = null;
-
 // Whether a Svelte state owns `value`, asked as Svelte asks it of what is put
 // into its state: whether the value holds its mark. Asked of the object and
 // nothing else: a guess from how a proxy behaves took a proxy of anyone's for
-// Svelte's, and ran a handler of the author's that Svelte never runs.
+// Svelte's, and ran a handler of the author's that Svelte never runs. The
+// crossing asks it as the host's answer (`host.owns`).
 const stateOwned = (value) => {
     if (STATE === undefined) return false;
 
@@ -4105,6 +4088,8 @@ const stateOwned = (value) => {
         return false;
     }
 };
+
+host.owns = stateOwned;
 
 // The prototypes whose getters Svelte does not run as it reads an object.
 const PLAIN_PROTOTYPES = new Set([Object.prototype, Array.prototype, Map.prototype, Set.prototype, Date.prototype]);
@@ -5968,132 +5953,6 @@ function twoKeys(name) {
     throw error;
 }
 
-// The inbound twin of `plainData`: a JavaScript value as real Python. The walk
-// is Brython's own `JSObj.to_dict()`; what is left here is the root, which a
-// method on an object cannot speak for: a scalar, a null, a bare array.
-//
-// What it buys, on a value that only ever crossed from JavaScript: `.get()`,
-// `.items()` and `isinstance(x, dict)`. Without it, `.get` and `.keys` raise
-// AttributeError while `.items` silently returns the *value* of a key spelled
-// "items", a failure whose shape depends on the data.
-export function pyData(value, made, live = false) {
-    const $B = globalThis.__BRYTHON__;
-
-    if (value === undefined || value === null) return NONE;
-
-    if (typeof value !== 'object') return pyBind(value);
-
-    // A view a JavaScript reader was handed is its container again, at any
-    // depth: `{item: values.original}` holds the dict itself, not a copy of it.
-    if (VIEWED.has(value)) return pyBind(value);
-
-    // Written into a view, an object a state owns is itself (`entering`).
-    if (live && stateOwned(value)) return pyBind(value);
-
-    // And one whose properties are a getter or a setter becomes Svelte's state,
-    // as Svelte makes it when it is put into a state: its getters and setters
-    // read and write through Svelte's proxy, which follows its other
-    // properties too. Copied, the getter was read once and the setter never
-    // called; kept as it was, nothing followed what it held.
-    if (live && behaves(value)) return pyBind(proxied === null ? value : proxied(value));
-
-    // A Brython list and a Brython tuple are JavaScript arrays too, told apart
-    // from a foreign one by the `ob_type` they carry, and kept as they are: a
-    // tuple stays immutable, and a list stays the object its name holds.
-    //
-    // A foreign array is rebuilt, and a JavaScript array belongs to a graph
-    // rather than to a tree: `xs.push(xs)` holds itself, and `[shared, shared]`
-    // holds one list twice. So each array is registered *before* its children
-    // are walked, and whatever the graph does afterwards finds the list already
-    // made.
-    if (Array.isArray(value)) {
-        // Asked of the *class*, like the object branch below and for the same
-        // reason: `ob_type` is a field name, and an array is as free to carry
-        // one as an object is: a JavaScript array with a business field of that
-        // name is no Brython list, and `to_py(rows)` gives a `list`.
-        if (quietPyType(value) !== undefined) return value;
-
-        made ??= new WeakMap();
-
-        const known = made.get(value);
-        if (known !== undefined) return known;
-
-        const list = _b_.list.$factory([]);
-
-        made.set(value, list);
-        for (const one of value) list.push(pyData(one, made, live));
-
-        return list;
-    }
-
-    // The other half of the graph, and the reason it cannot be left to Brython:
-    // its `convert_to_python` is tree-only, so `o.self = o` overflows inside
-    // *its* frames, and two references to one object come back as two dicts. A
-    // cycle does not have to be *in* an object for the object branch to be the
-    // one that meets it, since `{"xs": [o]}` enters here.
-    //
-    // This framework updates by mutation, so two names that stop being one thing
-    // is a write that stops arriving.
-    //
-    // Only a plain object. A Date, a Map, a Response, a DOM node and anything
-    // Python already owns keep the crossing they had.
-    //
-    // Asked as `plainObject`, the predicate written for exactly this question
-    // one page up, so the outbound and inbound walks recognise the same
-    // objects. One rule, one site.
-    //
-    // "Is this already a Python object" is not `ob_type === undefined`: that is
-    // a *field name*, which data is allowed to carry, `{"ob_type": "business",
-    // "value": 42}` being ordinary JSON. A real Python object carries a class
-    // there, so the question is asked of the class, read without running a
-    // getter of that name: each property is read once, by the copy. Asked of
-    // both places the engine keeps it (`quietPyType`): a dict keeps its class
-    // under a symbol, and was copied, its identity and its non-string keys
-    // lost, `to_py({7: 42})` empty.
-    if (quietPyType(value) === undefined && plainObject(value)) {
-        made ??= new WeakMap();
-
-        const known = made.get(value);
-        if (known !== undefined) return known;
-
-        const dict = _b_.dict.$factory();
-
-        made.set(value, dict);
-
-        // Every own enumerable property, as JavaScript's spread and Svelte's
-        // proxy take them, a symbol's included: `Object.entries` reads the
-        // strings alone, and a library's metadata under a symbol was lost.
-        for (const key of Reflect.ownKeys(value)) {
-            if (Object.prototype.propertyIsEnumerable.call(value, key)) $B.$setitem(dict, key, pyData(value[key], made, live));
-        }
-
-        return dict;
-    }
-
-    const python = $B.jsobj2pyobj(value);
-
-    // Idempotent, which it has to be: `jsobj2pyobj` hands back the *original*
-    // Python object when the value once came from one, which is what the
-    // `PYOBJ` WeakMap is for, and a dict has no `to_dict`, so `to_py` serves as
-    // the guard on a boundary, raising on nothing that needs no converting.
-    // Only for something that needed converting: `jsobj2pyobj` hands back the
-    // *same* object when the value was already Python, and a Python instance
-    // that defines `to_dict`, an ordinary serialisation helper, answers a
-    // **bound method**, not a JavaScript function. Identity is the test:
-    // nothing was converted, so there is nothing to finish.
-    if (python === value) return python;
-
-    // **Not reachable from a component, and kept as a belt.** Everything a
-    // component can hand this (`js.JSON.parse(…)`, the answer of a `__js__`
-    // import) has already crossed `inbound`, so `jsobj2pyobj` gives the same
-    // object back and the line above returns first. A mutation sweep says so:
-    // inverting the test below calls `null()` on every conversion and no test
-    // can tell, because no reachable input gets here. `tests/to-py.test.js`
-    // covers what an author can actually write.
-    const toDict = $B.$getattr(python, 'to_dict', null);
-
-    return toDict === null ? python : toDict();
-}
 
 // Does it behave like a URL, asked somewhere a throw is expected rather than
 // fatal.
@@ -8710,43 +8569,6 @@ function lookup(target, name) {
 // `lookup` lets both go on. Once the key is found the destination is decided.
 const keyed = (target, name) => lookup(target, name) !== MISSING;
 
-// A scalar entering Python, wherever it enters from. One rule for the four
-// doors, because the same value had different capabilities behind each: a
-// binding's write-back, an imported constant, an argument handed to an exported
-// function, and `to_py` itself.
-//
-// Brython reads a JavaScript number as an `int` when it is whole and as a
-// `JSObject` when it is not: a `type="number"` field, the one input Svelte
-// converts for you, wrote `0.42` into a name whose `type()` was then `JSObject`.
-// It prints `0.42`, so the page looks right, and `round(x, 1)` raises. The same
-// crossing in a group turned `value={1}` into the string "1".
-//
-// `jsobj2pyobj` is the conversion, and Brython owns its three rules: a whole
-// number stays an int, one past 2^53 becomes a BigInt, anything else becomes a
-// float. Numbers alone: `bind:this` hands over a DOM node and `bind:files` a
-// FileList, and those must cross as they are. Idempotent, so the group may ask
-// for it early, to compare, and the write may ask again.
-//
-// An absence is None, the rule `pyArg` and `pyData` keep: a cleared number
-// field hands over `null`, and `value is None` has to say so.
-export const pyBind = (value) => {
-    if (value === null || value === undefined) return NONE;
-
-    // The number a Python write is handing over right now (`handOver`) is the
-    // value it was written as.
-    if (handed !== null && Object.is(value, handed.js)) return handed.py;
-    if (typeof value === 'number') return globalThis.__BRYTHON__.jsobj2pyobj(value);
-
-    // A function as every door takes one (`functionIn`): a function
-    // `pyHandler` published is its callable, a JavaScript one is adapted.
-    if (typeof value === 'function') return functionIn(value);
-
-    // A view a JavaScript reader was handed (`viewOf`) is its container again,
-    // and a copy of bytes the bytes it holds.
-    if (VIEWED.has(value)) return globalThis.__BRYTHON__.PYOBJ_MAP.get(value);
-
-    return bytesIn(value) ?? value;
-};
 
 // Whether a read through the dot would find an attribute, answered without
 // reading it: a write that asked `$getattr` would run the getter of the property
@@ -9380,9 +9202,8 @@ export const unproxied = (value, crossed) => (crossed != null && Object.is(value
 // child keeps as well (`crossed`), so its own read gives the float again while
 // Svelte still holds the number it wrote. A list, a tuple or a dict crosses as
 // its view (`viewOf`), which a JavaScript parent reads and writes live; a
-// string or an int is its own JavaScript form and crosses as itself.
-let handed = null;
-
+// string or an int is its own JavaScript form and crosses as itself. The pair
+// handed over is the crossing's to know (`lent.handed`).
 export const handOver = (written, write) => {
     const crossing = viewOf(plainScalar(written));
 
@@ -9393,14 +9214,14 @@ export const handOver = (written, write) => {
     }
 
     const record = { js: crossing, py: written };
-    const previous = handed;
+    const previous = lent.handed;
 
-    handed = record;
+    lent.handed = record;
 
     try {
         write(crossing);
     } finally {
-        handed = previous;
+        lent.handed = previous;
     }
 
     return record;
