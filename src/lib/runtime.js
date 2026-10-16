@@ -104,16 +104,33 @@ lent.functionIn = functionIn;
 lent.seq = (value) => __pybridge.seq(value);
 lent.schedule = scheduleAsync;
 
-// The doors this module opens, each with its rule, which the entries of
-// `__pybridge` name (`toJs`, `toPython`).
+// The doors this module opens, each with its rule, registered under its name
+// (`doors`) and held by the entry of `__pybridge` that opens it. Held, not
+// looked up: an entry is called on every crossing, and a lookup by name there
+// cost 5 to 7 % of `bound`.
 //
+// What Python hands out to a DOM boundary, an attribute, a prop or a `bind:`
+// written by name (`bound`): None the absence, a callable its handler, and a
+// container its view.
+const attribute = (value) => {
+    if (value === NONE) return undefined;
+
+    return value !== null && (typeof value === 'object' || typeof value === 'function') && callable(value)
+        ? pyHandler(value)
+        : viewOf(value);
+};
+
 // A spread to a JavaScript child: each value crosses as a prop written by name
-// does, `bound` and then the floats of a config made numbers (`pyNumbers`).
-doors.out('spread', (value) => spreadOf(value, (one) => pyNumbers(__pybridge.bound(one))));
+// does, `attribute` and then the floats of a config made numbers (`pyNumbers`).
+const spread = (value) => spreadOf(value, (one) => pyNumbers(attribute(one)));
 
 // A spread to a Python child: each value the Python value itself, None among
 // them None, and not the absence that reads the child's default.
-doors.out('spread-python', (value) => spreadOf(value, (one) => (one === NONE ? NONE : __pybridge.bound(one))));
+const spreadPython = (value) => spreadOf(value, (one) => (one === NONE ? NONE : attribute(one)));
+
+doors.out('attribute', attribute);
+doors.out('spread', spread);
+doors.out('spread-python', spreadPython);
 
 // The global object, for the generated code to reach `Object`, `Symbol` and
 // `Error` through: a module that binds one of those names binds it in the
@@ -973,13 +990,7 @@ export const __pybridge = {
     // the same callable one level down already is, `config={{'cb': run}}`: a
     // JavaScript child calls it with its own numbers and arguments, and a raw
     // function raised on them where the nested one answered.
-    bound(value) {
-        if (value === NONE) return undefined;
-
-        return value !== null && (typeof value === 'object' || typeof value === 'function') && callable(value)
-            ? pyHandler(value)
-            : viewOf(value);
-    },
+    bound: attribute,
 
     // The snippet a `{@render}` renders when its spelling does not say whose it
     // is: `children`, an alias, an attribute, a key. One a Python markup
@@ -1152,16 +1163,12 @@ export const __pybridge = {
     // a level further down than a prop written by name, so `{**attrs}` handed
     // a child `config.rate` as a Brython float where `config={config}` handed
     // it a number.
-    spread(value) {
-        return toJs(value, 'spread');
-    },
+    spread,
 
     // The same props handed to a child written in Python, each the Python value
     // itself, as one written by name is handed to it: None among them is None,
     // and not the absence that reads the child's default.
-    spreadPython(value) {
-        return toJs(value, 'spread-python');
-    },
+    spreadPython,
 
     // A spread on an element: each key is the attribute it becomes, read the
     // way that attribute is read when written by name. Only None is converted
