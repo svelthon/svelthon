@@ -27,6 +27,22 @@ test('bryntime/ imports the engine and itself, and nothing of Svelte or of the r
     expect(imports.filter((one) => !one.endsWith(`: ${ENGINE}`) && !/: \.\/[\w-]+\.js$/.test(one))).toEqual([]);
 });
 
+// And by name: what it writes on the engine, signs its refusals with and
+// recognises them by is its own. Its comments may take Svelte for an example;
+// a line of code that names Svelthon or Svelte is a contract a page without
+// them would have to keep.
+test('no line of code of bryntime/ names Svelthon or Svelte', () => {
+    const named = readdirSync(DIR).flatMap((file) =>
+        readFileSync(`${DIR}/${file}`, 'utf8')
+            .split('\n')
+            .map((line, index) => [`${file}:${index + 1}`, line.replace(/(^|\s)\/\/.*$/, '')])
+            .filter(([, code]) => /svelthon|svelte/i.test(code))
+            .map(([where, code]) => `${where}: ${code.trim()}`)
+    );
+
+    expect(named).toEqual([]);
+});
+
 test('loaded alone, with no host, it crosses data both ways', () => {
     const $B = globalThis.__BRYTHON__;
     const python = pyData({ name: 'a', rows: [1, 2.5, { deep: null }] });

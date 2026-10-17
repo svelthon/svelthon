@@ -27,7 +27,8 @@ import {
     thenable,
     ticking,
     unboxed,
-    jsonCopy
+    jsonCopy,
+    refusal
 } from './runtime.js';
 
 // What the author wrote, as a value JavaScript can read with `typeof`.
@@ -90,18 +91,12 @@ const instantOf = (value) => {
 // `svelthon — ` and all name a file. These three could do neither: they run at
 // render time, inside a compiled `__expr_N`, so the file is not theirs to know.
 //
-// The mark is what fixes that. `pyError` already receives the expression and the
-// component from the wrapper that catches, and it now completes a marked error
-// with them, which leaves the sentence here and the position there. Genuine
-// JavaScript errors keep crossing untouched, which was the reason `pyError`
-// stayed out of their way in the first place.
-function refuse(message) {
-    const error = new Error(`svelthon — ${message}`);
-
-    error.$svelthon = true;
-
-    return error;
-}
+// A refusal (`refusal`) is what fixes that. `pyError` already receives the
+// expression and the component from the wrapper that catches, and it completes
+// a refusal with them, which leaves the sentence here and the position there.
+// Genuine JavaScript errors keep crossing untouched, which was the reason
+// `pyError` stayed out of their way in the first place.
+const refuse = (message) => refusal(message, 'svelthon');
 
 // What a refusal shows of the value it refused.
 //

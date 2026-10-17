@@ -16,23 +16,23 @@ const $B = globalThis.__BRYTHON__;
 
 // globals.js shadowed `process` so that brython.js would see the DOM jsdom
 // provides rather than the Node process behind it. Its load is over.
-if ($B.$svelthonRealProcess) {
-    globalThis.process = $B.$svelthonRealProcess;
-    delete $B.$svelthonRealProcess;
+if ($B.$bryntimeRealProcess) {
+    globalThis.process = $B.$bryntimeRealProcess;
+    delete $B.$bryntimeRealProcess;
 }
 
 // What brython.js adds to the global scope when it finds no browser.
 const DOM_STUBS = new Set(['document', 'location', 'HTMLElement', 'MutationObserver', 'customElements']);
 
-if (!$B.$svelthon_booted) {
-    $B.$svelthon_booted = true;
+if (!$B.$bryntimeBooted) {
+    $B.$bryntimeBooted = true;
     $B.brython({ ipy_id: [] });
 
     // Server rendering must look like server rendering. Brython's DOM stubs did
     // their job during the bootstrap above; leaving them in place makes every
     // library that tests `typeof document` take the browser path and fail on
     // `window`. See the note in globals.js.
-    const before = $B.$svelthonGlobalsBefore;
+    const before = $B.$bryntimeGlobalsBefore;
 
     if (before && !before.has('window')) {
         for (const name of Object.getOwnPropertyNames(globalThis)) {

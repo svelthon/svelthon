@@ -28,9 +28,9 @@ const contract = readFileSync(at('../BRYTHON.md'), 'utf8');
 // written in these files.
 const REACHED = /(?:\$B|__BRYTHON__)\.([A-Za-z_$][A-Za-z0-9_$]*)/g;
 
-// Marks Svelthon itself hangs on the engine. They are ours to name and ours to
-// change, so they are not part of anybody's contract.
-const OURS = /^\$svelthon/;
+// Marks Svelthon and Bryntime hang on the engine. They are ours to name and
+// ours to change, so they are not part of anybody's contract.
+const OURS = /^\$(svelthon|bryntime)/;
 
 const used = new Set();
 

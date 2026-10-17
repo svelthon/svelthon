@@ -66,6 +66,7 @@ const {
     propertyKey,
     propertyName,
     twoKeys,
+    refused,
     doors,
     toJs,
     toPython
@@ -96,6 +97,10 @@ export {
     jsonCopy,
     plainData
 };
+
+// Under its own name, since this module has a `refusal` of its own (a view's
+// write refused while a block renders).
+export { refusal } from './bryntime/bryntime.js';
 
 // What the crossing borrows of this module until it moves there too.
 lent.functionIn = functionIn;
@@ -3832,14 +3837,15 @@ export const fileLines = (file, lines) => {
 export function pyError(error, where) {
     const $B = globalThis.__BRYTHON__;
 
-    // One of ours, thrown by a template helper rather than by Python. It carries
-    // its own sentence and the project's prefix; what it cannot know from inside
+    // A refusal, thrown by a template helper or by a crossing rather than by
+    // Python. It carries its own sentence; what it cannot know from inside
     // `date()` is which expression called it, and that is exactly what `where`
-    // holds. Marked rather than sniffed, so a genuine JavaScript error keeps
-    // crossing untouched.
-    if (error instanceof Error && error.$svelthon && !error.$located) {
+    // holds. Known by `refused` rather than sniffed, so a genuine JavaScript
+    // error keeps crossing untouched. Bryntime's own reach the author signed
+    // with this project's name, as every other refusal here is.
+    if (refused(error) && !error.$located) {
         error.$located = true;
-        error.message = `${error.message} (${where})`;
+        error.message = `${error.message.replace(/^bryntime — /, 'svelthon — ')} (${where})`;
     }
 
     if (!error || typeof error !== 'object' || error.message !== undefined) return error;

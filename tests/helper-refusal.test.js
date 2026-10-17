@@ -3,7 +3,7 @@ import { mount, flushSync } from './mounted.js';
 
 import HelperRefusal from './fixtures/HelperRefusal.svelte';
 import { batch, date, fromnow } from '../src/lib/helpers.js';
-import { pyError, NONE } from '../src/lib/runtime.js';
+import { pyError, plainData, NONE } from '../src/lib/runtime.js';
 
 // The eighteen refusals in `compile.cjs` and `markup.js` all open with
 // `svelthon — ` and all name a file. The three in `helpers.js` could do neither,
@@ -89,5 +89,28 @@ describe('and the mark is what makes that possible', () => {
 
     test('a helper called outside a component still says what is wrong', () => {
         expect(() => batch([1], 0)).toThrow(/^svelthon — batch\(\): n must be an integer/);
+    });
+
+    // Bryntime signs its own refusals, and JavaScript that calls the crossing
+    // reads its name; the author, through a component, reads this project's,
+    // located, as every other refusal here.
+    test('a refusal of Bryntime reaches the author signed svelthon and located', () => {
+        const $B = globalThis.__BRYTHON__;
+        const keys = $B.builtins.dict.$factory();
+        let thrown;
+
+        $B.$setitem(keys, 1, 'numeric');
+        $B.$setitem(keys, '1', 'text');
+
+        try {
+            plainData(keys);
+        } catch (error) {
+            thrown = error;
+        }
+
+        expect(thrown.message).toMatch(/^bryntime — this dict has two keys JavaScript cannot tell apart/);
+        expect(pyError(thrown, 'label() — src/App.svelte').message).toMatch(
+            /^svelthon — this dict has two keys JavaScript cannot tell apart: .* \(label\(\) — src\/App\.svelte\)$/s
+        );
     });
 });

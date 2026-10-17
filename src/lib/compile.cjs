@@ -18,7 +18,7 @@ globalThis.$B ??= globalThis.__BRYTHON__; // the codegen's eval() resolves $B gl
 // this set. Recorded too late, the stubs count as pre-existing and survive, and
 // then every library that tests `typeof document` takes the browser path and
 // dies on `window is not defined`.
-globalThis.$B.$svelthonGlobalsBefore ??= new Set(Object.getOwnPropertyNames(globalThis));
+globalThis.$B.$bryntimeGlobalsBefore ??= new Set(Object.getOwnPropertyNames(globalThis));
 
 // The engine, then the parsing chain: this file is the one that compiles, so it
 // is the one that declares it needs a compiler. Everything else loads `boot.js`,

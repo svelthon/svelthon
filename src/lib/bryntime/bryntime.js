@@ -1583,21 +1583,32 @@ export function propertyName(key, out, seen, adapt) {
     return name;
 }
 
+// A refusal: an error with its own sentence, signed by whoever raises it, and
+// known as one by `refused` alone, so that whoever catches it can tell it from
+// a JavaScript error and complete it with what only the caller knows, and a
+// JavaScript error keeps crossing untouched. Nothing is written on the error.
+const REFUSALS = new WeakSet();
+
+export function refusal(message, by = 'bryntime') {
+    const error = new Error(`${by} — ${message}`);
+
+    REFUSALS.add(error);
+
+    return error;
+}
+
+export const refused = (error) => REFUSALS.has(error);
+
 // Two keys Python keeps apart that JavaScript can only spell one way. The
-// narrowing is the destination's, but the silence would be ours, and this
-// project's own rule for the moment is written one file over: a serialiser
+// narrowing is the destination's, but the silence would be ours: a serialiser
 // meeting something it cannot serialise owes the author a sentence.
 export function twoKeys(name) {
-    const error = new Error(
-        `svelthon — this dict has two keys JavaScript cannot tell apart: ` +
+    throw refusal(
+        `this dict has two keys JavaScript cannot tell apart: ` +
             `\`${String(name)}\` is what both of them spell as a property name. A ` +
             `JavaScript object has string keys only, so one would silently ` +
             `replace the other on the way out.`
     );
-
-    error.$svelthon = true;
-
-    throw error;
 }
 
 // And the doors themselves: each named where it is opened, `toJs(value,
