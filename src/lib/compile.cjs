@@ -4399,11 +4399,18 @@ function compile(
     // after the DOM exists, its teardown when the component goes away. Both
     // names stay ordinary functions, nothing stops Python calling them too.
     //
-    // A hook is whatever the name holds once the script has run, a `def` or a
-    // value bound by `=`, `on_mount = lambda: …`: read off the `def`'s own
-    // binding, or off the name's.
+    // A hook is whatever the name holds once the script has run, however the
+    // name was bound: a `def`, a value bound by `=`, `on_mount = lambda: …`, a
+    // prop, a name imported from JavaScript by the script or by the `<script
+    // module>`, where only the first two were asked and the others were never
+    // called. Read off the `def`'s own binding, or off the name's.
     const defined = (hook) => funcs.some((f) => f.name === hook);
-    const lifecycle = (hook) => !store && (defined(hook) || state.includes(hook));
+    const holdsHook = (hook) =>
+        state.includes(hook) ||
+        [...props, ...bindables].some((one) => (one.name ?? one) === hook) ||
+        jsImported.includes(hook) ||
+        jsNames.includes(hook);
+    const lifecycle = (hook) => !store && (defined(hook) || holdsHook(hook));
     const hook = (name) => (defined(name) ? fn(name) : name);
 
     // A component free to define its own `publish` or `derived` keeps it.

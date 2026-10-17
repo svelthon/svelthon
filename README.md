@@ -80,7 +80,7 @@ rest of that configuration and what each line buys.
 npm install
 npm run dev          # the demo, at /demo/
 
-npm test             # 1 944 tests: semantics, props, reactivity, Svelte surface
+npm test             # 1 945 tests: semantics, props, reactivity, Svelte surface
 npm run test:quiet   # the suite's own output: a green run must say nothing
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
@@ -1161,7 +1161,8 @@ def on_destroy():
 What `on_mount` returns is its cleanup, as with Svelte's `onMount`: a function
 returned there runs on teardown, before `on_destroy`. Either may be an
 `async def`, which is started, or any value the name holds once the script has
-run, `on_mount = lambda: …` included.
+run, however it was bound: `on_mount = lambda: …`, a prop, a name imported from
+JavaScript by the script or by the `<script module>`.
 
 Both stay ordinary functions, and Python may call them too. They run **untracked**:
 a hook reads the component's names through the namespace accessors, and those
@@ -1593,7 +1594,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 1 944 tests as written (vitest reports more, one per
+Validated by `npm test`, 1 945 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;

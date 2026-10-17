@@ -78,7 +78,7 @@ reste de cette configuration et ce que chaque ligne apporte.
 npm install
 npm run dev          # la démo, sous /demo/
 
-npm test             # 1 944 tests : sémantique, props, réactivité, surface Svelte
+npm test             # 1 945 tests : sémantique, props, réactivité, surface Svelte
 npm run test:quiet   # la sortie de la suite : un run vert ne doit rien dire
 npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
@@ -1208,7 +1208,9 @@ def on_destroy():
 Ce que rend `on_mount` est son nettoyage, comme avec `onMount` de Svelte : une
 fonction rendue là s'exécute au démontage, avant `on_destroy`. L'un comme
 l'autre peut être un `async def`, qui est démarré, ou toute valeur que le nom
-tient une fois le script exécuté, `on_mount = lambda: …` compris.
+tient une fois le script exécuté, quelle que soit sa liaison : `on_mount =
+lambda: …`, une prop, un nom importé de JavaScript par le script ou par le
+`<script module>`.
 
 Les deux restent des fonctions ordinaires, Python peut les appeler aussi. Elles
 s'exécutent **hors suivi** (`untrack`) : un hook lit les noms du composant à
@@ -1612,7 +1614,7 @@ part jamais.
 
 ## État
 
-Validé par `npm test`, 1 944 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 1 945 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
