@@ -9,7 +9,7 @@
 import { test, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
 import '../src/lib/compile.cjs';
-import { host, pyData, plainData, entering, pyBind, NONE } from '../src/lib/bryntime/bryntime.js';
+import { host, pyData, plainData, entering, pyBind, refused, NONE } from '../src/lib/bryntime/bryntime.js';
 
 const DIR = 'src/lib/bryntime';
 const ENGINE = '../../../vendor/brython_runtime.js';
@@ -52,4 +52,26 @@ test('loaded alone, with no host, it crosses data both ways', () => {
     expect(pyBind(undefined)).toBe(NONE);
     expect(host.owns(python)).toBe(false);
     expect($B.class_name(entering({ n: 1 }))).toBe('dict');
+});
+
+// With no host to give its name, a refusal is signed with Bryntime's own, and
+// known as one by `refused`.
+test('alone, it signs its refusals with its own name', () => {
+    const $B = globalThis.__BRYTHON__;
+    const keys = $B.builtins.dict.$factory();
+    let thrown;
+
+    $B.$setitem(keys, 1, 'numeric');
+    $B.$setitem(keys, '1', 'text');
+
+    try {
+        plainData(keys);
+    } catch (error) {
+        thrown = error;
+    }
+
+    expect(host.name).toBe('bryntime');
+    expect(thrown.message).toMatch(/^bryntime — this dict has two keys JavaScript cannot tell apart/);
+    expect(refused(thrown)).toBe(true);
+    expect(refused(new Error('bryntime — written by hand'))).toBe(false);
 });

@@ -2,6 +2,7 @@ import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 
 import HelperRefusal from './fixtures/HelperRefusal.svelte';
+import RefusalCaught from './fixtures/RefusalCaught.svelte';
 import { batch, date, fromnow } from '../src/lib/helpers.js';
 import { pyError, plainData, NONE } from '../src/lib/runtime.js';
 
@@ -91,12 +92,16 @@ describe('and the mark is what makes that possible', () => {
         expect(() => batch([1], 0)).toThrow(/^svelthon — batch\(\): n must be an integer/);
     });
 
-    // Bryntime signs its own refusals, and JavaScript that calls the crossing
-    // reads its name; the author, through a component, reads this project's,
-    // located, as every other refusal here.
-    test('a refusal of Bryntime reaches the author signed svelthon and located', () => {
+    // The crossing signs a refusal where it makes it, with the name the host
+    // gave, so the author reads this project's by every path: JavaScript that
+    // calls the crossing, a component through `pyError`, which adds the
+    // position and nothing else, and Python catching it in an `except`, which
+    // `pyError` never sees and which read `bryntime` while the name was
+    // rewritten on the way out.
+    test('a refusal of the crossing is signed svelthon by every path, a Python except included', () => {
         const $B = globalThis.__BRYTHON__;
         const keys = $B.builtins.dict.$factory();
+        const two = /^svelthon — this dict has two keys JavaScript cannot tell apart/;
         let thrown;
 
         $B.$setitem(keys, 1, 'numeric');
@@ -108,9 +113,16 @@ describe('and the mark is what makes that possible', () => {
             thrown = error;
         }
 
-        expect(thrown.message).toMatch(/^bryntime — this dict has two keys JavaScript cannot tell apart/);
+        expect(thrown.message).toMatch(two);
         expect(pyError(thrown, 'label() — src/App.svelte').message).toMatch(
             /^svelthon — this dict has two keys JavaScript cannot tell apart: .* \(label\(\) — src\/App\.svelte\)$/s
         );
+
+        const target = document.body.appendChild(document.createElement('div'));
+        const instance = mount(RefusalCaught, { target });
+
+        flushSync();
+        expect(instance.caught()).toMatch(two);
+        target.remove();
     });
 });

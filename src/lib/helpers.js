@@ -91,12 +91,13 @@ const instantOf = (value) => {
 // `svelthon — ` and all name a file. These three could do neither: they run at
 // render time, inside a compiled `__expr_N`, so the file is not theirs to know.
 //
-// A refusal (`refusal`) is what fixes that. `pyError` already receives the
-// expression and the component from the wrapper that catches, and it completes
-// a refusal with them, which leaves the sentence here and the position there.
-// Genuine JavaScript errors keep crossing untouched, which was the reason
-// `pyError` stayed out of their way in the first place.
-const refuse = (message) => refusal(message, 'svelthon');
+// A refusal (`refusal`) is what fixes that: signed with the project's name,
+// as the crossing's are. `pyError` already receives the expression and the
+// component from the wrapper that catches, and it completes a refusal with
+// them, which leaves the sentence here and the position there. Genuine
+// JavaScript errors keep crossing untouched, which was the reason `pyError`
+// stayed out of their way in the first place.
+const refuse = refusal;
 
 // What a refusal shows of the value it refused.
 //

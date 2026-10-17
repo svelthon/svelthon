@@ -102,6 +102,10 @@ export {
 // write refused while a block renders).
 export { refusal } from './bryntime/bryntime.js';
 
+// The name this project's author knows, which signs every refusal the crossing
+// makes, as every other refusal here is signed.
+host.name = 'svelthon';
+
 // What the crossing borrows of this module until it moves there too.
 lent.functionIn = functionIn;
 lent.handler = pyHandler;
@@ -3841,11 +3845,11 @@ export function pyError(error, where) {
     // Python. It carries its own sentence; what it cannot know from inside
     // `date()` is which expression called it, and that is exactly what `where`
     // holds. Known by `refused` rather than sniffed, so a genuine JavaScript
-    // error keeps crossing untouched. Bryntime's own reach the author signed
-    // with this project's name, as every other refusal here is.
+    // error keeps crossing untouched. Signed already, with this project's name
+    // (`host.name`), wherever it was made.
     if (refused(error) && !error.$located) {
         error.$located = true;
-        error.message = `${error.message.replace(/^bryntime — /, 'svelthon — ')} (${where})`;
+        error.message = `${error.message} (${where})`;
     }
 
     if (!error || typeof error !== 'object' || error.message !== undefined) return error;

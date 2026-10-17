@@ -157,10 +157,11 @@ export const plainScalar = (value) => {
 };
 
 // What the host answers, handed over by it as it loads: whether one of its
-// states owns a value (`owns`), and how it makes an object its state
-// (`adopt`). Svelthon's answer for Svelte's. With no host, no state owns
-// anything and an object stays as it is.
-export const host = { owns: () => false, adopt: null };
+// states owns a value (`owns`), how it makes an object its state (`adopt`),
+// and the name its author knows, which signs every refusal (`name`).
+// Svelthon's answer for Svelte's. With no host, no state owns anything, an
+// object stays as it is, and a refusal is signed with Bryntime's own name.
+export const host = { owns: () => false, adopt: null, name: 'bryntime' };
 
 // What the host still lends the crossing: how a function crosses in
 // (`functionIn`) and out (`handler`), the pair a Python write is handing over
@@ -1587,14 +1588,16 @@ export function propertyName(key, out, seen, adapt) {
     return name;
 }
 
-// A refusal: an error with its own sentence, signed by whoever raises it, and
-// known as one by `refused` alone, so that whoever catches it can tell it from
-// a JavaScript error and complete it with what only the caller knows, and a
-// JavaScript error keeps crossing untouched. Nothing is written on the error.
+// A refusal: an error with its own sentence, signed where it is made with the
+// name the host gave (`host.name`), so the author reads one name by whatever
+// path it reaches them, a Python `except` included, and known as one by
+// `refused` alone, so that whoever catches it can tell it from a JavaScript
+// error and complete it with what only the caller knows, and a JavaScript
+// error keeps crossing untouched. Nothing is written on the error.
 const REFUSALS = new WeakSet();
 
-export function refusal(message, by = 'bryntime') {
-    const error = new Error(`${by} — ${message}`);
+export function refusal(message) {
+    const error = new Error(`${host.name} — ${message}`);
 
     REFUSALS.add(error);
 
