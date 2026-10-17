@@ -1010,7 +1010,7 @@ const inbound = (value) =>
 // an argument to a component's or a store's function, received the float
 // Brython builds where it expected a number.
 export function functionIn(value) {
-    return PUBLISHED.get(value) ?? (declared(value) === null ? jsCall(value) : value);
+    return PUBLISHED.get(value) ?? (declared(value) === null ? adapter(value) : value);
 }
 
 // **Brython's own refusal, which this proxy was going around.**
@@ -1071,6 +1071,11 @@ const crossing = (target, self, args) => {
     return inbound(Reflect.apply(target, self, converted));
 };
 
+// What an import from JavaScript binds, and what a namespace of one hands
+// Python: a function enters as a function enters by any door (`functionIn`),
+// so a Python function a JavaScript module re-exports is that function again,
+// where it was adapted as JavaScript's and its `1.0` crossed as the number 1,
+// back an int, and a `Price(float)` as a plain float.
 export function jsCall(value) {
     // An imported constant crosses here too, and it crosses once, as the same
     // value returned by an imported *function* crosses through `inbound`:
@@ -1078,7 +1083,11 @@ export function jsCall(value) {
     // A namespace, a default export or an object crosses as it is: the
     // functions reached through it are the engine's to call, and the engine
     // hands Python callables over through `pyobj2jsobj_hook`, above `pyHandler`.
-    if (typeof value !== 'function') return pyBind(value);
+    return typeof value === 'function' ? functionIn(value) : pyBind(value);
+}
+
+// The adapter of a JavaScript function, one for the life of the function.
+function adapter(value) {
     if (ADAPTERS.has(value)) return value;
 
     const known = ADAPTED.get(value);
