@@ -1,9 +1,7 @@
 // How many classes, made and dropped, are still alive once collected: run by
 // `tests/class-retention.test.js` under `node --expose-gc`, since a test cannot
 // trigger a collection. Prints `{kind: alive}` as JSON.
-import { createRequire } from 'node:module';
-
-createRequire(import.meta.url)('../src/lib/compile.cjs');
+await import('../src/lib/compile.js');
 await import('../src/lib/runtime.js');
 
 const $B = globalThis.__BRYTHON__;

@@ -17,6 +17,13 @@ import {
 import { parse } from 'svelte/compiler';
 
 const require = createRequire(import.meta.url);
+
+// The engine first, which Bryntime loads and starts, and the compiler then
+// runs on (`compile.cjs`). Required, as this plugin only runs in Node: Vite
+// bundles its config and every file the config imports, and an import would
+// put the engine in that bundle, which `npm run test:quiet` would say (its
+// `eval` warned about); the bundle does not follow a `require`.
+require('./bryntime/bryntime.js');
 const { compile, VIRTUAL_PREFIX, virtualId, pythonModuleName, elementProps, PY_NAME, componentImports, importedNames } = require('./compile.cjs');
 
 // Generated modules, keyed by project and component name. Filled by the preprocessor when

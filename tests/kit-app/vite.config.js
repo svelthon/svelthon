@@ -30,7 +30,7 @@ export default defineConfig({
     resolve: {
         alias: {
             'svelthon/runtime': at('../../src/lib/runtime.js'),
-            'svelthon/compile': at('../../src/lib/compile.cjs')
+            'svelthon/compile': at('../../src/lib/compile.js')
         }
     },
     // Vite's dependency scanner hands the Python of a component to a

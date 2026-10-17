@@ -25,7 +25,7 @@
   "exports": {
     ".": "./src/lib/svelthon.js",
     "./runtime": "./src/lib/runtime.js",
-    "./compile": "./src/lib/compile.cjs",
+    "./compile": "./src/lib/compile.js",
     "./markup": "./src/lib/markup.js",
     "./package.json": "./package.json"
   },
@@ -37,7 +37,7 @@
     "vendor"
   ],
   "engines": {
-    "node": ">=20.19"
+    "node": "^20.19.0 || >=22.12.0"
   },
   "peerDependencies": {
     "svelte": "^5.56.0"

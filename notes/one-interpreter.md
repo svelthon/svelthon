@@ -3,6 +3,14 @@
 *Open. The correctness half is fixed and the demo runs; what is left is waste and
 a choice between two ways of removing it.*
 
+*2026-10-17: `compile.cjs` loads no engine. Bryntime loads and starts it
+(`src/lib/bryntime/`), and every way into the compiler reaches Bryntime first:
+`src/lib/compile.js` for `svelthon/compile`, the plugin, the suite's setup.
+The plugin reaches it by `require`, which the bundled config does not follow:
+imported, the engine entered that bundle, 10 files where it held 6, loaded in
+360 to 375 ms where it took 160 to 220, and its `eval` was warned about on a
+green run. What follows describes the two loads as they were.*
+
 ## Two loads of one file
 
 `compile.cjs` reaches Brython with `require`, because it is CommonJS. A component

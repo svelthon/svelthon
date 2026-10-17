@@ -44,7 +44,10 @@ npm install svelthon
 ```
 
 Two names, in a project that already has Svelte 5 or SvelteKit: a Vite plugin,
-and a preprocessor for `svelte.config.js`.
+and a preprocessor for `svelte.config.js`. Node `^20.19.0 || >=22.12.0`, Vite
+7's range: the plugin `require`s an ES module, which Node does without a flag
+from those versions only, and Node 21 or 22.0 to 22.11 would raise
+`ERR_REQUIRE_ESM`.
 
 ```js
 // vite.config.js
@@ -1724,9 +1727,9 @@ file itself, each held by a test: a guard against a second execution in one
 process, `/* @vite-ignore */` on the two dynamic imports, CPython's order for an
 int formatted with a base prefix, and the binding of a `__call__` that is not a
 function. `vendor/BRYTHON_FIX.md` lists them all.
-They live in the file rather than in a build step, because the compiler loads
-the same copy with `require` under Node, so a patch applied only while serving
-would leave server-side rendering on an unrepaired Brython.
+They live in the file rather than in a build step, because Node loads the same
+copy, for the compiler and for server-side rendering, so a patch applied only
+while serving would leave both on an unrepaired Brython.
 
 `vendor/` holds exactly what the package ships: the two halves of Brython 3.14
 dev, cut from one bundle that `scripts/vendor-brython.py` rebuilds from master

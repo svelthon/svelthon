@@ -55,6 +55,11 @@ export default defineConfig({
     test: {
         environment: 'jsdom',
 
+        // The engine, which Bryntime loads and starts before any test file: a
+        // test that requires `compile.cjs` directly reaches it as every other
+        // way into the compiler does.
+        setupFiles: ['tests/engine-setup.js'],
+
         // What sits in a folder of the scratch is kept, a copy of the tree among
         // it, and a copy is no test of this tree: it imports what is no longer
         // there. The probes beside them stay runnable by their own config.

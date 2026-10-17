@@ -21,39 +21,28 @@ describe('the engine is imported where it is started', () => {
         expect(read('bryntime/boot.js')).toMatch(/^import '\.\.\/\.\.\/\.\.\/vendor\/brython_runtime\.js';$/m);
     });
 
-    // And the parsing chain is declared by the file that parses, so a route
-    // that does not compile never pulls it into its chunk.
-    test('compile.cjs takes the chain, in that order', () => {
-        const source = read('compile.cjs');
-        expect(source).toContain("require('../../vendor/brython_runtime.js');");
-        expect(source.indexOf('brython_runtime.js')).toBeLessThan(
-            source.indexOf('brython_compiler.js')
-        );
-    });
-
     test('and it is the file that calls brython()', () => {
         expect(read('bryntime/boot.js')).toContain('$B.brython(');
     });
 
-    // `compile.cjs` cannot reach Bryntime's loader (it says why), so it loads
-    // the engine by a copy of it, held here statement for statement: the code
-    // of `globals.js`, then of `boot.js`, its import of the engine a `require`
-    // from where `compile.cjs` sits. The day one of them changes, so must the
-    // other.
-    test('compile.cjs loads the engine as Bryntime does, statement for statement', () => {
-        const code = (source) =>
-            source
-                .split('\n')
-                .map((line) => line.replace(/(^|\s)\/\/.*$/, '').trim())
-                .filter(Boolean);
-        const bryntime = [...code(read('bryntime/globals.js')), ...code(read('bryntime/boot.js'))].map((line) =>
-            line === "import '../../../vendor/brython_runtime.js';" ? "require('../../vendor/brython_runtime.js');" : line
-        );
-        const compiler = code(read('compile.cjs'));
-        const start = compiler.indexOf(bryntime[0]);
+    // The engine has one loader, Bryntime's. The compiler adds the parsing
+    // chain to it and loads no engine of its own: neither the engine's file
+    // nor a start.
+    test('compile.cjs loads no engine', () => {
+        const source = read('compile.cjs');
 
-        expect(start).toBeGreaterThan(-1);
-        expect(compiler.slice(start, start + bryntime.length)).toEqual(bryntime);
+        expect(source).not.toMatch(/require\('[^']*brython_runtime\.js'\)/);
+        expect(source).not.toContain('$B.brython(');
+        expect(source).toContain("require('../../vendor/brython_compiler.js');");
+    });
+
+    // And the way JavaScript reaches it, `svelthon/compile`, imports Bryntime
+    // first, an ES module importing ES and then CommonJS, the order a bundler
+    // keeps.
+    test('compile.js imports Bryntime before compile.cjs', () => {
+        const imports = [...read('compile.js').matchAll(/^import\s+(?:\S+\s+from\s+)?'([^']+)';/gm)].map(([, from]) => from);
+
+        expect(imports).toEqual(['./bryntime/bryntime.js', './compile.cjs']);
     });
 
     // The import used to sit in `runtime.js`, two lines above `import

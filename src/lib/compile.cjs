@@ -4,47 +4,19 @@
 // result in two: a plain ES module holding the generated code, and a Svelte
 // component script that wires it to runes.
 //
-// CommonJS because the engine and its parsing chain are classic scripts that
-// have to execute in an order, which ES imports cannot give (they hoist).
+// CommonJS because the parsing chain is a classic script that has to execute
+// after the engine, which ES imports cannot order (they hoist).
 
-// The engine, loaded as Bryntime loads it: `bryntime/globals.js` then
-// `bryntime/boot.js`, statement for statement, which `tests/boot-order.test.js`
-// holds identical. A copy, because neither can be reached from here: a
-// CommonJS file that requires an ES module makes it lazy in every bundle that
-// holds both, and the engine then started after code that reads it (every
-// route of a SvelteKit server at 500); and the two in one CommonJS file are
-// what a browser cannot run from the dev server (`require is not defined`).
-{
-    globalThis.self ??= globalThis;
-    globalThis.addEventListener ??= () => {};
-    const base = globalThis.location?.href ?? 'http://localhost/';
-    globalThis.__BRYTHON__ ??= { brython_path: new URL('/brython/', base).href };
-    globalThis.$B = globalThis.__BRYTHON__;
-    globalThis.$B.$bryntimeGlobalsBefore ??= new Set(Object.getOwnPropertyNames(globalThis));
-    if (globalThis.document && globalThis.process?.release?.name === 'node') {
-        const real = globalThis.process;
-        const shadow = Object.create(real);
-        Object.defineProperty(shadow, 'release', { value: { ...real.release, name: 'jsdom' } });
-        globalThis.$B.$bryntimeRealProcess = real;
-        globalThis.process = shadow;
-    }
-    require('../../vendor/brython_runtime.js');
-    const $B = globalThis.__BRYTHON__;
-    if ($B.$bryntimeRealProcess) {
-        globalThis.process = $B.$bryntimeRealProcess;
-        delete $B.$bryntimeRealProcess;
-    }
-    const DOM_STUBS = new Set(['document', 'location', 'HTMLElement', 'MutationObserver', 'customElements']);
-    if (!$B.$bryntimeBooted) {
-        $B.$bryntimeBooted = true;
-        $B.brython({ ipy_id: [] });
-        const before = $B.$bryntimeGlobalsBefore;
-        if (before && !before.has('window')) {
-            for (const name of Object.getOwnPropertyNames(globalThis)) {
-                if (!before.has(name) && DOM_STUBS.has(name)) delete globalThis[name];
-            }
-        }
-    }
+// The engine is Bryntime's to load and start, and this file loads none: every
+// way in reaches Bryntime first, `compile.js`, the plugin, the suite's setup.
+// Not required from here, because a CommonJS file that requires an ES module
+// makes it lazy in every bundle that holds both, and the engine then started
+// after code that reads it, every route of a SvelteKit server at 500.
+if (!globalThis.__BRYTHON__?.$bryntimeBooted) {
+    throw new Error(
+        "svelthon — the compiler runs on the engine Bryntime starts: import 'svelthon/compile', " +
+            'or src/lib/bryntime/bryntime.js before compile.cjs'
+    );
 }
 
 // Then the parsing chain: this file is the one that compiles, so it is the one
