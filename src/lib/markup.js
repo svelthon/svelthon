@@ -2754,16 +2754,18 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         // writes it for its own group, from the model, when the tag has a value,
         // a checkbox being one whose `type` is the static text `checkbox`. With
         // no node to read static text off, the server is handed the text. A tag
-        // that writes `checked` itself is checked by it, as Svelte's is, and
-        // gets no second one.
+        // that writes `checked` itself, by the attribute or by `bind:checked`,
+        // is checked by it, as Svelte's is, and gets no second one, which
+        // Svelte refused beside the binding as `attribute_duplicate`.
         const kind = tag === null ? null : tagValue(markup, tag.start, 'type');
         const boxes = kind !== null && !kind.braced && markup.slice(kind.start, kind.end) === 'checkbox';
         const served =
             found !== null && value === 'undefined'
                 ? JSON.stringify(attributeText(markup.slice(found.start, found.end), markup[found.start - 1]))
                 : value;
+        const names = tag === null ? null : tagNames(markup, tag.start);
         const checked =
-            tag !== null && tagNames(markup, tag.start).has('checked')
+            names !== null && (names.has('checked') || names.has('bind:checked'))
                 ? ''
                 : ` checked={__pybridge.groupChecked(() => ${read}, () => ${served}, ${boxes})}`;
 
