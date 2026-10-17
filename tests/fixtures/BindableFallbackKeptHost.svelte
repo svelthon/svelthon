@@ -10,6 +10,8 @@
 
     export const clear = () => child.clear();
     export const same = () => child.same();
+    export const floated = () => child.floated();
+    export const held = () => child.held();
 </script>
 
 <Child bind:ratio bind:rows bind:this={child} />

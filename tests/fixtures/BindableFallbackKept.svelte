@@ -20,6 +20,12 @@ def whole():
 
 
 @export
+def floated():
+    global ratio
+    ratio = 15.0
+
+
+@export
 def held():
     return repr(ratio)
 

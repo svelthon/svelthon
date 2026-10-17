@@ -11,6 +11,9 @@ import { test, expect } from 'vitest';
 import { createRequire } from 'node:module';
 import { mount, flushSync } from './mounted.js';
 import JavascriptGlobals from './fixtures/JavascriptGlobals.svelte';
+import GlobalsBindable from './fixtures/GlobalsBindable.svelte';
+import GlobalsBindableFunction from './fixtures/GlobalsBindableFunction.svelte';
+import GlobalsBindableNative from './fixtures/GlobalsBindableNative.svelte';
 import * as names from './fixtures/global_names.py';
 
 const { compile } = createRequire(import.meta.url)('../src/lib/compile.cjs');
@@ -29,6 +32,30 @@ test('a name JavaScript gives its globals is the module’s own', () => {
         calls: target.querySelector('span').textContent,
         module: [names.Object, names.raised()]
     }).toEqual({ sum: '21', js: '2', calls: '[1]', module: [10, 'Error: mine'] });
+});
+
+// The setter of a bindable prop compared what crossed with `Object.is`, by that
+// name: a module binding `Object` to a number stopped it mounting, or writing
+// the prop, and one exporting a function under it stopped it mounting, the
+// function's binding not made yet. The Svelte child binding `Object` is the
+// witness.
+test('a bindable prop is written beside a module binding Object, as in Svelte', () => {
+    const shown = (Component) => {
+        const target = document.body.appendChild(document.createElement('div'));
+        const instance = mount(Component, { target });
+
+        flushSync();
+        const initial = target.textContent.trim();
+
+        instance.change(9);
+        flushSync();
+
+        return [initial, target.textContent.trim()];
+    };
+
+    expect(shown(GlobalsBindableNative)).toEqual(['7', '9']);
+    expect(shown(GlobalsBindable)).toEqual(shown(GlobalsBindableNative));
+    expect(shown(GlobalsBindableFunction)).toEqual(['', '9']);
 });
 
 test('undefined bound by a module is refused at its line', () => {

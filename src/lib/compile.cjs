@@ -3146,7 +3146,7 @@ function preamble(c) {
         // author's names live in the same scope, and an `importjs { untrack }`
         // or a `def getContext()` of theirs is theirs.
         `import { ${['getContext as __getContext', 'setContext as __setContext', 'getAllContexts as __getAllContexts']
-            .concat(c.lifecycle('on_mount') || c.lifecycle('on_destroy') ? ['untrack as __untrack'] : [])
+            .concat(c.lifecycle('on_mount') || c.lifecycle('on_destroy') || c.bindables.length ? ['untrack as __untrack'] : [])
             .concat(c.lifecycle('on_destroy') || releases(c) ? ['onDestroy as __onDestroy'] : [])
             .join(', ')} } from 'svelte';`,
         // The three questions the runtime asks of Svelte, answered by runes: a
@@ -3430,17 +3430,24 @@ function authorBindings(c) {
         // prop while the parent passes nothing. And so does a server, where
         // Svelte reads a fallback as the props are destructured, before init()
         // has written it.
+        //
+        // Two Python values may cross as one number, `15` and `15.0`, where
+        // Svelte sees no change: what Python reads is then what moves the
+        // revision its readers read.
         ...c.bindables.map((b) => {
             const declared = c.defaulted.includes(b);
             const box = bindableDefault(b);
+            const held = declared ? `__unproxied(${b}, ${crossed(b)}, ${passed(b)}, ${box})` : `__unproxied(${b}, ${crossed(b)})`;
             const written = `const __written = __track(${NEXT_VALUE}, ${bump(b)}${c.store ? '' : `, ${SUBS}`});`;
-            const handed = `${crossed(b)} = __handOver(__written, (__crossing) => { ${b} = __crossing; });`;
+            const handed =
+                `const __was = __untrack(() => ${held});` +
+                ` ${crossed(b)} = __handOver(__written, (__crossing) => { ${b} = __crossing; });` +
+                ` if (!__global.Object.is(__untrack(() => ${held}), __was)) ${bump(b)}();`;
             const set = declared
                 ? `${written} if (__initialising) { ${box}.py = __written;` +
                   ` __handOver(__written, (__crossing) => { ${box}.value = __crossing; });` +
                   ` if (${b} !== undefined) return; } ${handed}`
                 : `if (!__initialising || ${b} === undefined) { ${written} ${handed} }`;
-            const held = declared ? `__unproxied(${b}, ${crossed(b)}, ${passed(b)}, ${box})` : `__unproxied(${b}, ${crossed(b)})`;
             return (
                 `__bind(__proto, '${b}', () => (${rev(b)}, __follow(__pyBind(${held}))),` +
                 ` (${NEXT_VALUE}) => { ${set} }, () => ${b});`

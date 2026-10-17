@@ -78,7 +78,7 @@ reste de cette configuration et ce que chaque ligne apporte.
 npm install
 npm run dev          # la démo, sous /demo/
 
-npm test             # 1 928 tests : sémantique, props, réactivité, surface Svelte
+npm test             # 1 930 tests : sémantique, props, réactivité, surface Svelte
 npm run test:quiet   # la sortie de la suite : un run vert ne doit rien dire
 npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
@@ -1607,7 +1607,7 @@ part jamais.
 
 ## État
 
-Validé par `npm test`, 1 928 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 1 930 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
