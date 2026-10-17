@@ -118,8 +118,11 @@ function atTopLevel(text, visit) {
 // The call a `{@render}` makes, `callee(arguments)`: the last group at top
 // level, when it closes the expression. The first parenthesis is not it:
 // `(first)(1.0)` groups its callee, and `pick(a, b)(1.0)` calls a factory
-// first. Null for anything else, which Svelte refuses in its own words.
-function renderedCall(text) {
+// first. A group holding the whole call groups it and no more, as Svelte reads
+// `{@render (row(1.0))}`, whose arguments are Python's all the same. Null for
+// anything else, which Svelte refuses in its own words.
+function renderedCall(written) {
+    const text = ungrouped(written);
     let depth = 0;
     let last = -1;
 

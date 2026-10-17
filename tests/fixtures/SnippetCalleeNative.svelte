@@ -9,3 +9,6 @@
 {@render (true ? first : second)(1.0)}
 {@render pick(first, second)(1.0)}
 {@render pick(first, second)(true)}
+{@render (first(1.0))}
+{@render ((first(true)))}
+{@render ((first)(1.0))}

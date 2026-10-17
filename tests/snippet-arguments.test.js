@@ -103,14 +103,18 @@ test('the Svelte markup is the rule for attributes', async () => {
 // The call is the last group of the expression, not its first parenthesis: a
 // grouped callee was read as an empty one, and a factory's own call as the
 // render's, its arguments left JavaScript (`True` was undefined) or crossed.
-// What Svelte renders is the rule, CPython's `type(1.0)` and `True` beside it.
+// And a call grouped whole, `{@render (first(1.0))}`, was no call found, and
+// left as it was written: `True` undefined again, `1.0` an int. What Svelte
+// renders is the rule, CPython's `type(1.0)` and `True` beside it.
 test('a snippet reached by a grouped, chosen or returned callee is handed Python values', async () => {
-    expect(await shown(SnippetCallee)).toBe('first=float:1.0 first=float:1.0 first=float:1.0 first=bool:True');
+    expect(await shown(SnippetCallee)).toBe(
+        'first=float:1.0 first=float:1.0 first=float:1.0 first=bool:True first=float:1.0 first=bool:True first=float:1.0'
+    );
 });
 
 test('the Svelte markup is the rule for callees', async () => {
     expect(await shown(SnippetCalleeNative)).toBe(
-        'first=number:1 first=number:1 first=number:1 first=boolean:true'
+        'first=number:1 first=number:1 first=number:1 first=boolean:true first=number:1 first=boolean:true first=number:1'
     );
 });
 
