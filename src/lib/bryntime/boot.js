@@ -1,17 +1,17 @@
-// Brython without its parsing chain: a Svelthon page runs code compiled ahead
-// of time and never parses Python. What does is `compile.cjs`, which takes the
-// chain itself, so a route that compiles pays for it and no other does.
+// Brython without its parsing chain: a page that runs code compiled ahead of
+// time never parses Python. A compiler that does takes the chain itself, so
+// what compiles pays for it and nothing else does.
 //
-// Imported here and not left to the order of `runtime.js`. The engine is a
-// CommonJS file, so a bundler wraps it in a lazy initialiser and places the call
-// where the binding is used rather than where the import sits: read from a
-// neighbour, that call lands *after* this file and `$B.brython` is undefined.
-// Naming the dependency where it is needed is what keeps the order.
+// Imported here and not left to the order of whoever imports this. The engine
+// is a CommonJS file, so a bundler wraps it in a lazy initialiser and places
+// the call where the binding is used rather than where the import sits: read
+// from a neighbour, that call lands *after* this file and `$B.brython` is
+// undefined. Naming the dependency where it is needed is what keeps the order.
 import '../../../vendor/brython_runtime.js';
 
-// Initialise the runtime once per page. `ipy_id: []` keeps brython() from
-// scanning the document for <script type="text/python">: Svelthon components
-// are already compiled, there is nothing left to find.
+// Initialise the engine once per page. `ipy_id: []` keeps brython() from
+// scanning the document for <script type="text/python">: the Python a page
+// runs is already compiled, there is nothing left to find.
 const $B = globalThis.__BRYTHON__;
 
 // globals.js shadowed `process` so that brython.js would see the DOM jsdom

@@ -1,14 +1,14 @@
 // What crosses between Python and JavaScript, and how: the core of Bryntime,
 // the runtime a page uses to read Python from JavaScript and JavaScript from
-// Python, with or without Svelte. It imports nothing of Svelte; `runtime.js`
-// imports it and hands Svelte what Svelte asks.
+// Python. It imports the engine and nothing else; a host, a framework such as
+// Svelte, imports it and answers through `host` what only it knows.
 //
 // First, what the engine marks as its own: the questions every door asks of a
 // value before it decides what the value becomes.
 import './globals.js';
 import './boot.js';
 
-// Python's None, so a prop the parent never passed reads as None rather than
+// Python's None, so a value JavaScript never gave reads as None rather than
 // leaking JavaScript's undefined into Python.
 export const NONE = globalThis.__BRYTHON__.builtins.None;
 
@@ -22,9 +22,9 @@ export const _b_ = globalThis.__BRYTHON__.builtins;
 // flattened**: refusing an accurate `__all__` because JavaScript would need
 // `$B.$call` to use one of its entries would be a JavaScript limit imposed on
 // Python. A class exported directly and the same class inside a dict or a list
-// cross alike, since a `load()` returning a registry of models is the ordinary
-// way to write a route, so the decision lives in this predicate, which every
-// path that meets a class asks.
+// cross alike, since a registry of models is an ordinary thing to hand over
+// (a SvelteKit `load()` returning one, for example), so the decision lives in
+// this predicate, which every path that meets a class asks.
 export const pyClass = (value) =>
     value !== null &&
     typeof value === 'object' &&
@@ -158,15 +158,15 @@ export const plainScalar = (value) => {
 
 // What the host answers, handed over by it as it loads: whether one of its
 // states owns a value (`owns`), and how it makes an object its state
-// (`adopt`). Svelte's are `runtime.js`'s. With no host, no state owns anything
-// and an object stays as it is.
+// (`adopt`). Svelthon's answer for Svelte's. With no host, no state owns
+// anything and an object stays as it is.
 export const host = { owns: () => false, adopt: null };
 
-// What the rest of the runtime still lends the crossing: how a function
-// crosses in (`functionIn`) and out (`handler`), the pair a Python write is
-// handing over right now (`handed`, which `handOver` sets), the number and the
-// value it was written as, the rows a Python iterable yields as the template
-// walks them (`seq`), and how a coroutine is run (`schedule`). Alone, a
+// What the host still lends the crossing: how a function crosses in
+// (`functionIn`) and out (`handler`), the pair a Python write is handing over
+// right now (`handed`), the number and the value it was written as, the rows a
+// Python iterable yields as JavaScript walks them (`seq`), and how a coroutine
+// is run (`schedule`). Alone, a
 // function crosses as itself both ways and the rows are Python's own
 // iteration, followed by nothing; a coroutine has nothing to run it.
 export const lent = {
@@ -182,8 +182,9 @@ export const lent = {
 // the pairs of a mapping, each read without running the author's code.
 
 // Whether an object is a bag of keys, or something of a class of its own: a
-// Response, a URL, a Date, a Map, a Promise, any of which a `load()` may hand
-// straight back and whose keys copied would destroy it.
+// Response, a URL, a Date, a Map, a Promise, any of which Python may hand
+// straight back (from a SvelteKit `load()`, say) and whose keys copied would
+// destroy it.
 //
 // Read on the prototype and not as `value.constructor`, which a dict may carry
 // as data: `{"constructor": "invoice"}` would answer a constructor of its own.
@@ -191,9 +192,9 @@ export const lent = {
 // **null** prototype is the other bag of keys: `Object.create(null)`, what
 // `Object.groupBy` returns, and a module namespace object.
 //
-// One predicate for every crossing that asks it, `branch`, `mapping()` in
-// helpers.js and `urlencode`, so `to_js`, `tojson` and a query string agree on
-// what a bag of keys is.
+// One predicate for every crossing that asks it, `branch` here and a host's
+// own serialisers (Svelthon's `tojson` and `urlencode`), so a copy, JSON and a
+// query string agree on what a bag of keys is.
 //
 // And a **root** prototype rather than *our* `Object.prototype`: an object built
 // by another JavaScript context sits on that context's `Object.prototype`, and
@@ -346,9 +347,9 @@ export function pyEntries(value) {
     return [...$B.builtins.dict.$iter_items(value)].map((entry) => [entry.key, entry.value]);
 }
 
-// What the framework hands *in* to an exported function.
+// What a framework hands *in* to an exported function.
 //
-// SvelteKit's request event carries `params` and `url` wrapped in proxies that
+// SvelteKit's request event, for one, carries `params` and `url` wrapped in proxies that
 // record every key read, so it knows what a `load()` depended on. Brython probes
 // an object's symbols when it wraps it for Python, those symbols land in the
 // recorded set, and SvelteKit's serialiser then refuses them. Python must
@@ -395,8 +396,9 @@ export const pyBytes = (value) => {
 // object can be one: a view is refused by those APIs or written out as text,
 // and Chrome refuses a typed array over a buffer that grows. So a copy, of the
 // bytes held at the crossing: exact for `bytes`, which never change, and for a
-// `bytearray` the bytes of that moment, which an export takes again at each
-// change (`liveExport`) and a prop at each render.
+// `bytearray` the bytes of that moment, which the host takes again whenever it
+// hands the value over (Svelthon, at each change of an export and each render
+// of a prop).
 export const mutableBytes = (value) => ownType(value).tp_mro.includes(_b_.bytearray);
 
 // The bytes each copy was made of, for the way back (`bytesIn`).
@@ -471,40 +473,40 @@ export const isSet = (value) => {
     return Array.isArray(cls.tp_mro) && (cls.tp_mro.includes(_b_.set) || cls.tp_mro.includes(_b_.frozenset));
 };
 
-// **A Python list, tuple or dict that a JavaScript component reads is read
-// through a view**, as Svelte hands a child a `$state` object: a proxy whose
-// every read subscribes the reader. Handed the container itself, a JavaScript
-// child would read a dict's keys as plain properties, which nothing follows,
-// and stay where it was when `state["count"] += 1` repaints every Python
-// reader, the dict given as a prop or through a context alike.
+// **A Python list, tuple or dict that JavaScript reads is read through a
+// view**: a proxy whose every read subscribes the reader, as Svelte hands a
+// child a `$state` object. Handed the container itself, a JavaScript reader
+// would read a dict's keys as plain properties, which nothing follows, and
+// stay where it was when `state["count"] += 1` repaints every Python reader,
+// however the dict reached it (a Svelte prop or context, for one).
 //
 // A read gives what the same value gives at the other doors: None is `null`, as
 // `plainData` writes it inside a container, a scalar is JavaScript's own, a
-// callable is adapted (`pyHandler`), and a container inside is a view in its
+// callable is adapted (`lent.handler`), and a container inside is a view in its
 // turn. A write is Python's own `obj[key] = value`, `append` or `del`, so it
 // notifies as the same line written in Python does.
 //
 // One view per container, so a reader comparing what it holds finds the same
 // object. And the engine's own map hands the container back: `jsobj2pyobj` and
-// `pyBind` read it, so a view that comes back to Python, as a prop, a context, a
-// binding or an argument, is the container again.
+// `pyBind` read it, so a view that comes back to Python, by whatever door, a
+// binding or an argument among them, is the container again.
 export const VIEW_OF = new WeakMap();
 export const VIEWED = new WeakSet();
 
 // A view's prototype is not `Array.prototype` or `Object.prototype` itself, only
-// inherits from it: Svelte wraps a plain array or object put in a `$state` in a
-// proxy of its own, which keeps every write to itself, so a JavaScript parent
-// that binds a Python list would push into a copy Python never sees, and a
-// write to a dict stopped there as well. Not being one, by identity, is what
-// tells Svelte to keep the view as it is. Every method, the iterator and
-// `Array.isArray` are the array's.
+// inherits from it: a host that wraps a plain array or object in a proxy of its
+// own keeps every write to that proxy (Svelte does it to what a `$state`
+// holds), so a JavaScript parent that binds a Python list would push into a
+// copy Python never sees, and a write to a dict stopped there as well. Not
+// being one, by identity, is what tells such a host to keep the view as it
+// is. Every method, the iterator and `Array.isArray` are the array's.
 export const LIST_VIEW = Object.create(Array.prototype);
 
 // And a dict's or an instance's carries `Object.prototype`'s own names, each
-// the same property: SvelteKit's serialiser (`devalue`) takes an object for a
-// plain one by those names, as it takes one from another realm, so a view in
-// a `load`'s data is written out as the object it reads as, where Svelte's
-// test by identity still keeps it.
+// the same property: a serialiser that takes an object for a plain one by
+// those names, as it takes one from another realm (`devalue`, SvelteKit's),
+// writes a view out as the object it reads as, where a test by identity still
+// keeps it.
 export const PLAIN_VIEW = Object.defineProperties(Object.create(Object.prototype), Object.getOwnPropertyDescriptors(Object.prototype));
 
 // Then what JavaScript hands Python: a scalar, a value written, a copy.
@@ -515,8 +517,9 @@ export const PLAIN_VIEW = Object.defineProperties(Object.create(Object.prototype
 // function, and `to_py` itself.
 //
 // Brython reads a JavaScript number as an `int` when it is whole and as a
-// `JSObject` when it is not: a `type="number"` field, the one input Svelte
-// converts for you, wrote `0.42` into a name whose `type()` was then `JSObject`.
+// `JSObject` when it is not: a `type="number"` field, whose value Svelte's
+// binding hands over as a number, wrote `0.42` into a name whose `type()` was
+// then `JSObject`.
 // It prints `0.42`, so the page looks right, and `round(x, 1)` raises. The same
 // crossing in a group turned `value={1}` into the string "1".
 //
@@ -531,15 +534,15 @@ export const PLAIN_VIEW = Object.defineProperties(Object.create(Object.prototype
 export const pyBind = (value) => {
     if (value === null || value === undefined) return NONE;
 
-    // The number a Python write is handing over right now (`handOver`) is the
-    // value it was written as.
+    // The number a Python write is handing over right now (`lent.handed`) is
+    // the value it was written as.
     const handed = lent.handed;
 
     if (handed !== null && Object.is(value, handed.js)) return handed.py;
     if (typeof value === 'number') return globalThis.__BRYTHON__.jsobj2pyobj(value);
 
-    // A function as every door takes one (`functionIn`): a function
-    // `pyHandler` published is its callable, a JavaScript one is adapted.
+    // A function as every door takes one (`lent.functionIn`): a function the
+    // crossing published is its callable, a JavaScript one is adapted.
     if (typeof value === 'function') return lent.functionIn(value);
 
     // A view a JavaScript reader was handed (`viewOf`) is its container again,
@@ -572,10 +575,11 @@ export function pyData(value, made, live = false) {
     if (live && host.owns(value)) return pyBind(value);
 
     // And one whose properties are a getter or a setter becomes the host's
-    // state, as Svelte makes it when it is put into a state: its getters and
-    // setters read and write through Svelte's proxy, which follows its other
-    // properties too. Copied, the getter was read once and the setter never
-    // called; kept as it was, nothing followed what it held.
+    // state (`host.adopt`), as Svelte makes such an object when it is put into
+    // a state: its getters and setters read and write through the host's
+    // proxy, which follows its other properties too. Copied, the getter was
+    // read once and the setter never called; kept as it was, nothing followed
+    // what it held.
     if (live && behaves(value)) return pyBind(host.adopt === null ? value : host.adopt(value));
 
     // A Brython list and a Brython tuple are JavaScript arrays too, told apart
@@ -613,8 +617,8 @@ export function pyData(value, made, live = false) {
     // cycle does not have to be *in* an object for the object branch to be the
     // one that meets it, since `{"xs": [o]}` enters here.
     //
-    // This framework updates by mutation, so two names that stop being one thing
-    // is a write that stops arriving.
+    // A reader follows a value by its mutations, so two names that stop being
+    // one thing is a write that stops arriving.
     //
     // Only a plain object. A Date, a Map, a Response, a DOM node and anything
     // Python already owns keep the crossing they had.
@@ -641,9 +645,9 @@ export function pyData(value, made, live = false) {
 
         made.set(value, dict);
 
-        // Every own enumerable property, as JavaScript's spread and Svelte's
-        // proxy take them, a symbol's included: `Object.entries` reads the
-        // strings alone, and a library's metadata under a symbol was lost.
+        // Every own enumerable property, as JavaScript's spread takes them, a
+        // symbol's included: `Object.entries` reads the strings alone, and a
+        // library's metadata under a symbol was lost.
         for (const key of Reflect.ownKeys(value)) {
             if (Object.prototype.propertyIsEnumerable.call(value, key)) $B.$setitem(dict, key, pyData(value[key], made, live));
         }
@@ -664,9 +668,9 @@ export function pyData(value, made, live = false) {
     // nothing was converted, so there is nothing to finish.
     if (python === value) return python;
 
-    // **Not reachable from a component, and kept as a belt.** Everything a
-    // component can hand this (`js.JSON.parse(…)`, the answer of a `__js__`
-    // import) has already crossed `inbound`, so `jsobj2pyobj` gives the same
+    // **Not reachable from Python, and kept as a belt.** Everything Python can
+    // hand this (`js.JSON.parse(…)`, the answer of a `__js__` import) has
+    // already crossed `inbound`, so `jsobj2pyobj` gives the same
     // object back and the line above returns first. A mutation sweep says so:
     // inverting the test below calls `null()` on every conversion and no test
     // can tell, because no reachable input gets here. `tests/to-py.test.js`
@@ -679,16 +683,16 @@ export function pyData(value, made, live = false) {
 // What JavaScript writes into a view. A plain object or an array of its own is
 // data, made Python's the way `to_py` makes it, so that a later write to it goes
 // through a view of its own and is followed: after `rows.push({n: 2})`,
-// `rows.at(-1).n = 3` reaches the page as well as the data. Svelte draws the
+// `rows.at(-1).n = 3` reaches the reader as well as the data. Svelte draws the
 // same line, making a proxy of exactly those two kinds when one is put
 // into its state. Anything else crosses as a binding's value does: a view handed
 // back is its container again, and a class instance, a Date or a DOM node keeps
 // its identity.
 //
-// And an object a Svelte state already owns is kept, at any depth (`live`), as
-// Svelte keeps a proxy of its own put into its state: copied, a model shared by
-// two components stopped being one, and a write made through its owner never
-// reached the Python reader.
+// And an object a state of the host already owns (`host.owns`) is kept, at any
+// depth (`live`), as Svelte keeps a proxy of its own put into its state:
+// copied, a model shared by two readers stopped being one, and a write made
+// through its owner never reached the Python reader.
 export const entering = (given) =>
     given !== null &&
     typeof given === 'object' &&
@@ -708,15 +712,16 @@ export const entering = (given) =>
 // can walk the storage with no conversion at all, and for a list or a tuple that
 // is exactly right. It stops being right the moment a subclass redefines
 // `__iter__`: `[x for x in rows]` may answer `[3, 2, 1]` for a storage of
-// `[1, 2, 3]`, and the template's loop, the crossing and `tojson` answer what
-// Python answers. The storage is not the sequence when the author has said
-// otherwise, and this is the one place that knows it.
+// `[1, 2, 3]`, and whatever walks it from JavaScript (a template's loop, the
+// crossing, a serialiser) answers what Python answers. The storage is not the
+// sequence when the author has said otherwise, and this is the one place that
+// knows it.
 //
 // `list()` is not the road: Brython's constructor copies the storage of anything
 // array-shaped, so asking it answers the question with the question.
 // `make_js_iterator` is, and it carries both of the other obligations. It runs
 // `iter()`, the only call that *validates* the protocol: an `__iter__` that
-// returns a plain list is a TypeError in the script and in the template alike.
+// returns a plain list is a TypeError in Python and from JavaScript alike.
 // And it keeps the storage fast path
 // exactly where it is still true, since Brython copies that path onto a subclass
 // only when the subclass leaves `__iter__` alone.
@@ -850,10 +855,10 @@ export const rawJSON = (value) => typeof JSON.isRawJSON === 'function' && JSON.i
 
 // A call that has been made and not finished.
 //
-// Asked in four places, one of them in `helpers.js`, so it is written once and
-// shared. Compared in JavaScript rather than
-// through `aio.iscoroutine()`: this runs on every call into Python, template
-// expressions included, and a Brython call here costs more than the check saves.
+// Asked in several places, by the host too, so it is written once and shared.
+// Compared in JavaScript rather than through `aio.iscoroutine()`: this runs on
+// every call into Python, and a Brython call here costs more than the check
+// saves.
 //
 // Asked of the class the value carries as data (`pyType`), not through
 // `$B.get_class`, which reads an `ob_type` getter of a JavaScript object, and
@@ -961,10 +966,10 @@ export const callDescriptor = (value) => {
 // Callable in Python, which is wider than *is a JavaScript function* and is the
 // question every boundary that promises to adapt a callback has to ask.
 //
-// Exported for the one caller outside this file that has to ask the same
-// question: the serialiser. What crosses to JavaScript as a call has no JSON,
-// and a second predicate written in `helpers.js` would answer differently the
-// day this one learns another shape.
+// Exported for the callers outside this file that have to ask the same
+// question, a host's serialiser among them: what crosses to JavaScript as a
+// call has no JSON, and a second predicate written there would answer
+// differently the day this one learns another shape.
 export const callable = (value) =>
     typeof value === 'function' ||
     boundMethod(value) ||
@@ -1101,11 +1106,11 @@ export const crossedAs = (coroutine, policy, convert) => {
     return view;
 };
 
-// What an exported function hands back to the framework.
+// What an exported function hands back to a framework.
 //
-// SvelteKit serialises whatever `load()` returns, and a Brython dict carries
-// symbol-keyed internals (`Symbol(OB_TYPE)`) that its serialiser refuses
-// outright. So the boundary converts: Python containers become plain JavaScript
+// A framework serialises what Python returns (SvelteKit, whatever `load()`
+// returns), and a Brython dict carries symbol-keyed internals
+// (`Symbol(OB_TYPE)`) that a serialiser refuses outright. So the boundary converts: Python containers become plain JavaScript
 // data, which is the only shape anything outside Python can read anyway.
 // `adapt` is the third caller-said rule, beside the two `seen` carries: what a
 // callable, and under the serialiser's rule a value with no JSON, becomes.
@@ -1303,9 +1308,9 @@ export function plainData(value, seen, adapt) {
         return adapt(value);
     }
 
-    // A coroutine handed to the framework becomes a promise. That is what lets a
-    // `load()` stream: `{"lentes": chercher_lentement()}` returns a coroutine,
-    // and SvelteKit waits on the promise it turns into. An `aio.Future` is one
+    // A coroutine handed to JavaScript becomes a promise, which JavaScript can
+    // wait on: a SvelteKit `load()` streams that way, `{"lentes":
+    // chercher_lentement()}` returning a coroutine. An `aio.Future` is one
     // already, whose result crosses the same way.
     if (pyAwaitable(value)) {
         // A walk that cannot wait must not start one.
@@ -1436,7 +1441,7 @@ function branch(value, seen, shell, adapt) {
     if (sequence(value)) {
         // list, tuple, and a subclass through whatever it says iterating it
         // means: `json.dumps` of a list subclass in CPython is its `__iter__`
-        // too, and a component renders `rows` and exports it the same way.
+        // too, and JavaScript reads `rows` the same way, by a view or a copy.
         //
         // What `iterated` hands back is walked by its indices: a JavaScript
         // array is its indexed elements, as `JSON.stringify` and a structured
@@ -1449,9 +1454,8 @@ function branch(value, seen, shell, adapt) {
         return out;
     }
 
-    // A class is not data to flatten. `pyExport` already decided that at the top
-    // level; this is the same decision one level down, where a class sits in a
-    // dict a `load()` returns or in a list a component holds.
+    // A class is not data to flatten (`pyClass`), at the top or one level
+    // down, where a class sits in a dict or a list Python hands over.
     if (pyClass(value)) return value;
 
     // A set is copied as the `Set` its view reads as, each member copied in
@@ -1460,8 +1464,8 @@ function branch(value, seen, shell, adapt) {
     if (isSet(value)) return new Set(Array.from(iterated(value), (one) => plainData(one, seen, adapt)));
 
     // Anything of a class of its own is not ours to flatten: a Response, a URL,
-    // a Date, a Map, a Promise: a Python `load()` may hand any of those straight
-    // back to the framework, and copying their keys would destroy them.
+    // a Date, a Map, a Promise: Python may hand any of those straight back to
+    // JavaScript, and copying their keys would destroy them.
     if (!plainObject(value)) return value;
 
     // A class instance keeps its attributes under a private symbol rather than as
@@ -1518,8 +1522,8 @@ function branch(value, seen, shell, adapt) {
     // function's return value.
     //
     // The walk touches two symbols: `$B.is_dict` reads `Symbol(OB_TYPE)`, and
-    // the iteration reads `ob_type` besides. SvelteKit wraps `event.params` in a
-    // proxy that records every key read, and `pyDict` snapshots it at the
+    // the iteration reads `ob_type` besides. A proxy that records every key
+    // read, as SvelteKit's `event.params` is, is snapshot by `pyDict` at the
     // *inbound* boundary, so Python holds a plain dict and this function never
     // meets the proxy.
     //
@@ -1627,8 +1631,8 @@ export const doors = {
     }
 };
 
-// A door taking more than the value, a snippet's owners or a child's
-// component, is handed the rest after it.
+// A door taking more than the value (in Svelthon, a snippet's owners or a
+// child's component) is handed the rest after it.
 export const toJs = (value, name, ...rest) => OUT.get(name)(value, ...rest);
 export const toPython = (value, name, ...rest) => IN.get(name)(value, ...rest);
 
