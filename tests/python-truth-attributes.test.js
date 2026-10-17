@@ -7,6 +7,8 @@ import { mount, flushSync } from './mounted.js';
 import PythonTruthAttributes from './fixtures/PythonTruthAttributes.svelte';
 import PythonTruthBindings from './fixtures/PythonTruthBindings.svelte';
 import PythonTruthBindingsNative from './fixtures/PythonTruthBindingsNative.svelte';
+import DefaultCheckedTruth from './fixtures/DefaultCheckedTruth.svelte';
+import DefaultCheckedTruthNative from './fixtures/DefaultCheckedTruthNative.svelte';
 
 const at = () => {
     const target = document.body.appendChild(document.createElement('div'));
@@ -138,3 +140,28 @@ test.for([['list'], ['dict'], ['tuple'], ['set'], ['object'], ['full'], ['none']
         }
     }
 );
+
+// `defaultChecked`, a property Svelte sets and no attribute spells, was read
+// as JavaScript's truth, written by name, quoted or spread: an object whose
+// `__bool__` says False checked its box, a binding read from the box took
+// `True`, and a form's reset checked it again. Each as Svelte given the truth
+// Python finds, after a reset too.
+test.for([[false], [true]])('defaultChecked takes Python’s truth, as Svelte given it does: %s', ([full]) => {
+    const shown = (Component) => {
+        const target = document.body.appendChild(document.createElement('div'));
+        const instance = mount(Component, { target, props: { full } });
+        flushSync();
+
+        const boxes = () => [...target.querySelectorAll('input')].map((one) => [one.checked, one.defaultChecked]);
+        const initial = boxes();
+        const model = instance.model();
+
+        target.querySelectorAll('input').forEach((one) => (one.checked = !full));
+        target.querySelector('form').reset();
+        flushSync();
+
+        return { initial, model, reset: boxes() };
+    };
+
+    expect(shown(DefaultCheckedTruth)).toEqual(shown(DefaultCheckedTruthNative));
+});

@@ -39,7 +39,15 @@ export const BOOLEAN_ATTRIBUTES = [
     'disableremoteplayback'
 ];
 
-const BOOLEAN_ATTRIBUTE = new RegExp(`^(?:${BOOLEAN_ATTRIBUTES.join('|')})$`, 'i');
+// And the boolean properties Svelte sets on an element under a name no
+// attribute spells, from `DOM_PROPERTIES` in the same file: `defaultChecked`,
+// what a form's reset puts back, whose attribute is `checked`. Its others,
+// `readOnly` or `noValidate`, are names of the list above in another case,
+// which the table reads as one; `value`, `volume`, `defaultValue` and
+// `srcObject` are values. `tests/attributes.test.js` holds that true.
+export const BOOLEAN_PROPERTIES = ['defaultChecked'];
+
+const BOOLEAN_ATTRIBUTE = new RegExp(`^(?:${[...BOOLEAN_ATTRIBUTES, ...BOOLEAN_PROPERTIES].join('|')})$`, 'i');
 
 // The wrapper an element's attribute of that name goes through, or null for
 // one read as a plain value: `class`, which Svelte hands to `clsx`, and the
