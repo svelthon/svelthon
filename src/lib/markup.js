@@ -3,7 +3,7 @@
 // browser playground compiles components client-side and needs exactly this,
 // while the file next door needs `fs` and `path` and cannot be loaded there.
 import { parse } from 'svelte/compiler';
-import { attributeWrapper } from './attributes.js';
+import { attributeWrapper, truthBinding } from './attributes.js';
 import { atomic, replaceLiterals } from './lexical.js';
 
 export { atomic };
@@ -2598,6 +2598,14 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         const write = declaredHere(expr) ? declaredWrite(expr, crossing) : assign(expr, crossing);
         if (heldChild() !== null) {
             return `() => ${forChild(call(expr, '__bound', undefined, 'child'), 'scalar')}, (${BOUND_VALUE}) => ${write}`;
+        }
+
+        // A binding Svelte reads for truth, on an element: the Python value,
+        // its truth taken as an attribute of that name takes it, on this side
+        // of the expression, where an absence is still `undefined`. A
+        // component's prop of that name is the author's value, read below.
+        if (onElement(tag) && truthBinding(directive.slice('bind:'.length))) {
+            return `() => __pybridge.boundTruth(${call(expr, '', undefined, 'python')}), (${BOUND_VALUE}) => ${write}`;
         }
 
         const read = multiple ? 'selection' : toPythonChild() ? 'child' : 'scalar';

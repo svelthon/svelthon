@@ -403,8 +403,10 @@ et montre le `{:else}`, comme Svelte avec `null` : une liste pas encore fournie
 ne fait aucune ligne, là où le `for` de Python lèverait.
 
 **Les directives prennent du Python aussi.** Un gestionnaire est un `lambda`,
-`class:` se lit avec la vérité de Python, et une liaison nomme quelque chose à
-quoi Python sait affecter :
+`class:` se lit avec la vérité de Python, tout comme `bind:checked`,
+`bind:indeterminate`, `bind:open`, `bind:muted` et `bind:paused` sur un
+élément, None restant l'absence d'où Svelte lit l'élément ; une liaison nomme
+quelque chose à quoi Python sait affecter :
 
 ```svelte
 <input oninput={lambda e: on_text(e.target.value)} bind:value={row["label"]} use:action={opts} />

@@ -53,3 +53,10 @@ export const attributeWrapper = (name) =>
           : BOOLEAN_ATTRIBUTE.test(name)
             ? '__truthy'
             : null;
+
+// The bindings Svelte reads for truth, `input.checked = Boolean(value)` and
+// `!!get()` for `paused`: the boolean attributes it binds, `checked`,
+// `indeterminate`, `open` and `muted`, and `paused`, a state of a media element
+// no attribute spells. On an element, `bind:checked={[]}` is Python's false, as
+// `checked={[]}` is.
+export const truthBinding = (name) => name === 'paused' || BOOLEAN_ATTRIBUTE.test(name);

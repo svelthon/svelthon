@@ -5,6 +5,8 @@
 import { test, expect } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import PythonTruthAttributes from './fixtures/PythonTruthAttributes.svelte';
+import PythonTruthBindings from './fixtures/PythonTruthBindings.svelte';
+import PythonTruthBindingsNative from './fixtures/PythonTruthBindingsNative.svelte';
 
 const at = () => {
     const target = document.body.appendChild(document.createElement('div'));
@@ -90,3 +92,49 @@ test.for([
 test('control: class from a string is the string', () => {
     expect(at()('text').className).toBe('plain words');
 });
+
+// And a binding Svelte reads for truth, on an element: `bind:checked`,
+// `indeterminate`, `open`, `muted` and `paused` were handed a container or an
+// object as JavaScript holds it, true whatever Python found, so an empty list
+// checked its box and an object whose `__bool__` says False opened a
+// `<details>`. Each as a Svelte component bound to the Python value's truth
+// shows it, None as one bound to `undefined`, from which both read the element.
+test.for([['list'], ['dict'], ['tuple'], ['set'], ['object'], ['full'], ['none']])(
+    'a binding read for truth takes Python’s, as Svelte bound to it does: %s',
+    ([kind]) => {
+        const played = [];
+        const play = HTMLMediaElement.prototype.play;
+
+        HTMLMediaElement.prototype.play = function () {
+            played.push(this.dataset.k);
+            return Promise.resolve();
+        };
+
+        // What a media element is asked to do is what `paused` shows: jsdom
+        // plays nothing, and leaves `paused` as it was.
+        const shown = (Component, props) => {
+            played.length = 0;
+
+            const target = document.body.appendChild(document.createElement('div'));
+            const instance = mount(Component, { target, props });
+
+            flushSync();
+
+            const read = (key, property) => target.querySelector(`[data-k="${key}"]`)[property];
+            const state = [read('checked', 'checked'), read('indeterminate', 'indeterminate'), read('open', 'open'), read('muted', 'muted')];
+
+            return { state, played: [...played], model: instance.model() };
+        };
+
+        try {
+            const truth = kind === 'none' ? undefined : kind === 'full';
+            const native = shown(PythonTruthBindingsNative, { truth });
+            const python = shown(PythonTruthBindings, { kind });
+
+            expect([python.state, python.played]).toEqual([native.state, native.played]);
+            if (kind === 'none') expect(python.model).toEqual(native.model);
+        } finally {
+            HTMLMediaElement.prototype.play = play;
+        }
+    }
+);

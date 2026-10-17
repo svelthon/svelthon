@@ -1007,6 +1007,17 @@ export const __pybridge = {
     // function raised on them where the nested one answered.
     bound: attribute,
 
+    // And to a binding Svelte reads for truth, `bind:checked` on an element:
+    // Python's truth of the value, as `checked={…}` reads it, where an empty
+    // list handed over as its view was JavaScript's true. An absence, None or
+    // `javascript.NULL`, stays one, from which Svelte reads the element's own
+    // state, as from `undefined` and `null`.
+    boundTruth(value) {
+        if (value === NONE || value === undefined) return undefined;
+
+        return value === null ? null : __pybridge.truthy(value);
+    },
+
     // The snippet a `{@render}` renders when its spelling does not say whose it
     // is: `children`, an alias, an attribute, a key. One a Python markup
     // declares reads its arguments as Python values: this markup's own, among

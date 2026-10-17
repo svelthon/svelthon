@@ -395,7 +395,10 @@ shows the `{:else}`, as Svelte does with `null`: a list not handed over yet is
 no rows, where Python's `for` would raise.
 
 **Directives take Python as well.** A handler is a `lambda`, `class:` is read for
-Python's truthiness, and a binding names something Python can assign to:
+Python's truthiness, and so are `bind:checked`, `bind:indeterminate`,
+`bind:open`, `bind:muted` and `bind:paused` on an element, None staying the
+absence from which Svelte reads the element; a binding names something Python
+can assign to:
 
 ```svelte
 <input oninput={lambda e: on_text(e.target.value)} bind:value={row["label"]} use:action={opts} />
