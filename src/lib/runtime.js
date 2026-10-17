@@ -1,12 +1,10 @@
-// What every compiled component imports. `globals.js` prepares the scope
-// brython.js reads as it loads, and `boot.js` imports the engine itself and
-// starts it.
-import './globals.js';
-import './boot.js';
+// What every compiled component imports. `crossing.js` comes first: it imports
+// `globals.js`, which prepares the scope brython.js reads as it loads, and
+// `boot.js`, which imports the engine itself and starts it.
+import * as core from './crossing.js';
 import { untrack } from 'svelte';
 import { createSubscriber } from 'svelte/reactivity';
 import { attributeWrapper } from './attributes.js';
-import * as core from './crossing.js';
 
 // Held here as constants of this module: a binding imported is read through the
 // module's cell at each use, which the hot paths of a crossing paid.
