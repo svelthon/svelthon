@@ -3391,9 +3391,10 @@ function authorBindings(c) {
         `const __proto = __global.Object.create(null);`,
         // The names a `from m import *` binds get their accessors at run time,
         // in a component unsubscribed with its own list; a store keeps its
-        // subscriptions for as long as the page.
+        // subscriptions for as long as the page, and notes each under `names`,
+        // which it publishes when it has no `__all__` (`starredMembers`).
         ...(c.starred
-            ? [`__global.Object.defineProperty(__proto, '$svelthonStarred', { value: { owner: ${c.store ? 'undefined' : SUBS} } });`]
+            ? [`__global.Object.defineProperty(__proto, '$svelthonStarred', { value: { owner: ${c.store ? 'undefined, names: new __global.Set()' : SUBS} } });`]
             : []),
         // Python may write to a prop; the write lands in the local fallback and
         // is shadowed for as long as the parent supplies a value, which is
@@ -3628,6 +3629,21 @@ const unboundRefusals = (c) =>
     c.unbound.map(
         (n) => `if (${NS}[${JSON.stringify(n)}] === undefined) throw new __global.Error(${JSON.stringify(neverBinds(n, c.listedAt))});`
     );
+
+// And the names those star imports brought, on a store with no `__all__`: it
+// publishes every name it has, and these the source does not spell. Each the
+// way a name the compiler gave no signal is published, read and written
+// through the namespace.
+const starredMembers = (c) =>
+    c.store && c.starred && !c.listsAll
+        ? [
+              `for (const __name of ${NS}.$svelthonStarred.names) {` +
+                  ` if (__global.Object.hasOwn(${STORE_FACADE}, __name)) continue;` +
+                  ` __global.Object.defineProperty(${STORE_FACADE}, __name, { enumerable: true,` +
+                  ` get: () => ${RUNTIME.storeMember}(${NS}[__name], __name + ${JSON.stringify(`() — ${c.source}`)}),` +
+                  ` set: (${NEXT_VALUE}) => { ${NS}[__name] = __pyArg(${NEXT_VALUE}); } }); }`
+          ]
+        : [];
 
 function initCall(c) {
     // A module's body runs when it is imported (`moduleLoad`).
@@ -3997,7 +4013,7 @@ function moduleLoad(c) {
     if (!c.store && !c.plain) return [];
 
     const name = pythonModuleName(c.source);
-    const run = [`__init(${NS});`, ...unboundRefusals(c), ...liveExports(c), ...(c.store ? effectLines(c) : [])];
+    const run = [`__init(${NS});`, ...unboundRefusals(c), ...starredMembers(c), ...liveExports(c), ...(c.store ? effectLines(c) : [])];
     const roots = c.effects.filter((e) => e.root).map((e) => ` ${destroyer(e.name)} = ${RUNTIME.laterRoot}();`);
 
     return [
@@ -4474,14 +4490,14 @@ function compile(
 
     const isFunction = (name) => funcs.some((f) => f.name === name);
 
-    // What `__all__` lists and the compiler gave no signal: a class, or a name a
-    // star import brought. A store reads it off the namespace, as a `.py` does.
-    const unsignalled =
-        listed === null
-            ? []
-            : exported.filter(
-                  (n) => !state.includes(n) && !deriveds.some((d) => d.name === n) && !isFunction(n)
-              );
+    // What the store publishes and the compiler gave no signal: a class, the
+    // destructor of an `@effect.root`, a name an import brought, one a star
+    // import brought. A store reads it off the namespace, as a `.py` does. What
+    // `__all__` lists, or, with none, every name the module binds: the store
+    // publishes every name it has, and its directives are none of them.
+    const unsignalled = (listed ?? (store ? [...new Set([...binds, ...jsImported])].filter((n) => !DIRECTIVES.has(n)) : [])).filter(
+        (n) => !state.includes(n) && !deriveds.some((d) => d.name === n) && !isFunction(n)
+    );
 
     // Everything the sections read, gathered once. Nothing is computed here:
     // the whole of `compile()` above this line is the reading, and everything
@@ -4507,6 +4523,7 @@ function compile(
         // Whether a name belongs to the module's public surface. `__all__` when
         // the module wrote one, everything when it did not.
         published: (name) => listed === null || listed.includes(name),
+        listsAll: listed !== null,
         imported,
         props,
         bindables,

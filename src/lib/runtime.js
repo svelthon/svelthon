@@ -2647,14 +2647,18 @@ export function withNamespace(name, namespace, run) {
 // gets, on the prototype as `bind` places them, with a revision made here since
 // none was declared for it: a list imported this way and appended to repaints
 // what reads it, as one imported by name does. Unsubscribed with the
-// component's own list, which the compiler hands over on the prototype.
+// component's own list, which the compiler hands over on the prototype. A store
+// keeps them under `names` too, which it publishes when it has no `__all__`,
+// since it then publishes every name it has.
 function starred(namespace, name) {
     const proto = Object.getPrototypeOf(namespace);
 
     // Only the generated namespace's own prototype is ours to write on.
     if (proto === null || proto === Object.prototype) return;
 
-    const { owner } = namespace.$svelthonStarred;
+    const { owner, names } = namespace.$svelthonStarred;
+
+    names?.add(name);
     let update;
     const changed = createSubscriber((one) => {
         update = one;

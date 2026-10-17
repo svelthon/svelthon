@@ -114,6 +114,23 @@ test('and so in a module, by its name or another', () => {
     expect(runs).toEqual([]);
 });
 
+// A store with no `__all__` publishes every name it binds, its root's
+// destructor among them: JavaScript stops the root by that name, where
+// `store.stop` was undefined and only a Python function could stop it.
+test('and from JavaScript, by its name on a store with no __all__', async () => {
+    const { store } = await import('./fixtures/unlisted_store.svelte.py');
+
+    flushSync();
+    store.bump();
+    flushSync();
+    expect([store.n, store.seen]).toEqual([2, 2]);
+
+    store.stop();
+    store.bump();
+    flushSync();
+    expect([store.n, store.seen]).toEqual([3, 2]);
+});
+
 // A module whose first attempt stopped its root, kept its destructor and
 // failed: the attempt that succeeds has a root of its own, which runs, and
 // which the failed attempt's destructor does not stop. The two shared one, so

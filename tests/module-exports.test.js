@@ -339,6 +339,24 @@ def unlisted():
         expect(script).toContain('get hidden()');
         expect(script).toContain('export { __export_bump as bump };');
     });
+
+    // All of it is every name it binds, and the store gave a getter to those
+    // with a signal alone: a class, the destructor of an `@effect.root` and the
+    // names an import or a star import brought were not on it, `store.Model`
+    // undefined and `store.stop()` no function. The same module listing every
+    // name it binds is the witness; `effect-root.test.js` stops the root.
+    test('a module with no __all__ publishes every name it binds, as one listing them all does', async () => {
+        const { store: unlisted } = await import('./fixtures/unlisted_store.svelte.py');
+        const { store: listed } = await import('./fixtures/listed_store.svelte.py');
+
+        expect(Object.keys(unlisted).sort()).toEqual(Object.keys(listed).sort());
+        expect([unlisted.Model.tp_name, unlisted.NULL, unlisted.label(), typeof unlisted.stop]).toEqual([
+            'Model',
+            null,
+            'from the module',
+            'function'
+        ]);
+    });
 });
 
 // `__all__` and `__js__` are read off the AST and read is all they are for.
