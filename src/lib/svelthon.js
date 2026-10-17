@@ -861,9 +861,13 @@ const isReactive = (file) => file.endsWith('.svelte.py');
 // module that SvelteKit loads when it decides. SvelteKit takes for one every id
 // its pattern matches, `/[/.]remote\.[^/]+$/`, the query included: a second
 // half, `peps.remote.py?python`, was a second remote module to it, refused for
-// the default export that runs its body. No `import` can name it either:
-// `peps.remote` is not a module Python publishes.
-const isRemote = (file) => file.endsWith('.remote.py');
+// the default export that runs its body.
+//
+// Its rule, read on the file's name, with SvelteKit or without it: `remote.py`
+// as well as `peps.remote.py`. Python can import the first, `import remote`,
+// and its body then runs as it loads and not at the import statement, which
+// is where this departs from CPython.
+const isRemote = (file) => /[/.]remote\.py$/.test(file);
 
 // The Vite plugin that serves those modules.
 export function svelthon(options = {}) {

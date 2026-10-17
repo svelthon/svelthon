@@ -77,7 +77,7 @@ rest of that configuration and what each line buys.
 npm install
 npm run dev          # the demo, at /demo/
 
-npm test             # 1 915 tests: semantics, props, reactivity, Svelte surface
+npm test             # 1 916 tests: semantics, props, reactivity, Svelte surface
 npm run test:quiet   # the suite's own output: a green run must say nothing
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
@@ -845,11 +845,17 @@ what makes SvelteKit's remote functions work from Python: `accepted = query(…)
 in a `.remote.py` holds, and exports, the object SvelteKit's own `query()`
 built. Anything a framework recognises by identity keeps it across the boundary.
 
-**A `.remote.py` is one module**, its body run as it is loaded and nothing
-exported by default, as a route module that SvelteKit loads when it decides.
-Any other `.py` has a second half that a Python `import` runs; SvelteKit takes
-whatever id ends in `.remote.` and something for a remote module, and refuses
-a default export there.
+**A `remote.py` or a `*.remote.py` is one module**, its body run as it is
+loaded and nothing exported by default, as a route module that SvelteKit loads
+when it decides. SvelteKit takes a module for one of remote functions by its
+name, a `/` or a `.` then `remote.` (`/[/.]remote\.[^/]+$/`), and refuses a
+default export there; any other `.py` has a second half, which a Python
+`import` runs.
+
+**Where this departs from CPython**, with SvelteKit or without it: a module
+named `remote.py` or `*.remote.py` runs its body as it loads, and not at the
+`import` statement, because SvelteKit makes it a remote module by its name.
+`import remote` under an `if` not taken runs it all the same.
 
 **A reactive module reads it too.** `__all__` in a `.svelte.py` says what the
 store publishes, exactly as it does in a `.py`; without one, the store publishes
@@ -1572,7 +1578,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 1 915 tests as written (vitest reports more, one per
+Validated by `npm test`, 1 916 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;

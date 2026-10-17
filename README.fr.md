@@ -75,7 +75,7 @@ reste de cette configuration et ce que chaque ligne apporte.
 npm install
 npm run dev          # la démo, sous /demo/
 
-npm test             # 1 915 tests : sémantique, props, réactivité, surface Svelte
+npm test             # 1 916 tests : sémantique, props, réactivité, surface Svelte
 npm run test:quiet   # la sortie de la suite : un run vert ne doit rien dire
 npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
@@ -886,11 +886,17 @@ c'est ce qui fait marcher les fonctions distantes de SvelteKit depuis Python :
 `query()` de SvelteKit a fabriqué. Ce qu'un framework reconnaît par identité le
 reste en traversant.
 
-**Un `.remote.py` est un seul module**, son corps exécuté au chargement et rien
-d'exporté par défaut, comme un module de route que SvelteKit charge quand il le
-décide. Tout autre `.py` a une seconde moitié, que lance un `import` Python ;
-SvelteKit prend pour un module distant tout identifiant qui finit par
-`.remote.` suivi d'autre chose, et y refuse un export par défaut.
+**Un `remote.py` ou un `*.remote.py` est un seul module**, son corps exécuté au
+chargement et rien d'exporté par défaut, comme un module de route que SvelteKit
+charge quand il le décide. SvelteKit prend un module pour un module de
+fonctions distantes d'après son nom, un `/` ou un `.` puis `remote.`
+(`/[/.]remote\.[^/]+$/`), et y refuse un export par défaut ; tout autre `.py` a
+une seconde moitié, que lance un `import` Python.
+
+**Là où l'on s'écarte de CPython**, avec SvelteKit ou sans lui : un module nommé
+`remote.py` ou `*.remote.py` exécute son corps à son chargement, et non à
+l'instruction `import`, parce que SvelteKit en fait un module distant d'après
+son nom. `import remote` sous un `if` non pris l'exécute quand même.
 
 **Un module réactif le lit aussi.** `__all__` dans un `.svelte.py` dit ce que le
 store publie, exactement comme dans un `.py` ; sans lui, le store publie tous les
@@ -1591,7 +1597,7 @@ part jamais.
 
 ## État
 
-Validé par `npm test`, 1 915 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 1 916 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;

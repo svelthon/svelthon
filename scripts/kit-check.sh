@@ -63,20 +63,29 @@ route() {
     fi
 }
 
+# A remote function, as the browser asks it: `GET /_app/remote/<id>`, its id
+# the one SvelteKit wrote into the client.
+remote() {
+    local name=$1 expected=$2 id answer
+
+    id=$(grep -rhoE "[A-Za-z0-9_-]+/$name\b" "$APP/build/client" | head -1)
+    answer=$(curl -s "$ORIGIN/_app/remote/$id")
+
+    if printf %s "$answer" | grep -qF '"type":"result"' && printf %s "$answer" | grep -qF "$expected"; then
+        echo "✓ kit remote — $name() answered from Python"
+    else
+        echo "✗ kit remote — ${id:-no id for $name}: ${answer:0:200}"
+        status=1
+    fi
+}
+
 route / 'kit + python = -4'
 route /load '42 from [0, 1, 4, 9]'
 route /remote 'asking the server'
+# A module named `remote.py`, which SvelteKit takes for one by its name.
+route /named 'asking remote.py'
 
-# The remote function, as the browser asks it: `GET /_app/remote/<id>`, its id
-# the one SvelteKit wrote into the client.
-ID=$(grep -rhoE '[A-Za-z0-9_-]+/greeting' "$APP/build/client" | head -1)
-ANSWER=$(curl -s "$ORIGIN/_app/remote/$ID")
-
-if printf %s "$ANSWER" | grep -qF '"type":"result"' && printf %s "$ANSWER" | grep -qF 'hello from Python'; then
-    echo "✓ kit remote — greeting() answered from Python"
-else
-    echo "✗ kit remote — ${ID:-no id}: ${ANSWER:0:200}"
-    status=1
-fi
+remote greeting 'hello from Python'
+remote shout 'shouted from python'
 
 exit $status

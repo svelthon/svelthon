@@ -99,3 +99,17 @@ test('an import cycle finds the module half made', () => {
     expect([early, late]).toEqual(['early', 'late']);
     expect([seen, refused, now()]).toEqual(['early', 'ImportError', 'late']);
 });
+
+// Where this departs from CPython, written: a module named `remote.py` or
+// `*.remote.py` is one SvelteKit takes for a module of remote functions by its
+// name, and refuses the half an import runs, so it has one, whether SvelteKit
+// builds the page or not. Its body runs as it loads, when its importer's code
+// is evaluated, and not at the import statement; `timing_never`, imported the
+// same way, still runs nothing. Imported here, last: what it records comes
+// after every line the tests above read.
+test('a module named remote.py runs its body as it loads, under an import not taken', async () => {
+    await import('./fixtures/timing_remote.py');
+
+    expect(recorded()).toMatch(/ remote$/);
+    expect(recorded()).not.toContain('never');
+});
