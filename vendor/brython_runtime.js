@@ -12926,6 +12926,20 @@ $B.JSObj.tp_hash=function(self){
 return _b_.object.tp_hash(self)}
 $B.JSObj.tp_iter=function(self){return{
 ob_type:js_iterator,obj:self,it:Object.keys(self)[Symbol.iterator](),length:Object.keys(self).length}}
+function is_plain(obj){if(obj===null ||typeof obj !='object'){return false}
+var proto=Object.getPrototypeOf(obj)
+return proto===Object.prototype ||proto===null}
+$B.JSObj.mp_length=function(self){if(! is_plain(self)){$B.RAISE(_b_.TypeError,"object of type '"+
+$B.class_name(self)+"' has no len()")}
+return Object.keys(self).length}
+var plain_funcs={get:function(){var $=$B.args("get",3,{self:null,key:null,_default:null},arguments,{_default:_b_.None})
+return Object.hasOwn($.self,$.key)? jsobj2pyobj($.self[$.key]):
+$._default},keys:function(){var $=$B.args("keys",1,{self:null},arguments)
+return $B.$list(Object.keys($.self))},items:function(){var $=$B.args("items",1,{self:null},arguments)
+return $B.$list(Object.keys($.self).map(
+key=> $B.fast_tuple([key,jsobj2pyobj($.self[key])])))},values:function(){var $=$B.args("values",1,{self:null},arguments)
+return $B.$list(Object.keys($.self).map(
+key=> jsobj2pyobj($.self[key])))}}
 $B.JSObj.tp_getattro=function(_self,attr){var test=false 
 if(test){console.log("__ga__",_self,attr)}
 var res=_b_.object.tp_getattro(_self,attr,$B.NULL)
@@ -12939,6 +12953,7 @@ if(js_attr===undefined){if(typeof _self=='object' && attr in _self){
 return _b_.None}
 if(typeof _self.getNamedItem=='function'){var res=_self.getNamedItem(attr)
 if(res !==undefined){return jsobj2pyobj(res)}}
+if(is_plain(_self)&& Object.hasOwn(plain_funcs,attr)){return function(){return plain_funcs[attr](_self,...arguments)}}
 var klass=$B.get_class(_self),class_attr=$B.search_in_mro(klass,attr,$B.NULL)
 if(class_attr !==$B.NULL){if(test){console.log('found in klass',class_attr)}
 if(typeof class_attr=="function"){return function(){var args=new Array(arguments.length+1)
@@ -13144,11 +13159,26 @@ js_array_funcs.extend=function(self){var $=$B.args("extend",2,{self:null,t:null}
 var self=$.self,t=$.t,memo=new Map()
 for(var item of $B.make_js_iterator(t)){self[self.length]=$B.pyobj2jsobj(item,memo)}
 return _b_.None}
+js_array_funcs.count=function(){var $=$B.args("count",2,{self:null,x:null},arguments)
+return _b_.list.tp_funcs.count($.self,pyobj2jsobj($.x))}
+js_array_funcs.index=function(){var missing={},$=$B.args("index",4,{self:null,x:null,start:null,stop:null},arguments,{start:0,stop:missing}),x=pyobj2jsobj($.x)
+return $.stop===missing ?
+_b_.list.tp_funcs.index($.self,x,$.start):
+_b_.list.tp_funcs.index($.self,x,$.start,$.stop)}
+js_array_funcs.insert=function(){var $=$B.args("insert",3,{self:null,i:null,item:null},arguments)
+return _b_.list.tp_funcs.insert($.self,$.i,pyobj2jsobj($.item))}
+js_array_funcs.remove=function(){var $=$B.args("remove",2,{self:null,x:null},arguments)
+return _b_.list.tp_funcs.remove($.self,pyobj2jsobj($.x))}
+js_array_funcs.copy=function(){var $=$B.args("copy",1,{self:null},arguments)
+return $.self.slice()}
+js_array_funcs.clear=function(){var $=$B.args("clear",1,{self:null},arguments)
+$.self.length=0
+return _b_.None}
 js_array_funcs.__reduce_ex__=function(self,protocol){
 var items=new Array(self.length)
 for(var i=0;i < self.length;i++){items[i]=jsobj2pyobj(self[i])}
 return $B.fast_tuple([_b_.list,$B.fast_tuple([$B.fast_tuple(items)])])}
-js_array.tp_methods=["append","extend","__reduce_ex__"]
+js_array.tp_methods=["append","extend","count","index","insert","remove","copy","clear","__reduce_ex__"]
 $B.set_func_names(js_array,'javascript')
 $B.get_jsobj_class=function(obj){if(typeof obj=='function'){return $B.JSObj}
 var proto=Object.getPrototypeOf(obj)

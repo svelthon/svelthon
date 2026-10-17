@@ -812,6 +812,35 @@ test('a set made from what is not a list, a tuple or a dict iterates it: set-upd
     expect(made([0.5, 1.5])).toEqual([true, true, true, [9], [1], [1], true]);
 });
 
+// A JavaScript array had only `append` and `extend` of a list's methods, and a
+// plain object none of a dict's: `count`, `index`, `insert`, `remove`, `copy`
+// and `clear` on the one, `len`, `get`, `keys`, `values` and `items` on the
+// other, these only where the object has no member of that name, so a `Map`
+// keeps its `get`. `tests/js-parent-data.test.js` reads them in a component.
+test('a JavaScript array and a plain object answer as a list and a dict: js-array-list-methods, plain-jsobject-mapping', () => {
+    const $B = globalThis.__BRYTHON__;
+    const call = (value, name, ...args) => $B.$call($B.$getattr($B.jsobj2pyobj(value), name), ...args);
+    const plain = (rows) => Array.from(rows, (one) => (Array.isArray(one) ? Array.from(one) : one));
+    const letters = ['a', 'b', 'c', 'b'];
+    const record = { a: 1, b: 2 };
+
+    expect([call(letters, 'count', 'b'), call(letters, 'index', 'b')]).toEqual([2, 1]);
+    call(letters, 'insert', 1, 'x');
+    call(letters, 'remove', 'c');
+    expect(letters).toEqual(['a', 'x', 'b', 'b']);
+
+    const copied = call(letters, 'copy');
+
+    call(letters, 'clear');
+    expect([copied, letters]).toEqual([['a', 'x', 'b', 'b'], []]);
+
+    expect($B.$call($B.builtins.len, $B.jsobj2pyobj(record))).toBe(2);
+    expect([call(record, 'get', 'a'), call(record, 'get', 'z', 0)]).toEqual([1, 0]);
+    expect([plain(call(record, 'keys')), plain(call(record, 'values'))]).toEqual([['a', 'b'], [1, 2]]);
+    expect(plain(call(record, 'items'))).toEqual([['a', 1], ['b', 2]]);
+    expect(call(new Map([['k', 'v']]), 'get', 'k')).toBe('v');
+});
+
 // A builtin that takes no arguments said "takes no argument", and `locals()`
 // refused a keyword with the same sentence. `python3` on the same module, at
 // its top and in a function.
