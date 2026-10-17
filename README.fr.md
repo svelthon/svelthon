@@ -1135,7 +1135,8 @@ Ses props sont ses noms annotés, observés comme attributs et exposés comme
 propriétés, et chaque attribut arrive dans le type que nomme son annotation :
 `start: int` lit `start="5"` comme `5`, `tags: list` lit un tableau JSON. Un
 `bool` suit HTML, comme en Svelte : un attribut présent est vrai, quelle que
-soit sa valeur.
+soit sa valeur. Une propriété que la page remet à `undefined` relit son défaut,
+comme celle d'un élément Svelte, `15.0` tel que Python l'a écrit.
 
 `host()` est la sortie, et la seule : un élément personnalisé parle à la page par
 des événements DOM et non par des props. Sans lui, un composant pourrait recevoir

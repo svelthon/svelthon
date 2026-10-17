@@ -1088,7 +1088,8 @@ Its props are its annotated names, observed as attributes and exposed as
 properties, and each attribute arrives as the type its annotation names:
 `start: int` reads `start="5"` as `5`, `tags: list` reads a JSON array. A
 `bool` follows HTML, as in Svelte: an attribute that is present is true,
-whatever its value.
+whatever its value. A property the page sets back to `undefined` reads its
+default again, as a Svelte element's does, `15.0` as Python wrote it.
 
 `host()` is the way back out, and the only one: a custom element speaks to the
 page through DOM events rather than props. Without it a component could receive

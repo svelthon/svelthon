@@ -3189,6 +3189,9 @@ function declarations(c) {
                   // form a custom element's reader is handed and one Svelte's
                   // proxy leaves alone, kept beside the Python value, which
                   // Python reads while the parent passes nothing (`passed`).
+                  // A custom element's page passes no parent's value Python
+                  // can read, so the element reads it whenever the prop holds
+                  // that crossing, as it read a value init() handed over.
                   // A prop that declares none, or `None`, has none, as
                   // `$bindable()` and `$bindable(undefined)` have none.
                   ...(defaulted.length ? [`class __Declared { value = $state.raw(); py = undefined; }`] : []),
@@ -3196,7 +3199,7 @@ function declarations(c) {
                   `let { ${c.bindables
                       .map((b) =>
                           defaulted.includes(b)
-                              ? `${b} = $bindable(${bindableDefault(b)}.value), ${b}: ${passed(b)}`
+                              ? `${b} = $bindable(${bindableDefault(b)}.value)${c.element ? '' : `, ${b}: ${passed(b)}`}`
                               : `${b} = $bindable()`
                       )
                       .join(', ')}, ...__props } =` + ` $props();`,
@@ -3440,7 +3443,9 @@ function authorBindings(c) {
         ...c.bindables.map((b) => {
             const declared = c.defaulted.includes(b);
             const box = bindableDefault(b);
-            const held = declared ? `__unproxied(${b}, ${crossed(b)}, ${passed(b)}, ${box})` : `__unproxied(${b}, ${crossed(b)})`;
+            const held = declared
+                ? `__unproxied(${b}, ${crossed(b)}, ${c.element ? 'undefined' : passed(b)}, ${box})`
+                : `__unproxied(${b}, ${crossed(b)})`;
             const written = `const __written = __track(${NEXT_VALUE}, ${bump(b)}${c.store ? '' : `, ${SUBS}`});`;
             const handed =
                 `const __was = __untrack(() => ${held});` +
@@ -4268,14 +4273,9 @@ function compile(
     // both from an accessor it publishes for a destructured prop, the one a
     // `bindable` is, so every prop takes that path; a scalar the component
     // writes reaches the element as JavaScript's own (`handOver`).
-    //
-    // An accessor per name the props destructure, so the second one a default
-    // reads its parent's value by (`passed`) would take the prop's place. No
-    // parent binds an element's prop: init() writes the default to it.
     if (element && !store && !plain) {
         bindables = [...props, ...bindables];
         props = [];
-        defaulted = [];
     }
 
     // Neither a store nor a plain module has a parent, so an annotation there
@@ -4511,6 +4511,9 @@ function compile(
         props,
         bindables,
         defaulted,
+        // A custom element publishes an accessor per name the props
+        // destructure, so it reads no parent's value by a second one.
+        element: element && !store && !plain,
         state,
         funcs,
         classes,

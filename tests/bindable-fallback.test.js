@@ -13,6 +13,8 @@ import BindableFallbackPyHost from './fixtures/BindableFallbackPyHost.svelte';
 import BindableFallbackPyHostNative from './fixtures/BindableFallbackPyHostNative.svelte';
 import BindableFallbackPyHeld from './fixtures/BindableFallbackPyHeld.svelte';
 import BindableFallbackKept from './fixtures/BindableFallbackKept.svelte';
+import './fixtures/BindableFallbackElement.svelte';
+import './fixtures/BindableFallbackElementNative.svelte';
 import BindableFallbackKeptHost from './fixtures/BindableFallbackKeptHost.svelte';
 
 const text = (target, key) => target.querySelector(`[data-k="${key}"]`)?.textContent;
@@ -80,6 +82,43 @@ test('a parent binding undefined to a prop with a default is refused at mount, a
 
     expect(refused(BindableFallbackNative)).toThrow(/props_invalid_value/);
     expect(refused(BindableFallback)).toThrow(/props_invalid_value/);
+});
+
+// A custom element's page clears a prop by its property, as a parent does, and
+// the element reads its default again, as a Svelte element does: a float as
+// Python wrote it. The component clearing its own reads it cleared.
+test.for([
+    ['the page sets a value, then nothing', [['value', 'x'], ['value', undefined]], ['default|15', 'x|15', 'default|15']],
+    ['the page sets the float, then nothing', [['ratio', 2], ['ratio', undefined]], ['default|15', 'default|2', 'default|15']],
+    ['the component clears its own', ['clear'], ['default|15', '|15']]
+])('a custom element, %s, reads what a Svelte element reads', async ([, steps, expected]) => {
+    const shown = async (tag) => {
+        const element = document.createElement(tag);
+        const seen = [];
+        const settle = async () => {
+            flushSync();
+            await Promise.resolve();
+            flushSync();
+            seen.push(element.querySelector('[data-k="child"]').textContent);
+        };
+
+        document.body.appendChild(element);
+        try {
+            await settle();
+            for (const step of steps) {
+                if (step === 'clear') element.querySelector('button').click();
+                else element[step[0]] = step[1];
+                await settle();
+            }
+            return seen;
+        } finally {
+            element.remove();
+        }
+    };
+    const native = await shown('bindable-fallback-element-native');
+
+    expect(native).toEqual(expected);
+    expect(await shown('bindable-fallback-element')).toEqual(native.map((one) => one.replace('|15', '|15.0')));
 });
 
 // The default reads back as Python wrote it, a float as a float and a list as
