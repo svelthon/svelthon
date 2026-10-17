@@ -13,6 +13,8 @@ import ComponentThisParent from './fixtures/ComponentThisParent.svelte';
 import IndirectChildParent from './fixtures/IndirectChildParent.svelte';
 import ShadowedPythonChild from './fixtures/ShadowedPythonChild.svelte';
 import ShadowedNativeChild from './fixtures/ShadowedNativeChild.svelte';
+import HeldNoneHost from './fixtures/HeldNoneHost.svelte';
+import HeldNoneHostNative from './fixtures/HeldNoneHostNative.svelte';
 
 // First, before any other mounts a Python child: a child handed by JavaScript
 // is told apart by what it says of itself, not by a parent that imported it.
@@ -37,6 +39,29 @@ test('<svelte:component> hands each child the values of its language', () => {
     expect(target.querySelector('[data-k="native"]').textContent).toBe('number|15');
     expect(target.querySelector('[data-k="double quotes"]').textContent).toBe('float|15.0');
     expect(target.querySelector('[data-k="single quotes"]').textContent).toBe('float|15.0');
+});
+
+// None is the absence by every way a held JavaScript child is handed it, as by
+// its import: the child reads its default, as under a Svelte parent handing
+// `undefined`. A name the script assigned and `<svelte:component>` handed the
+// Python object, which JavaScript reads as present.
+test('a JavaScript child held by a name reads None as the absence its default fills', () => {
+    const shown = (Host) => {
+        const target = document.body.appendChild(document.createElement('div'));
+        mount(Host, { target });
+        flushSync();
+
+        return Object.fromEntries([...target.querySelectorAll('output')].map((one) => [one.dataset.k, one.textContent]));
+    };
+    const native = shown(HeldNoneHostNative);
+
+    expect(native).toEqual({
+        direct: 'number|99|undefined',
+        named: 'number|99|undefined',
+        spread: 'number|99|undefined',
+        component: 'number|99|undefined'
+    });
+    expect(shown(HeldNoneHost)).toEqual(native);
 });
 
 test('a child re-exported or reached through a namespace gets the values of its language', () => {
