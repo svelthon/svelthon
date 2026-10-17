@@ -3154,9 +3154,9 @@ function preamble(c) {
             .join(', ')} } from 'svelte';`,
         // The three questions the runtime asks of Svelte, answered by runes: a
         // plain module has none. Whether a reaction is reading
-        // (`inReaction` in the runtime), whether a write would be refused
+        // (`host.reacting` in Bryntime), whether a write would be refused
         // here, asked by a write of the value a state already holds, which
-        // Svelte checks and which changes nothing (`refusal`), and what marks a
+        // Svelte checks and which changes nothing (`host.refuses`), and what marks a
         // state of Svelte's own, which `$state` looks for in the probe it is
         // handed (`stateOwned`).
         `__pybridge.tracking(() => $effect.tracking());`,

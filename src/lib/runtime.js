@@ -98,13 +98,25 @@ export {
     plainData
 };
 
-// Under its own name, since this module has a `refusal` of its own (a view's
-// write refused while a block renders).
 export { refusal } from './bryntime/bryntime.js';
 
 // The name this project's author knows, which signs every refusal the crossing
 // makes, as every other refusal here is signed.
 host.name = 'svelthon';
+
+// How Svelte's reactions read and write, which Bryntime follows a watched
+// Python value through. Whether the code running is a reaction is Svelte's
+// `$effect.tracking()`, and whether a write would be refused is a write Svelte
+// checks and that changes nothing, which raises where Svelte refuses one, in a
+// derived or a block. A plain module has no runes, so both are handed over by
+// the first component or store that loads, whose script Svelte compiles
+// (`__pybridge.tracking`, `__pybridge.refusing`), and the runtime asks nothing
+// of Svelte's internals. Until one has, every read is taken for a reaction's,
+// which costs a walk and subscribes nothing outside one, so a page of
+// JavaScript components reading a `.py` module's objects is followed all the
+// same; and nothing is refused.
+host.subscriber = createSubscriber;
+host.untrack = untrack;
 
 // What the crossing borrows of this module until it moves there too.
 lent.functionIn = functionIn;
@@ -144,32 +156,6 @@ doors.out('spread-python', spreadPython);
 // `Error` through: a module that binds one of those names binds it in the
 // generated module's own scope, where the generated code read it in its place.
 export const jsGlobal = globalThis;
-
-// Whether the code running is a reaction that follows what it reads, as Svelte
-// answers `$effect.tracking()`. A plain module has no runes, so the answer is
-// handed over by the first component or store that loads, whose script Svelte
-// compiles (`__pybridge.tracking`), and the runtime asks nothing of Svelte's
-// internals. Until one has, every read is taken for a reaction's, which costs
-// a walk and subscribes nothing outside one: a page of JavaScript components
-// reading a `.py` module's objects is followed all the same.
-let inReaction = () => true;
-
-// A write Svelte checks and that changes nothing, handed over the same way
-// (`__pybridge.refusing`): it raises where Svelte refuses a write, in a
-// derived or a block, and does nothing anywhere else. Null until a component
-// or a store has loaded, and nothing is refused before then.
-let refusal = null;
-
-const refusing = () => {
-    if (refusal === null) return false;
-
-    try {
-        refusal();
-        return false;
-    } catch {
-        return true;
-    }
-};
 
 // How a set's view takes out the member its own lookup found, and tells it
 // (`SetView.delete`): the mutation tracking's, which sets it.
@@ -861,15 +847,22 @@ export const __pybridge = {
     },
 
     // The answer to `$effect.tracking()`, handed over by a component or a
-    // store as it loads (`inReaction` above).
+    // store as it loads (`host.reacting`).
     tracking(answer) {
-        inReaction = answer;
+        host.reacting = answer;
     },
 
-    // A write Svelte checks and that changes nothing, handed over the same way
-    // (`refusal` above).
+    // A write Svelte checks and that changes nothing, handed over the same way:
+    // a write is refused where it raises (`host.refuses`).
     refusing(write) {
-        refusal = write;
+        host.refuses = () => {
+            try {
+                write();
+                return false;
+            } catch {
+                return true;
+            }
+        };
     },
 
     // What a component or a store hands Svelte's `$state` as it loads, so the
@@ -1366,7 +1359,7 @@ function installMutationTracking($B) {
     // made while a derived or a block reads). A write of Python's is made
     // before anything is told, and the refusal came from telling the readers:
     // the model kept what the page refused, and an author who caught the
-    // error read two answers. So where writes are refused (`refusing`), what
+    // error read two answers. So where writes are refused (`host.refuses`), what
     // a watched container stores is copied before the write (`saving`), and
     // put back if telling its readers is refused (`settle`). A write that
     // changes nothing tells nobody, and passes, as Svelte's own collections
@@ -1381,12 +1374,12 @@ function installMutationTracking($B) {
     // tells its readers whatever it writes, so telling them first decides
     // what telling them after would.
     const saving = (target, name, args) =>
-        MARKS.has(target) && refusing() && !(name !== undefined && unchanging(name, target, args)) ? storageOf(target) : undefined;
+        MARKS.has(target) && host.refuses() && !(name !== undefined && unchanging(name, target, args)) ? storageOf(target) : undefined;
 
     const beforeClassWrite = (obj, attr) => {
         // Asked first whether anything could read it, one lookup an object
         // nobody reads misses, since every attribute write comes through here.
-        if (!READ_CLASSES.has(obj) || !refusing()) return;
+        if (!READ_CLASSES.has(obj) || !host.refuses()) return;
 
         classNameChanged(obj, attr);
         notify(obj);
@@ -1695,7 +1688,7 @@ function installMutationTracking($B) {
             // call is told as a change, and does not pay a read of every
             // member before it.
             if (name === 'intersection_update') {
-                if (!refusing()) return null;
+                if (!host.refuses()) return null;
 
                 const held = new Set(Object.values(target.$store).flat());
                 const changed = () => target.$used !== held.size || Object.values(target.$store).some((bucket) => bucket.some((one) => !held.has(one)));
@@ -1993,7 +1986,7 @@ function installMutationTracking($B) {
             try {
                 return Reflect.apply(engine, this, [exc, ...rest]);
             } finally {
-                untrack(() => notify(exc));
+                host.untrack(() => notify(exc));
             }
         };
     }
@@ -2095,7 +2088,7 @@ function installMutationTracking($B) {
     // Only in a reaction that follows its reads: a handler or the script's own
     // run subscribes nothing, and what a reaction reads it links itself.
     const lookedUp = (obj, attr) => {
-        if (typeof attr !== 'string' || !inReaction()) return undefined;
+        if (typeof attr !== 'string' || !host.reacting()) return undefined;
 
         if (pyClass(obj)) {
             const meta = namesRead(quietPyType(obj)?.tp_mro, attr);
@@ -2204,7 +2197,7 @@ function installMutationTracking($B) {
     const PROTOCOLS = Symbol('special methods');
 
     followMetaclass = (value) => {
-        if (!inReaction()) return;
+        if (!host.reacting()) return;
 
         const meta = pyClass(value) ? quietPyType(value) : undefined;
 
@@ -2246,7 +2239,7 @@ function installMutationTracking($B) {
 
             entry = {
                 updates,
-                subscribe: createSubscriber((update) => {
+                subscribe: host.subscriber((update) => {
                     updates.add(update);
                     return () => updates.delete(update);
                 })
@@ -2325,7 +2318,7 @@ function installMutationTracking($B) {
     // descriptor }`, or null for a read nothing of a class answers. Only in a
     // reaction, as `lookedUp`.
     const providers = (obj, attr) => {
-        if (typeof attr !== 'string' || !inReaction()) return null;
+        if (typeof attr !== 'string' || !host.reacting()) return null;
 
         const own = pyClass(obj) ? obj : undefined;
 
@@ -3800,7 +3793,7 @@ export function follow(value) {
 // marker left as one may have lost the links from its children, and takes them
 // back as it is read again.
 const watcher = (marker) =>
-    createSubscriber((update) => {
+    host.subscriber((update) => {
         const revived = dead(marker);
 
         join(marker, update);

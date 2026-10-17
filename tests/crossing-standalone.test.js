@@ -55,6 +55,23 @@ test('loaded alone, with no host, it crosses data both ways', () => {
     expect($B.class_name(entering({ n: 1 }))).toBe('dict');
 });
 
+// With no host to answer how its reactions read and write, every read is taken
+// for a reaction's, nothing is refused, nobody subscribes, and a call that
+// reads without following runs as it is.
+test('alone, it follows nothing and refuses nothing', () => {
+    let started = 0;
+    const join = host.subscriber(() => {
+        started += 1;
+        return () => {};
+    });
+
+    expect(host.reacting()).toBe(true);
+    expect(host.refuses()).toBe(false);
+    join();
+    expect(started).toBe(0);
+    expect(host.untrack(() => 7)).toBe(7);
+});
+
 // With no host to give its name, a refusal is signed with Bryntime's own, and
 // known as one by `refused`.
 test('alone, it signs its refusals with its own name', () => {

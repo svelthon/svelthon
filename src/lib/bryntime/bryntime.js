@@ -163,7 +163,24 @@ export const plainScalar = (value) => {
 // and the name its author knows, which signs every refusal (`name`).
 // Svelthon's answer for Svelte's. With no host, no state owns anything, an
 // object stays as it is, and a refusal is signed with Bryntime's own name.
-export const host = { owns: () => false, adopt: null, name: 'bryntime' };
+//
+// And how its reactions read and write, which a watched Python value is
+// followed through: whether the code running is a reaction that follows what
+// it reads (`reacting`), whether a write would be refused here (`refuses`),
+// a subscription a reaction joins by calling it, `start` called with the
+// function that tells it and handing back the one that ends it
+// (`subscriber`), and a call that reads without following (`untrack`).
+// Alone, every read is taken for a reaction's, nothing is refused, nobody
+// subscribes, and nothing is followed.
+export const host = {
+    owns: () => false,
+    adopt: null,
+    name: 'bryntime',
+    reacting: () => true,
+    refuses: () => false,
+    subscriber: () => () => {},
+    untrack: (fn) => fn()
+};
 
 // What the host still lends the crossing: how a function crosses in
 // (`functionIn`) and out (`handler`), the pair a Python write is handing over
