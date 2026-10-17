@@ -27,6 +27,22 @@ test('bryntime/ imports the engine and itself, and nothing of Svelte or of the r
     expect(imports.filter((one) => !one.endsWith(`: ${ENGINE}`) && !/: \.\/[\w-]+\.js$/.test(one))).toEqual([]);
 });
 
+// And by one door: Svelthon reaches Bryntime through `bryntime.js` alone, which
+// starts the engine and exports its neighbours, so each of the others stays
+// Bryntime's own to split or to move.
+test('Svelthon reaches bryntime/ through bryntime.js alone', () => {
+    const doors = readdirSync('src/lib')
+        .filter((file) => /\.c?js$/.test(file))
+        .flatMap((file) =>
+            [...readFileSync(`src/lib/${file}`, 'utf8').matchAll(/(?:from\s+|require\(\s*|import\s+)['"]\.\/bryntime\/([\w-]+\.js)['"]/g)].map(
+                ([, to]) => `${file}: ${to}`
+            )
+        );
+
+    expect(doors.length).toBeGreaterThan(0);
+    expect(doors.filter((one) => !one.endsWith(': bryntime.js'))).toEqual([]);
+});
+
 // And by name: what it writes on the engine, signs its refusals with and
 // recognises them by is its own. Its comments may take Svelte for an example;
 // a line of code that names Svelthon or Svelte is a contract a page without

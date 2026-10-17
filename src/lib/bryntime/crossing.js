@@ -180,19 +180,25 @@ export const host = {
     untrack: (fn) => fn()
 };
 
-// What the host still lends the crossing: how a function crosses in
-// (`functionIn`) and out (`handler`), the pair a Python write is handing over
-// right now (`handed`), the number and the value it was written as, the rows a
-// Python iterable yields as JavaScript walks them (`seq`), and how a coroutine
-// is run (`schedule`). Alone, a
-// function crosses as itself both ways and the rows are Python's own
-// iteration, followed by nothing; a coroutine has nothing to run it.
+// What is lent the crossing. By `calls.js`, as it loads, since the crossing
+// cannot import it back: how a function crosses in (`functionIn`) and out
+// (`handler`), and how a coroutine is run (`schedule`). By the views, the pair
+// a Python write is handing over right now (`handed`), the number and the value
+// it was written as. And by the host: the rows a Python iterable yields as
+// JavaScript walks them (`seq`), what an object only the host knows is to
+// Python when JavaScript hands it over as an argument (`argument`), and the
+// line of its file a frame's line stands for (`place`). Alone, a function
+// crosses as itself both ways, the rows are Python's own iteration, followed by
+// nothing, a coroutine has nothing to run it, an object crosses as itself and a
+// line is its own.
 export const lent = {
     functionIn: (value) => value,
     handler: (value) => value,
     handed: null,
     seq: (value) => iterated(value),
-    schedule: null
+    schedule: null,
+    argument: (value) => value,
+    place: (file, line) => line
 };
 
 // Then the shapes of what crosses: a bag of keys, an instance of the author's,
