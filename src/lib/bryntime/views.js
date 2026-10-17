@@ -1175,9 +1175,20 @@ function setView(value) {
             // argument for a Python set and raised from inside the engine.
             if (key === 'constructor') return Set;
 
-            const found = Reflect.get(shell, key, shell);
+            // A member of the set's own class reads its private fields, and runs
+            // on the object behind. Any other a prototype holds, `Object`'s
+            // `valueOf`, a method or a getter put on a prototype, runs on the
+            // view, as on a `Set`: run on the object behind, `valueOf()` handed
+            // that object out, back in Python another object, and a copy of
+            // its empty storage an empty set.
+            let holder = Object.getPrototypeOf(shell);
 
-            if (typeof found !== 'function') return found;
+            while (holder !== null && !Object.hasOwn(holder, key)) holder = Object.getPrototypeOf(holder);
+
+            const own = holder === SetView.prototype;
+            const found = Reflect.get(shell, key, own ? shell : view);
+
+            if (!own || typeof found !== 'function') return found;
             if (!bound.has(found)) bound.set(found, Reflect.apply(Function.prototype.bind, found, [shell]));
 
             return bound.get(found);

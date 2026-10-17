@@ -126,3 +126,47 @@ test('an unchanged method is one function, read after read', () => {
     expect(sets.unchanged.has).toBe(sets.unchanged.has);
     expect(sets.unchanged.has(2)).toBe(true);
 });
+
+// A member a prototype holds, `Object`'s `valueOf` or a method or a getter put
+// on `Set.prototype`, runs on the view, as on a `Set`: it ran on the object
+// behind the view, which `valueOf()` handed out, a copy of it an empty set and,
+// back in Python, another object than the set. A `Set` is the witness, and
+// Python's own set handed back the very one, of its own class.
+test('a member a prototype holds runs on the view, as on a Set', () => {
+    const answers = (tags) => {
+        const other = {};
+
+        return [
+            tags.valueOf() === tags,
+            tags.valueOf.call(other) === other,
+            tags.isPrototypeOf(Object.create(tags)),
+            tags.receiver() === tags,
+            tags.given === tags
+        ];
+    };
+
+    try {
+        Set.prototype.receiver = function () {
+            return this;
+        };
+        Object.defineProperty(Set.prototype, 'given', {
+            configurable: true,
+            get() {
+                return this;
+            }
+        });
+
+        expect(answers(new Set([1, 2]))).toEqual([true, true, true, true, true]);
+        expect(answers(sets.fresh())).toEqual(answers(new Set([1, 2])));
+    } finally {
+        delete Set.prototype.receiver;
+        delete Set.prototype.given;
+    }
+
+    expect(() => structuredClone(sets.fresh().valueOf())).toThrow();
+    expect(sets.crossing().map((one) => [...one])).toEqual([
+        [true, 'set', 2],
+        [true, 'frozenset', 2],
+        [true, 'Tags', 2]
+    ]);
+});
