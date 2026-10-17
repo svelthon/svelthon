@@ -4,34 +4,59 @@
 // result in two: a plain ES module holding the generated code, and a Svelte
 // component script that wires it to runes.
 //
-// CommonJS because brython.js is a classic script that has to execute *after*
-// the globals below are in place, which ES imports cannot order (they hoist).
+// CommonJS because the engine and its parsing chain are classic scripts that
+// have to execute in an order, which ES imports cannot give (they hoist).
 
-globalThis.self ??= globalThis;           // touched by the bootstrap
-globalThis.addEventListener ??= () => {}; // idem
-globalThis.__BRYTHON__ ??= {};
-globalThis.$B ??= globalThis.__BRYTHON__; // the codegen's eval() resolves $B globally
+// The engine, loaded as Bryntime loads it: `bryntime/globals.js` then
+// `bryntime/boot.js`, statement for statement, which `tests/boot-order.test.js`
+// holds identical. A copy, because neither can be reached from here: a
+// CommonJS file that requires an ES module makes it lazy in every bundle that
+// holds both, and the engine then started after code that reads it (every
+// route of a SvelteKit server at 500); and the two in one CommonJS file are
+// what a browser cannot run from the dev server (`require is not defined`).
+{
+    globalThis.self ??= globalThis;
+    globalThis.addEventListener ??= () => {};
+    const base = globalThis.location?.href ?? 'http://localhost/';
+    globalThis.__BRYTHON__ ??= { brython_path: new URL('/brython/', base).href };
+    globalThis.$B = globalThis.__BRYTHON__;
+    globalThis.$B.$bryntimeGlobalsBefore ??= new Set(Object.getOwnPropertyNames(globalThis));
+    if (globalThis.document && globalThis.process?.release?.name === 'node') {
+        const real = globalThis.process;
+        const shadow = Object.create(real);
+        Object.defineProperty(shadow, 'release', { value: { ...real.release, name: 'jsdom' } });
+        globalThis.$B.$bryntimeRealProcess = real;
+        globalThis.process = shadow;
+    }
+    require('../../vendor/brython_runtime.js');
+    const $B = globalThis.__BRYTHON__;
+    if ($B.$bryntimeRealProcess) {
+        globalThis.process = $B.$bryntimeRealProcess;
+        delete $B.$bryntimeRealProcess;
+    }
+    const DOM_STUBS = new Set(['document', 'location', 'HTMLElement', 'MutationObserver', 'customElements']);
+    if (!$B.$bryntimeBooted) {
+        $B.$bryntimeBooted = true;
+        $B.brython({ ipy_id: [] });
+        const before = $B.$bryntimeGlobalsBefore;
+        if (before && !before.has('window')) {
+            for (const name of Object.getOwnPropertyNames(globalThis)) {
+                if (!before.has(name) && DOM_STUBS.has(name)) delete globalThis[name];
+            }
+        }
+    }
+}
 
-// The same snapshot `globals.js` takes, taken here too because this file loads
-// Brython without it. Off a browser, brython.js installs `document`, `location`
-// and three more, and `boot.js` removes whatever it added by comparing against
-// this set. Recorded too late, the stubs count as pre-existing and survive, and
-// then every library that tests `typeof document` takes the browser path and
-// dies on `window is not defined`.
-globalThis.$B.$bryntimeGlobalsBefore ??= new Set(Object.getOwnPropertyNames(globalThis));
-
-// The engine, then the parsing chain: this file is the one that compiles, so it
-// is the one that declares it needs a compiler. Everything else loads `boot.js`,
-// which takes the engine alone, and a bundler puts the chain in the chunk of
-// whatever imports *this*. A route that does not compile never receives it.
+// Then the parsing chain: this file is the one that compiles, so it is the one
+// that declares it needs a compiler. Everything else loads the engine alone,
+// and a bundler puts the chain in the chunk of whatever imports *this*. A route
+// that does not compile never receives it.
 //
 // Order is the contract: the chain registers `$B.Parser` onto an engine that is
-// already there.
-require('../../vendor/brython_runtime.js');
+// already there, and started.
 require('../../vendor/brython_compiler.js');
 
 const $B = globalThis.__BRYTHON__;
-$B.brython({ ipy_id: [] });
 
 const { INJECTED } = require('./injected.cjs');
 const { atomic, replaceLiterals } = require('./lexical.js');

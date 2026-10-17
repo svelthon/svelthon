@@ -84,6 +84,9 @@ route /load '42 from [0, 1, 4, 9]'
 route /remote 'asking the server'
 # A module named `remote.py`, which SvelteKit takes for one by its name.
 route /named 'asking remote.py'
+# The compiler in the bundle, as a playground has it, and the engine started
+# first all the same.
+route /compiler 'compiled True'
 
 remote greeting 'hello from Python'
 remote shout 'shouted from python'

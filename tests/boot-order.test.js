@@ -35,6 +35,27 @@ describe('the engine is imported where it is started', () => {
         expect(read('bryntime/boot.js')).toContain('$B.brython(');
     });
 
+    // `compile.cjs` cannot reach Bryntime's loader (it says why), so it loads
+    // the engine by a copy of it, held here statement for statement: the code
+    // of `globals.js`, then of `boot.js`, its import of the engine a `require`
+    // from where `compile.cjs` sits. The day one of them changes, so must the
+    // other.
+    test('compile.cjs loads the engine as Bryntime does, statement for statement', () => {
+        const code = (source) =>
+            source
+                .split('\n')
+                .map((line) => line.replace(/(^|\s)\/\/.*$/, '').trim())
+                .filter(Boolean);
+        const bryntime = [...code(read('bryntime/globals.js')), ...code(read('bryntime/boot.js'))].map((line) =>
+            line === "import '../../../vendor/brython_runtime.js';" ? "require('../../vendor/brython_runtime.js');" : line
+        );
+        const compiler = code(read('compile.cjs'));
+        const start = compiler.indexOf(bryntime[0]);
+
+        expect(start).toBeGreaterThan(-1);
+        expect(compiler.slice(start, start + bryntime.length)).toEqual(bryntime);
+    });
+
     // The import used to sit in `runtime.js`, two lines above `import
     // './boot.js'`, which reads as an order and is not one.
     test('runtime.js does not import it', () => {

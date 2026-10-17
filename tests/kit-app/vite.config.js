@@ -28,9 +28,13 @@ export default defineConfig({
         })
     ],
     resolve: {
-        alias: { 'svelthon/runtime': at('../../src/lib/runtime.js') }
+        alias: {
+            'svelthon/runtime': at('../../src/lib/runtime.js'),
+            'svelthon/compile': at('../../src/lib/compile.cjs')
+        }
     },
     // Vite's dependency scanner hands the Python of a component to a
-    // JavaScript parser; the one bare import worth pre-bundling is named.
-    optimizeDeps: { entries: [], include: ['svelte'] }
+    // JavaScript parser; the bare imports worth pre-bundling are named, the
+    // compiler among them, which is CommonJS.
+    optimizeDeps: { entries: [], include: ['svelte', 'svelthon/compile'] }
 });
