@@ -1007,9 +1007,10 @@ class SetView extends Set {
     // order of an intersection.
     union(other) {
         const record = setRecord(other);
+        const keys = keysOf(record);
         const result = new Set(this.#members());
 
-        for (const one of walk(record.keys())) result.add(one);
+        for (const one of keys) result.add(one);
 
         return result;
     }
@@ -1021,7 +1022,7 @@ class SetView extends Set {
         if (this.#size <= record.size) {
             for (const one of this.#members()) if (record.has(one)) result.add(one);
         } else {
-            for (const one of walk(record.keys())) if (this.#has(one)) result.add(one);
+            for (const one of keysOf(record)) if (this.#has(one)) result.add(one);
         }
 
         return result;
@@ -1036,7 +1037,7 @@ class SetView extends Set {
         if (this.#size <= record.size) {
             for (const one of [...result]) if (record.has(one)) result.delete(one);
         } else {
-            for (const one of walk(record.keys())) result.delete(one);
+            for (const one of keysOf(record)) result.delete(one);
         }
 
         return result;
@@ -1044,9 +1045,10 @@ class SetView extends Set {
 
     symmetricDifference(other) {
         const record = setRecord(other);
+        const keys = keysOf(record);
         const result = new Set(this.#members());
 
-        for (const one of walk(record.keys())) {
+        for (const one of keys) {
             if (this.#has(one)) result.delete(one);
             else result.add(one);
         }
@@ -1067,7 +1069,7 @@ class SetView extends Set {
         const record = setRecord(other);
 
         if (this.#size < record.size) return false;
-        for (const one of walk(record.keys())) if (!this.#has(one)) return false;
+        for (const one of keysOf(record)) if (!this.#has(one)) return false;
 
         return true;
     }
@@ -1078,7 +1080,7 @@ class SetView extends Set {
         if (this.#size <= record.size) {
             for (const one of this.#members()) if (record.has(one)) return false;
         } else {
-            for (const one of walk(record.keys())) if (this.#has(one)) return false;
+            for (const one of keysOf(record)) if (this.#has(one)) return false;
         }
 
         return true;
@@ -1119,8 +1121,30 @@ const setRecord = (other) => {
     };
 };
 
-// An iterator walked with `for…of`, which closes it on an early return.
-const walk = (iterator) => ({ [Symbol.iterator]: () => iterator });
+// The keys of a set method's argument, taken as the specification takes them
+// (GetIteratorFromMethod): `keys()` called and its `next` read there and then,
+// which a union and a symmetric difference do before they copy their receiver,
+// so that what either does to it is in the copy. Walked with `for…of`, which
+// closes the iterator on an early return, its `return` read when it closes.
+const keysOf = (record) => {
+    const iterator = record.keys();
+
+    if (iterator === null || (typeof iterator !== 'object' && typeof iterator !== 'function')) {
+        throw new TypeError("The 'keys' of a set-like object must return an object");
+    }
+
+    const next = iterator.next;
+    const stepper = {
+        next: () => Reflect.apply(next, iterator, []),
+        get return() {
+            const close = iterator.return;
+
+            return close === undefined || close === null ? undefined : () => Reflect.apply(close, iterator, []);
+        }
+    };
+
+    return { [Symbol.iterator]: () => stepper };
+};
 
 // Handed out behind a proxy of its own, as every other view is: the set's own
 // storage stays empty, so what reads that storage rather than the methods

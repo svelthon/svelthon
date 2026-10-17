@@ -755,6 +755,52 @@ test('a set’s algebra answers as Set.prototype does', () => {
     expect([...sets.walked.intersection(smaller)]).toEqual([3, 1]);
 });
 
+// And copied once the argument's iterator is taken, `keys()` called and its
+// `next` read, as the specification takes it: what either does to the set is
+// in a union or a symmetric difference, where the copy made before kept the
+// members they removed and missed those they added. Each change, at each of
+// the two moments, against a `Set` given the same.
+test('a set’s union and symmetric difference see what taking the argument’s keys did to it, as Set.prototype does', () => {
+    const native = new Set();
+    const refillNative = () => {
+        native.clear();
+        [1, 2, 3].forEach((one) => native.add(one));
+    };
+    const changes = [(set) => set.clear(), (set) => set.add(5), (set) => set.delete(1)];
+    const outcome = (set, refill, name, change, moment) => {
+        refill();
+
+        const other = {
+            size: 2,
+            has: (one) => one === 2 || one === 4,
+            keys() {
+                if (moment === 'keys') change(set);
+
+                const inner = [2, 4][Symbol.iterator]();
+
+                return {
+                    get next() {
+                        if (moment === 'next') change(set);
+                        return () => inner.next();
+                    }
+                };
+            }
+        };
+
+        return [[...set[name](other)], [...set]];
+    };
+
+    for (const name of ['union', 'symmetricDifference']) {
+        for (const change of changes) {
+            for (const moment of ['keys', 'next']) {
+                expect(outcome(sets.walked, sets.refill, name, change, moment), `${name} ${moment} ${change}`).toEqual(
+                    outcome(native, refillNative, name, change, moment)
+                );
+            }
+        }
+    }
+});
+
 // A copy made by the constructor, `new data.constructor(data)` as lodash's
 // `cloneDeep` makes one, is a `Set` of the members, as of a `Set`.
 test('a set view is copied by its constructor', () => {
