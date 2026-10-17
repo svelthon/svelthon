@@ -1005,7 +1005,7 @@ describe('the attribute pass', () => {
     // `<svelte:self>` in a component written in Python is that component, and is
     // handed the Python value, a float as a float, as any Python child is.
     test('<svelte:self> is handed the Python values', () => {
-        expect(rewrite('<svelte:self value={x} />').out).toBe('<svelte:self value={__expr_py_0()} />');
+        expect(rewrite('<svelte:self value={x} />').out).toBe('<svelte:self value={__expr_child_0()} />');
     });
 
     test('bind:group on a component is a prop binding, not an action', () => {

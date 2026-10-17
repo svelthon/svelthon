@@ -28,12 +28,12 @@ test('the child read is a dependency, and its language decides the prop', async 
     const forJavaScript = await compiled();
 
     expect(forJavaScript.dependencies).toContain(child);
-    expect(forJavaScript.code).not.toMatch(/__expr_py_/);
+    expect(forJavaScript.code).not.toMatch(/__expr_child_/);
 
     writeFileSync(child, '<script lang="python">\nprice: float\n</script>\n<p>{price}</p>\n');
 
     const forPython = await compiled();
 
     expect(forPython.dependencies).toContain(child);
-    expect(forPython.code).toMatch(/__expr_py_/);
+    expect(forPython.code).toMatch(/__expr_child_/);
 });

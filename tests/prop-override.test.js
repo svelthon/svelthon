@@ -65,7 +65,7 @@ test.for([
 // string out of the BMP was never `===` to the child's write of the same value,
 // which then hid the parent's next one. The parent passes a value, then in one
 // batch another, and the child writes the first again.
-const KINDS = ['float', 'int', 'str', 'astral', 'big', 'true', 'none'];
+const KINDS = ['float', 'int', 'str', 'astral', 'big', 'true'];
 
 const written = (Host, kind) => {
     const target = document.body.appendChild(document.createElement('div'));
@@ -86,6 +86,14 @@ test.for(KINDS)('under a Python parent, the child writing the %s the parent pass
 
     expect(written(PropWriteKindsHost, kind)).toEqual(native);
     expect(native).toEqual(['0.75', '0.75']);
+});
+
+// None the parent passes is the absence, which the prop reads its default for:
+// the child writing None writes another value than the one the prop holds, and
+// keeps it, as a Svelte child writing `undefined` does.
+test('under a Python parent, the child writing the None the parent passed keeps it, as a Svelte child keeps undefined', () => {
+    expect(written(PropWriteKindsHostNative, 'none')).toEqual(['undefined', '']);
+    expect(written(PropWriteKindsHost, 'none')).toEqual(['None', '']);
 });
 
 // The witness: the native child does what the rule says, read and shown alike.

@@ -2597,10 +2597,10 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         const crossing = multiple ? SELECTED_VALUE : BIND_VALUE;
         const write = declaredHere(expr) ? declaredWrite(expr, crossing) : assign(expr, crossing);
         if (heldChild() !== null) {
-            return `() => ${forChild(call(expr, '__bound', undefined, 'python'), 'scalar')}, (${BOUND_VALUE}) => ${write}`;
+            return `() => ${forChild(call(expr, '__bound', undefined, 'child'), 'scalar')}, (${BOUND_VALUE}) => ${write}`;
         }
 
-        const read = multiple ? 'selection' : toPythonChild() ? 'python' : 'scalar';
+        const read = multiple ? 'selection' : toPythonChild() ? 'child' : 'scalar';
 
         return `() => ${call(expr, '__bound', undefined, read)}, (${BOUND_VALUE}) => ${write}`;
     };
@@ -2609,8 +2609,10 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     // the Python value itself, a `Price(float)` with its class and a `15.0`
     // still a float, by every way a prop is written: by name, short, spread,
     // bound, and under a name beginning with `on`, which may be a callback or
-    // data. A JavaScript child is handed JavaScript's own. `<svelte:self>` is
-    // the component being compiled, which is written in Python.
+    // data. None is handed as `undefined`, the absence a Svelte prop reads its
+    // default for, as at every door. A JavaScript child is handed
+    // JavaScript's own. `<svelte:self>` is the component being compiled,
+    // which is written in Python.
     const toPythonChild = () =>
         isComponent(tag) &&
         tag.held === undefined &&
@@ -2864,8 +2866,8 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
             // where it warns about `undefined`, after `save()` and not after a
             // name holding an optional handler. `?? undefined` is a form
             // Svelte reads as no call, and changes no value.
-            if (heldChild() !== null) return `{${forChild(call(rewritten, '__bound', inner, 'python'))}}`;
-            if (isComponent(tag)) return `{${call(rewritten, '__bound', inner, toPythonChild() ? 'python' : '')}}`;
+            if (heldChild() !== null) return `{${forChild(call(rewritten, '__bound', inner, 'child'))}}`;
+            if (isComponent(tag)) return `{${call(rewritten, '__bound', inner, toPythonChild() ? 'child' : '')}}`;
 
             const adapted = `${EVENT_WRAPPER}(${call(rewritten, '', inner)})`;
 
@@ -2891,11 +2893,11 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         // (`choice`).
         //
         if (heldChild() !== null) {
-            return `{${forChild(call(inner, '__bound', undefined, 'python'), name === 'value' ? 'scalar' : '')}}`;
+            return `{${forChild(call(inner, '__bound', undefined, 'child'), name === 'value' ? 'scalar' : '')}}`;
         }
 
         const grouped = !isComponent(tag) && tag !== null && tagNames(markup, tag.start).has('bind:group');
-        const kind = toPythonChild() ? 'python' : name !== 'value' ? '' : grouped ? 'choice' : 'scalar';
+        const kind = toPythonChild() ? 'child' : name !== 'value' ? '' : grouped ? 'choice' : 'scalar';
 
         return `{${call(inner, '__bound', undefined, kind)}}`;
     };
@@ -3798,14 +3800,16 @@ export function collector(defs, lines, columns) {
         // Every kind keeps the `__expr_` prefix: it is what makes the generated
         // wrapper evaluate them the way a template expression is evaluated. The
         // part after it is what the compiler reads the kind from: `lazy_`, whose
-        // parameters are read by a call, and `py_`, whose value stays Python.
+        // parameters are read by a call, `py_`, whose value stays Python, and
+        // `child_`, a prop a Python child is handed, its Python value with None
+        // the absence it is to Svelte.
         const infix = assign
             ? 'set_'
             : kind === 'lazy'
               ? 'lazy_'
               : kind === 'python'
                 ? 'py_'
-                : kind === 'scalar' || kind === 'selection' || kind === 'choice'
+                : kind === 'scalar' || kind === 'selection' || kind === 'choice' || kind === 'child'
                   ? `${kind}_`
                   : '';
         const name = `__expr_${infix}${defs.length}`;

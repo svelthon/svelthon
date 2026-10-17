@@ -1593,6 +1593,9 @@ const KEPT_PYTHON = /^__expr_(?:py|lazy)_/;
 // `selection_`, the list of a `<select multiple>`, item by item, and
 // `choice_`, the value of a control a `bind:group` binds.
 const COMPARED = /^__expr_(scalar|selection|choice)_/;
+// A prop handed to a child written in Python (`child_`): the Python value
+// itself, None the `undefined` it is at every door.
+const HANDED = /^__expr_child_/;
 // The write half of a binding, `set_`, which an input event calls and not the
 // render.
 const WRITES = /^__expr_set_/;
@@ -3652,7 +3655,7 @@ function instanceExports(c) {
             componentWrapper(f) === RUNTIME.pyExpression
                 ? `const ${wrapperName(f.name)} = ${RUNTIME.pyExpression}((a) => ${fn(f.name)}(...a), ` +
                   `${JSON.stringify(`${f.name}() — ${c.source}`)}, ${f.arity === Infinity ? '1 / 0' : f.arity}, ` +
-                  `${KEPT_PYTHON.test(f.name) ? 'true' : COMPARED.test(f.name) ? `'${f.name.match(COMPARED)[1]}'` : 'false'}` +
+                  `${KEPT_PYTHON.test(f.name) ? 'true' : HANDED.test(f.name) ? `'child'` : COMPARED.test(f.name) ? `'${f.name.match(COMPARED)[1]}'` : 'false'}` +
                   `${WRITES.test(f.name) ? ', true' : ''});`
                 : `const ${wrapperName(f.name)} = ${RUNTIME.pyComponent}(() => ${fn(f.name)}, ` +
                   `${JSON.stringify(`${f.name}() — ${c.source}`)}${f.exported && !c.store ? ', true' : ''});`

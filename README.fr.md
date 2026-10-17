@@ -78,7 +78,7 @@ reste de cette configuration et ce que chaque ligne apporte.
 npm install
 npm run dev          # la démo, sous /demo/
 
-npm test             # 1 930 tests : sémantique, props, réactivité, surface Svelte
+npm test             # 1 932 tests : sémantique, props, réactivité, surface Svelte
 npm run test:quiet   # la sortie de la suite : un run vert ne doit rien dire
 npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
@@ -260,7 +260,9 @@ parent passe une nouvelle valeur : c'est la règle de Svelte pour les props non
 
 Un parent Python donne à un enfant Python la valeur elle-même, une sous-classe
 de `float` avec sa classe, et à un enfant JavaScript le nombre ou la chaîne de
-JavaScript. Le compilateur les distingue en lisant le fichier de l'enfant quand
+JavaScript. `None` est l'absence pour l'un comme pour l'autre, le `undefined`
+que passe un parent Svelte, et l'enfant lit donc son défaut ; `javascript.NULL`
+est une valeur, comme `null`. Le compilateur les distingue en lisant le fichier de l'enfant quand
 l'import en nomme un. Tout autre enfant, venu d'un paquet, d'un alias de
 chemin, d'un module qui le réexporte ou d'un namespace, sous un nom que le
 script affecte, `Picked = Child if wide else Native`, un prop, un nom du
@@ -1607,7 +1609,7 @@ part jamais.
 
 ## État
 
-Validé par `npm test`, 1 930 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 1 932 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;

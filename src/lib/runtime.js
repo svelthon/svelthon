@@ -132,9 +132,9 @@ const attribute = (value) => {
 // does, `attribute` and then the floats of a config made numbers (`pyNumbers`).
 const spread = (value) => spreadOf(value, (one) => pyNumbers(attribute(one)));
 
-// A spread to a Python child: each value the Python value itself, None among
-// them None, and not the absence that reads the child's default.
-const spreadPython = (value) => spreadOf(value, (one) => (one === NONE ? NONE : attribute(one)));
+// A spread to a Python child: each value the Python value itself, as a prop
+// written by name is, None the absence that reads the child's default.
+const spreadPython = (value) => spreadOf(value, attribute);
 
 doors.out('attribute', attribute);
 doors.out('spread', spread);
@@ -1237,6 +1237,7 @@ doors.out('handler', pyEvent);
 doors.out('attach', pyAttach);
 doors.out('expression', pyNumbers);
 doors.out('expression-python', (value) => keptPython(value));
+doors.out('expression-child', (value) => handedPython(value));
 doors.out('expression-scalar', (value) => COMPARED.scalar(value));
 doors.out('expression-selection', (value) => COMPARED.selection(value));
 doors.in('context', __pybridge.received);
@@ -6979,10 +6980,12 @@ const COMPARED = {
     choice
 };
 
-// What Python reads again is handed back as it is, None included. Called from
-// JavaScript, a Python function gives `undefined` for None, which a Python
-// child handed it reads as an absence: its default, in place of None.
+// What Python reads again is handed back as it is, None included: called from
+// JavaScript, a Python function gives `undefined` for None. A prop handed to a
+// Python child (`'child'`) is handed as it comes, None the `undefined` a Svelte
+// prop reads its default for.
 const keptPython = (value) => (value === undefined ? NONE : value);
+const handedPython = (value) => (value === NONE ? undefined : value);
 
 //
 // `rendering` counts the template expressions running: whatever Python runs
@@ -7006,7 +7009,7 @@ export const pyExpression = (call, where, arity, kept = false, writes = false) =
                     }
                 },
                 where,
-                kept === true ? keptPython : (COMPARED[kept] ?? pyNumbers)
+                kept === true ? keptPython : kept === 'child' ? handedPython : (COMPARED[kept] ?? pyNumbers)
             ),
         nameOf(where),
         arity

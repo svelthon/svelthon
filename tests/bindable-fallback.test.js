@@ -9,6 +9,9 @@ import { mount, flushSync } from './mounted.js';
 import BindableFallback from './fixtures/BindableFallback.svelte';
 import BindableFallbackNative from './fixtures/BindableFallbackNative.svelte';
 import BindableFallbackHost from './fixtures/BindableFallbackHost.svelte';
+import BindableFallbackPyHost from './fixtures/BindableFallbackPyHost.svelte';
+import BindableFallbackPyHostNative from './fixtures/BindableFallbackPyHostNative.svelte';
+import BindableFallbackPyHeld from './fixtures/BindableFallbackPyHeld.svelte';
 import BindableFallbackKept from './fixtures/BindableFallbackKept.svelte';
 import BindableFallbackKeptHost from './fixtures/BindableFallbackKeptHost.svelte';
 
@@ -44,6 +47,25 @@ test.for([
 
     expect(native).toEqual(expected);
     expect(steps(BindableFallbackHost, { Child: BindableFallback, bound, start }, actions)).toEqual(native);
+});
+
+// A Python parent holds None where a Svelte one holds `undefined`, and hands it
+// on as `undefined`, to a child named by its import or held by a name.
+test.for([
+    ['cleared by the child', ['clear']],
+    ['cleared by the parent', [undefined, 'x']]
+])('bound by a Python parent, %s, the Python child reads what a Svelte child reads', ([, actions]) => {
+    const native = steps(BindableFallbackPyHostNative, {}, actions);
+
+    expect(native.slice(0, 2)).toEqual(['start|start', 'default|']);
+    expect(steps(BindableFallbackPyHost, {}, actions)).toEqual(native);
+    expect(steps(BindableFallbackPyHeld, { python: false }, actions)).toEqual(native);
+    expect(steps(BindableFallbackPyHeld, { python: true }, actions)).toEqual(native);
+});
+
+test('a Python parent binding None to a prop with a default is refused at mount, as Svelte refuses undefined', () => {
+    expect(() => steps(BindableFallbackPyHostNative, { empty: true }, [])).toThrow(/props_invalid_value/);
+    expect(() => steps(BindableFallbackPyHost, { empty: true }, [])).toThrow(/props_invalid_value/);
 });
 
 test('a child with no parent that clears its prop reads it cleared, as a Svelte child does', () => {

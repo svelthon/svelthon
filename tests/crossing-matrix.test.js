@@ -96,6 +96,7 @@ const TO_JS = {
     pyExport: (kind) => toJs($B.$getitem(kinds.VALUES, kind), 'export', 'crossing-matrix'),
     expression: (kind) => expression(false)(kind),
     'expression-python': (kind) => expression(true)(kind),
+    'expression-child': (kind) => expression('child')(kind),
     'expression-scalar': (kind) => expression('scalar')(kind),
     'expression-selection': (kind) => expression('selection')(kind)
 };
@@ -188,7 +189,7 @@ const MATRIX = {
         instance: 'view {n: 1}', function: 'function', method: 'function', class: 'python type', builtin: 'function'
     },
     spreadPython: {
-        none: PYTHON_NONE, true: 'true', int: '7', big: '1180591620717411303424n', 'float-int': 'python float',
+        none: 'undefined', true: 'true', int: '7', big: '1180591620717411303424n', 'float-int': 'python float',
         float: 'python float', str: '"a"', astral: 'python str', 'str-sub': 'python Text', bytes: 'Uint8Array',
         list: 'view [1, view [2]]', tuple: 'view [1, 2]', dict: 'view {2: "b", a: 1}', set: 'SetView',
         frozenset: 'SetView', instance: 'view {n: 1}', function: 'function', method: 'function', class: 'python type',
@@ -209,6 +210,14 @@ const MATRIX = {
     },
     'expression-python': {
         none: PYTHON_NONE, true: 'true', int: '7', big: '1180591620717411303424n', 'float-int': 'python float',
+        float: 'python float', str: '"a"', astral: 'python str', 'str-sub': 'python Text', bytes: 'python bytes',
+        list: 'python list', tuple: 'python tuple', dict: 'python dict', set: 'python set',
+        frozenset: 'python frozenset', instance: 'python Box', function: 'python function', method: 'python method',
+        class: 'python type', builtin: PYTHON_REFUSED
+    },
+    // A prop a Python child is handed: the Python value, None the absence.
+    'expression-child': {
+        none: 'undefined', true: 'true', int: '7', big: '1180591620717411303424n', 'float-int': 'python float',
         float: 'python float', str: '"a"', astral: 'python str', 'str-sub': 'python Text', bytes: 'python bytes',
         list: 'python list', tuple: 'python tuple', dict: 'python dict', set: 'python set',
         frozenset: 'python frozenset', instance: 'python Box', function: 'python function', method: 'python method',
@@ -325,6 +334,9 @@ test('None is undefined at every door to JavaScript, and null in JSON alone', ()
     const cells = Object.fromEntries(Object.keys(TO_JS).map((door) => [door, row(door).none]));
 
     expect(Object.keys(cells).filter((door) => cells[door] !== 'undefined' && cells[door] !== PYTHON_NONE)).toEqual([]);
+    // A prop is Svelte's door whatever the child's language: a Python child is
+    // handed None as the absence its default fills.
+    expect([cells.spreadPython, cells['expression-child']]).toEqual(['undefined', 'undefined']);
     expect([toJs(none, 'context'), toJs(none, 'key'), toJs(none, 'debug')]).toEqual([undefined, undefined, undefined]);
     expect(tojson(none)).toBe('null');
 

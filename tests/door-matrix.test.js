@@ -6,7 +6,8 @@
 // received in a log of its own, outside every door.
 //
 // The witnesses: a Python child receives the parent's very value, whatever the
-// door; a spread hands a child what the same prop written by name does. The
+// door, None as a prop the absence a Svelte parent's `undefined` is; a spread
+// hands a child what the same prop written by name does. The
 // cells apart from their witness are listed, the work of the plan's last step.
 import { test, expect } from 'vitest';
 import { mount, unmount, flushSync } from 'svelte';
@@ -132,9 +133,19 @@ test.for([['parent', PARENT], ['js-name', SVELTE_CHILD], ['from-js-name', FROM_S
     }
 );
 
-// A Python child receives the parent's very value, by every door.
-test.for(['name', 'spread', 'context', 'snippet'])('a Python child receives the value itself, %s', (door) => {
-    expect(apart(row(door), PARENT)).toEqual([]);
+// A Python child receives the parent's very value, by every door, but None by
+// name and in a spread: a prop, where it is the absence the child's default
+// fills, as the `undefined` a Svelte parent passes is.
+test.for([
+    ['name', ['none']],
+    ['spread', ['none']],
+    ['context', []],
+    ['snippet', []]
+])('a Python child receives the value itself, %s, but for these kinds', ([door, kinds]) => {
+    const got = row(door);
+
+    expect(apart(got, PARENT)).toEqual(kinds);
+    for (const kind of kinds) expect(got[kind]).toBe(FROM_SVELTE.undefined);
 });
 
 // A Svelte child receives in a spread what it receives by name; None is
