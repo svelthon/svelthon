@@ -889,7 +889,7 @@ function installMutationTracking($B) {
 
         let marker = markers.get(attr);
 
-        // The class is held weakly here too: a value that outlives it, a list
+        // The class is held weakly here: a value that outlives it, a list
         // the module shares, keeps this marker among its parents.
         if (marker === undefined) {
             const target = new WeakRef(cls);
@@ -1031,7 +1031,8 @@ function installMutationTracking($B) {
         // `__getattr__`, none of which reads it by its name: given anew, it
         // wakes the readers of every watched object it answers for. New bases
         // enrol them under the classes they are looked up through now.
-        if (/^__.+__$/.test(attr)) wakeInstances(cls, attr === '__bases__');
+        if (attr === '__bases__') for (const one of cls.tp_mro) enrolClass(one);
+        if (/^__.+__$/.test(attr)) wakeInstances(cls);
     };
 
     // What depends on the order a class is searched in, with no name read
@@ -1641,6 +1642,7 @@ const upwards = (start, stamp) => {
             if (dead(frame.climbed)) {
                 marker.linked.delete(frame.climbed);
                 parents.splice(frame.at, 1);
+                detach(marker);
             }
             frame.climbed = null;
         }
@@ -1651,12 +1653,13 @@ const upwards = (start, stamp) => {
         }
 
         const parent = parents[frame.at];
-        const holder = parent.target.deref();
+        const holder = targetOf(parent);
         const known = verified.get(parent) === parent.stamp;
 
         if (holder === undefined || (child !== undefined && !known && !holds(holder, child, marker))) {
             marker.linked.delete(parent);
             parents.splice(frame.at, 1);
+            detach(marker);
             continue;
         }
 
@@ -1677,7 +1680,7 @@ const upwards = (start, stamp) => {
 // per row.
 const climbing = (marker) => ({
     marker,
-    child: marker.target.deref(),
+    child: targetOf(marker),
     verified: (marker.verified ??= new WeakMap()),
     at: marker.parents.length,
     climbed: null
@@ -1979,7 +1982,9 @@ function inheritContents(into, source) {
 // `Storage` turning a property into its own source text.
 export const MARKS = new WeakMap();
 
-export function mark(value) {
+// `walk` false leaves what the value holds to the caller, which takes it under
+// watch once the value's own link is made (`linked`).
+export function mark(value, walk = true) {
     // `stamp` moves each time the container itself changes, which is what
     // `upwards` needs to know whether a link it checked is still to check.
     //
@@ -2003,74 +2008,103 @@ export function mark(value) {
     marker.stamp = 0;
 
     marker.bumps = [];
-    // Weak, so a child's link does not keep a container it has left alive.
-    marker.target = new WeakRef(value);
+    // Held while something reads it or a watched container holds it, and let
+    // go when neither does (`detach`): a child's link then no longer keeps a
+    // container it has left alive. A weak reference instead, made for every
+    // value marked, kept each one alive until the job that made it ended.
+    marker.held = value;
 
     MARKS.set(value, marker);
 
     if (pyClass(value)) READ_CLASSES.add(value);
 
-    enrol(value, marker);
-    adopt(value);
+    enrol(value);
+    if (walk) adopt(value);
 
     return marker;
 }
 
-// The watched objects of each class of the author's, held weakly through their
-// markers, under every class they are looked up through. A special method a
-// class is given anew, `Base.__len__ = …`, changes what `len()` answers for
-// each of them, and for each of its subclasses', and the read that called it
-// read no name (`classNameChanged`, `wakeInstances`). Swept as a link's
-// parents are, so that the dead do not pile up; each marker enrolled once
-// under a class (`classes`).
-//
-// New bases are new classes looked up through, for the objects of a class and
-// of its subclasses alike, all enrolled under it: they are enrolled again under
-// what they are looked up through now, so that a method the new base is given
-// later wakes them too. A class an object is no longer looked up through, by
-// new bases or by a new `__class__`, wakes it no more: the enrolment is dropped
-// as it is met, and the object enrolled again should it come back.
-const WATCHED_OF_CLASS = new WeakMap();
+// What a marker stands for: the value it holds, undefined once let go; or, for
+// the marker of a name of a class, the class its weak reference still reaches.
+const targetOf = (marker) => marker.held ?? marker.target?.deref();
 
-function enrol(value, marker) {
-    const classes = (marker.classes ??= new WeakSet());
+// A marker nothing reads and no watched container holds lets its value go: a
+// child that left the value, kept somewhere, keeps it no more, and its link to
+// it goes at the child's next change (`upwards`). Read again or held again, the
+// marker takes its value back, and what the value holds with it (`track`,
+// `linked`, `follow`). A child that left a row it was in keeps that row, and
+// what the row is in up to the first value let go, until the child changes.
+const detach = (marker) => {
+    if (dead(marker)) marker.held = undefined;
+};
 
-    for (const cls of quietPyType(value)?.tp_mro ?? []) {
-        if ((cls.tp_flags & globalThis.__BRYTHON__.TPFLAGS.HEAPTYPE) === 0 || classes.has(cls)) continue;
+// The classes of the author's an object marked is looked up through, which
+// something may now read (`READ_CLASSES`): a write to one is asked about. New
+// bases are new classes looked up through, for the objects of a class and of
+// its subclasses alike (`classNameChanged`).
+const enrolClass = (cls) => {
+    if ((cls.tp_flags & globalThis.__BRYTHON__.TPFLAGS.HEAPTYPE) !== 0) READ_CLASSES.add(cls);
+};
 
-        classes.add(cls);
-        READ_CLASSES.add(cls);
+function enrol(value) {
+    for (const cls of quietPyType(value)?.tp_mro ?? []) enrolClass(cls);
+}
 
-        let held = WATCHED_OF_CLASS.get(cls);
+// The markers something reads, each as long as it is read (`join`, `leave`):
+// held, as their readers hold their values.
+const LIVE = new Set();
 
-        if (held === undefined) WATCHED_OF_CLASS.set(cls, (held = { refs: new Set(), sweepAt: SWEEP_FROM }));
+// A special method a class is given anew, `Base.__len__ = …`, changes what
+// `len()` answers for each of its objects, and for each of its subclasses',
+// and the read that called it read no name (`classNameChanged`): it wakes the
+// readers of each watched object looked up through the class now, found
+// under what something reads (`LIVE`), the way `adopt` walks a value. An object
+// that left the class, by new bases or by a new `__class__`, is not one of
+// them. A list of every object watched under its class answered without a
+// walk, and the weak reference each entry took kept every object a loop made
+// alive until the job ended, for a write that comes rarely.
+function wakeInstances(cls) {
+    const seen = new Set();
+    const pending = [...LIVE].map(targetOf);
 
-        held.refs.add(new WeakRef(marker));
+    while (pending.length > 0) {
+        const value = pending.pop();
+        const marker = value === undefined || seen.has(value) ? undefined : MARKS.get(value);
 
-        if (held.refs.size >= held.sweepAt) {
-            for (const ref of held.refs) if (ref.deref() === undefined) held.refs.delete(ref);
-            held.sweepAt = Math.max(SWEEP_FROM, 2 * held.refs.size);
-        }
+        if (marker === undefined) continue;
+        seen.add(value);
+
+        if ((quietPyType(value)?.tp_mro ?? []).includes(cls)) marker();
+
+        pending.push(...watchedParts(value));
     }
 }
 
-function wakeInstances(cls, rebased) {
-    const held = WATCHED_OF_CLASS.get(cls);
+// What a watched value holds that is watched under it, as `adopt` finds it:
+// its attribute dictionary and its slots, the items of a list, both halves of
+// a dict's entries, a set's members, what a live view reads.
+function watchedParts(value) {
+    const parts = [];
+    const attributes = ownAttributes(value);
 
-    for (const ref of [...(held?.refs ?? [])]) {
-        const marker = ref.deref();
-        const value = marker?.target.deref();
+    if (attributes !== undefined) parts.push(attributes);
+    parts.push(...slotValues(value, true));
 
-        if (value === undefined || !(quietPyType(value)?.tp_mro ?? []).includes(cls)) {
-            held.refs.delete(ref);
-            marker?.classes.delete(cls);
-            continue;
+    if (Array.isArray(value)) {
+        for (let i = 0; i < value.length; i++) {
+            const held = Object.getOwnPropertyDescriptor(value, i);
+
+            if (held !== undefined && 'value' in held) parts.push(held.value);
         }
-
-        if (rebased) enrol(value, marker);
-
-        marker();
+    } else if (globalThis.__BRYTHON__.is_dict(value)) {
+        for (const [key, child] of heldEntries(value)) parts.push(key, child);
+    } else if (isSet(value)) {
+        for (const bucket of Object.values(value.$store)) parts.push(...bucket);
+    } else if (viewed(value) !== undefined) {
+        parts.push(viewed(value));
     }
+
+    return parts.filter((one) => MARKS.has(one));
 }
 
 // Everything already inside a watched value: an attribute written in __init__,
@@ -2231,6 +2265,7 @@ const join = (marker, bump, owner) => {
     if (marker.bumps.includes(bump)) return;
 
     marker.bumps.push(bump);
+    LIVE.add(marker);
 
     if (owner !== undefined) owner.push(marker, bump);
 };
@@ -2242,6 +2277,8 @@ const leave = (marker, bump, owner) => {
     if (at === -1) return;
 
     marker.bumps.splice(at, 1);
+    if (marker.bumps.length === 0) LIVE.delete(marker);
+    detach(marker);
 
     if (owner === undefined) return;
 
@@ -2252,6 +2289,18 @@ const leave = (marker, bump, owner) => {
         }
     }
 };
+
+// Every marker a component signed onto, and the callback it signed with, kept
+// flat rather than in pairs so that subscribing allocates nothing.
+//
+// Without this, a container shared through a store would keep the callbacks of
+// every component that ever read it, one more per mount of a child, for one
+// child alive.
+export function unsubscribe(owner) {
+    for (let i = 0; i < owner.length; i += 2) leave(owner[i], owner[i + 1]);
+
+    owner.length = 0;
+}
 
 // What the name held before this write loses its subscription, or a mutation of
 // a value the name no longer holds would still notify it. Kept on the name's
@@ -2273,8 +2322,10 @@ export function track(value, bump, owner) {
     const own = MARKS.get(value);
     if (own !== undefined) {
         // A container with nobody listening may have lost the links from its
-        // children, pruned as a dead end: listened to again, it takes them back.
+        // children, pruned as a dead end, and let its value go: listened to
+        // again, it takes both back.
         const revived = dead(own);
+        own.held = value;
         join(own, bump, owner);
         if (revived) adopt(value);
         return value;
@@ -2315,16 +2366,22 @@ function linked(marker, parent, child, key, loose, name) {
 
     if (own === undefined) {
         if (!mutable(child)) return child;
-        own = mark(child);
+        // What the child holds is taken under watch once its own link is made,
+        // below: a row's link to its list is what tells the row it is held.
+        own = mark(child, false);
 
         // A frozen object refuses the marker, and `mark` says so by giving the
         // value back unchanged.
         if (own === undefined) return child;
+        revived = true;
     } else {
         // A dead end, pruned by `upwards`, whose own children may have lost
         // their link to it the same way: linked again, it takes them back.
         revived = dead(own);
     }
+
+    // Held by a watched container, the child holds its value again.
+    own.held = child;
 
     // One line up, not a copy of everyone above. A child under two parents keeps
     // both, and a mutation reaches the readers of either.
@@ -2346,7 +2403,7 @@ function linked(marker, parent, child, key, loose, name) {
             let kept = 0;
 
             for (const one of own.parents) {
-                if (one.target.deref() === undefined) own.linked.delete(one);
+                if (targetOf(one) === undefined) own.linked.delete(one);
                 else own.parents[kept++] = one;
             }
             own.parents.length = kept;
@@ -2395,7 +2452,12 @@ export function follow(value) {
         // A value a block declares comes under watch when it is first read.
         const marker = MARKS.get(value) ?? (BLOCK_STATE.has(value) && mutable(value) ? mark(value) : undefined);
 
-        if (marker !== undefined) (marker.watch ??= watcher(marker))();
+        // Held again before the watch signs on, which it does there and then,
+        // and takes back what the value holds.
+        if (marker !== undefined) {
+            marker.held = value;
+            (marker.watch ??= watcher(marker))();
+        }
     }
 
     return value;
@@ -2410,7 +2472,7 @@ const watcher = (marker) =>
         const revived = dead(marker);
 
         join(marker, update);
-        if (revived) adopt(marker.target.deref());
+        if (revived) adopt(targetOf(marker));
 
         return () => leave(marker, update);
     });

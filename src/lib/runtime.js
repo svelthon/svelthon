@@ -82,6 +82,7 @@ const {
     inherit,
     follow,
     track,
+    unsubscribe,
     removeFound,
     followMetaclass,
     heldAtSource,
@@ -117,6 +118,7 @@ const {
 export {
     follow,
     track,
+    unsubscribe,
     pyError,
     schedule,
     scheduleAsync,
@@ -1376,23 +1378,6 @@ const seenUnder = (row) => {
 // rule the project already follows for an internal it depends on: when the code
 // reads a name, a test names it too.
 export const marks = (value) => MARKS.get(value);
-
-// Every marker a component signed onto, and the callback it signed with, kept
-// flat rather than in pairs so that subscribing allocates nothing.
-//
-// Without this, a container shared through a store would keep the callbacks of
-// every component that ever read it, one more per mount of a child, for one
-// child alive.
-export function unsubscribe(owner) {
-    for (let i = 0; i < owner.length; i += 2) {
-        const marker = owner[i];
-        const at = marker.bumps.indexOf(owner[i + 1]);
-
-        if (at !== -1) marker.bumps.splice(at, 1);
-    }
-
-    owner.length = 0;
-}
 
 // A Python line as a line of the file. `lines` is a number, the count of lines
 // before the `<script>` body, or that number with the ranges of Python lines
