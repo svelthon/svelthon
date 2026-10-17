@@ -1381,6 +1381,30 @@ function stillTuple(value) {
     return still;
 }
 
+// A frozenset changes no more than a tuple does, through what it holds, and one
+// holding nothing that can change has nothing to watch: no marker, and so no
+// weak reference keeping it, and all a job makes of them, alive until the job
+// ends. Asked once of each, whose members never change. A subclass may hold
+// attributes, and is watched as an instance is.
+const STILL_FROZENSETS = new WeakMap();
+
+function stillFrozenset(value) {
+    let still = STILL_FROZENSETS.get(value);
+
+    if (still === undefined) {
+        still = !Object.values(value.$store).flat().some(mutable);
+        STILL_FROZENSETS.set(value, still);
+    }
+
+    return still;
+}
+
+// The engine's values that never change, which Brython keeps as objects: a
+// float, an int too large for a number, a string out of the BMP, bytes, a
+// complex, a range, a slice. Of these very types, and not of a subclass, which
+// may hold attributes: nothing to watch.
+const STILL_TYPES = new Set([_b_.float, _b_.int, _b_.str, _b_.bytes, _b_.complex, _b_.range, _b_.slice]);
+
 // What an object stores, copied deep enough to put it back (`settle` in the
 // mutation tracking): its own fields, each as its descriptor and in its order,
 // so that no getter runs to copy one, a hole stays a hole, and a key put back
@@ -1496,6 +1520,9 @@ function mutable(value) {
         // 1` is state. CPython flags such a class a heap type, and so does
         // Brython; the engine's own classes have nothing to watch.
         if (cls === _b_.type) return (value.tp_flags & $B.TPFLAGS.HEAPTYPE) !== 0;
+
+        if (STILL_TYPES.has(cls)) return false;
+        if (cls === _b_.frozenset) return !stillFrozenset(value);
 
         // A bound method, made anew by each read, holds nothing of its own:
         // what changes is its function or its instance, each watched as itself.
