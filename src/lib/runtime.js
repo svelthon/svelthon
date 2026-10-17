@@ -4933,6 +4933,11 @@ class SetView extends Set {
             }
         } finally {
             marker.walks.delete(ref);
+            // The target of a weak reference lives until the job that made it
+            // ends: what the walk recorded goes now, or a loop walking the set
+            // again and again in one job keeps the records of every walk.
+            walk.visited = walk.due = null;
+            walk.entries = walk.arrivals = [];
         }
     }
 
