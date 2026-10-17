@@ -33,13 +33,14 @@ test('an exported dict and list read as a Svelte component hands its state', () 
 });
 
 test('the Svelte component is the rule', () => {
+    // `none` is `undefined`, which `JSON.stringify` leaves out.
     expect(read(InstanceDataNative)).toEqual([
-        '{"count":0,"rate":0.5,"none":null}',
+        '{"count":0,"rate":0.5}',
         0,
-        '{"count":0,"rate":0.5,"none":null}',
+        '{"count":0,"rate":0.5}',
         true,
         '[1,2]',
-        '{"count":1,"rate":0.5,"none":null}',
+        '{"count":1,"rate":0.5}',
         '[1,2,3]'
     ]);
 });

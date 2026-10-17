@@ -12,6 +12,7 @@ import { test, expect } from 'vitest';
 import '../src/lib/compile.cjs';
 import { pyData, pyExpression } from '../src/lib/runtime.js';
 import { toJs, toPython } from '../src/lib/bryntime/bryntime.js';
+import { tojson } from '../src/lib/helpers.js';
 import { describeJs } from './crossing-describe.js';
 
 const $B = globalThis.__BRYTHON__;
@@ -155,13 +156,13 @@ const PYTHON_NONE = 'python NoneType';
 
 const MATRIX = {
     plainData: {
-        none: 'null', true: 'true', int: '7', big: '1180591620717411303424n', 'float-int': '15', float: '0.5',
+        none: 'undefined', true: 'true', int: '7', big: '1180591620717411303424n', 'float-int': '15', float: '0.5',
         str: '"a"', astral: '"😀"', 'str-sub': '"t"', bytes: 'Uint8Array', list: '[1, [2]]', tuple: '[1, 2]',
         dict: '{2: "b", a: 1}', set: 'Set', frozenset: 'Set', instance: '{n: 1}',
         function: 'function', method: 'function', class: 'python type', builtin: 'function'
     },
     plainScalar: {
-        none: 'null', true: 'true', int: '7', big: '1180591620717411303424n', 'float-int': '15', float: '0.5',
+        none: 'undefined', true: 'true', int: '7', big: '1180591620717411303424n', 'float-int': '15', float: '0.5',
         str: '"a"', astral: '"😀"', 'str-sub': '"t"', bytes: 'python bytes', list: 'python list',
         tuple: 'python tuple', dict: 'python dict', set: 'python set', frozenset: 'python frozenset',
         instance: 'python Box', function: 'python function', method: 'python method', class: 'python type',
@@ -175,7 +176,7 @@ const MATRIX = {
         builtin: PYTHON_REFUSED
     },
     'view-read': {
-        none: 'null', true: 'true', int: '7', big: '1180591620717411303424n', 'float-int': '15', float: '0.5',
+        none: 'undefined', true: 'true', int: '7', big: '1180591620717411303424n', 'float-int': '15', float: '0.5',
         str: '"a"', astral: '"😀"', 'str-sub': '"t"', bytes: 'Uint8Array', list: 'view [1, view [2]]',
         tuple: 'view [1, 2]', dict: 'view {2: "b", a: 1}', set: 'SetView', frozenset: 'SetView',
         instance: 'view {n: 1}', function: 'function', method: 'function', class: 'python type', builtin: 'function'
@@ -194,7 +195,7 @@ const MATRIX = {
         builtin: 'function'
     },
     pyExport: {
-        none: 'null', true: 'true', int: '7', big: '1180591620717411303424n', 'float-int': '15', float: '0.5',
+        none: 'undefined', true: 'true', int: '7', big: '1180591620717411303424n', 'float-int': '15', float: '0.5',
         str: '"a"', astral: '"😀"', 'str-sub': '"t"', bytes: 'Uint8Array', list: 'view [1, view [2]]',
         tuple: 'view [1, 2]', dict: 'view {2: "b", a: 1}', set: 'SetView', frozenset: 'SetView',
         instance: 'view {n: 1}', function: 'function', method: 'function', class: 'python type', builtin: 'function'
@@ -228,7 +229,7 @@ const MATRIX = {
         builtin: PYTHON_REFUSED
     },
     pyBind: {
-        undefined: 'NoneType:None', null: 'NoneType:None', true: 'bool:True', int: 'int:7', float: 'float:0.5',
+        undefined: 'NoneType:None', null: 'NullType:<Javascript null>', true: 'bool:True', int: 'int:7', float: 'float:0.5',
         nan: 'float:nan', big: 'int:1180591620717411303424', str: "str:'a'", astral: "str:'😀'",
         object: 'JSObject:<Javascript object: [object Object]>', array: 'JavascriptArray:[1, [2]]',
         accessor: 'JSObject:<Javascript object: [object Object]>',
@@ -242,7 +243,7 @@ const MATRIX = {
         promise: 'JSObject:<Javascript object: [object Promise]>'
     },
     pyData: {
-        undefined: 'NoneType:None', null: 'NoneType:None', true: 'bool:True', int: 'int:7', float: 'float:0.5',
+        undefined: 'NoneType:None', null: 'NullType:<Javascript null>', true: 'bool:True', int: 'int:7', float: 'float:0.5',
         nan: 'float:nan', big: 'int:1180591620717411303424', str: "str:'a'", astral: "str:'😀'",
         object: "dict:{'a': 1}", array: 'list:[1, [2]]', accessor: "dict:{'n': 1}",
         'class-instance': 'JSObject:<Javascript object: [object Object]>',
@@ -255,7 +256,7 @@ const MATRIX = {
         promise: 'JSObject:<Javascript object: [object Promise]>'
     },
     'pyData-live': {
-        undefined: 'NoneType:None', null: 'NoneType:None', true: 'bool:True', int: 'int:7', float: 'float:0.5',
+        undefined: 'NoneType:None', null: 'NullType:<Javascript null>', true: 'bool:True', int: 'int:7', float: 'float:0.5',
         nan: 'float:nan', big: 'int:1180591620717411303424', str: "str:'a'", astral: "str:'😀'",
         object: "dict:{'a': 1}", array: 'list:[1, [2]]', accessor: 'JSObject:<Javascript object: [object Object]>',
         'class-instance': 'JSObject:<Javascript object: [object Object]>',
@@ -268,7 +269,7 @@ const MATRIX = {
         promise: 'JSObject:<Javascript object: [object Promise]>'
     },
     pyArg: {
-        undefined: 'NoneType:None', null: 'NoneType:None', true: 'bool:True', int: 'int:7', float: 'float:0.5',
+        undefined: 'NoneType:None', null: 'NullType:<Javascript null>', true: 'bool:True', int: 'int:7', float: 'float:0.5',
         nan: 'float:nan', big: 'int:1180591620717411303424', str: "str:'a'", astral: "str:'😀'",
         object: 'JSObject:<Javascript object: [object Object]>', array: 'JavascriptArray:[1, [2]]',
         accessor: 'JSObject:<Javascript object: [object Object]>',
@@ -282,7 +283,7 @@ const MATRIX = {
         promise: 'JSObject:<Javascript object: [object Promise]>'
     },
     'view-write': {
-        undefined: 'NoneType:None', null: 'NoneType:None', true: 'bool:True', int: 'int:7', float: 'float:0.5',
+        undefined: 'NoneType:None', null: 'NullType:<Javascript null>', true: 'bool:True', int: 'int:7', float: 'float:0.5',
         nan: 'float:nan', big: 'int:1180591620717411303424', str: "str:'a'", astral: "str:'😀'",
         object: "dict:{'a': 1}", array: 'list:[1, [2]]', accessor: 'JSObject:<Javascript object: [object Object]>',
         'class-instance': 'JSObject:<Javascript object: [object Object]>',
@@ -311,4 +312,27 @@ test('to_js is a copy of what the view reads, on every kind', () => {
     const copied = (text) => text.replaceAll('view ', '').replace('SetView', 'Set');
 
     expect(PY_KINDS.filter((kind) => copied(view[kind]) !== copy[kind])).toEqual([]);
+});
+
+// The None column: None is `undefined` at every door that hands JavaScript a
+// value, the engine's pairing (`pyobj2jsobj`), `null` being `javascript.NULL`'s,
+// and `null` in JSON alone, `tojson`'s. A door that hands Python's own value
+// to a Python reader keeps None. A context, a key and a `{@debug}` copy, which
+// no row above opens, alike. And the way in: `undefined` is None and `null`
+// the `javascript.NULL` it is, at every door.
+test('None is undefined at every door to JavaScript, and null in JSON alone', () => {
+    const none = $B.builtins.None;
+    const cells = Object.fromEntries(Object.keys(TO_JS).map((door) => [door, row(door).none]));
+
+    expect(Object.keys(cells).filter((door) => cells[door] !== 'undefined' && cells[door] !== PYTHON_NONE)).toEqual([]);
+    expect([toJs(none, 'context'), toJs(none, 'key'), toJs(none, 'debug')]).toEqual([undefined, undefined, undefined]);
+    expect(tojson(none)).toBe('null');
+
+    const entering = Object.keys(TO_PY).filter((door) => {
+        const one = row(door);
+
+        return one.undefined !== 'NoneType:None' || one.null !== 'NullType:<Javascript null>';
+    });
+
+    expect(entering).toEqual([]);
 });

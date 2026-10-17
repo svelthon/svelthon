@@ -7,4 +7,4 @@
 </script>
 
 <Child bind:value bind:this={child} />
-<p data-k="parent">{value == null}:{Boolean(value)}</p>
+<p data-k="parent">{value === undefined}:{Boolean(value)}</p>

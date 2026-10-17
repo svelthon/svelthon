@@ -4,7 +4,7 @@ import ContextReaderPy from './ContextReaderPy.svelte';
 
 setContext('amount', 0.42);
 setContext(0.5, 'half');
-setContext(null, 'under null');
+setContext(undefined, 'under undefined');
 </script>
 
 <ContextReaderPy />

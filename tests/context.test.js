@@ -101,17 +101,17 @@ describe('a context number across languages', () => {
 
     // `None` crossed as Brython's own object, which JavaScript calls true: a
     // child testing `value == null` took the branch for a present value, and a
-    // `None` key and a `null` key were two entries of the Map. Both are
-    // JavaScript's `null`, as `None` is at every other door, and a Python
-    // reader still reads `None`.
-    test('None set in Python is null to JavaScript and None to Python', () => {
+    // `None` key and an `undefined` key were two entries of the Map. Both are
+    // JavaScript's `undefined`, as `None` is at every other door, `null` being
+    // `javascript.NULL`'s, and a Python reader still reads `None`.
+    test('None set in Python is undefined to JavaScript and None to Python', () => {
         expect(read(ContextFromPy, 'javascript-reads-none')).toBe('true:false');
         expect(read(ContextFromPy, 'python-reads-none')).toBe('True');
     });
 
-    test('a None key and a null key are one key, in either direction', () => {
+    test('a None key and an undefined key are one key, in either direction', () => {
         expect(read(ContextFromPy, 'javascript-reads-none-key')).toBe('under none');
-        expect(read(ContextFromJs, 'python-reads-none-key')).toBe('under null');
+        expect(read(ContextFromJs, 'python-reads-none-key')).toBe('under undefined');
     });
 });
 

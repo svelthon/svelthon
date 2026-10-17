@@ -72,7 +72,7 @@ describe('a Python object crossing the boundary', () => {
                 { number: 484, tags: ['typing'] },
                 { number: 484, tags: ['typing'] }
             ],
-            none: null
+            none: undefined
         });
     });
 });

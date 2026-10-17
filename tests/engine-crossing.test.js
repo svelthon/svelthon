@@ -25,7 +25,8 @@ const wanted = {
     clear: 'rows;',
     callables: 'list,tuple,dict',
     getattr: 'object,object;[False, False]',
-    none: 'undefined,null'
+    // None is `undefined` as an argument and inside a container alike.
+    none: 'undefined,undefined'
 };
 
 const read = (props) => {

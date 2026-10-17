@@ -3,7 +3,7 @@
     import { setContext } from 'svelte';
     import LiveReader from './LiveReader.svelte';
 
-    let state = $state({ count: 0, rate: 0.5, inner: { n: 0 }, none: null });
+    let state = $state({ count: 0, rate: 0.5, inner: { n: 0 }, none: undefined });
     let rows = $state([1, 2]);
     let shared = $state({ count: 0 });
 

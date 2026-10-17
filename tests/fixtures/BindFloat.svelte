@@ -5,6 +5,8 @@
 # 0.1 and 0.25.
 # A plain JavaScript object stands for the `Spring` instance the example binds
 # to: what matters is that the target is a member expression, not the class.
+import javascript
+
 ratio = 0.1
 count = 1
 held = js.Object.new()
@@ -21,4 +23,4 @@ row = {"n": 1}
 
 <p data-k="back">{ratio}</p>
 <p data-k="back-type">{type(ratio).__name__}</p>
-<p data-k="absent">{count is None} {row["n"] is None}</p>
+<p data-k="absent">{count is javascript.NULL} {row["n"] is javascript.NULL}</p>

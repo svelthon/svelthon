@@ -56,7 +56,8 @@ describe('to_py on data whose field is called ob_type', () => {
     });
 
     // And when the field holds null: the class is what answers, at every site
-    // that reads one, and null is no class.
+    // that reads one, and null is no class. It arrives as `javascript.NULL`,
+    // the `null` it is, and goes back as `null`.
     test('holding null, it crosses in, out, and through tojson', () => {
         const data = { ob_type: null, value: 42 };
 

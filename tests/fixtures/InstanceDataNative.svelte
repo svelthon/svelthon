@@ -1,6 +1,6 @@
 <script>
     // The same instance API in Svelte: the witness for InstanceData.
-    let conf = $state({ count: 0, rate: 0.5, none: null });
+    let conf = $state({ count: 0, rate: 0.5, none: undefined });
     let rows = $state([1, 2]);
 
     export function config() {

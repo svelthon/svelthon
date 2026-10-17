@@ -12,7 +12,27 @@ import NanKey from './fixtures/NanKey.svelte';
 import SignedZeroKey from './fixtures/SignedZeroKey.svelte';
 import FunctionKey from './fixtures/FunctionKey.svelte';
 import BoundMethodKey from './fixtures/BoundMethodKey.svelte';
+import NoneNullKey from './fixtures/NoneNullKey.svelte';
 import { __pybridge } from '../src/lib/runtime.js';
+
+// None and `javascript.NULL` are two keys, as Python finds them unequal, alone
+// or inside a tuple: the text a tuple keys by spelled both `None`, so a context
+// set under one was found under the other, a keyed `{#each}` refused the two
+// rows as `each_key_duplicate`, and a `{#key}` kept its block.
+test.for([['scalar'], ['tuple'], ['nested']])('%s: None and javascript.NULL are two keys, as Python finds them unequal', ([kind]) => {
+    const target = document.body.appendChild(document.createElement('div'));
+    const instance = mount(NoneNullKey, { target, props: { kind } });
+    flushSync();
+
+    expect(instance.model()).toEqual([false, [0, 1]]);
+    expect([...target.querySelectorAll('output')].map((one) => one.textContent)).toEqual(['0', '1']);
+
+    const field = target.querySelector('input');
+
+    instance.change();
+    flushSync();
+    expect(target.querySelector('input')).not.toBe(field);
+});
 
 test.for([['alone'], ['tuple'], ['builtin'], ['special'], ['special in a tuple']])('%s: an equal bound method keeps the block, another makes one', ([kind]) => {
     const target = document.body.appendChild(document.createElement('div'));

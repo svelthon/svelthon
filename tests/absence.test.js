@@ -1,13 +1,13 @@
-// **A JavaScript absence is Python's `None`**, on every path a value takes into
-// Python: an argument of an exported function, and the fields of a route
-// event's snapshot. The explicit conversion already had the rule; these two
-// handed `null` and `undefined` through, so `is None` answered false and the
-// author's fallback was skipped.
+// **A JavaScript absence, `undefined`, is Python's `None`, and `null` is
+// `javascript.NULL`**, the engine's two pairings, on every path a value takes
+// into Python: an argument of an exported function, and the fields of a route
+// event's snapshot. These two handed `undefined` through, so `is None`
+// answered false and the author's fallback was skipped.
 //
-// Asserted inside Python: a round trip hands `null` back as `null` either way,
+// Asserted inside Python: a round trip hands each back as it was either way,
 // and would pass throughout.
 import { test, expect } from 'vitest';
-import { absent, route_absent, fallback } from './fixtures/absence.py';
+import { absent, is_null as isNull, route_null, fallback } from './fixtures/absence.py';
 
 const event = (slug) => ({
     fetch() {},
@@ -17,16 +17,17 @@ const event = (slug) => ({
     params: { slug }
 });
 
-test.for([['null', null], ['undefined', undefined]])('%s handed to a Python function is None', ([, value]) => {
-    expect(absent(value)).toBe(true);
+test('undefined handed to a Python function is None, and null is javascript.NULL', () => {
+    expect([absent(undefined), isNull(undefined)]).toEqual([true, false]);
+    expect([absent(null), isNull(null)]).toEqual([false, true]);
 });
 
 test('while False, 0 and the empty string are values', () => {
     for (const value of [false, 0, '']) expect(absent(value)).toBe(false);
 });
 
-test('an absent route id is None in the snapshot', () => {
-    expect(route_absent(event('x'))).toBe(true);
+test('a null route id is null in the snapshot', () => {
+    expect(route_null(event('x'))).toBe(true);
 });
 
 test('and an absent parameter takes the fallback the author wrote', () => {

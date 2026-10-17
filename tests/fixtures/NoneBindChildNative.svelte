@@ -2,8 +2,8 @@
     let { value = $bindable('x') } = $props();
 
     export const clear = () => {
-        value = null;
+        value = undefined;
     };
 </script>
 
-<p data-k="child">{value === null}</p>
+<p data-k="child">{value === undefined}</p>

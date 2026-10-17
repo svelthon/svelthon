@@ -22,10 +22,11 @@ describe('a JavaScript module calling into Python', () => {
     });
 
     // What a Python value looks like to `JSON.stringify`: a dict is an object,
-    // a list an array, and None is null rather than an object that serialises
-    // as `{}`.
+    // a list an array, and None is `undefined`, which it leaves out as it leaves
+    // out any `undefined`, rather than an object that serialises as `{}`. JSON
+    // that keeps it as `null` is `tojson`'s.
     test('a dict, a list and None serialise as JavaScript expects', () => {
-        expect(read('payload')).toBe('{"a":[1,2],"b":null}');
+        expect(read('payload')).toBe('{"a":[1,2]}');
     });
 
     // The other direction of arity: `joined(*pieces)` takes as many as it is

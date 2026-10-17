@@ -4,7 +4,7 @@
 export const CONTENTS = [
     ['absent', '7'],
     ['undefined', '7'],
-    ['null', 'None'],
+    ['null', '<Javascript null>'],
     ['set', '5']
 ];
 

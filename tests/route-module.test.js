@@ -447,7 +447,8 @@ describe('a query string read twice', () => {
         const asked = (route) =>
             both_views(event({ url: 'https://example.test/a?tag=a', route }))[3];
 
-        // What lands in the snapshot is the id, never the object holding it.
+        // What lands in the snapshot is the id, never the object holding it:
+        // `null`, read by Python as `javascript.NULL` and handed back as it is.
         expect(asked({ id: '/a/[slug]' })).toBe('/a/[slug]');
         expect(asked({ id: null })).toBe(null);
     });

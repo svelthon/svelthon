@@ -55,10 +55,11 @@ describe('a float across a binding', () => {
         expect(at('back-type').textContent).toBe('float');
     });
 
-    // A cleared number field hands over `null`, and Python reads None: the
-    // rule `pyArg` and `pyData` keep, at the binding. A name and an item, the
-    // two targets a binding writes through.
-    test('a cleared number field arrives as None', () => {
+    // A cleared number field hands over `null`, and Python reads the `null` it
+    // is, `javascript.NULL`: the engine's pairing, which `pyArg` and `pyData`
+    // keep, at the binding. A name and an item, the two targets a binding
+    // writes through.
+    test('a cleared number field arrives as null', () => {
         const at = setup();
         for (const k of ['int', 'item']) {
             at(k).value = '';

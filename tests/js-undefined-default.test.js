@@ -2,7 +2,7 @@
 // `undefined`, as in Svelte.** `{value=7}` read off a row JavaScript hands over
 // rendered None for `{value: undefined}`: the member had crossed into Python,
 // where `undefined` is None, before the default was decided. A `null` given on
-// purpose stays None and a set value stays itself, in each, a snippet and
+// purpose stays `null`, `javascript.NULL`, and a set value stays itself, in each, a snippet and
 // await, for a plain record, one with an `ob_type` field and a getter, which
 // is read once.
 import { test, expect } from 'vitest';

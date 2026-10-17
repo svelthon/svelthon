@@ -356,7 +356,11 @@ function boundKey(value) {
 }
 
 function keyText(value) {
-    if (value === null || value === undefined || value === NONE) return 'None';
+    // None and the `undefined` it is at every door are one key, as `key` makes
+    // them; `javascript.NULL`, which Python tells apart from None, is another,
+    // spelled as Python prints it.
+    if (value === undefined || value === NONE) return 'None';
+    if (value === null) return _b_.repr(value);
     if (ownEquality(value)) return identityOf(value, quietPyType(value).tp_name);
 
     const number = numeric(value);
@@ -645,9 +649,9 @@ export const __pybridge = {
     // own, since the float itself would reach Svelte as the number NaN, which
     // no comparison finds again.
     key(value) {
-        // `None` is JavaScript's `null`, so `set_context(None, …)` and
-        // `getContext(null)` name one entry, as every other door makes it.
-        if (value === NONE) return null;
+        // `None` is JavaScript's `undefined`, so `set_context(None, …)` and
+        // `getContext(undefined)` name one entry, as every other door makes it.
+        if (value === NONE) return undefined;
         if (ownEquality(value)) return value;
 
         // Equal to a number, it is that number, which is what an `int` key
@@ -1080,8 +1084,7 @@ export const __pybridge = {
     // What a context holds, written by Python. Either end may be JavaScript's,
     // so a callable is published as at every other door (`pyHandler`) and a
     // JavaScript reader can call it; a scalar is made JavaScript's, `None` its
-    // `null`, which a JavaScript reader takes for an absence; a container is
-    // the object it is.
+    // `undefined` (`plainScalar`); a container is the object it is.
     toContext(value) {
         return value !== null && (typeof value === 'object' || typeof value === 'function') && callable(value)
             ? pyHandler(value)
@@ -3939,7 +3942,7 @@ const viewDescriptor = (view, key, authored, read) =>
         : { value: read(), writable: true, enumerable: true, configurable: true };
 
 const forReader = (one) => {
-    if (one === NONE) return null;
+    if (one === NONE) return undefined;
 
     // A coroutine read off a view is the promise it crosses as anywhere, one run
     // for every reference to it, its result crossing as a returned value does:
@@ -5420,9 +5423,10 @@ const routeEvent = (value) => {
 };
 
 export function pyArg(value) {
-    // An absence is `None`, the rule `pyData` applies: `value is None` in the
-    // function called has to be true for a `null` or an `undefined`.
-    if (value === null || value === undefined) return NONE;
+    // `undefined` is `None` and `null` is `javascript.NULL`, the rule `pyData`
+    // applies.
+    if (value === undefined) return NONE;
+    if (value === null) return null;
     if (typeof value !== 'object') return pyBind(value);
     if (!routeEvent(value)) return value;
 
@@ -6489,9 +6493,9 @@ function perReceiver(self) {
 // `alias(shared, shared)` hands JavaScript one object for one Python list, and
 // a view handed back is its container again: `back(rows) is rows`.
 //
-// `None` as an argument is `undefined`, the engine's pairing, so a parameter
-// with a default takes it whichever way the function was imported; inside a
-// container it is `null`, which is what JSON writes for it.
+// `None` is `undefined`, the engine's pairing, as an argument, so a parameter
+// with a default takes it whichever way the function was imported, and inside
+// a container alike.
 const outbound = (value, made) => {
     if (value === NONE) return undefined;
     if (callable(value)) return pyHandler(value);
@@ -6965,14 +6969,13 @@ const choice = (value) => {
 // What Svelte compares crosses into JavaScript as everything else does: a value
 // that is a number is its number, a NaN and an instance of a subclass of float,
 // int or str among them, as a JavaScript child is handed it. A list's items are
-// read by index, as Svelte's `includes` reads them (`byIndex`); a None among
-// them, which a list's view reads as `null`, is the `undefined` an option's None
-// is (`bound`).
-const item = (one) => (one === null ? undefined : scalarOnly(one));
+// read by index, as Svelte's `includes` reads them (`byIndex`), each as an
+// option's value is: a None the `undefined` an option's None is, a
+// `javascript.NULL` the `null` an option's NULL is.
 
 const COMPARED = {
     scalar: scalarOnly,
-    selection: (value) => (Array.isArray(value) ? byIndex(value, item) : scalarOnly(value)),
+    selection: (value) => (Array.isArray(value) ? byIndex(value, scalarOnly) : scalarOnly(value)),
     choice
 };
 

@@ -1,9 +1,9 @@
 <script>
     // The same patterns in Svelte: the witness for JsUndefinedDefault, a
-    // `null` shown as Python shows None.
+    // `null` shown as Python shows the `javascript.NULL` it reads.
     let { row, place = 'each' } = $props();
 
-    const shown = (value) => (value === null ? 'None' : String(value));
+    const shown = (value) => (value === null ? '<Javascript null>' : String(value));
 </script>
 
 {#snippet card({ value = 7 })}<p>{shown(value)}</p>{/snippet}

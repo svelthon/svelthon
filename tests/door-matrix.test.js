@@ -117,7 +117,7 @@ const SVELTE_CHILD = {
 
 // What the Python child reads of JavaScript values a Svelte parent hands it.
 const FROM_SVELTE = {
-    undefined: "str:'absent'", null: 'NoneType:None', true: 'bool:True', int: 'int:7', float: 'float:0.5',
+    undefined: "str:'absent'", null: 'NullType', true: 'bool:True', int: 'int:7', float: 'float:0.5',
     nan: 'float:nan', big: 'int:1180591620717411303424', str: "str:'a'", astral: "str:'😀'",
     object: 'JSObject', array: 'JavascriptArray', accessor: 'JSObject', 'class-instance': 'JSObject',
     date: 'JSObject', map: 'IterableJavascriptObject', set: 'IterableJavascriptObject',
@@ -137,8 +137,9 @@ test.for(['name', 'spread', 'context', 'snippet'])('a Python child receives the 
     expect(apart(row(door), PARENT)).toEqual([]);
 });
 
-// A Svelte child receives in a spread what it receives by name; through the
-// context, None is `null` where by name it is the absence its default fills.
+// A Svelte child receives in a spread what it receives by name; None is
+// `undefined` by both doors, which by name is the absence the child's default
+// fills, and through the context, which has no default, stays `undefined`.
 test.for([
     ['js-spread', 'js-name', []],
     ['js-context', 'js-name', ['none']],

@@ -27,7 +27,7 @@ describe('a fractional prop', () => {
         expect(at(key).textContent).toBe('0.8');
     });
 
-    test('and an absent one is None', () => {
+    test('and a null one is the null JavaScript passed', () => {
         expect(setup(ScalarProps, { amount: null })('absent').textContent).toBe('True');
     });
 });
@@ -35,7 +35,7 @@ describe('a fractional prop', () => {
 describe('a value a JavaScript promise resolves to', () => {
     test.for([
         ['a fractional number is a float', 'js-float', '0.4'],
-        ['null is None', 'js-none', 'True'],
+        ['null is the null it resolved to', 'js-none', 'True'],
         ['control: a Python coroutine s float', 'py-float', '0.4']
     ])('%s', async ([, key, answer]) => {
         const at = setup(ScalarAwait);

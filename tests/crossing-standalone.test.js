@@ -48,6 +48,7 @@ test('loaded alone, with no host, it crosses data both ways', () => {
     const python = pyData({ name: 'a', rows: [1, 2.5, { deep: null }] });
 
     expect($B.class_name(python)).toBe('dict');
+    // `null` comes in as `javascript.NULL` and goes out as `null`.
     expect(plainData(python)).toEqual({ name: 'a', rows: [1, 2.5, { deep: null }] });
     expect(pyBind(undefined)).toBe(NONE);
     expect(host.owns(python)).toBe(false);

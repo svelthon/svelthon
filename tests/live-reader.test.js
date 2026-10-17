@@ -51,7 +51,7 @@ test('a JavaScript child follows Python data as it follows Svelte state', () => 
 // The witness, Svelte's own owner and the same child.
 test('the Svelte owner is the rule', () => {
     const shape = (count, n, rows) =>
-        `{"count":${count},"rate":0.5,"inner":{"n":${n}},"none":null}|count,rate,inner,none|true|` +
+        `{"count":${count},"rate":0.5,"inner":{"n":${n}}}|count,rate,inner,none|true|` +
         rows.map((row) => `[${row}]`).join('');
 
     expect(steps(LiveOwnerNative)).toEqual([

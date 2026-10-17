@@ -145,12 +145,14 @@ export const pyScalar = (value) => {
 };
 
 // A value read by JavaScript off a store: a scalar as JavaScript's own, a float
-// a number, `None` its `null`, which a JavaScript reader takes for an absence,
-// and a container as itself, since its identity is what a mutation is followed
-// by. The read half of the store's setter, which takes `__pyArg`, and the door
-// of a context and of a `bindable` handed back to a parent.
+// a number, and a container as itself, since its identity is what a mutation is
+// followed by. `None` is JavaScript's `undefined`, as at every door Brython
+// opens (`pyobj2jsobj`), and `null` is `javascript.NULL`'s: `null` stands for
+// `None` in JSON alone, which has no `undefined`. The read half of the store's
+// setter, which takes `__pyArg`, and the door of a context and of a `bindable`
+// handed back to a parent.
 export const plainScalar = (value) => {
-    if (value === NONE) return null;
+    if (value === NONE) return undefined;
 
     const scalar = pyScalar(value);
     return scalar === undefined ? value : scalar;
@@ -359,14 +361,13 @@ export function pyEntries(value) {
 //
 // Duck-typed, and the identity for anything else: a module called from
 // ordinary JavaScript keeps its arguments untouched.
-// A JavaScript absence, `null` or `undefined`, is Python's `None` in it, as
-// `pyData` says at its root: `event["params"]["slug"] is None` has to answer the
-// way the author wrote it.
+// JavaScript's `undefined` is Python's `None` in it, and `null` is
+// `javascript.NULL`, as the engine pairs them and as `pyData` says at its root.
 export function pyDict(entries) {
     const $B = globalThis.__BRYTHON__;
     const out = _b_.dict.$factory();
 
-    for (const [key, value] of entries) $B.$setitem(out, key, value ?? NONE);
+    for (const [key, value] of entries) $B.$setitem(out, key, value === undefined ? NONE : value);
     return out;
 }
 
@@ -481,10 +482,9 @@ export const isSet = (value) => {
 // stay where it was when `state["count"] += 1` repaints every Python reader,
 // however the dict reached it (a Svelte prop or context, for one).
 //
-// A read gives what the same value gives at the other doors: None is `null`, as
-// `plainData` writes it inside a container, a scalar is JavaScript's own, a
-// callable is adapted (`lent.handler`), and a container inside is a view in its
-// turn. A write is Python's own `obj[key] = value`, `append` or `del`, so it
+// A read gives what the same value gives at the other doors: None is
+// `undefined`, a scalar is JavaScript's own, a callable is adapted
+// (`lent.handler`), and a container inside is a view in its turn. A write is Python's own `obj[key] = value`, `append` or `del`, so it
 // notifies as the same line written in Python does.
 //
 // One view per container, so a reader comparing what it holds finds the same
@@ -530,10 +530,12 @@ export const PLAIN_VIEW = Object.defineProperties(Object.create(Object.prototype
 // FileList, and those must cross as they are. Idempotent, so the group may ask
 // for it early, to compare, and the write may ask again.
 //
-// An absence is None, the rule `pyArg` and `pyData` keep: a cleared number
-// field hands over `null`, and `value is None` has to say so.
+// `undefined` is None and `null` is `javascript.NULL`, the engine's two
+// pairings, which `pyArg` and `pyData` keep too: a cleared number field hands
+// over `null`, and Python reads the `null` it is.
 export const pyBind = (value) => {
-    if (value === null || value === undefined) return NONE;
+    if (value === undefined) return NONE;
+    if (value === null) return null;
 
     // The number a Python write is handing over right now (`lent.handed`) is
     // the value it was written as.
@@ -564,7 +566,8 @@ export const pyBind = (value) => {
 export function pyData(value, made, live = false) {
     const $B = globalThis.__BRYTHON__;
 
-    if (value === undefined || value === null) return NONE;
+    if (value === undefined) return NONE;
+    if (value === null) return null;
 
     if (typeof value !== 'object') return pyBind(value);
 
@@ -1232,7 +1235,12 @@ function turn(value, key, seen, adapt, chain) {
 const CONTAINERS = new Set([_b_.list, _b_.tuple, _b_.dict, _b_.set, _b_.frozenset, _b_.bytes, _b_.bytearray]);
 
 export function plainData(value, seen, adapt) {
-    if (value === undefined || value === null || value === NONE) return null;
+    // `None` is JavaScript's `undefined` and `null` stays `null`, as at every
+    // door, but under the serialiser's rule, which writes JSON, where each of
+    // them is `null`.
+    if (value === undefined || value === null || value === NONE) {
+        return adapt !== undefined && seen instanceof Set ? null : value === NONE ? undefined : value;
+    }
 
     // A callable crosses as the view hands one over, adapted (`lent.handler`),
     // unless the caller has a rule of its own (`adapt`): a copy is what
@@ -1575,8 +1583,9 @@ function branch(value, seen, shell, adapt) {
 // `JSON.stringify` would drop it in silence.
 // The name alone, for a reader that looks a key up rather than writing a
 // mapping out: a JavaScript property name is a string, and a Brython float is an
-// object, so `{1.5: "x"}` would otherwise be keyed by `[object Object]`.
-export const propertyKey = (key) => (typeof key === 'symbol' ? key : String(plainData(key)));
+// object, so `{1.5: "x"}` would otherwise be keyed by `[object Object]`. A key
+// `None` is spelled `"null"`, as JSON spells it: a name, not a value crossing.
+export const propertyKey = (key) => (typeof key === 'symbol' ? key : String(key === NONE ? null : plainData(key)));
 
 export function propertyName(key, out, seen, adapt) {
     if (typeof key === 'symbol' && adapt !== undefined && seen instanceof Set) adapt(key);
