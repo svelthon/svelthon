@@ -152,7 +152,8 @@ console_check dev "$URL" "http://localhost:$PORT/demo/"
 # What it does not hold: the order a bundler gives a CommonJS module. That one
 # appears in a SvelteKit build, and this is a plain Vite application, so moving
 # the engine's import back to a neighbouring file leaves every marker below
-# green. `tests/boot-order.test.js` holds it as text for want of a Kit app here.
+# green. `scripts/kit-check.sh` builds a SvelteKit app and sees it answer 500,
+# and `tests/boot-order.test.js` holds it as text in the suite.
 pkill -f "vite --port $PORT" 2>/dev/null
 for _ in $(seq 40); do
     ss -ltn 2>/dev/null | grep -q ":$PORT " || break

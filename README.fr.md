@@ -79,7 +79,8 @@ npm test             # 1 915 tests : sémantique, props, réactivité, surface S
 npm run test:quiet   # la sortie de la suite : un run vert ne doit rien dire
 npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
-npm run test:all     # les quatre ci-dessus, dans l'ordre, arrêt au premier échec
+npm run test:kit     # une appli SvelteKit construite avec adapter-node : routes, fonction distante
+npm run test:all     # les cinq ci-dessus, dans l'ordre, arrêt au premier échec
 npm run bench        # Python contre JavaScript, même composant, vrai navigateur
 npm run build
 ```
@@ -1743,9 +1744,11 @@ deux projets, et ce que le vendored porte en plus du master de Brython est dans
 ```sh
 npm install
 npm test             # grille de fidélité, props, réactivité (jsdom)
-npm run test:browser # interop DOM, dans un vrai Chromium
-npm run test:hmr     # invalidation des modules virtuels (composant + store)
-npm run test:all     # les trois ci-dessus, arrêt au premier échec
+npm run test:quiet   # un run vert ne doit rien dire
+npm run test:browser # interop DOM et démo, dans un vrai Chromium
+npm run test:hmr     # invalidation des modules virtuels
+npm run test:kit     # un build de production SvelteKit, servi
+npm run test:all     # les cinq ci-dessus, arrêt au premier échec
 npm run dev          # la démo, sous /demo/
 npm run build
 ```

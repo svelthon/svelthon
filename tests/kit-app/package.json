@@ -1,0 +1,8 @@
+{
+  "name": "svelthon-kit-app",
+  "private": true,
+  "type": "module",
+  "imports": {
+    "#lib/*": "./src/lib/*"
+  }
+}

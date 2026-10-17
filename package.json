@@ -51,10 +51,13 @@
     "test:browser": "bash scripts/browser-check.sh",
     "test:hmr": "bash scripts/hmr-check.sh",
     "test:quiet": "node scripts/quiet-check.mjs",
-    "test:all": "npm run test && npm run test:quiet && npm run test:browser && npm run test:hmr",
+    "test:kit": "bash scripts/kit-check.sh",
+    "test:all": "npm run test && npm run test:quiet && npm run test:browser && npm run test:hmr && npm run test:kit",
     "bench": "bash scripts/bench.sh"
   },
   "devDependencies": {
+    "@sveltejs/adapter-node": "6.0.0-next.10",
+    "@sveltejs/kit": "3.0.0-next.23",
     "@sveltejs/vite-plugin-svelte": "^7.3.0",
     "@vitest/coverage-v8": "^4.1.11",
     "jsdom": "^29.1.1",

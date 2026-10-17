@@ -5,9 +5,10 @@
 // a neighbour's import order, that call lands after `boot.js` in a production
 // server build and `$B.brython` is undefined: the site builds and answers 500.
 //
-// Nothing the suite runs can see that, because nothing here builds. What holds
-// it is the shape of the graph, read as text: the file that starts the engine is
-// the file that imports it.
+// Nothing the suite runs can see that, because nothing in it builds: `npm run
+// test:kit` builds a SvelteKit app and sees the 500. Here, what holds it is the
+// shape of the graph, read as text: the file that starts the engine is the
+// file that imports it.
 import { test, expect, describe } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
