@@ -1196,12 +1196,14 @@ export const __pybridge = {
     spreadPython,
 
     // A spread on an element: each key is the attribute it becomes, read the
-    // way that attribute is read when written by name. Only None is converted
-    // first, as the direct path converts it: an object stays the object, which
-    // is how an `<option>`'s value finds its `<select>`. A `value` is then made
-    // JavaScript's as `value={…}` is (`COMPARED`): a float its number, which
-    // the `<select>` it is compared with holds too, and on a control a
-    // `bind:group` binds (`grouped`), what the group reads (`choice`).
+    // way that attribute is read when written by name. Each value crosses
+    // first as one written by name does (`spread`): None the absence, a float,
+    // an int or a str of a subclass its scalar, where `min` and `step` read
+    // `[object Object]`, and an object the object, which is how an `<option>`'s
+    // value finds its `<select>`. A `value` is made JavaScript's as `value={…}`
+    // is (`COMPARED`), from the value itself: a float its number, which the
+    // `<select>` it is compared with holds too, and on a control a `bind:group`
+    // binds (`grouped`), what the group reads (`choice`).
     //
     // A key Svelte takes for a handler, one beginning with `on`, is adapted as
     // a handler written by name is, by the component's `event`: a raise reaches
@@ -1215,7 +1217,7 @@ export const __pybridge = {
         if (value === null || value === undefined || value === NONE) return spreadOf(value);
 
         const read = spreadOf(value, (one) => one);
-        const out = spreadOf(read, __pybridge.bound);
+        const out = spread(read);
 
         for (const key of Object.keys(out)) {
             const wrapper = attributeWrapper(key);
@@ -1223,7 +1225,7 @@ export const __pybridge = {
             else if (wrapper === '__class') out[key] = __pybridge.klass(read[key]);
             else if (wrapper === '__truthy') out[key] = __pybridge.truthy(read[key]);
             else if (wrapper === '__hidden') out[key] = __pybridge.hidden(read[key]);
-            else if (key === 'value') out[key] = (grouped ? COMPARED.choice : COMPARED.scalar)(out[key]);
+            else if (key === 'value') out[key] = (grouped ? COMPARED.choice : COMPARED.scalar)(__pybridge.bound(read[key]));
         }
 
         return out;
