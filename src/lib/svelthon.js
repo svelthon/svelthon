@@ -738,7 +738,7 @@ function compilePython(file, path, root) {
     }
 
     const source = readFileSync(file, 'utf8');
-    const mode = isReactive(file) ? { store: true } : { plain: true };
+    const mode = isReactive(file) ? { store: true } : { plain: true, eager: isRemote(file) };
     const result = compile(source, nameFor(file, root), shown, {
         ...mode,
         sourceContent: source,
@@ -789,6 +789,8 @@ function pythonImports(names, fromDirectory, path) {
 // JavaScript and SvelteKit import: the same module, its body run as this one is
 // evaluated, as importing a JavaScript module runs it. One module behind both,
 // so a name Python changes is the name JavaScript reads.
+//
+// A `.remote.py` is served once, under its own path, whatever asks for it.
 const PYTHON_QUERY = '?python';
 
 function eagerModule(file) {
@@ -854,6 +856,15 @@ function searchedFrom(fromDirectory, path) {
 // wrote.
 const isReactive = (file) => file.endsWith('.svelte.py');
 
+// A module of SvelteKit's remote functions has one half, the module itself, its
+// body run as it is evaluated and nothing exported by default, as a route
+// module that SvelteKit loads when it decides. SvelteKit takes for one every id
+// its pattern matches, `/[/.]remote\.[^/]+$/`, the query included: a second
+// half, `peps.remote.py?python`, was a second remote module to it, refused for
+// the default export that runs its body. No `import` can name it either:
+// `peps.remote` is not a module Python publishes.
+const isRemote = (file) => file.endsWith('.remote.py');
+
 // The Vite plugin that serves those modules.
 export function svelthon(options = {}) {
     const isVirtual = (id) => id.startsWith(VIRTUAL_PREFIX);
@@ -908,9 +919,10 @@ export function svelthon(options = {}) {
             if (isVirtual(specifier)) return '\0' + specifier;
 
             // The module as Python reaches it is resolved as its file is, and
-            // keeps its query.
-            const query = specifier.endsWith(`.py${PYTHON_QUERY}`) ? PYTHON_QUERY : '';
-            const id = specifier.slice(0, specifier.length - query.length);
+            // keeps its query, but for a `.remote.py`, which has one half.
+            const asked = specifier.endsWith(`.py${PYTHON_QUERY}`) ? PYTHON_QUERY : '';
+            const id = specifier.slice(0, specifier.length - asked.length);
+            const query = isRemote(id) ? '' : asked;
 
             // Without an importer either: SvelteKit hands its route modules to
             // Vite as already-resolved entries, with nobody to resolve against.
@@ -942,8 +954,9 @@ export function svelthon(options = {}) {
 
             this.addWatchFile(file);
 
-            // JavaScript's import of the file, which runs the module's body.
-            return deferred ? script : eagerModule(file);
+            // JavaScript's import of the file, which runs the module's body, or
+            // the module itself when it runs its body on its own.
+            return deferred || isRemote(file) ? script : eagerModule(file);
         },
 
         // A component's generated code lives in its own module, which Vite has

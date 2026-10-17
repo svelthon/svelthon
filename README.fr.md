@@ -885,6 +885,12 @@ c'est ce qui fait marcher les fonctions distantes de SvelteKit depuis Python :
 `query()` de SvelteKit a fabriqué. Ce qu'un framework reconnaît par identité le
 reste en traversant.
 
+**Un `.remote.py` est un seul module**, son corps exécuté au chargement et rien
+d'exporté par défaut, comme un module de route que SvelteKit charge quand il le
+décide. Tout autre `.py` a une seconde moitié, que lance un `import` Python ;
+SvelteKit prend pour un module distant tout identifiant qui finit par
+`.remote.` suivi d'autre chose, et y refuse un export par défaut.
+
 **Un module réactif le lit aussi.** `__all__` dans un `.svelte.py` dit ce que le
 store publie, exactement comme dans un `.py` ; sans lui, le store publie tous les
 noms qu'il a.

@@ -3917,6 +3917,11 @@ const liveExports = (c) =>
 // The default export, which `export *` leaves out: what JavaScript imports by
 // name is what `__all__` says, and nothing of ours beside it.
 //
+// An eager module has no such export: the function is called as the module is
+// evaluated, and the module is its one half. A `.remote.py` is one, loaded by
+// SvelteKit when it decides, as a route module is, and refused by it when it
+// exports a default.
+//
 // A body that raises leaves its namespace to whoever holds it, and the next
 // import runs in a new one, which the function hands back to be the module's;
 // and with roots of its own, so a destructor the failed attempt handed out, or
@@ -3930,10 +3935,10 @@ function moduleLoad(c) {
 
     return [
         ``,
-        `export default __pythonModule(${NS}, ${PY_NAME.test(name) ? JSON.stringify(name) : 'null'}, ` +
+        `${c.eager ? '' : 'export default '}__pythonModule(${NS}, ${PY_NAME.test(name) ? JSON.stringify(name) : 'null'}, ` +
             `(${NEXT_VALUE}) => { ${NS} = ${NEXT_VALUE};${roots.join('')} }, () => {`,
         ...run.map((line) => (line === '' ? line : `    ${line}`)),
-        `});`
+        c.eager ? `})();` : `});`
     ];
 }
 
@@ -4047,6 +4052,9 @@ function compile(
         sourceContent = null,
         // Whether the component is compiled as a custom element.
         element = false,
+        // Whether a module's body runs as the module is evaluated, with no
+        // function behind a default export: the one half of a `.remote.py`.
+        eager = false,
         // Whether an imported name is one of the project's own `.py` files,
         // `'file'`, or names a directory of the project, `'package'`, asked by
         // whoever can read the file system. Without it the imports are not
@@ -4421,6 +4429,7 @@ function compile(
         templateLine,
         store,
         plain,
+        eager,
         namespace,
         js,
         // Every name the module reads as a global. What decides whether `host`

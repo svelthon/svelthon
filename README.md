@@ -844,6 +844,12 @@ what makes SvelteKit's remote functions work from Python: `accepted = query(…)
 in a `.remote.py` holds, and exports, the object SvelteKit's own `query()`
 built. Anything a framework recognises by identity keeps it across the boundary.
 
+**A `.remote.py` is one module**, its body run as it is loaded and nothing
+exported by default, as a route module that SvelteKit loads when it decides.
+Any other `.py` has a second half that a Python `import` runs; SvelteKit takes
+whatever id ends in `.remote.` and something for a remote module, and refuses
+a default export there.
+
 **A reactive module reads it too.** `__all__` in a `.svelte.py` says what the
 store publishes, exactly as it does in a `.py`; without one, the store publishes
 every name it has.
