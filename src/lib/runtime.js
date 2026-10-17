@@ -8430,7 +8430,17 @@ export function bind(proto, key, get, set, source, listed = true, computed = fal
 // list, a dict or an instance crosses as its view now, which Svelte does not
 // wrap, and is itself again; a JavaScript object Python wrote reads back as
 // Svelte's proxy of it, as it does in a child written in Svelte.
-export const unproxied = (value, crossed) => (crossed != null && Object.is(value, crossed.js) ? crossed.py : value);
+//
+// And the default it declares (`declared`), which Svelte holds as it crosses
+// while the parent passes nothing: Python reads it as it was written, `15.0`
+// and not the `15` it crossed as, unless the child's own write is what the
+// prop holds.
+export const unproxied = (value, crossed, passed, declared) =>
+    crossed != null && Object.is(value, crossed.js)
+        ? crossed.py
+        : declared !== undefined && passed === undefined && Object.is(value, declared.value)
+          ? declared.py
+          : value;
 
 // **A scalar Python writes into a `bindable` prop crosses as JavaScript's own**,
 // because the parent may be JavaScript: a float handed to it as the Brython
@@ -8447,10 +8457,12 @@ export const unproxied = (value, crossed) => (crossed != null && Object.is(value
 export const handOver = (written, write) => {
     const crossing = viewOf(plainScalar(written));
 
+    // A value that is its own JavaScript form is kept all the same: what the
+    // prop holds is then the child's write, and not the default it declares.
     if (crossing === written) {
         write(written);
 
-        return null;
+        return { js: written, py: written };
     }
 
     const record = { js: crossing, py: written };

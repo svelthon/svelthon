@@ -2289,6 +2289,7 @@ function surface(body, theirs = new Set()) {
     const marked = (node, name) => !mine(name) && isCallTo(node, name);
     const props = [];
     const bindables = [];
+    const defaulted = [];
     const state = [];
     const funcs = [];
     const classes = [];
@@ -2525,7 +2526,17 @@ function surface(body, theirs = new Set()) {
                 // `bindable` of their own, which computes the default like any
                 // other call, as `derived` and `effect` above.
                 if (node.target instanceof $B.ast.Name && take(node.target.id)) {
-                    (marked(node, 'bindable') ? bindables : props).push(node.target.id);
+                    const bindable = marked(node, 'bindable');
+
+                    (bindable ? bindables : props).push(node.target.id);
+
+                    // A default declared, as Svelte reads one off `$bindable(…)`:
+                    // `name: str`, `bindable()` and `None` declare none.
+                    const value = bindable ? node.value.args[0] : node.value;
+
+                    if (value != null && !(value instanceof $B.ast.Constant && value.value === $B.builtins.None)) {
+                        defaulted.push(node.target.id);
+                    }
                 }
             } else if (
                 // `async def` is a different AST node, and an async handler is a
@@ -2640,7 +2651,7 @@ function surface(body, theirs = new Set()) {
     globals(body);
     walruses(body);
 
-    return { props, bindables, state, funcs, classes, deriveds, effects, inspects, reserved, bound, lines, remarked, starred };
+    return { props, bindables, defaulted, state, funcs, classes, deriveds, effects, inspects, reserved, bound, lines, remarked, starred };
 }
 
 // The modules the source imports, `import x` and `from x import y` alike.
@@ -3057,8 +3068,12 @@ const given = (name) => `__given_${name}`;
 const fallback = (name) => `__default_${name}`;
 const pick = (name) => `__pick_${name}`;
 // A `bindable` prop's last scalar written by Python, beside the number Svelte
-// was handed for it (`handOver`).
+// was handed for it (`handOver`), and the default it declares, which Svelte
+// reads when the parent leaves it `undefined`.
 const crossed = (name) => `__crossed_${name}`;
+const bindableDefault = (name) => `__declared_${name}`;
+// What the parent passes it, `undefined` when nothing, read past the fallback.
+const passed = (name) => `__passed_${name}`;
 // What `$effect.root` hands back. Python reads the decorated name and gets
 // this, exactly as JavaScript reads `const destroy = $effect.root(…)`, and
 // the name belongs to the destructor on both sides.
@@ -3156,19 +3171,41 @@ function preamble(c) {
 }
 
 function declarations(c) {
+    const defaulted = c.bindables.filter((b) => c.defaulted.includes(b));
+
     return [
         ...(c.bindables.length
             ? [
-                  `let { ${c.bindables.map((b) => `${b} = $bindable()`).join(', ')}, ...__props } =` +
-                      ` $props();`,
+                  // Svelte's own fallback: a bindable prop the parent leaves
+                  // `undefined` reads the default it declares, bound or passed,
+                  // and one the child itself wrote `undefined` without a parent
+                  // that binds it reads `undefined`. The default is the one
+                  // init() writes, after Svelte asks, so Svelte reads it from a
+                  // state, lazily, as it reads any default that is not a
+                  // literal. It is the default as it crosses (`handOver`), the
+                  // form a custom element's reader is handed and one Svelte's
+                  // proxy leaves alone, kept beside the Python value, which
+                  // Python reads while the parent passes nothing (`passed`).
+                  // A prop that declares none, or `None`, has none, as
+                  // `$bindable()` and `$bindable(undefined)` have none.
+                  ...(defaulted.length ? [`class __Declared { value = $state.raw(); py = undefined; }`] : []),
+                  ...defaulted.map((b) => `const ${bindableDefault(b)} = new __Declared();`),
+                  `let { ${c.bindables
+                      .map((b) =>
+                          defaulted.includes(b)
+                              ? `${b} = $bindable(${bindableDefault(b)}.value), ${b}: ${passed(b)}`
+                              : `${b} = $bindable()`
+                      )
+                      .join(', ')}, ...__props } =` + ` $props();`,
                   ...c.bindables.flatMap((b) => [
                       `let ${crossed(b)} = null;`,
                       `let ${rev(b)} = $state.raw(0);`,
                       `const ${bump(b)} = () => { ${rev(b)} += 1; };`
                   ]),
                   // The module body applies the annotation's default by writing
-                  // to the name, and that write must not travel up to the
-                  // parent. Only writes made after init() are real ones.
+                  // to the name, and that write is the default, which travels
+                  // up to no parent. Only writes made after init() are real
+                  // ones.
                   `let __initialising = true;`,
                   ``
               ]
@@ -3386,11 +3423,29 @@ function authorBindings(c) {
         // and a container its view, its original kept beside it (`handOver`),
         // which `unproxied` gives Python again while the prop still holds what
         // the write handed over; a parent's setter may decide otherwise.
-        ...c.bindables.map(
-            (b) =>
-                `__bind(__proto, '${b}', () => (${rev(b)}, __follow(__pyBind(__unproxied(${b}, ${crossed(b)})))),` +
-                ` (${NEXT_VALUE}) => { if (!__initialising || ${b} === undefined) { const __written = __track(${NEXT_VALUE}, ${bump(b)}${c.store ? '' : `, ${SUBS}`}); ${crossed(b)} = __handOver(__written, (__crossing) => { ${b} = __crossing; }); } }, () => ${b});`
-        ),
+        //
+        // What init() writes to a prop that declares a default is that
+        // default, Svelte's fallback, the last write winning as for any prop.
+        // One that declares none has no fallback, so init() writes it to the
+        // prop while the parent passes nothing. And so does a server, where
+        // Svelte reads a fallback as the props are destructured, before init()
+        // has written it.
+        ...c.bindables.map((b) => {
+            const declared = c.defaulted.includes(b);
+            const box = bindableDefault(b);
+            const written = `const __written = __track(${NEXT_VALUE}, ${bump(b)}${c.store ? '' : `, ${SUBS}`});`;
+            const handed = `${crossed(b)} = __handOver(__written, (__crossing) => { ${b} = __crossing; });`;
+            const set = declared
+                ? `${written} if (__initialising) { ${box}.py = __written;` +
+                  ` __handOver(__written, (__crossing) => { ${box}.value = __crossing; });` +
+                  ` if (${b} !== undefined) return; } ${handed}`
+                : `if (!__initialising || ${b} === undefined) { ${written} ${handed} }`;
+            const held = declared ? `__unproxied(${b}, ${crossed(b)}, ${passed(b)}, ${box})` : `__unproxied(${b}, ${crossed(b)})`;
+            return (
+                `__bind(__proto, '${b}', () => (${rev(b)}, __follow(__pyBind(${held}))),` +
+                ` (${NEXT_VALUE}) => { ${set} }, () => ${b});`
+            );
+        }),
         // Reading the revision alongside the value is what registers the
         // dependency: an in-place mutation then invalidates every reader,
         // without the value ever changing identity.
@@ -4195,7 +4250,7 @@ function compile(
     ];
     const jsImported = jsImports.flatMap((one) => one.entries.map((e) => e.local));
 
-    let { props, bindables, state, funcs, classes, deriveds, effects, inspects, reserved, bound, lines, remarked, starred } =
+    let { props, bindables, defaulted, state, funcs, classes, deriveds, effects, inspects, reserved, bound, lines, remarked, starred } =
         surface(root._ast.body, new Set(jsImported));
 
     // A custom element's props belong to its element, which reads each back,
@@ -4203,9 +4258,14 @@ function compile(
     // both from an accessor it publishes for a destructured prop, the one a
     // `bindable` is, so every prop takes that path; a scalar the component
     // writes reaches the element as JavaScript's own (`handOver`).
+    //
+    // An accessor per name the props destructure, so the second one a default
+    // reads its parent's value by (`passed`) would take the prop's place. No
+    // parent binds an element's prop: init() writes the default to it.
     if (element && !store && !plain) {
         bindables = [...props, ...bindables];
         props = [];
+        defaulted = [];
     }
 
     // Neither a store nor a plain module has a parent, so an annotation there
@@ -4440,6 +4500,7 @@ function compile(
         imported,
         props,
         bindables,
+        defaulted,
         state,
         funcs,
         classes,

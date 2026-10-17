@@ -78,7 +78,7 @@ reste de cette configuration et ce que chaque ligne apporte.
 npm install
 npm run dev          # la démo, sous /demo/
 
-npm test             # 1 924 tests : sémantique, props, réactivité, surface Svelte
+npm test             # 1 928 tests : sémantique, props, réactivité, surface Svelte
 npm run test:quiet   # la sortie de la suite : un run vert ne doit rien dire
 npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
@@ -682,7 +682,14 @@ tag: str = bindable("default")   # avec
 
 La subtilité est dans le défaut : le corps du module l'applique en écrivant dans
 le nom, et cette écriture-là ne doit pas remonter au parent. Seules celles qui
-suivent le retour d'`init()` sont de vraies écritures.
+suivent le retour d'`init()` sont de vraies écritures. Le défaut est la valeur de
+repli de Svelte : chaque fois que le parent laisse le prop à `undefined`, lié ou
+passé, l'enfant relit son défaut ; un enfant qui écrit `None` dans un prop que
+son parent lie relit donc son défaut, comme un enfant Svelte qui écrit
+`undefined`. Un parent qui lie `undefined` à un prop qui a un défaut est refusé
+au montage de l'enfant, par le contrôle de Svelte (`props_invalid_value`).
+`bindable()` et `bindable(None)` ne déclarent aucun défaut, comme `$bindable()`
+et `$bindable(undefined)`.
 
 ## Réactivité : un signal par nom
 
@@ -1600,7 +1607,7 @@ part jamais.
 
 ## État
 
-Validé par `npm test`, 1 924 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 1 928 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;

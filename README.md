@@ -80,7 +80,7 @@ rest of that configuration and what each line buys.
 npm install
 npm run dev          # the demo, at /demo/
 
-npm test             # 1 924 tests: semantics, props, reactivity, Svelte surface
+npm test             # 1 928 tests: semantics, props, reactivity, Svelte surface
 npm run test:quiet   # the suite's own output: a green run must say nothing
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
@@ -665,7 +665,13 @@ tag: str = bindable("default")   # with one
 
 The subtlety is in the default: the module body applies it by writing to the
 name, and that write must not travel up to the parent. Only writes made after
-`init()` returns are real ones.
+`init()` returns are real ones. The default is Svelte's fallback: whenever the
+parent leaves the prop `undefined`, bound or passed, the child reads its default
+again, so a child that writes `None` to a prop its parent binds reads its default
+back, as a Svelte child that writes `undefined` does. A parent binding
+`undefined` to a prop with a default is refused when the child mounts, by
+Svelte's own check (`props_invalid_value`). `bindable()` and `bindable(None)`
+declare no default, as `$bindable()` and `$bindable(undefined)` do.
 
 ## Reactivity: one signal per name
 
@@ -1581,7 +1587,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 1 924 tests as written (vitest reports more, one per
+Validated by `npm test`, 1 928 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;

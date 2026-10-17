@@ -30,9 +30,8 @@ test('a bindable a Python child sets to None reaches a JavaScript parent as a Sv
         return [target.querySelector('[data-k="parent"]').textContent, target.querySelector('[data-k="child"]').textContent];
     };
 
-    // The parent reads `undefined` from both. The Svelte child, once its value
-    // is `undefined`, reads its fallback again; the Python child reads the
-    // `None` it wrote.
+    // The parent reads `undefined` from both, and each child, once its parent
+    // holds `undefined`, reads its default again.
     expect(cleared(NoneBindChildNative)).toEqual(['true:false', 'false']);
-    expect(cleared(NoneBindChild)).toEqual(['true:false', 'True']);
+    expect(cleared(NoneBindChild)).toEqual(['true:false', 'False']);
 });
