@@ -1,20 +1,30 @@
 // @vitest-environment node
 //
-// **The crossing stands without Svelte and without the runtime**, the core
-// Bryntime is to be: `crossing.js` imports the engine and nothing else, and
-// loaded alone, with no host to answer, it still turns JavaScript values into
-// Python ones and back. What a host adds, the states it owns and how it makes
-// an object one of them, is asked through `host`, which answers nothing here.
+// **Bryntime stands without Svelte and without the runtime**: what
+// `src/lib/bryntime/` holds imports the engine and its own files, nothing
+// else, and loaded alone, with no host to answer, it still turns JavaScript
+// values into Python ones and back. What a host adds, the states it owns and
+// how it makes an object one of them, is asked through `host`, which answers
+// nothing here.
 import { test, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import '../src/lib/compile.cjs';
-import { host, pyData, plainData, entering, pyBind, NONE } from '../src/lib/crossing.js';
+import { host, pyData, plainData, entering, pyBind, NONE } from '../src/lib/bryntime/bryntime.js';
 
-test('crossing.js imports the engine, and nothing of Svelte or of the runtime', () => {
-    const source = readFileSync('src/lib/crossing.js', 'utf8');
-    const imports = [...source.matchAll(/^import\s+(?:[^'";]*\s+from\s+)?'([^']+)';/gm)].map(([, from]) => from);
+const DIR = 'src/lib/bryntime';
+const ENGINE = '../../../vendor/brython_runtime.js';
 
-    expect(imports).toEqual(['./globals.js', './boot.js']);
+test('bryntime/ imports the engine and itself, and nothing of Svelte or of the runtime', () => {
+    const files = readdirSync(DIR);
+    const imports = files.flatMap((file) =>
+        [...readFileSync(`${DIR}/${file}`, 'utf8').matchAll(/^(?:import|export)\s+(?:[^'";]*\s+from\s+)?'([^']+)';/gm)].map(
+            ([, from]) => `${file}: ${from}`
+        )
+    );
+
+    expect(files).toContain('bryntime.js');
+    expect(imports).toContain(`boot.js: ${ENGINE}`);
+    expect(imports.filter((one) => !one.endsWith(`: ${ENGINE}`) && !/: \.\/[\w-]+\.js$/.test(one))).toEqual([]);
 });
 
 test('loaded alone, with no host, it crosses data both ways', () => {

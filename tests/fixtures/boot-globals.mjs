@@ -18,13 +18,13 @@ if (scenario === 'browser') globalThis.window = { fake: true };
 // — so a fake one takes the bootstrap down before the decision is reached.
 if (scenario === 'hosted') globalThis.HTMLElement = class Mine {};
 
-await import('../../src/lib/globals.js');
+await import('../../src/lib/bryntime/globals.js');
 
 // Laid down between the two imports: absent from the recorded set, and not a
 // stub name. The cleanup has two reasons to leave it alone and needs both.
 globalThis.__witness = 'mine';
 
-await import('../../src/lib/boot.js');
+await import('../../src/lib/bryntime/boot.js');
 
 process.stdout.write(
     JSON.stringify({

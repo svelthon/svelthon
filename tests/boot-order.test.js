@@ -17,7 +17,7 @@ const read = (name) =>
 
 describe('the engine is imported where it is started', () => {
     test('boot.js imports it', () => {
-        expect(read('boot.js')).toMatch(/^import '\.\.\/\.\.\/vendor\/brython_runtime\.js';$/m);
+        expect(read('bryntime/boot.js')).toMatch(/^import '\.\.\/\.\.\/\.\.\/vendor\/brython_runtime\.js';$/m);
     });
 
     // And the parsing chain is declared by the file that parses, so a route
@@ -31,7 +31,7 @@ describe('the engine is imported where it is started', () => {
     });
 
     test('and it is the file that calls brython()', () => {
-        expect(read('boot.js')).toContain('$B.brython(');
+        expect(read('bryntime/boot.js')).toContain('$B.brython(');
     });
 
     // The import used to sit in `runtime.js`, two lines above `import
@@ -46,7 +46,7 @@ describe('the engine is imported where it is started', () => {
     // then heats a file no page asks for and leaves the real one cold, and the
     // check fails intermittently rather than clearly.
     test('the browser check warms the file boot.js names', () => {
-        const engine = read('boot.js').match(/vendor\/(\w+\.js)/)[1];
+        const engine = read('bryntime/boot.js').match(/vendor\/(\w+\.js)/)[1];
         const script = readFileSync(
             fileURLToPath(new URL('../scripts/browser-check.sh', import.meta.url)),
             'utf8'

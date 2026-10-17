@@ -11,7 +11,7 @@
 import { test, expect } from 'vitest';
 import '../src/lib/compile.cjs';
 import { pyData, pyExpression } from '../src/lib/runtime.js';
-import { toJs, toPython } from '../src/lib/crossing.js';
+import { toJs, toPython } from '../src/lib/bryntime/bryntime.js';
 import { describeJs } from './crossing-describe.js';
 
 const $B = globalThis.__BRYTHON__;

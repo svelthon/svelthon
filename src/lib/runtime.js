@@ -1,7 +1,7 @@
-// What every compiled component imports. `crossing.js` comes first: it imports
-// `globals.js`, which prepares the scope brython.js reads as it loads, and
-// `boot.js`, which imports the engine itself and starts it.
-import * as core from './crossing.js';
+// What every compiled component imports. Bryntime comes first: `bryntime.js`
+// imports `globals.js`, which prepares the scope brython.js reads as it loads,
+// and `boot.js`, which imports the engine itself and starts it.
+import * as core from './bryntime/bryntime.js';
 import { untrack } from 'svelte';
 import { createSubscriber } from 'svelte/reactivity';
 import { attributeWrapper } from './attributes.js';

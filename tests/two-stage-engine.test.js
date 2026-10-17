@@ -22,7 +22,7 @@ import { readFileSync } from 'node:fs';
 // not in the code. Narrowing a suite to one test is the first thing anyone does
 // with a failure, so a file must not manufacture one.
 test('the runtime half has no parser, gains one, and compiles Python through it', async () => {
-    await import('../src/lib/globals.js');
+    await import('../src/lib/bryntime/globals.js');
     await import('../vendor/brython_runtime.js');
 
     const $B = globalThis.__BRYTHON__;

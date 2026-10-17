@@ -1503,8 +1503,8 @@ fichier, quelques lignes.
 Ça fonctionne. Svelte compile une seconde version de chaque composant qui rend
 une chaîne HTML au lieu de créer des nœuds DOM ; le corps Python s'exécute donc
 sous Node, ce que le compilateur fait déjà au build. Il manquait deux shims au
-runtime navigateur (`self`, `addEventListener`) ; `src/lib/globals.js` les pose
-désormais, et c'était tout l'obstacle.
+runtime navigateur (`self`, `addEventListener`) ;
+`src/lib/bryntime/globals.js` les pose désormais, et c'était tout l'obstacle.
 
 Couvert par `tests/ssr.test.js` : composants, props, composition avec composants
 enfants et l'accès d'attribut, et les valeurs Python elles-mêmes : `-7 // 2`

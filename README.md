@@ -1447,8 +1447,8 @@ loader rather than through Vite, so a shim re-exporting from a `.py` fails with
 It works. Svelte compiles a second version of each component that returns an
 HTML string instead of creating DOM nodes, so the Python body runs under Node,
 which is what the compiler already does at build time. Two shims were missing
-from the browser runtime (`self`, `addEventListener`); `src/lib/globals.js` now
-sets them, and that was the whole obstacle.
+from the browser runtime (`self`, `addEventListener`);
+`src/lib/bryntime/globals.js` now sets them, and that was the whole obstacle.
 
 Covered by `tests/ssr.test.js`: components, props, composition with child
 components and attribute access, and the Python values themselves: `-7 // 2`

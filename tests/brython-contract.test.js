@@ -34,8 +34,11 @@ const OURS = /^\$svelthon/;
 
 const used = new Set();
 
-for (const name of readdirSync(LIB)) {
-    const source = readFileSync(join(LIB, name), 'utf8');
+// Every file, `bryntime/` included.
+for (const entry of readdirSync(LIB, { recursive: true, withFileTypes: true })) {
+    if (!entry.isFile()) continue;
+
+    const source = readFileSync(join(entry.parentPath, entry.name), 'utf8');
 
     for (const [, member] of source.matchAll(REACHED)) {
         if (!OURS.test(member)) used.add(member);

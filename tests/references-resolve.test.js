@@ -32,7 +32,7 @@
 import { test, expect, describe } from 'vitest';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 
 const at = (path) => fileURLToPath(new URL(`../${path}`, import.meta.url));
 
@@ -44,7 +44,10 @@ const OURS = ['tests/', 'src/lib/', 'vendor/', 'scripts/', 'docs/'];
 const REFERENCE = /`([\w./-]+\/[\w./-]+\.(?:js|cjs|py|svelte|md|json|html))(?::\d+(?::\d+)?)?`/g;
 
 const shipped = [
-    ...readdirSync(at('src/lib')).map((one) => `src/lib/${one}`),
+    // Every file, `bryntime/` included.
+    ...readdirSync(at('src/lib'), { recursive: true, withFileTypes: true })
+        .filter((one) => one.isFile())
+        .map((one) => join('src/lib', relative(at('src/lib'), one.parentPath), one.name)),
     ...readdirSync(at('tests')).filter((one) => one.endsWith('.js')).map((one) => `tests/${one}`),
     // The audits are working documents of a reading in progress, and they cite
     // what they measured at the time on purpose.
