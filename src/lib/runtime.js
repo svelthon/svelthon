@@ -456,7 +456,23 @@ const pythonComponent = (component) => {
         if (one !== null && (typeof one === 'function' || typeof one === 'object')) PYTHON_COMPONENTS.add(one);
     }
 
-    return PYTHON_COMPONENTS.has(component) || PYTHON_COMPONENTS.has(ADAPTERS.get(component));
+    // The component, or what it stands for, however it reached the tag: the
+    // adapter an import from JavaScript made of it (`ADAPTERS`), the function
+    // Svelthon published for a value of Python's (`PUBLISHED`), and the method
+    // the engine wraps when Python reads it off a JavaScript object,
+    // `makeBox(Child).Child`, which keeps the function under `$js_func`. Taken
+    // for a JavaScript child, a Python one was handed JavaScript's numbers, a
+    // `Price(float)` a plain float.
+    const seen = new Set();
+
+    while (component !== null && (typeof component === 'function' || typeof component === 'object') && !seen.has(component)) {
+        if (PYTHON_COMPONENTS.has(component)) return true;
+
+        seen.add(component);
+        component = ADAPTERS.get(component) ?? PUBLISHED.get(component) ?? quietly(component, '$js_func');
+    }
+
+    return false;
 };
 
 // Each snippet from elsewhere, to the function that renders it with its
