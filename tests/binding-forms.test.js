@@ -128,7 +128,7 @@ describe('and the ones that bind a value become a signal', () => {
     test('and hands the runtime the list its names unsubscribe with', () => {
         const emitted = script('from browser import *\n');
 
-        expect(emitted).toContain("Object.defineProperty(__proto, '$svelthonStarred', { value: { owner: __subs } });");
+        expect(emitted).toContain("Object.defineProperty(__proto, '$bryntimeStarred', { value: { owner: __subs } });");
         expect(emitted).toContain('const __subs = [];');
         expect(emitted).toContain('__unsubscribe(__subs)');
     });

@@ -3394,7 +3394,7 @@ function authorBindings(c) {
         // subscriptions for as long as the page, and notes each under `names`,
         // which it publishes when it has no `__all__` (`starredMembers`).
         ...(c.starred
-            ? [`__global.Object.defineProperty(__proto, '$svelthonStarred', { value: { owner: ${c.store ? 'undefined, names: new __global.Set()' : SUBS} } });`]
+            ? [`__global.Object.defineProperty(__proto, '$bryntimeStarred', { value: { owner: ${c.store ? 'undefined, names: new __global.Set()' : SUBS} } });`]
             : []),
         // Python may write to a prop; the write lands in the local fallback and
         // is shadowed for as long as the parent supplies a value, which is
@@ -3637,7 +3637,7 @@ const unboundRefusals = (c) =>
 const starredMembers = (c) =>
     c.store && c.starred && !c.listsAll
         ? [
-              `for (const __name of ${NS}.$svelthonStarred.names) {` +
+              `for (const __name of ${NS}.$bryntimeStarred.names) {` +
                   ` if (__global.Object.hasOwn(${STORE_FACADE}, __name)) continue;` +
                   ` __global.Object.defineProperty(${STORE_FACADE}, __name, { enumerable: true,` +
                   ` get: () => ${RUNTIME.storeMember}(${NS}[__name], __name + ${JSON.stringify(`() — ${c.source}`)}),` +
