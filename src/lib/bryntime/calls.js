@@ -7,7 +7,7 @@ import * as mutations from './mutations.js';
 import { pyError, thrown } from './errors.js';
 import { takesNoPositional, viewOf } from './views.js';
 
-const { LIST_VIEW, NONE, PLAIN_VIEW, VIEWED, VIEW_OF, _b_, authoredInstance, boundMethod, bytesIn, bytesOut, callDescriptor, callable, declares, define, entering, isSet, javascriptOwn, lent, ownAttributes, plainData, propertyKey, propertyName, pyAwaitable, pyBind, pyBytes, pyClass, pyCoroutine, pyEntries, pyItems, pyScalar, pyType, quietPyType, refused, slotDeclared, twoKeys, unpackedPair, wrapperMethod } = core;
+const { LIST_VIEW, NONE, PLAIN_VIEW, VIEWED, VIEW_OF, _b_, authoredInstance, boundMethod, bytesIn, bytesOut, callDescriptor, callable, declares, define, entering, isSet, javascriptOwn, lent, ownAttributes, plainData, propertyKey, propertyName, pyAwaitable, pyBind, pyBytes, pyClass, pyCoroutine, pyEntries, pyItems, pyScalar, pyType, quietPyType, quietly, refused, slotDeclared, twoKeys, unpackedPair, wrapperMethod } = core;
 const { MISSING, PUBLISHED, follow } = mutations;
 
 // A promise that can tell it is being waited for.
@@ -1013,6 +1013,18 @@ export function functionIn(value) {
     return PUBLISHED.get(value) ?? (declared(value) === null ? adapter(value) : value);
 }
 
+// The keywords of a call, which the engine hands over as a trailing object
+// carrying them under its own symbol, `$B.KW`, or null for a call that has
+// none: no argument an author passes, a Python dict or a JavaScript object, can
+// carry that key.
+export const keywordsOf = (args) => args[args.length - 1]?.[globalThis.__BRYTHON__.KW] ?? null;
+
+// The engine's own reading of them, which is what a Python function gets: the
+// explicit ones, then each `**` mapping through its `keys()` and
+// `__getitem__`, a key given twice refused, as an object of the keywords by
+// name, for the function called `name`.
+export const parseKeywords = (keywords, name) => globalThis.__BRYTHON__.parse_kwargs(keywords, name);
+
 // **Brython's own refusal, which this proxy was going around.**
 //
 // A keyword call to a JavaScript function is undecidable (`foo(y=1, x=2)` on
@@ -1032,9 +1044,9 @@ export function functionIn(value) {
 // two, and a parameter with a default would receive an internal object.
 const withoutKeywords = (target, args) => {
     const $B = globalThis.__BRYTHON__;
-    const keywords = args[args.length - 1]?.[$B.KW];
+    const keywords = keywordsOf(args);
 
-    if (keywords === undefined) return args;
+    if (keywords === null) return args;
 
     if ($B.keyword_is_empty(keywords)) return args.slice(0, -1);
 
@@ -1057,6 +1069,24 @@ const ADAPTED = new WeakMap();
 // The adapters themselves, which convert what they are called with, each with
 // the function it adapts: what goes back out to JavaScript.
 export const ADAPTERS = new WeakMap();
+
+// Whether a value is one of `set`, or stands for one, however it reached Python
+// and came back: the adapter an import from JavaScript made of it (`ADAPTERS`),
+// the function published for a value of Python's (`PUBLISHED`), and the method
+// the engine wraps when Python reads it off a JavaScript object, which keeps
+// the function under `$js_func`.
+export const standsFor = (value, set) => {
+    const seen = new Set();
+
+    while (value !== null && (typeof value === 'function' || typeof value === 'object') && !seen.has(value)) {
+        if (set.has(value)) return true;
+
+        seen.add(value);
+        value = ADAPTERS.get(value) ?? PUBLISHED.get(value) ?? quietly(value, '$js_func');
+    }
+
+    return false;
+};
 
 // The call itself, Python's arguments out and JavaScript's answer back. The
 // memo is made here, so it lasts exactly one call: a longer-lived one would hand

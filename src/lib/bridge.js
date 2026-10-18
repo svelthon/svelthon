@@ -10,10 +10,8 @@ import { attributeWrapper } from './attributes.js';
 // module's cell at each use, which the hot paths of a crossing paid.
 const {
     NONE,
-    _b_,
     pyClass,
     pyType,
-    quietly,
     ownType,
     quietPyType,
     pyScalar,
@@ -32,6 +30,20 @@ const {
     bytesOut,
     bytesIn,
     isSet,
+    isDict,
+    isTuple,
+    isExactScalar,
+    authoredClass,
+    pyTruth,
+    pyStr,
+    pyList,
+    pyGetattr,
+    pySetattr,
+    pySetitem,
+    pyContains,
+    pyEquals,
+    pyRaise,
+    jsMember,
     VIEW_OF,
     VIEWED,
     LIST_VIEW,
@@ -76,7 +88,6 @@ const {
     MARKS,
     MISSING,
     BLOCK_STATE,
-    PUBLISHED,
     STORED,
     NAMESPACE_DICTS,
     watchable,
@@ -107,6 +118,7 @@ const {
     arityNow,
     outbound,
     ADAPTERS,
+    standsFor,
     jsCall,
     pyExport,
     STALE,
@@ -165,6 +177,7 @@ export {
     pyEntries,
     pyBytes,
     isSet,
+    isDict,
     pyBind,
     pyData,
     opaque,
@@ -181,7 +194,7 @@ export {
     plainData
 };
 
-export { refusal } from './bryntime/bryntime.js';
+export { refusal, pyTypeName, keywordsOf, parseKeywords, pyJsonParse } from './bryntime/bryntime.js';
 
 // The name this project's author knows, which signs every refusal the crossing
 // makes, as every other refusal here is signed.
@@ -308,23 +321,13 @@ const pythonComponent = (component) => {
         if (one !== null && (typeof one === 'function' || typeof one === 'object')) PYTHON_COMPONENTS.add(one);
     }
 
-    // The component, or what it stands for, however it reached the tag: the
-    // adapter an import from JavaScript made of it (`ADAPTERS`), the function
-    // Svelthon published for a value of Python's (`PUBLISHED`), and the method
-    // the engine wraps when Python reads it off a JavaScript object,
-    // `makeBox(Child).Child`, which keeps the function under `$js_func`. Taken
-    // for a JavaScript child, a Python one was handed JavaScript's numbers, a
-    // `Price(float)` a plain float.
-    const seen = new Set();
-
-    while (component !== null && (typeof component === 'function' || typeof component === 'object') && !seen.has(component)) {
-        if (PYTHON_COMPONENTS.has(component)) return true;
-
-        seen.add(component);
-        component = ADAPTERS.get(component) ?? PUBLISHED.get(component) ?? quietly(component, '$js_func');
-    }
-
-    return false;
+    // The component, or what it stands for, however it reached the tag
+    // (`standsFor`): the adapter an import from JavaScript made of it, the
+    // function Svelthon published for a value of Python's, and the method the
+    // engine wraps when Python reads it off a JavaScript object,
+    // `makeBox(Child).Child`. Taken for a JavaScript child, a Python one was
+    // handed JavaScript's numbers, a `Price(float)` a plain float.
+    return standsFor(component, PYTHON_COMPONENTS);
 };
 
 // Each snippet from elsewhere, to the function that renders it with its
@@ -426,7 +429,7 @@ export const __pybridge = {
     declare(namespace, name, value, classes) {
         const meta = pyClass(value) ? quietPyType(value) : undefined;
 
-        if (meta !== undefined && (meta.tp_flags & globalThis.__BRYTHON__.TPFLAGS.HEAPTYPE) !== 0) {
+        if (meta !== undefined && authoredClass(meta)) {
             classes[name] = value;
             return;
         }
@@ -479,7 +482,7 @@ export const __pybridge = {
         if (value === null || value === undefined || value === NONE) return undefined;
         if (typeof value !== 'object') return value;
 
-        if (globalThis.__BRYTHON__.is_dict(value)) {
+        if (isDict(value)) {
             // `define`, because the key is the author's: `"__proto__"` is a
             // class name here, not the object's prototype.
             const out = {};
@@ -517,7 +520,7 @@ export const __pybridge = {
         // languages already agree.
         if (typeof value !== 'object' && typeof value !== 'function') return Boolean(value);
         try {
-            return _b_.bool.$factory(value) === true;
+            return pyTruth(value);
         } catch (error) {
             if (raised(error)) throw error;
             return Boolean(value);
@@ -544,7 +547,7 @@ export const __pybridge = {
     str(value) {
         if (value === undefined || value === null || value === NONE) return '';
         try {
-            return _b_.str.$factory(value);
+            return pyStr(value);
         } catch (error) {
             if (raised(error)) throw error;
             return String(value);
@@ -556,14 +559,14 @@ export const __pybridge = {
     // as a `JavascriptArray`, which prints `[A, B]` where Python prints
     // `['A', 'B']`. Anything a helper hands to Python goes through this.
     list(items) {
-        return _b_.list.$factory(items);
+        return pyList(items);
     },
 
     // What a `<select multiple>` writes back: Svelte's array of the chosen
     // options' values, which is a list in Python, with a list's methods, each
     // value crossing as a binding's does.
     selected(value) {
-        return Array.isArray(value) ? _b_.list.$factory(value.map(pyBind)) : pyBind(value);
+        return Array.isArray(value) ? pyList(value.map(pyBind)) : pyBind(value);
     },
 
     // A `<select>` bound by `bind:value` that a spread may make multiple:
@@ -619,7 +622,7 @@ export const __pybridge = {
                 // generator is spent by this and the walk below reads the list,
                 // never the iterator again. The pairs `enumerate()`, `zip()` and
                 // `.items()` make are noted as theirs (`sameRow`).
-                rows = _b_.list.$factory(value);
+                rows = pyList(value);
 
                 if (makesPairs(value)) for (const row of rows) MADE_ANEW.add(row);
             } catch (error) {
@@ -651,7 +654,7 @@ export const __pybridge = {
         // Rows that are tuples the iterable did not make itself, the pairs of
         // `sorted(d.items())`, have the pairs noted as they are made at the
         // block's next computations (`computed`); asked of the first row.
-        if (computingFor !== null) computingFor.noting = !makesPairs(value) && quietPyType(rows[0]) === _b_.tuple;
+        if (computingFor !== null) computingFor.noting = !makesPairs(value) && isTuple(rows[0]);
 
         // Hand the watch down to the rows: {#each} walks the array in
         // JavaScript, never through $getitem, so this is the only path by which
@@ -1179,7 +1182,7 @@ function computed(walk, compute) {
 const samePair = (one, other) =>
     one.length === other.length && one.every((member, at) => member === other[at] || (nested(member) && nested(other[at]) && samePair(member, other[at])));
 
-const nested = (row) => quietPyType(row) === _b_.tuple && !MARKS.has(row) && row.some((one) => MARKS.has(one) || nested(one));
+const nested = (row) => isTuple(row) && !MARKS.has(row) && row.some((one) => MARKS.has(one) || nested(one));
 
 // The last walk a change made under a row climbed through (`seen`), or under
 // what a tuple holds: the pairs `enumerate()` makes are watched by no one, and
@@ -1187,7 +1190,7 @@ const nested = (row) => quietPyType(row) === _b_.tuple && !MARKS.has(row) && row
 const seenUnder = (row) => {
     const seen = MARKS.get(row)?.seen ?? 0;
 
-    return quietPyType(row) === _b_.tuple ? row.reduce((last, one) => Math.max(last, seenUnder(one)), seen) : seen;
+    return isTuple(row) ? row.reduce((last, one) => Math.max(last, seenUnder(one)), seen) : seen;
 };
 
 // The marker of a watched container, and the one export in this file that exists
@@ -1347,7 +1350,7 @@ const readState = (value) => {
         const attributes = ownAttributes(value);
         const fields = [...slotValues(value).values()];
 
-        if (attributes !== null && globalThis.__BRYTHON__.is_dict(attributes)) {
+        if (attributes !== null && isDict(attributes)) {
             for (const [, one] of heldEntries(attributes)) fields.push(one);
         }
 
@@ -1682,10 +1685,8 @@ export function pyTeardown(value, where) {
 // A write from Python to a name `__js__` or `importjs` brings: refused, as
 // JavaScript refuses an assignment to an import, with the name and the file.
 export function readOnlyImport(name, where) {
-    const $B = globalThis.__BRYTHON__;
-
-    $B.RAISE(
-        _b_.TypeError,
+    pyRaise(
+        'TypeError',
         `'${name}' is a JavaScript import of ${where}, and an import is read-only; ` +
             `bind another name to hold a value of your own`
     );
@@ -1789,8 +1790,7 @@ const choice = (value) => {
 
     if (alone === value) return alone;
 
-    const type = ownType(value);
-    const plain = type === _b_.float || type === _b_.int || type === _b_.str || type === _b_.bool || value instanceof String;
+    const plain = isExactScalar(value) || value instanceof String;
 
     if (plain && alone === alone) return alone;
 
@@ -1953,12 +1953,11 @@ const forJavaScript = (args) => {
 // number or its string; to a Python action only a float, an int or a str is,
 // and an instance of a subclass is itself, an object with fields of its own,
 // which a new one may change. A container always counts, as an object does.
-const PLAIN_SCALARS = [_b_.float, _b_.int, _b_.bool, _b_.str];
 const changed = (before, after, python) => {
     const handed = (value) => {
         if (value === NONE) return undefined;
         const scalar = pyScalar(value);
-        return scalar === undefined || (python && !PLAIN_SCALARS.includes(ownType(value))) ? value : scalar;
+        return scalar === undefined || (python && !isExactScalar(value)) ? value : scalar;
     };
     const a = handed(before);
     const b = handed(after);
@@ -2030,7 +2029,7 @@ export function directiveTransition(node, [where, head, ...value], options) {
         given !== undefined && given !== null && given !== NONE
             ? given
             : declared(fn) !== null
-              ? globalThis.__BRYTHON__.empty_dict()
+              ? pyDict([])
               : {};
 
     return directiveCall(where, fn, [node, params, options]).result;
@@ -2067,7 +2066,7 @@ function directiveResult(value, where) {
         !Array.isArray(value) &&
         pyClass(ownType(value)) &&
         pyScalar(value) === undefined &&
-        !globalThis.__BRYTHON__.is_dict(value);
+        !isDict(value);
 
     if (!called && !instance) return pyNumbers(value);
 
@@ -2082,7 +2081,7 @@ function directiveResult(value, where) {
                     if (key in target) return Reflect.get(target, key);
                     if (typeof key === 'symbol') return undefined;
 
-                    const found = globalThis.__BRYTHON__.$getattr(value, key, MISSING);
+                    const found = pyGetattr(value, key, MISSING);
 
                     if (found === MISSING || found === NONE) return undefined;
 
@@ -2157,30 +2156,30 @@ function directiveCallable(member, path) {
 // `otherwise`, when given, is a callable whose result stands for a name that is
 // neither: the default of a key in a pattern, `{#each rows as {id=0}}`.
 export function readAttr(target, name, otherwise) {
-    const $B = globalThis.__BRYTHON__;
-
     // A JavaScript record, an object no Python type marks, is read as
     // JavaScript, once, a getter too, and its member handed over the way the
-    // engine hands over any JavaScript member, in two cases. A key with a
-    // default, `{value=7}`, which Svelte takes for a member that is missing or
-    // `undefined`: crossed, `undefined` is None, as a `null` given on purpose
-    // is, so the default is decided before. And a record whose own data has a
-    // field called `ob_type`: the engine reads that field to know what an
-    // object is, takes `"business"` for a class, and fails inside its
-    // attribute lookup.
+    // engine hands over any JavaScript member, bound to the record
+    // (`jsMember`), in two cases. A key with a default, `{value=7}`, which
+    // Svelte takes for a member that is missing or `undefined`: crossed,
+    // `undefined` is None, as a `null` given on purpose is, so the default is
+    // decided before. And a record whose own data has a field called `ob_type`:
+    // the engine reads that field to know what an object is, takes `"business"`
+    // for a class, and fails inside its attribute lookup.
     if (
         target !== null &&
         typeof target === 'object' &&
         pyType(target) === undefined &&
         (otherwise !== undefined || Object.hasOwn(target, 'ob_type'))
     ) {
-        const present = name in target;
-        const member = present ? target[name] : undefined;
+        if (otherwise !== undefined) {
+            const member = jsMember(target, name, MISSING);
 
-        if (member === undefined && otherwise !== undefined) return $B.$call(otherwise);
-        if (present) return $B.jsobj2pyobj(member, target);
+            return member === MISSING ? invoke(otherwise) : member;
+        }
 
-        $B.RAISE(_b_.AttributeError, `'${name}'`);
+        if (name in target) return jsMember(target, name);
+
+        pyRaise('AttributeError', `'${name}'`);
     }
 
     // A function a module's namespace exports, `importjs * as callbacks`, is the
@@ -2193,14 +2192,14 @@ export function readAttr(target, name, otherwise) {
 
     // With a default, so a miss costs no exception: building one on every field
     // read of every dict would be the whole cost of this feature.
-    const found = $B.$getattr(target, name, MISSING);
+    const found = pyGetattr(target, name, MISSING);
     if (found !== MISSING) return found;
 
     const item = lookup(target, name);
     if (item !== MISSING) return item;
 
     // No such key either: the default, or the real lookup, which raises.
-    return otherwise === undefined ? $B.$getattr(target, name) : $B.$call(otherwise);
+    return otherwise === undefined ? pyGetattr(target, name) : invoke(otherwise);
 }
 
 // Whether the dot should write a key rather than an attribute: the object has
@@ -2223,22 +2222,20 @@ const keyed = (target, name) => lookup(target, name) !== MISSING;
 // They return the value, as an assignment expression must, so that a group can
 // hold several and `{count}` still reads afterwards.
 export function writeAttr(target, name, value) {
-    const $B = globalThis.__BRYTHON__;
-
     if (!attributed(target, name) && keyed(target, name)) {
         // Outside the `try`, for the reason written above `keyed`.
-        $B.$setitem(target, name, value);
+        pySetitem(target, name, value);
 
         return value;
     }
 
-    $B.$setattr1(target, name, value);
+    pySetattr(target, name, value);
 
     return value;
 }
 
 export function writeItem(target, key, value) {
-    globalThis.__BRYTHON__.$setitem(target, key, value);
+    pySetitem(target, key, value);
 
     return value;
 }
@@ -2330,7 +2327,7 @@ const sameTarget = (a, b) =>
 // all, a foreign JavaScript one, is only itself.
 const sameChoice = (one, mine) => {
     try {
-        return __pybridge.truthy(globalThis.__BRYTHON__.is_or_equals(one, mine));
+        return __pybridge.truthy(pyEquals(one, mine));
     } catch (error) {
         if (raised(error)) throw error;
 
@@ -2346,7 +2343,7 @@ const groupHolds = (model, value) => {
     if (model === undefined || model === null || model === NONE) return false;
 
     try {
-        return __pybridge.truthy(globalThis.__BRYTHON__.$is_member(value, model));
+        return __pybridge.truthy(pyContains(model, value));
     } catch (error) {
         if (raised(error)) throw error;
 

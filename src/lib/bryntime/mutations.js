@@ -4,7 +4,7 @@
 // the host reaches it through `bryntime.js`.
 import * as core from './core.js';
 
-const { NONE, VIEW_OF, _b_, callable, declares, host, isSet, javascriptOwn, ownAttributes, ownType, pyBytes, pyClass, pyEntries, quietPyType, slotValues } = core;
+const { NONE, VIEW_OF, _b_, authoredClass, callable, declares, host, isSet, javascriptOwn, ownAttributes, ownType, pyBytes, pyClass, pyEntries, quietPyType, slotValues } = core;
 
 // How a set's view takes out the member its own lookup found, and tells it
 // (`SetView.delete`): the mutation tracking's, which sets it.
@@ -2043,7 +2043,7 @@ const detach = (marker) => {
 // bases are new classes looked up through, for the objects of a class and of
 // its subclasses alike (`classNameChanged`).
 const enrolClass = (cls) => {
-    if ((cls.tp_flags & globalThis.__BRYTHON__.TPFLAGS.HEAPTYPE) !== 0) READ_CLASSES.add(cls);
+    if (authoredClass(cls)) READ_CLASSES.add(cls);
 };
 
 function enrol(value) {

@@ -22,6 +22,11 @@ import {
     unpackedPair,
     pyName,
     isSet,
+    isDict,
+    pyTypeName,
+    keywordsOf,
+    parseKeywords,
+    pyJsonParse,
     opaque,
     pyBytes,
     thenable,
@@ -356,7 +361,7 @@ const noCall = (one) => {
     // range is not JSON serializable*, naming the class of the value rather
     // than accusing it of being one.
     if (pyClass(ownType(one))) {
-        const named = globalThis.__BRYTHON__.class_name(one);
+        const named = pyTypeName(one);
 
         throw refuse(
             `tojson(): ${__pybridge.str(one)} is a ${named}, and a ${named} has no JSON`
@@ -412,21 +417,14 @@ export function tojson(value, indent) {
     return level === undefined || text === undefined ? text : text.replaceAll('\u0001', level);
 }
 
-// Python's `javascript.JSON.parse`, not the `JSON.parse` of the language this
-// file is written in. Brython registers its builtin modules as the engine loads,
-// and importing `bridge.js` has loaded it, so there is nothing to wait for.
-const parseJson = (() => {
-    const $B = globalThis.__BRYTHON__;
-
-    return $B.$getattr($B.$getattr($B.imported.javascript, 'JSON'), 'parse');
-})();
-
-// And the way back, through Brython's route rather than the JavaScript one:
-// `javascript.JSON` reads the source text of each literal, so an integer past
-// 2^53 keeps its digits, where a reviver runs only after `JSON.parse` has made a
-// double of it, and it answers `None` for `null` at every depth.
+// And the way back, through Brython's route rather than the JavaScript one,
+// Python's `javascript.JSON.parse` (`pyJsonParse`), not the `JSON.parse` of the
+// language this file is written in: `javascript.JSON` reads the source text of
+// each literal, so an integer past 2^53 keeps its digits, where a reviver runs
+// only after `JSON.parse` has made a double of it, and it answers `None` for
+// `null` at every depth.
 export function from_json(text) {
-    return parseJson(text);
+    return pyJsonParse(text);
 }
 
 // The items of a sequence as Python's loop yields them, read once (`seq`) into
@@ -644,12 +642,12 @@ export function striptags(value) {
 // internal store. Jinja reads a float as a plain value, `1.5`, and so do we.
 //
 // So the shapes are named: a Python dict, or a plain JavaScript object, which is
-// what `js.` interop and a `load()` hand over. `$B.is_dict` answers the first
+// what `js.` interop and a `load()` hand over. `isDict` answers the first
 // without touching the object's symbols, which matters because SvelteKit wraps
 // `event.params` in a proxy that records every key read.
 function mapping(value) {
     if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
-    if (globalThis.__BRYTHON__.is_dict(value)) return true;
+    if (isDict(value)) return true;
 
     // The same question `plainData` asks, asked of the same predicate, so `to_js`,
     // `tojson` and `urlencode` take the same shapes, a null prototype included.
@@ -765,11 +763,6 @@ const listed = (names) => {
     return `${quoted.slice(0, -1).join(', ')}, and ${quoted[quoted.length - 1]}`;
 };
 
-// The keywords of a call, which Brython hands over as a trailing object
-// carrying them under its own symbol, `$B.KW`: no argument an author passes, a
-// Python dict or a JavaScript object, can carry that key.
-const keywordsOf = (args) => args[args.length - 1]?.[globalThis.__BRYTHON__.KW] ?? null;
-
 // A name the helper does not take is an error, not something to ignore: the
 // spelling is the only thing the author can have got wrong, and Python says so
 // too.
@@ -812,7 +805,7 @@ const byName = (fn, signature) => {
         // `keys()` and `__getitem__`, a key given twice refused. Each mapping
         // was read here as an object instead, so a mapping that is not a dict
         // handed over the engine's fields, `no argument named ob_type`.
-        const keywords = kw === null ? {} : globalThis.__BRYTHON__.parse_kwargs(kw, fn.name);
+        const keywords = kw === null ? {} : parseKeywords(kw, fn.name);
 
         for (const [key, value] of Object.entries(keywords)) {
             // A subclass of str names the argument by the value it holds.

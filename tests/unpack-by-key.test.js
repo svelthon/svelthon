@@ -29,6 +29,8 @@ import RestMappingKeys from './fixtures/RestMappingKeys.svelte';
 import RestSymbols from './fixtures/RestSymbols.svelte';
 import RestSymbolsNative from './fixtures/RestSymbolsNative.svelte';
 import { rows as symbolRows, token as symbolToken } from './fixtures/rest_symbols.js';
+import RestMembers from './fixtures/RestMembers.svelte';
+import RestMembersNative from './fixtures/RestMembersNative.svelte';
 
 // Which rule a row takes was read off the row: a field `keys = 3` was called,
 // a property `keys` was run, and a JavaScript object's `ob_type` getter ran
@@ -153,6 +155,26 @@ test('the rest of a JavaScript row keeps its symbols, as JavaScript does', () =>
     expect({ kept }).toEqual(read(RestSymbolsNative));
     expect(taken).toBe(`${selected}|${Reflect.ownKeys(rest).length}`);
     expect([kept, taken]).toEqual(['10|1|20', '20|1']);
+});
+
+// A method of a JavaScript record crosses bound to the record, as the engine
+// hands over any member Python reads off one, whether `**rest` takes it or the
+// dot reads it off a record JavaScript keeps an `ob_type` field on: run with
+// `this` the record, as JavaScript runs `rest.describe()`. Svelte's own
+// unpacking is the witness.
+test('a method of a JavaScript record runs with the record as `this`', () => {
+    const read = (Component) => {
+        const target = document.body.appendChild(document.createElement('div'));
+        mount(Component, { target });
+        flushSync();
+        const found = Object.fromEntries([...target.querySelectorAll('p')].map((one) => [one.dataset.k, one.textContent]));
+        target.remove();
+        return found;
+    };
+    const python = read(RestMembers);
+
+    expect(python).toEqual(read(RestMembersNative));
+    expect(python).toEqual({ rest: '1|a', dot: 'b' });
 });
 
 // The rest of a JavaScript row compared the keys taken as Python compares them,

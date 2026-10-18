@@ -502,6 +502,72 @@ export const isSet = (value) => {
     return Array.isArray(cls.tp_mro) && (cls.tp_mro.includes(_b_.set) || cls.tp_mro.includes(_b_.frozenset));
 };
 
+// A dict, or an instance of a subclass of one, asked of the class the engine
+// keeps under its own symbol, so nothing of the object itself is read: not its
+// keys, and not the symbols a proxy of SvelteKit's records.
+export const isDict = (value) => Boolean(globalThis.__BRYTHON__.is_dict(value));
+
+// A tuple of the exact class, which the pairs `enumerate()` and `.items()` make;
+// a named tuple is a class of its author's.
+export const isTuple = (value) => quietPyType(value) === _b_.tuple;
+
+// A float, an int, a bool or a str of the exact class, which is its value and
+// nothing else: an instance of a subclass is an object with fields of its own.
+export const isExactScalar = (value) => {
+    const type = ownType(value);
+
+    return type === _b_.float || type === _b_.int || type === _b_.bool || type === _b_.str;
+};
+
+// A class its author wrote, by a `class` statement or by `type()`, rather than
+// one of the engine's own.
+export const authoredClass = (cls) => (cls.tp_flags & globalThis.__BRYTHON__.TPFLAGS.HEAPTYPE) !== 0;
+
+// Python's own operations, each the engine's, as a host asks them: its truth,
+// its `str()`, a list of an iterable, a class's name, `getattr` with an
+// optional default, the two assignments, `in`, `==`, and a builtin exception
+// raised by its name.
+export const pyTruth = (value) => _b_.bool.$factory(value) === true;
+
+export const pyStr = (value) => _b_.str.$factory(value);
+
+export const pyList = (iterable) => _b_.list.$factory(iterable);
+
+export const pyTypeName = (value) => globalThis.__BRYTHON__.class_name(value);
+
+export const pyGetattr = (value, name, otherwise) => globalThis.__BRYTHON__.$getattr(value, name, otherwise);
+
+export const pySetattr = (target, name, value) => globalThis.__BRYTHON__.$setattr1(target, name, value);
+
+export const pySetitem = (target, key, value) => globalThis.__BRYTHON__.$setitem(target, key, value);
+
+export const pyContains = (container, item) => globalThis.__BRYTHON__.$is_member(item, container);
+
+export const pyEquals = (one, other) => globalThis.__BRYTHON__.is_or_equals(one, other);
+
+export const pyRaise = (name, message) => globalThis.__BRYTHON__.RAISE(_b_[name], message);
+
+// Python's `javascript.JSON.parse`, the engine's own, which reads the source
+// text of each literal. Brython registers its builtin modules as the engine
+// loads, which `bryntime.js` has done before this file runs.
+export const pyJsonParse = (() => {
+    const $B = globalThis.__BRYTHON__;
+
+    return $B.$getattr($B.$getattr($B.imported.javascript, 'JSON'), 'parse');
+})();
+
+// The member `name` of a JavaScript record, read once, a getter too, and handed
+// to Python as the engine hands over any member it reads: a function bound to
+// the record, so a method reading `this` finds it, as `record.name()` does in
+// JavaScript. `otherwise`, when given, stands for a member missing or
+// `undefined`, as a JavaScript default does, decided before the crossing makes
+// `undefined` None.
+export const jsMember = (record, name, otherwise) => {
+    const member = record[name];
+
+    return member === undefined && otherwise !== undefined ? otherwise : globalThis.__BRYTHON__.jsobj2pyobj(member, record);
+};
+
 // **A Python list, tuple or dict that JavaScript reads is read through a
 // view**: a proxy whose every read subscribes the reader, as Svelte hands a
 // child a `$state` object. Handed the container itself, a JavaScript reader

@@ -5,7 +5,7 @@
 import * as core from './core.js';
 import * as mutations from './mutations.js';
 
-const { NONE, _b_, boundMethod, callable, declares, ownType, pyEntries, pyScalar, quietPyType, wrapperMethod } = core;
+const { NONE, _b_, boundMethod, callable, declares, jsMember, ownType, propertyKey, pyEntries, pyScalar, quietPyType, wrapperMethod } = core;
 const { MISSING } = mutations;
 
 // The items of an array read by index into a plain array, each through `fn`, as
@@ -249,17 +249,12 @@ export function restOf(row, taken) {
     const out = _b_.dict.$factory();
 
     if (javaScriptRow(row)) {
-        const keys = new Set(
-            Array.from(taken, (key) => {
-                const spelt = $B.pyobj2jsobj(key);
-                return typeof spelt === 'symbol' ? spelt : String(spelt);
-            })
-        );
+        const keys = new Set(Array.from(taken, (key) => propertyKey(key)));
 
         for (const key of Reflect.ownKeys(row)) {
             if (keys.has(key) || !Object.prototype.propertyIsEnumerable.call(row, key)) continue;
 
-            $B.$setitem(out, key, $B.jsobj2pyobj(row[key], row));
+            $B.$setitem(out, key, jsMember(row, key));
         }
 
         return out;
