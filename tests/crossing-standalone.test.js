@@ -43,6 +43,32 @@ test('Svelthon reaches bryntime/ through bryntime.js alone', () => {
     expect(doors.filter((one) => !one.endsWith(': bryntime.js'))).toEqual([]);
 });
 
+// And through that door alone: at run time only bryntime/ touches the engine,
+// by its name or by the shape of its objects, and the host and the helpers ask
+// it through Bryntime's functions. The compiler, which builds with the engine's
+// other half and its AST, is exempted file by file, so a new file of the host
+// is held to the rule from its first line. Comments may name the engine.
+const COMPILER = ['compile.cjs', 'markup.js'];
+const ENGINE_TOKENS = /\$B\b|__BRYTHON__|\b_b_\b|\btp_\w+|\.\$factory\b|\$store\b|\$js_func\b|\$lineno\b|\$proxy\b/;
+
+test('at run time, nothing outside bryntime/ touches the engine', () => {
+    const files = readdirSync('src/lib', { recursive: true })
+        .filter((file) => /\.[cm]?js$/.test(file) && !file.startsWith('bryntime/'));
+    const touching = files
+        .filter((file) => !COMPILER.includes(file))
+        .flatMap((file) =>
+            readFileSync(`src/lib/${file}`, 'utf8')
+                .replace(/\/\*[\s\S]*?\*\//g, (comment) => comment.replace(/[^\n]/g, ''))
+                .split('\n')
+                .map((line, index) => [`${file}:${index + 1}`, line.replace(/(^|\s)\/\/.*$/, '')])
+                .filter(([, code]) => ENGINE_TOKENS.test(code))
+                .map(([where, code]) => `${where}: ${code.trim()}`)
+        );
+
+    expect(files).toEqual(expect.arrayContaining([...COMPILER, 'bridge.js', 'helpers.js']));
+    expect(touching).toEqual([]);
+});
+
 // And by name: what it writes on the engine, signs its refusals with and
 // recognises them by is its own. Its comments may take Svelte for an example;
 // a line of code that names Svelthon or Svelte is a contract a page without
