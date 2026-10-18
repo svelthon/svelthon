@@ -12966,7 +12966,7 @@ return $B.NULL}
 if(js_attr !==null &&
 js_attr.toString &&
 typeof js_attr=='function' &&
-js_attr.toString().startsWith('class ')){
+Function.prototype.toString.call(js_attr).startsWith('class ')){
 return jsclass2pyclass(js_attr)}else if(typeof js_attr==='function'){
 if(! js_attr.$infos && ! js_attr.$function_infos){js_attr.$js_func=js_attr}
 return jsobj2pyobj(js_attr,_self.$js_func ||_self)}else{
@@ -13015,7 +13015,7 @@ if(res !==undefined){return jsobj2pyobj(res)}}}
 if(js_attr !==null && js_attr !==undefined &&
 js_attr.toString &&
 typeof js_attr=='function' &&
-js_attr.toString().startsWith('class ')){
+Function.prototype.toString.call(js_attr).startsWith('class ')){
 return jsclass2pyclass(js_attr)}else if(typeof js_attr==='function'){
 if(! js_attr.$infos && ! js_attr.$function_infos){js_attr.$js_func=js_attr}
 return jsobj2pyobj(js_attr,self.$js_func ||self)}else{

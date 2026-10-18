@@ -875,6 +875,11 @@ export const __pybridge = {
     // each argument, read once the snippet has announced itself, which is the
     // first thing it does; a server hands it the values themselves, crossed
     // before the call, so the ones it was handed are kept for it meanwhile.
+    //
+    // The snippet is known by what it stands for (`standsFor`), as a component
+    // is: read off a JavaScript object, `holder.fn`, it is the engine's wrapper
+    // of the Python snippet, bound to the object, and was taken for a
+    // JavaScript one, its `1.0` handed over as `1`.
     snippet(value, owns) {
         const fn = __pybridge.bound(value);
 
@@ -882,7 +887,7 @@ export const __pybridge = {
 
         let crossing = CROSSING_SNIPPETS.get(fn);
 
-        if (crossing === undefined && PYTHON_SNIPPETS.has(fn)) return fn;
+        if (crossing === undefined && standsFor(fn, PYTHON_SNIPPETS)) return fn;
 
         if (crossing === undefined) {
             const crossed = (one) => pyNumbers(__pybridge.bound(one));
@@ -899,7 +904,7 @@ export const __pybridge = {
                           }
                       }
                     : (anchor, ...args) =>
-                          fn(anchor, ...args.map((one) => () => (PYTHON_SNIPPETS.has(fn) ? one() : crossed(one()))));
+                          fn(anchor, ...args.map((one) => () => (standsFor(fn, PYTHON_SNIPPETS) ? one() : crossed(one()))));
             CROSSING_SNIPPETS.set(fn, crossing);
         }
 
@@ -915,7 +920,8 @@ export const __pybridge = {
 
         const call = SERVED_ARGUMENTS[SERVED_ARGUMENTS.length - 1];
 
-        return call !== undefined && call.fn === fn ? call.values : null;
+        // The call may have been made through what stands for it, its wrapper.
+        return call !== undefined && standsFor(call.fn, new Set([fn])) ? call.values : null;
     },
 
     // A `bind:group` control's `checked`, written by the server, where no action

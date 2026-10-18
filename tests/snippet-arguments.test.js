@@ -121,8 +121,10 @@ test('the Svelte markup is the rule for callees', async () => {
 // A Python parent's snippet is Python's wherever a Python child renders it
 // from: it says so as it runs, and is handed what the child handed it, a whole
 // float and two subclasses, where it was handed an int, a float and a str. A
-// JavaScript parent's, beside it, is handed JavaScript's.
-test.for(['bare', 'alias', 'dict'])('a Python parent snippet a Python child renders %s keeps its values', async (kind) => {
+// JavaScript parent's, beside it, is handed JavaScript's. Kept in a
+// JavaScript object and read back by the dot, it is the engine's wrapper of
+// the snippet, and is known by what it stands for, as a component is.
+test.for(['bare', 'alias', 'dict', 'box', 'getter', 'nested', 'held'])('a Python parent snippet a Python child renders %s keeps its values', async (kind) => {
     expect(await shown(SnippetPythonParent, { kind })).toBe('parent=float:1.0|Price|Label');
     expect(await shown(SnippetPythonChildHost, { kind })).toBe('parent=number:1|number|string');
 });

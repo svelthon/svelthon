@@ -11,7 +11,7 @@ import SnippetPythonChildHost from './fixtures/SnippetPythonChildHost.svelte';
 import SnippetPythonParentShapes from './fixtures/SnippetPythonParentShapes.svelte';
 import SnippetPythonChildShapesHost from './fixtures/SnippetPythonChildShapesHost.svelte';
 
-test.for(['bare', 'alias', 'dict'])('a Python parent snippet rendered %s on a server keeps its values', (kind) => {
+test.for(['bare', 'alias', 'dict', 'box', 'getter', 'nested', 'held'])('a Python parent snippet rendered %s on a server keeps its values', (kind) => {
     expect(render(SnippetPythonParent, { props: { kind } }).body).toContain('float:1.0|Price|Label');
     expect(render(SnippetPythonChildHost, { props: { kind } }).body).toContain('number:1|number|string');
 });

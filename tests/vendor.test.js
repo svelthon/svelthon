@@ -853,6 +853,21 @@ test("a JavaScript object's ob_type is its data unless it holds a class: get-cla
     expect(read({ ob_type: 'business', value: 42 }, 'ob_type')).toBe('business');
 });
 
+// A function read off a JavaScript object had its own `toString` called, to
+// tell a class, and one that raises, as a snippet in Svelte's development mode
+// does, refused the read. `tests/snippet-arguments.test.js` renders a Python
+// snippet kept in a JavaScript object.
+test("a JavaScript function read off an object is not asked its own toString: jsobj-function-tostring", () => {
+    const $B = globalThis.__BRYTHON__;
+    const fn = () => 1;
+
+    fn.toString = () => {
+        throw new Error('toString');
+    };
+
+    expect($B.$call($B.$getattr($B.jsobj2pyobj({ fn }), 'fn'))).toBe(1);
+});
+
 // The items of a JavaScript Set reached Python unconverted, so a float in it
 // refused a format; `hash()` of JavaScript's null raised a JavaScript error,
 // and so did null as a subscript. Each answer is read on its own, so each
