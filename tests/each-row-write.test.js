@@ -25,6 +25,8 @@ import EachFreshTuple from './fixtures/EachFreshTuple.svelte';
 import EachFreshTupleNative from './fixtures/EachFreshTupleNative.svelte';
 import EachMadePairs from './fixtures/EachMadePairs.svelte';
 import EachMadePairsNative from './fixtures/EachMadePairsNative.svelte';
+import EachPairIdentity from './fixtures/EachPairIdentity.svelte';
+import EachPairIdentityNative from './fixtures/EachPairIdentityNative.svelte';
 
 // What a component counted and showed after mounting and after each action.
 const steps = (Component, props, ...actions) => {
@@ -63,11 +65,14 @@ test('selects written as they mount, then one chosen, run what Svelte runs', () 
     expect(mine[1].shown).toMatch(/^0 2 0 /);
 });
 
+// And one key more per pair made anew at each walk, read off each of them,
+// which tells a key read off the pair itself, `id(pair)`, from one read off its
+// members, the cases below.
 test('rows walked through enumerate() run their block again on a change of the list alone', () => {
     const click = (name) => (target) => target.querySelector(`.${name}`).click();
     const mine = steps(EachRowPairs, {}, click('bump'), click('grow'));
 
-    expect(mine).toEqual(plus(steps(EachRowPairsNative, {}, click('bump'), click('grow')), 0, 1, 1));
+    expect(mine).toEqual(plus(steps(EachRowPairsNative, {}, click('bump'), click('grow')), 0, 7, 7));
     expect(mine.map(({ shown }) => shown)).toEqual([
         '0:0 1:0 2:0 3:0 4:0',
         '0:0 1:0 2:1 3:0 4:0',
@@ -84,6 +89,52 @@ test.for([['sorted'], ['enumerated'], ['reversed']])('pairs made by the iterable
 
     expect(mine).toEqual(steps(EachMadePairsNative, { kind }, grow));
     expect(mine[1].rows - mine[0].rows).toBe(1);
+});
+
+// Whether each input is a new one after each of two walks, and its text: typed
+// into before each walk.
+const walks = (Component, props) => {
+    const target = document.body.appendChild(document.createElement('div'));
+    const instance = mount(Component, { target, props });
+    const inputs = () => [...target.querySelectorAll('input')];
+    const walked = [];
+
+    flushSync();
+
+    for (let round = 0; round < 2; round++) {
+        const before = inputs();
+
+        before.forEach((one, at) => (one.value = `draft-${at}`));
+        instance.step();
+        flushSync();
+        walked.push(inputs().map((one, at) => [one !== before[at], one.value]));
+    }
+
+    target.remove();
+    return walked;
+};
+
+// Pairs `enumerate()`, `zip()` and `.items()` made anew, the same rows in
+// them, stood for the old ones even under a key read off the pair itself,
+// `id(pair)`: the block kept its old rows, and an input typed into kept its
+// text. Svelte, handed new pairs keyed by themselves, makes new rows, twice.
+test.for([['enumerate'], ['zip'], ['items']])('pairs made anew under a key read off the pair, %s, are new rows, as in Svelte', ([kind]) => {
+    expect(walks(EachPairIdentity, { kind })).toEqual(walks(EachPairIdentityNative, {}));
+    expect(walks(EachPairIdentity, { kind })[0]).toEqual([
+        [true, ''],
+        [true, '']
+    ]);
+});
+
+// And under a key read off the members for the first row and off the pair for
+// the others: the first row asked alone stood for them all, its key the same,
+// and the others kept their old rows.
+test.for([['enumerate'], ['zip'], ['items']])('pairs made anew under a key read off the pair for some rows, %s, are new rows there, as in Svelte', ([kind]) => {
+    expect(walks(EachPairIdentity, { kind, keying: 'mixed' })).toEqual(walks(EachPairIdentityNative, { keying: 'mixed' }));
+    expect(walks(EachPairIdentity, { kind, keying: 'mixed' })[0]).toEqual([
+        [false, 'draft-0'],
+        [true, '']
+    ]);
 });
 
 // The other half: a key changed in place is a new row to Svelte, made again,

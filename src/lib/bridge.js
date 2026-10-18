@@ -764,6 +764,27 @@ export const __pybridge = {
             return changed;
         };
 
+        // A pair made anew holding the same row stands for it while its key
+        // does too: a key read off the pair itself, `id(pair)`, is a new one,
+        // and the block takes the new pairs, as Svelte's does. Asked of every
+        // pair made anew, since one key may read the pair for one row and its
+        // members for another, `pair[0] if pair[0] == 0 else id(pair)`: against
+        // the key noted for the one it stands for when nothing under it changed
+        // since, and otherwise against the key of that one, read again. One key
+        // read per pair made anew, as Svelte reads every key when its iterable
+        // runs again. Unfollowed.
+        const renewed = (rows) => {
+            for (let at = 0; at < held.length; at++) {
+                if (held[at] === rows[at] || !(at in keys)) continue;
+
+                const was = seenUnder(held[at]) === moved[at] ? keys[at] : untrack(() => keyOf(held[at], at));
+
+                if (untrack(() => keyOf(rows[at], at)) !== was) return true;
+            }
+
+            return false;
+        };
+
         return {
             // What the block walks, undefined until the first `refresh`.
             get held() {
@@ -788,12 +809,13 @@ export const __pybridge = {
                 }
 
                 const marker = MARKS.get(rows);
-                const unchanged =
+                let unchanged =
                     walked && ((rows === source && marker !== undefined && marker.stamp === stamp) || sameRows(held, rows));
 
                 source = rows;
                 stamp = marker?.stamp;
 
+                if (unchanged && keyOf !== undefined && renewed(rows)) unchanged = false;
                 if (unchanged && !(keyOf !== undefined && rekeyed())) return false;
 
                 held = Array.from(unchanged ? held : rows);
