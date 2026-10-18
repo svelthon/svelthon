@@ -1518,6 +1518,8 @@ const RUNTIME = {
     bind: '__bind',
     track: '__track',
     follow: '__follow',
+    followOwn: '__followOwn',
+    SHAPING: '__SHAPING',
     pyError: '__pyError',
     pyEvent: '__pyEvent',
     pyAttach: '__pyAttach',
@@ -3124,7 +3126,7 @@ function preamble(c) {
         // name no one would type: only generated code touches it, and `py` is a
         // name an author may want.
         `import { ${runtimeAliases([
-            'bind', '__pybridge', 'jsGlobal', 'track', 'follow', 'pyError',
+            'bind', '__pybridge', 'jsGlobal', 'track', 'follow', 'followOwn', 'SHAPING', 'pyError',
             'pyEvent', 'pyAttach', 'plainData', 'pyArg', 'pyData', 'pyComponent', 'pyExpression',
             'jsCall',
             'ticking', 'pyBind', 'NONE', 'helpers',
@@ -3337,7 +3339,9 @@ function templateBridge(c) {
         // there too, and wrapped, so a list changed in place, the same object,
         // still reaches the effect placed before the block, which
         // moves the block's revision only when the rows differ
-        // (`__pybridge.walk`). A derived alone would not do: Svelte runs a
+        // (`__pybridge.walk`), and which a keyed block's walk tells of a
+        // change under any row it holds (`watch`), its key maybe moved. A
+        // derived alone would not do: Svelte runs a
         // block again, unasked, whenever an effect writes something it reaches
         // through deriveds, and a thousand selects written as they mount ran it
         // a thousand times. Written here, in runes, since the runtime knows no
@@ -3348,7 +3352,7 @@ function templateBridge(c) {
         `    const yielded = $derived.by(() => ({ rows: walk.computed(compute) }));`,
         `    let revision = $state.raw(0);`,
         `    let count = 0;`,
-        `    $effect.pre(() => { if (walk.refresh(yielded.rows)) revision = ++count; });`,
+        `    $effect.pre(() => { walk.watch(); if (walk.refresh(yielded.rows)) revision = ++count; });`,
         `    const rows = () => (revision, walk.held === undefined && walk.refresh(yielded.rows), walk.held);`,
         `    rows.noted = walk.noted;`,
         `    return rows;`,
@@ -3416,7 +3420,7 @@ function authorBindings(c) {
         // derived.
         ...c.props.map(
             (n) =>
-                `__bind(__proto, '${n}', () => (${rev(n)}, __follow(__pyBind(${pick(n)}()))),` +
+                `__bind(__proto, '${n}', () => (__SHAPING.on ? (${local(n)}, __followOwn(__pyBind(${pick(n)}()))) : (${rev(n)}, __follow(__pyBind(${pick(n)}())))),` +
                 ` (${NEXT_VALUE}) => { const __written = __track(${NEXT_VALUE}, ${bump(n)}, ${SUBS});` +
                 ` if (__initialising) { ${fallback(n)}.declared = __written; ${fallback(n)}.value = __written; ${local(n)} = __written; return; }` +
                 ` const __plain = __plainScalar(__written);` +
@@ -3458,16 +3462,18 @@ function authorBindings(c) {
                   ` if (${b} !== undefined) return; } ${handed}`
                 : `if (!__initialising || ${b} === undefined) { ${written} ${handed} }`;
             return (
-                `__bind(__proto, '${b}', () => (${rev(b)}, __follow(__pyBind(${held}))),` +
+                `__bind(__proto, '${b}', () => (__SHAPING.on ? __followOwn(__pyBind(${held})) : (${rev(b)}, __follow(__pyBind(${held})))),` +
                 ` (${NEXT_VALUE}) => { ${set} }, () => ${b});`
             );
         }),
         // Reading the revision alongside the value is what registers the
         // dependency: an in-place mutation then invalidates every reader,
-        // without the value ever changing identity.
+        // without the value ever changing identity. Except for the rows of an
+        // `{#each}` (`__SHAPING`), which follow the value's own changes and
+        // what they read under it (`__pybridge.walk`).
         ...c.state.map(
             (n) =>
-                `__bind(__proto, '${n}', () => (${rev(n)}, ${n}), (${NEXT_VALUE}) => { ${n} = __track(${NEXT_VALUE}, ${bump(n)}${c.store ? '' : `, ${SUBS}`}); });`
+                `__bind(__proto, '${n}', () => (__SHAPING.on ? __followOwn(${n}) : (${rev(n)}, ${n})), (${NEXT_VALUE}) => { ${n} = __track(${NEXT_VALUE}, ${bump(n)}${c.store ? '' : `, ${SUBS}`}); });`
         ),
         // A name bound by `class` is declared, no state: no revision, no watch.
         // Its accessor follows, in a reaction, the special methods its
@@ -3483,7 +3489,7 @@ function authorBindings(c) {
         ...c.funcs.map(
             (f) =>
                 `__bind(__proto, '${f.name}', () => ` +
-                `(${rev(f.name)}, ${fn(f.name)}), ` +
+                `(__SHAPING.on ? __followOwn(${fn(f.name)}) : (${rev(f.name)}, ${fn(f.name)})), ` +
                 `(${NEXT_VALUE}) => { ${fn(f.name)} = __track(${NEXT_VALUE}, ${bump(f.name)}${c.store ? '' : `, ${SUBS}`}); }, () => ${fn(f.name)});`
         ),
         ...c.inspects.map(

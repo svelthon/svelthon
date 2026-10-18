@@ -94,7 +94,12 @@ const {
     mark,
     inherit,
     follow,
+    followOwn,
+    shaped,
+    SHAPING,
     track,
+    trackEach,
+    trackOwns,
     unsubscribe,
     removeFound,
     followMetaclass,
@@ -156,6 +161,8 @@ export {
     withNamespace,
     bind,
     follow,
+    followOwn,
+    SHAPING,
     track,
     unsubscribe,
     pyError,
@@ -593,6 +600,9 @@ export const __pybridge = {
     seq(value) {
         if (value === undefined || value === null || value === NONE) return [];
 
+        // The rows of a block are what it walks: their own changes run it.
+        if (SHAPING.on) followOwn(value);
+
         let rows;
 
         if (Array.isArray(value)) {
@@ -723,14 +733,14 @@ export const __pybridge = {
     // which reaches only what reads that row. Svelte's proxies give its own
     // block exactly that.
     //
-    // The iterable is Python, read through names that follow everything under
-    // them, so it is evaluated again on a change inside a row, and `refresh`
-    // compares what it yields with what the block holds: the same list,
-    // unchanged since (its `stamp`), with nothing to compare; otherwise row by
-    // row, by identity, and a tuple, which `enumerate()` and `.items()` make
-    // anew each time, by what it holds. Each component's `__collection`
-    // carries the result to the block with Svelte's own runes, which this
-    // file, made for any host, does not hold.
+    // The iterable is Python, computed as Svelte's proxies are read (`shaped`):
+    // again on a change of what it read, and not on a change inside a row it
+    // did not read into. And `refresh` compares what it yields with what the
+    // block holds: the same list, unchanged since (its `stamp`), with nothing
+    // to compare; otherwise row by row, by identity, and a tuple, which
+    // `enumerate()` and `.items()` make anew each time, by what it holds. Each
+    // component's `__collection` carries the result to the block with Svelte's
+    // own runes, which this file, made for any host, does not hold.
     //
     // A copy, since a list changes in place and the next comparison is with
     // what it held.
@@ -738,15 +748,48 @@ export const __pybridge = {
     // A keyed block runs again, too, when a change in a row moves its key: the
     // block reads its keys with the rows unfollowed (`eachKey`) and notes each
     // (`noted`), and the key of a row something changed under since is read
-    // again here, unfollowed, against the one noted. One read per row changed,
-    // where Svelte, whose key reads the one field it names, needs none: a
-    // container is the finest a change is known at here.
+    // again here, unfollowed, against the one noted, as the effect that
+    // refreshes the rows is told of a change under any of them (`watch`). One
+    // read per row changed, where Svelte, whose key reads the one field it
+    // names, needs none: a container is the finest a change is known at here.
     walk(keyOf) {
         let held;
         let source;
         let stamp;
         let moved;
         let keys = [];
+        let update;
+        let under = new Set();
+        const told = () => update?.();
+        const underRows =
+            keyOf === undefined
+                ? undefined
+                : host.subscriber((one) => {
+                      update = one;
+                      under = trackEach(held ?? [], told, under);
+
+                      return () => {
+                          update = undefined;
+                          under = trackEach([], told, under);
+                      };
+                  });
+
+        // And the computation of the rows told, by one subscriber, of an own
+        // change of anything it read (`shaped`): what it read last, and what
+        // the subscriber is signed onto.
+        let ownUpdate;
+        let read = new Set();
+        let owned = new Set();
+        const ownTold = () => ownUpdate?.();
+        const readChanges = host.subscriber((one) => {
+            ownUpdate = one;
+            owned = trackOwns(read, ownTold, owned);
+
+            return () => {
+                ownUpdate = undefined;
+                owned = trackOwns(new Set(), ownTold, owned);
+            };
+        });
 
         const rekeyed = () => {
             let changed = false;
@@ -791,10 +834,22 @@ export const __pybridge = {
                 return held;
             },
 
+            // Told, the caller, of a change under any row a keyed block holds.
+            watch() {
+                underRows?.();
+            },
+
             // The rows the iterable yields, its pairs noted as they are made
             // when the block needs them noted (`noting`).
             computed(compute) {
                 return computed(this, compute);
+            },
+
+            // What the computation read, followed for its own changes.
+            readOwn(markers) {
+                read = markers;
+                if (ownUpdate !== undefined) owned = trackOwns(markers, ownTold, owned);
+                readChanges();
             },
 
             // Whether `rows` differ from the rows the block holds, which they
@@ -821,6 +876,7 @@ export const __pybridge = {
                 held = Array.from(unchanged ? held : rows);
                 keys = [];
                 if (keyOf !== undefined) moved = held.map(seenUnder);
+                if (update !== undefined) under = trackEach(held, told, under);
 
                 return true;
             },
@@ -1181,7 +1237,10 @@ function computed(walk, compute) {
     computingFor = walk;
 
     try {
-        return walk.noting !== false ? notingPairs(madeAnew, compute) : compute();
+        return shaped(
+            () => (walk.noting !== false ? notingPairs(madeAnew, compute) : compute()),
+            (markers) => walk.readOwn(markers)
+        );
     } finally {
         computingFor = outer;
     }

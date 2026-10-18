@@ -870,7 +870,8 @@ test("a JavaScript function read off an object is not asked its own toString: js
 
 // Lists and tuples compared their items from the last one, so `(k, v) == (k2,
 // v2)` asked `v == v2` before telling `k` from `k2`, which an `{#each}` sorting
-// `d.items()` read as a read inside each row. `python3` on the same module.
+// `d.items()` read as a read inside each row. `python3` on the same module;
+// `tests/each-computed-rows.test.js` sorts the pairs.
 test('lists and tuples compare their items from the first: list-eq-left-to-right', async () => {
     const { answers } = await import('./fixtures/sequence_equality.py');
 

@@ -8,7 +8,7 @@ import { pyError, thrown } from './errors.js';
 import { takesNoPositional, viewOf } from './views.js';
 
 const { LIST_VIEW, NONE, PLAIN_VIEW, VIEWED, VIEW_OF, _b_, authoredInstance, boundMethod, bytesIn, bytesOut, callDescriptor, callable, declares, define, entering, isSet, javascriptOwn, lent, ownAttributes, plainData, propertyKey, propertyName, pyAwaitable, pyBind, pyBytes, pyClass, pyCoroutine, pyEntries, pyItems, pyScalar, pyType, quietPyType, quietly, refused, slotDeclared, twoKeys, unpackedPair, wrapperMethod } = core;
-const { MISSING, PUBLISHED, follow } = mutations;
+const { MISSING, PUBLISHED, follow, entered } = mutations;
 
 // A promise that can tell it is being waited for.
 //
@@ -1273,7 +1273,7 @@ export function pyExport(value, where) {
 // would come back to Python a `JSObject`.
 export const running = (call, where, convert = pyNumbers) => {
     try {
-        const result = call();
+        const result = entered(call);
         const value = schedule(result, where, convert ?? undefined);
 
         // A coroutine's promise converts what it resolves to, above; the

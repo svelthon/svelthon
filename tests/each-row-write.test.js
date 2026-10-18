@@ -65,14 +65,13 @@ test('selects written as they mount, then one chosen, run what Svelte runs', () 
     expect(mine[1].shown).toMatch(/^0 2 0 /);
 });
 
-// And one key more per pair made anew at each walk, read off each of them,
-// which tells a key read off the pair itself, `id(pair)`, from one read off its
-// members, the cases below.
+// A change inside a row walks no pair anew, the iterable having read nothing
+// inside the rows: the one key more is the changed row's.
 test('rows walked through enumerate() run their block again on a change of the list alone', () => {
     const click = (name) => (target) => target.querySelector(`.${name}`).click();
     const mine = steps(EachRowPairs, {}, click('bump'), click('grow'));
 
-    expect(mine).toEqual(plus(steps(EachRowPairsNative, {}, click('bump'), click('grow')), 0, 7, 7));
+    expect(mine).toEqual(plus(steps(EachRowPairsNative, {}, click('bump'), click('grow')), 0, 1, 1));
     expect(mine.map(({ shown }) => shown)).toEqual([
         '0:0 1:0 2:0 3:0 4:0',
         '0:0 1:0 2:1 3:0 4:0',

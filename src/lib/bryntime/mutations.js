@@ -863,10 +863,12 @@ function installMutationTracking($B) {
         // An instance of the author's that no name watches, `Tile()` made in
         // the expression: what it finds on its classes is followed by name, as
         // a read made on the class is. A watched one is followed through its
-        // watch.
+        // watch, which the rows of an `{#each}` follow for its own changes
+        // alone (`SHAPING`): there, it is followed by name too, so `b.limit`
+        // computes them again after `Box.limit = 3`.
         const type = quietPyType(obj);
 
-        if (type !== undefined && authoredClass(type) && !MARKS.has(obj)) {
+        if (type !== undefined && authoredClass(type) && (!MARKS.has(obj) || SHAPING.on)) {
             return namesRead(type.tp_mro, attr);
         }
 
@@ -993,14 +995,27 @@ function installMutationTracking($B) {
 
         if (entry === undefined) {
             const updates = new Set();
+            const follow = host.subscriber((update) => {
+                updates.add(update);
+                return () => updates.delete(update);
+            });
 
-            entry = {
+            // Once per computation of the rows of an `{#each}` (`shapedNames`):
+            // each subscription is an effect of Svelte's, and `b.n` read off
+            // 2 000 rows asked for 2 000 of one name of one class.
+            const named = {
                 updates,
-                subscribe: host.subscriber((update) => {
-                    updates.add(update);
-                    return () => updates.delete(update);
-                })
+                subscribe() {
+                    if (shapedNames !== null) {
+                        if (shapedNames.has(named)) return;
+                        shapedNames.add(named);
+                    }
+
+                    follow();
+                }
             };
+
+            entry = named;
             names.set(attr, entry);
         }
 
@@ -1630,6 +1645,7 @@ const upwards = (start, stamp) => {
     start.seen = stamp;
 
     for (const one of start.bumps) one();
+    tellOwn(start);
 
     if (start.parents === undefined) return;
 
@@ -1680,6 +1696,10 @@ const upwards = (start, stamp) => {
 
         for (const one of parent.bumps) one();
 
+        // What an object keeps its own state in, its attributes' dictionary
+        // or the container a view reads, changing is the object changing.
+        if (child !== undefined && keptIn(holder) === child) tellOwn(parent);
+
         if (parent.parents !== undefined) frames.push(climbing(parent));
     }
 };
@@ -1695,7 +1715,17 @@ const climbing = (marker) => ({
     climbed: null
 });
 
-const dead = (marker) => marker.bumps.length === 0 && (marker.parents === undefined || marker.parents.length === 0);
+const dead = (marker) =>
+    marker.bumps.length === 0 && !(marker.owns?.length > 0) && (marker.parents === undefined || marker.parents.length === 0);
+
+// Tell what follows a value's own changes (`followOwn`).
+const tellOwn = (marker) => {
+    for (const one of marker.owns ?? []) one();
+};
+
+// The container an object keeps its own state in, a change of which is a
+// change of the object: its attributes' dictionary, or what a live view reads.
+const keptIn = (holder) => ownAttributes(holder) ?? viewed(holder);
 
 // An item written, `obj[key] = value`: both halves are inside. Except a slice,
 // `rows[:] = [child]`, whose value is a source: what it yields is inside.
@@ -2016,7 +2046,10 @@ export function mark(value, walk = true) {
 
     marker.stamp = 0;
 
+    // `bumps` are told of a change of the value or of anything under it,
+    // `owns` of a change of the value itself (`followOwn`).
     marker.bumps = [];
+    marker.owns = [];
     // Held while something reads it or a watched container holds it, and let
     // go when neither does (`detach`): a child's link then no longer keeps a
     // container it has left alive. A weak reference instead, made for every
@@ -2299,6 +2332,39 @@ const leave = (marker, bump, owner) => {
     }
 };
 
+// One subscriber signed onto many values at once, told of a change of any of
+// them or of anything under it, and off the ones handed before and not now:
+// the rows a keyed block holds, whose keys may read anything under them
+// (`__pybridge.walk`). A pair nobody watches stands for what it holds. The
+// markers signed onto, handed back for the next call.
+export function trackEach(values, bump, before = new Set()) {
+    const now = new Set();
+    const add = (value) => {
+        const marker = MARKS.get(value);
+
+        if (marker !== undefined) {
+            marker.held = value;
+            now.add(marker);
+        } else if (isTuple(value)) {
+            for (const one of value) add(one);
+        }
+    };
+
+    for (const value of values) add(value);
+    for (const marker of before) if (!now.has(marker)) leave(marker, bump);
+
+    for (const marker of now) {
+        if (before.has(marker)) continue;
+
+        const revived = dead(marker);
+
+        join(marker, bump);
+        if (revived) adopt(targetOf(marker));
+    }
+
+    return now;
+}
+
 // Every marker a component signed onto, and the callback it signed with, kept
 // flat rather than in pairs so that subscribing allocates nothing.
 //
@@ -2485,6 +2551,247 @@ const watcher = (marker) =>
 
         return () => leave(marker, update);
     });
+
+// **What the rows of an `{#each}` are computed from, read as Svelte's proxies
+// read it** (`shaped`): a change inside a row reaches what reads that row,
+// and computes the rows again only when the computation read inside it.
+// Svelte's iterable follows each field it reads, here a container is the
+// finest a change is known at: what the computation reads of a container,
+// one of its attributes, one of its items, its length, its iteration, `in`,
+// a comparison or an operator, follows its own changes (`followOwn`), an item
+// added, removed or replaced, an attribute written; what reads everything
+// under it, `str()`, `repr()`, a format, a match or a conversion for
+// JavaScript, follows it whole (`follow`). A name read follows its own
+// changes too, and its rebinding.
+//
+// What the computation reads, it reads through the engine's doors, which are
+// taken for its duration only (`SHAPE_DOORS`), as `notingPairs` takes the
+// iterators: anything else Python runs pays nothing. And for its own reads
+// only: Python entered again inside it (`entered`), a derived it reads or a
+// handler JavaScript calls, reads as everywhere else, everything under a name,
+// since such a read may be another reaction's.
+export const SHAPING = { on: false, entries: 0 };
+
+// What the computation follows already, once each: every subscription is an
+// effect of Svelte's, made and destroyed at each computation. The markers
+// whose own changes it read, signed onto by one subscriber once it ends; the
+// markers it read whole; the names of classes it read.
+let shapedOwn = null;
+let shapedWhole = null;
+let shapedNames = null;
+
+export function followOwn(value) {
+    if (!watchable(value)) return value;
+
+    const marker = MARKS.get(value) ?? (BLOCK_STATE.has(value) && mutable(value) ? mark(value) : undefined);
+
+    if (marker === undefined || marker.owns === undefined || shapedOwn === null) return value;
+
+    shapedOwn.add(marker);
+    marker.held = value;
+
+    return value;
+}
+
+// One subscriber signed onto the own changes of many markers at once, and off
+// the ones handed before and not now: what one computation of the rows of an
+// `{#each}` read (`shaped`). One subscriber per marker was an effect of
+// Svelte's per row at each computation. The markers signed onto, handed back
+// for the next call.
+export function trackOwns(markers, bump, before = new Set()) {
+    for (const marker of before) {
+        if (markers.has(marker)) continue;
+
+        const at = marker.owns.indexOf(bump);
+
+        if (at !== -1) marker.owns.splice(at, 1);
+        if (marker.bumps.length === 0 && marker.owns.length === 0) LIVE.delete(marker);
+        detach(marker);
+    }
+
+    for (const marker of markers) {
+        if (before.has(marker)) continue;
+
+        const revived = dead(marker);
+
+        marker.owns.push(bump);
+        LIVE.add(marker);
+        if (revived) adopt(targetOf(marker));
+    }
+
+    return new Set(markers);
+}
+
+// The whole of a value read by what reads everything under it, and of the
+// values a container made in the computation holds, `"%s" % (rows,)`: one
+// nobody watches is the computation's own, and reads what it holds.
+const followWhole = (value, seen = new Set()) => {
+    if (!SHAPING.on || value === null || typeof value !== 'object' || seen.has(value)) return;
+
+    seen.add(value);
+
+    if (MARKS.has(value) || BLOCK_STATE.has(value)) {
+        const marker = MARKS.get(value);
+
+        if (marker !== undefined && shapedWhole?.has(marker)) return;
+        if (marker !== undefined) shapedWhole?.add(marker);
+
+        follow(value);
+        return;
+    }
+
+    const type = quietPyType(value);
+
+    if (type === _b_.tuple || type === _b_.list) for (const one of value) followWhole(one, seen);
+    else if (type === _b_.dict) for (const [key, one] of pyEntries(value)) followWhole(key, seen), followWhole(one, seen);
+    else if (type === _b_.set || type === _b_.frozenset) for (const bucket of Object.values(value.$store)) for (const one of bucket) followWhole(one, seen);
+};
+
+// Python entered from inside the computation: its first entry is the
+// computation's own expression, any other reads as Python reads everywhere.
+export const entered = (run) => {
+    if (!SHAPING.on) return run();
+
+    if (SHAPING.entries++ === 0) {
+        try {
+            return run();
+        } finally {
+            SHAPING.entries--;
+        }
+    }
+
+    const [own, whole, named] = [shapedOwn, shapedWhole, shapedNames];
+
+    SHAPING.on = false;
+    shapedOwn = shapedWhole = shapedNames = null;
+
+    try {
+        return run();
+    } finally {
+        SHAPING.on = true;
+        [shapedOwn, shapedWhole, shapedNames] = [own, whole, named];
+        SHAPING.entries--;
+    }
+};
+
+// The computation, and then `watch`, handed the markers whose own changes it
+// read, to sign one subscriber onto them all (`trackOwns`), in the same
+// reaction.
+export function shaped(compute, watch) {
+    if (SHAPING.on) return compute();
+
+    const doors = shapeDoors();
+    const markers = new Set();
+
+    SHAPING.on = true;
+    SHAPING.entries = 0;
+    shapedOwn = markers;
+    shapedWhole = new Set();
+    shapedNames = new Set();
+    for (const [owner, name, , taken] of doors) owner[name] = taken;
+
+    try {
+        return compute();
+    } finally {
+        for (const [owner, name, own] of doors) owner[name] = own;
+        SHAPING.on = false;
+        shapedOwn = shapedWhole = shapedNames = null;
+        watch?.(markers);
+    }
+}
+
+// The doors, made once: each the engine's own function, read as it is when
+// the computation first runs, and the one that follows what it reads.
+let SHAPE_DOORS;
+
+const ownOf = (value) => {
+    if (SHAPING.on && value !== null && typeof value === 'object') followOwn(value);
+};
+
+// What a call hands its arguments to: a function of the author's reads them
+// through these doors itself, a `dict()` reads the pairs it is given, and
+// any other builtin reads the containers it is handed, and what they hold
+// through these doors again. A builtin is told by its module, `builtins`:
+// it carries `$function_infos` as the author's functions do.
+const authorsFunction = (callable) => callable?.$function_infos !== undefined && callable.$function_infos[0] !== 'builtins';
+const ownArguments = (args) => {
+    for (const one of args) {
+        const keywords = one !== null && typeof one === 'object' ? one[globalThis.__BRYTHON__.KW] : undefined;
+
+        if (Array.isArray(keywords)) {
+            for (const value of Object.values(keywords[0] ?? {})) ownOf(value);
+            for (const spread of keywords.slice(1)) ownOf(spread);
+        } else {
+            ownOf(one);
+        }
+    }
+};
+
+function shapeDoors() {
+    if (SHAPE_DOORS !== undefined) return SHAPE_DOORS;
+
+    const $B = globalThis.__BRYTHON__;
+    const doors = [];
+    const around = (owner, name, take) => {
+        const own = owner[name];
+
+        doors.push([owner, name, own, take(own)]);
+    };
+    const readsOwn = (at) => (own) =>
+        function (...args) {
+            ownOf(args[at]);
+            return Reflect.apply(own, this, args);
+        };
+    const readsWhole = (at) => (own) =>
+        function (...args) {
+            followWhole(args[at]);
+            return Reflect.apply(own, this, args);
+        };
+    const WHOLE_CALLS = new Set([_b_.dict, _b_.str, _b_.repr, _b_.ascii, _b_.format]);
+
+    around($B, '$getattr', readsOwn(0));
+    around($B, '$getattr_pep657', readsOwn(0));
+    around($B, '$getitem', readsOwn(0));
+    around($B, 'getitem_slice', readsOwn(0));
+    around($B, '$is_member', readsOwn(1));
+    around($B, 'unpacker', readsOwn(0));
+    around($B, 'make_js_iterator', readsOwn(0));
+    around($B, '$bool', readsOwn(0));
+    around(_b_.list, '$unpack', readsOwn(0));
+    around(_b_.str, '$factory', readsWhole(0));
+    around(_b_, 'repr', readsWhole(0));
+    around(_b_, 'ascii', readsWhole(0));
+    around(_b_, 'format', readsWhole(0));
+    around($B, 'pattern_match', readsWhole(0));
+    around($B, 'pyobj2jsobj', readsWhole(0));
+    around($B, 'rich_comp', (own) =>
+        function (op, a, b, ...rest) {
+            ownOf(a);
+            ownOf(b);
+            return Reflect.apply(own, this, [op, a, b, ...rest]);
+        });
+    around($B, 'rich_op', (own) =>
+        function (op, a, b, ...rest) {
+            if (op === '__mod__') followWhole(b);
+            ownOf(a);
+            ownOf(b);
+            return Reflect.apply(own, this, [op, a, b, ...rest]);
+        });
+    around($B, 'call_attr', (own) =>
+        function (obj, attr, inum, ...args) {
+            ownOf(obj);
+            ownArguments(args);
+            return Reflect.apply(own, this, [obj, attr, inum, ...args]);
+        });
+    around($B, '$call', (own) =>
+        function (callable, ...args) {
+            if (WHOLE_CALLS.has(callable)) for (const one of args) followWhole(one);
+            else if (!authorsFunction(callable)) ownArguments(args);
+            return Reflect.apply(own, this, [callable, ...args]);
+        });
+
+    return (SHAPE_DOORS = doors);
+}
 
 // The Python callable each function `pyHandler` published stands for, so that
 // what comes back to Python is the callable it handed over, through every door:

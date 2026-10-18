@@ -11,7 +11,7 @@ import * as calls from './calls.js';
 // imported is read through the module's cell at each use, and a namespace's
 // accessors are the hottest path of a name.
 const { NONE, host, mutableBytes, pyBytes } = core;
-const { NAMESPACE_DICTS, STORED, heldAtSource, track } = mutations;
+const { NAMESPACE_DICTS, STORED, heldAtSource, track, entered } = mutations;
 const { STALE, flushExports } = calls;
 
 // The body of a derived, an effect or an `inspect`, called the way Python calls
@@ -22,7 +22,7 @@ export const invoke = (fn) => {
     // Exports flushed after it, as at every door Python hands control back
     // through: a `bytearray` an effect changed is new to the effect after it.
     try {
-        return typeof fn === 'function' ? fn() : globalThis.__BRYTHON__.$call(fn);
+        return entered(() => (typeof fn === 'function' ? fn() : globalThis.__BRYTHON__.$call(fn)));
     } finally {
         flushExports();
     }

@@ -65,11 +65,13 @@ describe('compiler', () => {
     test('every state name gets its revision signal', () => {
         // Two signals per name: the value, and a counter the getter reads — it
         // is the counter that makes an in-place mutation visible without a copy.
+        // Except while the rows of an `{#each}` are computed, which follow the
+        // value's own changes and what they read under it.
         const { script } = compile('items = []\n', 'R', 'R.svelte');
 
         expect(script).toContain('let __rev_items = $state.raw(0)');
         expect(script).toContain('const __bump_items = () => { __rev_items += 1; }');
-        expect(script).toContain("bind(__proto, 'items', () => (__rev_items, items)");
+        expect(script).toContain("bind(__proto, 'items', () => (__SHAPING.on ? __followOwn(items) : (__rev_items, items))");
         // The list is the third argument, and the `onDestroy` below is what
         // empties it, on the server too: a container reached through a store
         // outlives the instance that read it, so subscribing without a way out
