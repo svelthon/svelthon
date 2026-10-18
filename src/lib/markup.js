@@ -2673,7 +2673,15 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         const [head, ...rest] = one.name.split('.');
         const local = scoped(head);
 
-        if (local !== null) return { read: [local, ...rest].join('.'), wrap: true };
+        // A child reached through an attribute, `<Holder.Child />`, is read as
+        // Python reads it, as `this={Holder.Child}` is, and followed: written
+        // as JavaScript, it read an instance's attribute, a slot, a property
+        // or a class's name as the property of that name, undefined, and the
+        // child was not there, and a child put in its place was not read
+        // again.
+        if (rest.length > 0) return { read: call(one.name, '__bound'), wrap: true };
+
+        if (local !== null) return { read: local, wrap: true };
         if (where?.imported === undefined) return null;
 
         // A child named by its own file is known; an import read again is
