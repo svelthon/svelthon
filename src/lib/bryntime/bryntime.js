@@ -8,9 +8,10 @@
 // tracking of the Python values a reaction reads, which tells it when they are
 // mutated (`mutations.js`), what Python raises as JavaScript reads it
 // (`errors.js`), the calls between the two languages (`calls.js`), the live
-// views of Python containers JavaScript reads (`views.js`), and the Python
+// views of Python containers JavaScript reads (`views.js`), the Python
 // modules a page runs, their namespaces, their bodies and what they publish
-// (`modules.js`).
+// (`modules.js`), and the protocols of Python a host's syntax asks, keys,
+// `**`, a starred name and a key's lookup (`protocols.js`).
 import './globals.js';
 import './boot.js';
 
@@ -20,3 +21,4 @@ export * from './errors.js';
 export * from './calls.js';
 export * from './views.js';
 export * from './modules.js';
+export * from './protocols.js';
