@@ -199,7 +199,7 @@ def increment():
         // read of to_py, and on that one alone.
         const { script } = compile('x = 1\n', 'C', 'src/C.svelte');
 
-        expect(script).toMatch(/import \{[^}]*\bpyData as __pyData\b[^}]*\} from 'svelthon\/runtime'/);
+        expect(script).toMatch(/import \{[^}]*\bpyData as __pyData\b[^}]*\} from 'svelthon\/bridge'/);
         expect(script).toContain("bind(__proto, 'to_py', () => __pyData");
     });
 

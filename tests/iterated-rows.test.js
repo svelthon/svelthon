@@ -35,7 +35,7 @@ import IteratedRows from './fixtures/IteratedRows.svelte';
 import IteratedChild from './fixtures/IteratedChild.svelte';
 import ForeignRows from './fixtures/ForeignRows.svelte';
 import { batch } from '../src/lib/helpers.js';
-import { plainData } from '../src/lib/runtime.js';
+import { plainData } from '../src/lib/bridge.js';
 
 const render = (props) => {
     const target = document.body.appendChild(document.createElement('div'));

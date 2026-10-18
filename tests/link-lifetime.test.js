@@ -4,7 +4,7 @@
 // link as it passes. A container listened to again takes its children back.
 import { test, expect } from 'vitest';
 import { mount, unmount, flushSync } from './mounted.js';
-import { marks } from '../src/lib/runtime.js';
+import { marks } from '../src/lib/bridge.js';
 import SharedRowHolder from './fixtures/SharedRowHolder.svelte';
 import Reattached from './fixtures/Reattached.svelte';
 import shared from './fixtures/shared_row.svelte.py';

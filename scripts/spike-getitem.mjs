@@ -68,7 +68,7 @@ const measure = (label) =>
 
 measure('Brython nu');
 
-// L'interception, telle qu'elle est dans runtime.js.
+// L'interception, telle qu'elle est dans bridge.js.
 const mutableCls = new Set([$B.builtins.dict, $B.builtins.set]);
 const mutable = (v) => Array.isArray(v) || mutableCls.has($B.get_class(v));
 const mark = (v, bumps, reads) => {

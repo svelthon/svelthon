@@ -4,7 +4,7 @@
 //
 // Five of the last passes found the same shape of defect, and twice the cause
 // was not a missed case but a rule that existed **twice**: once in
-// `runtime.js` and once as a template literal in `compile.cjs`. A rule added to
+// `bridge.js` and once as a template literal in `compile.cjs`. A rule added to
 // the first cannot reach the second — a string is not code anyone greps — so
 // the argument conversion arrived at two call boundaries out of three, and the
 // callback policy at one export route out of two. Both were silent.

@@ -4,7 +4,7 @@ import v8 from 'node:v8';
 import { runInNewContext } from 'node:vm';
 
 import { test, expect, describe, vi } from 'vitest';
-import '../src/lib/runtime.js';
+import '../src/lib/bridge.js';
 import { mount, flushSync, settled } from './mounted.js';
 import CoroutineAwaited from './fixtures/CoroutineAwaited.svelte';
 import ComprehensionAwait from './fixtures/ComprehensionAwait.svelte';
@@ -1092,7 +1092,7 @@ test('code from compile() runs where its tree leaves a field out: compile-ast-op
 // descriptors: it read the storage by its name, which is the base's.
 test('a redeclared slot crosses as box.x reads it: slots-shadowed-storage', async () => {
     const { shadowed_box } = await import('./fixtures/class_bases.py');
-    const { plainData } = await import('../src/lib/runtime.js');
+    const { plainData } = await import('../src/lib/bridge.js');
 
     expect(plainData(shadowed_box())).toEqual({ x: 2 });
 });

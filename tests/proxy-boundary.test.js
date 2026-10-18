@@ -13,7 +13,7 @@
 // as the control. The sentence was true of the boundary and false of the
 // function that repeated it.
 import { test, expect, describe } from 'vitest';
-import { pyArg } from '../src/lib/runtime.js';
+import { pyArg } from '../src/lib/bridge.js';
 import { requestEvent } from './request-event.js';
 
 const recording = (target, touched) =>

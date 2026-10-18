@@ -16,7 +16,7 @@
 // *renders*, which is Python's own repr, and never what crosses. A green suite
 // says nothing about the questions it does not ask.
 import { test, expect, describe } from 'vitest';
-import { plainData, pyExport } from '../src/lib/runtime.js';
+import { plainData, pyExport } from '../src/lib/bridge.js';
 import { tojson } from '../src/lib/helpers.js';
 
 const $B = globalThis.__BRYTHON__;

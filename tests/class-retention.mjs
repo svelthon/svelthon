@@ -2,7 +2,7 @@
 // `tests/class-retention.test.js` under `node --expose-gc`, since a test cannot
 // trigger a collection. Prints `{kind: alive}` as JSON.
 await import('../src/lib/compile.js');
-await import('../src/lib/runtime.js');
+await import('../src/lib/bridge.js');
 
 const $B = globalThis.__BRYTHON__;
 const print = console.log;

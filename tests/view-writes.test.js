@@ -4,7 +4,7 @@
 // same write does to an array.
 import { test, expect, describe } from 'vitest';
 import '../src/lib/compile.cjs';
-import { __pybridge, pyData } from '../src/lib/runtime.js';
+import { __pybridge, pyData } from '../src/lib/bridge.js';
 
 const view = (items) => {
     const source = pyData(items);

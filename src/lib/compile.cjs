@@ -3143,7 +3143,7 @@ function preamble(c) {
             ...(c.templateLine === undefined ? [] : ['templateFrom']),
             ...(c.store ? [] : ['fileLines']),
             ...(c.jsImported.length ? ['readOnlyImport'] : [])
-        ])} } from 'svelthon/runtime';`,
+        ])} } from 'svelthon/bridge';`,
         ...c.jsImports.map(jsImportLine),
         // Under the engine's prefix like every other name it lends: the
         // author's names live in the same scope, and an `importjs { untrack }`
@@ -3552,7 +3552,7 @@ function jsNameBindings(c, extra = []) {
     // asking again.
     //
     // Safe to read afresh because the adaptation is memoised per function
-    // (`ADAPTED` in runtime.js): the same function gives the same proxy, so a
+    // (`ADAPTED` in bridge.js): the same function gives the same proxy, so a
     // callback registered from Python can still be taken back.
     //
     // A name `__js__` or `importjs` brings is JavaScript's import, which only
@@ -3726,7 +3726,7 @@ function instanceExports(c) {
                   // `__pyArg`, because this setter is a **crossing**:
                   // `store.amount = 0.25` puts a Python float where Python
                   // expects one, as `store.set_amount(0.25)` does. The table of
-                  // crossings in runtime.js lists this door and its getter.
+                  // crossings in bridge.js lists this door and its getter.
                   //
                   // The same conversion the call boundary owes, and no more: a
                   // scalar becomes its Python self and an object keeps its
@@ -3912,7 +3912,7 @@ function plainPreamble(c) {
             'bind', '__pybridge', 'jsGlobal', 'pyCall', 'pyError', 'plainData', 'pyArg',
             'pyData', 'pyExport', 'jsCall', 'ticking', 'pyBind', 'NONE', 'helpers',
             'pythonModule', 'group', 'invoke', 'liveExport', 'readOnlyImport'
-        ])} } from 'svelthon/runtime';`,
+        ])} } from 'svelthon/bridge';`,
         ...c.jsImports.map(jsImportLine),
         ``
     ];
@@ -4384,7 +4384,7 @@ function compile(
     refuseBoundImports(root._ast, table, jsImported, source, lineOffset);
     refuseLibraryCalls(root._ast, table, source, lineOffset);
     const module = [
-        `import { ${runtimeAliases(['withNamespace', 'pyError'])} } from 'svelthon/runtime';`,
+        `import { ${runtimeAliases(['withNamespace', 'pyError'])} } from 'svelthon/bridge';`,
         ``,
         `export function init(${NS}) {`,
         `  try {`,

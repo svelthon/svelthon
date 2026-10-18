@@ -28,7 +28,7 @@ import { test, expect, describe } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
-const source = readFileSync(fileURLToPath(new URL('../src/lib/bryntime/tracking.js', import.meta.url)), 'utf8');
+const source = readFileSync(fileURLToPath(new URL('../src/lib/bryntime/mutations.js', import.meta.url)), 'utf8');
 
 // Comments and strings carry braces of their own — `{ob_type, im_func, im_self}`
 // is written in four comments of this file — so the structure is read with those

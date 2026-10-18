@@ -1,7 +1,7 @@
 // What Python raises, as JavaScript reads it: the exception described, its
 // message and its stack filled in, placed where its frames are. Moved out of
 // the runtime as it was; the host reaches it through `bryntime.js`.
-import * as core from './crossing.js';
+import * as core from './core.js';
 
 const { NONE, _b_, refused, lent } = core;
 

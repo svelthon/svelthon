@@ -2,7 +2,7 @@ import { test, expect } from 'vitest';
 import { setFlagsFromString } from 'node:v8';
 import { runInNewContext } from 'node:vm';
 import * as data from './fixtures/watched_rows.py';
-import { track, pyBind } from '../src/lib/runtime.js';
+import { track, pyBind } from '../src/lib/bridge.js';
 
 // The collector, which Node hands a script only under `--expose-gc`: the flag
 // is set for this file alone, and the rest of the suite runs as it always has.

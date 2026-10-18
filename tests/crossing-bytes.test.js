@@ -1,6 +1,6 @@
 import { test, expect } from 'vitest';
 import { mount, flushSync } from './mounted.js';
-import { invoke, pyAttach, pyEvent, pyHandler } from '../src/lib/runtime.js';
+import { invoke, pyAttach, pyEvent, pyHandler } from '../src/lib/bridge.js';
 import * as python from './fixtures/crossing_bytes.py';
 import BytesHost from './fixtures/BytesHost.svelte';
 

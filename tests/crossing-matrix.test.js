@@ -10,7 +10,7 @@
 // contract: a copy of what JavaScript otherwise reads through the view.
 import { test, expect } from 'vitest';
 import '../src/lib/compile.cjs';
-import { pyData, pyExpression } from '../src/lib/runtime.js';
+import { pyData, pyExpression } from '../src/lib/bridge.js';
 import { toJs, toPython } from '../src/lib/bryntime/bryntime.js';
 import { tojson } from '../src/lib/helpers.js';
 import { describeJs } from './crossing-describe.js';

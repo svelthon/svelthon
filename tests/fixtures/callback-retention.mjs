@@ -1,7 +1,7 @@
 // Run under `node --expose-gc`: adapts native methods bound to strings and to
 // lists, drops them, collects, and prints how many are still alive. Plain
 // JavaScript closures are the control that says a collection happened.
-import { pyHandler } from '../../src/lib/runtime.js';
+import { pyHandler } from '../../src/lib/bridge.js';
 
 const $B = globalThis.__BRYTHON__;
 const adapted = (value, operation) => pyHandler($B.$getattr(value, operation));

@@ -232,7 +232,7 @@ export const jsGlobal = globalThis;
 
 // The template helpers, re-exported so a generated component has one specifier
 // to import rather than two, and so every satellite repo keeps the single
-// `svelthon/runtime` alias it already resolves.
+// `svelthon/bridge` alias it already resolves.
 //
 // The cycle is deliberate and safe: `helpers.js` reads `NONE`, `__pybridge`,
 // `ticking`, `plainData` and `pyData` from here, but only from inside function

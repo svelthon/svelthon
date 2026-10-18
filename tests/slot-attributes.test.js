@@ -16,7 +16,7 @@
 // The two fixtures differ by the two `__slots__` lines and nothing else.
 import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
-import { plainData } from '../src/lib/runtime.js';
+import { plainData } from '../src/lib/bridge.js';
 import SlotBox from './fixtures/SlotBox.svelte';
 import AttrBox from './fixtures/AttrBox.svelte';
 import ListSlotBox from './fixtures/ListSlotBox.svelte';

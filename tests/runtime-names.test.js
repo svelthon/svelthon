@@ -67,7 +67,7 @@ describe('a name the runtime lends the generated code', () => {
     test('every name the preamble imports arrives under a generated spelling', () => {
         const line = compile('x = 1\n', 'C', 'src/C.svelte')
             .script.split('\n')
-            .find((one) => one.includes("from 'svelthon/runtime'"));
+            .find((one) => one.includes("from 'svelthon/bridge'"));
 
         const imported = line
             .slice(line.indexOf('{') + 1, line.indexOf('}'))

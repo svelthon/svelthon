@@ -278,7 +278,7 @@ than by a build-time check, and going upstream retires none of them:
 identity across the boundary is observable.
 
 The back-reference is read from Svelthon under **Brython's** name for it,
-`$B.PYOBJ_MAP`, in `src/lib/runtime.js`. While the WeakMap was a local edit it
+`$B.PYOBJ_MAP`, in `src/lib/bryntime/core.js`. While the WeakMap was a local edit it
 was called `$B.$svelthonPyobj`, and the read is written with `?.`, so the
 re-vendoring would have turned it into `undefined` without a word. What caught
 it is the test that names the map, not the code that uses it.

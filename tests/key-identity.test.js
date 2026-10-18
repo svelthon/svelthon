@@ -13,7 +13,7 @@ import SignedZeroKey from './fixtures/SignedZeroKey.svelte';
 import FunctionKey from './fixtures/FunctionKey.svelte';
 import BoundMethodKey from './fixtures/BoundMethodKey.svelte';
 import NoneNullKey from './fixtures/NoneNullKey.svelte';
-import { __pybridge } from '../src/lib/runtime.js';
+import { __pybridge } from '../src/lib/bridge.js';
 
 // None and `javascript.NULL` are two keys, as Python finds them unequal, alone
 // or inside a tuple: the text a tuple keys by spelled both `None`, so a context

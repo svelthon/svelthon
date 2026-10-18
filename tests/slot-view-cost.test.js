@@ -7,7 +7,7 @@
 // times the size of the class.
 import { test, expect, vi } from 'vitest';
 import '../src/lib/compile.cjs';
-import '../src/lib/runtime.js';
+import '../src/lib/bridge.js';
 
 test('reading every slot of an instance reads the class entries once', () => {
     const $B = globalThis.__BRYTHON__;

@@ -3,7 +3,7 @@ import { mount, flushSync, settled } from './mounted.js';
 import Async from './fixtures/Async.svelte';
 import AsyncError from './fixtures/AsyncError.svelte';
 import AsyncExports from './fixtures/AsyncExports.svelte';
-import { schedule } from '../src/lib/runtime.js';
+import { schedule } from '../src/lib/bridge.js';
 import './fixtures/route.py'; // compiled and registered, for the coroutine below
 import {
     from_foreign,

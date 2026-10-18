@@ -3,7 +3,7 @@
 // object of its own, drops them, collects, and prints how many are still
 // alive. The last use is the one a relay that kept its pair would hold. Plain
 // closures are the control that says a collection happened.
-import { __pybridge } from '../../src/lib/runtime.js';
+import { __pybridge } from '../../src/lib/bridge.js';
 
 const reading = process.argv[2] === 'read';
 const held = [];

@@ -13,7 +13,7 @@
 import { test, expect } from 'vitest';
 import v8 from 'node:v8';
 import { runInNewContext } from 'node:vm';
-import { track } from '../src/lib/runtime.js';
+import { track } from '../src/lib/bridge.js';
 
 test('linking a child shared by n containers grows with n', () => {
     v8.setFlagsFromString('--expose-gc');

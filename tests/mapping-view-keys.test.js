@@ -11,7 +11,7 @@ import { test, expect } from 'vitest';
 import { flushSync } from 'svelte';
 import { mount } from './mounted.js';
 import { growth, timed } from './growth.js';
-import { __pybridge, plainData, pyBind } from '../src/lib/runtime.js';
+import { __pybridge, plainData, pyBind } from '../src/lib/bridge.js';
 import MappingKeys from './fixtures/MappingKeys.svelte';
 
 const $B = globalThis.__BRYTHON__;

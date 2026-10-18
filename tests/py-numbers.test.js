@@ -2,7 +2,7 @@ import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 
 import Retained from './fixtures/Retained.svelte';
-import { pyNumbers } from '../src/lib/runtime.js';
+import { pyNumbers } from '../src/lib/bridge.js';
 
 // `pyNumbers` unwraps Brython floats one level down, so that what a Python `def`
 // hands to the *framework* is a number: `Element.animate` refuses a duration

@@ -6,7 +6,7 @@
 // instance a marker, three times the call itself.
 import { test, expect } from 'vitest';
 import '../src/lib/compile.cjs';
-import { track, marks } from '../src/lib/runtime.js';
+import { track, marks } from '../src/lib/bridge.js';
 
 test('a method read off a watched instance is not watched itself', () => {
     const $B = globalThis.__BRYTHON__;

@@ -25,7 +25,7 @@ import { test, expect, describe } from 'vitest';
 import { createRequire } from 'node:module';
 import { parse } from 'svelte/compiler';
 
-import { bind } from '../src/lib/runtime.js';
+import { bind } from '../src/lib/bridge.js';
 
 const { compile } = createRequire(import.meta.url)('../src/lib/compile.cjs');
 

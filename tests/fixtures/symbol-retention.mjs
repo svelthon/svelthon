@@ -2,7 +2,7 @@
 // JavaScript objects, each as the key of a dict nobody keeps, drops everything,
 // collects, and prints how many are still alive. The objects are the control:
 // they hold their hash on themselves.
-import '../../src/lib/runtime.js';
+import '../../src/lib/bridge.js';
 
 const $B = globalThis.__BRYTHON__;
 const _b_ = $B.builtins;

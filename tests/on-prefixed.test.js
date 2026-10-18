@@ -2,7 +2,7 @@ import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 
 import OnPrefixed from './fixtures/OnPrefixed.svelte';
-import { pyEvent, NONE } from '../src/lib/runtime.js';
+import { pyEvent, NONE } from '../src/lib/bridge.js';
 
 // What marks a handler is `on` followed by a lowercase letter, or Svelte 4's
 // `on:`. That catches `onclick` and it also catches `once`, `only` and

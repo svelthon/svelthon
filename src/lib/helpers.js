@@ -29,7 +29,7 @@ import {
     unboxed,
     jsonCopy,
     refusal
-} from './runtime.js';
+} from './bridge.js';
 
 // What the author wrote, as a value JavaScript can read with `typeof`.
 //
@@ -414,7 +414,7 @@ export function tojson(value, indent) {
 
 // Python's `javascript.JSON.parse`, not the `JSON.parse` of the language this
 // file is written in. Brython registers its builtin modules as the engine loads,
-// and importing `runtime.js` has loaded it, so there is nothing to wait for.
+// and importing `bridge.js` has loaded it, so there is nothing to wait for.
 const parseJson = (() => {
     const $B = globalThis.__BRYTHON__;
 

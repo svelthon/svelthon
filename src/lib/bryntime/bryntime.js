@@ -4,9 +4,9 @@
 // through `host` what only it knows.
 //
 // In this order: the scope brython.js reads as it loads (`globals.js`), the
-// engine itself, started (`boot.js`), what crosses and how (`crossing.js`), the
+// engine itself, started (`boot.js`), what crosses and how (`core.js`), the
 // tracking of the Python values a reaction reads, which tells it when they are
-// mutated (`tracking.js`), what Python raises as JavaScript reads it
+// mutated (`mutations.js`), what Python raises as JavaScript reads it
 // (`errors.js`), the calls between the two languages (`calls.js`), the live
 // views of Python containers JavaScript reads (`views.js`), and the Python
 // modules a page runs, their namespaces, their bodies and what they publish
@@ -14,8 +14,8 @@
 import './globals.js';
 import './boot.js';
 
-export * from './crossing.js';
-export * from './tracking.js';
+export * from './core.js';
+export * from './mutations.js';
 export * from './errors.js';
 export * from './calls.js';
 export * from './views.js';

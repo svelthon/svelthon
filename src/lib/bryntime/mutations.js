@@ -2,7 +2,7 @@
 // is mutated, and every container inside a watched one is watched too. Moved
 // out of the runtime as it was; it reaches its host only through `host`, and
 // the host reaches it through `bryntime.js`.
-import * as core from './crossing.js';
+import * as core from './core.js';
 
 const { NONE, VIEW_OF, _b_, callable, declares, host, isSet, javascriptOwn, ownAttributes, ownType, pyBytes, pyClass, pyEntries, quietPyType, slotValues } = core;
 

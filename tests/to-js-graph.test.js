@@ -11,7 +11,7 @@
 // prompted it: `tojson` produces JSON, which has neither identity nor cycles.
 // It was written for one of six callers and applied to all of them.
 import { test, expect, describe } from 'vitest';
-import { plainData } from '../src/lib/runtime.js';
+import { plainData } from '../src/lib/bridge.js';
 
 const $B = globalThis.__BRYTHON__;
 const _b_ = $B.builtins;

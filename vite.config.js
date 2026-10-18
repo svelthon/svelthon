@@ -19,7 +19,7 @@ export default defineConfig({
         })],
     resolve: {
         alias: {
-            'svelthon/runtime': fileURLToPath(new URL('./src/lib/runtime.js', import.meta.url))
+            'svelthon/bridge': fileURLToPath(new URL('./src/lib/bridge.js', import.meta.url))
         },
         conditions: ['browser']
     },

@@ -12,7 +12,7 @@
 // spawning, like `link-retention.test.js`.
 import { test, expect } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { __pybridge, pyData } from '../src/lib/runtime.js';
+import { __pybridge, pyData } from '../src/lib/bridge.js';
 
 const canSpawn = (() => {
     try {

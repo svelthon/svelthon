@@ -17,7 +17,7 @@
 import { test, expect, describe } from 'vitest';
 
 import { runInNewContext } from 'node:vm';
-import { NONE, __pybridge, pyData } from '../src/lib/runtime.js';
+import { NONE, __pybridge, pyData } from '../src/lib/bridge.js';
 import {
     batch,
     date,

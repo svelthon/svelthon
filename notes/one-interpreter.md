@@ -14,7 +14,7 @@ green run. What follows describes the two loads as they were.*
 ## Two loads of one file
 
 `compile.cjs` reaches Brython with `require`, because it is CommonJS. A component
-reaches it with `import`, through `runtime.js`. Node keeps a CommonJS `require`
+reaches it with `import`, through `bridge.js`. Node keeps a CommonJS `require`
 and an ES `import` of the same file as **two module instances**, so
 `vendor/brython.js` executes twice in one process — and the second execution
 rebuilds `$B.ast`, leaving the classes the compiler is already holding without
@@ -39,7 +39,7 @@ landing **between** two compilations.
 - The playground never has them in one scope: the compiler runs in a worker, the
   interface in the page, the compiled component in an iframe.
 - The demo has them, and it does server rendering. `hooks.server.py` compiled
-  fine; the first render then pulled `runtime.js` into the SSR graph, and every
+  fine; the first render then pulled `bridge.js` into the SSR graph, and every
   `.py` route module compiled after that failed.
 
 So the bug was latent for as long as nobody disturbed the order. Clearing
@@ -73,7 +73,7 @@ module that then declines to run.
 
 **Make `compile.cjs` an ES module** so both halves share one instance. The reason
 given for CommonJS — that `brython.js` must run after the globals, which hoisted
-imports cannot order — no longer holds on its own: `runtime.js` already gets that
+imports cannot order — no longer holds on its own: `bridge.js` already gets that
 order right with three separate imports, and module imports execute in sequence.
 The real cost is elsewhere, and it is why this has not been done: Vite **bundles
 `vite.config.js`**, and a static import would pull Brython and the standard

@@ -1,7 +1,7 @@
 """The two doors a JavaScript value has into a store, on one module.
 
 A published name can be *assigned* (`store.held = 0.25`) or handed to a
-*function* (`store.take(0.25)`), and both are crossings. The table in runtime.js
+*function* (`store.take(0.25)`), and both are crossings. The table in bridge.js
 names seven and the setter was an eighth, unlisted and untreated: the value
 landed as raw JavaScript, so `type(held)` answered `JSObject` and
 `format(held, ".2f")` raised while the call beside it worked.

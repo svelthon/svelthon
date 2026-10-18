@@ -7,7 +7,7 @@
 // update each of its n rows once. Every way a row enters or moves is counted
 // here, by the element reads any search of the list makes.
 import { test, expect } from 'vitest';
-import { track, unsubscribe } from '../src/lib/runtime.js';
+import { track, unsubscribe } from '../src/lib/bridge.js';
 
 const $B = globalThis.__BRYTHON__;
 const list = (items) => $B.builtins.list.$factory(items);

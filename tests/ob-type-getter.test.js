@@ -9,7 +9,7 @@
 // The witness is JavaScript's own copy, `Object.fromEntries(Object.entries(row))`:
 // each conversion runs the getter as many times as it does, and no more.
 import { test, expect } from 'vitest';
-import { plainData, pyData } from '../src/lib/runtime.js';
+import { plainData, pyData } from '../src/lib/bridge.js';
 import { tojson, urlencode } from '../src/lib/helpers.js';
 
 // A record with a getter `ob_type` that counts its runs, hidden or enumerable,

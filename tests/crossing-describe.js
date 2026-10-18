@@ -1,7 +1,7 @@
 // How the crossing matrices write a JavaScript value out: a Python one by its
 // type, a view by its contents, anything else by its constructor. Brython is
 // loaded before this module is.
-import { ownType } from '../src/lib/runtime.js';
+import { ownType } from '../src/lib/bridge.js';
 
 export const describeJs = (value, seen = new Set()) => {
     const $B = globalThis.__BRYTHON__;

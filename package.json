@@ -24,7 +24,7 @@
   "main": "./src/lib/svelthon.js",
   "exports": {
     ".": "./src/lib/svelthon.js",
-    "./runtime": "./src/lib/runtime.js",
+    "./bridge": "./src/lib/bridge.js",
     "./compile": "./src/lib/compile.js",
     "./markup": "./src/lib/markup.js",
     "./package.json": "./package.json"

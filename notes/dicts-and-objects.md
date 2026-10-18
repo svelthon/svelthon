@@ -94,7 +94,7 @@ Both were ours, and both are paid.
 module's namespace was a plain JavaScript object to Brython, and the call
 converted its arguments on the way in. The function read off a module is the
 Python function itself now, so the argument arrives as it was made; and the
-namespace is a `module` (`pythonModule` in `runtime.js`), whose attributes are
+namespace is a `module` (`pythonModule` in `bridge.js`), whose attributes are
 read through a dict delegating to its accessors. Measured in
 `tests/crossing.test.js`.
 
@@ -183,7 +183,7 @@ not about the shape, it is about which side of the wire the module lives on.
 
 The dot in a template expression finds an attribute first and a key second.
 `{pep.title}` reads a class instance or a dict, and `{pep["title"]}` still means
-what it always did. Implemented in `runtime.js` as `inTemplate`, exercised by
+what it always did. Implemented in `bridge.js` as `inTemplate`, exercised by
 `tests/dot.test.js`.
 
 This is what Jinja does — `foo.bar` tries the attribute then the item, and its

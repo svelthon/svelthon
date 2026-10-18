@@ -8,7 +8,7 @@
 // left of 2 000 of them, 4 096 characters each, is read off the heap, for the
 // adapter and for the same writes made directly.
 import { randomBytes } from 'node:crypto';
-import { __pybridge, pyData } from '../../src/lib/runtime.js';
+import { __pybridge, pyData } from '../../src/lib/bridge.js';
 
 const kept = { native: [], provide: [], provided: [] };
 

@@ -5,7 +5,7 @@
 // `constructor`. Neither is exotic, and the boundary decided things from them
 // that belong to JavaScript's object model rather than to the data.
 import { test, expect, describe } from 'vitest';
-import { plainData, pyData } from '../src/lib/runtime.js';
+import { plainData, pyData } from '../src/lib/bridge.js';
 
 describe('a key is data, whatever JavaScript calls it', () => {
     // `out[key] = value` runs the setter `__proto__` has on `Object.prototype`.

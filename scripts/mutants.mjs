@@ -196,7 +196,7 @@ for (const [index, site] of chosen.entries()) {
     // Bail cancels the files still in flight the moment one fails, so what the
     // summary counts depends on how 32 cores happened to schedule — and twice
     // now a mutant has read `SURVIVED` in a sweep and `killed` when the same
-    // command was re-run by hand. `runtime.js:935` is the second: it stops the
+    // command was re-run by hand. `bridge.js:935` is the second: it stops the
     // mutation walk from ever notifying, and eight tests go red.
     //
     // A kill is cheap to believe: something was red, and bail could only have

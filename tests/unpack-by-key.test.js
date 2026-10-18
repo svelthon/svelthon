@@ -9,7 +9,7 @@
 // there, `{id, name}` and `{row.id}` agree on every row, and so must ours.
 import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
-import { restOf, pyData } from '../src/lib/runtime.js';
+import { restOf, pyData } from '../src/lib/bridge.js';
 import UnpackByKey from './fixtures/UnpackByKey.svelte';
 import UnpackByKeyNative from './fixtures/UnpackByKeyNative.svelte';
 import UnpackByKeyTypo from './fixtures/UnpackByKeyTypo.svelte';

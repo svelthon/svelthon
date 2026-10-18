@@ -7,7 +7,7 @@
 // read-only property was accepted and stayed writable.
 import { test, expect, describe } from 'vitest';
 import { proxy } from 'svelte/internal/client';
-import { __pybridge, pyData } from '../src/lib/runtime.js';
+import { __pybridge, pyData } from '../src/lib/bridge.js';
 
 const pair = (data) => ({
     svelte: proxy(structuredClone(data)),

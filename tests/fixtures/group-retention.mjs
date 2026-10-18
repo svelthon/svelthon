@@ -7,7 +7,7 @@
 // The runtime is loaded before the document exists, as on a server: loaded
 // after, Brython takes the process for a browser and starts its page observer.
 import { JSDOM } from 'jsdom';
-import { group } from '../../src/lib/runtime.js';
+import { group } from '../../src/lib/bridge.js';
 
 const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'http://localhost/' });
 

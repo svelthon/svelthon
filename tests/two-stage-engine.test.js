@@ -10,7 +10,7 @@
 // `brython_compiler.js`.
 //
 // This file loads the two vendored halves directly rather than through
-// `src/lib/runtime.js`, which pulls the whole engine.
+// `src/lib/bridge.js`, which pulls the whole engine.
 import { test, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 

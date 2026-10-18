@@ -1,6 +1,6 @@
 import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
-import { marks, track } from './../src/lib/runtime.js';
+import { marks, track } from './../src/lib/bridge.js';
 import NotifyKey from './fixtures/NotifyKey.svelte';
 
 // The marker of a watched container used to be a non-enumerable `$notify`

@@ -10,7 +10,7 @@
 import { test, expect } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { mount, flushSync } from './mounted.js';
-import { group } from '../src/lib/runtime.js';
+import { group } from '../src/lib/bridge.js';
 import GroupMany from './fixtures/GroupMany.svelte';
 import GroupGone from './fixtures/GroupGone.svelte';
 import GroupGoneNative from './fixtures/GroupGoneNative.svelte';

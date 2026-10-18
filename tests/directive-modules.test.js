@@ -1,7 +1,7 @@
 import { test, expect, describe } from 'vitest';
 import { mount, unmount, flushSync, settled } from './mounted.js';
 import { pythonExpressions, collector } from '../src/lib/markup.js';
-import { directiveTransition, directiveAnimate, directiveAction } from '../src/lib/runtime.js';
+import { directiveTransition, directiveAnimate, directiveAction } from '../src/lib/bridge.js';
 import DirectiveModule from './fixtures/DirectiveModule.svelte';
 import DirectiveLife from './fixtures/DirectiveLife.svelte';
 import DirectiveScope from './fixtures/DirectiveScope.svelte';

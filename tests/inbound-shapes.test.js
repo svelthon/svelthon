@@ -21,7 +21,7 @@ import {
     field_named_type,
     python_mapping_json
 } from './fixtures/inbound_shapes.py';
-import { plainData } from '../src/lib/runtime.js';
+import { plainData } from '../src/lib/bridge.js';
 import { tojson } from '../src/lib/helpers.js';
 
 describe('to_py on a value that is already Python', () => {

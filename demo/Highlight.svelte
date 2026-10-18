@@ -3,7 +3,7 @@
     // own tokenizer, so the Python is coloured by Python's own rules and cannot
     // drift from the grammar. Markup and the odd JS block get a light regex
     // pass — there, colour is decoration, not a claim about correctness.
-    import 'svelthon/runtime';
+    import 'svelthon/bridge';
 
     const NAME = 1;
     const NUMBER = 2;

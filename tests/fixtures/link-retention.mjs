@@ -3,7 +3,7 @@
 // what is still alive. Keys of dicts never watched are the control that says a
 // collection happened. The shared list itself is never mutated: that would
 // prune the links on its own and hide what this measures.
-import { track, unsubscribe, marks } from '../../src/lib/runtime.js';
+import { track, unsubscribe, marks } from '../../src/lib/bridge.js';
 
 const $B = globalThis.__BRYTHON__;
 const _b_ = $B.builtins;

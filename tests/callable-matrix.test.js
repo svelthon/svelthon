@@ -43,7 +43,7 @@
 // that boundary's own contract.
 import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
-import { directiveAction } from '../src/lib/runtime.js';
+import { directiveAction } from '../src/lib/bridge.js';
 import * as mod from './fixtures/callable_matrix.py';
 import { taken } from './fixtures/matrix_library.js';
 import CallableMatrix from './fixtures/CallableMatrix.svelte';

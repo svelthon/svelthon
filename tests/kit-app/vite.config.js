@@ -29,7 +29,7 @@ export default defineConfig({
     ],
     resolve: {
         alias: {
-            'svelthon/runtime': at('../../src/lib/runtime.js'),
+            'svelthon/bridge': at('../../src/lib/bridge.js'),
             'svelthon/compile': at('../../src/lib/compile.js')
         }
     },

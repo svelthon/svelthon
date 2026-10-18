@@ -9,8 +9,8 @@
 import { test, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 
-test('runtime.js imports from Svelte its public API alone', () => {
-    const source = readFileSync('src/lib/runtime.js', 'utf8');
+test('bridge.js imports from Svelte its public API alone', () => {
+    const source = readFileSync('src/lib/bridge.js', 'utf8');
     const imports = [...source.matchAll(/^import\s*\{([^}]*)\}\s*from\s*'(svelte[^']*)';/gm)].map(
         ([, names, from]) => `${from}: ${names.replace(/\s+/g, ' ').trim()}`
     );

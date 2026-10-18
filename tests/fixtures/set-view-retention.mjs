@@ -1,7 +1,7 @@
 // Run under `node --expose-gc`: members added to a Python set through its view
 // and gone from it again, deleted from JavaScript or cleared by Python, while
 // the view itself stays alive. Prints how many of them are still alive.
-import '../../src/lib/runtime.js';
+import '../../src/lib/bridge.js';
 
 const $B = globalThis.__BRYTHON__;
 const views = [];

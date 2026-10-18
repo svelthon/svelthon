@@ -45,10 +45,10 @@ describe('the engine is imported where it is started', () => {
         expect(imports).toEqual(['./bryntime/bryntime.js', './compile.cjs']);
     });
 
-    // The import used to sit in `runtime.js`, two lines above `import
+    // The import used to sit in `bridge.js`, two lines above `import
     // './boot.js'`, which reads as an order and is not one.
-    test('runtime.js does not import it', () => {
-        expect(read('runtime.js')).not.toContain('vendor/brython');
+    test('bridge.js does not import it', () => {
+        expect(read('bridge.js')).not.toContain('vendor/brython');
     });
 
     // `browser-check.sh` warms the engine before it measures, because a cold

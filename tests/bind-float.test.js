@@ -1,7 +1,7 @@
 import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import BindFloat from './fixtures/BindFloat.svelte';
-import { plainData, pyNumbers } from '../src/lib/runtime.js';
+import { plainData, pyNumbers } from '../src/lib/bridge.js';
 
 // A binding is the one place a Python value reaches the DOM unconverted, and a
 // Brython float is an object rather than a number. Every input below used to

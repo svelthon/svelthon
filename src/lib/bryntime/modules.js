@@ -3,15 +3,15 @@
 // leaves undone, `globals()`, `del` of a name, and the names it publishes to
 // JavaScript, live. Moved out of the runtime as it was; the host reaches it
 // through `bryntime.js`.
-import * as core from './crossing.js';
-import * as tracking from './tracking.js';
+import * as core from './core.js';
+import * as mutations from './mutations.js';
 import * as calls from './calls.js';
 
 // Held as constants of this module, as its neighbours hold theirs: a binding
 // imported is read through the module's cell at each use, and a namespace's
 // accessors are the hottest path of a name.
 const { host, mutableBytes, pyBytes } = core;
-const { NAMESPACE_DICTS, STORED, heldAtSource, track } = tracking;
+const { NAMESPACE_DICTS, STORED, heldAtSource, track } = mutations;
 const { STALE, flushExports } = calls;
 
 // The body of a derived, an effect or an `inspect`, called the way Python calls

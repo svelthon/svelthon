@@ -5,7 +5,7 @@
 // it is written to by attribute only.
 import { test, expect } from 'vitest';
 import { mount, flushSync } from './mounted.js';
-import { marks, track } from '../src/lib/runtime.js';
+import { marks, track } from '../src/lib/bridge.js';
 import FunctionState from './fixtures/FunctionState.svelte';
 
 const shown = (kind, how) => {

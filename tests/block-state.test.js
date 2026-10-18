@@ -5,7 +5,7 @@
 import { test, expect } from 'vitest';
 import { mount as mountSvelte, unmount } from 'svelte';
 import { mount, flushSync } from './mounted.js';
-import { __pybridge, marks, track } from '../src/lib/runtime.js';
+import { __pybridge, marks, track } from '../src/lib/bridge.js';
 import BlockState from './fixtures/BlockState.svelte';
 import BlockLease from './fixtures/BlockLease.svelte';
 import BlockReplace from './fixtures/BlockReplace.svelte';

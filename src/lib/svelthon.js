@@ -430,7 +430,7 @@ const announced = (code, filename) => {
 
     const statement =
         `import __svelthon_self from ${JSON.stringify(`./${basename(filename)}`)};` +
-        `import { __pybridge as __svelthon_bridge } from 'svelthon/runtime';` +
+        `import { __pybridge as __svelthon_bridge } from 'svelthon/bridge';` +
         `__svelthon_bridge.python(() => __svelthon_self);`;
     const at = moduleScriptStart(code);
 
