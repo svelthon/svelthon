@@ -448,8 +448,13 @@ export function bind(proto, key, get, set, source, listed = true, computed = fal
     Object.defineProperty(proto, key, {
         get,
         set(value) {
+            // A first binding, the name held nowhere before, adds a name to
+            // `globals()`; asked only when the name has no stamp yet.
+            const fresh = value !== undefined && !BOUND_AT.get(this)?.has(key) && !holdsName(this, key);
+
             write.call(this, value);
             if (value !== undefined) stampBound(this, key);
+            if (fresh) resizedNamespace(this);
         },
         enumerable: listed,
         configurable: true
@@ -535,6 +540,7 @@ export function bind(proto, key, get, set, source, listed = true, computed = fal
         let deleted = DELETED.get(namespace);
         if (deleted === undefined) DELETED.set(namespace, (deleted = new Set()));
         deleted.add(name);
+        resizedNamespace(namespace);
     };
 
     // `name in globals()`: the namespace is the globals, and a deleted name is
@@ -581,11 +587,23 @@ const DICTS = new WeakMap();
 const NAMESPACE_VERSIONS = new WeakMap();
 const changedShape = (dict) => NAMESPACE_VERSIONS.set(dict, (NAMESPACE_VERSIONS.get(dict) ?? 0) + 1);
 
+// And the names the code binds or deletes itself, past the dict: a first
+// binding through a name's setter, a `del` (`installDeletion`). A name no
+// setter sees, a class, is an own key of the namespace, which a walk counts.
+const resizedNamespace = (namespace) => {
+    const dict = DICTS.get(namespace);
+
+    if (dict !== undefined) changedShape(dict);
+};
+
 // Brython walks a dict as items, each with its value read, whether the keys
 // alone are wanted, `list(globals())`, or the pairs, and in both directions,
 // `reversed(globals())`. A namespace's value may be a derived, run by being
 // read, so its items read their value only when it is asked for. A key added
-// or removed meanwhile ends the walk, as it ends Brython's.
+// or removed meanwhile ends the walk, as it ends Brython's: through the dict,
+// and by the code itself, `x = 1`, a class or `del x`, which writes the
+// namespace past it. Counted as the namespace is written (`changedShape`,
+// `resizedNamespace`), never at each step, which made a walk quadratic.
 (function lazyNamespaceItems(dict) {
     const $B = globalThis.__BRYTHON__;
     const changed = () => $B.RAISE($B.builtins.RuntimeError, 'dictionary changed size during iteration');

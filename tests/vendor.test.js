@@ -853,6 +853,18 @@ test("a JavaScript object's ob_type is its data unless it holds a class: get-cla
     expect(read({ ob_type: 'business', value: 42 }, 'ob_type')).toBe('business');
 });
 
+// The items of a JavaScript Set reached Python unconverted, so a float in it
+// refused a format; `hash()` of JavaScript's null raised a JavaScript error,
+// and so did null as a subscript. Each answer is read on its own, so each
+// commit is held by its own. And a name bound while `globals()` is walked
+// raises, as in CPython: held by Bryntime's walk of a namespace of Svelthon's,
+// not by the engine, whose branch `globals-changed-size` is not vendored.
+test("JavaScript values answer as in CPython, and a walk of globals() by Bryntime's namespace: js-iterable-converts-items, null-undefined-hash, getitem-null-item", async () => {
+    const { answers } = await import('./fixtures/js_values_and_namespaces.py');
+
+    expect([...answers()]).toEqual(["['0.25', '0.50']", '2', 'True', 'TypeError', 'RuntimeError']);
+});
+
 // A builtin that takes no arguments said "takes no argument", and `locals()`
 // refused a keyword with the same sentence. `python3` on the same module, at
 // its top and in a function.

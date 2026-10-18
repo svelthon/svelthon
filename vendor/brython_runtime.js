@@ -1821,7 +1821,7 @@ throw err}}
 $B.$getitem1=function(obj,item){var is_list=Array.isArray(obj)&& $B.get_class(obj)===_b_.list,is_dict=$B.get_class(obj)===_b_.dict && ! obj[$B.JSOBJ]
 if(typeof item=="number"){if(is_list ||typeof obj=="string"){item=item >=0 ? item :obj.length+item
 if(obj[item]!==undefined){return obj[item]}else{
-throw index_error(obj)}}}else if(item.valueOf && typeof item.valueOf()=="string" && is_dict){return _b_.dict.$getitem(obj,item)}
+throw index_error(obj)}}}else if(item?.valueOf && typeof item.valueOf()=="string" && is_dict){return _b_.dict.$getitem(obj,item)}
 if($B.is_type(obj)){
 var meta_gi=$B.search_in_mro($B.get_class(obj),"__getitem__",$B.NULL)
 if(meta_gi !==$B.NULL){return $B.$call(meta_gi,obj,item)}
@@ -5106,7 +5106,7 @@ return true}catch(err){if($B.is_exc(err,[_b_.AttributeError])){return false}
 throw err}}
 _b_.hash=function(obj){check_nb_args_no_kw('hash',1,arguments)
 return $B.$hash(obj)}
-$B.$hash=function(obj){if(obj.__hashvalue__ !==undefined){return obj.__hashvalue__}
+$B.$hash=function(obj){if(obj?.__hashvalue__ !==undefined){return obj.__hashvalue__}
 var res
 if(typeof obj==="boolean"){return obj ? 1 :0}else if(typeof obj==="number"){res=obj}else{
 var klass=$B.get_class(obj)
@@ -13066,7 +13066,7 @@ return self}
 $B.IterableJSObj.sq_length=function(self){return self.length}
 $B.IterableJSObj.tp_iternext=function*(self){if(self.it===undefined){
 self.it=self[Symbol.iterator]()}
-for(var value of self.it){yield value}}
+for(var value of self.it){yield jsobj2pyobj(value)}}
 $B.set_func_names($B.IterableJSObj,'builtins')
 var js_array_iterator=$B.make_builtin_class('JSArray_iterator')
 js_array_iterator.$factory=function(obj){return{
@@ -15118,6 +15118,7 @@ case '__ne__':
 return other !==null && other !==undefined
 default:
 return _b_.NotImplemented}}
+NullType.tp_hash=$B.UndefinedType.tp_hash=$B.NoneType.tp_hash
 NullType.tp_repr=function(_self){
 return '<Javascript null>'}
 $B.set_func_names(NullType,'javascript')

@@ -4,6 +4,7 @@ import * as module from './fixtures/globals_dict.py';
 import * as moduleLocals from './fixtures/module_locals.py';
 import * as ordered from './fixtures/globals_order.py';
 import * as orderedStore from './fixtures/globals_order_store.svelte.py';
+import * as walked from './fixtures/globals_walked.py';
 
 // `globals()` is the module's own dict, as CPython hands it over: its class,
 // its keys, a write that makes a global and a deletion that removes one. The
@@ -54,6 +55,25 @@ test.each([
     ]);
     expect(rows(one.moved())).toEqual(moved);
     expect(rows(one.replaced())).toEqual(moved);
+});
+
+// A name bound or deleted while `globals()` is walked changes its size, and
+// the walk raises: a variable, a class and a function bound by `global`, a key
+// written into `globals()`, a `del`, and a class and a variable bound at the
+// top of the module, whose class had no accessor and was seen by no one. A
+// name bound again does not. Counted as the namespace is written, so a walk
+// costs what it did. `python3` on the same file.
+test('a name bound or deleted while globals() is walked ends the walk as in CPython', () => {
+    expect([...walked.seen]).toEqual([
+        'variable RuntimeError',
+        'class RuntimeError',
+        'function RuntimeError',
+        'existing ok',
+        'item RuntimeError',
+        'delete RuntimeError',
+        'top class RuntimeError',
+        'top variable RuntimeError'
+    ]);
 });
 
 // `locals()` at the top of a module is the module's dict, and refuses an

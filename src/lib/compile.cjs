@@ -3941,6 +3941,12 @@ function plainBindings(c) {
             (d) =>
                 `__bind(__proto, '${d.name}', () => __invoke(${fn(d.name)}), (${NEXT_VALUE}) => { ${fn(d.name)} = ${NEXT_VALUE}; }, () => ${fn(d.name)}, true, true);`
         ),
+        // A class is bound as in a component (`authorBindings`), so the
+        // namespace sees its statement add the name, as `globals()` does.
+        ...declaredClasses(c).flatMap((n, at) => [
+            ...(at === 0 ? ['const __classes = __global.Object.create(null);'] : []),
+            `__bind(__proto, '${n}', () => __pybridge.declared(__classes[${JSON.stringify(n)}]), function (${NEXT_VALUE}) { __pybridge.declare(this, '${n}', ${NEXT_VALUE}, __classes); });`
+        ]),
         ...injections(c.declared, false, c.names),
 
         // A module has no `<script module>`, so nothing joins its own imports.
