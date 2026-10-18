@@ -63,6 +63,8 @@ const {
     jsonCopy,
     plainData,
     sequence,
+    makesPairs,
+    notingPairs,
     propertyKey,
     propertyName,
     twoKeys,
@@ -1348,52 +1350,24 @@ const sameRow = (one, other) => one === other || (MADE_ANEW.has(one) && MADE_ANE
 // alone, a list made of them was only a list, and a change inside one row read
 // every row again.
 const MADE_ANEW = new WeakSet();
-const PAIR_MAKERS = new Set(['enumerate', 'zip', 'dict_items', 'dict_itemiterator']);
+const madeAnew = (pair) => MADE_ANEW.add(pair);
 
-const makesPairs = (iterable) => {
-    const type = quietPyType(iterable);
-
-    return type !== undefined && (type.tp_flags & globalThis.__BRYTHON__.TPFLAGS.HEAPTYPE) === 0 && PAIR_MAKERS.has(type.tp_name);
-};
-
-// The iterators of `.items()`, `enumerate()` and `zip()` make their pairs in
-// `tp_iternext`, which Brython reads anew at each `__next__` (`make_next`):
-// replaced while a block computes its rows, and only for a block whose rows are
-// tuples its iterable does not make itself, which `seq` tells (`noting`). The
-// note costs a generator per pair, measured above the noise on the
-// `enumerate(rows)` of twenty thousand rows, so the common case does not pay
-// it. A block computed inside another's computation finds them replaced
-// already.
-let computing = 0;
+// The pairs `.items()`, `enumerate()` and `zip()` make are noted while a block
+// computes its rows (`notingPairs`), and only for a block whose rows are tuples
+// its iterable does not make itself, which `seq` tells (`noting`). The note
+// costs a generator per pair, measured above the noise on the `enumerate(rows)`
+// of twenty thousand rows, so the common case does not pay it.
 let computingFor = null;
-const replaced = [];
 
 function computed(walk, compute) {
-    const $B = globalThis.__BRYTHON__;
-    const noting = walk.noting !== false;
     const outer = computingFor;
 
     computingFor = walk;
 
-    if (noting && computing++ === 0) {
-        for (const iterator of [$B.dict_itemiterator, _b_.enumerate, _b_.zip]) {
-            const own = iterator.tp_iternext;
-
-            replaced.push([iterator, own]);
-            iterator.tp_iternext = function* (self) {
-                for (const pair of own.call(this, self)) {
-                    MADE_ANEW.add(pair);
-                    yield pair;
-                }
-            };
-        }
-    }
-
     try {
-        return compute();
+        return walk.noting !== false ? notingPairs(madeAnew, compute) : compute();
     } finally {
         computingFor = outer;
-        if (noting && --computing === 0) for (const [iterator, own] of replaced.splice(0)) iterator.tp_iternext = own;
     }
 }
 
@@ -1902,35 +1876,6 @@ export function pyTeardown(value, where) {
     return typeof cleanup === 'function' ? cleanup : undefined;
 }
 
-// **Every Python callable the engine hands to JavaScript goes through
-// `pyHandler`.** Brython converts the arguments of any JavaScript call it makes
-// (a method of a namespace or of an object a library returned or resolved, a
-// constructor through `.new`, a property written, a global like
-// `setTimeout`) with its own `pyobj2jsobj`, whose callback trims nothing and
-// is not the function `pyHandler` publishes for the same callable. The engine
-// asks `$B.pyobj2jsobj_hook` first, an extension point proposed upstream and
-// vendored (see BRYTHON_FIX.md), so the conversion has one site and one
-// contract.
-//
-// A Python list, tuple, dict or set and an instance of the author's class are
-// answered too, by their view, as a named import's arguments are (`outbound`)
-// and as at a prop and an export: handed to a JavaScript function or written
-// into a JavaScript object, `config.tags = tags`, they are Python's own, so a
-// later `tags.append(…)` is there and a write from JavaScript is Python's. The
-// engine's own walk made a copy, which missed every later mutation, or left
-// the value itself, which JavaScript cannot read. The callable question comes
-// first: a list subclass that defines `__call__` is a callback.
-//
-// Anything else goes on to the engine.
-globalThis.__BRYTHON__.pyobj2jsobj_hook = (value) => {
-    if (value === null || (typeof value !== 'object' && typeof value !== 'function')) return undefined;
-    if (declared(value) !== null || ADAPTERS.has(value)) return pyHandler(value);
-    if (pyBytes(value)) return bytesOut(value);
-
-    const view = viewOf(value);
-
-    return view === value ? undefined : view;
-};
 
 // A write from Python to a name `__js__` or `importjs` brings: refused, as
 // JavaScript refuses an assignment to an import, with the name and the file.
@@ -2108,9 +2053,9 @@ export const pyExpression = (call, where, arity, kept = false, writes = false) =
 
 // **A name of the module that nothing has bound yet**, assigned in a branch
 // that did not run, or deleted, is read by Python code as CPython reads it,
-// `NameError` (`$B.resolve_in_scopes`, where a read the namespace no longer
-// answers goes), and by the template as Svelte renders a value that is not
-// there: empty.
+// `NameError`, and by the template as Svelte renders a value that is not
+// there: empty. Bryntime asks the host which reads are the template's
+// (`host.absent`).
 //
 // The template is the text between its braces, the way the dot is: a read is
 // the template's when the code making it is written there, a lambda or a
@@ -2132,26 +2077,11 @@ export const templateFrom = (file, line) => {
     TEMPLATE_LINES.set(file, line);
 };
 
-(function installTemplateAbsence($B) {
-    const resolve = $B.resolve_in_scopes;
-    const declares = (namespace, name) =>
-        namespace !== null && typeof namespace === 'object' && namespace.$proxy === true && name in namespace;
-    const templates = () => {
-        const frame = $B.frame_obj?.frame;
-        const from = frame === undefined ? undefined : TEMPLATE_LINES.get(frame.__file__);
-        return rendering > 0 && from !== undefined && frame.$lineno >= from;
-    };
+host.absent = (file, line) => {
+    const from = TEMPLATE_LINES.get(file);
 
-    $B.resolve_in_scopes = function (name, namespaces, inum) {
-        try {
-            return resolve.call(this, name, namespaces, inum);
-        } catch (error) {
-            if (templates() && namespaces.some((one) => declares(one, name))) return NONE;
-
-            throw error;
-        }
-    };
-})(globalThis.__BRYTHON__);
+    return rendering > 0 && from !== undefined && line >= from;
+};
 
 // **A directive is a call whose callee is a Python expression.** The markup pass
 // writes `use:act.measured={v}` as `use:__directiveAction={["act.measured",

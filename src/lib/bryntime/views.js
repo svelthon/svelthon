@@ -5,7 +5,7 @@
 import * as core from './core.js';
 import * as mutations from './mutations.js';
 import { pyError, relayed } from './errors.js';
-import { pyExport, pyHandler } from './calls.js';
+import { ADAPTERS, declared, pyExport, pyHandler } from './calls.js';
 
 const { LIST_VIEW, NONE, PLAIN_VIEW, VIEWED, VIEW_OF, _b_, authoredInstance, bytesOut, callable, crossedAs, declares, define, entering, isSet, iterated, lent, ownAttributes, ownType, plainData, plainScalar, propertyKey, pyAwaitable, pyBind, pyBytes, pyClass, pyEntries, pyScalar, pyType, quietPyType, refused, slotValues, twoKeys } = core;
 const { MARKS, MISSING, PUBLISHED, follow, mark, removeFound } = mutations;
@@ -1296,4 +1296,34 @@ export const handOver = (written, write) => {
     }
 
     return record;
+};
+
+// **Every Python callable the engine hands to JavaScript goes through
+// `pyHandler`.** Brython converts the arguments of any JavaScript call it makes
+// (a method of a namespace or of an object a library returned or resolved, a
+// constructor through `.new`, a property written, a global like
+// `setTimeout`) with its own `pyobj2jsobj`, whose callback trims nothing and
+// is not the function `pyHandler` publishes for the same callable. The engine
+// asks `$B.pyobj2jsobj_hook` first, an extension point proposed upstream and
+// vendored (see BRYTHON_FIX.md), so the conversion has one site and one
+// contract.
+//
+// A Python list, tuple, dict or set and an instance of the author's class are
+// answered too, by their view, as a named import's arguments are (`outbound`)
+// and as at a prop and an export: handed to a JavaScript function or written
+// into a JavaScript object, `config.tags = tags`, they are Python's own, so a
+// later `tags.append(…)` is there and a write from JavaScript is Python's. The
+// engine's own walk made a copy, which missed every later mutation, or left
+// the value itself, which JavaScript cannot read. The callable question comes
+// first: a list subclass that defines `__call__` is a callback.
+//
+// Anything else goes on to the engine.
+globalThis.__BRYTHON__.pyobj2jsobj_hook = (value) => {
+    if (value === null || (typeof value !== 'object' && typeof value !== 'function')) return undefined;
+    if (declared(value) !== null || ADAPTERS.has(value)) return pyHandler(value);
+    if (pyBytes(value)) return bytesOut(value);
+
+    const view = viewOf(value);
+
+    return view === value ? undefined : view;
 };

@@ -170,6 +170,11 @@ export const plainScalar = (value) => {
 // (`subscriber`), and a call that reads without following (`untrack`).
 // Alone, every read is taken for a reaction's, nothing is refused, nobody
 // subscribes, and nothing is followed.
+//
+// And whether a name of a module that nothing has bound, read at a line of a
+// file, is an absence there, None, rather than CPython's `NameError`
+// (`absent`): a template's text, which renders a value that is not there as
+// empty. Alone, every such read raises.
 export const host = {
     owns: () => false,
     adopt: null,
@@ -177,7 +182,8 @@ export const host = {
     reacting: () => true,
     refuses: () => false,
     subscriber: () => () => {},
-    untrack: (fn) => fn()
+    untrack: (fn) => fn(),
+    absent: () => false
 };
 
 // What is lent the crossing. By `calls.js`, as it loads, since the crossing
@@ -788,6 +794,49 @@ export function iterated(value) {
     if (type === _b_.list || type === _b_.tuple) return value;
 
     return $B.$list(Array.from($B.make_js_iterator(value, $B.NULL)));
+}
+
+// The iterators that make the pairs they yield, `.items()`, `enumerate()` and
+// `zip()`, and not a class of the author's derived from one: what they yield is
+// a tuple made anew at each step.
+const PAIR_MAKERS = new Set(['enumerate', 'zip', 'dict_items', 'dict_itemiterator']);
+
+export const makesPairs = (iterable) => {
+    const type = quietPyType(iterable);
+
+    return type !== undefined && (type.tp_flags & globalThis.__BRYTHON__.TPFLAGS.HEAPTYPE) === 0 && PAIR_MAKERS.has(type.tp_name);
+};
+
+// `compute` run with each pair those iterators make handed to `note` as it is
+// made. They make them in `tp_iternext`, which Brython reads anew at each
+// `__next__` (`make_next`): replaced for the run and put back after it. A run
+// inside another's finds them replaced already, its pairs noted by the outer
+// run's `note`.
+let noting = 0;
+const replaced = [];
+
+export function notingPairs(note, compute) {
+    const $B = globalThis.__BRYTHON__;
+
+    if (noting++ === 0) {
+        for (const iterator of [$B.dict_itemiterator, _b_.enumerate, _b_.zip]) {
+            const own = iterator.tp_iternext;
+
+            replaced.push([iterator, own]);
+            iterator.tp_iternext = function* (self) {
+                for (const pair of own.call(this, self)) {
+                    note(pair);
+                    yield pair;
+                }
+            };
+        }
+    }
+
+    try {
+        return compute();
+    } finally {
+        if (--noting === 0) for (const [iterator, own] of replaced.splice(0)) iterator.tp_iternext = own;
+    }
 }
 
 // An object no Python type marks is JavaScript's, and leaves Python as itself,
@@ -1605,13 +1654,19 @@ function branch(value, seen, shell, adapt) {
 // The name alone, for a reader that looks a key up rather than writing a
 // mapping out: a JavaScript property name is a string, and a Brython float is an
 // object, so `{1.5: "x"}` would otherwise be keyed by `[object Object]`. A key
-// `None` is spelled `"null"`, as JSON spells it: a name, not a value crossing.
-export const propertyKey = (key) => (typeof key === 'symbol' ? key : String(key === NONE ? null : plainData(key)));
+// `None` is the `undefined` it is at every door, `"undefined"`, as JavaScript
+// spells `{[undefined]: 1}`; under the serialiser's rule (`serialising`), which
+// writes JSON, it is `"null"`, as `json.dumps` spells it, where it spelled
+// `"null"` for every reader.
+export const propertyKey = (key, serialising = false) =>
+    typeof key === 'symbol' ? key : key === NONE ? (serialising ? 'null' : 'undefined') : String(plainData(key));
 
 export function propertyName(key, out, seen, adapt) {
-    if (typeof key === 'symbol' && adapt !== undefined && seen instanceof Set) adapt(key);
+    const serialising = adapt !== undefined && seen instanceof Set;
 
-    const name = propertyKey(key);
+    if (typeof key === 'symbol' && serialising) adapt(key);
+
+    const name = propertyKey(key, serialising);
 
     if (Object.hasOwn(out, name)) twoKeys(name);
 

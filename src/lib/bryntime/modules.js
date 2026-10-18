@@ -10,7 +10,7 @@ import * as calls from './calls.js';
 // Held as constants of this module, as its neighbours hold theirs: a binding
 // imported is read through the module's cell at each use, and a namespace's
 // accessors are the hottest path of a name.
-const { host, mutableBytes, pyBytes } = core;
+const { NONE, host, mutableBytes, pyBytes } = core;
 const { NAMESPACE_DICTS, STORED, heldAtSource, track } = mutations;
 const { STALE, flushExports } = calls;
 
@@ -756,5 +756,32 @@ function namespaceDict(namespace) {
         if (frame?.$has_generators && ours(frame[1])) frame.$has_generators = false;
 
         return leave.apply(this, args);
+    };
+})(globalThis.__BRYTHON__);
+
+// **A name of a module that nothing has bound yet**, assigned in a branch that
+// did not run, or deleted, is read as CPython reads it, `NameError`
+// (`$B.resolve_in_scopes`, where a read the namespace no longer answers goes),
+// save where the host says such a read is an absence, at the line of the file
+// the code making it is written at (`host.absent`): None there, what
+// JavaScript's `undefined` becomes wherever it enters Python.
+(function installAbsence($B) {
+    const resolve = $B.resolve_in_scopes;
+    const declares = (namespace, name) =>
+        namespace !== null && typeof namespace === 'object' && namespace.$proxy === true && name in namespace;
+    const absent = () => {
+        const frame = $B.frame_obj?.frame;
+
+        return frame !== undefined && host.absent(frame.__file__, frame.$lineno);
+    };
+
+    $B.resolve_in_scopes = function (name, namespaces, inum) {
+        try {
+            return resolve.call(this, name, namespaces, inum);
+        } catch (error) {
+            if (absent() && namespaces.some((one) => declares(one, name))) return NONE;
+
+            throw error;
+        }
     };
 })(globalThis.__BRYTHON__);

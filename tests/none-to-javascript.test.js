@@ -9,6 +9,7 @@ import { test, expect } from 'vitest';
 import { flushSync } from 'svelte';
 import { mount } from './mounted.js';
 import store from './fixtures/none_store.svelte.py';
+import keys from './fixtures/none_keys.svelte.py';
 import NoneBindHost from './fixtures/NoneBindHost.svelte';
 import NoneBindChild from './fixtures/NoneBindChild.svelte';
 import NoneBindChildNative from './fixtures/NoneBindChildNative.svelte';
@@ -16,6 +17,17 @@ import NoneBindChildNative from './fixtures/NoneBindChildNative.svelte';
 test("a store's None is undefined, read and returned", () => {
     expect(store.user).toBe(undefined);
     expect(store.give()).toBe(undefined);
+});
+
+// And a key: a dict keyed by None is keyed by `undefined` to JavaScript, as
+// `{[undefined]: 1}` is, read through its view and copied by `to_js`, where its
+// key was `"null"`. JSON alone spells it `"null"`, as `json.dumps` does.
+test('a dict key None is undefined to JavaScript and null in JSON', () => {
+    const native = Object.keys({ [undefined]: 1 });
+
+    expect([...keys.viewed()]).toEqual(native);
+    expect(Object.keys(keys.copied())).toEqual(native);
+    expect(Object.keys(JSON.parse(keys.serialised()))).toEqual(['null']);
 });
 
 test('a bindable a Python child sets to None reaches a JavaScript parent as a Svelte child’s does', () => {
