@@ -870,7 +870,7 @@ const PAIR_MAKERS = new Set(['enumerate', 'zip', 'dict_items', 'dict_itemiterato
 export const makesPairs = (iterable) => {
     const type = quietPyType(iterable);
 
-    return type !== undefined && (type.tp_flags & globalThis.__BRYTHON__.TPFLAGS.HEAPTYPE) === 0 && PAIR_MAKERS.has(type.tp_name);
+    return type !== undefined && !authoredClass(type) && PAIR_MAKERS.has(type.tp_name);
 };
 
 // `compute` run with each pair those iterators make handed to `note` as it is
@@ -1057,7 +1057,7 @@ export function slotValues(value, all = false, only = null) {
     const mro = declaresSlots(value) ? quietPyType(value)?.tp_mro : undefined;
 
     for (const cls of Array.isArray(mro) ? mro : []) {
-        if ((cls.tp_flags & $B.TPFLAGS.HEAPTYPE) === 0) continue;
+        if (!authoredClass(cls)) continue;
 
         const entries = only === null ? pyEntries($B.get_dict(cls)) : [[only, $B.search_in_dict(cls, only, $B.NULL)]];
 

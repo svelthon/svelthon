@@ -4,7 +4,7 @@
 // the host reaches it through `bryntime.js`.
 import * as core from './core.js';
 
-const { NONE, VIEW_OF, _b_, authoredClass, callable, declares, host, isSet, javascriptOwn, ownAttributes, ownType, pyBytes, pyClass, pyEntries, quietPyType, slotValues } = core;
+const { NONE, VIEW_OF, _b_, authoredClass, callable, declares, host, isSet, isTuple, javascriptOwn, ownAttributes, ownType, pyBytes, pyClass, pyEntries, quietPyType, slotValues } = core;
 
 // How a set's view takes out the member its own lookup found, and tells it
 // (`SetView.delete`): the mutation tracking's, which sets it.
@@ -866,7 +866,7 @@ function installMutationTracking($B) {
         // watch.
         const type = quietPyType(obj);
 
-        if (type !== undefined && (type.tp_flags & $B.TPFLAGS.HEAPTYPE) !== 0 && !MARKS.has(obj)) {
+        if (type !== undefined && authoredClass(type) && !MARKS.has(obj)) {
             return namesRead(type.tp_mro, attr);
         }
 
@@ -912,7 +912,7 @@ function installMutationTracking($B) {
         const stored = $B.search_in_dict(cls, attr, $B.NULL);
         const type = stored === $B.NULL ? undefined : quietPyType(stored);
 
-        if (type === undefined || (type.tp_flags & $B.TPFLAGS.HEAPTYPE) === 0) return;
+        if (type === undefined || !authoredClass(type)) return;
         if ($B.search_slot(type, 'tp_descr_get', $B.NULL) === $B.NULL) return;
 
         linked(nameMarker(cls, attr), cls, stored, undefined, true, attr);
@@ -949,9 +949,9 @@ function installMutationTracking($B) {
 
         const meta = pyClass(value) ? quietPyType(value) : undefined;
 
-        if (meta === undefined || (meta.tp_flags & $B.TPFLAGS.HEAPTYPE) === 0) return;
+        if (meta === undefined || !authoredClass(meta)) return;
 
-        for (const cls of meta.tp_mro) if ((cls.tp_flags & $B.TPFLAGS.HEAPTYPE) !== 0) className(cls, PROTOCOLS).subscribe();
+        for (const cls of meta.tp_mro) if (authoredClass(cls)) className(cls, PROTOCOLS).subscribe();
     };
 
     // `dir(box)` lists the names of every class the object is looked up
@@ -1370,7 +1370,7 @@ export const watchable = (value) => value !== null && (typeof value === 'object'
 const STILL_TUPLES = new WeakMap();
 
 function stillTuple(value) {
-    if (quietPyType(value) !== _b_.tuple) return false;
+    if (!isTuple(value)) return false;
 
     let still = STILL_TUPLES.get(value);
 
@@ -1520,7 +1520,7 @@ function mutable(value) {
         // a dictionary, as a function and an instance do, and `Counter.total +=
         // 1` is state. CPython flags such a class a heap type, and so does
         // Brython; the engine's own classes have nothing to watch.
-        if (cls === _b_.type) return (value.tp_flags & $B.TPFLAGS.HEAPTYPE) !== 0;
+        if (cls === _b_.type) return authoredClass(value);
 
         if (STILL_TYPES.has(cls)) return false;
         if (cls === _b_.frozenset) return !stillFrozenset(value);
@@ -1772,7 +1772,7 @@ function attributeOf(holder, name) {
     if (!pyClass(kind)) return UNTOLD;
 
     const asks = (hook) =>
-        kind.tp_mro.some((one) => (one.tp_flags & $B.TPFLAGS.HEAPTYPE) !== 0 && $B.search_in_dict(one, hook, $B.NULL) !== $B.NULL);
+        kind.tp_mro.some((one) => authoredClass(one) && $B.search_in_dict(one, hook, $B.NULL) !== $B.NULL);
 
     if (asks('__getattr__') || asks('__getattribute__')) return UNTOLD;
 
