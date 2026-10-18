@@ -936,6 +936,7 @@ function installMutationTracking($B) {
     // read that lists them.
     const CLASS_NAMES = new WeakMap();
     const EVERY = Symbol('every name');
+    const BUILTIN_NAME = { updates: new Set(), subscribe() {} };
 
     // And on the special methods a metaclass gives the classes it makes,
     // `PROTOCOLS`, which an operation on a class looks up and no read names:
@@ -972,7 +973,15 @@ function installMutationTracking($B) {
     };
     Object.defineProperties($B.builtins.dir, Object.getOwnPropertyDescriptors(dir));
 
+    // Only a class of Python's own code can change: a builtin one refuses
+    // every write, `str.x = 1` raising `TypeError`, its bases included, so a
+    // read of one of its names follows nothing. Followed, each `isinstance`
+    // and each lookup a comparison makes, every one through `tuple` and
+    // `object` for a `sorted()` of pairs, made the reaction an effect of
+    // Svelte's, made and destroyed at each run.
     const className = (cls, attr) => {
+        if (!authoredClass(cls)) return BUILTIN_NAME;
+
         let names = CLASS_NAMES.get(cls);
 
         if (names === undefined) {
