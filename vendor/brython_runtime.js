@@ -12331,8 +12331,7 @@ $B.list_iterator.tp_methods=["__length_hint__","__reduce__","__setstate__"]
 $B.list_iterator.noargs_methods=["__length_hint__","__reduce__"]
 var eq=$B.list_eq=function(self,other){if($B.PYOBJ_MAP.has(other)){other=$B.PYOBJ_MAP.get(other)}
 var cls=$B.$isinstance(self,list)? list :tuple
-if(isinstance(other,cls)){if(other.length==self.length){var i=self.length
-while(i--){if(! $B.is_or_equals(self[i],other[i])){return false}}
+if(isinstance(other,cls)){if(other.length==self.length){for(var i=0;i < self.length;i++){if(! $B.is_or_equals(self[i],other[i])){return false}}
 return true}
 return false}
 return _b_.NotImplemented}

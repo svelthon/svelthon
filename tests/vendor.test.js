@@ -868,6 +868,15 @@ test("a JavaScript function read off an object is not asked its own toString: js
     expect($B.$call($B.$getattr($B.jsobj2pyobj({ fn }), 'fn'))).toBe(1);
 });
 
+// Lists and tuples compared their items from the last one, so `(k, v) == (k2,
+// v2)` asked `v == v2` before telling `k` from `k2`, which an `{#each}` sorting
+// `d.items()` read as a read inside each row. `python3` on the same module.
+test('lists and tuples compare their items from the first: list-eq-left-to-right', async () => {
+    const { answers } = await import('./fixtures/sequence_equality.py');
+
+    expect([...answers()]).toEqual(['False', '0', 'True', 'True']);
+});
+
 // The items of a JavaScript Set reached Python unconverted, so a float in it
 // refused a format; `hash()` of JavaScript's null raised a JavaScript error,
 // and so did null as a subscript. Each answer is read on its own, so each
