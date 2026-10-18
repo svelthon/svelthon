@@ -841,6 +841,18 @@ test('a JavaScript array and a plain object answer as a list and a dict: js-arra
     expect(call(new Map([['k', 'v']]), 'get', 'k')).toBe('v');
 });
 
+// A JavaScript object's own field `ob_type` was taken for its class, whatever
+// it held, so `"business"` there failed the attribute lookup inside the engine.
+// Only a class there is one. `tests/unpack-by-key.test.js` reads such a record
+// by the dot in a component, a method of it included.
+test("a JavaScript object's ob_type is its data unless it holds a class: get-class-ob-type-class", () => {
+    const $B = globalThis.__BRYTHON__;
+    const read = (value, name) => $B.$getattr($B.jsobj2pyobj(value), name);
+
+    expect(read({ ob_type: 'business', value: 42 }, 'value')).toBe(42);
+    expect(read({ ob_type: 'business', value: 42 }, 'ob_type')).toBe('business');
+});
+
 // A builtin that takes no arguments said "takes no argument", and `locals()`
 // refused a keyword with the same sentence. `python3` on the same module, at
 // its top and in a function.

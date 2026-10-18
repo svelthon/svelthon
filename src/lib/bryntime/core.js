@@ -111,18 +111,31 @@ export const pyScalar = (value) => {
 
     if (!pyClass(type)) return undefined;
 
-    // **A limit.** `ob_type` is a public key, so a JavaScript object can carry
-    // one, and a field holding a real Brython class walks past the check meant
-    // for a business *string*: `{ob_type: float, value: 42, label: "kept"}`
-    // crosses as the number `42` and the `label` beside it is gone.
+    // **Two limits, one cause: the engine marks its objects by `ob_type`, a
+    // public name, which a JavaScript object is as free to carry.**
     //
-    // Looking cannot close it, not even the prototype, since a float that has
-    // crossed a boundary is a plain object too: **a genuine Brython float and
-    // `{ob_type: float, value: 42}` are the same object**, field for field, on
-    // the paths that matter. What would close it is provenance, the engine
-    // marking what it made, and that is Brython's to give, not ours to infer.
-    // So the contract: a value carrying a Brython class under `ob_type` **is**
-    // that value here, and `tests/helpers.test.js` pins it.
+    // A field holding a real Brython class walks past the check meant for a
+    // business *string*: `{ob_type: float, value: 42, label: "kept"}` crosses as
+    // the number `42` and the `label` beside it is gone. Looking cannot close
+    // it, not even the prototype, since a float that has crossed a boundary is
+    // a plain object too: **a genuine Brython float and `{ob_type: float, value:
+    // 42}` are the same object**, field for field, on the paths that matter.
+    //
+    // And a getter of that name is run by the engine itself, which reads
+    // `obj.ob_type` on any object it looks an attribute up on: where this file
+    // reads the field off its descriptor, `row.first` on a JavaScript row runs
+    // it, and Svelte's unpacking never reads it. Read off the descriptor in the
+    // engine's `get_class`, it cost 3 to 8 % on the crossing of 50 000 and
+    // 200 000 JavaScript objects and on 4 000 class reads, measured, and it is
+    // not done.
+    //
+    // What would close both is provenance: the engine marking what it made
+    // under a symbol of its own, as it marks a dict already (`$B.OB_TYPE`). That
+    // is Brython's to give, a proposal to make upstream, not ours to infer. So
+    // the contract: a value carrying a Brython class under `ob_type` **is** that
+    // value here, which `tests/helpers.test.js` pins, and an `ob_type` getter of
+    // a JavaScript object runs when Python reads one of its attributes, which
+    // `tests/unpack-by-key.test.js` says.
 
     const mro = type.tp_mro;
 

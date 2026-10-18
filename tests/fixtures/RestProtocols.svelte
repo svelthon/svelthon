@@ -1,7 +1,5 @@
 <script lang="python">
-# A row is a mapping by its class, not by a field or a property called `keys`,
-# and a JavaScript row is read without running its `ob_type` getter.
-importjs {rows as foreign} from './rest_protocols.js'
+# A row is a mapping by its class, not by a field or a property called `keys`.
 
 
 class FieldRow:
@@ -24,8 +22,6 @@ class PropertyRow:
 rows = [
     ("field", FieldRow()),
     ("property", PropertyRow()),
-    ("refusing", foreign.refusing),
-    ("counting", foreign.counting),
 ]
 </script>
 

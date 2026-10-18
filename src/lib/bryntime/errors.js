@@ -3,7 +3,26 @@
 // the runtime as it was; the host reaches it through `bryntime.js`.
 import * as core from './core.js';
 
-const { NONE, _b_, refused, lent } = core;
+const { NONE, _b_, refused, lent, pyClass, ownType } = core;
+
+// An exception the author's own Python raised, as opposed to a conversion that
+// could not be made.
+//
+// A host that tries Python first and falls back to JavaScript, for a value's
+// truth or its text, falls back for a foreign value (a DOM node, a JavaScript
+// object), which Brython's own classifier trips on, and not for the author's
+// own error: a `__bool__` or a `__str__` that raises goes on, rather than
+// leaving a plausible page.
+//
+// Told apart by the *error*, not by the value, which keeps the value itself
+// untouched: it may be a proxy that records every key read. A Brython exception
+// is a plain object carrying `ob_type` and a `__traceback__`; it is not an
+// `instanceof Error`, and it has no `__class__` either.
+export const raised = (error) =>
+    error !== null &&
+    typeof error === 'object' &&
+    pyClass(ownType(error)) &&
+    error.__traceback__ !== undefined;
 
 // The traps of a view, each relaying what Python raises under it as a call
 // does (`pyCall`): the exception itself, its message filled in, so JavaScript

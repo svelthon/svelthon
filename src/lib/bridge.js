@@ -104,6 +104,7 @@ const {
     pyError,
     thrown,
     relayed,
+    raised,
     schedule,
     scheduleAsync,
     pyArg,
@@ -280,24 +281,6 @@ Object.defineProperty(NONE, 'toString', {
 //
 // Only generated code types it, so its name takes no word an author may want
 // from the component's scope.
-// An exception the author's own Python raised, as opposed to a conversion that
-// could not be made.
-//
-// `truthy` and `str` try Python first and fall back to JavaScript, and the
-// fallback is there for a foreign value (a DOM node, a JavaScript object),
-// which Brython's own classifier trips on, and not for the author's own error:
-// a `__bool__` or a `__str__` that raises goes on, rather than leaving a
-// plausible page.
-//
-// Told apart by the *error*, not by the value, which keeps the value itself
-// untouched: it may be a proxy that records every key read. A Brython exception
-// is a plain object carrying `ob_type` and a `__traceback__`; it is not an
-// `instanceof Error`, and it has no `__class__` either.
-const raised = (error) =>
-    error !== null &&
-    typeof error === 'object' &&
-    pyClass(ownType(error)) &&
-    error.__traceback__ !== undefined;
 
 // The components written in Python, as their Python parents import them. Each
 // says so as its module loads, by a function that reads it, since its module's
@@ -2156,30 +2139,16 @@ function directiveCallable(member, path) {
 // `otherwise`, when given, is a callable whose result stands for a name that is
 // neither: the default of a key in a pattern, `{#each rows as {id=0}}`.
 export function readAttr(target, name, otherwise) {
-    // A JavaScript record, an object no Python type marks, is read as
-    // JavaScript, once, a getter too, and its member handed over the way the
-    // engine hands over any JavaScript member, bound to the record
-    // (`jsMember`), in two cases. A key with a default, `{value=7}`, which
-    // Svelte takes for a member that is missing or `undefined`: crossed,
-    // `undefined` is None, as a `null` given on purpose is, so the default is
-    // decided before. And a record whose own data has a field called `ob_type`:
-    // the engine reads that field to know what an object is, takes `"business"`
-    // for a class, and fails inside its attribute lookup.
-    if (
-        target !== null &&
-        typeof target === 'object' &&
-        pyType(target) === undefined &&
-        (otherwise !== undefined || Object.hasOwn(target, 'ob_type'))
-    ) {
-        if (otherwise !== undefined) {
-            const member = jsMember(target, name, MISSING);
+    // A key with a default, `{value=7}`, which Svelte takes for a member that is
+    // missing or `undefined`, read off a JavaScript record, an object no Python
+    // type marks: read as JavaScript, once, a getter too, and its member handed
+    // over the way the engine hands over any JavaScript member, bound to the
+    // record (`jsMember`). Crossed, `undefined` is None, as a `null` given on
+    // purpose is, so the default is decided before.
+    if (otherwise !== undefined && target !== null && typeof target === 'object' && pyType(target) === undefined) {
+        const member = jsMember(target, name, MISSING);
 
-            return member === MISSING ? invoke(otherwise) : member;
-        }
-
-        if (name in target) return jsMember(target, name);
-
-        pyRaise('AttributeError', `'${name}'`);
+        return member === MISSING ? invoke(otherwise) : member;
     }
 
     // A function a module's namespace exports, `importjs * as callbacks`, is the
