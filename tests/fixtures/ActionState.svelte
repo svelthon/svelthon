@@ -31,6 +31,11 @@ box = Box(model)
 slotted = Slotted(model)
 mixed = Mixed(model)
 local = [{"n": 1}]
+# The instance inside a container, which holds the state in its field.
+listbox = [Box(model)]
+dictbox = {"child": Box(model)}
+tuplebox = (Box(model),)
+listslots = [Slotted(model)]
 
 
 def number(kind, value):
@@ -38,6 +43,10 @@ def number(kind, value):
         return value.n
     if kind in ("instance", "slots", "mixed"):
         return value.model.n
+    if kind in ("listbox", "tuplebox", "listslots"):
+        return value[0].model.n
+    if kind == "dictbox":
+        return value["child"].model.n
     if kind == "nested":
         return value["child"]["inner"].n
     if kind == "dict":
@@ -73,4 +82,8 @@ def bump_local():
 <div data-k="slots" use:chosen={slotted}></div>
 <div data-k="mixed" use:chosen={mixed}></div>
 <div data-k="local" use:chosen={local}></div>
+<div data-k="listbox" use:chosen={listbox}></div>
+<div data-k="dictbox" use:chosen={dictbox}></div>
+<div data-k="tuplebox" use:chosen={tuplebox}></div>
+<div data-k="listslots" use:chosen={listslots}></div>
 <p>{model.n}|{rows[0].n}|{record["child"].n}|{nested["child"]["inner"].n}|{box.model.n}|{slotted.model.n}|{mixed.model.n}|{local[0]["n"]}</p>

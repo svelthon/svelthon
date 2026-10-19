@@ -12,8 +12,9 @@ import ActionStateNative from './fixtures/ActionStateNative.svelte';
 import ActionStateHost from './fixtures/ActionStateHost.svelte';
 
 // An instance holds its field in its `__dict__`, in its slots, or, a subclass
-// with a `__dict__` of its own, in the slot it inherits.
-const KINDS = ['direct', 'list', 'dict', 'nested', 'instance', 'slots', 'mixed', 'local'];
+// with a `__dict__` of its own, in the slot it inherits; and inside a list, a
+// dict or a tuple, where the walk of the container stopped at it.
+const KINDS = ['direct', 'list', 'dict', 'nested', 'instance', 'slots', 'mixed', 'local', 'listbox', 'dictbox', 'tuplebox', 'listslots'];
 
 const READS = {
     direct: (value) => value.n,
@@ -23,7 +24,11 @@ const READS = {
     instance: (value) => value.model.n,
     slots: (value) => value.model.n,
     mixed: (value) => value.model.n,
-    local: (value) => value[0].n
+    local: (value) => value[0].n,
+    listbox: (value) => value[0].model.n,
+    dictbox: (value) => value.child.model.n,
+    tuplebox: (value) => value[0].model.n,
+    listslots: (value) => value[0].model.n
 };
 
 const run = (Child, python_action) => {

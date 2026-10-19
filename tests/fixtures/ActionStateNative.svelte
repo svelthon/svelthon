@@ -19,6 +19,10 @@
     let slotted = new Box(given());
     let mixed = new Box(given());
     let local = $state([{ n: 1 }]);
+    let listbox = $state([new Box(given())]);
+    let dictbox = $state({ child: new Box(given()) });
+    let tuplebox = $state([new Box(given())]);
+    let listslots = $state([new Box(given())]);
 
     export function bump_local() {
         local[0].n += 1;
@@ -33,4 +37,8 @@
 <div data-k="slots" use:observe={slotted}></div>
 <div data-k="mixed" use:observe={mixed}></div>
 <div data-k="local" use:observe={local}></div>
+<div data-k="listbox" use:observe={listbox}></div>
+<div data-k="dictbox" use:observe={dictbox}></div>
+<div data-k="tuplebox" use:observe={tuplebox}></div>
+<div data-k="listslots" use:observe={listslots}></div>
 <p>{model.n}|{rows[0].n}|{record.child.n}|{nested.child.inner.n}|{box.model.n}|{slotted.model.n}|{mixed.model.n}|{local[0].n}</p>

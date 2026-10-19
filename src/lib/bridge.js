@@ -1380,9 +1380,25 @@ const deepRead = (value, visited) => {
     }
 };
 
+// A Python object's own fields are its attributes, in its `__dict__` and in
+// its slots, an inherited one included, read as stored and without a property
+// of the author's run (`slotValues`).
+const storedFields = (value) => {
+    const attributes = ownAttributes(value);
+    const fields = [...slotValues(value).values()];
+
+    if (attributes !== null && attributes !== undefined && isDict(attributes)) {
+        for (const [, one] of heldEntries(attributes)) fields.push(one);
+    }
+
+    return fields;
+};
+
 // What a Python container holds, as Svelte reads what its own state holds: an
 // object of JavaScript's is read to its end (`deepRead`), and a container is
-// walked in its turn. Walked as stored and not through its view, which
+// walked in its turn, and so is an instance of the author's, by its fields, as
+// Svelte reads an instance its state holds: `[Box(model)]` handed to an action
+// followed `model` no more. Walked as stored and not through its view, which
 // converts each value and subscribes the reader to it, a thousand times the
 // cost on a list of two thousand rows, for changes Python follows already.
 const heldStates = (value, visited) => {
@@ -1393,12 +1409,13 @@ const heldStates = (value, visited) => {
     const visit = (one) => {
         if (typeof one !== 'object' || one === null) return;
 
-        if (pyContainer(one)) heldStates(one, visited);
+        if (pyContainer(one) || authoredInstance(one)) heldStates(one, visited);
         else deepRead(one, visited);
     };
 
     if (Array.isArray(value)) for (const one of value) visit(one);
-    else for (const [, one] of heldEntries(value)) visit(one);
+    else if (pyContainer(value)) for (const [, one] of heldEntries(value)) visit(one);
+    else for (const one of storedFields(value)) visit(one);
 };
 
 // Svelte's `deep_read_state`, which an action's effect runs on its value: a
@@ -1414,17 +1431,7 @@ const readState = (value) => {
     else if (quietPyType(value) === undefined) {
         for (const key in value) if (stateOwned(value[key])) deepRead(value[key], new Set());
     } else {
-        // A Python object's own fields are its attributes, in its `__dict__`
-        // and in its slots, an inherited one included, read as stored and
-        // without a property of the author's run (`slotValues`).
-        const attributes = ownAttributes(value);
-        const fields = [...slotValues(value).values()];
-
-        if (attributes !== null && isDict(attributes)) {
-            for (const [, one] of heldEntries(attributes)) fields.push(one);
-        }
-
-        for (const one of fields) if (stateOwned(one)) deepRead(one, new Set());
+        for (const one of storedFields(value)) if (stateOwned(one)) deepRead(one, new Set());
     }
 };
 
