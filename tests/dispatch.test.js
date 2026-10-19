@@ -20,6 +20,9 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import { pythonExpressions, collector } from '../src/lib/markup.js';
+// The parser the names an expression reads are read with, which the plugin
+// has loaded before any markup is read.
+import '../src/lib/compile.cjs';
 
 const source = readFileSync(fileURLToPath(new URL('../src/lib/markup.js', import.meta.url)), 'utf8');
 

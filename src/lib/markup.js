@@ -1163,6 +1163,72 @@ const referenced = (text) => {
     return [...found];
 };
 
+// And the names it reads **from outside itself**, which is what a template
+// expression is handed: a lambda's parameters are its own, and so is every
+// target of a comprehension, in each of its clauses but the first iterable, as
+// CPython scopes them. `(lambda x: x)(7)` reads no `x` of the template's;
+// `(lambda y=x: y)()` reads one in its default, and `[x for x in x]` in its
+// first iterable. Handed every word, a snippet's parameter the expression
+// shadows was read all the same, before the expression ran, and its default
+// with it, where Svelte reads none. Read off the tree the engine's parser
+// makes, and off the text where it makes none, which the compiler then
+// refuses. A walrus's target is taken as read, as it was.
+const freeNames = (text) => {
+    const tree = targetTree(`(${text}\n)`);
+
+    if (tree === null) return referenced(text);
+
+    const ast = globalThis.__BRYTHON__.ast;
+    const found = new Set();
+    const COMPREHENSIONS = [ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp];
+    const targets = (node, into) => {
+        if (node instanceof ast.Name) into.add(node.id);
+        else if (node instanceof ast.Tuple || node instanceof ast.List) for (const one of node.elts) targets(one, into);
+        else if (node instanceof ast.Starred) targets(node.value, into);
+    };
+    const visit = (node, bound) => {
+        if (Array.isArray(node)) {
+            for (const one of node) visit(one, bound);
+            return;
+        }
+        if (node === null || typeof node !== 'object' || !Array.isArray(node.constructor?._fields)) return;
+
+        if (node instanceof ast.Name) {
+            if (!bound.has(node.id)) found.add(node.id);
+            return;
+        }
+
+        if (node instanceof ast.Lambda) {
+            const { args } = node;
+            const own = new Set(bound);
+
+            visit([args.defaults, args.kw_defaults], bound);
+            for (const one of [...args.posonlyargs, ...args.args, ...args.kwonlyargs, args.vararg, args.kwarg]) {
+                if (one) own.add(one.arg);
+            }
+            visit(node.body, own);
+            return;
+        }
+
+        if (COMPREHENSIONS.some((kind) => node instanceof kind)) {
+            const [first, ...rest] = node.generators;
+            const own = new Set(bound);
+
+            visit(first.iter, bound);
+            for (const one of node.generators) targets(one.target, own);
+            for (const one of node.generators) visit([one.target, one.ifs], own);
+            visit(rest.map((one) => one.iter), own);
+            visit([node.elt, node.key, node.value], own);
+            return;
+        }
+
+        for (const field of node.constructor._fields) visit(node[field], bound);
+    };
+
+    visit(tree, new Set());
+    return [...found];
+};
+
 // One entry of a declaration that destructures: a snippet's parameter, and the
 // target of an `{#each}`. Either may be a name, a pattern Svelte takes apart,
 // or either of those carrying a default.
@@ -1677,7 +1743,7 @@ function eachBlock(trimmed, declare, call, refuse, loop) {
     const written = parts.length === 2 ? parts[1].trim() : null;
     const index = written ?? loop.index(keyed !== null);
 
-    loop.noted(index, referenced(body.slice(0, at)));
+    loop.noted(index, freeNames(body.slice(0, at)));
 
     const declared = written === null && index !== null ? `${pattern}, ${index}` : pattern;
     const key = keyed ? eachKey(keyed[1], unpack, call) : null;
@@ -2180,7 +2246,7 @@ function scopeChain(seed, indexed, refuseCompilerName) {
     // It is the right shape anyway. `follow(x)` subscribes the reader to `x`,
     // and an expression that does not read `x` has no business depending on it.
     const mentioned = (expr) => {
-        const names = new Set(referenced(expr).map(pythonName));
+        const names = new Set(freeNames(expr).map(pythonName));
 
         return inScope().filter((one) => names.has(pythonName(one)));
     };
@@ -2195,7 +2261,7 @@ function scopeChain(seed, indexed, refuseCompilerName) {
     // one object, which the values the binding mentions cannot. A block whose
     // author wrote no index is noted for the second walk to give it one.
     const iterations = (expr) => {
-        const names = new Set(referenced(expr).map(pythonName));
+        const names = new Set(freeNames(expr).map(pythonName));
         const indexes = [];
 
         for (let at = scopes.length - 1; at > 0; at--) {

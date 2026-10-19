@@ -1,6 +1,9 @@
 import { test, expect, describe } from 'vitest';
 import { mount, unmount, flushSync, settled } from './mounted.js';
 import { pythonExpressions, collector } from '../src/lib/markup.js';
+// The parser the names an expression reads are read with, which the plugin
+// has loaded before any markup is read.
+import '../src/lib/compile.cjs';
 import { directiveTransition, directiveAnimate, directiveAction } from '../src/lib/bridge.js';
 import DirectiveModule from './fixtures/DirectiveModule.svelte';
 import DirectiveLife from './fixtures/DirectiveLife.svelte';
