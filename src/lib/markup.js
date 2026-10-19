@@ -1250,6 +1250,32 @@ const freeNames = (text) => {
     return [...found];
 };
 
+// Whether an expression may run without reading a name it holds: a branch,
+// `if … else`, `and`, `or` and a comparison chained past its first test, or a
+// body run later or never, a lambda's and a comprehension's. Outside them
+// Python reads every name it holds, so a name read ahead is the one it reads,
+// and costs no call; inside one, a name read ahead may be one Python would
+// not read, a snippet's parameter running its default or a derived its body.
+// Text the engine's parser makes no tree of is taken to skip.
+const skips = (text) => {
+    const tree = targetTree(`(${text}\n)`);
+
+    if (tree === null) return true;
+
+    const ast = globalThis.__BRYTHON__.ast;
+    const SKIPPING = [ast.IfExp, ast.BoolOp, ast.Lambda, ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp];
+    const visit = (node) => {
+        if (Array.isArray(node)) return node.some(visit);
+        if (node === null || typeof node !== 'object' || !Array.isArray(node.constructor?._fields)) return false;
+        if (SKIPPING.some((kind) => node instanceof kind)) return true;
+        if (node instanceof ast.Compare && node.comparators.length > 1) return true;
+
+        return node.constructor._fields.some((field) => visit(node[field]));
+    };
+
+    return visit(tree);
+};
+
 // One entry of a declaration that destructures: a snippet's parameter, and the
 // target of an `{#each}`. Either may be a name, a pattern Svelte takes apart,
 // or either of those carrying a default.
@@ -2525,9 +2551,6 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     //   'lazy'    the same, for an expression whose names may not exist yet
     //             when it is prepared: a default inside a pattern, where a later
     //             name of the same pattern is still in the temporal dead zone.
-    //             Each name is handed over as a function that reads it, and the
-    //             compiler makes the reads calls, so a branch Python does not
-    //             take reads nothing, as in Python.
     //   'scalar'  a value a binding compares by identity, a `value` or a
     //             `bind:` read: a scalar is made JavaScript's, so `0.5` twice
     //             is one value, and a container is handed over as the object it
@@ -2540,22 +2563,30 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     // `bound` names the block's names the expression binds for itself, which
     // are therefore not handed in: the key of an `{#each}`, see `eachKey`.
     // `followed` is false for that key alone, which `eachKey` says why.
+    //
+    // An expression that may run without reading a name it holds (`skips`), and
+    // every one of the 'lazy' kind, is handed each name as a function that reads
+    // it, and the compiler makes the reads calls (`templateDots`), so a branch
+    // Python does not take reads nothing, as in Python and as in Svelte's own
+    // `true ? 7 : x`: read before the call, `{7 if True else x}` read a
+    // snippet's parameter, and its default with it, and failed on what the
+    // branch excluded. Any other reads each name it holds, and is handed it.
     const call = (expr, wrapper, source = expr, kind = '', bound = [], followed = true) => {
         const trimmed = expr.trim();
         const args = mentioned(trimmed).filter((one) => !bound.some((name) => sameName(name, one)));
-        const lazy = kind === 'lazy';
+        const late = args.length > 0 && (kind === 'lazy' || skips(trimmed));
 
         locate(source.trim());
         // The column of its opening brace, counted from zero: where every
         // refusal of this pass points.
         const at = position();
-        const name = collect(trimmed, wrapper, args, false, at?.line, kind, at?.column);
+        const name = collect(trimmed, wrapper, args, false, at?.line, kind, at?.column, late);
 
         // follow() on the block's own names: a row of an {#each} is a plain
         // JavaScript value, not a signal, so reading `it.label` registers
         // nothing by itself. This is what subscribes the row's block to the row.
         const value = (arg) => (followed ? `${FOLLOW}(${received(arg)})` : received(arg));
-        const handed = (arg) => (lazy ? `() => ${value(arg)}` : value(arg));
+        const handed = (arg) => (late ? `() => ${value(arg)}` : value(arg));
 
         return `${name}(${args.map(handed).join(', ')})`;
     };
@@ -3892,7 +3923,7 @@ export function moduleScriptStart(content) {
 export function collector(defs, lines, columns) {
     const seen = new Map();
 
-    return (written, wrapper, args, assign = false, line, kind = '', column) => {
+    return (written, wrapper, args, assign = false, line, kind = '', column, late = false) => {
         // Every expression the template holds comes through here, read or
         // written, so this is where a Python comment leaves it: once, for all
         // of them. What is left is the code, and a comment has nothing to say
@@ -3902,15 +3933,16 @@ export function collector(defs, lines, columns) {
         // lets it run over several lines. Both functions below hold it between
         // parentheses, which give that back and change nothing else, a target
         // included.
-        const key = `${assign ? 'set' : kind || 'get'}|${wrapper}|${args.join(',')}|${line}:${column}|${expression}`;
+        const key = `${assign ? 'set' : kind || 'get'}|${late}|${wrapper}|${args.join(',')}|${line}:${column}|${expression}`;
         if (seen.has(key)) return seen.get(key);
 
         // Every kind keeps the `__expr_` prefix: it is what makes the generated
         // wrapper evaluate them the way a template expression is evaluated. The
-        // part after it is what the compiler reads the kind from: `lazy_`, whose
-        // parameters are read by a call, `py_`, whose value stays Python, and
-        // `child_`, a prop a Python child is handed, its Python value with None
-        // the absence it is to Svelte.
+        // part after it is what the compiler reads the kind from: `lazy_` and
+        // `py_`, whose value stays Python, and `child_`, a prop a Python child
+        // is handed, its Python value with None the absence it is to Svelte.
+        // And a `_late` at its end, whose parameters arrive as functions and
+        // are read by a call (`call`).
         const infix = assign
             ? 'set_'
             : kind === 'lazy'
@@ -3920,7 +3952,7 @@ export function collector(defs, lines, columns) {
                 : kind === 'scalar' || kind === 'selection' || kind === 'choice' || kind === 'child'
                   ? `${kind}_`
                   : '';
-        const name = `__expr_${infix}${defs.length}`;
+        const name = `__expr_${infix}${defs.length}${late ? '_late' : ''}`;
         seen.set(key, name);
         lines?.push(line);
         columns?.push(column);

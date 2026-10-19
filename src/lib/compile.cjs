@@ -1661,13 +1661,14 @@ function templateDots(def) {
         edits.push({ from: end(node), to: end(node), text: after, size: -size });
     };
 
-    // A function whose parameters arrive as functions, `lazy` in `markup.js`:
-    // each read of one becomes a call, except where a lambda or a comprehension
-    // binds the same name for itself.
+    // A function whose parameters arrive as functions, named `_late` by `call`
+    // in `markup.js`: each read of one becomes a call, except where a lambda or
+    // a comprehension binds the same name for itself.
     const [def0] = tree.body;
-    const lazy = def0 instanceof $B.ast.FunctionDef && def0.name.startsWith('__expr_lazy_')
-        ? new Set(def0.args.args.map((one) => one.arg))
-        : new Set();
+    const lazy =
+        def0 instanceof $B.ast.FunctionDef && def0.name.startsWith(EXPR_PREFIX) && def0.name.endsWith('_late')
+            ? new Set(def0.args.args.map((one) => one.arg))
+            : new Set();
 
     // The names a target binds: `x`, `(k, v)`, `*rest`.
     const targets = (target, names = []) => {
