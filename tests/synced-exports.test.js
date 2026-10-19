@@ -1,4 +1,6 @@
 import { test, expect } from 'vitest';
+import v8 from 'node:v8';
+import { runInNewContext } from 'node:vm';
 import { mount, flushSync } from './mounted.js';
 import { growth } from './growth.js';
 import * as python from './fixtures/synced_exports.py';
@@ -578,9 +580,12 @@ test('what Python raises under a view reaches the reader, in Python’s words', 
 // arrival, made it sixteen; a tuple's hash was not asked, and made it sixteen
 // again.
 test('a walk of a set grows with its length when it deletes ahead or adds as it goes', () => {
+    v8.setFlagsFromString('--expose-gc');
+    const gc = runInNewContext('gc');
     const range = (n) => Array.from({ length: n }, (_, i) => i);
     const sieve = (n) => {
         sets.refill(range(n));
+        gc();
         const start = performance.now();
         let at = 0;
 
@@ -594,6 +599,7 @@ test('a walk of a set grows with its length when it deletes ahead or adds as it 
     };
     const cells = (n) => {
         sets.fill_cells(n);
+        gc();
         const start = performance.now();
 
         for (const cell of sets.walked) sets.drop_next(cell);
@@ -602,6 +608,7 @@ test('a walk of a set grows with its length when it deletes ahead or adds as it 
     };
     const worklist = (n) => {
         sets.refill([0]);
+        gc();
         const start = performance.now();
 
         for (const one of sets.walked) if (one < n) sets.walked.add(one + 1);
@@ -610,13 +617,15 @@ test('a walk of a set grows with its length when it deletes ahead or adds as it 
     };
     // From a size whose run lasts tens of milliseconds, beyond what a pause or
     // a shared core adds: a tuple costs ten times what an int does. The best
-    // of three runs (`growth`): of two, a garbage collection or the load of the
-    // whole suite still decided it, 8.27 against a bound of 8.
-    const measured = { from: 2000, most: 64000 };
+    // of three runs (`growth`), the heap collected before each. Read at eight
+    // times the size, where linear and quadratic are 8 and 64 and the bound,
+    // 24, sits a factor three from both: at four times, the bound of 8 sat a
+    // factor two from linear, and the load of the whole suite crossed it.
+    const measured = { from: 2000, most: 64000, factor: 8 };
 
-    expect(growth(sieve, measured)).toBeLessThan(8);
-    expect(growth(cells, measured)).toBeLessThan(8);
-    expect(growth(worklist, measured)).toBeLessThan(8);
+    expect(growth(sieve, measured)).toBeLessThan(24);
+    expect(growth(cells, measured)).toBeLessThan(24);
+    expect(growth(worklist, measured)).toBeLessThan(24);
 }, 120000);
 
 // A member that never left is not visited again, whatever became of its
