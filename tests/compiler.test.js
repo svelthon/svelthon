@@ -135,7 +135,7 @@ def increment():
     // Fixed upstream, `filename-invalid-identifier-chars`, and it was a local
     // edit in the vendored bundle before that. Going upstream does not retire
     // the test: a newer Brython loses a behaviour as silently as a dropped
-    // edit, and this is what turns red when it does. See BRYTHON.md.
+    // edit, and this is what turns red when it does.
     test('a path builds a valid identifier, and __file__ keeps the real path', () => {
         const { module } = compile('x = 1\n', 'C', 'src/routes/+page.server.py');
 
@@ -153,7 +153,7 @@ def increment():
     // Fixed upstream too, `fstring-middle-position`. Brython reported the
     // position of the token that *opened* the f-string for every FSTRING_MIDDLE
     // chunk, so anything walking the stream positionally went backwards and
-    // re-emitted text it had already seen. See BRYTHON.md.
+    // re-emitted text it had already seen.
     test('an f-string chunk reports its own position', () => {
         const $B = globalThis.__BRYTHON__;
         const FSTRING_MIDDLE = 60;

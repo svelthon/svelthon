@@ -7,6 +7,44 @@
 // tests.
 import { test, expect } from 'vitest';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
+
+// And by what it says of it: a comment, a test, a note or a document of
+// Svelthon's names the package, never a file of it, which is Bryntime's to
+// split, move or rename. Twice after the split a sentence here went on naming
+// one, a path into the package and then its list of the engine's repairs.
+// This file holds the pattern, so it is the one file not read.
+const BRYNTIME_FILE =
+    /bryntime\/(?!compiler\b)[\w./-]+|BRYTHON_FIX|\b(?:globals|boot|core|mutations|views|calls|errors|modules|protocols|brython_runtime|brython_compiler)\.js\b/;
+
+test('no file of Svelthon names a file of Bryntime', () => {
+    const within = (dir, keep) =>
+        readdirSync(dir, { recursive: true })
+            .filter(keep)
+            .map((file) => join(dir, file));
+    const files = [
+        ...within('src/lib', (file) => /\.[cm]?js$/.test(file)),
+        ...within('notes', (file) => file.endsWith('.md')),
+        ...within('demo', (file) => /\.(js|svelte|py|html)$/.test(file)),
+        ...readdirSync('tests')
+            .filter((file) => file.endsWith('.js') && file !== 'crossing-standalone.test.js')
+            .map((file) => `tests/${file}`),
+        ...readdirSync('scripts')
+            .filter((file) => file.endsWith('.sh'))
+            .map((file) => `scripts/${file}`),
+        ...readdirSync('.').filter((file) => file.endsWith('.md') && !file.startsWith('AUDIT'))
+    ];
+    const named = files.flatMap((file) =>
+        readFileSync(file, 'utf8')
+            .split('\n')
+            .map((line, index) => [`${file}:${index + 1}`, line])
+            .filter(([, line]) => BRYNTIME_FILE.test(line))
+            .map(([where, line]) => `${where}: ${line.trim()}`)
+    );
+
+    expect(files.length).toBeGreaterThan(100);
+    expect(named).toEqual([]);
+});
 
 test('Svelthon depends on Bryntime and keeps no copy of it or of the engine', () => {
     expect(JSON.parse(readFileSync('package.json', 'utf8')).dependencies).toHaveProperty('bryntime');

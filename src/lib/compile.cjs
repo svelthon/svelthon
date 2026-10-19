@@ -58,8 +58,8 @@ const namespaceCall = (name) => `$B.namespace(${JSON.stringify(name)})`;
 // `$B.url2name` maps the file to, with '-' made '_', or else the filename with
 // '.' made '_'. It ends up as a *string*, the argument to $B.namespace and the
 // frame name, so a '/' is harmless there. The identifier built beside it is a
-// different matter, and the vendored build is patched so that one stays valid
-// (see BRYTHON.md).
+// different matter, and the engine Bryntime ships is patched so that one stays
+// valid.
 const namespaceFor = (filename, named = null) =>
     named === null ? filename.replace(/\./g, '_') : named.replace(/-/g, '_');
 
@@ -2751,8 +2751,8 @@ function refuseRelativeImports(relative, source, lineOffset) {
     );
 }
 
-// The modules the runtime holds, the ones `brython_runtime.js` registers as it
-// loads. Python's standard library does not ship: anything else an `import`
+// The modules the runtime holds, the ones the engine Bryntime ships registers
+// as it loads. Python's standard library does not ship: anything else an `import`
 // names is one of the project's own files or nothing, and Brython, looking for
 // nothing, raises `JavascriptError` rather than `ImportError`.
 // `tests/provided-modules.test.js` holds this list to the runtime's.
@@ -4202,7 +4202,7 @@ function compile(
     // `$B.unindent` is Brython's own, the one it already runs on every
     // `<script type="text/python">`, so the two tags behave alike and there is no
     // second copy of the rule to keep in agreement. It is private upstream, so
-    // the vendored build exposes it in one token (see BRYTHON.md). Its rule is
+    // the engine Bryntime ships exposes it in one token. Its rule is
     // `textwrap.dedent`'s with a conservative bail (one non-blank line already at
     // column zero and the source comes back untouched), and blank lines are
     // kept, so the line count never moves and the source map, the tracebacks and
@@ -4387,8 +4387,8 @@ function compile(
     // name `$B.url2name` gives it: `module` and `locals_id` are ignored by
     // js_from_root, so the name to hook is not `name`. Upstream maps only '.' to '_', so
     // a real path emitted `locals_src/Counter_svelte`, which is not valid
-    // JavaScript; the vendored build is patched to neutralise every character
-    // that cannot appear in an identifier (see BRYTHON.md). That is what lets
+    // JavaScript; the engine Bryntime ships is patched to neutralise every
+    // character that cannot appear in an identifier. That is what lets
     // the real path be passed, so Python's __file__ names the actual file, which
     // is what a traceback shows.
     //

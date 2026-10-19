@@ -4,7 +4,8 @@
 a choice between two ways of removing it.*
 
 *2026-10-17: `compile.cjs` loads no engine. Bryntime loads and starts it
-(`src/lib/bryntime/`), and every way into the compiler reaches Bryntime first:
+(the `bryntime` package since 2026-10-19), and every way into the compiler
+reaches Bryntime first:
 `src/lib/compile.js` for `svelthon/compile`, the plugin, the suite's setup.
 The plugin reaches it by `require`, which the bundled config does not follow:
 imported, the engine entered that bundle, 10 files where it held 6, loaded in
@@ -63,8 +64,8 @@ copy, so the compiler — which loads the same file with `require` under Node �
 on an unrepaired Brython. Everything else the plugin patched was in the same
 position, and `/api/py` in the demo, an endpoint that builds its own `Response`,
 returned 500 on a defect that was supposedly fixed. The plugin is gone; every
-repair is an edit in the file, listed in `BRYTHON.md` and held by
-`tests/vendor.test.js`.
+repair is an edit in the engine Bryntime ships, which lists them and holds them
+by its own tests.
 
 It still does not remove the second load: Vite transforms and serves 1.4 MB for a
 module that then declines to run.
@@ -98,15 +99,15 @@ true but unwritten.
 **The order of the two Brython loads.** Described above. The cache decided when
 the served copy executed, and it happened to execute before it could do harm.
 
-**The removal of Brython's DOM stubs.** `globals.js` records the globals that
-exist before Brython loads, and `boot.js` removes whatever it added — that is what
-stops a library testing `typeof document` from taking the browser path and dying
-on `window is not defined`. But the compiler loads Brython through `require`,
-without `globals.js`, so its stubs were never in the snapshot. It worked because
-the *served* copy re-executed after the snapshot was taken, and boot could see
-those stubs. Guarding that re-execution removed the accident along with the bug.
-The compiler now takes the same snapshot itself, before its own load — a reason
-rather than a coincidence.
+**The removal of Brython's DOM stubs.** Bryntime records the globals that exist
+before Brython loads, and removes whatever it added once the engine has started
+— that is what stops a library testing `typeof document` from taking the
+browser path and dying on `window is not defined`. But the compiler loaded
+Brython through `require`, without that record, so its stubs were never in the
+snapshot. It worked because the *served* copy re-executed after the snapshot
+was taken, and the cleanup could see those stubs. Guarding that re-execution
+removed the accident along with the bug. The compiler then took the same
+snapshot itself, before its own load; it has loaded no engine since 2026-10-17.
 
 **The demo's own playground page.** It has no `+page.js`, so SvelteKit rendered
 it on the server, although it imports `compile.cjs` — CommonJS. It worked because
