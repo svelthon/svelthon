@@ -1821,5 +1821,5 @@ expose, donc seuls ceux réellement nommés ont à voyager.
 Svelthon est sous MIT, la licence de Svelte et de l'outillage autour. Voir
 `LICENSE`.
 
-Bryntime, dont Svelthon dépend, est sous BSD-3-Clause, la licence de Brython,
-dont il embarque le moteur avec son préavis, Copyright (c) 2012 Pierre Quentel.
+Bryntime, dont Svelthon dépend, est sous BSD-3-Clause, la même licence que
+Brython.

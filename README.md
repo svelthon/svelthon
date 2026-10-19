@@ -1767,5 +1767,5 @@ so only the ones actually named need travel.
 Svelthon is MIT, the licence of Svelte and of the tooling around it. See
 `LICENSE`.
 
-Bryntime, which Svelthon depends on, is BSD-3-Clause, the licence of Brython,
-whose engine it ships with its notice, Copyright (c) 2012 Pierre Quentel.
+Bryntime, which Svelthon depends on, is BSD-3-Clause, the same licence as
+Brython.
