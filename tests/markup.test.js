@@ -656,7 +656,7 @@ describe('the blocks that declare names', () => {
         const { out, defs } = rewrite('{#snippet row(item, index)}<li>{item}</li>{/snippet}');
 
         expect(out).toContain('{#snippet row(__argument_0, __argument_1)}');
-        expect(out).toContain('{@const item = __pybridge.param(__argument_0, __snippet_0, 0)}');
+        expect(out).toContain('{const item = $derived(__pybridge.param(__argument_0, __snippet_0, 0))}');
 
         // Its own name comes first: it lives in the scope that encloses the
         // block, and an enclosing scope reaches into it.

@@ -39,6 +39,9 @@ test.for([
     ['or', '7'],
     ['lambda', '7'],
     ['each index', '7'],
+    // Svelte's own bare parameter is read in development as in production,
+    // where its branch reads it: the `{@render}` argument runs nowhere here.
+    ['bare snippet parameter', '7'],
     ['taken', 'read']
 ])('a branch %s shows %s', ([kind, answer]) => {
     expect(shown(kind)).toBe(answer);

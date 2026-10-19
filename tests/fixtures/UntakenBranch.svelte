@@ -7,6 +7,10 @@ def fail():
     raise ValueError("branch-was-read")
 </script>
 
+{#snippet bare(x)}
+    <output>{7 if True else x}</output>
+{/snippet}
+
 {#if True}
     {y => fail()}
     {#if kind == "if true"}
@@ -23,6 +27,8 @@ def fail():
         {#each rows as row, i}
             <output>{7 if True else i}</output>
         {/each}
+    {:else if kind == "bare snippet parameter"}
+        {@render bare(fail())}
     {:else}
         <output>{y if True else 7}</output>
     {/if}

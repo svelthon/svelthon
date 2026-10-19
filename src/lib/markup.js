@@ -1686,9 +1686,17 @@ function snippetParameters(trimmed, declare, call, refuse, frame) {
         const target = parameterPattern(equals === -1 ? part : part.slice(0, equals), call, [], false, unpack).trim();
         const fallback = equals === -1 ? '' : `, () => ${call(part.slice(equals + 1), '', undefined, 'lazy')}`;
 
+        // A bare parameter is a derived of its own, which nothing reads ahead:
+        // Svelte reads a `{@const}` as soon as it is declared, in development,
+        // and the `{@render}` argument then ran where its snippet's branch did
+        // not read it, where Svelte's own bare parameter is never read. A
+        // default or a pattern Svelte reads ahead itself, and so does this.
+        const read = `__pybridge.param(${argument}, ${frame}, ${at}${fallback})`;
+        const bare = equals === -1 && DECLARED_NAME.test(target);
+
         given.push(argument);
         reads.push(
-            `{@const ${target} = __pybridge.param(${argument}, ${frame}, ${at}${fallback})}` +
+            (bare ? `{const ${target} = $derived(${read})}` : `{@const ${target} = ${read}}`) +
                 unpacked({ consts: unpack.consts.slice(from) }, call)
         );
     });
