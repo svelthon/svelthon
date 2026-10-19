@@ -400,14 +400,29 @@ describe('moduleImports', () => {
     });
 
     // A TypeScript block parses as TypeScript, and what exists only as a type
-    // publishes no name.
+    // publishes no name. What the transform Svelte runs makes a value does:
+    // an `enum`, a namespace holding a value, an `import X = A.B`. Read off
+    // the JavaScript it emits; an `enum` and a namespace were missed, and
+    // Python raised `NameError` on `Colour.Red`.
     test.for([
         ['function twice(v: number): number { return v * 2 }', ['twice']],
         ['import type { A } from "./a"', []],
         ['import { type A, b } from "./a"', ['b']],
         ['export type T = number', []],
         ['interface I { x: number }', []],
-        ['declare const x: number', []]
+        ['declare const x: number', []],
+        ['enum Colour { Red = 7 }', ['Colour']],
+        ['export enum Colour { Red = 7 }', ['Colour']],
+        ['declare enum Colour { Red = 7 }', []],
+        ['namespace Colour { export const Red = 7 }', ['Colour']],
+        ['export namespace Colour { export const Red = 7 }', ['Colour']],
+        ['namespace Colour.Inner { export const Red = 7 }', ['Colour']],
+        // Its `var` is the function's the namespace becomes.
+        ['namespace Colour { export var Red = 7 }', ['Colour']],
+        ['namespace Colour { export type Red = 7; export interface Blue {} }', []],
+        ['namespace Colour { namespace Inner { export type Red = 7 } }', []],
+        ['declare namespace Colour { const Red: 7 }', []],
+        ['namespace Colour { export const Red = 7 }\nimport Red = Colour.Red', ['Colour', 'Red']]
     ])('in TypeScript, %s', ([source, names]) => {
         const typed = `<script module lang="ts">\n${source}\n</script>\n<p>x</p>`;
 

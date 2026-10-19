@@ -224,9 +224,27 @@ const declaredBy = (pattern) => {
     }
 };
 
+// Whether a TypeScript namespace holds a value, which the transform then binds
+// to its name: one that declares only types, an interface, a type alias or a
+// namespace of the same kind, is erased with them.
+const TYPES_ONLY = new Set(['TSInterfaceDeclaration', 'TSTypeAliasDeclaration']);
+
+const instantiated = (node) => {
+    const body = node.body?.type === 'TSModuleDeclaration' ? [node.body] : (node.body?.body ?? []);
+
+    return body.some((one) => {
+        const declared = one.type === 'ExportNamedDeclaration' && one.declaration ? one.declaration : one;
+
+        if (declared.type === 'TSModuleDeclaration') return instantiated(declared);
+        return !TYPES_ONLY.has(declared.type);
+    });
+};
+
 // The names a statement at the top of the module binds there, at run time. A
 // TypeScript `import type`, `export type` or `declare` names a type or an
-// ambient value, which no code at run time holds, so it binds nothing.
+// ambient value, which no code at run time holds, so it binds nothing. An
+// `enum`, a namespace that holds a value and an `import X = A.B` are values
+// the transform binds; a namespace's `var` stays in the function it becomes.
 const declares = (node) => {
     if (node.declare || node.importKind === 'type' || node.exportKind === 'type') return [];
 
@@ -237,7 +255,11 @@ const declares = (node) => {
             return node.declarations.flatMap((one) => declaredBy(one.id));
         case 'FunctionDeclaration':
         case 'ClassDeclaration':
+        case 'TSEnumDeclaration':
+        case 'TSImportEqualsDeclaration':
             return declaredBy(node.id);
+        case 'TSModuleDeclaration':
+            return instantiated(node) ? declaredBy(node.id) : [];
         // `export const shared = 1` is a declaration wearing a hat. A bare
         // `export { a }` re-exports a name already declared above, so it adds
         // nothing and falls through.
@@ -251,13 +273,15 @@ const declares = (node) => {
 
 // What JavaScript scopes to the module from below the top: a `var`, in a block,
 // a loop or a `try`. `let`, `const`, a class, and in a module a function declared
-// in a block, belong to the block; a function's body is a scope of its own.
+// in a block, belong to the block; a function's body is a scope of its own, and
+// so is a TypeScript namespace, which the transform makes a function.
 const SCOPES = new Set([
     'FunctionDeclaration',
     'FunctionExpression',
     'ArrowFunctionExpression',
     'ClassDeclaration',
-    'ClassExpression'
+    'ClassExpression',
+    'TSModuleDeclaration'
 ]);
 const POSITIONS = new Set(['type', 'start', 'end', 'loc', 'range', 'metadata']);
 
