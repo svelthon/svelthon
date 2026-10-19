@@ -1194,8 +1194,20 @@ const referenced = (text) => {
 // with it, where Svelte reads none. Read off the tree the engine's parser
 // makes, and off the text where it makes none, which the compiler then
 // refuses. A walrus's target is taken as read, as it was.
+//
+// The tree is kept for the text asked last, which `skips` asks of next: one
+// parse, where every expression of a page was parsed twice before it compiled.
+// Its parentheses let it run over lines, as it does between braces.
+let lastTree = { text: null, tree: null };
+
+const expressionTree = (text) => {
+    if (lastTree.text !== text) lastTree = { text, tree: targetTree(`(${text}\n)`) };
+
+    return lastTree.tree;
+};
+
 const freeNames = (text) => {
-    const tree = targetTree(`(${text}\n)`);
+    const tree = expressionTree(text);
 
     if (tree === null) return referenced(text);
 
@@ -1258,7 +1270,7 @@ const freeNames = (text) => {
 // not read, a snippet's parameter running its default or a derived its body.
 // Text the engine's parser makes no tree of is taken to skip.
 const skips = (text) => {
-    const tree = targetTree(`(${text}\n)`);
+    const tree = expressionTree(text);
 
     if (tree === null) return true;
 
