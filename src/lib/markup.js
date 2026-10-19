@@ -1251,6 +1251,74 @@ const freeNames = (text) => {
     return [...found];
 };
 
+// Whether an expression reads `name` before it runs anything. Read ahead, a
+// name whose read runs code (`costly`) then runs it where Python would: first,
+// and on every run. The expression is walked in Python's order of evaluation,
+// and the first of the two decides. Each node runs code once it has read its
+// operands, save a name, a constant and its attribute, a tuple, a list, a
+// slice, an f-string, a keyword and a lambda, whose body runs later. A node
+// that may skip what follows reads its first operand alone before it runs:
+// the test of a conditional, the first value of an `and` or an `or`, the
+// first comparison of a chain, the first iterable of a comprehension; and so,
+// taken as hashing what it has read, does a dict or a set. So `row["label"]`, `fmt(row)` and `"#" + row`
+// read `row` first, and `first() + row`, `"a" if c else row` and
+// `[row for _ in rows]` do not. A walrus's target is written, not read, and a
+// `**` merge, a keyword the engine's tree leaves without a name, runs code.
+//
+// A `target` is the target of a write. Python reads the value first, then the
+// owner of an attribute or an item: a target that unpacks runs code before it
+// reads anything, and a name is written, not read.
+const readAhead = (text, name, target = false) => {
+    const tree = targetTree(`(${text}\n)`);
+
+    if (tree === null) return false;
+
+    const ast = globalThis.__BRYTHON__.ast;
+
+    if (target && !(tree instanceof ast.Attribute || tree instanceof ast.Subscript)) return false;
+
+    const COMPREHENSIONS = [ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp];
+    const PURE = [ast.Constant, ast.Tuple, ast.List, ast.Slice, ast.JoinedStr, ast.keyword, ast.Lambda];
+    const sought = pythonName(name);
+    let answer = null;
+    const decide = (value) => {
+        if (answer === null) answer = value;
+    };
+    const visit = (node) => {
+        if (answer !== null) return;
+        if (Array.isArray(node)) {
+            for (const one of node) visit(one);
+            return;
+        }
+        if (node === null || typeof node !== 'object' || !Array.isArray(node.constructor?._fields)) return;
+
+        if (node instanceof ast.Name) {
+            if (pythonName(node.id) === sought) decide(node.ctx instanceof ast.Load);
+            return;
+        }
+
+        if (node instanceof ast.Lambda) visit([node.args.defaults, node.args.kw_defaults]);
+        else if (node instanceof ast.IfExp) visit(node.test);
+        else if (node instanceof ast.BoolOp) visit(node.values[0]);
+        else if (node instanceof ast.Compare) visit([node.left, node.comparators[0]]);
+        else if (COMPREHENSIONS.some((kind) => node instanceof kind)) visit(node.generators[0].iter);
+        else if (node instanceof ast.Dict) visit([node.keys[0], node.values[0]]);
+        else if (node instanceof ast.Set) visit(node.elts[0]);
+        else if (node instanceof ast.NamedExpr) visit([node.value, node.target]);
+        else if (node instanceof ast.Attribute && node.value instanceof ast.Constant) return;
+        else {
+            for (const field of node.constructor._fields) {
+                if (field !== 'ctx' && field !== 'op') visit(node[field]);
+            }
+        }
+
+        if (!PURE.some((kind) => node instanceof kind) || (node instanceof ast.keyword && !node.arg)) decide(false);
+    };
+
+    visit(tree);
+    return answer === true;
+};
+
 // One entry of a declaration that destructures: a snippet's parameter, and the
 // target of an `{#each}`. Either may be a name, a pattern Svelte takes apart,
 // or either of those carrying a default.
@@ -2611,11 +2679,21 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     // snippet's parameter, and its default with it, and failed on what the
     // branch excluded; and `{first() + x}` ran `x`'s default before `first()`.
     // Any other is handed each name read: a row read ahead is the row Python
-    // reads, and a call for each read cost a row's update a fifth more.
+    // reads, and a call for each read cost a row's update a fifth more. So is
+    // one that holds a single such name and reads it before it runs anything
+    // (`readAhead`): `{item["n"] * 2}` reads `item` first, where a read ahead
+    // runs its code too, and handed late, every row a snippet renders paid
+    // the fifth.
+    const handedLate = (text, args, target = false) => {
+        const running = args.filter(costly);
+
+        return running.length > 1 || (running.length === 1 && !readAhead(text, running[0], target));
+    };
+
     const call = (expr, wrapper, source = expr, kind = '', bound = [], followed = true) => {
         const trimmed = expr.trim();
         const args = mentioned(trimmed).filter((one) => !bound.some((name) => sameName(name, one)));
-        const late = args.length > 0 && (kind === 'lazy' || args.some(costly));
+        const late = args.length > 0 && (kind === 'lazy' || handedLate(trimmed, args));
 
         locate(source.trim());
         // The column of its opening brace, counted from zero: where every
@@ -2641,11 +2719,12 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     // binding makes it here rather than each at its own site.
     //
     // The target's names are handed as the read's are (`call`): late when one
-    // runs code, so `bag[0 if True else x]` reads no `x` on a write either,
-    // where the write read it, ran its default, and lost what was typed.
+    // runs code anywhere but first, so `bag[0 if True else x]` reads no `x` on
+    // a write either, where the write read it, ran its default, and lost what
+    // was typed.
     const assign = (expr, crossing = BIND_VALUE) => {
         const args = mentioned(expr.trim());
-        const late = args.some(costly);
+        const late = handedLate(expr.trim(), args, true);
         const at = position();
         const name = collect(expr.trim(), '', args, true, at?.line, '', at?.column, late);
         const value = (arg) => `${FOLLOW}(${received(arg)})`;

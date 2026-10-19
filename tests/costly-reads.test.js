@@ -7,6 +7,8 @@
 // are CPython's, and Svelte's in production.
 import { test, expect } from 'vitest';
 import { mount, flushSync } from './mounted.js';
+import { pythonExpressions, collector } from '../src/lib/markup.js';
+import '../src/lib/compile.cjs';
 import ReadOrder from './fixtures/ReadOrder.svelte';
 import BoundBranch from './fixtures/BoundBranch.svelte';
 import { seen } from './fixtures/read_order.js';
@@ -38,4 +40,41 @@ test.for(['if', 'and'])('a binding whose target skips a default writes what is t
     flushSync();
 
     expect(target.querySelector('output').textContent).toBe('new');
+});
+
+// **Read before anything runs, such a name is read ahead**: its read runs
+// first there too, as in Python, and a call for each read cost every row a
+// snippet renders a fifth of its update. A snippet's parameter, handed late
+// (`_late`) in each expression and binding of its body, or ahead, in Python's
+// order of evaluation.
+const handedLate = (body) => {
+    const defs = [];
+
+    pythonExpressions(`{#snippet line(x)}${body}{/snippet}`, collector(defs));
+
+    return defs.map((one) => /^def __expr_\w*_late\(/.test(one));
+};
+
+test.for([
+    ['an item of it', '{x["n"] * 2}', [false]],
+    ['an argument', '{fmt(x)}', [false]],
+    ['the right operand of a constant', '{"#" + x}', [false]],
+    ['the test of a conditional', '{x["a"] if x else 0}', [false]],
+    ['a method of a constant', '{", ".join(x)}', [false]],
+    ["a lambda's default", '{(lambda y=x: y)()}', [false]],
+    ['the owner of a bound item', '<input bind:value={x["label"]}>', [false, false]],
+    ['after a call', '{first() + x}', [true]],
+    ['in a branch', '{"a" if c else x}', [true]],
+    ['after a method is read', '{a.b(x)}', [true]],
+    ['past a first comparison', '{1 < 2 < x}', [true]],
+    ['after a merge', '{f(**m, k=x)}', [true]],
+    ['after an unpacked argument', '{f(k=x, *m)}', [true]],
+    ["in a lambda's body", '{(lambda: x)()}', [true]],
+    ["in a comprehension's body", '{[x for _ in rows]}', [true]],
+    ["past a set's first item", '{ {1, x} }', [true]],
+    ["in a bound item's branch", '<input bind:value={bag[0 if c else x]}>', [true, true]],
+    // Written, the value is unpacked before it is read; read, it comes first.
+    ['in a target that unpacks', '<input bind:value={(x["a"], y)}>', [true, false]]
+])('a snippet parameter is read ahead only where Python reads it first: %s', ([, body, late]) => {
+    expect(handedLate(body)).toEqual(late);
 });
