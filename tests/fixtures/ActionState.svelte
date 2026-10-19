@@ -24,6 +24,18 @@ class Mixed(Slotted):
     pass
 
 
+class Gauge:
+    # The state is read by a property, and held by no field.
+    @property
+    def amount(self):
+        return model.n
+
+
+class Inherited(Gauge):
+    # The property is its base's, whose getters Svelte does not run.
+    pass
+
+
 rows = [model]
 record = {"child": model}
 nested = {"child": {"inner": model}}
@@ -36,6 +48,8 @@ listbox = [Box(model)]
 dictbox = {"child": Box(model)}
 tuplebox = (Box(model),)
 listslots = [Slotted(model)]
+gauged = [Gauge()]
+inherited = [Inherited()]
 
 
 def number(kind, value):
@@ -53,6 +67,8 @@ def number(kind, value):
         return value["child"].n
     if kind == "local":
         return value[0]["n"]
+    if kind in ("gauged", "inherited"):
+        return value[0].amount
     return value[0].n
 
 
@@ -86,4 +102,6 @@ def bump_local():
 <div data-k="dictbox" use:chosen={dictbox}></div>
 <div data-k="tuplebox" use:chosen={tuplebox}></div>
 <div data-k="listslots" use:chosen={listslots}></div>
+<div data-k="gauged" use:chosen={gauged}></div>
+<div data-k="inherited" use:chosen={inherited}></div>
 <p>{model.n}|{rows[0].n}|{record["child"].n}|{nested["child"]["inner"].n}|{box.model.n}|{slotted.model.n}|{mixed.model.n}|{local[0]["n"]}</p>

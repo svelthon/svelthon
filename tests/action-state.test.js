@@ -13,8 +13,13 @@ import ActionStateHost from './fixtures/ActionStateHost.svelte';
 
 // An instance holds its field in its `__dict__`, in its slots, or, a subclass
 // with a `__dict__` of its own, in the slot it inherits; and inside a list, a
-// dict or a tuple, where the walk of the container stopped at it.
-const KINDS = ['direct', 'list', 'dict', 'nested', 'instance', 'slots', 'mixed', 'local', 'listbox', 'dictbox', 'tuplebox', 'listslots'];
+// dict or a tuple, where the walk of the container stopped at it. Or it reads
+// the state by a property, which the walk did not run, as Svelte runs the
+// getters of the prototype; one of a base's it does not, and neither does this.
+const KINDS = [
+    'direct', 'list', 'dict', 'nested', 'instance', 'slots', 'mixed', 'local', 'listbox', 'dictbox', 'tuplebox', 'listslots',
+    'gauged', 'inherited'
+];
 
 const READS = {
     direct: (value) => value.n,
@@ -28,8 +33,12 @@ const READS = {
     listbox: (value) => value[0].model.n,
     dictbox: (value) => value.child.model.n,
     tuplebox: (value) => value[0].model.n,
-    listslots: (value) => value[0].model.n
+    listslots: (value) => value[0].model.n,
+    gauged: (value) => value[0].amount,
+    inherited: (value) => value[0].amount
 };
+
+const LAST = { local: ['local', 'update', 2], inherited: ['inherited', 'install', 1] };
 
 const run = (Child, python_action) => {
     const target = document.body.appendChild(document.createElement('div'));
@@ -69,6 +78,6 @@ test.for(KINDS.flatMap((kind) => [['JavaScript', kind], ['Python', kind]]))(
 
         expect(of(python)).toEqual(of(native));
         expect(python.page).toBe(native.page);
-        expect(of(native).at(-1)).toEqual(kind === 'local' ? ['local', 'update', 2] : [kind, 'update', 3]);
+        expect(of(native).at(-1)).toEqual(LAST[kind] ?? [kind, 'update', 3]);
     }
 );

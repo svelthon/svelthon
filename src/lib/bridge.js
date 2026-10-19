@@ -18,6 +18,7 @@ const {
     plainScalar,
     plainObject,
     ownAttributes,
+    ownAccessors,
     authoredInstance,
     declares,
     declaresSlots,
@@ -1413,7 +1414,13 @@ const storedFields = (value) => {
 // followed `model` no more. Walked as stored and not through its view, which
 // converts each value and subscribes the reader to it, a thousand times the
 // cost on a list of two thousand rows, for changes Python follows already.
-const heldStates = (value, visited) => {
+//
+// An instance's `property` is read too, as Svelte runs the getters of its
+// prototype, and what it returns is not walked, as there: `[box]` whose
+// `amount` returns a `count` followed `count` no more, where an interpolation
+// of `box.amount` did. Its class is read for them once in a walk, where each
+// of two thousand rows reading it made an update near three times the cost.
+const heldStates = (value, visited, accessors = new Map()) => {
     if (visited.has(value)) return;
 
     visited.add(value);
@@ -1421,13 +1428,25 @@ const heldStates = (value, visited) => {
     const visit = (one) => {
         if (typeof one !== 'object' || one === null) return;
 
-        if (pyContainer(one) || authoredInstance(one)) heldStates(one, visited);
+        if (pyContainer(one) || authoredInstance(one)) heldStates(one, visited, accessors);
         else deepRead(one, visited);
     };
 
     if (Array.isArray(value)) for (const one of value) visit(one);
     else if (pyContainer(value)) for (const [, one] of heldEntries(value)) visit(one);
-    else for (const one of storedFields(value)) visit(one);
+    else {
+        const type = ownType(value);
+
+        if (!accessors.has(type)) accessors.set(type, ownAccessors(type));
+        for (const one of storedFields(value)) visit(one);
+        for (const name of accessors.get(type)) {
+            try {
+                pyGetattr(value, name);
+            } catch {
+                // Read on, as Svelte does.
+            }
+        }
+    }
 };
 
 // Svelte's `deep_read_state`, which an action's effect runs on its value: a

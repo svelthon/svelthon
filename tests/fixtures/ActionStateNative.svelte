@@ -24,6 +24,15 @@
     let tuplebox = $state([new Box(given())]);
     let listslots = $state([new Box(given())]);
 
+    class Gauge {
+        get amount() {
+            return model.n;
+        }
+    }
+    class Inherited extends Gauge {}
+    let gauged = $state([new Gauge()]);
+    let inherited = $state([new Inherited()]);
+
     export function bump_local() {
         local[0].n += 1;
     }
@@ -41,4 +50,6 @@
 <div data-k="dictbox" use:observe={dictbox}></div>
 <div data-k="tuplebox" use:observe={tuplebox}></div>
 <div data-k="listslots" use:observe={listslots}></div>
+<div data-k="gauged" use:observe={gauged}></div>
+<div data-k="inherited" use:observe={inherited}></div>
 <p>{model.n}|{rows[0].n}|{record.child.n}|{nested.child.inner.n}|{box.model.n}|{slotted.model.n}|{mixed.model.n}|{local[0].n}</p>
