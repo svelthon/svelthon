@@ -1,5 +1,6 @@
 <script lang="python">
 kind: str = "if true"
+rows = [{}]
 
 
 def fail():
@@ -18,6 +19,10 @@ def fail():
         <output>{7 if (True or y) else 9}</output>
     {:else if kind == "lambda"}
         <output>{(lambda: y)() if False else 7}</output>
+    {:else if kind == "each index"}
+        {#each rows as row, i}
+            <output>{7 if True else i}</output>
+        {/each}
     {:else}
         <output>{y if True else 7}</output>
     {/if}

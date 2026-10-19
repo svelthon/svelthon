@@ -1588,18 +1588,29 @@ const boundBy = (parts, tuple, unpack) => {
     return names;
 };
 
+// The names of a declaration list whose read runs code (`computing`): those of
+// every part that is not a bare name, a pattern, which a `{@const}` reads a key
+// or an attribute for, or a parameter holding a default.
+const unpacking = (parts, tuple, refuse) =>
+    boundBy(
+        parts.filter((part) => !DECLARED_NAME.test(part.trim())),
+        tuple,
+        unpacker(refuse)
+    );
+
 // A comma list of patterns that a block declares: its names go to `declare`,
 // which opens the block's scope, with the aliases of the rows it unpacks by key
-// beside them, and the list comes back with every expression in it compiled
-// inside that scope. Every construct that binds names in the markup goes
-// through here: a snippet's parameters, an `{#each}` target, and the value an
-// `{#await}` hands to `then` or `catch`. `consts` is what the block opens with.
-// `refuse` throws a refusal at the block.
+// beside them and the names whose read runs code (`unpacking`), and the list
+// comes back with every expression in it compiled inside that scope. Every
+// construct that binds names in the markup goes through here: a snippet's
+// parameters, an `{#each}` target, and the value an `{#await}` hands to `then`
+// or `catch`. `consts` is what the block opens with. `refuse` throws a refusal
+// at the block.
 const destructured = (text, declare, call, tuple, refuse) => {
     const parts = arguments_(text.trim());
     const first = unpacker(refuse);
 
-    declare(boundBy(parts, tuple, first), first.aliases);
+    declare(boundBy(parts, tuple, first), first.aliases, unpacking(parts, tuple, refuse));
 
     const unpack = unpacker(refuse);
     const pattern = parts.map((part) => parameterPattern(part, call, [], tuple, unpack)).join(',');
@@ -1643,7 +1654,7 @@ function snippetParameters(trimmed, declare, call, refuse, frame) {
     const parts = arguments_(trimmed.slice(open + 1, close));
     const first = unpacker(refuse);
 
-    declare(boundBy(parts, false, first), first.aliases);
+    declare(boundBy(parts, false, first), first.aliases, unpacking(parts, false, refuse));
 
     const unpack = unpacker(refuse);
     const given = [];
@@ -2245,6 +2256,27 @@ function scopeChain(seed, indexed, refuseCompilerName) {
         scopes[scopes.length - 1].parameters = new Set(names);
     };
 
+    // The innermost scope's names whose read may run code, the author's or a
+    // default's: a name a pattern unpacks, which reads a key or an attribute,
+    // one whose parameter holds a default, and a derived the markup declares.
+    // And every snippet parameter, bare or not: Svelte hands one as a function
+    // of the `{@render}` argument, which reading it runs. A row, an index or a
+    // state cell is read as it is held.
+    const computing = (names = []) => {
+        const scope = scopes[scopes.length - 1];
+
+        if (scope) for (const one of names) (scope.computed ??= new Set()).add(one);
+    };
+
+    const costly = (name) => {
+        const held = found(name);
+
+        return (
+            held !== null &&
+            (scopes[held.at].computed?.has(held.declared) === true || scopes[held.at].parameters?.has(held.declared) === true)
+        );
+    };
+
     // The innermost scope holding `name`, and the spelling it was declared
     // under, what JavaScript knows the variable by. Null when no scope holds it.
     const found = (name) => {
@@ -2334,6 +2366,8 @@ function scopeChain(seed, indexed, refuseCompilerName) {
         seeded,
         declare,
         parameters,
+        computing,
+        costly,
         inScope,
         received,
         mentioned,
@@ -2435,7 +2469,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     };
 
     const chain = scopeChain(seed, indexed, refuseCompilerName);
-    const { push, pop, closeElement, branch, seeded, declare, parameters, received, mentioned, scoped, iterations, holds } = chain;
+    const { push, pop, closeElement, branch, seeded, declare, parameters, computing, costly, received, mentioned, scoped, iterations, holds } = chain;
 
     // The `{` of the construct being read, as the author sees it. `region.start`
     // is the character after the brace, so this steps back onto it.
@@ -2564,17 +2598,19 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     // are therefore not handed in: the key of an `{#each}`, see `eachKey`.
     // `followed` is false for that key alone, which `eachKey` says why.
     //
-    // An expression that may run without reading a name it holds (`skips`), and
-    // every one of the 'lazy' kind, is handed each name as a function that reads
-    // it, and the compiler makes the reads calls (`templateDots`), so a branch
-    // Python does not take reads nothing, as in Python and as in Svelte's own
-    // `true ? 7 : x`: read before the call, `{7 if True else x}` read a
-    // snippet's parameter, and its default with it, and failed on what the
-    // branch excluded. Any other reads each name it holds, and is handed it.
+    // An expression that may run without reading a name it holds (`skips`) and
+    // holds one whose read runs code (`costly`), and every one of the 'lazy'
+    // kind, is handed each name as a function that reads it, and the compiler
+    // makes the reads calls (`templateDots`), so a branch Python does not take
+    // reads nothing, as in Python and as in Svelte's own `true ? 7 : x`: read
+    // before the call, `{7 if True else x}` read a snippet's parameter, and its
+    // default with it, and failed on what the branch excluded. Any other is
+    // handed each name read: a row read ahead is the row a branch would read,
+    // and a call for each read cost a row's update a fifth more.
     const call = (expr, wrapper, source = expr, kind = '', bound = [], followed = true) => {
         const trimmed = expr.trim();
         const args = mentioned(trimmed).filter((one) => !bound.some((name) => sameName(name, one)));
-        const late = args.length > 0 && (kind === 'lazy' || skips(trimmed));
+        const late = args.length > 0 && (kind === 'lazy' || (args.some(costly) && skips(trimmed)));
 
         locate(source.trim());
         // The column of its opening brace, counted from zero: where every
@@ -3497,8 +3533,9 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
             } else if (opens('each')) {
                 // The block's scope, known once its names are declared.
                 let id;
-                const declare = (names, generated) => {
+                const declare = (names, generated, costly) => {
                     push(names, generated);
+                    computing(costly);
                     id = chain.id();
                 };
 
@@ -3548,7 +3585,11 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                     push([]);
                     out += `{#await ${promise}${tail === null ? '' : ` ${tail[1]}`}}`;
                 } else {
-                    const { pattern, consts } = destructured(tail[2], push, call, false, refusePattern);
+                    const opening = (names, generated, costly) => {
+                        push(names, generated);
+                        computing(costly);
+                    };
+                    const { pattern, consts } = destructured(tail[2], opening, call, false, refusePattern);
 
                     out += `{#await ${promise} ${tail[1]} ${pattern}}${consts}`;
                 }
@@ -3581,9 +3622,10 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 // ordinary JavaScript and Svelte compiles it as one.
                 out += `{#snippet ${snippetParameters(
                     trimmed,
-                    (names, aliases) => {
+                    (names, aliases, costly) => {
                         push(names, aliases);
                         parameters([...names, ...aliases]);
+                        computing(costly);
                     },
                     call,
                     refusePattern,
@@ -3609,8 +3651,9 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
             // and the names its clause binds.
             branch();
 
-            const rebind = (names, generated = []) => {
+            const rebind = (names, generated = [], costly = []) => {
                 declare(names, generated);
+                computing(costly);
             };
 
             const elseIf = /^:else\s+if\s/.test(trimmed);
@@ -3771,6 +3814,10 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                         : `{const ${declared.name} = $derived(${value})}`;
 
                 declare([declared.name]);
+
+                // A derived runs its expression when it is read; a state cell
+                // is read as it is held.
+                if (declared.rune !== 'state') computing([declared.name]);
 
                 if (declared.rune === 'state' && grouped.has(declared.name)) {
                     out += `{const ${CELL}${declared.name} = {}}`;
