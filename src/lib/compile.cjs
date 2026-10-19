@@ -3646,6 +3646,8 @@ function injectedBindings(c) {
                   `__bind(__proto, '__spreadElement', () => (value) => __pybridge.spreadElement(value, __event));`,
                   // And on a control a `bind:group` binds, its `value` as the group reads it.
                   `__bind(__proto, '__spreadChoice', () => (value) => __pybridge.spreadElement(value, __event, true));`,
+                  // And on a custom element, whose properties take the values as they are.
+                  `__bind(__proto, '__spreadCustom', () => (value) => __pybridge.spreadElement(value, __event, false, true));`,
                   `__bind(__proto, '__spread', () => __pybridge.spread);`,
                   `__bind(__proto, '__spreadPython', () => __pybridge.spreadPython);`,
                   `__bind(__proto, '__bound', () => __pybridge.bound);`,

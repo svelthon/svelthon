@@ -860,8 +860,15 @@ const onElement = (tag) =>
     tag !== null && (tag.name === 'svelte:element' || (/^[a-z]/.test(tag.name) && !tag.name.includes(':')));
 
 // The wrapper an attribute of this name goes through on this tag, or null: the
-// one decision every way of writing an attribute asks for.
-const wrapperFor = (name, tag) => (onElement(tag) ? attributeWrapper(name) : null);
+// one decision every way of writing an attribute asks for. On a custom element
+// (`custom`) a name of the boolean table is a property's, which Svelte sets to
+// the value as it is: `open={rows}` on `<my-list>` was handed the truth of the
+// list, where Svelte hands the list.
+const wrapperFor = (name, tag, custom = false) => {
+    const wrapper = onElement(tag) ? attributeWrapper(name) : null;
+
+    return custom && wrapper === '__truthy' ? null : wrapper;
+};
 
 // Svelte 4 slot syntax, which `{#snippet}` replaced. Neither spelling is an
 // expression: `let:item={row}` takes a binding pattern the way `bind:` does, and
@@ -2725,6 +2732,15 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     const heldChild = () => tag?.held ?? null;
     const forChild = (read, kind = '') => `__pybridge.child(${heldChild()}, ${read}, ${JSON.stringify(kind)})`;
 
+    // Whether the tag is a custom element, as Svelte tells one
+    // (`is_custom_element_node`): an element whose name holds a dash, or that
+    // an `is` names. Read off the tag once, when an attribute first asks.
+    const custom = (one) =>
+        one !== null &&
+        one.name !== 'svelte:element' &&
+        onElement(one) &&
+        (one.custom ??= one.name.includes('-') || tagNames(markup, one.start).has('is'));
+
     const groupAction = (expr) => {
         // The Python list itself: the group compares with Python's `==`, and
         // its inputs know each other by the list they share.
@@ -2935,7 +2951,9 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
 
         // `class`, which Svelte hands to `clsx`, and the boolean attributes,
         // which the DOM reads for truth: both read Python's truth instead.
-        if (wrapperFor(name, tag)) return `{${call(inner, wrapperFor(name, tag))}}`;
+        const wrapper = wrapperFor(name, tag, custom(tag));
+
+        if (wrapper) return `{${call(inner, wrapper)}}`;
 
         // `href={website}` with nothing to show: None goes out as undefined so
         // Svelte drops the attribute rather than writing the word "None" into
@@ -3093,7 +3111,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 const grouped = named === 'value' && tag !== null && tagNames(markup, tag.start).has('bind:group');
                 const lone = loneInterpolation(markup, index, closingBrace);
 
-                if (lone !== -1 && (directive(named) || wrapperFor(named, tag) || grouped)) {
+                if (lone !== -1 && (directive(named) || wrapperFor(named, tag, custom(tag)) || grouped)) {
                     unquoted = lone;
                     index += 1;
                     continue;
@@ -3190,7 +3208,9 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                             ? '__spread'
                             : tagNames(markup, tag.start).has('bind:group')
                               ? '__spreadChoice'
-                              : '__spreadElement';
+                              : custom(tag)
+                                ? '__spreadCustom'
+                                : '__spreadElement';
 
                         out +=
                             heldChild() !== null

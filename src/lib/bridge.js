@@ -1130,7 +1130,10 @@ export const __pybridge = {
     //
     // Each property is read once, as a JavaScript spread reads it: a getter
     // asked again may answer otherwise, or refuse.
-    spreadElement(value, event = (one) => pyEvent(one), grouped = false) {
+    //
+    // On a custom element (`custom`), a key of the boolean table is a
+    // property's, which Svelte sets to the value as it is, as `open={…}` there.
+    spreadElement(value, event = (one) => pyEvent(one), grouped = false, custom = false) {
         if (value === null || value === undefined || value === NONE) return spreadOf(value);
 
         const read = spreadOf(value, (one) => one);
@@ -1140,7 +1143,7 @@ export const __pybridge = {
             const wrapper = attributeWrapper(key);
             if (key[0] + key[1] === 'on') out[key] = event(read[key]);
             else if (wrapper === '__class') out[key] = __pybridge.klass(read[key]);
-            else if (wrapper === '__truthy') out[key] = __pybridge.truthy(read[key]);
+            else if (wrapper === '__truthy' && !custom) out[key] = __pybridge.truthy(read[key]);
             else if (wrapper === '__hidden') out[key] = __pybridge.hidden(read[key]);
             else if (key === 'value') out[key] = (grouped ? COMPARED.choice : COMPARED.scalar)(__pybridge.bound(read[key]));
         }
