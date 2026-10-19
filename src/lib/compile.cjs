@@ -4651,19 +4651,13 @@ function readScript(src, where) {
     }
 }
 
-// The names of the script whose read runs code: a derived, which runs its body
-// when what it reads has changed, and a prop, which runs what the parent wrote
-// for it. What the markup pass asks before it reads a name ahead of an
-// expression (`readAhead`), off `surface`, which the compile acts on. Null for
-// a script that does not parse.
-function runningNames(src) {
+// What the script declares, `surface`'s answer, which the compile acts on: its
+// props, its deriveds and the rest. What the markup pass asks before it reads a
+// name ahead of an expression. Null for a script that does not parse.
+function scriptSurface(src) {
     const read = readScript(src, '<script>');
 
-    if (read === null) return null;
-
-    const { props, bindables, deriveds } = surface(read.tree.body, read.theirs);
-
-    return [...props, ...bindables, ...deriveds.map((one) => one.name)];
+    return read === null ? null : surface(read.tree.body, read.theirs);
 }
 
 // A component's props and the Svelte type of each, for a custom element: Svelte
@@ -4703,4 +4697,4 @@ function elementProps(src) {
     return [...props, ...bindables].map((name) => ({ name, type: types.get(name) }));
 }
 
-module.exports = { compile, VIRTUAL_PREFIX, virtualId, pythonModuleName, elementProps, runningNames, PY_NAME, componentImports, importedNames };
+module.exports = { compile, VIRTUAL_PREFIX, virtualId, pythonModuleName, elementProps, scriptSurface, PY_NAME, componentImports, importedNames };

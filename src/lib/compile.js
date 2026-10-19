@@ -11,7 +11,7 @@ export const {
     virtualId,
     pythonModuleName,
     elementProps,
-    runningNames,
+    scriptSurface,
     PY_NAME,
     componentImports,
     importedNames

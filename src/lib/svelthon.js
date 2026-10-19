@@ -14,6 +14,7 @@ import {
     markupOnly,
     blankBodies
 } from './markup.js';
+import { runningNames } from './expressions.js';
 import { parse } from 'svelte/compiler';
 
 const require = createRequire(import.meta.url);
@@ -24,7 +25,7 @@ const require = createRequire(import.meta.url);
 // put the engine in that bundle, which `npm run test:quiet` would say (its
 // `eval` warned about); the bundle does not follow a `require`.
 require('bryntime');
-const { compile, VIRTUAL_PREFIX, virtualId, pythonModuleName, elementProps, runningNames, PY_NAME, componentImports, importedNames } = require('./compile.cjs');
+const { compile, VIRTUAL_PREFIX, virtualId, pythonModuleName, elementProps, scriptSurface, PY_NAME, componentImports, importedNames } = require('./compile.cjs');
 
 // Generated modules, keyed by project and component name. Filled by the preprocessor when
 // Svelte transforms a component, read back when Vite resolves the import that
@@ -553,7 +554,11 @@ export function python(options = {}) {
             // handed a name ahead. Every name, of a script that does not parse.
             let running;
             const runs = (name) => {
-                running ??= runningNames(python);
+                if (running === undefined) {
+                    const declared = scriptSurface(python);
+
+                    running = declared === null ? null : runningNames(declared);
+                }
 
                 return running === null || running.includes(name);
             };

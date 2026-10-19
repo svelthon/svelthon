@@ -5,6 +5,18 @@
 import { parse } from 'svelte/compiler';
 import { attributeWrapper, truthBinding } from './attributes.js';
 import { atomic, replaceLiterals } from './lexical.js';
+import {
+    NAME_CHAR,
+    NAME,
+    CONVERSION,
+    pythonName,
+    sameName,
+    targetTree,
+    freeNames,
+    handedLate,
+    computing as computingIn,
+    costly as costlyIn
+} from './expressions.js';
 
 export { atomic };
 
@@ -182,12 +194,6 @@ function arguments_(text) {
 // is not, and the only thing that tells them apart is whether the word is a
 // keyword. Only the ones that can be followed by a parenthesised expression are
 // listed; `def` or `class` cannot appear inside a template expression at all.
-// What a name is made of, after its first character. Declared here because the
-// keyword boundary below is the first reader; `NAME` and `NAME_END` are built
-// from it a few lines down, where the reason it is a Unicode class is written
-// out.
-const NAME_CHAR = '\\p{XID_Continue}';
-
 // The keywords themselves, and the boundary in front of one is the same class as
 // the rest of a name, not `\w`, which is ASCII. `énot` is a perfectly good
 // Python name ending in four letters that spell a keyword: with an ASCII
@@ -202,19 +208,6 @@ const KEYWORD_BEFORE = new RegExp(
 // The keywords that hold a comma until their own end, starting at `lastIndex`
 // and spelled whole, with the same boundary: `x.lambda` and `info` are none.
 const KEYWORD_AT = new RegExp(`(?<![${NAME_CHAR}.])(lambda|for|in)(?![${NAME_CHAR}])`, 'uy');
-
-// A name, spelled the way Python spells one, and the single source every pattern
-// in this file that reads a name is built from.
-//
-// `\w` is ASCII in JavaScript, and `année` or `ligné` is a name to Python. Every
-// site that asks "is this a name" reads this one class, and nothing spells it
-// out again.
-//
-// Python's own classes, `XID_Start` and `XID_Continue`, the ones
-// `str.isidentifier` answers by: marks are in them because a name in Vietnamese
-// or Devanagari carries them, and `℘` or `·` because Python takes them. `u` is
-// required for `\p{…}` to mean anything at all.
-const NAME = `[\\p{XID_Start}_][${NAME_CHAR}]*`;
 
 // What a callable can end with, just before the parenthesis of a call: the last
 // character of a name by the same classes as `NAME`, or the close of a
@@ -1121,208 +1114,6 @@ const isComponent = (tag) => tag !== null && COMPONENT.test(tag.name);
 
 const identifiers = (text) => [...text.matchAll(new RegExp(NAME, 'gu'))].map((m) => m[0]);
 
-// The names an expression **reads**, which is not every word in its text.
-//
-// `identifiers` above answers the other question, which names a *declaration*
-// binds, and a pattern holds no strings and no attributes, so one regular
-// expression is the whole of it there. An expression is not that: two kinds of
-// word in one are not a reference.
-//
-//   a **string** or a comment   `greet("count")` does not read `count`
-//   an **attribute**            `row.label` reads `row`; `label` is the object's
-//
-// A name an expression does not read may be in the temporal dead zone of the
-// declaration it sits in: in `{#each rows as [label="total", total=0]}`,
-// reading `total` for the first default would read it before it exists.
-//
-// **An f-string is code, in its fields and nowhere else.** `f"{count} left"`
-// reads `count`, so skipping the literal whole would cost the block the very
-// subscription it depends on; reading all of it would count `left`. `atomic`
-// says where each field's expression lies, since it is the scanner that tells a
-// field from a format specification, where `#` is an option and `'` a fill
-// character: `f"{value:#x}"` and `f"{value:'>4}"` read `value` and nothing else.
-// A conversion, `!r`, closes the expression as well.
-const CONVERSION = /![rsa]\s*$/;
-
-// A name as Python reads it: normalized to NFKC when it holds a character past
-// ASCII, as the engine reads every identifier, so `ﬁeld` and `field` are one
-// name. The markup compares names so and never rewrites one it emits: a name a
-// block declares is a JavaScript variable as well, and JavaScript knows it by
-// the spelling it was declared under.
-const pythonName = (name) => (/^[\x00-\x7f]*$/.test(name) ? name : name.normalize('NFKC'));
-
-const referenced = (text) => {
-    const found = new Set();
-    const name = new RegExp(`^${NAME}`, 'u');
-    let at = 0;
-
-    while (at < text.length) {
-        const fields = [];
-        const skip = atomic(text, at, (from, to) => fields.push(text.slice(from, to)));
-
-        if (skip > 0) {
-            for (const field of fields) {
-                for (const one of referenced(field.replace(CONVERSION, ''))) found.add(one);
-            }
-
-            at += skip;
-            continue;
-        }
-
-        const word = text.slice(at).match(name);
-
-        if (word === null) {
-            at += 1;
-            continue;
-        }
-
-        if (!/\.\s*$/.test(text.slice(0, at))) found.add(word[0]);
-
-        at += word[0].length;
-    }
-
-    return [...found];
-};
-
-// And the names it reads **from outside itself**, which is what a template
-// expression is handed: a lambda's parameters are its own, and so is every
-// target of a comprehension, in each of its clauses but the first iterable, as
-// CPython scopes them. `(lambda x: x)(7)` reads no `x` of the template's;
-// `(lambda y=x: y)()` reads one in its default, and `[x for x in x]` in its
-// first iterable. Handed every word, a snippet's parameter the expression
-// shadows was read all the same, before the expression ran, and its default
-// with it, where Svelte reads none. Read off the tree the engine's parser
-// makes, and off the text where it makes none, which the compiler then
-// refuses. A walrus's target is taken as read, as it was. Its parentheses let
-// it run over lines, as it does between braces.
-const freeNames = (text) => {
-    const tree = targetTree(`(${text}\n)`);
-
-    if (tree === null) return referenced(text);
-
-    const ast = globalThis.__BRYTHON__.ast;
-    const found = new Set();
-    const COMPREHENSIONS = [ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp];
-    const targets = (node, into) => {
-        if (node instanceof ast.Name) into.add(node.id);
-        else if (node instanceof ast.Tuple || node instanceof ast.List) for (const one of node.elts) targets(one, into);
-        else if (node instanceof ast.Starred) targets(node.value, into);
-    };
-    const visit = (node, bound) => {
-        if (Array.isArray(node)) {
-            for (const one of node) visit(one, bound);
-            return;
-        }
-        if (node === null || typeof node !== 'object' || !Array.isArray(node.constructor?._fields)) return;
-
-        if (node instanceof ast.Name) {
-            if (!bound.has(node.id)) found.add(node.id);
-            return;
-        }
-
-        if (node instanceof ast.Lambda) {
-            const { args } = node;
-            const own = new Set(bound);
-
-            visit([args.defaults, args.kw_defaults], bound);
-            for (const one of [...args.posonlyargs, ...args.args, ...args.kwonlyargs, args.vararg, args.kwarg]) {
-                if (one) own.add(one.arg);
-            }
-            visit(node.body, own);
-            return;
-        }
-
-        if (COMPREHENSIONS.some((kind) => node instanceof kind)) {
-            const [first, ...rest] = node.generators;
-            const own = new Set(bound);
-
-            visit(first.iter, bound);
-            for (const one of node.generators) targets(one.target, own);
-            for (const one of node.generators) visit([one.target, one.ifs], own);
-            visit(rest.map((one) => one.iter), own);
-            visit([node.elt, node.key, node.value], own);
-            return;
-        }
-
-        for (const field of node.constructor._fields) visit(node[field], bound);
-    };
-
-    visit(tree, new Set());
-    return [...found];
-};
-
-// Whether an expression reads `name` before it runs anything. Read ahead, a
-// name whose read runs code (`costly`) then runs it where Python would: first,
-// and on every run. The expression is walked in Python's order of evaluation,
-// and the first of the two decides. Each node runs code once it has read its
-// operands, save a name, a constant and its attribute, a tuple, a list, a
-// slice, an f-string, a keyword and a lambda, whose body runs later. A name
-// `runs` answers for runs code where it is read, a derived of the script or a
-// prop, as `total` ran its body after `x`'s default in `[total, x]`. A node
-// that may skip what follows reads its first operand alone before it runs:
-// the test of a conditional, the first value of an `and` or an `or`, the
-// first comparison of a chain, the first iterable of a comprehension; and so,
-// taken as hashing what it has read, does a dict or a set. So `row["label"]`,
-// `fmt(row)` and `"#" + row` read `row` first, and `first() + row`,
-// `"a" if c else row`, `[row for _ in rows]` and `[total, row]` do not. A
-// walrus's target is written, not read, and a `**` merge, a keyword the
-// engine's tree leaves without a name, runs code.
-//
-// A `target` is the target of a write. Python reads the value first, then the
-// owner of an attribute or an item: a target that unpacks runs code before it
-// reads anything, and a name is written, not read.
-const readAhead = (text, name, runs, target = false) => {
-    const tree = targetTree(`(${text}\n)`);
-
-    if (tree === null) return false;
-
-    const ast = globalThis.__BRYTHON__.ast;
-
-    if (target && !(tree instanceof ast.Attribute || tree instanceof ast.Subscript)) return false;
-
-    const COMPREHENSIONS = [ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp];
-    const PURE = [ast.Constant, ast.Tuple, ast.List, ast.Slice, ast.JoinedStr, ast.keyword, ast.Lambda];
-    const sought = pythonName(name);
-    let answer = null;
-    const decide = (value) => {
-        if (answer === null) answer = value;
-    };
-    const visit = (node) => {
-        if (answer !== null) return;
-        if (Array.isArray(node)) {
-            for (const one of node) visit(one);
-            return;
-        }
-        if (node === null || typeof node !== 'object' || !Array.isArray(node.constructor?._fields)) return;
-
-        if (node instanceof ast.Name) {
-            if (pythonName(node.id) === sought) decide(node.ctx instanceof ast.Load);
-            else if (runs(node.id)) decide(false);
-            return;
-        }
-
-        if (node instanceof ast.Lambda) visit([node.args.defaults, node.args.kw_defaults]);
-        else if (node instanceof ast.IfExp) visit(node.test);
-        else if (node instanceof ast.BoolOp) visit(node.values[0]);
-        else if (node instanceof ast.Compare) visit([node.left, node.comparators[0]]);
-        else if (COMPREHENSIONS.some((kind) => node instanceof kind)) visit(node.generators[0].iter);
-        else if (node instanceof ast.Dict) visit([node.keys[0], node.values[0]]);
-        else if (node instanceof ast.Set) visit(node.elts[0]);
-        else if (node instanceof ast.NamedExpr) visit([node.value, node.target]);
-        else if (node instanceof ast.Attribute && node.value instanceof ast.Constant) return;
-        else {
-            for (const field of node.constructor._fields) {
-                if (field !== 'ctx' && field !== 'op') visit(node[field]);
-            }
-        }
-
-        if (!PURE.some((kind) => node instanceof kind) || (node instanceof ast.keyword && !node.arg)) decide(false);
-    };
-
-    visit(tree);
-    return answer === true;
-};
-
 // One entry of a declaration that destructures: a snippet's parameter, and the
 // target of an `{#each}`. Either may be a name, a pattern Svelte takes apart,
 // or either of those carrying a default.
@@ -1954,26 +1745,6 @@ const keyword = (trimmed, sigil) => {
 // behind a JavaScript proxy fails its own type checks.
 const DECLARED_NAME = new RegExp(`^${NAME}$`, 'u');
 
-// An expression as Python reads it, by the parser of the Brython the compiler
-// has loaded before any markup is read. A binding's target: `(amount)` is the
-// `Name` `amount`, and `bag["selected"]`, `bag[ "selected" ]` and
-// `bag['selected']` are one `Subscript`. And where an `{#await}` ends. Null for
-// text that does not parse, which the compiler refuses where it is written once
-// it compiles it.
-function targetTree(expr) {
-    const $B = globalThis.__BRYTHON__;
-
-    if (typeof $B?.Parser !== 'function') {
-        throw new Error("svelthon: reading a template expression needs Brython's parser, which `compile.cjs` loads");
-    }
-
-    try {
-        return $B._PyPegen.run_parser(new $B.Parser(expr.trim(), '<target>', 'eval')).body;
-    } catch {
-        return null;
-    }
-}
-
 // The name a target is, when it is one.
 const bareName = (expr) => {
     const node = targetTree(expr);
@@ -2213,11 +1984,6 @@ export function pythonExpressions(markup, collect, onPython, where) {
 // what Svelte's component names allow: an ASCII letter left `<Étiquette>` no tag.
 const TAG_OPEN = /<(\/?)\s*(\p{ID_Start}[\p{ID_Continue}$‌‍:.-]*)/uy;
 
-// Two names as Python compares them (`pythonName`): `ﬁeld` declared and
-// `field` read are one name. Every question of which name an expression reads
-// is asked through this, and no spelling is compared as it was written.
-const sameName = (one, other) => pythonName(one) === pythonName(other);
-
 // The scopes the markup declares names in, from the component's own to the
 // block being read, and what a name an expression reads is in them. `seed` is
 // what the first walk recorded in each scope, `indexed` where it asked for an
@@ -2318,30 +2084,20 @@ function scopeChain(seed, indexed, refuseCompilerName) {
         keyed[keyed.length - 1] = undefined;
     };
 
-    // The innermost scope's names that are a snippet's parameters.
+    // The innermost scope's names that are a snippet's parameters, each one
+    // whose read runs code (`computing`).
     const parameters = (names) => {
         scopes[scopes.length - 1].parameters = new Set(names);
+        computingIn(scopes[scopes.length - 1], names);
     };
 
-    // The innermost scope's names whose read may run code, the author's or a
-    // default's: a name a pattern unpacks, which reads a key or an attribute,
-    // one whose parameter holds a default, and a derived the markup declares.
-    // And every snippet parameter, bare or not: Svelte hands one as a function
-    // of the `{@render}` argument, which reading it runs. A row, an index or a
-    // state cell is read as it is held.
-    const computing = (names = []) => {
-        const scope = scopes[scopes.length - 1];
-
-        if (scope) for (const one of names) (scope.computed ??= new Set()).add(one);
-    };
+    // The innermost scope's names whose read may run code (`computing`).
+    const computing = (names = []) => computingIn(scopes[scopes.length - 1], names);
 
     const costly = (name) => {
         const held = found(name);
 
-        return (
-            held !== null &&
-            (scopes[held.at].computed?.has(held.declared) === true || scopes[held.at].parameters?.has(held.declared) === true)
-        );
+        return held !== null && costlyIn(scopes[held.at], held.declared);
     };
 
     // The innermost scope holding `name`, and the spelling it was declared
@@ -2674,33 +2430,18 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     // are therefore not handed in: the key of an `{#each}`, see `eachKey`.
     // `followed` is false for that key alone, which `eachKey` says why.
     //
-    // An expression that holds a name whose read runs code (`costly`), and
-    // every one of the 'lazy' kind, is handed each name as a function that
-    // reads it, and the compiler makes the reads calls (`templateDots`), so the
-    // name is read where Python reads it: never in a branch Python does not
-    // take, as in Svelte's own `true ? 7 : x`, and after what the expression
-    // reads before it. Read before the call, `{7 if True else x}` read a
-    // snippet's parameter, and its default with it, and failed on what the
-    // branch excluded; and `{first() + x}` ran `x`'s default before `first()`.
-    // Any other is handed each name read: a row read ahead is the row Python
-    // reads, and a call for each read cost a row's update a fifth more. So is
-    // one that holds a single such name and reads it before it runs anything
-    // (`readAhead`): `{item["n"] * 2}` reads `item` first, where a read ahead
-    // runs its code too, and handed late, every row a snippet renders paid
-    // the fifth. A name it is not handed is the script's or a builtin's, and
-    // whether its read runs code is the script's to say (`where.runs`);
-    // without a script to ask, any may.
-    const handedLate = (text, args, target = false) => {
-        const running = args.filter(costly);
-        const runs = (name) => !args.some((one) => sameName(one, name)) && (where?.runs?.(name) ?? true);
-
-        return running.length > 1 || (running.length === 1 && !readAhead(text, running[0], runs, target));
-    };
+    // An expression that holds a name whose read runs code (`costly`) is
+    // handed each name late, as a function that reads it, or each read ahead
+    // (`handedLate`); every one of the 'lazy' kind late. Late, the compiler
+    // makes the reads calls (`templateDots`). Whether a name of the script's,
+    // which the expression is not handed, runs code when read is the script's
+    // to say (`where.runs`); without a script to ask, any may.
+    const scriptRuns = (name) => where?.runs?.(name) ?? true;
 
     const call = (expr, wrapper, source = expr, kind = '', bound = [], followed = true) => {
         const trimmed = expr.trim();
         const args = mentioned(trimmed).filter((one) => !bound.some((name) => sameName(name, one)));
-        const late = args.length > 0 && (kind === 'lazy' || handedLate(trimmed, args));
+        const late = args.length > 0 && (kind === 'lazy' || handedLate(trimmed, args, costly, scriptRuns));
 
         locate(source.trim());
         // The column of its opening brace, counted from zero: where every
@@ -2731,7 +2472,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     // was typed.
     const assign = (expr, crossing = BIND_VALUE) => {
         const args = mentioned(expr.trim());
-        const late = handedLate(expr.trim(), args, true);
+        const late = handedLate(expr.trim(), args, costly, scriptRuns, true);
         const at = position();
         const name = collect(expr.trim(), '', args, true, at?.line, '', at?.column, late);
         const value = (arg) => `${FOLLOW}(${received(arg)})`;

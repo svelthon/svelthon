@@ -13,7 +13,8 @@ import ReadOrder from './fixtures/ReadOrder.svelte';
 import ReadOrderParent from './fixtures/ReadOrderParent.svelte';
 import BoundBranch from './fixtures/BoundBranch.svelte';
 import { seen } from './fixtures/read_order.js';
-import { runningNames } from '../src/lib/compile.js';
+import { scriptSurface } from '../src/lib/compile.js';
+import { runningNames } from '../src/lib/expressions.js';
 
 test.for([
     ['default', 'first@1:second@2', ['first', 'second']],
@@ -106,5 +107,5 @@ test("a script's names whose read runs code are its deriveds and props", () => {
         '    pass'
     ].join('\n');
 
-    expect(runningNames(script).sort()).toEqual(['label', 'shared', 'total']);
+    expect(runningNames(scriptSurface(script)).sort()).toEqual(['label', 'shared', 'total']);
 });
