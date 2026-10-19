@@ -63,6 +63,65 @@ const VIEWS = new Set(['items', 'values']);
 // `type(box).__getattribute__(box, "x")`, it is the read `box.x` makes.
 const FOLLOWED = new Set([...MUTATORS, ...VIEWS, 'get', '__getattribute__']);
 
+const UNCROSSED = Symbol('uncrossed');
+
+// What the engine hands a native method for a Python argument, when finding
+// it reads nothing of the author's and makes nothing: a scalar of
+// JavaScript's and the engine's null as they are, an `int` past 2⁵³, a
+// `float` and None as the converter gives them (`pyobj2jsobj`), a
+// JavaScript object as itself. A `float` is an object of the engine's, and
+// an `int` past 2⁵³ another, so a key or a value of either, set again as it
+// was read, looked new.
+//
+// Anything else of Python's crosses as the engine's hook makes it
+// (`pyobj2jsobj_hook`), in its order: a callable as the function published
+// for it, told by `crossesAs`, bytes as a copy, made anew, and a list, a
+// dict, a set or an instance as its view, the one `viewOf` keeps, read
+// here and not made. A JavaScript array crosses as a copy.
+const crossed = (one) => {
+    if (one === null || (typeof one !== 'object' && typeof one !== 'function')) return one;
+    if (typeof one === 'object' && javascriptOwn(one) && !Array.isArray(one)) return one;
+
+    const type = quietPyType(one);
+
+    if (type === _b_.float || type === _b_.int || one === NONE) return globalThis.__BRYTHON__.pyobj2jsobj(one);
+    if (type === undefined || callable(one) || pyBytes(one)) return UNCROSSED;
+
+    return VIEW_OF.get(one) ?? UNCROSSED;
+};
+
+// Whether a value written is the one held, as a `SvelteMap` tells it: the
+// same object, or the same value as both cross (`crossed`), a float of
+// the engine's by its number, of the same type and the same sign: `1.0`
+// written over `1`, or `-0.0` over `0.0`, are one number to JavaScript and
+// two to the page, which shows each as Python writes it. And a NaN is the
+// same as nothing but itself, as `!==` tells it in a `SvelteMap` and a
+// `$state`, and as `==` tells it in Python. Two floats are read by their
+// number, without the converter's walk to it: a name written in a loop asks
+// this at each write.
+const sameNumber = (one, other) => Object.is(one, other) && one === one;
+
+const sameValue = (one, held) => {
+    if (one === held) return true;
+
+    const type = quietPyType(one);
+
+    if (type !== quietPyType(held)) return false;
+    if (type === _b_.float) return sameNumber(one.value, held.value);
+
+    const native = crossed(one);
+
+    return native !== UNCROSSED && sameNumber(native, crossed(held));
+};
+
+// **A write that changes nothing tells nobody**, as Svelte's `$state` tells
+// nobody of a value `===` to the one it holds: the same value (`sameValue`),
+// `round(x, 2)` written over `x`, a new float of the same number, among them.
+// Told, an effect normalising what it reads ran for ever. Except where Svelte
+// refuses a write (`host.refuses`), which it does before it compares: there
+// the write is told, and refused.
+export const changesNothing = (value, held) => sameValue(value, held) && !host.refuses();
+
 // Make an in-place mutation reactive: `items.append(x)` with nothing after it.
 //
 // Svelte's own answer is to proxy the value in depth, which is unusable here: a
@@ -326,19 +385,6 @@ function installMutationTracking($B) {
         const at = found((index) => target[KEYS][index], target[TABLE][hash]);
 
         return at === undefined || at === MISSING ? at : target[VALUES][at];
-    };
-
-    // Whether a value written is the one held, as a `SvelteMap` tells it: the
-    // same object, or the same value as both cross (`crossed`), a float of
-    // the engine's by its number, of the same type and the same sign: `1.0`
-    // written over `1`, or `-0.0` over `0.0`, are one number to JavaScript and
-    // two to the page, which shows each as Python writes it.
-    const sameValue = (one, held) => {
-        if (one === held) return true;
-
-        const native = crossed(one);
-
-        return native !== UNCROSSED && quietPyType(one) === quietPyType(held) && Object.is(native, crossed(held));
     };
 
     // The entries an `update` writes, in order, when reading them runs nothing
@@ -623,32 +669,6 @@ function installMutationTracking($B) {
     // both as the method receives them (`crossed`); one whose crossing could
     // run the author's code is taken for a change.
     const NATIVE = /^function (add|delete|clear|set)\(\) \{\s*\[native code\]\s*\}$/;
-    const UNCROSSED = Symbol('uncrossed');
-
-    // What the engine hands a native method for a Python argument, when finding
-    // it reads nothing of the author's and makes nothing: a scalar of
-    // JavaScript's and the engine's null as they are, an `int` past 2⁵³, a
-    // `float` and None as the converter gives them (`pyobj2jsobj`), a
-    // JavaScript object as itself. A `float` is an object of the engine's, and
-    // an `int` past 2⁵³ another, so a key or a value of either, set again as it
-    // was read, looked new.
-    //
-    // Anything else of Python's crosses as the engine's hook makes it
-    // (`pyobj2jsobj_hook`), in its order: a callable as the function published
-    // for it, told by `crossesAs`, bytes as a copy, made anew, and a list, a
-    // dict, a set or an instance as its view, the one `viewOf` keeps, read
-    // here and not made. A JavaScript array crosses as a copy.
-    const crossed = (one) => {
-        if (one === null || (typeof one !== 'object' && typeof one !== 'function')) return one;
-        if (typeof one === 'object' && javascriptOwn(one) && !Array.isArray(one)) return one;
-
-        const type = quietPyType(one);
-
-        if (type === _b_.float || type === _b_.int || one === NONE) return $B.pyobj2jsobj(one);
-        if (type === undefined || callable(one) || pyBytes(one)) return UNCROSSED;
-
-        return VIEW_OF.get(one) ?? UNCROSSED;
-    };
 
     // Whether `one` crosses as `stored`, what a map holds: a callable as the
     // function published for it (`PUBLISHED`), which `pyHandler` hands again

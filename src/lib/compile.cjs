@@ -1517,6 +1517,7 @@ const EXPR_PREFIX = '__expr_';
 const RUNTIME = {
     bind: '__bind',
     track: '__track',
+    changesNothing: '__changesNothing',
     follow: '__follow',
     followOwn: '__followOwn',
     SHAPING: '__SHAPING',
@@ -3113,6 +3114,18 @@ const SUBSCRIBING = (c) =>
 const rev = (name) => `__rev_${name}`;
 const bump = (name) => `__bump_${name}`;
 
+// A write that changes nothing leaves the cell as it was (`changesNothing`), as
+// Svelte's `$state` is left by a value `===` to the one it holds: a float
+// written again as a new object of the same number is one Svelte takes for a
+// change. The cell keeps the float it held, which nothing tells apart from the
+// one written: the engine's `is` and `id()` take two floats of one number for
+// one. Compared with what the name held as `track` keeps it, on its `bump`,
+// and not with the cell, which an effect writing the name would subscribe to.
+const writeName = (cell, name, store) =>
+    `const __was = ${bump(name)}.held;` +
+    ` const __written = __track(${NEXT_VALUE}, ${bump(name)}${store ? '' : `, ${SUBS}`});` +
+    ` if (!__changesNothing(__written, __was)) ${cell} = __written;`;
+
 // The component script, one function per section.
 //
 // Each takes the same context object, what `compile()` read off the source,
@@ -3126,7 +3139,7 @@ function preamble(c) {
         // name no one would type: only generated code touches it, and `py` is a
         // name an author may want.
         `import { ${runtimeAliases([
-            'bind', '__pybridge', 'jsGlobal', 'track', 'follow', 'followOwn', 'SHAPING', 'pyError',
+            'bind', '__pybridge', 'jsGlobal', 'track', 'changesNothing', 'follow', 'followOwn', 'SHAPING', 'pyError',
             'pyEvent', 'pyAttach', 'plainData', 'pyArg', 'pyData', 'pyComponent', 'pyExpression',
             'jsCall',
             'ticking', 'pyBind', 'NONE', 'helpers',
@@ -3417,12 +3430,16 @@ function authorBindings(c) {
         // value of this absence, and either way what was read before it may
         // not have been the cell it lands in: the revision every reader reads
         // is moved, as a write to an override is a write to Svelte's own
-        // derived.
+        // derived. Unless it changes nothing Python reads (`changesNothing`),
+        // told by what the derived held when it was last read, and not by a
+        // read of it, which would take a parent's write in: then the prop is
+        // left as it was, as Svelte leaves a state written the value it holds.
         ...c.props.map(
             (n) =>
                 `__bind(__proto, '${n}', () => (__SHAPING.on ? (${local(n)}, __followOwn(__pyBind(${pick(n)}()))) : (${rev(n)}, __follow(__pyBind(${pick(n)}())))),` +
-                ` (${NEXT_VALUE}) => { const __written = __track(${NEXT_VALUE}, ${bump(n)}, ${SUBS});` +
+                ` (${NEXT_VALUE}) => { const __held = ${bump(n)}.held; const __written = __track(${NEXT_VALUE}, ${bump(n)}, ${SUBS});` +
                 ` if (__initialising) { ${fallback(n)}.declared = __written; ${fallback(n)}.value = __written; ${local(n)} = __written; return; }` +
+                ` if (__changesNothing(__written, __pyBind(${fallback(n)}.overridden ? __held : ${fallback(n)}.absent ? ${fallback(n)}.value : ${fallback(n)}.current))) return;` +
                 ` const __plain = __plainScalar(__written);` +
                 ` if (__plainScalar(${fallback(n)}.current) !== __plain) ${fallback(n)}.current = __plain;` +
                 ` ${given(n)} = ${fallback(n)}.current; ${fallback(n)}.overridden = true;` +
@@ -3444,7 +3461,9 @@ function authorBindings(c) {
         //
         // Two Python values may cross as one number, `15` and `15.0`, where
         // Svelte sees no change: what Python reads is then what moves the
-        // revision its readers read.
+        // revision its readers read. And one value read as two objects, the
+        // float a JavaScript number reads as and the float written over it,
+        // moves nothing (`changesNothing`).
         ...c.bindables.map((b) => {
             const declared = c.defaulted.includes(b);
             const box = bindableDefault(b);
@@ -3455,7 +3474,7 @@ function authorBindings(c) {
             const handed =
                 `const __was = __untrack(() => ${held});` +
                 ` ${crossed(b)} = __handOver(__written, (__crossing) => { ${b} = __crossing; });` +
-                ` if (!__global.Object.is(__untrack(() => ${held}), __was)) ${bump(b)}();`;
+                ` if (!__changesNothing(__pyBind(__untrack(() => ${held})), __pyBind(__was))) ${bump(b)}();`;
             const set = declared
                 ? `${written} if (__initialising) { ${box}.py = __written;` +
                   ` __handOver(__written, (__crossing) => { ${box}.value = __crossing; });` +
@@ -3473,7 +3492,7 @@ function authorBindings(c) {
         // what they read under it (`__pybridge.walk`).
         ...c.state.map(
             (n) =>
-                `__bind(__proto, '${n}', () => (__SHAPING.on ? __followOwn(${n}) : (${rev(n)}, ${n})), (${NEXT_VALUE}) => { ${n} = __track(${NEXT_VALUE}, ${bump(n)}${c.store ? '' : `, ${SUBS}`}); });`
+                `__bind(__proto, '${n}', () => (__SHAPING.on ? __followOwn(${n}) : (${rev(n)}, ${n})), (${NEXT_VALUE}) => { ${writeName(n, n, c.store)} });`
         ),
         // A name bound by `class` is declared, no state: no revision, no watch.
         // Its accessor follows, in a reaction, the special methods its
@@ -3490,7 +3509,7 @@ function authorBindings(c) {
             (f) =>
                 `__bind(__proto, '${f.name}', () => ` +
                 `(__SHAPING.on ? __followOwn(${fn(f.name)}) : (${rev(f.name)}, ${fn(f.name)})), ` +
-                `(${NEXT_VALUE}) => { ${fn(f.name)} = __track(${NEXT_VALUE}, ${bump(f.name)}${c.store ? '' : `, ${SUBS}`}); }, () => ${fn(f.name)});`
+                `(${NEXT_VALUE}) => { ${writeName(fn(f.name), f.name, c.store)} }, () => ${fn(f.name)});`
         ),
         ...c.inspects.map(
             (i) => `__bind(__proto, '${i.name}', () => ${fn(i.name)}, (${NEXT_VALUE}) => { ${fn(i.name)} = ${NEXT_VALUE}; });`
