@@ -1664,11 +1664,13 @@ function templateDots(def) {
     // A function whose parameters arrive as functions, named `_late` by `call`
     // in `markup.js`: each read of one becomes a call, except where a lambda or
     // a comprehension binds the same name for itself.
+    // The write half of a binding is handed the value written first, as
+    // itself, and only the names after it so.
     const [def0] = tree.body;
-    const lazy =
-        def0 instanceof $B.ast.FunctionDef && def0.name.startsWith(EXPR_PREFIX) && def0.name.endsWith('_late')
-            ? new Set(def0.args.args.map((one) => one.arg))
-            : new Set();
+    const late = def0 instanceof $B.ast.FunctionDef && def0.name.startsWith(EXPR_PREFIX) && def0.name.endsWith('_late');
+    const lazy = late
+        ? new Set(def0.args.args.slice(def0.name.startsWith(`${EXPR_PREFIX}set_`) ? 1 : 0).map((one) => one.arg))
+        : new Set();
 
     // The names a target binds: `x`, `(k, v)`, `*rest`.
     const targets = (target, names = []) => {

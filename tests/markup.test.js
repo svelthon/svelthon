@@ -660,7 +660,7 @@ describe('the blocks that declare names', () => {
 
         // Its own name comes first: it lives in the scope that encloses the
         // block, and an enclosing scope reaches into it.
-        expect(defs.some((one) => /^def __expr_\d+\(item\):/m.test(one))).toBe(true);
+        expect(defs.some((one) => /^def __expr_\d+(?:_late)?\(item\):/m.test(one))).toBe(true);
     });
 
     // `{x = e}` and `{y => e}` are the two signs the script already uses, put in
@@ -690,7 +690,7 @@ describe('the blocks that declare names', () => {
         // The declaration reads the block's name and not its own; the
         // interpolation after it reads the declaration and not the block's.
         expect(defs.some((one) => /^def __expr_py_\d+\(row\):/m.test(one))).toBe(true);
-        expect(defs.some((one) => /^def __expr_\d+\(half\):/m.test(one))).toBe(true);
+        expect(defs.some((one) => /^def __expr_\d+(?:_late)?\(half\):/m.test(one))).toBe(true);
     });
 
     // The sign has to be an assignment, not a comparison or a keyword argument.

@@ -1193,21 +1193,10 @@ const referenced = (text) => {
 // shadows was read all the same, before the expression ran, and its default
 // with it, where Svelte reads none. Read off the tree the engine's parser
 // makes, and off the text where it makes none, which the compiler then
-// refuses. A walrus's target is taken as read, as it was.
-//
-// The tree is kept for the text asked last, which `skips` asks of next: one
-// parse, where every expression of a page was parsed twice before it compiled.
-// Its parentheses let it run over lines, as it does between braces.
-let lastTree = { text: null, tree: null };
-
-const expressionTree = (text) => {
-    if (lastTree.text !== text) lastTree = { text, tree: targetTree(`(${text}\n)`) };
-
-    return lastTree.tree;
-};
-
+// refuses. A walrus's target is taken as read, as it was. Its parentheses let
+// it run over lines, as it does between braces.
 const freeNames = (text) => {
-    const tree = expressionTree(text);
+    const tree = targetTree(`(${text}\n)`);
 
     if (tree === null) return referenced(text);
 
@@ -1260,32 +1249,6 @@ const freeNames = (text) => {
 
     visit(tree, new Set());
     return [...found];
-};
-
-// Whether an expression may run without reading a name it holds: a branch,
-// `if … else`, `and`, `or` and a comparison chained past its first test, or a
-// body run later or never, a lambda's and a comprehension's. Outside them
-// Python reads every name it holds, so a name read ahead is the one it reads,
-// and costs no call; inside one, a name read ahead may be one Python would
-// not read, a snippet's parameter running its default or a derived its body.
-// Text the engine's parser makes no tree of is taken to skip.
-const skips = (text) => {
-    const tree = expressionTree(text);
-
-    if (tree === null) return true;
-
-    const ast = globalThis.__BRYTHON__.ast;
-    const SKIPPING = [ast.IfExp, ast.BoolOp, ast.Lambda, ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp];
-    const visit = (node) => {
-        if (Array.isArray(node)) return node.some(visit);
-        if (node === null || typeof node !== 'object' || !Array.isArray(node.constructor?._fields)) return false;
-        if (SKIPPING.some((kind) => node instanceof kind)) return true;
-        if (node instanceof ast.Compare && node.comparators.length > 1) return true;
-
-        return node.constructor._fields.some((field) => visit(node[field]));
-    };
-
-    return visit(tree);
 };
 
 // One entry of a declaration that destructures: a snippet's parameter, and the
@@ -2639,19 +2602,20 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     // are therefore not handed in: the key of an `{#each}`, see `eachKey`.
     // `followed` is false for that key alone, which `eachKey` says why.
     //
-    // An expression that may run without reading a name it holds (`skips`) and
-    // holds one whose read runs code (`costly`), and every one of the 'lazy'
-    // kind, is handed each name as a function that reads it, and the compiler
-    // makes the reads calls (`templateDots`), so a branch Python does not take
-    // reads nothing, as in Python and as in Svelte's own `true ? 7 : x`: read
-    // before the call, `{7 if True else x}` read a snippet's parameter, and its
-    // default with it, and failed on what the branch excluded. Any other is
-    // handed each name read: a row read ahead is the row a branch would read,
-    // and a call for each read cost a row's update a fifth more.
+    // An expression that holds a name whose read runs code (`costly`), and
+    // every one of the 'lazy' kind, is handed each name as a function that
+    // reads it, and the compiler makes the reads calls (`templateDots`), so the
+    // name is read where Python reads it: never in a branch Python does not
+    // take, as in Svelte's own `true ? 7 : x`, and after what the expression
+    // reads before it. Read before the call, `{7 if True else x}` read a
+    // snippet's parameter, and its default with it, and failed on what the
+    // branch excluded; and `{first() + x}` ran `x`'s default before `first()`.
+    // Any other is handed each name read: a row read ahead is the row Python
+    // reads, and a call for each read cost a row's update a fifth more.
     const call = (expr, wrapper, source = expr, kind = '', bound = [], followed = true) => {
         const trimmed = expr.trim();
         const args = mentioned(trimmed).filter((one) => !bound.some((name) => sameName(name, one)));
-        const late = args.length > 0 && (kind === 'lazy' || (args.some(costly) && skips(trimmed)));
+        const late = args.length > 0 && (kind === 'lazy' || args.some(costly));
 
         locate(source.trim());
         // The column of its opening brace, counted from zero: where every
@@ -2675,11 +2639,17 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     // The value crosses through `pyBind`, which is where a JavaScript number
     // becomes a Python one. It is the only conversion a binding makes, and every
     // binding makes it here rather than each at its own site.
+    //
+    // The target's names are handed as the read's are (`call`): late when one
+    // runs code, so `bag[0 if True else x]` reads no `x` on a write either,
+    // where the write read it, ran its default, and lost what was typed.
     const assign = (expr, crossing = BIND_VALUE) => {
         const args = mentioned(expr.trim());
+        const late = args.some(costly);
         const at = position();
-        const name = collect(expr.trim(), '', args, true, at?.line, '', at?.column);
-        const rest = args.map((arg) => `${FOLLOW}(${received(arg)})`);
+        const name = collect(expr.trim(), '', args, true, at?.line, '', at?.column, late);
+        const value = (arg) => `${FOLLOW}(${received(arg)})`;
+        const rest = args.map((arg) => (late ? `() => ${value(arg)}` : value(arg)));
 
         return `${name}(${[`${crossing}(${BOUND_VALUE})`, ...rest].join(', ')})`;
     };
