@@ -12,7 +12,10 @@
 // JavaScript knows it by.
 import { test, expect } from 'vitest';
 import { mount, flushSync } from './mounted.js';
+import { preprocess } from 'svelte/compiler';
+import { python } from '../src/lib/svelthon.js';
 import NormalizedNames from './fixtures/NormalizedNames.svelte';
+import NormalizedModuleNames from './fixtures/NormalizedModuleNames.svelte';
 
 const mounted = () => {
     const target = document.body.appendChild(document.createElement('div'));
@@ -86,4 +89,32 @@ test('a walrus writes the script name under another spelling', () => {
     flushSync();
 
     expect(target.querySelector('output').textContent).toBe('1');
+});
+
+// And a name of the `<script module>`, published under the name Python reads:
+// it was published as JavaScript spells it, and both spellings raised
+// `NameError`. Read off the variable as JavaScript spells it.
+test.for([
+    ['ligature', '7'],
+    ['ligature, spelled plain', '7'],
+    ['full width', '8'],
+    ['kelvin', '9'],
+    ['builtin', '10']
+])('a name of the module script spelled another way reads it: %s', ([k, expected]) => {
+    const target = document.body.appendChild(document.createElement('div'));
+
+    mount(NormalizedModuleNames, { target });
+    flushSync();
+
+    expect(target.querySelector(`[data-k="${k}"]`).textContent).toBe(expected);
+});
+
+// Two of its names Python reads as one are refused: which one the template
+// reaches would be nobody's choice.
+test('two names of the module script that Python reads as one are refused', async () => {
+    const source = '<script module>\n    const ﬁeld = 1;\n    const field = 2;\n</script>\n\n<script lang="python">\npass\n</script>\n\n<p>{field}</p>\n';
+
+    await expect(preprocess(source, [python()], { filename: 'Twice.svelte' })).rejects.toThrow(
+        '`ﬁeld` and `field` are two JavaScript names Python reads as one'
+    );
 });

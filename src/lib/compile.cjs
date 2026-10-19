@@ -3571,8 +3571,28 @@ function jsNameBindings(c, extra = []) {
     // import in its `<script module>` and in an `importjs`, and the two loops
     // this replaces then bound it twice: the same line, emitted after itself.
     const names = [...new Set([...c.jsImported, ...extra])].filter(
-        (n) => !c.declared.includes(n)
+        (n) => !c.declared.includes(pythonKey(n))
     );
+
+    // Published under the name Python reads (`pythonKey`), each read off the
+    // variable as JavaScript spells it: `ﬁeld` in the `<script module>` is
+    // `field` to Python, which raised `NameError` on both spellings. Two
+    // variables Python reads as one name are refused, which one wins being
+    // nobody's choice.
+    const published = new Map();
+
+    for (const n of names) {
+        const other = published.get(pythonKey(n));
+
+        if (other !== undefined) {
+            throw new SyntaxError(
+                `svelthon — \`${other}\` and \`${n}\` are two JavaScript names Python reads as one, ` +
+                    `\`${pythonKey(n)}\` (${c.source}): Python normalizes a name as Unicode's NFKC does, ` +
+                    `so the template could reach only one of them. Give one of them another name.`
+            );
+        }
+        published.set(pythonKey(n), n);
+    }
 
     // **Read at every access, because a name is a binding and not a value.**
     // `let amount = 1` in a `<script module>` reaches Python as what the
@@ -3591,9 +3611,15 @@ function jsNameBindings(c, extra = []) {
     // by JavaScript's.
     return names.map((n) =>
         c.jsImported.includes(n)
-            ? `__bind(__proto, '${n}', () => __jsCall(${n}), () => __readOnlyImport(${JSON.stringify(n)}, ${JSON.stringify(c.source)}));`
-            : `__bind(__proto, '${n}', () => __jsCall(${n}));`
+            ? `__bind(__proto, '${pythonKey(n)}', () => __jsCall(${n}), () => __readOnlyImport(${JSON.stringify(n)}, ${JSON.stringify(c.source)}));`
+            : `__bind(__proto, '${pythonKey(n)}', () => __jsCall(${n}));`
     );
+}
+
+// A name as Python reads it, by the engine's own rule: NFKC past ASCII, as its
+// parser reads every identifier.
+function pythonKey(name) {
+    return $B._PyPegen.new_identifier(null, name);
 }
 
 // Everything the compiler adds: the injected helpers, the template bridge's
@@ -4380,7 +4406,7 @@ function compile(
     // again with a binding of those names that never runs, and reads each at
     // run time, the module's first and the builtins after, as it reads any
     // name the module binds. The analysis above stays on what the author wrote.
-    const shadowing = [...new Set([...jsImported, ...jsNames])].filter(
+    const shadowing = [...new Set([...jsImported, ...jsNames].map(pythonKey))].filter(
         (n) => n in $B.builtins && /^[A-Za-z_]\w*$/.test(n) && !['None', 'True', 'False', '__debug__'].includes(n)
     );
     const js = (shadowing.length ? brython(`${src}\nif False:\n    ${shadowing.join(' = ')} = None\n`) : root).to_js();
@@ -4443,7 +4469,7 @@ function compile(
         state.includes(hook) ||
         [...props, ...bindables].some((one) => (one.name ?? one) === hook) ||
         jsImported.includes(hook) ||
-        jsNames.includes(hook);
+        jsNames.some((one) => pythonKey(one) === hook);
     const lifecycle = (hook) => !store && (defined(hook) || holdsHook(hook));
     const hook = (name) => (defined(name) ? fn(name) : name);
 
