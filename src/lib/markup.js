@@ -978,9 +978,30 @@ const DIRECTIVE_ADAPTER = {
     animate: '__directiveAnimate'
 };
 
+// A tag's attribute in the unquoted spelling, `type=checkbox` or `value=a`,
+// which HTML and Svelte take as the quoted one: the value runs to what ends it
+// in Svelte's parser, a space, a quote, `=`, `<`, `>`, a backtick or `/>`, and
+// holds no interpolation, which Svelte refuses there
+// (`attribute_unquoted_sequence`). Its `quote` is empty. Read only by quote
+// and brace, it was no attribute: a checkbox so typed was taken for a radio,
+// and a value so written for none, and the server checked no box.
+const UNQUOTED_END = /[\s"'=<>`{]/;
+
+function unquotedEnd(markup, at) {
+    while (at < markup.length && !UNQUOTED_END.test(markup[at]) && !markup.startsWith('/>', at)) at += 1;
+
+    return at;
+}
+
 function tagValue(markup, from, name = 'value') {
     for (let at = from; at < markup.length && markup[at] !== '>'; ) {
         const char = markup[at];
+
+        if (char === '=' && (markup.slice(from, at + 1).match(ATTRIBUTE_NAME) || [])[1] === name) {
+            const start = at + 1 + markup.slice(at + 1).match(/^\s*/)[0].length;
+
+            if (!['"', "'", '{'].includes(markup[start])) return { start, end: unquotedEnd(markup, start), braced: false, quote: '' };
+        }
 
         if (char !== '"' && char !== "'" && char !== '{') {
             at += 1;
@@ -991,12 +1012,12 @@ function tagValue(markup, from, name = 'value') {
 
         if (end === -1) return null;
         if ((markup.slice(from, at).match(ATTRIBUTE_NAME) || [])[1] === name) {
-            return { start: at + 1, end, braced: char === '{' };
+            return { start: at + 1, end, braced: char === '{', quote: char === '{' ? '' : char };
         }
 
         // The shorthand, `{value}`, which is `value={value}`.
         if (char === '{' && ATTRIBUTE_START.test(markup[at - 1]) && markup.slice(at + 1, end).trim() === name) {
-            return { start: at + 1, end, braced: true };
+            return { start: at + 1, end, braced: true, quote: '' };
         }
 
         at = end + 1;
@@ -2799,7 +2820,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 ? 'undefined'
                 : found.braced
                   ? call(markup.slice(found.start, found.end), '', undefined, 'python')
-                  : quotedValue(markup.slice(found.start, found.end), markup[found.start - 1], 'python');
+                  : quotedValue(markup.slice(found.start, found.end), found.quote, 'python');
 
         region = outer;
 
@@ -2835,7 +2856,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         const boxes = kind !== null && !kind.braced && markup.slice(kind.start, kind.end) === 'checkbox';
         const served =
             found !== null && value === 'undefined'
-                ? JSON.stringify(attributeText(markup.slice(found.start, found.end), markup[found.start - 1]))
+                ? JSON.stringify(attributeText(markup.slice(found.start, found.end), found.quote))
                 : value;
         const names = tag === null ? null : tagNames(markup, tag.start);
         const checked =
