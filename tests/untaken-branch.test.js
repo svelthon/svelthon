@@ -42,9 +42,30 @@ test.for([
     // Svelte's own bare parameter is read in development as in production,
     // where its branch reads it: the `{@render}` argument runs nowhere here.
     ['bare snippet parameter', '7'],
+    // A default and a name a pattern unpacks are derived as the markup
+    // declares one, which nothing reads ahead, development included: CPython's
+    // answer, and Svelte's in production.
+    ['snippet default', '7'],
+    ['snippet pattern default', '7'],
+    ['each pattern default', '7'],
     ['taken', 'read']
 ])('a branch %s shows %s', ([kind, answer]) => {
     expect(shown(kind)).toBe(answer);
+});
+
+// None of them is a `{@const}`, which Svelte calls legacy and reads ahead in
+// development: a component whose author wrote none would stop compiling the
+// day Svelte drops it.
+test('the markup declares no {@const}', () => {
+    const defs = [];
+    const out = pythonExpressions(
+        '{#snippet row([x, z], y=1)}{y}{/snippet}{#each rows as {a = 1}}{a}{/each}' +
+            '{#await load() then {b}}{b}{/await}{#if True}{@debug rows}{/if}',
+        collector(defs)
+    );
+
+    expect(out).toContain('$derived(');
+    expect(out).not.toContain('{@const');
 });
 
 // A default and a name a pattern unpacks Svelte reads ahead itself in

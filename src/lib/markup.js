@@ -1569,16 +1569,23 @@ function unpackByKey(inside, call, names, tuple, unpack) {
     return alias;
 }
 
-// The `{@const}` lines a declaration list unpacks into, compiled once every
-// name of the block is in scope. A default goes through `lazy`, so a later key
-// it reads is read only when the default is taken; one an element waited for
-// is taken where its alias is `undefined` (`parameterPattern`).
+// The declarations a declaration list unpacks into, compiled once every name
+// of the block is in scope. A default goes through `lazy`, so a later key it
+// reads is read only when the default is taken; one an element waited for is
+// taken where its alias is `undefined` (`parameterPattern`).
+//
+// Each a derived the markup declares, `{const x = $derived(…)}`, which Svelte
+// reads when it is read, and never `{@const}`, the syntax Svelte calls legacy
+// and reads ahead in development: a component whose author wrote none would
+// stop compiling the day Svelte drops it.
+const derivedTag = (target, expression) => `{const ${target} = $derived(${expression})}`;
+
 const unpacked = (unpack, call) =>
     unpack.consts
         .map(({ target, read, source, lazy, missing, fallback }) =>
             missing === undefined
-                ? `{@const ${target} = ${call(read, '', source, lazy ? 'lazy' : 'python')}}`
-                : `{@const ${target} = ${missing} === undefined ? ${call(fallback, '', undefined, 'lazy')} : ${missing}}`
+                ? derivedTag(target, call(read, '', source, lazy ? 'lazy' : 'python'))
+                : derivedTag(target, `${missing} === undefined ? ${call(fallback, '', undefined, 'lazy')} : ${missing}`)
         )
         .join('');
 
@@ -1686,17 +1693,13 @@ function snippetParameters(trimmed, declare, call, refuse, frame) {
         const target = parameterPattern(equals === -1 ? part : part.slice(0, equals), call, [], false, unpack).trim();
         const fallback = equals === -1 ? '' : `, () => ${call(part.slice(equals + 1), '', undefined, 'lazy')}`;
 
-        // A bare parameter is a derived of its own, which nothing reads ahead:
-        // Svelte reads a `{@const}` as soon as it is declared, in development,
-        // and the `{@render}` argument then ran where its snippet's branch did
-        // not read it, where Svelte's own bare parameter is never read. A
-        // default or a pattern Svelte reads ahead itself, and so does this.
-        const read = `__pybridge.param(${argument}, ${frame}, ${at}${fallback})`;
-        const bare = equals === -1 && DECLARED_NAME.test(target);
-
+        // A derived of its own (`derivedTag`), which nothing reads ahead: Svelte
+        // reads a `{@const}` as soon as it is declared, in development, and the
+        // `{@render}` argument then ran where its snippet's branch did not read
+        // it, where Svelte's own bare parameter is never read.
         given.push(argument);
         reads.push(
-            (bare ? `{const ${target} = $derived(${read})}` : `{@const ${target} = ${read}}`) +
+            derivedTag(target, `__pybridge.param(${argument}, ${frame}, ${at}${fallback})`) +
                 unpacked({ consts: unpack.consts.slice(from) }, call)
         );
     });
@@ -3763,9 +3766,9 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                     const held = named.map(() => `${DEBUGGED}${debugCount++}`);
                     const block =
                         `{#if true}` +
-                        named.map((one, at) => `{@const ${held[at]} = __pybridge.debugged(${call(one, '', undefined, 'python')})}`).join('') +
+                        named.map((one, at) => derivedTag(held[at], `__pybridge.debugged(${call(one, '', undefined, 'python')})`)).join('') +
                         `{#if true}` +
-                        named.map((one, at) => `{@const ${one} = ${held[at]}}`).join('') +
+                        named.map((one, at) => derivedTag(one, held[at])).join('') +
                         `{@debug ${names.join(', ')}}{/if}{/if}`;
 
                     // The block renders nothing, as the tag does, but Svelte

@@ -11,6 +11,14 @@ def fail():
     <output>{7 if True else x}</output>
 {/snippet}
 
+{#snippet defaulted(x = fail())}
+    <output>{7 if True else x}</output>
+{/snippet}
+
+{#snippet unpacked({x = fail()})}
+    <output>{7 if True else x}</output>
+{/snippet}
+
 {#if True}
     {y => fail()}
     {#if kind == "if true"}
@@ -29,6 +37,14 @@ def fail():
         {/each}
     {:else if kind == "bare snippet parameter"}
         {@render bare(fail())}
+    {:else if kind == "snippet default"}
+        {@render defaulted()}
+    {:else if kind == "snippet pattern default"}
+        {@render unpacked({})}
+    {:else if kind == "each pattern default"}
+        {#each rows as {a = fail()}}
+            <output>{7 if True else a}</output>
+        {/each}
     {:else}
         <output>{y if True else 7}</output>
     {/if}

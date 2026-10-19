@@ -826,7 +826,7 @@ describe('{@render}', () => {
         const { out } = rewrite('{#snippet row([x, z], y=1)}{y}{/snippet}');
 
         expect(out).toMatch(
-            /^\{#snippet row\(__argument_0, __argument_1\)\}\{let __snippet_0 = __pybridge\.pythonSnippet\(row\)\}\{@const \[x, z\] = __pybridge\.param\(__argument_0, __snippet_0, 0\)\}\{@const y = __pybridge\.param\(__argument_1, __snippet_0, 1, \(\) => __expr_lazy_\d+\(/
+            /^\{#snippet row\(__argument_0, __argument_1\)\}\{let __snippet_0 = __pybridge\.pythonSnippet\(row\)\}\{const \[x, z\] = \$derived\(__pybridge\.param\(__argument_0, __snippet_0, 0\)\)\}\{const y = \$derived\(__pybridge\.param\(__argument_1, __snippet_0, 1, \(\) => __expr_lazy_\d+\(/
         );
     });
 
