@@ -2192,7 +2192,12 @@ function scopeChain(seed, indexed, refuseCompilerName) {
     // the same markup agree on. The base scope, the component's own, is 0.
     let opened = 0;
     const ids = [0];
-    const scopes = [[...(seed.get(0) || [])]];
+
+    // A scope is the list of the names it holds, carrying the snippets the
+    // first walk recorded in it (`snippets`), which tells a snippet from a
+    // name that shadows it, a parameter or an alias of the same spelling.
+    const scopeOf = (snippets, names = []) => Object.assign([...snippets, ...names], { snippets: new Set(snippets) });
+    const scopes = [scopeOf(seed.get(0) || [])];
 
     // Each scope's names by the name Python reads, the first declared spelling
     // of each, made when a lookup first needs them and again after the scope
@@ -2223,7 +2228,7 @@ function scopeChain(seed, indexed, refuseCompilerName) {
         opened += 1;
         ids.push(opened);
         owners.push(null);
-        scopes.push([...(seed.get(opened) || []), ...refuseCompilerName(names), ...generated]);
+        scopes.push(scopeOf(seed.get(opened) || [], [...refuseCompilerName(names), ...generated]));
         keyed.push(undefined);
     };
 
@@ -2255,14 +2260,18 @@ function scopeChain(seed, indexed, refuseCompilerName) {
         if (scopes.length > 1) {
             opened += 1;
             ids[ids.length - 1] = opened;
-            scopes[scopes.length - 1] = [];
+            scopes[scopes.length - 1] = scopeOf([]);
             keyed[keyed.length - 1] = undefined;
         }
     };
 
     const seeded = () => {
         if (scopes.length > 1) {
-            scopes[scopes.length - 1].push(...(seed.get(ids[ids.length - 1]) || []));
+            const scope = scopes[scopes.length - 1];
+            const snippets = seed.get(ids[ids.length - 1]) || [];
+
+            scope.push(...snippets);
+            for (const one of snippets) scope.snippets.add(one);
             keyed[keyed.length - 1] = undefined;
         }
     };
@@ -2399,6 +2408,15 @@ function scopeChain(seed, indexed, refuseCompilerName) {
 
         // Whether a scope holds `name`.
         holds: (name) => found(name) !== null,
+
+        // Whether the `name` read here is a snippet of this markup, and not a
+        // name that shadows one, the parameter of a snippet or an alias of an
+        // `{#each}` spelled as it is.
+        snippet: (name) => {
+            const held = found(name);
+
+            return held !== null && scopes[held.at].snippets?.has(held.declared) === true;
+        },
 
         // The id of the innermost scope, which the first walk recorded under.
         id: () => ids.at(-1),
@@ -3728,7 +3746,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 const spelled = head.replace(/\?\.\s*$/, '').trim();
                 const callee = pythonName(spelled);
                 const named = new RegExp(`^${SHORT_NAME}$`, 'u').test(spelled);
-                const owns = [...snippets].filter((name) => chain.holds(name));
+                const owns = [...snippets].filter((name) => chain.snippet(name));
                 const rendered =
                     named && owns.some((one) => sameName(one, callee))
                         ? head.replace(spelled, callee)
