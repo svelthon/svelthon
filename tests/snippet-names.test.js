@@ -148,7 +148,7 @@ describe('a snippet name in a template expression', () => {
     test('and a {@render} still names it in JavaScript', () => {
         const { out } = rewrite('{#snippet row(n)}<b>{n}</b>{/snippet}{@render row(1)}');
 
-        expect(out).toContain('{@render row(__expr_py_1(');
+        expect(out).toContain('{@render row(({ get value() { return __expr_py_1(');
     });
 });
 

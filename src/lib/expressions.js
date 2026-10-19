@@ -176,6 +176,44 @@ export const freeNames = (text) => {
     return [...found];
 };
 
+// Whether an expression calls anything, a function of the author's or a
+// comprehension, which runs one over what it iterates; a lambda's body runs
+// later and counts for nothing. What Svelte asks of a `{@render}` argument
+// before it holds its value: one that calls something is computed once until
+// what it reads changes, any other is read again at each read of its
+// parameter. Text that does not parse calls something, which the compiler
+// then refuses.
+export const callsAnything = (text) => {
+    const tree = targetTree(`(${text}\n)`);
+
+    if (tree === null) return true;
+
+    const ast = globalThis.__BRYTHON__.ast;
+    const CALLS = [ast.Call, ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp];
+    let calls = false;
+    const visit = (node) => {
+        if (calls) return;
+        if (Array.isArray(node)) {
+            for (const one of node) visit(one);
+            return;
+        }
+        if (node === null || typeof node !== 'object' || !Array.isArray(node.constructor?._fields)) return;
+
+        if (CALLS.some((kind) => node instanceof kind)) {
+            calls = true;
+            return;
+        }
+        if (node instanceof ast.Lambda) {
+            visit([node.args.defaults, node.args.kw_defaults]);
+            return;
+        }
+        for (const field of node.constructor._fields) visit(node[field]);
+    };
+
+    visit(tree);
+    return calls;
+};
+
 // The names of a scope whose read may run code, the author's or a default's:
 // a name a pattern unpacks, which reads a key or an attribute, one whose
 // parameter holds a default, and a derived the markup declares. And every

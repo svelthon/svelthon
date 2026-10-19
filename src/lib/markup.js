@@ -13,6 +13,7 @@ import {
     sameName,
     targetTree,
     freeNames,
+    callsAnything,
     handedLate,
     computing as computingIn,
     costly as costlyIn
@@ -1499,7 +1500,19 @@ function snippetParameters(trimmed, declare, call, refuse, frame) {
     const parts = arguments_(trimmed.slice(open + 1, close));
     const first = unpacker(refuse);
 
-    declare(boundBy(parts, false, first), first.aliases, unpacking(parts, false, refuse));
+    // A bare parameter, a name with no default, declares nothing of its own:
+    // each read of it reads the argument again (`__pybridge.param`), as Svelte
+    // reads its own parameter at each read. Held in a derived, it kept the
+    // first value until what that read changed, and `{@render
+    // card(source.value)}` showed a value `source` had left.
+    const bare = (part) => atTopLevel(part, (i) => part[i] === '=') === -1 && DECLARED_NAME.test(part.trim());
+    const rereads = new Map(
+        parts.flatMap((part, at) =>
+            bare(part) ? [[part.trim(), `__pybridge.param(${SNIPPET_ARGUMENT}${at}, ${frame}, ${at})`]] : []
+        )
+    );
+
+    declare(boundBy(parts, false, first), first.aliases, unpacking(parts, false, refuse), rereads);
 
     const unpack = unpacker(refuse);
     const given = [];
@@ -1519,11 +1532,14 @@ function snippetParameters(trimmed, declare, call, refuse, frame) {
         const target = parameterPattern(equals === -1 ? part : part.slice(0, equals), call, [], false, unpack).trim();
         const fallback = equals === -1 ? '' : `, () => ${call(part.slice(equals + 1), '', undefined, 'lazy')}`;
 
-        // A derived of its own (`derivedTag`), which nothing reads ahead: Svelte
-        // reads a `{@const}` as soon as it is declared, in development, and the
-        // `{@render}` argument then ran where its snippet's branch did not read
-        // it, where Svelte's own bare parameter is never read.
         given.push(argument);
+
+        if (bare(part)) return;
+
+        // A default or a pattern is a derived of its own (`derivedTag`), which
+        // nothing reads ahead: Svelte reads a `{@const}` as soon as it is
+        // declared, in development, and the `{@render}` argument then ran where
+        // its snippet's branch did not read it.
         reads.push(
             derivedTag(target, `__pybridge.param(${argument}, ${frame}, ${at}${fallback})`) +
                 unpacked({ consts: unpack.consts.slice(from) }, call)
@@ -2085,10 +2101,20 @@ function scopeChain(seed, indexed, refuseCompilerName) {
     };
 
     // The innermost scope's names that are a snippet's parameters, each one
-    // whose read runs code (`computing`).
-    const parameters = (names) => {
+    // whose read runs code (`computing`), and those that are read where they
+    // are written, each by what reads its argument (`rereads`).
+    const parameters = (names, rereads = new Map()) => {
         scopes[scopes.length - 1].parameters = new Set(names);
+        scopes[scopes.length - 1].rereads = rereads;
         computingIn(scopes[scopes.length - 1], names);
+    };
+
+    // What reads the parameter `name` is, where it is read rather than
+    // declared, or null.
+    const reread = (name) => {
+        const held = found(name);
+
+        return held === null ? null : (scopes[held.at].rereads?.get(held.declared) ?? null);
     };
 
     // The innermost scope's names whose read may run code (`computing`).
@@ -2137,7 +2163,7 @@ function scopeChain(seed, indexed, refuseCompilerName) {
     const received = (name) => {
         const held = found(name);
 
-        return held !== null && scopes[held.at].parameters?.has(held.declared) ? `${RECEIVED}(${name})` : name;
+        return held !== null && scopes[held.at].parameters?.has(held.declared) ? `${RECEIVED}(${reread(name) ?? name})` : name;
     };
 
     // The block names an expression actually reads, rather than every name in
@@ -2193,6 +2219,7 @@ function scopeChain(seed, indexed, refuseCompilerName) {
         costly,
         inScope,
         received,
+        reread,
         mentioned,
         scoped,
         iterations,
@@ -2673,7 +2700,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         // again.
         if (rest.length > 0) return { read: call(one.name, '__bound'), wrap: true };
 
-        if (local !== null) return { read: local, wrap: true };
+        if (local !== null) return { read: chain.reread(head) ?? local, wrap: true };
         if (where?.imported === undefined) return null;
 
         // A child named by its own file is known; an import read again is
@@ -2748,7 +2775,10 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         // be handed one default list and are still two targets. A cell the
         // markup declared is its own target, told by its token.
         const cell = own ? `${CELL}${scoped(bareName(expr))}` : null;
-        const where = cell !== null && holds(cell) ? [cell] : [...mentioned(expr.trim()), ...iterations(expr)];
+        const where =
+            cell !== null && holds(cell)
+                ? [cell]
+                : [...mentioned(expr.trim()).map((one) => chain.reread(one) ?? one), ...iterations(expr)];
 
         // And `checked` for the server, which runs no action: Svelte's server
         // writes it for its own group, from the model, when the tag has a value,
@@ -2828,8 +2858,22 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     // crossed into Python, and followed as the declaration's is
     // (`__pybridge.state`), or a list a child put there and then let go of
     // repainted nothing when it changed.
-    const declaredWrite = (expr, crossing) =>
-        `${scoped(bareName(expr))} = __pybridge.state(${crossing}(${BOUND_VALUE}))`;
+    //
+    // A bare parameter of a snippet is no cell, read where it is written
+    // (`snippetParameters`), and Svelte refuses to bind its own parameter.
+    const declaredWrite = (expr, crossing) => {
+        if (chain.reread(bareName(expr)) !== null) {
+            throw refuse(
+                new SyntaxError(
+                    `svelthon — \`${bareName(expr)}\` is a parameter of its snippet${said()}, which Svelte ` +
+                        `refuses to bind or reassign: it reads what \`{@render}\` hands it. Bind what the ` +
+                        `argument holds instead, where the snippet is rendered.`
+                )
+            );
+        }
+
+        return `${scoped(bareName(expr))} = __pybridge.state(${crossing}(${BOUND_VALUE}))`;
+    };
 
     // `(x := …)` writes through the namespace, which holds the module's names
     // and nothing else. A name the markup declared is not there, so the write
@@ -3460,9 +3504,9 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 // ordinary JavaScript and Svelte compiles it as one.
                 out += `{#snippet ${snippetParameters(
                     trimmed,
-                    (names, aliases, costly) => {
+                    (names, aliases, costly, rereads) => {
                         push(names, aliases);
-                        parameters([...names, ...aliases]);
+                        parameters([...names, ...aliases], rereads);
                         computing(costly);
                     },
                     call,
@@ -3537,6 +3581,14 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 // is not a bare name is a Python expression, read as Python
                 // reads it: `holder.fn` is an attribute, not a JavaScript
                 // property.
+                //
+                // Svelte holds an argument's value until what it reads changes
+                // when it calls something, and reads any other again at each
+                // read of its parameter. Every argument here is the call of its
+                // expression's function, so one that calls nothing
+                // (`callsAnything`) is handed inside a getter, whose body Svelte
+                // does not look into: `{@render card(source.value)}` held the
+                // first `source.value` where Svelte reads the current one.
                 const found = renderedCall(written.rest.trim());
                 const head = found === null ? '' : found.head;
                 const optional = /\?\.\s*$/.test(head);
@@ -3547,8 +3599,14 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 const rendered =
                     named && owns.some((one) => sameName(one, callee))
                         ? head.replace(spelled, callee)
-                        : `__pybridge.snippet(${named ? callee : call(spelled, '', undefined, 'python')}, [${owns.join(', ')}])${optional ? '?.' : ''}`;
-                const given = (one) => (!one.trim() ? one : call(one, '', undefined, 'python'));
+                        : `__pybridge.snippet(${named ? chain.reread(callee) ?? callee : call(spelled, '', undefined, 'python')}, [${owns.join(', ')}])${optional ? '?.' : ''}`;
+                const given = (one) => {
+                    if (!one.trim()) return one;
+
+                    const read = call(one, '', undefined, 'python');
+
+                    return callsAnything(one) ? read : `({ get value() { return ${read}; } }).value`;
+                };
 
                 out += found === null
                     ? markup.slice(index, end + 1)

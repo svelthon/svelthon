@@ -671,7 +671,10 @@ describe('the blocks that declare names', () => {
         const { out, defs } = rewrite('{#snippet row(item, index)}<li>{item}</li>{/snippet}');
 
         expect(out).toContain('{#snippet row(__argument_0, __argument_1)}');
-        expect(out).toContain('{const item = $derived(__pybridge.param(__argument_0, __snippet_0, 0))}');
+        // A bare parameter reads its argument where it is read, as Svelte's
+        // own does, and declares nothing.
+        expect(out).toContain('__pybridge.received(__pybridge.param(__argument_0, __snippet_0, 0))');
+        expect(out).not.toContain('{const item');
 
         // Its own name comes first: it lives in the scope that encloses the
         // block, and an enclosing scope reaches into it.
@@ -779,10 +782,16 @@ describe('{@render}', () => {
         return { out: pythonExpressions(markup, collector(defs)), defs };
     };
 
+    // An argument that calls nothing, handed inside a getter Svelte does not
+    // look into, so it is read again at each read of its parameter, as
+    // Svelte's own is; one that calls something is held as Svelte holds it.
+    const READ = String.raw`\(\{ get value\(\) \{ return __expr_py_\d+\(\); \} \}\)\.value`;
+    const pattern = (text) => new RegExp(text.replaceAll('READ', READ));
+
     test('each argument is compiled separately', () => {
         const { out } = rewrite('{@render row(item, index)}');
 
-        expect(out).toMatch(/\(__expr_py_\d+\(\), __expr_py_\d+\(\)\)\}$/);
+        expect(out).toMatch(pattern(String.raw`\(READ, READ\)\}$`));
     });
 
     test('a comma inside an argument is not a separator', () => {
@@ -797,7 +806,7 @@ describe('{@render}', () => {
     test('a snippet the markup declares keeps its arguments Python', () => {
         const { out } = rewrite('{#snippet row(x)}{x}{/snippet}{@render row(half)}');
 
-        expect(out).toMatch(/\{@render row\(__expr_py_\d+\(\)\)\}$/);
+        expect(out).toMatch(pattern(String.raw`\{@render row\(READ\)\}$`));
     });
 
     // Any other may be a Python parent's or a JavaScript one's, so the snippet
@@ -806,14 +815,16 @@ describe('{@render}', () => {
     test('a name the markup does not declare is decided by the snippet rendered', () => {
         const { out } = rewrite('{@render other?.(half)}');
 
-        expect(out).toMatch(/^\{@render __pybridge\.snippet\(other, \[\]\)\?\.\(__expr_py_\d+\(\)\)\}$/);
+        expect(out).toMatch(pattern(String.raw`^\{@render __pybridge\.snippet\(other, \[\]\)\?\.\(READ\)\}$`));
     });
 
     test('a name beside the markup snippets, or an attribute, is decided by the snippet rendered', () => {
         const { out } = rewrite('{#snippet row(x)}{x}{/snippet}{@render other?.(half)}{@render holder.fn(half)}');
 
         expect(out).toMatch(
-            /\{@render __pybridge\.snippet\(other, \[row\]\)\?\.\(__expr_py_\d+\(\)\)\}\{@render __pybridge\.snippet\(__expr_py_\d+\(\), \[row\]\)\(__expr_py_\d+\(\)\)\}$/
+            pattern(
+                String.raw`\{@render __pybridge\.snippet\(other, \[row\]\)\?\.\(READ\)\}\{@render __pybridge\.snippet\(__expr_py_\d+\(\), \[row\]\)\(READ\)\}$`
+            )
         );
     });
 
@@ -824,7 +835,9 @@ describe('{@render}', () => {
         const { out, defs } = rewrite('{@render (first)(x)}{@render pick(a, b)(True)}');
 
         expect(out).toMatch(
-            /^\{@render __pybridge\.snippet\(__expr_py_\d+\(\), \[\]\)\(__expr_py_\d+\(\)\)\}\{@render __pybridge\.snippet\(__expr_py_\d+\(\), \[\]\)\(__expr_py_\d+\(\)\)\}$/
+            pattern(
+                String.raw`^\{@render __pybridge\.snippet\(__expr_py_\d+\(\), \[\]\)\(READ\)\}\{@render __pybridge\.snippet\(__expr_py_\d+\(\), \[\]\)\(READ\)\}$`
+            )
         );
         expect(defs.some((one) => one.includes('pick(a, b)'))).toBe(true);
         expect(defs.some((one) => one.includes('True'))).toBe(true);
