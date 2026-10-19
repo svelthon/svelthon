@@ -878,6 +878,16 @@ test('lists and tuples compare their items from the first: list-eq-left-to-right
     expect([...answers()]).toEqual(['False', '0', 'True', 'True']);
 });
 
+// Sorting asked `==` of two items whenever one was not less than the other,
+// which CPython never asks: an `__eq__` that raises, or reads what an
+// `{#each}` would then follow, was run by `sorted()`. `python3` on the same
+// module.
+test('sorting compares with < alone: sort-less-than-only', async () => {
+    const { answers } = await import('./fixtures/sorting_less_than.py');
+
+    expect([...answers()]).toEqual(['bac', 'acb', 'bac']);
+});
+
 // The items of a JavaScript Set reached Python unconverted, so a float in it
 // refused a format; `hash()` of JavaScript's null raised a JavaScript error,
 // and so did null as a subscript. Each answer is read on its own, so each

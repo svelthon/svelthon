@@ -12549,7 +12549,7 @@ if(self.length==0){return _b_.None}
 self.$cl=$elts_class(self)
 var cmp=null
 function basic_cmp(a,b){return $B.rich_comp("__lt__",a,b)?-1:
-$B.rich_comp('__eq__',a,b)? 0 :1}
+$B.rich_comp("__lt__",b,a)? 1 :0}
 function reverse_cmp(a,b){return basic_cmp(b,a)}
 if(func===_b_.None && self.$cl===_b_.str){if(reverse){cmp=function(b,a){return $B.$AlphabeticalCompare(a,b)}}else{
 cmp=function(a,b){return $B.$AlphabeticalCompare(a,b)}}}else if(func===_b_.None && self.$cl===_b_.int){if(reverse){cmp=function(b,a){return a-b}}else{
