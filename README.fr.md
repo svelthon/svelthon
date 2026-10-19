@@ -1595,7 +1595,9 @@ une coroutine, une promesse, une `Map`, un `Set`, et `nan` ou `inf`, que JSON ne
 sait pas écrire et que `json.dumps` écrit sous une forme qu'aucun `JSON.parse`
 ne relit. Une classe JavaScript dit comment
 elle se sérialise en portant `toJSON` ; celle qui ne le dit pas est refusée
-aussi, puisque rien ne distingue ses champs de ceux d'une `Map`. `striptags`
+aussi, puisque rien ne distingue ses champs de ceux d'une `Map`. Il parcourt
+une structure de **2 500 niveaux** environ au plus, là où `json.dumps` en écrit
+20 000 : au-delà, la pile du moteur déborde. `striptags`
 montre le document visible, donc le texte d'un `<script>` ou d'un `<style>`
 n'atteint jamais la page.
 

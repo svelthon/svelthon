@@ -1550,7 +1550,8 @@ coroutine, a promise, a `Map`, a `Set`, and `nan` or `inf`, which JSON cannot
 spell and `json.dumps` writes in a form no `JSON.parse` reads back. A JavaScript
 class says how it serialises by carrying
 `toJSON`, and one that does not is refused too, since nothing can tell its fields
-from a `Map`'s. `striptags` shows the visible document, so the text of a
+from a `Map`'s. It walks a structure about **2 500 levels deep** at most, where
+`json.dumps` writes 20 000: deeper, the engine's stack overflows. `striptags` shows the visible document, so the text of a
 `<script>` or a `<style>` never reaches the page.
 
 `date` reads **a date with no time as a calendar day**, rendered as that day
