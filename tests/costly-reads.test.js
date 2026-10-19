@@ -72,7 +72,11 @@ test.for([
     ['after a derived is read', '{":".join([total, x])}', [true]],
     ['after a prop is read', '{label + x}', [true]],
     ['the right operand of a constant', '{"#" + x}', [false]],
-    ['the test of a conditional', '{x["a"] if x else 0}', [false]],
+    ['the test of a conditional', '{"yes" if x else "no"}', [false]],
+    // Read twice, each read is its own, as Svelte reads its parameter.
+    ['read twice', '{x - x}', [true]],
+    ['read twice around a call', '{x - step() - x}', [true]],
+    ['read in a test and a branch', '{x["a"] if x else 0}', [true]],
     ['a method of a constant', '{", ".join(x)}', [false]],
     ["a lambda's default", '{(lambda y=x: y)()}', [false]],
     ['the owner of a bound item', '<input bind:value={x["label"]}>', [false, false]],

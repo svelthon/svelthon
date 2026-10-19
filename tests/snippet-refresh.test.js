@@ -13,6 +13,8 @@ import { pythonExpressions, collector } from '../src/lib/markup.js';
 import '../src/lib/compile.cjs';
 import SnippetRefresh from './fixtures/SnippetRefresh.svelte';
 import SnippetRefreshNative from './fixtures/SnippetRefreshNative.svelte';
+import SnippetReadTwice from './fixtures/SnippetReadTwice.svelte';
+import SnippetReadTwiceNative from './fixtures/SnippetReadTwiceNative.svelte';
 import { reset } from './fixtures/refresh_source.js';
 
 const shown = (Component, kind) => {
@@ -35,6 +37,23 @@ test.for([
     ['call', ['10', '11']]
 ])('a snippet argument is read again where Svelte reads it again: %s', ([kind, expected]) => {
     expect([shown(SnippetRefresh, kind), shown(SnippetRefreshNative, kind)]).toEqual([expected, expected]);
+});
+
+// And at each read of one expression: `{x - step() - x}` reads `x` before and
+// after `step()` moves its argument on. Read once, ahead, it gave `0` where
+// Svelte gives `-10`.
+test('a snippet parameter read twice in one expression is read twice', () => {
+    const shownOnce = (Component) => {
+        const target = document.body.appendChild(document.createElement('div'));
+
+        reset();
+        mount(Component, { target });
+        flushSync();
+
+        return target.querySelector('output').textContent;
+    };
+
+    expect([shownOnce(SnippetReadTwice), shownOnce(SnippetReadTwiceNative)]).toEqual(['-10', '-10']);
 });
 
 // A bare parameter is no cell of the markup's, and Svelte refuses to bind its

@@ -17,3 +17,9 @@ export const advance = () => {
 };
 
 export const read = () => source.value;
+
+// Moves the value on between two reads of one expression, and counts nothing.
+export const step = () => {
+    latest = 20;
+    return 0;
+};

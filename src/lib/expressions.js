@@ -233,6 +233,25 @@ export const costly = (scope, declared) => scope.computed?.has(declared) === tru
 // not, which runs what the parent wrote for it.
 export const runningNames = ({ props, bindables, deriveds }) => [...props, ...bindables, ...deriveds.map((one) => one.name)];
 
+// How many times a tree names `name`, anywhere in it.
+const occurrences = (tree, name) => {
+    const ast = globalThis.__BRYTHON__.ast;
+    let count = 0;
+    const visit = (node) => {
+        if (Array.isArray(node)) {
+            for (const one of node) visit(one);
+            return;
+        }
+        if (node === null || typeof node !== 'object' || !Array.isArray(node.constructor?._fields)) return;
+
+        if (node instanceof ast.Name && pythonName(node.id) === name) count += 1;
+        for (const field of node.constructor._fields) visit(node[field]);
+    };
+
+    visit(tree);
+    return count;
+};
+
 // Whether an expression reads `name` before it runs anything. Read ahead, a
 // name whose read runs code (`costly`) then runs it where Python would: first,
 // and on every run. The expression is walked in Python's order of evaluation,
@@ -253,6 +272,10 @@ export const runningNames = ({ props, bindables, deriveds }) => [...props, ...bi
 // A `target` is the target of a write. Python reads the value first, then the
 // owner of an attribute or an item: a target that unpacks runs code before it
 // reads anything, and a name is written, not read.
+//
+// And the name is read once: read ahead, two reads were one, where each runs
+// its code, and a parameter read again answers what its argument holds then,
+// `{x - step() - x}` reading `x` before and after `step()`.
 const readAhead = (text, name, runs, target = false) => {
     const tree = targetTree(`(${text}\n)`);
 
@@ -261,6 +284,7 @@ const readAhead = (text, name, runs, target = false) => {
     const ast = globalThis.__BRYTHON__.ast;
 
     if (target && !(tree instanceof ast.Attribute || tree instanceof ast.Subscript)) return false;
+    if (occurrences(tree, pythonName(name)) !== 1) return false;
 
     const COMPREHENSIONS = [ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp];
     const PURE = [ast.Constant, ast.Tuple, ast.List, ast.Slice, ast.JoinedStr, ast.keyword, ast.Lambda];
