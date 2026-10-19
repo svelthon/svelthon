@@ -3,8 +3,8 @@
 // Server-side rendering: Svelte compiles a second version of the component that
 // returns an HTML string instead of creating DOM nodes. The Python body
 // therefore runs under Node — which the compiler already does at build time,
-// bar two shims (`self`, `addEventListener`) laid down by
-// src/lib/bryntime/globals.js.
+// bar two shims (`self`, `addEventListener`) laid down by Bryntime's
+// globals.js.
 import { test, expect, describe } from 'vitest';
 import { render } from 'svelte/server';
 

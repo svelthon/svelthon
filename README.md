@@ -80,7 +80,7 @@ rest of that configuration and what each line buys.
 npm install
 npm run dev          # the demo, at /demo/
 
-npm test             # 1 965 tests: semantics, props, reactivity, Svelte surface
+npm test             # semantics, props, reactivity, Svelte surface
 npm run test:quiet   # the suite's own output: a green run must say nothing
 npm run test:browser # DOM interop and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
@@ -1476,8 +1476,8 @@ loader rather than through Vite, so a shim re-exporting from a `.py` fails with
 It works. Svelte compiles a second version of each component that returns an
 HTML string instead of creating DOM nodes, so the Python body runs under Node,
 which is what the compiler already does at build time. Two shims were missing
-from the browser runtime (`self`, `addEventListener`);
-`src/lib/bryntime/globals.js` now sets them, and that was the whole obstacle.
+from the browser runtime (`self`, `addEventListener`); Bryntime's
+`bryntime/globals.js` now sets them, and that was the whole obstacle.
 
 Covered by `tests/ssr.test.js`: components, props, composition with child
 components and attribute access, and the Python values themselves: `-7 // 2`
@@ -1562,7 +1562,7 @@ Greenwich saw the day before. A value carrying a time is an instant and is
 rendered in the reader's own zone, which is what an instant is for.
 
 The whole runtime, gzipped, is **224 KB**. That is
-`vendor/brython_runtime.js`, the half without the parsing chain, which is what a
+`bryntime/vendor/brython_runtime.js`, the half without the parsing chain, which is what a
 browser gets; the full bundle it is cut from is 275 KB and never ships.
 
 ## Svelte surface covered
@@ -1595,7 +1595,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 1 965 tests as written (vitest reports more, one per
+Validated by `npm test`, 1 836 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;
@@ -1709,7 +1709,7 @@ fitting on one page, and its worked example is a test fixture, so it cannot drif
 The internals Svelthon depends on and the error messages that cost the most
 debugging time are written up in **[BRYTHON.md](BRYTHON.md)**, the contract
 between the two projects, and what the vendored build carries on top of
-Brython's master is in `vendor/BRYTHON_FIX.md`.
+Brython's master is in `bryntime/vendor/BRYTHON_FIX.md`.
 
 ## Running
 
@@ -1735,20 +1735,21 @@ imports, so the scan is skipped and the one package worth pre-bundling is named.
 
 ### The vendored Brython
 
-The vendored Brython is built from Brython's master and the repairs proposed
-there and not merged yet, one commit each, and carries **four** edits made in the
-file itself, each held by a test: a guard against a second execution in one
-process, `/* @vite-ignore */` on the two dynamic imports, CPython's order for an
-int formatted with a base prefix, and the binding of a `__call__` that is not a
-function. `vendor/BRYTHON_FIX.md` lists them all.
+Svelthon carries no copy of Brython. It depends on **Bryntime**, the package
+that ships the engine and the crossing between Python and JavaScript, and that
+Svelthon reaches through its one entry, `bryntime`, and the compiler through
+`bryntime/compiler`. Until it is published, it is installed from a checkout
+beside this one, `../bryntime`.
+
+Its Brython is built from Brython's master and the repairs proposed there and
+not merged yet, one commit each, and carries **four** edits made in the file
+itself, each held by a test: a guard against a second execution in one process,
+`/* @vite-ignore */` on the two dynamic imports, CPython's order for an int
+formatted with a base prefix, and the binding of a `__call__` that is not a
+function. `bryntime/vendor/BRYTHON_FIX.md` lists them all.
 They live in the file rather than in a build step, because Node loads the same
 copy, for the compiler and for server-side rendering, so a patch applied only
 while serving would leave both on an unrepaired Brython.
-
-`vendor/` holds exactly what the package ships: the two halves of Brython 3.14
-dev, cut from one bundle that `scripts/vendor-brython.py` rebuilds from master
-and leaves in `build/`. The folder carries a `package.json` marked `commonjs`:
-Node must load it as a classic script, while the root is `type: module`.
 
 **And it is the only Python that ships.** No stdlib module travels with
 Svelthon, `sys` included: a stdlib exists so that an author can `import`
@@ -1777,11 +1778,11 @@ so only the ones actually named need travel.
 Svelthon is MIT, the licence of Svelte and of the tooling around it. See
 `LICENSE`.
 
-The package also ships Brython, built and minified into
-`vendor/brython_runtime.js` and `vendor/brython_compiler.js`. Brython is not
-covered by that licence and keeps its own, BSD-3-Clause, Copyright (c) 2012
-Pierre Quentel. Its notice travels beside the files it covers, in
-`vendor/LICENSE`, and both are in the published tarball.
+Bryntime, which Svelthon depends on, is BSD-3-Clause, and ships Brython, built
+and minified into `bryntime/vendor/brython_runtime.js` and
+`bryntime/vendor/brython_compiler.js`. Brython keeps its own licence,
+BSD-3-Clause, Copyright (c) 2012 Pierre Quentel, whose notice travels beside the
+files it covers, in `bryntime/vendor/LICENSE`.
 
 What those two files are built from, and the commits proposed upstream they
-carry ahead of a release, is in `vendor/BRYTHON_FIX.md`.
+carry ahead of a release, is in `bryntime/vendor/BRYTHON_FIX.md`.

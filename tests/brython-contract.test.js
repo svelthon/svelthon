@@ -16,12 +16,15 @@
 // themselves, so a twenty-ninth member cannot arrive unnoticed.
 import { test, expect, describe } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 const at = (path) => fileURLToPath(new URL(path, import.meta.url));
 
 const LIB = at('../src/lib');
+// Bryntime, which reaches for the engine on Svelthon's behalf.
+const BRYNTIME = dirname(createRequire(import.meta.url).resolve('bryntime/package.json'));
 const contract = readFileSync(at('../BRYTHON.md'), 'utf8');
 
 // `$B.x` and `__BRYTHON__.x` are the same object under two names, and both are
@@ -34,11 +37,16 @@ const OURS = /^\$(svelthon|bryntime)/;
 
 const used = new Set();
 
-// Every file, `bryntime/` included.
-for (const entry of readdirSync(LIB, { recursive: true, withFileTypes: true })) {
-    if (!entry.isFile()) continue;
+// Every file of Svelthon's, and every module of Bryntime's, as it ships them.
+const files = [
+    ...readdirSync(LIB, { recursive: true, withFileTypes: true })
+        .filter((entry) => entry.isFile())
+        .map((entry) => join(entry.parentPath, entry.name)),
+    ...readdirSync(BRYNTIME).filter((name) => name.endsWith('.js')).map((name) => join(BRYNTIME, name))
+];
 
-    const source = readFileSync(join(entry.parentPath, entry.name), 'utf8');
+for (const file of files) {
+    const source = readFileSync(file, 'utf8');
 
     for (const [, member] of source.matchAll(REACHED)) {
         if (!OURS.test(member)) used.add(member);

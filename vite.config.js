@@ -1,5 +1,9 @@
 import { defineConfig, configDefaults } from 'vitest/config';
+import { searchForWorkspaceRoot } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
+import { realpathSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { python, svelthon, compileOptionsFor } from './src/lib/svelthon.js';
 import { demoStats } from './demo/stats.js';
@@ -39,8 +43,18 @@ export default defineConfig({
     // archives thousands of files under `tests/scratch`, which no page serves:
     // watched, they ran the system out of file watchers (`ENOSPC`) and the
     // server died before the first edit.
+    //
+    // And it serves Bryntime where the package really is: installed from a
+    // checkout beside this one, it is a link Vite follows out of the project,
+    // whose files it then refused to serve, every page at a 403.
     server: {
-        watch: { ignored: ['**/tests/scratch/**'] }
+        watch: { ignored: ['**/tests/scratch/**'] },
+        fs: {
+            allow: [
+                searchForWorkspaceRoot(process.cwd()),
+                realpathSync(dirname(createRequire(import.meta.url).resolve('bryntime/package.json')))
+            ]
+        }
     },
 
     // The demo's pages, served under `/demo/`; the two pages at the root are
@@ -82,8 +96,8 @@ export default defineConfig({
         // which goes past the 5 s default.
         testTimeout: 30000,
 
-        // Only what the project itself ships. The vendored Brython is not ours
-        // to cover, and it would drown the number it is measured against.
+        // Only what the project itself ships. Bryntime and its engine are not
+        // ours to cover here, and would drown the number measured against.
         //
         // What this can and cannot see is worth knowing: it instruments the test
         // worker, so a module that runs inside Vite's own process — the

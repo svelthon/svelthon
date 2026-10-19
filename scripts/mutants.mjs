@@ -74,7 +74,7 @@ const TIMEOUT = 60_000;
 const hash = (text) => createHash('sha1').update(text).digest('hex');
 
 const sites = [];
-// Every file, `bryntime/` included, by its path under `DIR`.
+// Every file, by its path under `DIR`.
 for (const file of readdirSync(DIR, { recursive: true }).filter((one) => /\.(js|cjs)$/.test(one))) {
     const lines = readFileSync(join(DIR, file), 'utf8').split('\n');
 

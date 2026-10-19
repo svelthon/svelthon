@@ -1,49 +1,72 @@
 // @vitest-environment node
 //
-// **Bryntime stands without Svelte and without the runtime**: what
-// `src/lib/bryntime/` holds imports the engine and its own files, nothing
-// else, and loaded alone, with no host to answer, it still turns JavaScript
-// values into Python ones and back. What a host adds, the states it owns and
-// how it makes an object one of them, is asked through `host`, which answers
-// nothing here.
+// **Bryntime stands without Svelte and without the runtime**: it is a package
+// Svelthon depends on, of which Svelthon keeps no copy, whose modules import
+// the engine and one another, nothing else, and loaded alone, with no host to
+// answer, it still turns JavaScript values into Python ones and back. What a
+// host adds, the states it owns and how it makes an object one of them, is
+// asked through `host`, which answers nothing here.
 import { test, expect } from 'vitest';
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { dirname, join } from 'node:path';
 import '../src/lib/compile.cjs';
-import { host, pyData, plainData, entering, pyBind, refused, NONE } from '../src/lib/bryntime/bryntime.js';
+import { host, pyData, plainData, entering, pyBind, refused, NONE } from 'bryntime';
 
-const DIR = 'src/lib/bryntime';
-const ENGINE = '../../../vendor/brython_runtime.js';
+const require = createRequire(import.meta.url);
+const DIR = dirname(require.resolve('bryntime/package.json'));
+const ENGINE = './vendor/brython_runtime.js';
+const IMPORTS = /^(?:import|export)\s+(?:[^'";]*\s+from\s+)?'([^']+)';/gm;
 
-test('bryntime/ imports the engine and itself, and nothing of Svelte or of the runtime', () => {
-    const files = readdirSync(DIR);
-    const imports = files.flatMap((file) =>
-        [...readFileSync(`${DIR}/${file}`, 'utf8').matchAll(/^(?:import|export)\s+(?:[^'";]*\s+from\s+)?'([^']+)';/gm)].map(
-            ([, from]) => `${file}: ${from}`
-        )
+// Bryntime's modules, the ones its entry reaches, read as it ships them.
+const modules = () => {
+    const seen = new Set();
+    const visit = (file) => {
+        if (seen.has(file)) return;
+        seen.add(file);
+        for (const [, from] of readFileSync(join(DIR, file), 'utf8').matchAll(IMPORTS)) {
+            if (/^\.\/[\w-]+\.js$/.test(from)) visit(from.slice(2));
+        }
+    };
+
+    visit(JSON.parse(readFileSync(join(DIR, 'package.json'), 'utf8')).main.replace(/^\.\//, ''));
+    return [...seen];
+};
+
+test('Svelthon depends on Bryntime and keeps no copy of it or of the engine', () => {
+    expect(JSON.parse(readFileSync('package.json', 'utf8')).dependencies).toHaveProperty('bryntime');
+    expect(existsSync('src/lib/bryntime')).toBe(false);
+    expect(existsSync('vendor')).toBe(false);
+});
+
+test('Bryntime imports the engine and itself, and nothing of Svelte or of the runtime', () => {
+    const imports = modules().flatMap((file) =>
+        [...readFileSync(join(DIR, file), 'utf8').matchAll(IMPORTS)].map(([, from]) => `${file}: ${from}`)
     );
 
-    expect(files).toContain('bryntime.js');
+    expect(modules()).toContain('bryntime.js');
     expect(imports).toContain(`boot.js: ${ENGINE}`);
     expect(imports.filter((one) => !one.endsWith(`: ${ENGINE}`) && !/: \.\/[\w-]+\.js$/.test(one))).toEqual([]);
 });
 
-// And by one door: Svelthon reaches Bryntime through `bryntime.js` alone, which
-// starts the engine and exports its neighbours, so each of the others stays
-// Bryntime's own to split or to move.
-test('Svelthon reaches bryntime/ through bryntime.js alone', () => {
+// And by one door: Svelthon reaches Bryntime through the package's entry alone,
+// which starts the engine and exports its neighbours, so each of the others
+// stays Bryntime's own to split or to move; and the compiler reaches the
+// engine's other half through the entry Bryntime gives it.
+test('Svelthon reaches Bryntime through its entry alone', () => {
     const doors = readdirSync('src/lib')
         .filter((file) => /\.c?js$/.test(file))
         .flatMap((file) =>
-            [...readFileSync(`src/lib/${file}`, 'utf8').matchAll(/(?:from\s+|require\(\s*|import\s+)['"]\.\/bryntime\/([\w-]+\.js)['"]/g)].map(
+            [...readFileSync(`src/lib/${file}`, 'utf8').matchAll(/(?:from\s+|require\(\s*|import\s+)['"](bryntime[^'"]*)['"]/g)].map(
                 ([, to]) => `${file}: ${to}`
             )
         );
 
     expect(doors.length).toBeGreaterThan(0);
-    expect(doors.filter((one) => !one.endsWith(': bryntime.js'))).toEqual([]);
+    expect(doors.filter((one) => !one.endsWith(': bryntime') && one !== 'compile.cjs: bryntime/compiler')).toEqual([]);
 });
 
-// And through that door alone: at run time only bryntime/ touches the engine,
+// And through that door alone: at run time only Bryntime touches the engine,
 // by its name or by the shape of its objects, and the host and the helpers ask
 // it through Bryntime's functions. The compiler, which builds with the engine's
 // other half and its AST, is exempted file by file, so a new file of the host
@@ -51,9 +74,8 @@ test('Svelthon reaches bryntime/ through bryntime.js alone', () => {
 const COMPILER = ['compile.cjs', 'markup.js'];
 const ENGINE_TOKENS = /\$B\b|__BRYTHON__|\b_b_\b|\btp_\w+|\bob_type\b|__traceback__|\.\$factory\b|\$store\b|\$js_func\b|\$lineno\b|\$proxy\b/;
 
-test('at run time, nothing outside bryntime/ touches the engine', () => {
-    const files = readdirSync('src/lib', { recursive: true })
-        .filter((file) => /\.[cm]?js$/.test(file) && !file.startsWith('bryntime/'));
+test('at run time, nothing of Svelthon touches the engine', () => {
+    const files = readdirSync('src/lib', { recursive: true }).filter((file) => /\.[cm]?js$/.test(file));
     const touching = files
         .filter((file) => !COMPILER.includes(file))
         .flatMap((file) =>
@@ -73,9 +95,9 @@ test('at run time, nothing outside bryntime/ touches the engine', () => {
 // recognises them by is its own. Its comments may take Svelte for an example;
 // a line of code that names Svelthon or Svelte is a contract a page without
 // them would have to keep.
-test('no line of code of bryntime/ names Svelthon or Svelte', () => {
-    const named = readdirSync(DIR).flatMap((file) =>
-        readFileSync(`${DIR}/${file}`, 'utf8')
+test('no line of code of Bryntime names Svelthon or Svelte', () => {
+    const named = modules().flatMap((file) =>
+        readFileSync(join(DIR, file), 'utf8')
             .split('\n')
             .map((line, index) => [`${file}:${index + 1}`, line.replace(/(^|\s)\/\/.*$/, '')])
             .filter(([, code]) => /svelthon|svelte/i.test(code))

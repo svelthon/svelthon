@@ -23,7 +23,7 @@ const require = createRequire(import.meta.url);
 // bundles its config and every file the config imports, and an import would
 // put the engine in that bundle, which `npm run test:quiet` would say (its
 // `eval` warned about); the bundle does not follow a `require`.
-require('./bryntime/bryntime.js');
+require('bryntime');
 const { compile, VIRTUAL_PREFIX, virtualId, pythonModuleName, elementProps, PY_NAME, componentImports, importedNames } = require('./compile.cjs');
 
 // Generated modules, keyed by project and component name. Filled by the preprocessor when

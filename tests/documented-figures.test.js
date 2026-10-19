@@ -12,6 +12,8 @@
 // build itself, so the answer is not to generate it but to make it fail loudly
 // when it stops being true.
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { dirname, join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 
 import { test, expect, describe } from 'vitest';
@@ -26,8 +28,9 @@ const stated = (text, pattern) => Number(text.match(pattern)[1].replace(/\s/g, '
 
 describe('the sizes the documents claim', () => {
     // The half a browser actually receives, which is what "the runtime" means to
-    // a reader: `boot.js` loads this file and no other.
-    const runtime = gzipSync(readFileSync('vendor/brython_runtime.js')).length / KIB;
+    // a reader: Bryntime's `boot.js` loads this file and no other.
+    const bryntime = dirname(createRequire(import.meta.url).resolve('bryntime/package.json'));
+    const runtime = gzipSync(readFileSync(join(bryntime, 'vendor/brython_runtime.js'))).length / KIB;
 
     test.for([
         ['README.md', () => stated(english, /The whole runtime, gzipped, is \*\*(\d+) KB\*\*/)],
@@ -107,8 +110,8 @@ describe('the test count the documents claim', () => {
     // the two documents are held against the same count rather than against a
     // total nobody can compute without running everything.
     test.for([
-        ['README.md', () => stated(english, /npm test\s+# ([\d\s]+?) tests: semantics/)],
-        ['README.fr.md', () => stated(french, /npm test\s+# ([\d\s]+?) tests : sémantique/)]
+        ['README.md', () => stated(english, /Validated by `npm test`, ([\d\s]+?) tests as written/)],
+        ['README.fr.md', () => stated(french, /Validé par `npm test`, ([\d\s]+?) tests écrits/)]
     ])('%s states a count within reach of the files', ([, read]) => {
         expect(read()).toBeGreaterThanOrEqual(counted);
     });

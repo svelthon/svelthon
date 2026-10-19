@@ -92,8 +92,10 @@ curl -sf -o /dev/null "http://localhost:$PORT/src/probe.js"
 curl -sf -o /dev/null "http://localhost:$PORT/demo/main.js"
 # The big one: the engine, which Vite transforms before serving and which no
 # cache holds on a first run. Until it is warm, a render can overrun the
-# browser's budget. `boot.js` names this file, so a page asks for this one.
-curl -sf -o /dev/null "http://localhost:$PORT/vendor/brython_runtime.js"
+# browser's budget. Bryntime's `boot.js` names this file, beside the Bryntime
+# the bridge imports, wherever Vite serves the package from.
+BRYNTIME=$(curl -sf "http://localhost:$PORT/src/lib/bridge.js" | grep -o '"[^"]*/bryntime\.js"' | head -1 | tr -d '"')
+curl -sf -o /dev/null "http://localhost:$PORT${BRYNTIME%/bryntime.js}/vendor/brython_runtime.js"
 curl -sf -o /dev/null "http://localhost:$PORT/demo/App.svelte"
 
 REPORT=$(browse probe 8000 "$URL" |

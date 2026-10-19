@@ -49,8 +49,8 @@ describe('to_py on data whose field is called ob_type', () => {
     //     d["value"] = 42     # TypeError
     //
     // — the same shape as the `__proto__` key, and the same predicate.
-    // `vendor/BRYTHON_FIX.md` carries it, and `tests/vendor.test.js` guards that
-    // the bundle still does.
+    // `bryntime/vendor/BRYTHON_FIX.md` carries it, and Bryntime's own tests
+    // guard that the bundle still does.
     test('is data, not a Python object', () => {
         expect(field_named_type({ ob_type: 'business', value: 42 })).toEqual(['business', 42]);
     });

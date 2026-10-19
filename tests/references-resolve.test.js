@@ -17,8 +17,9 @@
 //   and is written out now, which is what a lesson should be anyway.
 // - **it stopped existing.** `BRYTHON_BUGS.md` pointed three times at the
 //   vendored bundle under its old single-file name, with line numbers from it.
-//   The bundle was split in two, the symbols moved to `vendor/brython_runtime.js`,
-//   and the citations stayed where they were.
+//   The bundle was split in two, the symbols moved to
+//   `bryntime/vendor/brython_runtime.js`, and the citations stayed where they
+//   were.
 //
 // Only references into **our own directories** are checked, and that boundary is
 // the whole precision of this guard. A backticked name is as often an *example*
@@ -36,15 +37,17 @@ import { join, relative } from 'node:path';
 
 const at = (path) => fileURLToPath(new URL(`../${path}`, import.meta.url));
 
-// A path into one of these is a reference; anything else is prose.
-const OURS = ['tests/', 'src/lib/', 'vendor/', 'scripts/', 'docs/'];
+// A path into one of these is a reference; anything else is prose. Bryntime's
+// files are named as the package ships them, `bryntime/globals.js`, and opened
+// where it is installed.
+const OURS = ['tests/', 'src/lib/', 'scripts/', 'docs/', 'bryntime/'];
+const opened = (name) => at(name.startsWith('bryntime/') ? `node_modules/${name}` : name);
 
 // A name with a directory in it and an extension we write, optionally followed
-// by the line it sits at, as in `vendor/brython_runtime.js:14264`.
+// by the line it sits at, as in `bryntime/vendor/brython_runtime.js:14264`.
 const REFERENCE = /`([\w./-]+\/[\w./-]+\.(?:js|cjs|py|svelte|md|json|html))(?::\d+(?::\d+)?)?`/g;
 
 const shipped = [
-    // Every file, `bryntime/` included.
     ...readdirSync(at('src/lib'), { recursive: true, withFileTypes: true })
         .filter((one) => one.isFile())
         .map((one) => join('src/lib', relative(at('src/lib'), one.parentPath), one.name)),
@@ -69,7 +72,7 @@ describe('a reference in a shipped file', () => {
     });
 
     test('points at a file that exists', () => {
-        const missing = cited.filter(({ name }) => !existsSync(at(name)));
+        const missing = cited.filter(({ name }) => !existsSync(opened(name)));
 
         expect(missing.map(({ file, name }) => `${file} → ${name}`)).toEqual([]);
     });

@@ -33,8 +33,7 @@
     "BRYTHON.md",
     "DJANGO_FLASK.md",
     "notes",
-    "src/lib",
-    "vendor"
+    "src/lib"
   ],
   "engines": {
     "node": "^20.19.0 || >=22.12.0"
@@ -64,5 +63,8 @@
     "svelte": "^5.56.9",
     "vite": "^8.2.1",
     "vitest": "^4.1.10"
+  },
+  "dependencies": {
+    "bryntime": "file:../bryntime"
   }
 }

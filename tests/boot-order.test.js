@@ -11,18 +11,23 @@
 // file that imports it.
 import { test, expect, describe } from 'vitest';
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const read = (name) =>
     readFileSync(fileURLToPath(new URL(`../src/lib/${name}`, import.meta.url)), 'utf8');
+// Bryntime's own file, as the package ships it.
+const boot = () =>
+    readFileSync(join(dirname(createRequire(import.meta.url).resolve('bryntime/package.json')), 'boot.js'), 'utf8');
 
 describe('the engine is imported where it is started', () => {
-    test('boot.js imports it', () => {
-        expect(read('bryntime/boot.js')).toMatch(/^import '\.\.\/\.\.\/\.\.\/vendor\/brython_runtime\.js';$/m);
+    test("Bryntime's boot.js imports it", () => {
+        expect(boot()).toMatch(/^import '\.\/vendor\/brython_runtime\.js';$/m);
     });
 
     test('and it is the file that calls brython()', () => {
-        expect(read('bryntime/boot.js')).toContain('$B.brython(');
+        expect(boot()).toContain('$B.brython(');
     });
 
     // The engine has one loader, Bryntime's. The compiler adds the parsing
@@ -33,7 +38,7 @@ describe('the engine is imported where it is started', () => {
 
         expect(source).not.toMatch(/require\('[^']*brython_runtime\.js'\)/);
         expect(source).not.toContain('$B.brython(');
-        expect(source).toContain("require('../../vendor/brython_compiler.js');");
+        expect(source).toContain("require('bryntime/compiler');");
     });
 
     // And the way JavaScript reaches it, `svelthon/compile`, imports Bryntime
@@ -42,7 +47,7 @@ describe('the engine is imported where it is started', () => {
     test('compile.js imports Bryntime before compile.cjs', () => {
         const imports = [...read('compile.js').matchAll(/^import\s+(?:\S+\s+from\s+)?'([^']+)';/gm)].map(([, from]) => from);
 
-        expect(imports).toEqual(['./bryntime/bryntime.js', './compile.cjs']);
+        expect(imports).toEqual(['bryntime', './compile.cjs']);
     });
 
     // The import used to sit in `bridge.js`, two lines above `import
@@ -57,7 +62,7 @@ describe('the engine is imported where it is started', () => {
     // then heats a file no page asks for and leaves the real one cold, and the
     // check fails intermittently rather than clearly.
     test('the browser check warms the file boot.js names', () => {
-        const engine = read('bryntime/boot.js').match(/vendor\/(\w+\.js)/)[1];
+        const engine = boot().match(/vendor\/(\w+\.js)/)[1];
         const script = readFileSync(
             fileURLToPath(new URL('../scripts/browser-check.sh', import.meta.url)),
             'utf8'

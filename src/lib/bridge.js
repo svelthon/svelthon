@@ -1,7 +1,7 @@
 // What every compiled component imports. Bryntime comes first, through its one
-// door, `bryntime.js`: it starts the engine, and installs the mutation tracking
+// door, the package: it starts the engine, and installs the mutation tracking
 // on it, before this module runs.
-import * as core from './bryntime/bryntime.js';
+import * as core from 'bryntime';
 import { untrack } from 'svelte';
 import { createSubscriber } from 'svelte/reactivity';
 import { attributeWrapper } from './attributes.js';
@@ -204,7 +204,7 @@ export {
     plainData
 };
 
-export { refusal, pyTypeName, keywordsOf, parseKeywords, pyJsonParse } from './bryntime/bryntime.js';
+export { refusal, pyTypeName, keywordsOf, parseKeywords, pyJsonParse } from 'bryntime';
 
 // The name this project's author knows, which signs every refusal the crossing
 // makes, as every other refusal here is signed.

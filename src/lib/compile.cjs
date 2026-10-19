@@ -15,7 +15,7 @@
 if (!globalThis.__BRYTHON__?.$bryntimeBooted) {
     throw new Error(
         "svelthon — the compiler runs on the engine Bryntime starts: import 'svelthon/compile', " +
-            'or src/lib/bryntime/bryntime.js before compile.cjs'
+            "or 'bryntime' before compile.cjs"
     );
 }
 
@@ -25,8 +25,8 @@ if (!globalThis.__BRYTHON__?.$bryntimeBooted) {
 // that does not compile never receives it.
 //
 // Order is the contract: the chain registers `$B.Parser` onto an engine that is
-// already there, and started.
-require('../../vendor/brython_compiler.js');
+// already there, and started. Bryntime ships it, beside the engine.
+require('bryntime/compiler');
 
 const $B = globalThis.__BRYTHON__;
 
