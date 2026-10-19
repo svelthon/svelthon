@@ -2244,12 +2244,10 @@ $B.RAISE(_b_.TypeError,`unsupported operand type(s) for ${$B.method_to_op[op]}:`
 ` '${$B.class_name(x)}' and '${$B.class_name(y)}'`)}
 $B.is_none=function(o){return o===undefined ||o===null ||o==_b_.None}
 var repr_stack=new Set()
-$B.repr={enter:function(obj){var obj_id=_b_.id(obj)
+$B.repr={depth:0,
+enter:function(obj){var obj_id=_b_.id(obj)
 if(repr_stack.has(obj_id)){return true}else{
-repr_stack.add(obj_id)
-if(repr_stack.size > $B.recursion_limit){repr_stack.clear()
-$B.RAISE(_b_.RecursionError,"maximum recursion depth "+
-"exceeded while getting the repr of an object")}}},leave:function(obj){repr_stack.delete(_b_.id(obj))}}})(__BRYTHON__);
+repr_stack.add(obj_id)}},leave:function(obj){repr_stack.delete(_b_.id(obj))},clear:function(){repr_stack.clear()}}})(__BRYTHON__);
 ;
 "use strict";
 (function($B){var _b_=$B.builtins
@@ -5426,7 +5424,14 @@ quit.__repr__=function(){return "Use quit() or Ctrl-Z plus Return to exit"}
 var repr=_b_.repr=function(obj){check_nb_args_no_kw('repr',1,arguments)
 var klass=$B.get_class(obj)
 var tp_repr=$B.search_slot(klass,'tp_repr')
-return tp_repr(obj)}
+$B.repr.depth++
+try{
+return tp_repr(obj)}catch(err){
+if($B.repr.depth==1){$B.repr.clear()
+if($B.is_recursion_error(err)){$B.RAISE(_b_.RecursionError,"maximum recursion depth "+
+"exceeded while getting the repr of an object")}}
+throw err}finally{
+$B.repr.depth--}}
 var reversed=_b_.reversed
 reversed.$factory=function(seq){
 check_nb_args_no_kw('reversed',1,arguments)

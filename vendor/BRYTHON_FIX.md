@@ -2,8 +2,8 @@
 
 `brython_runtime.js` and `brython_compiler.js` are cut from one bundle, built
 from Brython's master of 11 September 2026 plus one hundred and sixty proposed commits
-(`metaclass-getattribute-args`, `iterator-setstate` and `getitem-binding` in two, as amended for their PRs) and four merged
-upstream since (#3022, #2996, #2989, #2982), with **four** edits
+(`metaclass-getattribute-args`, `iterator-setstate` and `getitem-binding` in two, as amended for their PRs) and five merged
+upstream since (#3022, #2996, #2989, #2982, #3125), with **four** edits
 made in the file itself afterwards. The wrapper, the integer format and the
 `__call__` binding carry a `/* SVELTHON patch, see BRYTHON_FIX.md */` comment,
 the only way to find them again in 1.4 MB; the other edit *is* a comment, so
@@ -37,6 +37,7 @@ written against:
 | `list-eq-left-to-right` | lists and tuples compare their items from the first, up to the first that differs: `list_eq` walked them from the last, so `(1, a) == (2, b)` asked `a == b` before telling `1` from `2`, and an `{#each}` sorting `d.items()` read inside every row it compared |
 | `sort-less-than-only` | sorting compares with `<` alone: the comparator asked `a == b` whenever `a < b` was false, so a sort ran an `__eq__` CPython never runs, and one that raises refused the sort. It asks `b < a` instead, which keeps equal items in their order |
 | `recursion-error-unlogged` | a stack overflow taken for a `RecursionError` is no more written on the console: `$B.is_recursion_error` logged every JavaScript error it was asked about, `js exc RangeError…` with its stack, a line of debugging left in |
+| `repr-deep-nesting` (#3125, merged) | `repr()` of nested containers is limited by the stack, not by the recursion limit: it raised `RecursionError` past a thousand levels, where CPython 3.14 writes as deep as its stack goes. A stack overflow out of the outermost `repr()` is the `RecursionError`, and leaves no object marked as being represented |
 | `dict-proto-key` | a dict entry whose key is `"__proto__"` is kept. The fast path for a string key is `d[key] = value`, which reaches the accessor on `Object.prototype`: the entry was lost and the value became the dictionary's own prototype, so `"__proto__" in d` was false and reading it raised `KeyError` on a key that had been written. It goes to the hash table instead, exactly as a string parsed as a negative integer already did, and the four sites that ask whether a key can be an ordinary property now ask it in one place |
 | `import-name-invalid-identifier-chars` | the identifier a module's wrapper is read back through is built by one rule, `$B.scope_name`, instead of one per site. The generator replaced every character an identifier cannot hold, the importer replaced the dot alone, so the two disagreed on anything else and `new Function` answered *Arg string terminates parameters early*. Five callers, one definition |
 | `escape-module-literals` | the module name and the filename are written into the generated module with `JSON.stringify` rather than pasted between quotes. `src/O'Brien.py` is a legal filename, and it closed four literals in a row — the namespace, the frame, `__file__` and `__name__` — so a valid Python file compiled to JavaScript that would not parse |
@@ -268,6 +269,7 @@ than by a build-time check, and going upstream retires none of them:
 | a function read off a JavaScript object is not asked its own `toString` (branch `jsobj-function-tostring`) | `tests/vendor.test.js`, and `tests/snippet-arguments.test.js`, a Python snippet kept in a JavaScript object, in development mode |
 | sorting compares with `<` alone (branch `sort-less-than-only`) | `tests/vendor.test.js` |
 | a stack overflow taken for a `RecursionError` is not logged (branch `recursion-error-unlogged`) | `tests/vendor.test.js` |
+| `repr()` goes as deep as the stack (branch `repr-deep-nesting`, #3125) | `tests/vendor.test.js` |
 | lists and tuples compare their items from the first (branch `list-eq-left-to-right`) | `tests/vendor.test.js`, and `tests/each-computed-rows.test.js`, an `{#each}` over `sorted(d.items())` not computed again on a change inside a row |
 | a JavaScript object's `ob_type` is its data unless it holds a class (branch `get-class-ob-type-class`) | `tests/vendor.test.js`, and `tests/unpack-by-key.test.js`, a record keeping a field `ob_type` read by the dot, its method run with the record as `this` |
 | an unhashable value is named by its type, and a set element or a dict key says what it was refused as (branches `unhashable-type-name`, `unhashable-element-context`, `unhashable-dict-key-context`) | `tests/vendor.test.js`, and `tests/synced-exports.test.js`, a write into a set's view refused and caught by the Python caller |

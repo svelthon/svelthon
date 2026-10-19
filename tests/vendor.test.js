@@ -906,6 +906,16 @@ test('a stack overflow taken for a RecursionError is not logged: recursion-error
     expect(said).toEqual([]);
 });
 
+// repr() raised RecursionError past the recursion limit, a thousand levels,
+// where CPython is limited by its stack alone: a structure as deep as the
+// stack takes it is written, and one deeper raises and leaves nothing marked
+// as being represented. `python3` on the same module.
+test('repr() goes as deep as the stack: repr-deep-nesting', async () => {
+    const { answers } = await import('./fixtures/deep_repr.py');
+
+    expect([...answers()]).toEqual(['True', 'RecursionError', '[[[]]]']);
+});
+
 // The items of a JavaScript Set reached Python unconverted, so a float in it
 // refused a format; `hash()` of JavaScript's null raised a JavaScript error,
 // and so did null as a subscript. Each answer is read on its own, so each
