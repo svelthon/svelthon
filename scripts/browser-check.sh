@@ -2,7 +2,7 @@
 # Brython's DOM wrapping, checked where it is real. `browser.html` is registered
 # by brython.js itself, but only by the browser half it installs when it does not
 # think it is running under Node — so what this asserts is that a browser needs
-# no import at all, which is also what globals.js arranges for jsdom.
+# no import at all, which is also what Bryntime arranges for jsdom.
 set -uo pipefail
 
 PORT=${PORT:-5199}
@@ -88,15 +88,25 @@ curl -sf -o /dev/null "$URL"
 curl -sf -o /dev/null "http://localhost:$PORT/demo/"
 # The HTML shell answers at once; it is the entry module that triggers the
 # graph's compilation, and that is what has to be waited for.
-curl -sf -o /dev/null "http://localhost:$PORT/src/probe.js"
-curl -sf -o /dev/null "http://localhost:$PORT/demo/main.js"
-# The big one: the engine, which Vite transforms before serving and which no
-# cache holds on a first run. Until it is warm, a render can overrun the
-# browser's budget. Bryntime's `boot.js` names this file, beside the Bryntime
-# the bridge imports, wherever Vite serves the package from.
-BRYNTIME=$(curl -sf "http://localhost:$PORT/src/lib/bridge.js" | grep -o '"[^"]*/bryntime\.js"' | head -1 | tr -d '"')
-curl -sf -o /dev/null "http://localhost:$PORT${BRYNTIME%/bryntime.js}/vendor/brython_runtime.js"
-curl -sf -o /dev/null "http://localhost:$PORT/demo/App.svelte"
+# Every module of that graph is requested in turn, the engine among them, the
+# big one, which Vite transforms before serving and which no cache holds on a
+# first run: until it is warm, a render can overrun the browser's budget. The
+# graph is walked from the imports Vite writes into what it serves, so the walk
+# names no file of a package and follows one wherever Vite serves it from.
+warm() {
+    local queue=("$@") seen=" " path next
+
+    while [ ${#queue[@]} -gt 0 ]; do
+        path=${queue[0]}
+        queue=("${queue[@]:1}")
+        case "$seen" in *" $path "*) continue ;; esac
+        seen+="$path "
+        for next in $(curl -sf "http://localhost:$PORT$path" | grep -oE "(from|import) *[\"']/[^\"']+[\"']" | grep -oE "/[^\"']+"); do
+            queue+=("$next")
+        done
+    done
+}
+warm /src/probe.js /demo/main.js
 
 REPORT=$(browse probe 8000 "$URL" |
     grep -o '<pre id="report">[^<]*' | sed 's|<pre id="report">||')

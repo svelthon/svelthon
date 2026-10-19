@@ -17,9 +17,8 @@
 //   and is written out now, which is what a lesson should be anyway.
 // - **it stopped existing.** `BRYTHON_BUGS.md` pointed three times at the
 //   vendored bundle under its old single-file name, with line numbers from it.
-//   The bundle was split in two, the symbols moved to
-//   `bryntime/vendor/brython_runtime.js`, and the citations stayed where they
-//   were.
+//   The bundle was split in two, the symbols moved to its runtime half, and the
+//   citations stayed where they were.
 //
 // Only references into **our own directories** are checked, and that boundary is
 // the whole precision of this guard. A backticked name is as often an *example*
@@ -38,13 +37,11 @@ import { join, relative } from 'node:path';
 const at = (path) => fileURLToPath(new URL(`../${path}`, import.meta.url));
 
 // A path into one of these is a reference; anything else is prose. Bryntime's
-// files are named as the package ships them, `bryntime/globals.js`, and opened
-// where it is installed.
-const OURS = ['tests/', 'src/lib/', 'scripts/', 'docs/', 'bryntime/'];
-const opened = (name) => at(name.startsWith('bryntime/') ? `node_modules/${name}` : name);
+// files are not among them: Svelthon names the package, never a file of it.
+const OURS = ['tests/', 'src/lib/', 'scripts/', 'docs/'];
 
 // A name with a directory in it and an extension we write, optionally followed
-// by the line it sits at, as in `bryntime/vendor/brython_runtime.js:14264`.
+// by the line it sits at, as in `src/lib/compile.cjs:2753`.
 const REFERENCE = /`([\w./-]+\/[\w./-]+\.(?:js|cjs|py|svelte|md|json|html))(?::\d+(?::\d+)?)?`/g;
 
 const shipped = [
@@ -72,7 +69,7 @@ describe('a reference in a shipped file', () => {
     });
 
     test('points at a file that exists', () => {
-        const missing = cited.filter(({ name }) => !existsSync(opened(name)));
+        const missing = cited.filter(({ name }) => !existsSync(at(name)));
 
         expect(missing.map(({ file, name }) => `${file} → ${name}`)).toEqual([]);
     });

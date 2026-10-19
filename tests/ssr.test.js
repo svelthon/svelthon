@@ -3,8 +3,7 @@
 // Server-side rendering: Svelte compiles a second version of the component that
 // returns an HTML string instead of creating DOM nodes. The Python body
 // therefore runs under Node — which the compiler already does at build time,
-// bar two shims (`self`, `addEventListener`) laid down by Bryntime's
-// globals.js.
+// bar two shims (`self`, `addEventListener`) laid down by Bryntime.
 import { test, expect, describe } from 'vitest';
 import { render } from 'svelte/server';
 
@@ -25,8 +24,8 @@ describe('server rendering', () => {
     // them, for its own bootstrap. Half the ecosystem decides it is in a browser
     // with `typeof document !== "undefined"` and then reaches for `window`, which
     // nothing defines: Bits UI does exactly that, and took server rendering down
-    // with a bare `ReferenceError: window is not defined`. boot.js removes them
-    // once the bootstrap is over.
+    // with a bare `ReferenceError: window is not defined`. Bryntime removes
+    // them once the bootstrap is over.
     test('no browser global is left behind', () => {
         for (const name of ['document', 'window', 'location', 'HTMLElement', 'customElements']) {
             expect(typeof globalThis[name], `${name} must not exist on the server`).toBe('undefined');

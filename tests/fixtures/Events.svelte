@@ -2,7 +2,7 @@
 # Both handlers are Python, and the first one walks the DOM — `event.target` is
 # a node, and reading `.value` off it goes through Brython's `browser.html`.
 # Nothing imports that module here: brython.js registers it on its own, as long
-# as it recognises a DOM. See globals.js.
+# as it recognises a DOM, which Bryntime arranges under jsdom.
 typed = ""
 kind = ""
 

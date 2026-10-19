@@ -2,7 +2,7 @@
 
 # Svelthon
 
-**Svelte components written in Python, compiled at build time.**
+**Svelte components in Python.**
 
 ```svelte
 <script lang="python">
@@ -1476,8 +1476,8 @@ loader rather than through Vite, so a shim re-exporting from a `.py` fails with
 It works. Svelte compiles a second version of each component that returns an
 HTML string instead of creating DOM nodes, so the Python body runs under Node,
 which is what the compiler already does at build time. Two shims were missing
-from the browser runtime (`self`, `addEventListener`); Bryntime's
-`bryntime/globals.js` now sets them, and that was the whole obstacle.
+from the browser runtime (`self`, `addEventListener`); Bryntime now sets them,
+and that was the whole obstacle.
 
 Covered by `tests/ssr.test.js`: components, props, composition with child
 components and attribute access, and the Python values themselves: `-7 // 2`
@@ -1561,9 +1561,8 @@ such a string as midnight UTC, so without the rule every reader west of
 Greenwich saw the day before. A value carrying a time is an instant and is
 rendered in the reader's own zone, which is what an instant is for.
 
-The whole runtime, gzipped, is **224 KB**. That is
-`bryntime/vendor/brython_runtime.js`, the half without the parsing chain, which is what a
-browser gets; the full bundle it is cut from is 275 KB and never ships.
+The runtime is Bryntime's, and a browser gets it without the parsing chain,
+which only the compiler loads; Bryntime's README gives its weight.
 
 ## Svelte surface covered
 
@@ -1706,10 +1705,9 @@ fitting on one page, and its worked example is a test fixture, so it cannot drif
 
 **Upstream, in Brython**
 
-The internals Svelthon depends on and the error messages that cost the most
-debugging time are written up in **[BRYTHON.md](BRYTHON.md)**, the contract
-between the two projects, and what the vendored build carries on top of
-Brython's master is in `bryntime/vendor/BRYTHON_FIX.md`.
+The internals of Brython's compiler that Svelthon depends on are written up in
+**[BRYTHON.md](BRYTHON.md)**, the contract between the two projects. At run
+time Svelthon reaches the engine through Bryntime alone, which keeps its own.
 
 ## Running
 
@@ -1733,23 +1731,14 @@ hands the Python to a JavaScript parser, then fails on `./store.py`, which no
 file of that name is meant to serve. Its only job here is to discover bare
 imports, so the scan is skipped and the one package worth pre-bundling is named.
 
-### The vendored Brython
+### Brython, through Bryntime
 
-Svelthon carries no copy of Brython. It depends on **Bryntime**, the package
-that ships the engine and the crossing between Python and JavaScript, and that
-Svelthon reaches through its one entry, `bryntime`, and the compiler through
-`bryntime/compiler`. Until it is published, it is installed from a checkout
-beside this one, `../bryntime`.
-
-Its Brython is built from Brython's master and the repairs proposed there and
-not merged yet, one commit each, and carries **four** edits made in the file
-itself, each held by a test: a guard against a second execution in one process,
-`/* @vite-ignore */` on the two dynamic imports, CPython's order for an int
-formatted with a base prefix, and the binding of a `__call__` that is not a
-function. `bryntime/vendor/BRYTHON_FIX.md` lists them all.
-They live in the file rather than in a build step, because Node loads the same
-copy, for the compiler and for server-side rendering, so a patch applied only
-while serving would leave both on an unrepaired Brython.
+Svelthon carries no copy of Brython. It depends on **Bryntime**, the Brython
+runtime for JavaScript frameworks, which ships the engine and the crossing
+between Python and JavaScript, and which Svelthon reaches through its one entry,
+`bryntime`, and the compiler through `bryntime/compiler`. Until it is published,
+it is installed from a checkout beside this one, `../bryntime`. Which engine it
+ships, built from what and with which repairs, is Bryntime's to say.
 
 **And it is the only Python that ships.** No stdlib module travels with
 Svelthon, `sys` included: a stdlib exists so that an author can `import`
@@ -1778,11 +1767,5 @@ so only the ones actually named need travel.
 Svelthon is MIT, the licence of Svelte and of the tooling around it. See
 `LICENSE`.
 
-Bryntime, which Svelthon depends on, is BSD-3-Clause, and ships Brython, built
-and minified into `bryntime/vendor/brython_runtime.js` and
-`bryntime/vendor/brython_compiler.js`. Brython keeps its own licence,
-BSD-3-Clause, Copyright (c) 2012 Pierre Quentel, whose notice travels beside the
-files it covers, in `bryntime/vendor/LICENSE`.
-
-What those two files are built from, and the commits proposed upstream they
-carry ahead of a release, is in `bryntime/vendor/BRYTHON_FIX.md`.
+Bryntime, which Svelthon depends on, is BSD-3-Clause, the licence of Brython,
+whose engine it ships with its notice, Copyright (c) 2012 Pierre Quentel.

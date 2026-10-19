@@ -39,8 +39,8 @@ import RestMembersNative from './fixtures/RestMembersNative.svelte';
 // where Svelte's unpacking never reads it. Reading it off the descriptor, as
 // Bryntime does, costs 3 to 8 % on the crossing of 50 000 and 200 000
 // JavaScript objects and on 4 000 class reads in the engine, measured against
-// the same bundle without it; the limit is written beside `pyScalar`'s, in
-// Bryntime's `core.js`.
+// the same bundle without it; the limit is Bryntime's, written beside
+// `pyScalar`'s.
 test('a row is a mapping by its class; an ob_type getter of a JavaScript row is run by the engine, as avoiding it costs 3 to 8 % on crossings and class reads', () => {
     const target = document.body.appendChild(document.createElement('div'));
     mount(RestProtocols, { target });

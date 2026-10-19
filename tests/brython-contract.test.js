@@ -13,37 +13,31 @@
 // A contract that is 88 % complete is a contract that will be trusted 100 %.
 //
 // Read the same way `tests/dispatch.test.js` reads its four lists: off the files
-// themselves, so a twenty-ninth member cannot arrive unnoticed.
+// themselves, so a thirtieth member cannot arrive unnoticed. They are
+// Svelthon's own files: what Bryntime reaches for is in Bryntime's contract.
 import { test, expect, describe } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 
 const at = (path) => fileURLToPath(new URL(path, import.meta.url));
 
 const LIB = at('../src/lib');
-// Bryntime, which reaches for the engine on Svelthon's behalf.
-const BRYNTIME = dirname(createRequire(import.meta.url).resolve('bryntime/package.json'));
 const contract = readFileSync(at('../BRYTHON.md'), 'utf8');
 
 // `$B.x` and `__BRYTHON__.x` are the same object under two names, and both are
 // written in these files.
 const REACHED = /(?:\$B|__BRYTHON__)\.([A-Za-z_$][A-Za-z0-9_$]*)/g;
 
-// Marks Svelthon and Bryntime hang on the engine. They are ours to name and
-// ours to change, so they are not part of anybody's contract.
-const OURS = /^\$(svelthon|bryntime)/;
+// Marks Svelthon hangs on the engine. They are ours to name and ours to change,
+// so they are not part of anybody's contract.
+const OURS = /^\$svelthon/;
 
 const used = new Set();
 
-// Every file of Svelthon's, and every module of Bryntime's, as it ships them.
-const files = [
-    ...readdirSync(LIB, { recursive: true, withFileTypes: true })
-        .filter((entry) => entry.isFile())
-        .map((entry) => join(entry.parentPath, entry.name)),
-    ...readdirSync(BRYNTIME).filter((name) => name.endsWith('.js')).map((name) => join(BRYNTIME, name))
-];
+const files = readdirSync(LIB, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => join(entry.parentPath, entry.name));
 
 for (const file of files) {
     const source = readFileSync(file, 'utf8');

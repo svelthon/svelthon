@@ -12,13 +12,9 @@
 // build itself, so the answer is not to generate it but to make it fail loudly
 // when it stops being true.
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
-import { createRequire } from 'node:module';
-import { dirname, join } from 'node:path';
-import { gzipSync } from 'node:zlib';
 
 import { test, expect, describe } from 'vitest';
 
-const KIB = 1024;
 const english = readFileSync('README.md', 'utf8');
 const french = readFileSync('README.fr.md', 'utf8');
 
@@ -27,20 +23,7 @@ const french = readFileSync('README.fr.md', 'utf8');
 const stated = (text, pattern) => Number(text.match(pattern)[1].replace(/\s/g, ''));
 
 describe('the sizes the documents claim', () => {
-    // The half a browser actually receives, which is what "the runtime" means to
-    // a reader: Bryntime's `boot.js` loads this file and no other.
-    const bryntime = dirname(createRequire(import.meta.url).resolve('bryntime/package.json'));
-    const runtime = gzipSync(readFileSync(join(bryntime, 'vendor/brython_runtime.js'))).length / KIB;
-
-    test.for([
-        ['README.md', () => stated(english, /The whole runtime, gzipped, is \*\*(\d+) KB\*\*/)],
-        ['README.fr.md', () => stated(french, /Le runtime entier, gzippé, fait \*\*(\d+) Ko\*\*/)]
-    ])('%s states the size of the runtime that ships', ([, read]) => {
-        expect(read()).toBe(Math.round(runtime));
-    });
-
-    // The bundle it is cut from, named in the same sentence, does not ship and
-    // is not in the repository, so its figure is not held here.
+    // The engine's own size is Bryntime's to state, and its README holds it.
 
     // The two documents have to agree with each other, which is the drift an
     // outside reading found first: one said 250, the other 255.

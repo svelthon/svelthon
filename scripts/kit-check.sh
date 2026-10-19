@@ -3,7 +3,8 @@
 # served as production serves it. Nothing else here runs a SvelteKit build: the
 # suite imports `src/lib` under jsdom, and the browser check builds a plain Vite
 # application. What only SvelteKit's build does was invisible: a production
-# server that answered 500 because a bundler ordered the engine after `boot.js`,
+# server that answered 500 because a bundler ordered the engine after the module
+# that starts it,
 # and a `.remote.py` that SvelteKit refused at build for its default export.
 #
 # Every route answers 200 with what its Python wrote, and the remote function
