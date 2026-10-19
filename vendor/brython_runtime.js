@@ -6300,7 +6300,6 @@ if(this_exc_class===undefined){console.log("exc class undefined",exc)}
 if(_b_.issubclass(this_exc_class,exc_class)){return true}}
 return false}
 $B.is_recursion_error=function(js_exc){
-console.log('js exc',js_exc)
 var msg=js_exc+"",parts=msg.split(":")
 if(parts.length==1){return false}
 var err_type=parts[0].trim(),err_msg=parts[1].trim()

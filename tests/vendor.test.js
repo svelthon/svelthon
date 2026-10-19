@@ -888,6 +888,24 @@ test('sorting compares with < alone: sort-less-than-only', async () => {
     expect([...answers()]).toEqual(['bac', 'acb', 'bac']);
 });
 
+// Whether a JavaScript error is a stack overflow, the engine asked by writing
+// it on the console, its stack included, a line of debugging left in.
+test('a stack overflow taken for a RecursionError is not logged: recursion-error-unlogged', () => {
+    const $B = globalThis.__BRYTHON__;
+    const said = [];
+    const log = console.log;
+
+    console.log = (...args) => said.push(args);
+
+    try {
+        expect($B.is_recursion_error(new RangeError('Maximum call stack size exceeded'))).toBe(true);
+    } finally {
+        console.log = log;
+    }
+
+    expect(said).toEqual([]);
+});
+
 // The items of a JavaScript Set reached Python unconverted, so a float in it
 // refused a format; `hash()` of JavaScript's null raised a JavaScript error,
 // and so did null as a subscript. Each answer is read on its own, so each
