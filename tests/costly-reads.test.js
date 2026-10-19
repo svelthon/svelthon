@@ -10,6 +10,7 @@ import { mount, flushSync } from './mounted.js';
 import { pythonExpressions, collector } from '../src/lib/markup.js';
 import '../src/lib/compile.cjs';
 import ReadOrder from './fixtures/ReadOrder.svelte';
+import ReadOrderParent from './fixtures/ReadOrderParent.svelte';
 import BoundBranch from './fixtures/BoundBranch.svelte';
 import { seen } from './fixtures/read_order.js';
 import { runningNames } from '../src/lib/compile.js';
@@ -18,14 +19,15 @@ test.for([
     ['default', 'first@1:second@2', ['first', 'second']],
     // In the order the body reads them, `y` first, and not the parameters'.
     ['two defaults', 'first@1:second@2', ['first', 'second']],
-    // Read first, a derived of the script runs its body first, where `x` read
-    // ahead ran its default before.
-    ['derived', 'first@1:second@2', ['first', 'second']]
+    // Read first, a derived of the script runs its body first, and a prop what
+    // its parent wrote for it, where `x` read ahead ran its default before.
+    ['derived', 'first@1:second@2', ['first', 'second']],
+    ['prop', 'first@1:second@2', ['first', 'second']]
 ])('a default is read in the order the expression reads it: %s', ([kind, shown, order]) => {
     const target = document.body.appendChild(document.createElement('div'));
 
     seen.length = 0;
-    mount(ReadOrder, { target, props: { kind } });
+    mount(kind === 'prop' ? ReadOrderParent : ReadOrder, { target, props: { kind } });
     flushSync();
 
     expect([target.querySelector('output').textContent, [...seen]]).toEqual([shown, order]);
