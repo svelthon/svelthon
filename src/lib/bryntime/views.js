@@ -467,6 +467,17 @@ function instanceView(value) {
             slotValues(value, false, key).has(key)
         );
     };
+    // Whether the class holds the name as a descriptor that deletes, a
+    // `property` or the author's own with `__delete__`, which `del box.value`
+    // runs: read off the class dictionaries, nothing of the author's run.
+    const deletes = (key) => {
+        if (typeof key !== 'string') return false;
+
+        const held = declares(quietPyType(value), key);
+        const kind = held === $B.NULL ? undefined : quietPyType(held);
+
+        return kind !== undefined && declares(kind, '__delete__') !== $B.NULL;
+    };
     const write = (key, given) => typeof key === 'string' && ($B.$setattr(value, key, entering(given)), true);
     // Whether a read is the author's: a `__getattribute__` of their class.
     const authored = () => declares(quietPyType(value), '__getattribute__') !== declares(_b_.object, '__getattribute__');
@@ -538,8 +549,12 @@ function instanceView(value) {
 
             return write(key, descriptor.value);
         },
+        // Python's `delattr` for an attribute of the instance's own and for
+        // one its class keeps behind a deleter, which runs, and raises what
+        // it raises; a name of the class's alone, or none, is left as
+        // JavaScript leaves a property it does not own.
         deleteProperty(shell, key) {
-            if (owns(key)) $B.$delattr(value, key);
+            if (owns(key) || deletes(key)) $B.$delattr(value, key);
 
             return true;
         },
