@@ -170,7 +170,10 @@ function installMutationTracking($B) {
     // a watched container stores is copied before the write (`saving`), and
     // put back if telling its readers is refused (`settle`). A write that
     // changes nothing tells nobody, and passes, as Svelte's own collections
-    // let it; one allowed tells its readers as it did, in a `finally`. A write
+    // let it, a set's and a dict's; a list's item and an attribute, as
+    // Svelte's `$state` lets them, only where it refuses no write
+    // (`changesNothing`). One allowed tells its readers as it did, in a
+    // `finally`. A write
     // known beforehand to change nothing, the call's name and arguments given,
     // copies nothing (`unchanging`).
     //
@@ -462,6 +465,45 @@ function installMutationTracking($B) {
         return held !== MISSING;
     };
 
+    // An item of a list written by its index, read there before and after,
+    // and an attribute of an instance, read where Python's lookup finds it
+    // (`attributeOf`), on one whose class writes it as `object` does: one
+    // whose `__setattr__` is its own may store it anywhere. The value written
+    // over itself tells nobody, as an item or a field of Svelte's `$state`
+    // tells nobody (`changesNothing`), and is refused where Svelte refuses.
+    const itemChange = (target, index) => {
+        if (typeof index !== 'number' || !Number.isInteger(index)) return null;
+
+        const at = index < 0 ? target.length + index : index;
+
+        if (at < 0 || at >= target.length) return null;
+
+        const length = target.length;
+        const before = target[at];
+
+        return () => target.length !== length || !changesNothing(target[at], before);
+    };
+
+    const OBJECT_SETATTR = $B.search_in_dict(_b_.object, '__setattr__', $B.NULL);
+
+    const attributeChange = (target, attr) => {
+        if (typeof attr !== 'string' || pyClass(target)) return null;
+
+        const type = quietPyType(target);
+
+        if (type === undefined || declares(type, '__setattr__') !== OBJECT_SETATTR) return null;
+
+        const before = attributeOf(target, attr);
+
+        if (before === UNTOLD) return null;
+
+        return () => {
+            const after = attributeOf(target, attr);
+
+            return after === UNTOLD || !changesNothing(after, before);
+        };
+    };
+
     const changeOf = (name, target, args) => {
         if (!MARKS.has(target)) return null;
 
@@ -492,6 +534,9 @@ function installMutationTracking($B) {
 
             return SET_SIZED.has(name) ? () => target.$used !== size : null;
         }
+
+        if (name === '__setitem__' && quietPyType(target) === _b_.list) return itemChange(target, args[0]);
+        if (name === '__setattr__') return attributeChange(target, args[0]);
 
         if (!$B.is_dict(target) || NAMESPACE_DICTS.has(target) || VERSION === undefined || KEYS === undefined) return null;
 
@@ -1155,13 +1200,14 @@ function installMutationTracking($B) {
         // and at `__setattr__`. The shape is the one every mutation path has,
         // and `tests/mutation-notifies-in-finally` reads it.
         //
-        // A watched dict's write is told as its own `__setitem__` is
-        // (`changeOf`), a dict's alone: the class of any other may write it
+        // A watched dict's or list's write is told as its own `__setitem__` is
+        // (`changeOf`), theirs alone: the class of any other may write it
         // anywhere. Asked of a watched object only, the copy too, since every
         // write by subscript in the program comes through here.
         const watched = MARKS.has(obj);
-        const dict = watched && quietPyType(obj) === _b_.dict;
-        const changed = dict ? changeOf('__setitem__', obj, [key, value]) : null;
+        const kind = watched ? quietPyType(obj) : undefined;
+        const dict = kind === _b_.dict;
+        const changed = dict || kind === _b_.list ? changeOf('__setitem__', obj, [key, value]) : null;
         const saved = !watched ? undefined : dict ? saving(obj, '__setitem__', [key, value]) : saving(obj);
 
         try {
@@ -1250,6 +1296,9 @@ function installMutationTracking($B) {
             // page at 0, with the handler catching the error and carrying on.
             beforeClassWrite(obj, attr);
 
+            // Asked of a watched object only, as every attribute write of the
+            // program comes through here (`changeOf`).
+            const changed = MARKS.has(obj) ? changeOf('__setattr__', obj, [attr, value]) : null;
             const saved = saving(obj);
             let result;
 
@@ -1257,7 +1306,7 @@ function installMutationTracking($B) {
                 result = setattr(obj, attr, value, ...rest);
                 return result;
             } finally {
-                settle(obj, saved, () => {
+                if (changed === null || changed()) settle(obj, saved, () => {
                     classNameChanged(obj, attr);
 
                     if (MARKS.has(obj)) {
