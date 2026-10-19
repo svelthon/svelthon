@@ -4630,26 +4630,52 @@ function importedNames(src, where) {
     }
 }
 
+// The script alone, read before the compile by what has to know what it
+// declares: parsed with its signs rewritten as the compile rewrites them, and
+// the names JavaScript brings in (`theirs`), which `surface` sets apart. A
+// script that does not parse gives null: the compile says why.
+function readScript(src, where) {
+    try {
+        const lifted = takeImportJs($B.unindent(src), where, 0, true);
+        const theirs = new Set(lifted.imports.flatMap((one) => one.entries.map((e) => e.local)));
+        const body = takeArrows(lifted.source, where, 0, true, theirs);
+        const tree = $B._PyPegen.run_parser(new $B.Parser(body, where, 'file'));
+
+        for (const one of declaredJsImports(tree, symbolTable(tree, where), where)) {
+            for (const name of one.names) theirs.add(name);
+        }
+
+        return { tree, theirs };
+    } catch {
+        return null;
+    }
+}
+
+// The names of the script whose read runs code: a derived, which runs its body
+// when what it reads has changed, and a prop, which runs what the parent wrote
+// for it. What the markup pass asks before it reads a name ahead of an
+// expression (`readAhead`), off `surface`, which the compile acts on. Null for
+// a script that does not parse.
+function runningNames(src) {
+    const read = readScript(src, '<script>');
+
+    if (read === null) return null;
+
+    const { props, bindables, deriveds } = surface(read.tree.body, read.theirs);
+
+    return [...props, ...bindables, ...deriveds.map((one) => one.name)];
+}
+
 // A component's props and the Svelte type of each, for a custom element: Svelte
 // learns what to observe from a destructured `$props()`, which Svelthon does not
 // write, or from `customElement.props`, which this fills. Read off the script
-// alone, with its signs rewritten as the compile rewrites them. A script that
-// does not parse declares nothing here: the compile says why.
+// alone (`readScript`). A script that does not parse declares nothing here.
 function elementProps(src) {
-    let tree;
-    let theirs;
+    const read = readScript(src, '<props>');
 
-    try {
-        const lifted = takeImportJs($B.unindent(src), '<props>', 0, true);
-        theirs = new Set(lifted.imports.flatMap((one) => one.entries.map((e) => e.local)));
-        const body = takeArrows(lifted.source, '<props>', 0, true, theirs);
-        tree = $B._PyPegen.run_parser(new $B.Parser(body, '<props>', 'file'));
-        for (const one of declaredJsImports(tree, symbolTable(tree, '<props>'), '<props>')) {
-            for (const name of one.names) theirs.add(name);
-        }
-    } catch {
-        return [];
-    }
+    if (read === null) return [];
+
+    const { tree, theirs } = read;
 
     // Which names are props is `surface`'s answer, the one the compile acts on;
     // what is read here is only the type each annotation names, anywhere a
@@ -4677,4 +4703,4 @@ function elementProps(src) {
     return [...props, ...bindables].map((name) => ({ name, type: types.get(name) }));
 }
 
-module.exports = { compile, VIRTUAL_PREFIX, virtualId, pythonModuleName, elementProps, PY_NAME, componentImports, importedNames };
+module.exports = { compile, VIRTUAL_PREFIX, virtualId, pythonModuleName, elementProps, runningNames, PY_NAME, componentImports, importedNames };

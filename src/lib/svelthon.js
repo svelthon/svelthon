@@ -24,7 +24,7 @@ const require = createRequire(import.meta.url);
 // put the engine in that bundle, which `npm run test:quiet` would say (its
 // `eval` warned about); the bundle does not follow a `require`.
 require('bryntime');
-const { compile, VIRTUAL_PREFIX, virtualId, pythonModuleName, elementProps, PY_NAME, componentImports, importedNames } = require('./compile.cjs');
+const { compile, VIRTUAL_PREFIX, virtualId, pythonModuleName, elementProps, runningNames, PY_NAME, componentImports, importedNames } = require('./compile.cjs');
 
 // Generated modules, keyed by project and component name. Filled by the preprocessor when
 // Svelte transforms a component, read back when Vite resolves the import that
@@ -548,6 +548,16 @@ export function python(options = {}) {
 
             const imported = new Set([...importedNames(python, filename ?? 'component'), ...moduleImports(content)]);
 
+            // Whether a name of the script runs code when it is read, a derived
+            // or a prop: read once, and only by an expression that may be
+            // handed a name ahead. Every name, of a script that does not parse.
+            let running;
+            const runs = (name) => {
+                running ??= runningNames(python);
+
+                return running === null || running.includes(name);
+            };
+
             const code = overMarkup(
                 content,
                 // The markup, and where it starts, so a refusal can name a
@@ -559,7 +569,8 @@ export function python(options = {}) {
                         offset,
                         pythonChildren,
                         javascriptChildren,
-                        imported
+                        imported,
+                        runs
                     })
             );
 

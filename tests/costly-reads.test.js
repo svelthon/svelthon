@@ -12,11 +12,15 @@ import '../src/lib/compile.cjs';
 import ReadOrder from './fixtures/ReadOrder.svelte';
 import BoundBranch from './fixtures/BoundBranch.svelte';
 import { seen } from './fixtures/read_order.js';
+import { runningNames } from '../src/lib/compile.js';
 
 test.for([
     ['default', 'first@1:second@2', ['first', 'second']],
     // In the order the body reads them, `y` first, and not the parameters'.
-    ['two defaults', 'first@1:second@2', ['first', 'second']]
+    ['two defaults', 'first@1:second@2', ['first', 'second']],
+    // Read first, a derived of the script runs its body first, where `x` read
+    // ahead ran its default before.
+    ['derived', 'first@1:second@2', ['first', 'second']]
 ])('a default is read in the order the expression reads it: %s', ([kind, shown, order]) => {
     const target = document.body.appendChild(document.createElement('div'));
 
@@ -46,11 +50,14 @@ test.for(['if', 'and'])('a binding whose target skips a default writes what is t
 // first there too, as in Python, and a call for each read cost every row a
 // snippet renders a fifth of its update. A snippet's parameter, handed late
 // (`_late`) in each expression and binding of its body, or ahead, in Python's
-// order of evaluation.
+// order of evaluation. The script's `total` and `label` run code when read, a
+// derived and a prop (`runningNames`); its `fmt` does not.
 const handedLate = (body) => {
     const defs = [];
+    const markup = `{#snippet line(x)}${body}{/snippet}`;
+    const runs = (name) => ['total', 'label'].includes(name);
 
-    pythonExpressions(`{#snippet line(x)}${body}{/snippet}`, collector(defs));
+    pythonExpressions(markup, collector(defs), undefined, { filename: 'Line.svelte', content: markup, offset: 0, runs });
 
     return defs.map((one) => /^def __expr_\w*_late\(/.test(one));
 };
@@ -58,6 +65,9 @@ const handedLate = (body) => {
 test.for([
     ['an item of it', '{x["n"] * 2}', [false]],
     ['an argument', '{fmt(x)}', [false]],
+    ['an argument of a builtin', '{len(x)}', [false]],
+    ['after a derived is read', '{":".join([total, x])}', [true]],
+    ['after a prop is read', '{label + x}', [true]],
     ['the right operand of a constant', '{"#" + x}', [false]],
     ['the test of a conditional', '{x["a"] if x else 0}', [false]],
     ['a method of a constant', '{", ".join(x)}', [false]],
@@ -77,4 +87,22 @@ test.for([
     ['in a target that unpacks', '<input bind:value={(x["a"], y)}>', [true, false]]
 ])('a snippet parameter is read ahead only where Python reads it first: %s', ([, body, late]) => {
     expect(handedLate(body)).toEqual(late);
+});
+
+// What the script says runs code when read: a derived, a prop and a bindable
+// one. Not a function, a state, a class or what JavaScript brings in.
+test("a script's names whose read runs code are its deriveds and props", () => {
+    const script = [
+        'importjs {first} from "./read_order.js"',
+        'label: object = None',
+        'shared: list = bindable()',
+        'total => first()',
+        'count = 0',
+        'def fmt(v):',
+        '    return v',
+        'class Box:',
+        '    pass'
+    ].join('\n');
+
+    expect(runningNames(script).sort()).toEqual(['label', 'shared', 'total']);
 });

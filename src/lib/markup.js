@@ -1256,19 +1256,22 @@ const freeNames = (text) => {
 // and on every run. The expression is walked in Python's order of evaluation,
 // and the first of the two decides. Each node runs code once it has read its
 // operands, save a name, a constant and its attribute, a tuple, a list, a
-// slice, an f-string, a keyword and a lambda, whose body runs later. A node
+// slice, an f-string, a keyword and a lambda, whose body runs later. A name
+// `runs` answers for runs code where it is read, a derived of the script or a
+// prop, as `total` ran its body after `x`'s default in `[total, x]`. A node
 // that may skip what follows reads its first operand alone before it runs:
 // the test of a conditional, the first value of an `and` or an `or`, the
 // first comparison of a chain, the first iterable of a comprehension; and so,
-// taken as hashing what it has read, does a dict or a set. So `row["label"]`, `fmt(row)` and `"#" + row`
-// read `row` first, and `first() + row`, `"a" if c else row` and
-// `[row for _ in rows]` do not. A walrus's target is written, not read, and a
-// `**` merge, a keyword the engine's tree leaves without a name, runs code.
+// taken as hashing what it has read, does a dict or a set. So `row["label"]`,
+// `fmt(row)` and `"#" + row` read `row` first, and `first() + row`,
+// `"a" if c else row`, `[row for _ in rows]` and `[total, row]` do not. A
+// walrus's target is written, not read, and a `**` merge, a keyword the
+// engine's tree leaves without a name, runs code.
 //
 // A `target` is the target of a write. Python reads the value first, then the
 // owner of an attribute or an item: a target that unpacks runs code before it
 // reads anything, and a name is written, not read.
-const readAhead = (text, name, target = false) => {
+const readAhead = (text, name, runs, target = false) => {
     const tree = targetTree(`(${text}\n)`);
 
     if (tree === null) return false;
@@ -1294,6 +1297,7 @@ const readAhead = (text, name, target = false) => {
 
         if (node instanceof ast.Name) {
             if (pythonName(node.id) === sought) decide(node.ctx instanceof ast.Load);
+            else if (runs(node.id)) decide(false);
             return;
         }
 
@@ -2683,11 +2687,14 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     // one that holds a single such name and reads it before it runs anything
     // (`readAhead`): `{item["n"] * 2}` reads `item` first, where a read ahead
     // runs its code too, and handed late, every row a snippet renders paid
-    // the fifth.
+    // the fifth. A name it is not handed is the script's or a builtin's, and
+    // whether its read runs code is the script's to say (`where.runs`);
+    // without a script to ask, any may.
     const handedLate = (text, args, target = false) => {
         const running = args.filter(costly);
+        const runs = (name) => !args.some((one) => sameName(one, name)) && (where?.runs?.(name) ?? true);
 
-        return running.length > 1 || (running.length === 1 && !readAhead(text, running[0], target));
+        return running.length > 1 || (running.length === 1 && !readAhead(text, running[0], runs, target));
     };
 
     const call = (expr, wrapper, source = expr, kind = '', bound = [], followed = true) => {
