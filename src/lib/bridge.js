@@ -603,6 +603,16 @@ export const __pybridge = {
         // The rows of a block are what it walks: their own changes run it.
         if (SHAPING.on) followOwn(value);
 
+        // An object of JavaScript's that is no iterable is walked as Svelte
+        // walks one, `Array.from`: its items by its `length`, an array-like,
+        // and otherwise none. Taken for a mapping, `{length: 2, 0: "x", 1:
+        // "y"}` walked its keys, `0, 1, length`. A `for` of the script keeps
+        // them, Python's to read. Asked whether it has an iterator, not what
+        // it is, so a getter of the author's is not run twice.
+        if (typeof value === 'object' && !Array.isArray(value) && javascriptOwn(value) && !(Symbol.iterator in value)) {
+            return Array.from(value);
+        }
+
         let rows;
 
         if (Array.isArray(value)) {
