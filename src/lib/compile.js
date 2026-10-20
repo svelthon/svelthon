@@ -12,7 +12,7 @@ import {
     refuse,
     compilePython,
     translation,
-    pythonKey,
+    pythonName,
     jsImportsOf,
     jsNameBindings,
     refuseBoundImports,
@@ -2453,7 +2453,7 @@ function compile(
         state.includes(hook) ||
         [...props, ...bindables].some((one) => (one.name ?? one) === hook) ||
         jsImported.includes(hook) ||
-        jsNames.some((one) => pythonKey(one) === hook);
+        jsNames.some((one) => pythonName(one) === hook);
     const lifecycle = (hook) => !store && (defined(hook) || holdsHook(hook));
     const hook = (name) => (defined(name) ? fn(name) : name);
 
