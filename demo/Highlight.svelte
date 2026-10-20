@@ -71,7 +71,7 @@
 
                 // A token that points backwards into text already emitted would
                 // duplicate it. FSTRING_MIDDLE used to do exactly that, until the
-                // engine Bryntime ships was patched; the guard stays
+                // engine Bryve ships was patched; the guard stays
                 // because nothing else here would survive a token out of order.
                 if (from < cursor) continue;
 

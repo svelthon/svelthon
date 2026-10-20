@@ -1594,7 +1594,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 1 856 tests as written (vitest reports more, one per
+Validated by `npm test`, 1 857 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;
@@ -1734,12 +1734,13 @@ imports, so the scan is skipped and the one package worth pre-bundling is named.
 ### Brython, through Bryntime
 
 Svelthon carries no copy of Brython. It depends on **Bryntime**, the Brython
-runtime for JavaScript frameworks, which starts the engine and holds the
-crossing between Python and JavaScript, and which Svelthon reaches through its
-one entry, `bryntime`. The engine is **Bryve**, Brython with its fixes, whose
-compiler Svelthon loads through `bryve/compiler`. Until they are published, both
-are installed from checkouts beside this one, `../bryntime` and `../bryve`.
-Which engine ships, built from what and with which repairs, is Bryve's to say.
+runtime for JavaScript frameworks, which holds the crossing between Python and
+JavaScript, and which Svelthon reaches through its one entry, `bryntime`. The
+engine is **Bryve**, Brython with its fixes, started where it is imported, on
+which Bryntime runs and from which Bryc, the compiler, loads the parsing chain,
+`bryve/compiler`. Until they are published, both are installed from checkouts
+beside this one, `../bryntime` and `../bryve`. Which engine ships, built from
+what and with which repairs, is Bryve's to say.
 
 **And it is the only Python that ships.** No stdlib module travels with
 Svelthon, `sys` included: a stdlib exists so that an author can `import`

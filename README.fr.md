@@ -1614,7 +1614,7 @@ parsing, que seul le compilateur charge ; le README de Bryntime en donne le poid
 
 ## État
 
-Validé par `npm test`, 1 856 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 1 857 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
@@ -1787,13 +1787,14 @@ nomme le seul paquet qui mérite d'être pré-bundlé.
 ### Brython, par Bryntime
 
 Svelthon ne porte aucune copie de Brython. Il dépend de **Bryntime**, le
-runtime Brython pour les frameworks JavaScript, qui démarre le moteur et tient
-la traversée entre Python et JavaScript, que Svelthon atteint par sa seule
-entrée, `bryntime`. Le moteur est **Bryve**, Brython et ses réparations, dont
-Svelthon charge le compilateur par `bryve/compiler`. Tant qu'ils ne sont pas
-publiés, les deux s'installent depuis des dépôts posés à côté de celui-ci,
-`../bryntime` et `../bryve`. Quel moteur est livré, construit depuis quoi et
-avec quelles réparations, c'est à Bryve de le dire.
+runtime Brython pour les frameworks JavaScript, qui tient la traversée entre
+Python et JavaScript, que Svelthon atteint par sa seule entrée, `bryntime`. Le
+moteur est **Bryve**, Brython et ses réparations, démarré là où il est
+importé, sur lequel Bryntime tourne et dont Bryc, le compilateur, charge la
+chaîne d'analyse, `bryve/compiler`. Tant qu'ils ne sont pas publiés, les deux
+s'installent depuis des dépôts posés à côté de celui-ci, `../bryntime` et
+`../bryve`. Quel moteur est livré, construit depuis quoi et avec quelles
+réparations, c'est à Bryve de le dire.
 
 **Et c'est le seul Python livré.** Aucun module de la stdlib ne voyage avec
 Svelthon, `sys` compris : une stdlib existe pour qu'un auteur puisse `import`

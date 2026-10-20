@@ -41,6 +41,11 @@ const code = (file) =>
         .split('\n')
         .map((line, index) => [`${file}:${index + 1}`, line.replace(/(^|\s)\/\/.*$/, '')]);
 
+// A statement that imports, not a string that reads like one: `import … from`,
+// `export … from` and the `} from` that ends one written over several lines, a
+// bare `import`, a `require(` and an `import(`.
+const IMPORTED = /(?:^\s*(?:import|export)\b[^'"]*?\bfrom\s+|^\s*\}\s*from\s+|^\s*import\s+|\brequire\(\s*|\bimport\(\s*)['"]([^'"]+)['"]/g;
+
 test('nothing outside Bryc reaches a file of it but its door', () => {
     const files = [
         ...within('src/lib', (file) => /\.[cm]?js$/.test(file) && !file.startsWith('bryc/')),
@@ -69,16 +74,25 @@ test('Bryc reaches no file outside its folder', () => {
     expect(reached).toEqual([]);
 });
 
+// And of the packages, Bryve alone, the engine started and then its parsing
+// chain: Bryc runs on Brython, never on a host's runtime, Bryntime included.
+test('Bryc imports no package but Bryve, Bryntime none', () => {
+    const packages = within(BRYC, (file) => /\.[cm]?js$/.test(file)).flatMap((file) =>
+        code(file).flatMap(([where, line]) =>
+            [...line.matchAll(IMPORTED)].filter(([, to]) => !to.startsWith('.')).map(([, to]) => `${where}: ${to}`)
+        )
+    );
+
+    expect(packages.filter((one) => /: bryntime\b/.test(one))).toEqual([]);
+    expect(packages.map((one) => one.replace(/^.*: /, ''))).toEqual(['bryve', 'bryve/compiler']);
+});
+
 // Bryc's own tests, `tests/bryc/`, reach it by its door and by nothing else:
 // no fixture, no file of the host's, no other package, a host of their own
 // written in the test. `vitest` is what runs them. They leave with Bryc, so
 // they hold nothing that stays.
 test("Bryc's own tests import its door and nothing else", () => {
     const files = within('tests/bryc', () => true);
-    // A statement that imports, not a string that reads like one: `import …
-    // from`, `export … from` and the `} from` that ends one written over
-    // several lines, a bare `import`, a `require(` and an `import(`.
-    const IMPORTED = /(?:^\s*(?:import|export)\b[^'"]*?\bfrom\s+|^\s*\}\s*from\s+|^\s*import\s+|\brequire\(\s*|\bimport\(\s*)['"]([^'"]+)['"]/g;
     const imported = files.flatMap((file) =>
         code(file).flatMap(([where, line]) =>
             [...line.matchAll(IMPORTED)]

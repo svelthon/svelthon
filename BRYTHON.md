@@ -10,7 +10,7 @@ assumptions are load-bearing.
 At run time Svelthon reaches the engine through Bryntime alone, and what
 Bryntime asks of Brython is Bryntime's contract, kept with it.
 
-Verified against the engine Bryntime ships, `$B.version_info == [3, 14, 0]`.
+Verified against the engine Bryve ships, `$B.version_info == [3, 14, 0]`.
 
 ## The single point everything rests on
 
