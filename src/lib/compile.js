@@ -42,7 +42,8 @@ import {
     declaredJsImports,
     continuedLines,
     takeImportJs,
-    jsImportLine
+    jsImportLine,
+    templateDots
 } from 'bryc';
 
 const $B = globalThis.__BRYTHON__;
@@ -2318,12 +2319,16 @@ function compile(
     // made Python (`HOST.rewrite`), the translation, and the imports the
     // runtime cannot satisfy refused. The name Python imports a module by; a
     // component is imported by nobody and keeps its path.
+    //
+    // In Svelthon's markup, and only there, the dot finds a key as well as an
+    // attribute: the template's functions are written so before Bryc joins
+    // them (`templateDots`), with the bridge's `readAttr` and `writeAttr`.
     const compiled = compileCommon(HOST, src, {
         name,
         source,
         component,
         named: component ? null : pythonModuleName(source),
-        defs,
+        defs: defs.map((def) => templateDots(HOST, def)),
         defLines,
         defColumns,
         lineOffset,

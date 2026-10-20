@@ -20,19 +20,11 @@
 // name the markup stops writing leaves its `bind()` in every component the
 // project ever compiles, for ever, and nothing goes red.
 import { test, expect } from 'vitest';
-import { readFileSync, readdirSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const read = (name) =>
     readFileSync(fileURLToPath(new URL(`../src/lib/${name}`, import.meta.url)), 'utf8');
-
-// Bryc's text, every file beside the module its package exports.
-const BRYC = dirname(fileURLToPath(import.meta.resolve('bryc')));
-const bryc = readdirSync(BRYC)
-    .filter((file) => file.endsWith('.js'))
-    .map((file) => readFileSync(join(BRYC, file), 'utf8'))
-    .join('\n');
 
 // Names the markup writes for itself, which the compiler never sees.
 const MARKUP_LOCAL = new Set([
@@ -120,17 +112,18 @@ const published = (compiler) => {
 // exactly the rename this is meant to catch.
 //
 // Plus what the compiler writes into the template's functions itself: every dot
-// of the markup becomes a `__getattr` call there, in Bryc's `templateDots`, so
-// the markup pass never spells it. Read off that function's own text in Bryc's,
-// so a name it stops writing leaves this list as well.
-const templateDots = () => {
-    const at = bryc.indexOf('function templateDots(');
-
-    return bryc.slice(at, bryc.indexOf('\n}', at));
-};
+// of the markup becomes a call there, written by Bryc's `templateDots` under
+// the names the compiler's runtime gives `readAttr` and `writeAttr`, so the
+// markup pass never spells them. Read off those two entries of `compile.js`,
+// so a name it stops giving leaves this list as well.
+const dots = () => [...read('compile.js').matchAll(/^\s*(?:readAttr|writeAttr): '(__\w+)',?$/gm)].map((one) => one[1]);
 
 const written = (markup) =>
-    new Set([...`${markup}\n${templateDots()}`.matchAll(/__[a-z][\w]*/g)].map((one) => one[0]));
+    new Set([...[...markup.matchAll(/__[a-z][\w]*/g)].map((one) => one[0]), ...dots()]);
+
+test('the dots of the template are written under two names of the runtime', () => {
+    expect(dots()).toEqual(['__getattr', '__setattr']);
+});
 
 // The markup pass, with the table of attribute wrappers it reads: `__class`
 // and `__truthy` are chosen there, by an attribute's name.
