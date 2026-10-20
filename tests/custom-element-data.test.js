@@ -28,16 +28,20 @@ const received = (Component) => {
     };
 
     // A `<svelte:element>` whose name becomes a custom element's as the page
-    // runs: what it renders, and what its `open` is handed, before and after.
+    // runs, and a standard element's again: what it renders, and what its
+    // `open` is handed, each time.
     const element = () => {
         const one = target.querySelector('[data-k="switched"]');
 
         return { name: one.localName, open: Array.isArray(one.open) ? [...one.open] : one.open };
     };
-    const before = element();
+    const swap = () => {
+        target.querySelector('[data-k="switch"]').click();
+        flushSync();
 
-    target.querySelector('[data-k="switch"]').click();
-    flushSync();
+        return element();
+    };
+    const switched = [element(), swap(), swap()];
 
     return {
         custom: {
@@ -49,7 +53,7 @@ const received = (Component) => {
             dynamic: [read('dynamic', 'open'), read('dynamic', 'hidden')],
             shorthand: read('shorthand', 'hidden'),
             dynamicSpread: [read('dynamicSpread', 'open'), read('dynamicSpread', 'hidden')],
-            switched: [before, element()]
+            switched
         },
         standard: [read('standard', 'open'), read('dynamicStandard', 'open')]
     };
@@ -67,11 +71,13 @@ test("a custom element's property is handed the value, by name and spread, a `<s
         dynamic: [list, list],
         shorthand: ['e'],
         dynamicSpread: [['c'], ['d']],
-        // A `<details>` reads the list for its truth, and the custom element
-        // that takes its place is handed the list.
+        // A `<details>` reads the list for its truth, the custom element that
+        // takes its place is handed the list, and the `<details>` back reads
+        // its truth again.
         switched: [
             { name: 'details', open: true },
-            { name: 'svelthon-probe', open: list }
+            { name: 'svelthon-probe', open: list },
+            { name: 'details', open: true }
         ]
     });
     // An empty list is false to Python, where JavaScript holds an array true,

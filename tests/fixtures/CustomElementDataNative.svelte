@@ -22,4 +22,4 @@
 <svelte:element this={tag} data-k="dynamicSpread" {...attrs}></svelte:element>
 <svelte:element this={standard} data-k="dynamicStandard" open={empty}></svelte:element>
 <svelte:element this={switched} data-k="switched" open={data} />
-<button data-k="switch" onclick={() => (switched = 'svelthon-probe')}>switch</button>
+<button data-k="switch" onclick={() => (switched = switched === 'details' ? 'svelthon-probe' : 'details')}>switch</button>

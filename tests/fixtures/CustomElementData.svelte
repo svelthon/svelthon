@@ -11,7 +11,7 @@ switched = "details"
 
 def swap():
     global switched
-    switched = "svelthon-probe"
+    switched = "svelthon-probe" if switched == "details" else "details"
 </script>
 
 <svelthon-probe data-k="named" open={data}></svelthon-probe>
