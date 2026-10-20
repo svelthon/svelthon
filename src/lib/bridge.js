@@ -233,6 +233,10 @@ lent.seq = (value) => __pybridge.seq(value);
 lent.argument = (value) => routeArgument(value);
 lent.place = (file, line) => inFile(line, FILE_LINES.get(file) ?? 0);
 
+// Whether the tag a `<svelte:element>` renders makes a custom element, as
+// Svelte tells one there, by the element's name: a dash in it.
+const customTag = (tag) => typeof tag === 'string' && tag.includes('-');
+
 // The doors this module opens, each with its rule, registered under its name
 // (`doors`) and held by the entry of `__pybridge` that opens it. Held, not
 // looked up: an entry is called on every crossing, and a lookup by name there
@@ -1131,8 +1135,9 @@ export const __pybridge = {
     // Each property is read once, as a JavaScript spread reads it: a getter
     // asked again may answer otherwise, or refuse.
     //
-    // On a custom element (`custom`), a key of the boolean table is a
-    // property's, which Svelte sets to the value as it is, as `open={…}` there.
+    // On a custom element (`custom`), a key of the boolean table, `hidden`
+    // among them, is a property's, which Svelte sets to the value as it is, as
+    // `open={…}` there.
     spreadElement(value, event = (one) => pyEvent(one), grouped = false, custom = false) {
         if (value === null || value === undefined || value === NONE) return spreadOf(value);
 
@@ -1144,11 +1149,27 @@ export const __pybridge = {
             if (key[0] + key[1] === 'on') out[key] = event(read[key]);
             else if (wrapper === '__class') out[key] = __pybridge.klass(read[key]);
             else if (wrapper === '__truthy' && !custom) out[key] = __pybridge.truthy(read[key]);
-            else if (wrapper === '__hidden') out[key] = __pybridge.hidden(read[key]);
+            else if (wrapper === '__hidden' && !custom) out[key] = __pybridge.hidden(read[key]);
             else if (key === 'value') out[key] = (grouped ? COMPARED.choice : COMPARED.scalar)(__pybridge.bound(read[key]));
         }
 
         return out;
+    },
+
+    // An attribute of the boolean table on a `<svelte:element>` whose tag is
+    // known only as it renders, `tag`: on a custom element, which Svelte tells
+    // by its name (`element.nodeName.includes('-')`), a property's, set to the
+    // value as it is, and on any other element its Python truth, `hidden` with
+    // its third state (`wrapper`). `value` is the Python value.
+    element(tag, wrapper, value) {
+        if (customTag(tag)) return __pybridge.bound(value);
+
+        return wrapper === '__hidden' ? __pybridge.hidden(value) : __pybridge.truthy(value);
+    },
+
+    // And a spread there, the same question asked of each key it gives.
+    elementSpread(tag, value, event, grouped = false) {
+        return __pybridge.spreadElement(value, event, grouped, customTag(tag));
     }
 };
 

@@ -3,7 +3,7 @@
 // browser playground compiles components client-side and needs exactly this,
 // while the file next door needs `fs` and `path` and cannot be loaded there.
 import { parse } from 'svelte/compiler';
-import { attributeWrapper, truthBinding } from './attributes.js';
+import { attributeWrapper, truthBinding, BOOLEAN_ATTRIBUTES, BOOLEAN_PROPERTIES } from './attributes.js';
 import {
     atomic,
     replaceLiterals,
@@ -860,13 +860,19 @@ const onElement = (tag) =>
 
 // The wrapper an attribute of this name goes through on this tag, or null: the
 // one decision every way of writing an attribute asks for. On a custom element
-// (`custom`) a name of the boolean table is a property's, which Svelte sets to
-// the value as it is: `open={rows}` on `<my-list>` was handed the truth of the
-// list, where Svelte hands the list.
+// (`custom`) a name of the boolean table, `hidden` among them, is a property's,
+// which Svelte sets to the value as it is (`set_custom_element_data`):
+// `open={rows}` on `<my-list>` was handed the truth of the list, where Svelte
+// hands the list. `class` stays Svelte's `clsx` there too.
+const TRUTH_WRAPPERS = new Set(['__truthy', '__hidden']);
+
+// The names an attribute of the table is spelled by.
+const TRUTH_NAMES = [...BOOLEAN_ATTRIBUTES, ...BOOLEAN_PROPERTIES, 'hidden'];
+
 const wrapperFor = (name, tag, custom = false) => {
     const wrapper = onElement(tag) ? attributeWrapper(name) : null;
 
-    return custom && wrapper === '__truthy' ? null : wrapper;
+    return custom && TRUTH_WRAPPERS.has(wrapper) ? null : wrapper;
 };
 
 // Svelte 4 slot syntax, which `{#snippet}` replaced. Neither spelling is an
@@ -2716,9 +2722,9 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     };
     const taken = new Set(identifiers(markup));
     let heldCount = 0;
-    const heldTag = () => {
+    const heldTag = (prefix = 'SvelthonChild') => {
         let name;
-        do name = `SvelthonChild${heldCount++}`;
+        do name = `${prefix}${heldCount++}`;
         while (taken.has(name));
         return name;
     };
@@ -2733,12 +2739,81 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
 
     // Whether the tag is a custom element, as Svelte tells one
     // (`is_custom_element_node`): an element whose name holds a dash, or that
-    // an `is` names. Read off the tag once, when an attribute first asks.
+    // an `is` names. Read off the tag once, when an attribute first asks. A
+    // `<svelte:element>` is one when the name it renders holds a dash, which
+    // Svelte reads off the node (`element.nodeName.includes('-')`), an `is`
+    // aside: known here when `this` is text, and as it renders otherwise
+    // (`elementSource`).
     const custom = (one) =>
         one !== null &&
-        one.name !== 'svelte:element' &&
         onElement(one) &&
-        (one.custom ??= one.name.includes('-') || tagNames(markup, one.start).has('is'));
+        (one.custom ??=
+            one.name === 'svelte:element'
+                ? staticElement(one)?.includes('-') === true
+                : one.name.includes('-') || tagNames(markup, one.start).has('is'));
+
+    // The name a `<svelte:element>` renders when its `this` is text and
+    // nothing else, `this="my-list"`, or undefined.
+    const staticElement = (one) => {
+        const value = tagValue(markup, one.start, 'this');
+
+        if (value === null || value.braced) return undefined;
+
+        const text = markup.slice(value.start, value.end);
+
+        return text.includes('{') ? undefined : text;
+    };
+
+    // The read of a `<svelte:element>`'s `this` when it is not text alone,
+    // braced, a lone interpolation between quotes, or text around one, which
+    // Svelte concatenates. Read once, in a block of one iteration, as the
+    // child of a `<svelte:component>` is (`heldSource`), and named by that
+    // iteration's item, which each attribute of the boolean table asks as it
+    // renders whether it names a custom element. The attribute is skipped
+    // whole where the walk meets it (`thisFrom`, `thisTo`).
+    const elementSource = (one) => {
+        if (one.name !== 'svelte:element' || staticElement(one) !== undefined || !asksCustom(one)) return null;
+
+        const value = tagValue(markup, one.start, 'this');
+        if (value === null) return null;
+
+        let start = value.start;
+        let end = value.end;
+        let read;
+
+        if (value.braced) {
+            region = { start, end };
+            read = call(markup.slice(start, end), '__bound');
+        } else {
+            const open = markup.indexOf('{', start);
+            const lone = loneInterpolation(markup, start - 1, closingBrace);
+
+            if (lone !== -1) {
+                start = open + 1;
+                end = lone - 1;
+                region = { start, end };
+                read = call(markup.slice(start, end), '__bound');
+            } else {
+                region = { start, end };
+                read = quotedValue(markup.slice(start, end), value.quote);
+            }
+        }
+
+        region = null;
+        one.thisFrom = value.start - 1;
+        one.thisTo = value.end;
+        return read;
+    };
+    // The open `<svelte:element>`s whose `this` is read so, by scope.
+    const elementOwners = new Map();
+
+    // Whether a tag holds what asks whether it is a custom element: an
+    // attribute of the boolean table, by name or as a shorthand, or a spread,
+    // which may give one. Any other reads its name as Svelte does.
+    const asksCustom = (one) =>
+        tagSpreads(markup, one.start) ||
+        [...tagNames(markup, one.start)].some((name) => TRUTH_WRAPPERS.has(attributeWrapper(name))) ||
+        TRUTH_NAMES.some((name) => tagValue(markup, one.start, name) !== null);
 
     const groupAction = (expr) => {
         // The Python list itself: the group compares with Python's `==`, and
@@ -2952,6 +3027,13 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         // which the DOM reads for truth: both read Python's truth instead.
         const wrapper = wrapperFor(name, tag, custom(tag));
 
+        // On a `<svelte:element>` whose name is known as it renders, the value
+        // goes as it is to a custom element and as its truth to any other,
+        // asked of that name (`__pybridge.element`).
+        if (tag?.element !== undefined && TRUTH_WRAPPERS.has(wrapper)) {
+            return `{__pybridge.element(${tag.element}, ${JSON.stringify(wrapper)}, ${call(inner, '', undefined, 'python')})}`;
+        }
+
         if (wrapper) return `{${call(inner, wrapper)}}`;
 
         // `href={website}` with nothing to show: None goes out as undefined so
@@ -2991,9 +3073,10 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         const char = markup[index];
 
         if (inTag) {
-            // The `this` of a `<svelte:component>` that holds its child: read
-            // once already, where the child was bound.
-            if (tag?.held !== undefined && tag.thisFrom === index) {
+            // The `this` of a `<svelte:component>` that holds its child, or of
+            // a `<svelte:element>` that renders a name known as it renders:
+            // read once already, where the child or the name was bound.
+            if ((tag?.held !== undefined || tag?.element !== undefined) && tag.thisFrom === index) {
                 const named = tagText().match(ATTRIBUTE_NAME);
 
                 if (named) cut(named[0].length);
@@ -3211,12 +3294,17 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                                 ? '__spreadCustom'
                                 : '__spreadElement';
 
+                        // And on a `<svelte:element>` whose name is known as it
+                        // renders, each key asked of that name, as an attribute
+                        // written by name is (`__pybridge.elementSpread`).
                         out +=
                             heldChild() !== null
                                 ? `{...${forChild(call(trimmed.slice(2), '', undefined, 'python'), 'spread')}}`
                                 : toPythonChild()
                                   ? `{...${call(trimmed.slice(2), '__spreadPython', undefined, 'python')}}`
-                                  : `{...${call(trimmed.slice(2), spreadWrapper)}}`;
+                                  : tag?.element !== undefined
+                                    ? `{...__pybridge.elementSpread(${tag.element}, ${call(trimmed.slice(2), '', undefined, 'python')}, __event, ${spreadWrapper === '__spreadChoice'})}`
+                                    : `{...${call(trimmed.slice(2), spreadWrapper)}}`;
                     } else if (trimmed.startsWith('...')) {
                         throw refuse(
                             new SyntaxError(
@@ -3273,9 +3361,10 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                     push([]);
                     chain.own(tag.name);
                     if (tag.wrapped) heldOwners.set(chain.id(), tag.held);
+                    if (tag.element !== undefined) elementOwners.set(chain.id(), tag.element);
                 }
 
-                if (tag?.wrapped && (tag.closing || selfClosing)) ending = '{/each}';
+                if ((tag?.wrapped || tag?.element !== undefined) && (tag.closing || selfClosing)) ending = '{/each}';
                 ended = true;
             }
 
@@ -3368,6 +3457,8 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                     index += named[0].length;
                     continue;
                 }
+
+                tag.element = elementOwners.get(chain.openedBy(tag.name));
             } else if (tag) {
                 const source = heldSource(tag);
 
@@ -3376,6 +3467,17 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                     tag.held = heldTag();
                     tag.wrapped = true;
                     out += `{#each [${source.read}] as ${tag.held}}<${tag.held}`;
+                    index += named[0].length;
+                    continue;
+                }
+
+                // A `<svelte:element>` whose `this` is read as it renders
+                // (`elementSource`), once, under a name of its own.
+                const element = source === null ? elementSource(tag) : null;
+
+                if (element !== null) {
+                    tag.element = heldTag('SvelthonElement');
+                    out += `{#each [${element}] as ${tag.element}}<svelte:element this={${tag.element}}`;
                     index += named[0].length;
                     continue;
                 }
