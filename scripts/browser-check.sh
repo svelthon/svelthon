@@ -9,6 +9,11 @@ PORT=${PORT:-5199}
 URL="http://localhost:$PORT/probe.html"
 EXPECTED='preloaded=OK True | doc=OK DOMNode | create=OK INPUT | tagName=OK INPUT | realm=OK GET|peps'
 
+# And the markup pass, `svelthon/markup`, loaded as a page that compiles its own
+# components loads it: under Node alone, the suite never saw it stop loading.
+MARKUP_URL="http://localhost:$PORT/markup.html"
+MARKUP_EXPECTED='markup=OK {__expr_0()} {__expr_1()} | 2 functions'
+
 # One profile per launch: two Chromiums back to back fight over the default
 # profile's lock, and the second renders an incomplete page — at random.
 PROFILES=$(mktemp -d)
@@ -106,7 +111,7 @@ warm() {
         done
     done
 }
-warm /src/probe.js /demo/main.js
+warm /src/probe.js /src/markup-probe.js /demo/main.js
 
 REPORT=$(browse probe 8000 "$URL" |
     grep -o '<pre id="report">[^<]*' | sed 's|<pre id="report">||')
@@ -119,6 +124,18 @@ else
     echo "✗ DOM interop"
     echo "  expected: $EXPECTED"
     echo "  got     : ${REPORT:-<empty>}"
+    status=1
+fi
+
+MARKUP=$(browse markup 8000 "$MARKUP_URL" |
+    grep -o '<pre id="markup">[^<]*' | sed 's|<pre id="markup">||')
+
+if [ "$MARKUP" = "$MARKUP_EXPECTED" ]; then
+    echo "✓ markup pass in a browser — $MARKUP"
+else
+    echo "✗ markup pass in a browser"
+    echo "  expected: $MARKUP_EXPECTED"
+    echo "  got     : ${MARKUP:-<empty>}"
     status=1
 fi
 
@@ -155,7 +172,7 @@ for one in "${expected[@]}"; do
 done
 
 # Both dev pages, and what they said while the assertions above read the DOM.
-console_check dev "$URL" "http://localhost:$PORT/demo/"
+console_check dev "$URL" "$MARKUP_URL" "http://localhost:$PORT/demo/"
 
 # The same page, from a production build. Everything above runs against the dev
 # server, which serves modules one by one; a build bundles them, minifies them

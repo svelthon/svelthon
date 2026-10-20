@@ -82,7 +82,7 @@ npm run dev          # the demo, at /demo/
 
 npm test             # semantics, props, reactivity, Svelte surface
 npm run test:quiet   # the suite's own output: a green run must say nothing
-npm run test:browser # DOM interop and the demo, in a real headless Chromium
+npm run test:browser # DOM interop, the markup pass and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
 npm run test:kit     # a SvelteKit app built with adapter-node: routes, remote function
 npm run test:all     # the five above, in order, stopping at the first failure
@@ -1715,7 +1715,7 @@ time Svelthon reaches the engine through Bryntime alone, which keeps its own.
 npm install
 npm test             # fidelity grid, props, reactivity (jsdom)
 npm run test:quiet   # a green run must say nothing
-npm run test:browser # DOM interop and the demo, in a real Chromium
+npm run test:browser # DOM interop, the markup pass and the demo, in a real Chromium
 npm run test:hmr     # virtual-module invalidation
 npm run test:kit     # a SvelteKit production build, served
 npm run test:all     # the five above, stopping at the first failure

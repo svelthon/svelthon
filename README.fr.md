@@ -80,7 +80,7 @@ npm run dev          # la démo, sous /demo/
 
 npm test             # sémantique, props, réactivité, surface Svelte
 npm run test:quiet   # la sortie de la suite : un run vert ne doit rien dire
-npm run test:browser # interop DOM et démo, dans un vrai Chromium headless
+npm run test:browser # interop DOM, passe du gabarit et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
 npm run test:kit     # une appli SvelteKit construite avec adapter-node : routes, fonction distante
 npm run test:all     # les cinq ci-dessus, dans l'ordre, arrêt au premier échec
@@ -1767,7 +1767,7 @@ Svelthon n'atteint le moteur que par Bryntime, qui tient le sien.
 npm install
 npm test             # grille de fidélité, props, réactivité (jsdom)
 npm run test:quiet   # un run vert ne doit rien dire
-npm run test:browser # interop DOM et démo, dans un vrai Chromium
+npm run test:browser # interop DOM, passe du gabarit et démo, dans un vrai Chromium
 npm run test:hmr     # invalidation des modules virtuels
 npm run test:kit     # un build de production SvelteKit, servi
 npm run test:all     # les cinq ci-dessus, arrêt au premier échec
