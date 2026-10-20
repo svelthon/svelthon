@@ -1,7 +1,7 @@
 # What Svelthon asks of Brython
 
 Svelthon compiles Python to JavaScript with Brython's compiler, which it loads
-onto the engine through `bryntime/compiler`, and wires the result to Svelte's
+onto the engine through `bryve/compiler`, and wires the result to Svelte's
 signals. Almost none of what the compiler touches is a public API: it is the
 shape of Brython's internals. This file is the contract, so that a Brython change
 can be checked against it, and so that whoever reads `src/lib/` knows which

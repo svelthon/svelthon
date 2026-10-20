@@ -16,7 +16,7 @@ import { join } from 'node:path';
 // This file holds the pattern, so it is the one file not read. An import of a
 // file beside the one that imports it, Bryc's `./errors.js`, names its own.
 const BRYNTIME_FILE =
-    /bryntime\/(?!compiler\b)[\w./-]+|BRYTHON_FIX|\b(?<!\.\/)(?:globals|boot|core|mutations|views|calls|errors|modules|protocols|brython_runtime|brython_compiler)\.js\b/;
+    /bryntime\/[\w./-]+|BRYTHON_FIX|\b(?<!\.\/)(?:globals|boot|core|mutations|views|calls|errors|modules|protocols|brython_runtime|brython_compiler)\.js\b/;
 
 test('no file of Svelthon names a file of Bryntime', () => {
     const within = (dir, keep) =>

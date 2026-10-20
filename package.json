@@ -65,6 +65,7 @@
     "vitest": "^4.1.10"
   },
   "dependencies": {
-    "bryntime": "file:../bryntime"
+    "bryntime": "file:../bryntime",
+    "bryve": "file:../bryve"
   }
 }

@@ -1787,12 +1787,13 @@ nomme le seul paquet qui mérite d'être pré-bundlé.
 ### Brython, par Bryntime
 
 Svelthon ne porte aucune copie de Brython. Il dépend de **Bryntime**, le
-runtime Brython pour les frameworks JavaScript, qui livre le moteur et la
-traversée entre Python et JavaScript, que Svelthon atteint par sa seule entrée,
-`bryntime`, et le compilateur par `bryntime/compiler`. Tant qu'il n'est pas
-publié, il s'installe depuis un dépôt posé à côté de celui-ci, `../bryntime`.
-Quel moteur il livre, construit depuis quoi et avec quelles réparations, c'est
-à Bryntime de le dire.
+runtime Brython pour les frameworks JavaScript, qui démarre le moteur et tient
+la traversée entre Python et JavaScript, que Svelthon atteint par sa seule
+entrée, `bryntime`. Le moteur est **Bryve**, Brython et ses réparations, dont
+Svelthon charge le compilateur par `bryve/compiler`. Tant qu'ils ne sont pas
+publiés, les deux s'installent depuis des dépôts posés à côté de celui-ci,
+`../bryntime` et `../bryve`. Quel moteur est livré, construit depuis quoi et
+avec quelles réparations, c'est à Bryve de le dire.
 
 **Et c'est le seul Python livré.** Aucun module de la stdlib ne voyage avec
 Svelthon, `sys` compris : une stdlib existe pour qu'un auteur puisse `import`

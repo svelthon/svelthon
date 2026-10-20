@@ -1734,11 +1734,12 @@ imports, so the scan is skipped and the one package worth pre-bundling is named.
 ### Brython, through Bryntime
 
 Svelthon carries no copy of Brython. It depends on **Bryntime**, the Brython
-runtime for JavaScript frameworks, which ships the engine and the crossing
-between Python and JavaScript, and which Svelthon reaches through its one entry,
-`bryntime`, and the compiler through `bryntime/compiler`. Until it is published,
-it is installed from a checkout beside this one, `../bryntime`. Which engine it
-ships, built from what and with which repairs, is Bryntime's to say.
+runtime for JavaScript frameworks, which starts the engine and holds the
+crossing between Python and JavaScript, and which Svelthon reaches through its
+one entry, `bryntime`. The engine is **Bryve**, Brython with its fixes, whose
+compiler Svelthon loads through `bryve/compiler`. Until they are published, both
+are installed from checkouts beside this one, `../bryntime` and `../bryve`.
+Which engine ships, built from what and with which repairs, is Bryve's to say.
 
 **And it is the only Python that ships.** No stdlib module travels with
 Svelthon, `sys` included: a stdlib exists so that an author can `import`
