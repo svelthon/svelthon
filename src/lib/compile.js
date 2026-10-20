@@ -7,19 +7,13 @@
 import 'bryntime';
 import { INJECTED } from './injected.js';
 import {
+    compile as compileCommon,
     atomic,
-    sourceMap,
     refuse,
-    compilePython,
-    translation,
     pythonName,
-    jsImportsOf,
     jsNameBindings,
-    refuseBoundImports,
     NS,
-    moduleNamespace,
     runtimeAliases,
-    moduleCode,
     namespaceObject,
     NEXT_VALUE,
     bump,
@@ -40,13 +34,7 @@ import {
     moduleLoad,
     PY_NAME,
     BODIES,
-    moduleImports,
-    refuseRelativeImports,
-    refuseMissingModules,
-    refuseTypeParameters,
-    refuseLibraryCalls,
     EXPR_PREFIX,
-    componentSource,
     JS_RESERVED,
     COMPILER_PREFIX,
     refuseHostWords,
@@ -613,10 +601,10 @@ const MODULE_INSTEAD = {
 // reaches that runtime by; the words it reserves, the locked ones of its
 // injection, a component's alone free in a plain `.py`, and what of its
 // injection may still be shadowed; what stands in for a standard module; the
-// name of the plugin's option a module is also found on, `path`; and how a
-// name becomes a state, Svelte's state with a revision beside it, which a
-// change in place moves while the value keeps its identity, and which a read
-// reads with the value.
+// name of the plugin's option a module is also found on, `path`; how a name
+// becomes a state, Svelte's state with a revision beside it, which a change in
+// place moves while the value keeps its identity, and which a read reads with
+// the value; and Svelthon's own signs made Python (`takeArrows`).
 const HOST = {
     name: 'svelthon',
     bridge: 'svelthon/bridge',
@@ -636,7 +624,8 @@ const HOST = {
         value: (cell) => cell,
         read: (name, cell) => `(${rev(name)}, ${cell})`,
         write: (cell, value) => `${cell} = ${value}`
-    }
+    },
+    rewrite: (text, { source, lineOffset, component, bound }) => takeArrows(text, source, lineOffset, component, bound)
 };
 
 // How many positional arguments a caller may hand a Python function, read off
@@ -2323,43 +2312,31 @@ function compile(
     // and Brython would rightly refuse it.
     const component = !store && !plain;
 
-    // Kept for the error path: the block as the author typed it, before the
-    // generated defs join it at column zero.
-    const authored = component ? src : '';
-
     refuseGeneratedSpelling(src, source, lineOffset);
 
-    // A component's script is an embedded block with the template's functions
-    // after it (Bryc's `componentSource`); a `.py` is a file, taken as it is.
-    let exprLines = [];
-    let templateLine;
-
-    if (component) ({ src, ranges: exprLines, templateLine } = componentSource(src, defs, defLines, defColumns));
-
-    const lifted = takeImportJs(HOST, src, source, lineOffset, component);
-
-    src = takeArrows(
-        lifted.source,
+    // The common half, Bryc's: a component's script joined with its template's
+    // functions, a `.py` taken as it is, `importjs` lifted, Svelthon's signs
+    // made Python (`HOST.rewrite`), the translation, and the imports the
+    // runtime cannot satisfy refused. The name Python imports a module by; a
+    // component is imported by nobody and keeps its path.
+    const compiled = compileCommon(HOST, src, {
+        name,
         source,
-        lineOffset,
         component,
-        new Set(lifted.imports.flatMap((one) => one.entries.map((e) => e.local)))
-    );
+        named: component ? null : pythonModuleName(source),
+        defs,
+        defLines,
+        defColumns,
+        lineOffset,
+        jsNames,
+        resolves,
+        sourceContent
+    });
+    const { root, table, js, namespace, module, map, jsImports, jsImported, imported, ranges: exprLines, templateLine } = compiled;
 
-    // The name Python imports a module by. A component is imported by nobody
-    // and keeps its path.
-    const named = component ? null : pythonModuleName(source);
-
-    const translating = { name, source, named, lineOffset, authored, ranges: exprLines, src };
-    const root = compilePython(HOST, src, translating);
-
-    // Python's symbol table, which says what every name means in every scope.
-    const table = symbolTable(root._ast, source);
+    ({ src } = compiled);
 
     if (component) refuseTemplateWalrus(root._ast, table, source, exprLines);
-
-    const jsImports = jsImportsOf(HOST, root._ast, table, source, lineOffset, lifted.imports);
-    const jsImported = jsImports.flatMap((one) => one.entries.map((e) => e.local));
 
     let { props, bindables, defaulted, state, funcs, classes, deriveds, effects, inspects, reserved, bound, lines, remarked, starred } =
         surface(root._ast.body, new Set(jsImported));
@@ -2418,28 +2395,6 @@ function compile(
     // read the name and get the result, minus the memoisation nothing observes.
     const plainDeriveds = plain ? deriveds : [];
     if (plain) deriveds = [];
-
-    // The names JavaScript gives the module, its imports and the `<script
-    // module>`'s, read as the module reads its own (Bryc's `translation`).
-    const js = translation(HOST, root, [...jsImported, ...jsNames], translating);
-
-    // The identifier Brython derives is `nameFor()`'s own output, so the
-    // namespace interception is unaffected.
-    const namespace = moduleNamespace(HOST, js, source, named);
-
-    // Svelte reserves the '$' prefix for *every* scope inside a component, and
-    // Brython's codegen opens with `var $B = __BRYTHON__`. So the generated
-    // code lives in its own module, which Svelte never parses.
-    const { found: importedAt, relative } = moduleImports(root._ast);
-    const imported = [...importedAt.keys()];
-
-    refuseRelativeImports(HOST, relative, source, lineOffset);
-    if (resolves) refuseMissingModules(HOST, importedAt, resolves, source, lineOffset);
-    refuseTypeParameters(HOST, root._ast.body, source, lineOffset);
-
-    refuseBoundImports(HOST, root._ast, table, jsImported, source, lineOffset);
-    refuseLibraryCalls(HOST, root._ast, table, source, lineOffset);
-    const module = moduleCode(HOST, { js, namespace, source });
 
     // Lifecycle by convention, mapped onto a single $effect: its body runs once
     // after the DOM exists, its teardown when the component goes away. Both
@@ -2588,7 +2543,7 @@ function compile(
     return {
         script,
         module,
-        map: sourceMap(module, source, sourceContent ?? src, lineOffset),
+        map,
         imports: imported
     };
 }
