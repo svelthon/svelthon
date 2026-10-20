@@ -18,7 +18,7 @@ import {
     handedLate,
     computing as computingIn,
     costly as costlyIn
-} from './bryc/bryc.js';
+} from 'bryc';
 
 // The scanners below look for a closing character and have to know which
 // characters are not code, and `atomic` says: the brace, the bracket, the

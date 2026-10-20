@@ -43,15 +43,15 @@ export default defineConfig({
     // watched, they ran the system out of file watchers (`ENOSPC`) and the
     // server died before the first edit.
     //
-    // And it serves Bryntime and Bryve where the packages really are: installed
-    // from checkouts beside this one, each is a link Vite follows out of the
-    // project, whose files it then refused to serve, every page at a 403.
+    // And it serves Bryntime, Bryc and Bryve where the packages really are:
+    // installed from checkouts beside this one, each is a link Vite follows out
+    // of the project, whose files it then refused to serve, every page at a 403.
     server: {
         watch: { ignored: ['**/tests/scratch/**'] },
         fs: {
             allow: [
                 searchForWorkspaceRoot(process.cwd()),
-                ...['bryntime', 'bryve'].map((name) => realpathSync(dirname(fileURLToPath(import.meta.resolve(`${name}/package.json`)))))
+                ...['bryntime', 'bryc', 'bryve'].map((name) => realpathSync(dirname(fileURLToPath(import.meta.resolve(`${name}/package.json`)))))
             ]
         }
     },

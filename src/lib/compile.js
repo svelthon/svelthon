@@ -2,7 +2,7 @@
 // Node and split the result in two: a plain ES module holding the generated
 // code, and a Svelte component script that wires it to runes.
 
-// The engine first, which Bryntime loads and starts: static imports run in the
+// The engine first, which Bryntime loads started: static imports run in the
 // order written, so everything below finds it started.
 import 'bryntime';
 import { INJECTED } from './injected.js';
@@ -43,7 +43,7 @@ import {
     continuedLines,
     takeImportJs,
     jsImportLine
-} from './bryc/bryc.js';
+} from 'bryc';
 
 const $B = globalThis.__BRYTHON__;
 

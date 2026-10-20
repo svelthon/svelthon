@@ -20,13 +20,13 @@
 // name without spelling a crossing.
 import { test, expect, describe } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// The compiler's text: this file's own, and Bryc's, every file of its folder,
-// where the module body's wrapper is written under the name the host's runtime
-// gives `pyError`.
-const BRYC = fileURLToPath(new URL('../src/lib/bryc/', import.meta.url));
+// The compiler's text: this file's own, and Bryc's, every file beside the
+// module its package exports, where the module body's wrapper is written under
+// the name the host's runtime gives `pyError`.
+const BRYC = dirname(fileURLToPath(import.meta.resolve('bryc')));
 const source = [
     readFileSync(fileURLToPath(new URL('../src/lib/compile.js', import.meta.url)), 'utf8'),
     ...readdirSync(BRYC)

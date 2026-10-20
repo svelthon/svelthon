@@ -74,16 +74,14 @@ test('Svelthon reaches Bryntime through its entry alone', () => {
 // by its name or by the shape of its objects, and the host and the helpers ask
 // it through Bryntime's functions. The compiler, which builds with the engine's
 // other half and its AST, is exempted file by file, so a new file of the host
-// is held to the rule from its first line, and Bryc, which is compiler
-// throughout, by its folder. Comments may name the engine.
+// is held to the rule from its first line. Comments may name the engine.
 const COMPILER = ['compile.js', 'markup.js'];
-const BRYC = 'bryc/';
 const ENGINE_TOKENS = /\$B\b|__BRYTHON__|\b_b_\b|\btp_\w+|\bob_type\b|__traceback__|\.\$factory\b|\$store\b|\$js_func\b|\$lineno\b|\$proxy\b/;
 
 test('at run time, nothing of Svelthon touches the engine', () => {
     const files = readdirSync('src/lib', { recursive: true }).filter((file) => /\.[cm]?js$/.test(file));
     const touching = files
-        .filter((file) => !COMPILER.includes(file) && !file.startsWith(BRYC))
+        .filter((file) => !COMPILER.includes(file))
         .flatMap((file) =>
             readFileSync(`src/lib/${file}`, 'utf8')
                 .replace(/\/\*[\s\S]*?\*\//g, (comment) => comment.replace(/[^\n]/g, ''))
@@ -93,6 +91,6 @@ test('at run time, nothing of Svelthon touches the engine', () => {
                 .map(([where, code]) => `${where}: ${code.trim()}`)
         );
 
-    expect(files).toEqual(expect.arrayContaining([...COMPILER, `${BRYC}bryc.js`, 'bridge.js', 'helpers.js']));
+    expect(files).toEqual(expect.arrayContaining([...COMPILER, 'bridge.js', 'helpers.js']));
     expect(touching).toEqual([]);
 });

@@ -65,6 +65,7 @@
     "vitest": "^4.1.10"
   },
   "dependencies": {
+    "bryc": "file:../bryc",
     "bryntime": "file:../bryntime",
     "bryve": "file:../bryve"
   }

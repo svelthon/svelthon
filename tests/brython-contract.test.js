@@ -14,7 +14,8 @@
 //
 // Read the same way `tests/dispatch.test.js` reads its four lists: off the files
 // themselves, so a thirtieth member cannot arrive unnoticed. They are
-// Svelthon's own files: what Bryntime reaches for is in Bryntime's contract.
+// Svelthon's own files: what Bryntime reaches for is in Bryntime's contract,
+// and what Bryc reaches for, which left with it, in Bryc's.
 import { test, expect, describe } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -49,9 +50,10 @@ for (const file of files) {
 
 describe('BRYTHON.md names every member the code reaches for', () => {
     test('there are members to check at all', () => {
-        // The measurement above found 28. A regex that stopped matching would
-        // otherwise make this file pass by finding nothing.
-        expect(used.size).toBeGreaterThanOrEqual(28);
+        // The measurement above found 28, and 11 once Bryc had left with the
+        // rest. A regex that stopped matching would otherwise make this file
+        // pass by finding nothing.
+        expect(used.size).toBeGreaterThanOrEqual(11);
     });
 
     test.for([...used].sort().map((member) => [member]))('%s', ([member]) => {

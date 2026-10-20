@@ -21,14 +21,14 @@
 // project ever compiles, for ever, and nothing goes red.
 import { test, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const read = (name) =>
     readFileSync(fileURLToPath(new URL(`../src/lib/${name}`, import.meta.url)), 'utf8');
 
-// Bryc's text, every file of its folder.
-const BRYC = fileURLToPath(new URL('../src/lib/bryc/', import.meta.url));
+// Bryc's text, every file beside the module its package exports.
+const BRYC = dirname(fileURLToPath(import.meta.resolve('bryc')));
 const bryc = readdirSync(BRYC)
     .filter((file) => file.endsWith('.js'))
     .map((file) => readFileSync(join(BRYC, file), 'utf8'))
