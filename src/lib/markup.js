@@ -2714,13 +2714,20 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         // again.
         if (rest.length > 0) return { read: call(one.name, '__bound'), wrap: true };
 
-        if (local !== null) return { read: chain.reread(head) ?? local, wrap: true };
+        // And a child held by a name, of the markup or of the script, is read
+        // the same way: as Python reads the name, `<Ｃard />` being `Card`,
+        // and handed over as Svelte takes a child, `None` as no child at all.
+        // Read as JavaScript, the first was not defined and the second was
+        // called.
+        if (local !== null) return { read: call(one.name, '__bound'), wrap: true };
         if (where?.imported === undefined) return null;
 
         // A child named by its own file is known; an import read again is
         // the same binding, with nothing run, so it needs no block.
         if (rest.length === 0 && (where.pythonChildren.has(head) || where.javascriptChildren.has(head))) return null;
-        return { read: one.name, wrap: rest.length > 0 || !where.imported.has(head) };
+        if (where.imported.has(head)) return { read: one.name, wrap: false };
+
+        return { read: call(one.name, '__bound'), wrap: true };
     };
     // Every name of the markup as Python reads it, as a snippet's is declared:
     // `𝓢velthonElement0` is `SvelthonElement0` to Python.

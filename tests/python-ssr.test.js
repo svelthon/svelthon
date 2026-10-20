@@ -35,6 +35,10 @@ import ContextReturned from './fixtures/ContextReturned.svelte';
 import ContextReturnedNative from './fixtures/ContextReturnedNative.svelte';
 import HeldNames from './fixtures/HeldNames.svelte';
 import HeldNamesNative from './fixtures/HeldNamesNative.svelte';
+import HeldNone from './fixtures/HeldNone.svelte';
+import HeldNoneNative from './fixtures/HeldNoneNative.svelte';
+import HeldSpelled from './fixtures/HeldSpelled.svelte';
+import HeldSpelledNative from './fixtures/HeldSpelledNative.svelte';
 import * as html from './fixtures/python-ssr-html.js';
 
 // `set_context` hands back what it was given on the server too, as Svelte's
@@ -46,16 +50,25 @@ test('the server renders what set_context returns, as setContext returns it', ()
     expect(body).toBe(render(ContextReturnedNative).body);
 });
 
-// And a tag the compiler holds hides no snippet whose name Python reads as its
-// own on the server either (`held-names.test.js`). Compared past the
-// hydration markers, which the block holding the tag adds.
+// A tag the compiler holds on the server too (`held-names.test.js`), compared
+// past the hydration markers, which the block holding the tag adds.
+const shown = (Component) => render(Component).body.replace(/<!--[^>]*-->/g, '');
+
+// It hides no snippet whose name Python reads as its own.
 test('the server renders a snippet named as Python reads a held tag, as Svelte does', () => {
-    const shown = (Component) => render(Component).body.replace(/<!--[^>]*-->/g, '');
     const body = shown(HeldNames);
 
     expect(body).toContain('<output data-k="element">element</output>');
     expect(body).toContain('<output data-k="child">child</output>');
     expect(body).toBe(shown(HeldNamesNative));
+});
+
+// A name that holds `None` holds no child, and a name is found as Python reads
+// it.
+test('the server renders a child held by a name as Python reads the name, None as no child', () => {
+    expect(shown(HeldNone)).toBe(shown(HeldNoneNative));
+    expect(shown(HeldSpelled)).toBe(shown(HeldSpelledNative));
+    expect(shown(HeldSpelled).match(/<output>child<\/output>/g)).toHaveLength(4);
 });
 
 test.for([
