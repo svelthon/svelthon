@@ -67,7 +67,9 @@ const ROWS = [
     ['a name the generated code once took', 'v', null, null],
     ["one of Svelthon's own words", 'effect', OURS.locked, null],
     ['a word JavaScript reserves', 'new', OURS.reserved, SVELTE],
-    ["the compiler's own prefix", '__x', OURS.prefix, OURS.prefix]
+    ["the compiler's own prefix", '__x', OURS.prefix, OURS.prefix],
+    // A FULLWIDTH LOW LINE, `＿`, which Python reads as `_`: the same name.
+    ["the compiler's own prefix as Python reads it", '_＿x', OURS.prefix, OURS.prefix]
 ];
 
 // Where the script declares a name.

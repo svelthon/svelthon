@@ -33,6 +33,8 @@ import QueryItems from './fixtures/QueryItems.svelte';
 import NormalizedNames from './fixtures/NormalizedNames.svelte';
 import ContextReturned from './fixtures/ContextReturned.svelte';
 import ContextReturnedNative from './fixtures/ContextReturnedNative.svelte';
+import HeldNames from './fixtures/HeldNames.svelte';
+import HeldNamesNative from './fixtures/HeldNamesNative.svelte';
 import * as html from './fixtures/python-ssr-html.js';
 
 // `set_context` hands back what it was given on the server too, as Svelte's
@@ -42,6 +44,18 @@ test('the server renders what set_context returns, as setContext returns it', ()
 
     expect(body).toContain('<p data-k="same">1 1 1 1</p>');
     expect(body).toBe(render(ContextReturnedNative).body);
+});
+
+// And a tag the compiler holds hides no snippet whose name Python reads as its
+// own on the server either (`held-names.test.js`). Compared past the
+// hydration markers, which the block holding the tag adds.
+test('the server renders a snippet named as Python reads a held tag, as Svelte does', () => {
+    const shown = (Component) => render(Component).body.replace(/<!--[^>]*-->/g, '');
+    const body = shown(HeldNames);
+
+    expect(body).toContain('<output data-k="element">element</output>');
+    expect(body).toContain('<output data-k="child">child</output>');
+    expect(body).toBe(shown(HeldNamesNative));
 });
 
 test.for([

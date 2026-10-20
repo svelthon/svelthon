@@ -2321,9 +2321,11 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
 
     // Every name the markup declares goes through here or through the two
     // writes below, which is why the refusal sits on the way in rather than at
-    // each of the four constructs that can declare one.
+    // each of the four constructs that can declare one. Asked of the name as
+    // Python reads it, which is the name declared: `_＿x`, with a fullwidth
+    // low line, takes the prefix too.
     const refuseCompilerName = (names) => {
-        const taken = [names].flat().find((one) => COMPILER_PREFIX.test(one));
+        const taken = [names].flat().map(pythonName).find((one) => COMPILER_PREFIX.test(one));
 
         if (taken === undefined) return names;
 
@@ -2720,7 +2722,9 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         if (rest.length === 0 && (where.pythonChildren.has(head) || where.javascriptChildren.has(head))) return null;
         return { read: one.name, wrap: rest.length > 0 || !where.imported.has(head) };
     };
-    const taken = new Set(identifiers(markup));
+    // Every name of the markup as Python reads it, as a snippet's is declared:
+    // `𝓢velthonElement0` is `SvelthonElement0` to Python.
+    const taken = new Set(identifiers(markup).map(pythonName));
     let heldCount = 0;
     const heldTag = (prefix = 'SvelthonChild') => {
         let name;
