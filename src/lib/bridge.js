@@ -2527,6 +2527,12 @@ export function group(node, [current, write, chosen, fielded, binding, scope, wh
     // lone interpolation keeps its type there, as in Svelte, where the field
     // holds its text). A value only itself is equal to was handed over boxed
     // (`choice`), and is taken back as itself.
+    //
+    // And a control with none of those holds no value: no text the node
+    // carries as its attribute, and nothing a spread wrote, which Svelte skips
+    // when it is `undefined`, a `None` among them. Svelte's group reads its
+    // `__value` then, undefined, which is None; the field's `"on"` is the
+    // browser's, no choice of the author's.
     const applied = (written) => CHOSEN.get(written) ?? pyBind(written);
 
     const value = () => {
@@ -2535,8 +2541,9 @@ export function group(node, [current, write, chosen, fielded, binding, scope, wh
         const written = fielded ? attributesOf(node) : undefined;
 
         if (written !== undefined && 'value' in written) return applied(written.value);
+        if (picked !== undefined) return pyBind(picked);
 
-        return picked === undefined ? node.value : pyBind(picked);
+        return node.hasAttribute('value') ? node.value : NONE;
     };
 
     // **A checkbox group is the checked inputs, read in the order they sit in

@@ -16,7 +16,7 @@ class Label(str):
     pass
 
 
-value = {"nan": lambda: float("nan"), "price": lambda: Price(0.5), "count": lambda: Count(1), "label": lambda: Label("yes")}[kind]()
+value = {"nan": lambda: float("nan"), "price": lambda: Price(0.5), "count": lambda: Count(1), "label": lambda: Label("yes"), "none": lambda: None}[kind]()
 attrs = {"value": value}
 picked = [value]
 

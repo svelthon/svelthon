@@ -3,7 +3,7 @@
     // witness for GroupSpreadChoice.
     let { kind = 'price' } = $props();
 
-    const initial = () => ({ nan: NaN, price: { value: 0.5 }, count: { value: 1 }, label: { value: 'yes' } })[kind];
+    const initial = () => ({ nan: NaN, price: { value: 0.5 }, count: { value: 1 }, label: { value: 'yes' }, none: undefined })[kind];
     const value = initial();
     const attrs = { value };
 
