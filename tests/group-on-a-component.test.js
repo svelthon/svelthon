@@ -1,5 +1,8 @@
 import { test, expect, describe } from 'vitest';
+import { compile as compileSvelte } from 'svelte/compiler';
 import { mount, flushSync } from './mounted.js';
+import { overMarkup, pythonExpressions, collector } from '../src/lib/markup.js';
+import '../src/lib/compile.js';
 import GroupHost from './fixtures/GroupHost.svelte';
 import GroupHostUnicode from './fixtures/GroupHostUnicode.svelte';
 
@@ -61,4 +64,33 @@ test('a component named past ASCII binds the prop too, in both spellings', () =>
     flushSync();
 
     expect([read('[data-k="chosen"]'), read('[data-k="group"]')]).toEqual(['z', 'z']);
+});
+
+// And on an element, an `<input>` alone, as Svelte has it (`bind_invalid_target`):
+// the action the binding becomes is taken by any element, so a `<select>` or a
+// `<div>` bound by `bind:group` compiled, bound to nothing. A `<svelte:element>`
+// may render an input, and keeps the binding.
+describe('bind:group on an element', () => {
+    const rewrite = (markup) => overMarkup(markup, (source, at) => pythonExpressions(source, collector([]), undefined, at));
+
+    test.for([
+        ['<select bind:group={picked}><option value="a">a</option></select>'],
+        ['<textarea bind:group={picked}></textarea>'],
+        ['<div bind:group={picked}></div>'],
+        ['<button bind:group={picked}></button>'],
+        ['<svg bind:group={picked}></svg>']
+    ])('%s is refused, as Svelte refuses it', ([markup]) => {
+        expect(() => rewrite(markup)).toThrow(/`bind:group` can only be used with `<input>`/);
+        expect(() => compileSvelte(`<script>let picked = $state([]);</script>${markup}`, { name: 'Probe' })).toThrow(
+            /`bind:group` can only be used with `<input>`/
+        );
+    });
+
+    test.for([
+        ['<input type="checkbox" value="a" bind:group={picked} />'],
+        ['<input type="radio" value="a" bind:group={picked} />'],
+        ['<svelte:element this={tag} bind:group={picked} />']
+    ])('%s keeps the binding', ([markup]) => {
+        expect(rewrite(markup)).toContain('use:__group');
+    });
 });

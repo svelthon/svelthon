@@ -2827,6 +2827,14 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         TRUTH_NAMES.some((name) => tagValue(markup, one.start, name) !== null);
 
     const groupAction = (expr) => {
+        // On an `<input>` alone, which Svelte refuses anywhere else,
+        // `bind_invalid_target`, where the action this becomes would be taken
+        // by any element: a `<select>` or a `<div>` would compile, bound to
+        // nothing. A `<svelte:element>` may render an input.
+        if (tag !== null && tag.name !== 'input' && tag.name !== 'svelte:element') {
+            throw refuse(new SyntaxError(`svelthon — \`bind:group\` can only be used with \`<input>\`${said()}`));
+        }
+
         // The Python list itself: the group compares with Python's `==`, and
         // its inputs know each other by the list they share.
         const read = call(expr, '', undefined, 'python');
