@@ -31,7 +31,18 @@ import ImplicitCloseHr from './fixtures/warned/ImplicitCloseHr.svelte';
 import ImplicitCloseHrNative from './fixtures/warned/ImplicitCloseHrNative.svelte';
 import QueryItems from './fixtures/QueryItems.svelte';
 import NormalizedNames from './fixtures/NormalizedNames.svelte';
+import ContextReturned from './fixtures/ContextReturned.svelte';
+import ContextReturnedNative from './fixtures/ContextReturnedNative.svelte';
 import * as html from './fixtures/python-ssr-html.js';
+
+// `set_context` hands back what it was given on the server too, as Svelte's
+// `setContext` does there: a value used as soon as it is set renders.
+test('the server renders what set_context returns, as setContext returns it', () => {
+    const body = render(ContextReturned).body;
+
+    expect(body).toContain('<p data-k="same">1 1 1 1</p>');
+    expect(body).toBe(render(ContextReturnedNative).body);
+});
 
 test.for([
     ['Python truth on attributes and class', PythonTruthAttributes, {}, 'PythonTruthAttributes'],

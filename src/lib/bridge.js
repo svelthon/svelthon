@@ -1062,6 +1062,10 @@ export const __pybridge = {
     // sets the key again to another value is read as it set it, and to an
     // equal one leaves the original standing, a number not saying who wrote
     // it.
+    //
+    // And it hands back what it was given, as Svelte's `setContext` returns its
+    // context: the Python value itself, `model = set_context("model", data)`
+    // naming `data`, where it named None.
     provide(set, get, own, key, value) {
         const out = __pybridge.toContext(value);
 
@@ -1076,6 +1080,8 @@ export const __pybridge = {
         }
 
         originals.byKey.set(key, { js: out, py: value });
+
+        return value;
     },
 
     provided(get, key) {

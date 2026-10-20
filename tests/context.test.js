@@ -12,6 +12,26 @@ import PropScalarsModule from './fixtures/PropScalarsModule.svelte';
 import PropScalarsPaths from './fixtures/PropScalarsPaths.svelte';
 import ContextLate from './fixtures/ContextLate.svelte';
 import ContextLateNative from './fixtures/ContextLateNative.svelte';
+import ContextReturned from './fixtures/ContextReturned.svelte';
+import ContextReturnedNative from './fixtures/ContextReturnedNative.svelte';
+
+// **`set_context` hands back what it was given**, as Svelte's `setContext`
+// returns its context: the value itself, a list, a `Price(float)`, a float, a
+// function, and one used as soon as it is set, `model = set_context("model",
+// {...})` then `model["count"]`, which raised on None.
+test('set_context returns the value it set, as setContext does', () => {
+    const read = (Component) => {
+        const target = document.body.appendChild(document.createElement('div'));
+
+        mount(Component, { target });
+        flushSync();
+
+        return [...target.querySelectorAll('[data-k]')].map((one) => one.textContent);
+    };
+
+    expect(read(ContextReturned)).toEqual(['1 1 1 1', '0']);
+    expect(read(ContextReturnedNative)).toEqual(read(ContextReturned));
+});
 
 // A scalar a Python provider sets is both readers' own: a JavaScript child reads
 // a number and a string, and a Python one the value that was set, of its own
