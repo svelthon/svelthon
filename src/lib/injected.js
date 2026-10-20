@@ -240,7 +240,11 @@ const INJECTED = [
     // Bound only where it is read, because Svelte refuses `$host()` at compile
     // time in a component that is not a custom element. Unlike `props_id` it may
     // be called from anywhere, so the value stays lazy like the rest.
-    { name: 'host', value: '() => () => $host()', component: true, whenRead: true }
+    //
+    // And in such a component, not where a `from m import *` may bring the name
+    // (`element`): the read may then be the module's own `host`, and Svelte
+    // would refuse the whole component over a call the author never wrote.
+    { name: 'host', value: '() => () => $host()', component: true, whenRead: true, element: true }
 ];
 
 export { INJECTED };

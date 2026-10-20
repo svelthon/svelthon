@@ -5,6 +5,8 @@ import ConditionalLifecycleHost from './fixtures/ConditionalLifecycleHost.svelte
 import BranchedLifecycle from './fixtures/BranchedLifecycle.svelte';
 import UnboundLifecycle from './fixtures/UnboundLifecycle.svelte';
 import AssignedLifecycle from './fixtures/AssignedLifecycle.svelte';
+import StarHooks from './fixtures/StarHooks.svelte';
+import { records, reset } from './fixtures/star_records.js';
 
 // on_mount / on_destroy by naming convention, backed by a single $effect: the
 // body runs once the DOM is in place, the cleanup when the component goes away.
@@ -117,6 +119,20 @@ describe('a hook is the value its name holds', () => {
         await unmount(app);
 
         expect(log).toEqual(['mount', 'cleanup', 'destroy']);
+    });
+
+    // Brought by `from m import *`, which binds names no statement of the
+    // component lists: the hooks were imported, and never called.
+    test('brought by `import *`: runs once, its cleanup before on_destroy', async () => {
+        reset();
+
+        const { app } = mounted(StarHooks);
+
+        expect(records).toEqual(['mount']);
+
+        await unmount(app);
+
+        expect(records).toEqual(['mount', 'cleanup', 'destroy']);
     });
 
     test('a hook bound to None is called, and says so', () => {

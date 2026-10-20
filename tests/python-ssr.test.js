@@ -41,6 +41,8 @@ import HeldSpelled from './fixtures/HeldSpelled.svelte';
 import HeldSpelledNative from './fixtures/HeldSpelledNative.svelte';
 import StarSnippet from './fixtures/StarSnippet.svelte';
 import StarSnippetNative from './fixtures/StarSnippetNative.svelte';
+import StarHooks from './fixtures/StarHooks.svelte';
+import { records, reset } from './fixtures/star_records.js';
 import * as html from './fixtures/python-ssr-html.js';
 
 // `set_context` hands back what it was given on the server too, as Svelte's
@@ -170,6 +172,15 @@ test.for(['functions', 'destroy_only', 'assigned', 'raising', 'disabled'])(
         expect(run(ServerLifecycle)).toEqual(native);
     }
 );
+
+// And brought by `from m import *`, which binds names no statement lists.
+test('on_destroy runs when the server render closes: brought by a star import', () => {
+    reset();
+
+    void render(StarHooks).body;
+
+    expect(records).toEqual(['destroy']);
+});
 
 // A component that reads a module's list, imported, assigned to a name, or
 // with a root effect beside it, is let go once its server render closes, as

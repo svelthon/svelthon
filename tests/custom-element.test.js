@@ -3,6 +3,7 @@ import { mount, flushSync } from './mounted.js';
 import { compile } from '../src/lib/compile.js';
 import './fixtures/Stepper.svelte';
 import WordHost from './fixtures/WordHost.svelte';
+import StarHost from './fixtures/StarHost.svelte';
 import './fixtures/TypedElement.svelte';
 import './fixtures/ObjectFormElement.svelte';
 import './fixtures/PartialPropsElement.svelte';
@@ -273,6 +274,28 @@ describe('a component compiled as a custom element', () => {
             expect(read('roles')).toBe("['host', 'guest']");
             expect(read('rooms')).toBe('1');
             expect(read('label')).toBe('host of the room');
+        });
+
+        // Nor in a component where a `from m import *` may bring the name: the
+        // read may be the module's own `host`, and Svelte refused the whole
+        // component over a `$host()` the author never wrote. A custom element
+        // keeps the binding, which the star replaces when it brings one.
+        test.for([
+            ['a component', {}, false],
+            ['a custom element', { element: true }, true]
+        ])('with a star import, %s decides the binding by what it is', ([, options, bound]) => {
+            const out = compile('from star_host import *\nvalue = host()\n', 'Probe', 'probe.svelte', options).script;
+
+            expect(out.includes("bind(__proto, 'host'")).toBe(bound);
+        });
+
+        test("a component renders the `host` a star brings, as an import that names it does", () => {
+            const target = document.body.appendChild(document.createElement('div'));
+
+            mount(StarHost, { target });
+            flushSync();
+
+            expect(target.querySelector('output').textContent).toBe('own-host');
         });
     });
 });

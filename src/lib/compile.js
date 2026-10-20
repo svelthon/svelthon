@@ -665,10 +665,11 @@ const HANDED = /^__expr_child_/;
 // render.
 const WRITES = /^__expr_set_/;
 
-const injectable = (one, declared, component, names) =>
+const injectable = (one, { declared, names, starred, element }, component) =>
     (component || !one.component) &&
     !declared.includes(one.name) &&
-    (!one.whenRead || names.has(one.name));
+    (!one.whenRead || names.has(one.name)) &&
+    (!one.element || element || !starred);
 
 // A locked name is Svelthon's own word (`HOST.reserved`), refused by Bryc.
 // The compiler's own prefix (Bryc's `COMPILER_PREFIX`) keeps six families of
@@ -758,17 +759,15 @@ function refuseRemarked(remarked, source, lines, lineOffset = 0) {
     );
 }
 
-const injections = (declared, component, names) =>
-    INJECTED.filter((one) => injectable(one, declared, component, names)).map(
+const injections = (c, component) =>
+    INJECTED.filter((one) => injectable(one, c, component)).map(
         (one) => `__bind(__proto, '${one.name}', ${one.value}, undefined, undefined, false);`
     );
 
 // The lines those injections need in the component's preamble, before any of
 // them is bound.
-const injectedPreamble = (declared, component, names) =>
-    INJECTED.filter((one) => one.emitted && injectable(one, declared, component, names)).map(
-        (one) => one.emitted
-    );
+const injectedPreamble = (c, component) =>
+    INJECTED.filter((one) => one.emitted && injectable(one, c, component)).map((one) => one.emitted);
 
 // Module-level names, read off the AST rather than the generated JS, since the
 // codegen mangles function names (`increment941818`) but the AST has the truth.
@@ -1830,8 +1829,8 @@ function componentNamespace(c) {
 // of it after `authorBindings`, so a name the author declared always wins.
 function injectedBindings(c) {
     return [
-        ...injectedPreamble(c.declared, true, c.names),
-        ...injections(c.declared, true, c.names),
+        ...injectedPreamble(c, true),
+        ...injections(c, true),
 
         // Wrappers for compiled template expressions. Not Python's own bool()
         // and str(): a template may hold a foreign JavaScript value, a DOM node
@@ -2192,7 +2191,7 @@ function plainBindings(c) {
             ...(at === 0 ? ['const __classes = __global.Object.create(null);'] : []),
             `__bind(__proto, '${n}', () => __pybridge.declared(__classes[${JSON.stringify(n)}]), function (${NEXT_VALUE}) { __pybridge.declare(this, '${n}', ${NEXT_VALUE}, __classes); });`
         ]),
-        ...injections(c.declared, false, c.names),
+        ...injections(c, false),
 
         // A module has no `<script module>`, so nothing joins its own imports.
         ...jsNameBindings(HOST, c),
@@ -2404,15 +2403,17 @@ function compile(
     // name was bound: a `def`, a value bound by `=`, `on_mount = lambda: …`, a
     // prop, a name imported from JavaScript by the script or by the `<script
     // module>`, where only the first two were asked and the others were never
-    // called. Read off the `def`'s own binding, or off the name's.
+    // called. Read off the `def`'s own binding, or off the name's, or, for a
+    // name only a `from m import *` may bind, off the namespace, where it is
+    // undefined when the star brought none.
     const defined = (hook) => funcs.some((f) => f.name === hook);
     const holdsHook = (hook) =>
         state.includes(hook) ||
         [...props, ...bindables].some((one) => (one.name ?? one) === hook) ||
         jsImported.includes(hook) ||
         jsNames.some((one) => pythonName(one) === hook);
-    const lifecycle = (hook) => !store && (defined(hook) || holdsHook(hook));
-    const hook = (name) => (defined(name) ? fn(name) : name);
+    const lifecycle = (hook) => !store && (defined(hook) || holdsHook(hook) || starred);
+    const hook = (name) => (defined(name) ? fn(name) : holdsHook(name) ? name : `${NS}.${name}`);
 
     // A component free to define its own `publish` or `derived` keeps it.
     // Two lists, and they answer two different questions.
