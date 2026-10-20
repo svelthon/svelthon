@@ -1,7 +1,8 @@
 <script lang="python">
 # An action written in Python answers in each shape Svelte reads `update` and
-# `destroy` off: a dict, an instance, a function carrying both, and an instance
-# that is callable itself.
+# `destroy` off: a dict, an instance, a function carrying both, an instance
+# that is callable itself, and a dict that is, its entries read and not its
+# attributes, where `update` is `dict.update`.
 shape: str = "dict"
 log = []
 value = 1
@@ -24,11 +25,20 @@ class CallableLease(Lease):
         pass
 
 
+class CallableRecord(dict):
+    def __call__(self, *args):
+        pass
+
+
 def action(node, given):
     record(f"install:{given}")
 
     if shape == "dict":
         return {"update": lambda next_value: record(f"update:{next_value}"), "destroy": lambda: record(f"destroy:{value}")}
+    if shape == "callable dict":
+        return CallableRecord(update=lambda next_value: record(f"update:{next_value}"), destroy=lambda: record(f"destroy:{value}"))
+    if shape == "empty callable dict":
+        return CallableRecord()
     if shape == "instance":
         return Lease()
     if shape == "callable instance":

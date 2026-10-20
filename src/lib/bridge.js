@@ -2194,7 +2194,9 @@ export function directiveAnimate(node, rects, [where, head, ...value]) {
 // callable instance is asked first, before it is taken for a config object.
 // And it is read like an instance all the same: an action's result that is a
 // function carrying `update` and `destroy`, or an instance with `__call__`,
-// still hands Svelte both, which it reads off whatever it is handed.
+// still hands Svelte both, which it reads off whatever it is handed. A dict
+// with `__call__` is still a dict, whose names are its entries: read as an
+// attribute, its `update` was `dict.update`, and its `destroy` none.
 function directiveResult(value, where) {
     const called = declared(value) !== null;
     const instance =
@@ -2218,7 +2220,7 @@ function directiveResult(value, where) {
                     if (key in target) return Reflect.get(target, key);
                     if (typeof key === 'symbol') return undefined;
 
-                    const found = pyGetattr(value, key, MISSING);
+                    const found = isDict(value) ? lookup(value, key) : pyGetattr(value, key, MISSING);
 
                     if (found === MISSING || found === NONE) return undefined;
 

@@ -8,7 +8,11 @@ import ActionTypes from './fixtures/ActionTypes.svelte';
 // callable included. A Python callable was adapted as a deferred transition's
 // is, into a function that held neither, so a function carrying both, or an
 // instance with `__call__`, was installed and then never updated nor destroyed.
-test.for(['dict', 'instance', 'function', 'callable instance'])(
+//
+// A dict that is callable too was read as an instance, by attribute: its
+// `update` was `dict.update`, called with the new value, and its `destroy` was
+// none. A dict's are its entries, callable or not, and an empty one has none.
+test.for(['dict', 'instance', 'function', 'callable instance', 'callable dict'])(
     'an action answering with a %s is updated and destroyed',
     (shape) => {
         const target = document.body.appendChild(document.createElement('div'));
@@ -22,6 +26,18 @@ test.for(['dict', 'instance', 'function', 'callable instance'])(
         expect(instance.model()).toBe('install:1,update:2,destroy:2');
     }
 );
+
+test('an action answering with an empty callable dict is neither updated nor destroyed', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+    const instance = mount(ActionResults, { target, props: { shape: 'empty callable dict' } });
+
+    flushSync();
+    instance.change();
+    flushSync();
+    unmount(instance);
+
+    expect(instance.model()).toBe('install:1');
+});
 
 // A Python action was asked whether its value changed by the number a float's
 // subclass stands for, so a new `Money(1.0)` in another currency never reached
