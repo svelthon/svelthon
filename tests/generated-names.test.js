@@ -20,12 +20,19 @@
 // name the markup stops writing leaves its `bind()` in every component the
 // project ever compiles, for ever, and nothing goes red.
 import { test, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import * as bryc from '../src/lib/bryc/bryc.js';
 
 const read = (name) =>
     readFileSync(fileURLToPath(new URL(`../src/lib/${name}`, import.meta.url)), 'utf8');
+
+// Bryc's text, every file of its folder.
+const BRYC = fileURLToPath(new URL('../src/lib/bryc/', import.meta.url));
+const bryc = readdirSync(BRYC)
+    .filter((file) => file.endsWith('.js'))
+    .map((file) => readFileSync(join(BRYC, file), 'utf8'))
+    .join('\n');
 
 // Names the markup writes for itself, which the compiler never sees.
 const MARKUP_LOCAL = new Set([
@@ -114,10 +121,16 @@ const published = (compiler) => {
 //
 // Plus what the compiler writes into the template's functions itself: every dot
 // of the markup becomes a `__getattr` call there, in Bryc's `templateDots`, so
-// the markup pass never spells it. Read off that function's own text, so a
-// name it stops writing leaves this list as well.
+// the markup pass never spells it. Read off that function's own text in Bryc's,
+// so a name it stops writing leaves this list as well.
+const templateDots = () => {
+    const at = bryc.indexOf('function templateDots(');
+
+    return bryc.slice(at, bryc.indexOf('\n}', at));
+};
+
 const written = (markup) =>
-    new Set([...`${markup}\n${bryc.templateDots}`.matchAll(/__[a-z][\w]*/g)].map((one) => one[0]));
+    new Set([...`${markup}\n${templateDots()}`.matchAll(/__[a-z][\w]*/g)].map((one) => one[0]));
 
 // The markup pass, with the table of attribute wrappers it reads: `__class`
 // and `__truthy` are chosen there, by an attribute's name.

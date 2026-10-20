@@ -19,16 +19,19 @@
 // helper whose whole value is that function, so the generated module holds the
 // name without spelling a crossing.
 import { test, expect, describe } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import * as bryc from '../src/lib/bryc/bryc.js';
 
-// The compiler's text: this file's own, and that of what Bryc gives it, read
-// through its door, where the module body's wrapper is written under the name
-// the host's runtime gives `pyError`.
+// The compiler's text: this file's own, and Bryc's, every file of its folder,
+// where the module body's wrapper is written under the name the host's runtime
+// gives `pyError`.
+const BRYC = fileURLToPath(new URL('../src/lib/bryc/', import.meta.url));
 const source = [
     readFileSync(fileURLToPath(new URL('../src/lib/compile.js', import.meta.url)), 'utf8'),
-    ...Object.values(bryc).filter((one) => typeof one === 'function')
+    ...readdirSync(BRYC)
+        .filter((file) => file.endsWith('.js'))
+        .map((file) => readFileSync(join(BRYC, file), 'utf8'))
 ].join('\n');
 
 // What a crossing is made of, in the runtime's own words.
