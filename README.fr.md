@@ -78,12 +78,12 @@ reste de cette configuration et ce que chaque ligne apporte.
 npm install
 npm run dev          # la démo, sous /demo/
 
-npm test             # sémantique, props, réactivité, surface Svelte
+npm test             # sémantique, props, réactivité, surface Svelte, puis le contrôle du navigateur
 npm run test:quiet   # la sortie de la suite : un run vert ne doit rien dire
-npm run test:browser # interop DOM, passe du gabarit et démo, dans un vrai Chromium headless
+npm run test:browser # le contrôle du navigateur seul : interop DOM, passe du gabarit et démo, dans un vrai Chromium headless
 npm run test:hmr     # invalidation des modules virtuels, composant et store
 npm run test:kit     # une appli SvelteKit construite avec adapter-node : routes, fonction distante
-npm run test:all     # les cinq ci-dessus, dans l'ordre, arrêt au premier échec
+npm run test:all     # tout ce qui précède, dans l'ordre, arrêt au premier échec
 npm run bench        # Python contre JavaScript, même composant, vrai navigateur
 npm run build
 ```
@@ -1765,12 +1765,12 @@ Svelthon n'atteint le moteur que par Bryntime, qui tient le sien.
 
 ```sh
 npm install
-npm test             # grille de fidélité, props, réactivité (jsdom)
+npm test             # grille de fidélité, props, réactivité (jsdom), puis le contrôle du navigateur
 npm run test:quiet   # un run vert ne doit rien dire
-npm run test:browser # interop DOM, passe du gabarit et démo, dans un vrai Chromium
+npm run test:browser # le contrôle du navigateur seul : interop DOM, passe du gabarit et démo
 npm run test:hmr     # invalidation des modules virtuels
 npm run test:kit     # un build de production SvelteKit, servi
-npm run test:all     # les cinq ci-dessus, arrêt au premier échec
+npm run test:all     # tout ce qui précède, arrêt au premier échec
 npm run dev          # la démo, sous /demo/
 npm run build
 ```

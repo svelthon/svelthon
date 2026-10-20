@@ -1,8 +1,8 @@
 // Mutation testing: change one thing the code decides, and see whether the suite
 // notices. A mutant the suite does not kill is a line nothing checks.
 //
-// Not part of `npm test`, for the same reason `bench.sh` and `browser-check.sh`
-// are not: it takes minutes, and it edits the source while it runs.
+// Not part of `npm test`, for the same reason `bench.sh` is not: it takes
+// minutes, and it edits the source while it runs.
 //
 // **The cost, measured rather than guessed.** A full run is 9,6 s wall but 257 s
 // of CPU, so one run already saturates a 32-core machine and running mutants in

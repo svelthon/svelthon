@@ -42,7 +42,7 @@
     "svelte": "^5.56.0"
   },
   "scripts": {
-    "test": "vitest run",
+    "test": "vitest run && bash scripts/browser-check.sh",
     "coverage": "vitest run --coverage",
     "dev": "vite",
     "build": "vite build",
@@ -51,7 +51,7 @@
     "test:hmr": "bash scripts/hmr-check.sh",
     "test:quiet": "node scripts/quiet-check.mjs",
     "test:kit": "bash scripts/kit-check.sh",
-    "test:all": "npm run test && npm run test:quiet && npm run test:browser && npm run test:hmr && npm run test:kit",
+    "test:all": "npm run test && npm run test:quiet && npm run test:hmr && npm run test:kit",
     "bench": "bash scripts/bench.sh"
   },
   "devDependencies": {

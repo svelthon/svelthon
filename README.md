@@ -80,12 +80,12 @@ rest of that configuration and what each line buys.
 npm install
 npm run dev          # the demo, at /demo/
 
-npm test             # semantics, props, reactivity, Svelte surface
+npm test             # semantics, props, reactivity, Svelte surface, then the browser check
 npm run test:quiet   # the suite's own output: a green run must say nothing
-npm run test:browser # DOM interop, the markup pass and the demo, in a real headless Chromium
+npm run test:browser # the browser check alone: DOM interop, the markup pass and the demo, in a real headless Chromium
 npm run test:hmr     # virtual-module invalidation, component and store paths
 npm run test:kit     # a SvelteKit app built with adapter-node: routes, remote function
-npm run test:all     # the five above, in order, stopping at the first failure
+npm run test:all     # all of the above, in order, stopping at the first failure
 npm run bench        # Python vs JavaScript, same component, real browser
 npm run build
 ```
@@ -1713,12 +1713,12 @@ time Svelthon reaches the engine through Bryntime alone, which keeps its own.
 
 ```sh
 npm install
-npm test             # fidelity grid, props, reactivity (jsdom)
+npm test             # fidelity grid, props, reactivity (jsdom), then the browser check
 npm run test:quiet   # a green run must say nothing
-npm run test:browser # DOM interop, the markup pass and the demo, in a real Chromium
+npm run test:browser # the browser check alone: DOM interop, the markup pass and the demo
 npm run test:hmr     # virtual-module invalidation
 npm run test:kit     # a SvelteKit production build, served
-npm run test:all     # the five above, stopping at the first failure
+npm run test:all     # all of the above, stopping at the first failure
 npm run dev          # the demo, at /demo/
 npm run build
 ```

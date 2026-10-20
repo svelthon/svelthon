@@ -11,9 +11,8 @@
 // the build.
 //
 // So this runs the suite and reads its two channels, which is the only place
-// the question is actually asked. It is not inside `npm test` for the reason
-// `bench.sh` and `browser-check.sh` are not: it starts a second full run, and a
-// suite that runs itself does not terminate.
+// the question is actually asked. It is not inside `npm test`: it starts a
+// second full run, and a suite that runs itself does not terminate.
 //
 // **It is the only half that sees the wiring.** The two guards above test rules
 // — one reads the test sources, the other recompiles the fixtures by calling
