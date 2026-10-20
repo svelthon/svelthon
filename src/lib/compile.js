@@ -612,9 +612,10 @@ const MODULE_INSTEAD = {
 // ran; the module the generated code imports its runtime from; the names it
 // reaches that runtime by; the words it reserves, the locked ones of its
 // injection, a component's alone free in a plain `.py`, and what of its
-// injection may still be shadowed; what stands in for a standard module; and
-// how a name becomes a state, Svelte's state with a revision beside it, which
-// a change in place moves while the value keeps its identity, and which a read
+// injection may still be shadowed; what stands in for a standard module; the
+// name of the plugin's option a module is also found on, `path`; and how a
+// name becomes a state, Svelte's state with a revision beside it, which a
+// change in place moves while the value keeps its identity, and which a read
 // reads with the value.
 const HOST = {
     name: 'svelthon',
@@ -625,6 +626,7 @@ const HOST = {
         said: 'The helpers, `date`, `slugify`, `tojson` and the rest, may still be shadowed; the decorators may not.'
     },
     instead: MODULE_INSTEAD,
+    pathOption: 'path',
     state: {
         cell: (name, cell, bumped) => [
             `let ${cell} = $state.raw(undefined);`,
