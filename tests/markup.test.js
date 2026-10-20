@@ -815,7 +815,7 @@ describe('{@render}', () => {
     test('a name the markup does not declare is decided by the snippet rendered', () => {
         const { out } = rewrite('{@render other?.(half)}');
 
-        expect(out).toMatch(pattern(String.raw`^\{@render __pybridge\.snippet\(other, \[\]\)\?\.\(READ\)\}$`));
+        expect(out).toMatch(pattern(String.raw`^\{@render __pybridge\.snippet\(__expr_py_\d+\(\), \[\]\)\?\.\(READ\)\}$`));
     });
 
     test('a name beside the markup snippets, or an attribute, is decided by the snippet rendered', () => {
@@ -823,7 +823,7 @@ describe('{@render}', () => {
 
         expect(out).toMatch(
             pattern(
-                String.raw`\{@render __pybridge\.snippet\(other, \[row\]\)\?\.\(READ\)\}\{@render __pybridge\.snippet\(__expr_py_\d+\(\), \[row\]\)\(READ\)\}$`
+                String.raw`\{@render __pybridge\.snippet\(__expr_py_\d+\(\), \[row\]\)\?\.\(READ\)\}\{@render __pybridge\.snippet\(__expr_py_\d+\(\), \[row\]\)\(READ\)\}$`
             )
         );
     });
@@ -844,7 +844,7 @@ describe('{@render}', () => {
     });
 
     test('a snippet rendered without arguments is called with none', () => {
-        expect(rewrite('{@render row()}').out).toBe('{@render __pybridge.snippet(row, [])()}');
+        expect(rewrite('{@render row()}').out).toBe('{@render __pybridge.snippet(__expr_py_0(), [])()}');
     });
 
     // A snippet this markup declares says it is Python's first of all, and only

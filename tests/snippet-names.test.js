@@ -8,6 +8,8 @@ import SnippetNames from './fixtures/SnippetNames.svelte';
 import SnippetAcrossStyle from './fixtures/SnippetAcrossStyle.svelte';
 import SnippetAfterOmittedClose from './fixtures/warned/SnippetAfterOmittedClose.svelte';
 import SnippetAfterOmittedCloseNative from './fixtures/warned/SnippetAfterOmittedCloseNative.svelte';
+import StarSnippet from './fixtures/StarSnippet.svelte';
+import StarSnippetNative from './fixtures/StarSnippetNative.svelte';
 
 // A `<style>` between a snippet's use and its declaration does not cut the
 // scope: Svelte hoists the snippet across the component. The
@@ -39,6 +41,28 @@ test('a snippet declared after an element closed for it is the one used above it
 
     expect(read(SnippetAfterOmittedClose)).toEqual(['7', 'Price']);
     expect(read(SnippetAfterOmittedCloseNative)).toEqual(['7', 'Price']);
+});
+
+// A snippet rendered by a bare name is the one Python holds under that name,
+// as `{@render (piece)()}` always was: a `from m import *` brings it with no
+// JavaScript variable of the component's, which the render read and did not
+// find, `piece is not defined`. The witness imports the same snippet by name
+// in Svelte. The server's half is in `python-ssr.test.js`.
+test('a snippet brought by * renders under its bare name, as Svelte renders it', () => {
+    const read = (component) => {
+        const target = document.body.appendChild(document.createElement('div'));
+
+        mount(component, { target });
+        flushSync();
+
+        const seen = ['named', 'optional'].map((k) => target.querySelector(`[data-k="${k}"]`).textContent.trim());
+
+        target.remove();
+        return seen;
+    };
+
+    expect(read(StarSnippet)).toEqual(['named', 'optional']);
+    expect(read(StarSnippet)).toEqual(read(StarSnippetNative));
 });
 
 // A snippet is a value, which is what makes it more than the slot it replaced:

@@ -39,6 +39,8 @@ import HeldNone from './fixtures/HeldNone.svelte';
 import HeldNoneNative from './fixtures/HeldNoneNative.svelte';
 import HeldSpelled from './fixtures/HeldSpelled.svelte';
 import HeldSpelledNative from './fixtures/HeldSpelledNative.svelte';
+import StarSnippet from './fixtures/StarSnippet.svelte';
+import StarSnippetNative from './fixtures/StarSnippetNative.svelte';
 import * as html from './fixtures/python-ssr-html.js';
 
 // `set_context` hands back what it was given on the server too, as Svelte's
@@ -69,6 +71,13 @@ test('the server renders a child held by a name as Python reads the name, None a
     expect(shown(HeldNone)).toBe(shown(HeldNoneNative));
     expect(shown(HeldSpelled)).toBe(shown(HeldSpelledNative));
     expect(shown(HeldSpelled).match(/<output>child<\/output>/g)).toHaveLength(4);
+});
+
+// A snippet brought by `*` renders under its bare name on the server too
+// (`snippet-names.test.js`).
+test('the server renders a snippet brought by * under its bare name, as Svelte does', () => {
+    expect(shown(StarSnippet)).toContain('named');
+    expect(shown(StarSnippet)).toBe(shown(StarSnippetNative));
 });
 
 test.for([

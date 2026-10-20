@@ -34,7 +34,9 @@ describe('the arguments of a {@render} are the ones Python reads', () => {
         ['info, format', 2],
         ['lambda_, for_, in_', 3]
     ])('item(%s): %i', ([written, count]) => {
-        const call = rewrite(`{@render item(${written})}`).match(/\((.*)\)\}$/)[1];
+        // The arguments, after the snippet and the markup's own: the callee is
+        // read by a function of its own, which is no argument.
+        const call = rewrite(`{@render item(${written})}`).match(/\[[^\]]*\]\)\((.*)\)\}$/)[1];
 
         expect(call.match(/__expr_py_\d+\(\)/g)).toHaveLength(count);
     });

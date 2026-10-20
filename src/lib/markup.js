@@ -3710,9 +3710,11 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 // attribute or a key, is decided at the render by the snippet
                 // itself (`__pybridge.snippet`): a parent written in Python
                 // declared its own, which say so as they run. And a callee that
-                // is not a bare name is a Python expression, read as Python
+                // is not one of them is a Python expression, read as Python
                 // reads it: `holder.fn` is an attribute, not a JavaScript
-                // property.
+                // property, and a bare name is the one Python holds, which a
+                // `from m import *` brings with no JavaScript variable of its
+                // own.
                 //
                 // Svelte holds an argument's value until what it reads changes
                 // when it calls something, and reads any other again at each
@@ -3731,7 +3733,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 const rendered =
                     named && owns.some((one) => sameName(one, callee))
                         ? head.replace(spelled, callee)
-                        : `__pybridge.snippet(${named ? chain.reread(callee) ?? callee : call(spelled, '', undefined, 'python')}, [${owns.join(', ')}])${optional ? '?.' : ''}`;
+                        : `__pybridge.snippet(${call(spelled, '', undefined, 'python')}, [${owns.join(', ')}])${optional ? '?.' : ''}`;
                 const given = (one) => {
                     if (!one.trim()) return one;
 
