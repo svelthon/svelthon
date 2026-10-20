@@ -1,6 +1,7 @@
 // The rows JsUndefinedDefault reads: a plain record, one with an `ob_type`
-// field, and one whose `value` is a getter, with `value` missing, `undefined`,
-// `null` or set, and what the default makes of each.
+// field, one whose `value` is a getter, and a function carrying `value` as its
+// own member, with `value` missing, `undefined`, `null` or set, and what the
+// default makes of each.
 export const CONTENTS = [
     ['absent', '7'],
     ['undefined', '7'],
@@ -10,14 +11,14 @@ export const CONTENTS = [
 
 export const cases = ['Python', 'Svelte'].flatMap((language) =>
     ['each', 'snippet', 'await'].flatMap((place) =>
-        ['plain', 'ob_type', 'getter'].flatMap((shape) =>
+        ['plain', 'ob_type', 'getter', 'function'].flatMap((shape) =>
             CONTENTS.map(([content, shown]) => [language, place, shape, content, shown])
         )
     )
 );
 
 export const row = (shape, content, read) => {
-    const made = shape === 'ob_type' ? { ob_type: 'business' } : {};
+    const made = shape === 'ob_type' ? { ob_type: 'business' } : shape === 'function' ? function item() {} : {};
 
     if (content === 'absent') return made;
 

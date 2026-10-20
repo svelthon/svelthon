@@ -11,7 +11,6 @@ import { attributeWrapper } from './attributes.js';
 const {
     NONE,
     pyClass,
-    pyType,
     ownType,
     quietPyType,
     pyScalar,
@@ -2295,12 +2294,19 @@ function directiveCallable(member, path) {
 // neither: the default of a key in a pattern, `{#each rows as {id=0}}`.
 export function readAttr(target, name, otherwise) {
     // A key with a default, `{value=7}`, which Svelte takes for a member that is
-    // missing or `undefined`, read off a JavaScript record, an object no Python
-    // type marks: read as JavaScript, once, a getter too, and its member handed
-    // over the way the engine hands over any JavaScript member, bound to the
-    // record (`jsMember`). Crossed, `undefined` is None, as a `null` given on
-    // purpose is, so the default is decided before.
-    if (otherwise !== undefined && target !== null && typeof target === 'object' && pyType(target) === undefined) {
+    // missing or `undefined`, read off a JavaScript record, an object or a
+    // function no Python type marks: read as JavaScript, once, a getter too, and
+    // its member handed over the way the engine hands over any JavaScript
+    // member, bound to the record (`jsMember`). Crossed, `undefined` is None, as
+    // a `null` given on purpose is, so the default is decided before. A
+    // function carrying a member was read as Python reads it, and its `null`
+    // took the default.
+    if (
+        otherwise !== undefined &&
+        target !== null &&
+        (typeof target === 'object' || typeof target === 'function') &&
+        quietPyType(target) === undefined
+    ) {
         const member = jsMember(target, name, MISSING);
 
         return member === MISSING ? invoke(otherwise) : member;
