@@ -8,7 +8,7 @@
 // `filename` whatever happens.
 //
 // Measured on 2026-09-13: the markup pass had been setting `filename`, `start`
-// and `end` since the file next door was written, and `compile.cjs` threw
+// and `end` since the file next door was written, and `compile.js` threw
 // sixteen `SyntaxError`s with none of them. One compiler, and a mistake in the
 // markup got a squiggle while a mistake in the script got a line of console
 // text.
@@ -18,11 +18,8 @@
 // a list of declared names rather than a line carry the file alone, and say so
 // by having no `start` rather than a wrong one.
 import { test, expect, describe } from 'vitest';
-import { createRequire } from 'node:module';
 import { parse } from 'svelte/compiler';
-
-const require = createRequire(import.meta.url);
-const { compile } = require('../src/lib/compile.cjs');
+import { compile } from '../src/lib/compile.js';
 
 const FILE = 'src/P.svelte';
 

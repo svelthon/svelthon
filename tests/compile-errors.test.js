@@ -3,9 +3,7 @@
 // Build-time code: jsdom has no business here, and its null
 // `document.currentScript` would break Brython's bootstrap.
 import { test, expect, describe } from 'vitest';
-import { createRequire } from 'node:module';
-
-const { compile } = createRequire(import.meta.url)('../src/lib/compile.cjs');
+import { compile } from '../src/lib/compile.js';
 
 // Brython quotes the offending line by reading the source back out of
 // `$B.file_cache`, and `compiler_error` does it without checking the entry

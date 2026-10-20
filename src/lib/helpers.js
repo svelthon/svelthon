@@ -1,6 +1,6 @@
 // The template helpers, as ordinary functions, where a coverage tool can
 // instrument them: `fromnow` alone chooses between seven units and two
-// directions. `injected.cjs` keeps the *names*, and what it emits is a
+// directions. `injected.js` keeps the *names*, and what it emits is a
 // reference, `() => __helpers.date`, rather than a body.
 //
 // Why the generated script reaches them through one object rather than by name:
@@ -92,7 +92,7 @@ const instantOf = (value) => {
 
 // A helper's refusal, in the dialect the rest of the project speaks.
 //
-// The eighteen refusals in `compile.cjs` and `markup.js` all open with
+// The eighteen refusals in `compile.js` and `markup.js` all open with
 // `svelthon — ` and all name a file. These three could do neither: they run at
 // render time, inside a compiled `__expr_N`, so the file is not theirs to know.
 //
@@ -857,7 +857,7 @@ const byName = (fn, signature) => {
 };
 
 // What the generated script binds. One object, one prefixed import, and the keys
-// are the Python spellings so `injected.cjs` names them the way an author does.
+// are the Python spellings so `injected.js` names them the way an author does.
 export const helpers = Object.fromEntries(
     Object.entries({
         tojson,

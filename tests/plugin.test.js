@@ -5,13 +5,12 @@
 // them — 16 % measured on a module that runs for every file in the project.
 // These call the hooks the way Svelte and Vite do.
 import { test, expect, describe } from 'vitest';
-import { createRequire } from 'node:module';
 import { resolve, relative } from 'node:path';
 import { readFileSync } from 'node:fs';
 import { preprocess, parse } from 'svelte/compiler';
 import { python, svelthon, withPrelude } from '../src/lib/svelthon.js';
+import { VIRTUAL_PREFIX } from '../src/lib/compile.js';
 
-const { VIRTUAL_PREFIX } = createRequire(import.meta.url)('../src/lib/compile.cjs');
 const fixtures = resolve(import.meta.dirname, 'fixtures');
 
 // A fixture through Svelte's own `preprocess`, which runs the `markup` hook and

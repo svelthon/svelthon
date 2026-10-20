@@ -7,9 +7,7 @@
 // that is not the shape it expects. Every branch below was uncovered until this
 // file existed — measured on `coverage-final.json`, not guessed.
 import { test, expect, describe } from 'vitest';
-import { createRequire } from 'node:module';
-
-const { compile } = createRequire(import.meta.url)('../src/lib/compile.cjs');
+import { compile } from '../src/lib/compile.js';
 
 const script = (src) => compile(src, 'Probe', 'src/Probe.svelte').script;
 

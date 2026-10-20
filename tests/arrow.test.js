@@ -3,9 +3,7 @@ import { mount, flushSync } from './mounted.js';
 import ArrowDerived from './fixtures/ArrowDerived.svelte';
 import ArrowEffect from './fixtures/ArrowEffect.svelte';
 import ArrowTuple from './fixtures/ArrowTuple.svelte';
-import { createRequire } from 'node:module';
-
-const { compile } = createRequire(import.meta.url)('../src/lib/compile.cjs');
+import { compile } from '../src/lib/compile.js';
 
 // The right-hand side of an arrow reads as the right-hand side of `=` reads:
 // a comma makes a tuple. Wrapped bare in the lambda, `pair => a, b` handed `b`

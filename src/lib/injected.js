@@ -1,12 +1,10 @@
-'use strict';
-
-// Data, and deliberately on its own: `compile.cjs` boots a Brython interpreter
-// the moment it is required, so anything that only wants to read this list
+// Data, and deliberately on its own: `compile.js` boots a Brython interpreter
+// the moment it is imported, so anything that only wants to read this list
 // (a test, a tool) would be starting one for nothing, and a second one in a
 // process that already has one fails outright.
 
 // Everything the compiler publishes into a module's namespace, in one place:
-// the counterpart of JS_RESERVED in compile.cjs, and readable the same way.
+// the counterpart of JS_RESERVED in Bryc, and readable the same way.
 //
 // Two rules, not one.
 //
@@ -245,4 +243,4 @@ const INJECTED = [
     { name: 'host', value: '() => () => $host()', component: true, whenRead: true }
 ];
 
-module.exports = { INJECTED };
+export { INJECTED };

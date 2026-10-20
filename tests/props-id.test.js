@@ -1,6 +1,6 @@
 import { test, expect, describe } from 'vitest';
-import { createRequire } from 'node:module';
 import { mount, flushSync } from './mounted.js';
+import { compile } from '../src/lib/compile.js';
 import PropsId from './fixtures/PropsId.svelte';
 
 // `$props.id()` under the name Svelte gives it, the way `set_context` follows
@@ -43,7 +43,6 @@ describe('props_id', () => {
     // cannot be produced lazily like the other injected names. The line is
     // emitted into the preamble instead — and only where the name is read.
     describe('the preamble carries it', () => {
-        const { compile } = createRequire(import.meta.url)('../src/lib/compile.cjs');
         const script = (src) => compile(src, 'Probe', 'probe.svelte', {}).script;
 
         test('when the component reads the name', () => {

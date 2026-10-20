@@ -158,7 +158,7 @@ for (const [index, site] of chosen.entries()) {
     // bounds a test; a loop that never ends inside the *transform* is Vite
     // compiling, before any test exists, and nothing there is bounded.
     //
-    // The shape is reachable and this file contains one: `compile.cjs`'s VLQ
+    // The shape is reachable and this file contains one: Bryc's VLQ
     // encoder shifts with `>>>=` and stops at `while (rest > 0)`, so `>` → `>=`
     // never terminates. It is the arithmetic and boundary rules that do this —
     // `+` ↔ `-`, `<` → `<=`, `>` → `>=` — which is to say the ones added to

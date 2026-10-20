@@ -3,13 +3,11 @@
 // The one unguarded coupling in the project, made guarded.
 //
 // `markup.js` writes the calls a compiled template expression makes — `__event`,
-// `__truthy`, `__assign` and the rest — and `compile.cjs` emits their
-// definitions. The two files must agree on eleven spellings and they cannot
-// share a constant: one is ESM and loads in a browser for the playground, the
-// other is CommonJS because Brython has to execute after its globals exist,
-// which ES imports cannot order. `require` does not reach across that line.
+// `__truthy`, `__assign` and the rest — and `compile.js` emits their
+// definitions. The two files must agree on eleven spellings and share no
+// constant for them.
 //
-// So the agreement is checked instead of imported, and in **both directions**,
+// So the agreement is checked, and in **both directions**,
 // which is a thing this file did not do at first.
 //
 // Forwards: every `__name` invented in the markup pass must have a definition in
@@ -67,7 +65,7 @@ const PYTHON_OWN = new Set(['__neg__', '__pos__']);
 
 test('every generated name the markup writes is defined by the compiler', () => {
     const markup = read('markup.js');
-    const compiler = read('compile.cjs');
+    const compiler = read('compile.js');
 
     const written = [...new Set([...markup.matchAll(/__[a-z][\w]*/g)].map((one) => one[0]))]
         .filter((one) => !MARKUP_LOCAL.has(one) && !PYTHON_OWN.has(one))
@@ -82,12 +80,12 @@ test('every generated name the markup writes is defined by the compiler', () => 
 
 test('and a name the compiler stopped emitting turns this red', () => {
     // The failure this guards against, spelled out: renaming one side only.
-    const compiler = read('compile.cjs').replace(/__event/g, '__handler');
+    const compiler = read('compile.js').replace(/__event/g, '__handler');
 
     expect(compiler.includes('__event')).toBe(false);
 });
 
-// What the compiler hands the template, and only that. `compile.cjs` writes many
+// What the compiler hands the template, and only that. `compile.js` writes many
 // other `__` names, and none of them is the template's business: `__proto`,
 // `__py`, `__props`, `__fn_x`, `__rev_x`, `__helpers` and the rest are the
 // component script talking to itself.
@@ -127,7 +125,7 @@ const markupSource = () => `${read('markup.js')}\n${read('attributes.js')}`;
 
 test('every name the compiler publishes to the template is one the markup writes', () => {
     const markup = written(markupSource());
-    const names = published(read('compile.cjs'));
+    const names = published(read('compile.js'));
 
     expect(names.length).toBeGreaterThan(8);
 
@@ -138,7 +136,7 @@ test('and one the markup stopped writing turns this red', () => {
     // The failure this guards against, and the reason it needed guarding: it
     // costs a dead `bind()` in every compiled component and says nothing.
     const markup = written(markupSource().replace(/__spread\b/g, '__spreadX'));
-    const names = published(read('compile.cjs'));
+    const names = published(read('compile.js'));
 
     expect(names.filter((one) => !markup.has(one))).toEqual(['__spread']);
 });

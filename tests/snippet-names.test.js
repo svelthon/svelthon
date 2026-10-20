@@ -3,7 +3,7 @@ import { mount, flushSync } from './mounted.js';
 import { pythonExpressions, collector } from '../src/lib/markup.js';
 // The parser the names an expression reads are read with, which the plugin
 // has loaded before any markup is read.
-import '../src/lib/compile.cjs';
+import '../src/lib/compile.js';
 import SnippetNames from './fixtures/SnippetNames.svelte';
 import SnippetAcrossStyle from './fixtures/SnippetAcrossStyle.svelte';
 import SnippetAfterOmittedClose from './fixtures/warned/SnippetAfterOmittedClose.svelte';

@@ -22,12 +22,10 @@
 // The table below is the point of the file: it is the language's list, not the
 // compiler's, so a form the compiler learns to miss again turns it red.
 import { test, expect, describe } from 'vitest';
-import { createRequire } from 'node:module';
 import { parse } from 'svelte/compiler';
 
 import { bind } from '../src/lib/bridge.js';
-
-const { compile } = createRequire(import.meta.url)('../src/lib/compile.cjs');
+import { compile } from '../src/lib/compile.js';
 
 const script = (src) => compile(src, 'P', 'src/P.svelte').script;
 

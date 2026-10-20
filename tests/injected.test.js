@@ -1,11 +1,8 @@
 import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
-import { createRequire } from 'node:module';
 import Shadowed from './fixtures/Shadowed.svelte';
-
-const require = createRequire(import.meta.url);
-const { INJECTED } = require('../src/lib/injected.cjs');
-const { compile } = require('../src/lib/compile.cjs');
+import { INJECTED } from '../src/lib/injected.js';
+import { compile } from '../src/lib/compile.js';
 
 // One test per name the compiler publishes, taken from the table itself
 // rather than written out here. A name added to it without a line in the fixture

@@ -1,9 +1,7 @@
 import { test, expect, describe, beforeEach } from 'vitest';
-import { createRequire } from 'node:module';
 import { mount, flushSync } from './mounted.js';
 import InspectWith from './fixtures/InspectWith.svelte';
-
-const { compile } = createRequire(import.meta.url)('../src/lib/compile.cjs');
+import { compile } from '../src/lib/compile.js';
 
 // `$inspect(x).with(fn)` chains, and Python cannot spell it: `with` is a keyword
 // and `with=` is not an argument name either. A keyword argument was the first

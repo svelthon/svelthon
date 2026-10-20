@@ -9,7 +9,7 @@
 // built around, and the arguments Python spells `None`.
 //
 // It is also what makes them *visible*. They used to be strings of JavaScript in
-// `injected.cjs`, so no coverage tool could instrument a line of them. Now they
+// `injected.js`, so no coverage tool could instrument a line of them. Now they
 // are a module, and this is the file that reads it.
 //
 // Node rather than jsdom on purpose: `striptags` has a branch that only exists

@@ -1,6 +1,6 @@
 import { test, expect, describe } from 'vitest';
-import { createRequire } from 'node:module';
 import { mount, flushSync } from './mounted.js';
+import { compile } from '../src/lib/compile.js';
 import EffectRoot from './fixtures/EffectRoot.svelte';
 import RootStore from './fixtures/RootStore.svelte';
 import RootOutlives, { held } from './fixtures/RootOutlives.svelte';
@@ -159,8 +159,6 @@ test('each attempt of a module has a root of its own', () => {
 // too. Stacking is Python's own way of saying that, and each decorator is read
 // independently, so the order carries no meaning and neither does its reverse.
 describe('a root and a pre together', () => {
-    const { compile } = createRequire(import.meta.url)('../src/lib/compile.cjs');
-
     const emitted = (decorators) =>
         compile(`c = 0\n\n${decorators}\ndef destroy():\n    js.String(c)\n`, 'Probe', 'probe.svelte', {})
             .script.split('\n')
@@ -206,8 +204,6 @@ describe('an effect in a shared module', () => {
 
     // The forms a module may not use, refused rather than quietly demoted.
     describe('what a module cannot write', () => {
-        const { compile } = createRequire(import.meta.url)('../src/lib/compile.cjs');
-
         const refusal = (src, options) => {
             try {
                 compile(src, 'Probe', 'probe.py', options);

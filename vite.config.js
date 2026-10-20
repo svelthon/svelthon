@@ -2,7 +2,6 @@ import { defineConfig, configDefaults } from 'vitest/config';
 import { searchForWorkspaceRoot } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { realpathSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { python, svelthon, compileOptionsFor } from './src/lib/svelthon.js';
@@ -52,7 +51,7 @@ export default defineConfig({
         fs: {
             allow: [
                 searchForWorkspaceRoot(process.cwd()),
-                realpathSync(dirname(createRequire(import.meta.url).resolve('bryntime/package.json')))
+                realpathSync(dirname(fileURLToPath(import.meta.resolve('bryntime/package.json'))))
             ]
         }
     },
@@ -69,9 +68,8 @@ export default defineConfig({
     test: {
         environment: 'jsdom',
 
-        // The engine, which Bryntime loads and starts before any test file: a
-        // test that requires `compile.cjs` directly reaches it as every other
-        // way into the compiler does.
+        // The engine, which Bryntime loads and starts before any test file, as
+        // every way into Svelthon reaches it first.
         setupFiles: ['tests/engine-setup.js'],
 
         // What sits in a folder of the scratch is kept, a copy of the tree among

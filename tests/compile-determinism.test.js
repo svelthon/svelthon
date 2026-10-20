@@ -6,11 +6,8 @@
 // and a cache keyed on content keeps its hits.
 import { test, expect, describe } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { createRequire } from 'node:module';
-
-const require = createRequire(import.meta.url);
-const { compile } = require('../src/lib/compile.cjs');
-const { SOURCE } = require('./fixtures/compile-output-source.cjs');
+import { compile } from '../src/lib/compile.js';
+import { SOURCE } from './fixtures/compile-output-source.js';
 
 const compiled = (source = 'src/Counter.svelte') => compile(SOURCE, 'Counter', source, {}).module;
 
@@ -58,7 +55,7 @@ const canSpawn = (() => {
 // The lambda's tag is drawn once per process, so only two processes show it.
 describe.skipIf(!canSpawn)('across processes', () => {
     test('two processes, the same code', () => {
-        const run = () => execFileSync(process.execPath, ['tests/fixtures/compile-output.cjs'], { encoding: 'utf8' });
+        const run = () => execFileSync(process.execPath, ['tests/fixtures/compile-output.js'], { encoding: 'utf8' });
         const first = run();
 
         expect(first).toMatch(/lambda_/);

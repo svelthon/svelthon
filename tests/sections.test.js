@@ -8,11 +8,8 @@
 // against itself passes whatever it says, and moving a section would move the
 // assertion with it. A position in the emitted text cannot be moved that way.
 import { test, expect, describe } from 'vitest';
-import { createRequire } from 'node:module';
-
-const require = createRequire(import.meta.url);
-const { compile } = require('../src/lib/compile.cjs');
-const { INJECTED } = require('../src/lib/injected.cjs');
+import { compile } from '../src/lib/compile.js';
+import { INJECTED } from '../src/lib/injected.js';
 
 // One of each thing a section emits: a prop, plain state, a derived, an effect,
 // a plain function and an exported one.

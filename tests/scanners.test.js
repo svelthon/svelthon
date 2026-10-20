@@ -19,13 +19,11 @@
 // it and a wrong answer.
 import { test, expect, describe } from 'vitest';
 
-import { createRequire } from 'node:module';
 import { collector, pythonExpressions, walrus } from '../src/lib/markup.js';
 
 // The engine, whose parser tells where an `{#await}` expression ends, as the
-// plugin loads it before any markup is read. Through Node's own module cache,
-// which a second evaluation of the engine in this environment would not share.
-createRequire(import.meta.url)('../src/lib/compile.cjs');
+// plugin loads it before any markup is read.
+import '../src/lib/compile.js';
 
 const rewrite = (markup) => pythonExpressions(markup, collector([]));
 

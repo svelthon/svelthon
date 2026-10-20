@@ -11,7 +11,7 @@
 import { test, expect } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import { pythonExpressions, collector } from '../src/lib/markup.js';
-import '../src/lib/compile.cjs';
+import '../src/lib/compile.js';
 import CustomElementData from './fixtures/CustomElementData.svelte';
 import CustomElementDataNative from './fixtures/CustomElementDataNative.svelte';
 

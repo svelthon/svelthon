@@ -10,11 +10,9 @@
 // A block that is an abbreviation says so with an ellipsis. Anything else has to
 // compile, because a reader copies the line that explains the feature.
 import { test, expect, describe } from 'vitest';
-import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-
-const { compile } = createRequire(import.meta.url)('../src/lib/compile.cjs');
+import { compile } from '../src/lib/compile.js';
 
 const read = (name) => readFileSync(fileURLToPath(new URL(`../${name}`, import.meta.url)), 'utf8');
 

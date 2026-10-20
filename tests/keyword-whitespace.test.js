@@ -20,13 +20,11 @@
 // refused, and `{@debug}` and `{/if}` take nothing at all.
 import { test, expect, describe } from 'vitest';
 import { compile } from 'svelte/compiler';
-import { createRequire } from 'node:module';
 import { pythonExpressions, collector } from '../src/lib/markup.js';
 
 // The engine, whose parser tells where an `{#await}` expression ends, as the
-// plugin loads it before any markup is read. Through Node's own module cache,
-// which a second evaluation of the engine in this environment would not share.
-createRequire(import.meta.url)('../src/lib/compile.cjs');
+// plugin loads it before any markup is read.
+import '../src/lib/compile.js';
 
 // `§` marks the one place the separator varies. Everything else in a row is
 // identical across the rows, which is what lets the outputs be compared.

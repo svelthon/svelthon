@@ -41,8 +41,8 @@ const at = (path) => fileURLToPath(new URL(`../${path}`, import.meta.url));
 const OURS = ['tests/', 'src/lib/', 'scripts/', 'docs/'];
 
 // A name with a directory in it and an extension we write, optionally followed
-// by the line it sits at, as in `src/lib/compile.cjs:2753`.
-const REFERENCE = /`([\w./-]+\/[\w./-]+\.(?:js|cjs|py|svelte|md|json|html))(?::\d+(?::\d+)?)?`/g;
+// by the line it sits at, as in `src/lib/compile.js:2753`.
+const REFERENCE = /`([\w./-]+\/[\w./-]+\.(?:js|py|svelte|md|json|html))(?::\d+(?::\d+)?)?`/g;
 
 const shipped = [
     ...readdirSync(at('src/lib'), { recursive: true, withFileTypes: true })

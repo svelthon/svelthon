@@ -12,10 +12,7 @@
 // in its own. The body compiled below has one of each. The vendored build
 // carries the upstream commits.
 import { test, expect, describe } from 'vitest';
-import { createRequire } from 'node:module';
-
-const require = createRequire(import.meta.url);
-const { compile } = require('../src/lib/compile.cjs');
+import { compile } from '../src/lib/compile.js';
 
 describe('a quote in the source path', () => {
     // Imports and `export` are stripped so the body can be handed to

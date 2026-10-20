@@ -3,13 +3,10 @@
 // The compiler is build-time code: jsdom has no business here, and its null
 // `document.currentScript` would break Brython's bootstrap.
 import { test, expect, describe } from 'vitest';
-import { createRequire } from 'node:module';
 
 import { overMarkup, pythonExpressions, collector } from '../src/lib/markup.js';
 import { compile as compileSvelte } from 'svelte/compiler';
-
-const require = createRequire(import.meta.url);
-const { compile } = require('../src/lib/compile.cjs');
+import { compile } from '../src/lib/compile.js';
 
 // The compiler used to be tested only through mounted components — so only
 // along its happy paths. These go through no rendering at all.
@@ -35,7 +32,7 @@ describe('compiler', () => {
     // was dropped from its exports the same way, and a value named in `__all__`
     // was told the module *never binds it*, which was false.
     //
-    // So it is refused, which is the rule `injected.cjs` states about its own
+    // So it is refused, which is the rule `injected.js` states about its own
     // list: winning in silence is the worst of the three behaviours.
     test('a Python name JavaScript reserves is refused, at its line', () => {
         expect(() => compile('class_ = 1\nnew = 2\nok = 3\n', 'R', 'R.svelte')).toThrow(

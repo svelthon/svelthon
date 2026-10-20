@@ -9,9 +9,8 @@
 // The READMEs teach the refused form in three places each, which is how it was
 // found: by compiling the documentation rather than by reading the compiler.
 import { test, expect, describe } from 'vitest';
-import { createRequire } from 'node:module';
+import { compile } from '../src/lib/compile.js';
 
-const { compile } = createRequire(import.meta.url)('../src/lib/compile.cjs');
 const script = (src) => compile(src, 'Probe', 'src/Probe.svelte').script;
 
 describe('a trailing comment', () => {

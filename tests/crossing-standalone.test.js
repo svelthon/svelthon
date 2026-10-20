@@ -76,7 +76,7 @@ test('Svelthon reaches Bryntime through its entry alone', () => {
 // other half and its AST, is exempted file by file, so a new file of the host
 // is held to the rule from its first line, and Bryc, which is compiler
 // throughout, by its folder. Comments may name the engine.
-const COMPILER = ['compile.cjs', 'markup.js'];
+const COMPILER = ['compile.js', 'markup.js'];
 const BRYC = 'bryc/';
 const ENGINE_TOKENS = /\$B\b|__BRYTHON__|\b_b_\b|\btp_\w+|\bob_type\b|__traceback__|\.\$factory\b|\$store\b|\$js_func\b|\$lineno\b|\$proxy\b/;
 

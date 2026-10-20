@@ -11,9 +11,8 @@
 // And the trailing `__` is what makes it safe: every name Python itself puts in
 // a module carries one.
 import { test, expect, describe } from 'vitest';
-import { createRequire } from 'node:module';
+import { compile } from '../src/lib/compile.js';
 
-const { compile } = createRequire(import.meta.url)('../src/lib/compile.cjs');
 const script = (src, options) => compile(src, 'Probe', 'src/Probe.svelte', options).script;
 
 describe('the compiler’s own prefix', () => {

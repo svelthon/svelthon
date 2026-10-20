@@ -3,9 +3,7 @@
 // Build-time code: jsdom has no business here, and its null
 // `document.currentScript` would break Brython's bootstrap.
 import { test, expect, describe } from 'vitest';
-import { createRequire } from 'node:module';
-
-const { compile } = createRequire(import.meta.url)('../src/lib/compile.cjs');
+import { compile } from '../src/lib/compile.js';
 
 // A rune lives at the top level of a component's module, and nowhere else.
 // `surface()` reads the AST and never descends into a `def` or a `class`, so a

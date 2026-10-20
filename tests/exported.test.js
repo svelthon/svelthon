@@ -3,8 +3,7 @@ import { mount, flushSync } from './mounted.js';
 import Exposed from './fixtures/Exposed.svelte';
 import ExposedHost from './fixtures/ExposedHost.svelte';
 import DecoratedExport from './fixtures/DecoratedExport.svelte';
-
-const { compile } = await import('../src/lib/compile.cjs').then((m) => m.default ?? m);
+import { compile } from '../src/lib/compile.js';
 
 // The one thing a parent can reach on a child that is not a prop. Svelte gathers
 // whatever an instance script exports into `$$exports` and hands that object

@@ -10,7 +10,7 @@
 import { test, expect } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import { pythonExpressions, collector } from '../src/lib/markup.js';
-import '../src/lib/compile.cjs';
+import '../src/lib/compile.js';
 import SnippetRefresh from './fixtures/SnippetRefresh.svelte';
 import SnippetRefreshNative from './fixtures/SnippetRefreshNative.svelte';
 import SnippetReadTwice from './fixtures/SnippetReadTwice.svelte';

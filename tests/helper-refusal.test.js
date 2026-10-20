@@ -6,7 +6,7 @@ import RefusalCaught from './fixtures/RefusalCaught.svelte';
 import { batch, date, fromnow } from '../src/lib/helpers.js';
 import { pyError, plainData, NONE } from '../src/lib/bridge.js';
 
-// The eighteen refusals in `compile.cjs` and `markup.js` all open with
+// The eighteen refusals in `compile.js` and `markup.js` all open with
 // `svelthon — ` and all name a file. The three in `helpers.js` could do neither,
 // and they are the three a beginner meets first: `{date(row.when)}` on a column
 // that is sometimes empty is the ordinary way to reach one.

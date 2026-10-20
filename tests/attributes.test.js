@@ -12,15 +12,15 @@
 // truth Python finds.
 import { test, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { render } from 'svelte/server';
 
 import { BOOLEAN_ATTRIBUTES, attributeWrapper } from '../src/lib/attributes.js';
 import BooleanNames from './fixtures/BooleanNames.svelte';
 import BooleanNamesNative from './fixtures/BooleanNamesNative.svelte';
 
-const svelte = dirname(createRequire(import.meta.url).resolve('svelte/package.json'));
+const svelte = dirname(fileURLToPath(import.meta.resolve('svelte/package.json')));
 const utils = readFileSync(join(svelte, 'src', 'utils.js'), 'utf8');
 const listed = utils.match(/const DOM_BOOLEAN_ATTRIBUTES = \[([^\]]*)\]/)[1];
 const names = (list) => [...list.matchAll(/'([^']+)'/g)].map(([, name]) => name);

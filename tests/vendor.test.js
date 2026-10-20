@@ -1,9 +1,9 @@
-import { createRequire } from 'node:module';
 import v8 from 'node:v8';
 import { runInNewContext } from 'node:vm';
 
 import { test, expect, vi } from 'vitest';
 import '../src/lib/bridge.js';
+import { compile } from '../src/lib/compile.js';
 import { mount, flushSync, settled } from './mounted.js';
 import CoroutineAwaited from './fixtures/CoroutineAwaited.svelte';
 import ComprehensionAwait from './fixtures/ComprehensionAwait.svelte';
@@ -66,8 +66,6 @@ test.for([
     ['future-import-errors', 'from __future__ import nothing_here\n', 'future feature nothing_here is not defined'],
     ['too-many-nested-parentheses', `x = ${'('.repeat(201)}1${')'.repeat(201)}\n`, 'too many nested parentheses']
 ])('syntax errors as CPython raises them: %s', ([, source, message]) => {
-    const { compile } = createRequire(import.meta.url)('../src/lib/compile.cjs');
-
     expect(() => compile(source, 'Probe', 'probe.py', { plain: true })).toThrow(`SyntaxError: ${message}`);
 });
 
@@ -95,7 +93,6 @@ test("a walk of globals() by Svelthon's namespace refuses a name bound meanwhile
 // had its name pasted between quotes in the code of every def, lambda, class
 // and comprehension, which then stopped parsing.
 test('a quote in a module name leaves its functions parseable: module-name-quote-literals', () => {
-    const { compile } = createRequire(import.meta.url)('../src/lib/compile.cjs');
     const body = 'def f():\n    return [x for x in (lambda: "ab")()]\n\nclass K:\n    y: int = 1\n';
     const { module } = compile(body, 'Probe', "src/Jean's app/Page.svelte");
 

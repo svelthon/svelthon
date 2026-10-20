@@ -1,6 +1,6 @@
 // Prints the code one component compiles to, for `compile-determinism.test.js`
 // to compare across processes.
-const { compile } = require('../../src/lib/compile.js');
-const { SOURCE } = require('./compile-output-source.cjs');
+import { compile } from '../../src/lib/compile.js';
+import { SOURCE } from './compile-output-source.js';
 
 process.stdout.write(compile(SOURCE, 'Counter', 'src/Counter.svelte', {}).module);

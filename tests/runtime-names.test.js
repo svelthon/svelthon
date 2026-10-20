@@ -1,10 +1,7 @@
-import { createRequire } from 'node:module';
-
 import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import RuntimeNames from './fixtures/RuntimeNames.svelte';
-
-const { compile } = createRequire(import.meta.url)('../src/lib/compile.cjs');
+import { compile } from '../src/lib/compile.js';
 
 // The third list of names, and the one the project had never written down.
 //

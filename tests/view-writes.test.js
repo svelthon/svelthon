@@ -3,7 +3,7 @@
 // What JavaScript writes through the view of a Python list, against what the
 // same write does to an array.
 import { test, expect, describe } from 'vitest';
-import '../src/lib/compile.cjs';
+import '../src/lib/compile.js';
 import { __pybridge, pyData } from '../src/lib/bridge.js';
 
 const view = (items) => {

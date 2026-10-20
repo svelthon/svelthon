@@ -6,12 +6,12 @@
 // preprocessor.
 import { test, expect } from 'vitest';
 import { readFileSync, readdirSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { preprocess, parse, compile as compileSvelte } from 'svelte/compiler';
 // `parse` wraps the script in a tag of its own, which is the only way Svelte's
 // parser reads JavaScript; runes and all, it is what the build reads.
 import { python } from '../src/lib/svelthon.js';
+import { compile } from '../src/lib/compile.js';
 
 test('a Svelte warning on the markup names the line written', async () => {
     // In a directory of its own: it warns on purpose, and the guard that no
@@ -48,7 +48,6 @@ test('a Svelte warning below an expression written over several lines names the 
 // script and the same script with every line joined parse to one tree,
 // positions aside. No line break in it means anything, so no partial fold can.
 test('joining the generated lines changes nothing Svelte parses', () => {
-    const { compile } = createRequire(import.meta.url)('../src/lib/compile.cjs');
     const tree = (code) =>
         JSON.stringify(parse(`<script>${code}</script>`, { modern: true }).instance.content, (key, value) =>
             key === 'start' || key === 'end' || key === 'loc' ? undefined : value
@@ -76,7 +75,6 @@ test('joining the generated lines changes nothing Svelte parses', () => {
 // statement or opens one. Held on every fixture, so a generator change that
 // breaks it says so here rather than as a syntax error in one component.
 test('every generated line can be joined to the next', () => {
-    const { compile } = createRequire(import.meta.url)('../src/lib/compile.cjs');
     const bad = [];
 
     for (const name of readdirSync('tests/fixtures').filter((one) => one.endsWith('.svelte'))) {

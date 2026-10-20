@@ -5,7 +5,7 @@
 //
 // `tests/refusal-position.test.js` asks this of the markup pass. Nothing asked
 // it of the compiler, and a mutation sweep said so in the bluntest way: eight
-// mutants of `compile.cjs` remove `+ lineOffset` from a position, or turn a
+// mutants of `compile.js` remove `+ lineOffset` from a position, or turn a
 // computed line into `undefined`, and the suite stays green. A refusal that
 // names the wrong line sends the author past the end of their own file, which
 // is the failure this project has repaired twice in other places.
@@ -15,9 +15,7 @@
 // Every case below is compiled with an offset, because an offset of zero is the
 // one value that cannot tell a missing `+ lineOffset` from a correct one.
 import { test, expect, describe } from 'vitest';
-import { createRequire } from 'node:module';
-
-const { compile } = createRequire(import.meta.url)('../src/lib/compile.cjs');
+import { compile } from '../src/lib/compile.js';
 
 const FILE = 'src/App.svelte';
 

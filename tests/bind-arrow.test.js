@@ -1,6 +1,6 @@
 import { test, expect, describe } from 'vitest';
-import { createRequire } from 'node:module';
 import { mount, flushSync } from './mounted.js';
+import { compile } from '../src/lib/compile.js';
 import BindArrowHost from './fixtures/BindArrowHost.svelte';
 
 // `value: str <=>` — the fourth of the dialect's bindings, and the only one that
@@ -63,8 +63,6 @@ describe('the bindable arrow', () => {
     });
 
     describe('the rewrite', () => {
-        const { compile } = createRequire(import.meta.url)('../src/lib/compile.cjs');
-
         const emitted = (src, options = {}) =>
             compile(src, 'Probe', options.plain ? 'probe.py' : 'probe.svelte', options).script;
 

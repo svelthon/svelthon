@@ -1845,7 +1845,7 @@ const targetKey = (expr) => {
     return node === null ? expr.trim() : key(node);
 };
 
-// The compiler's own prefix, written the same way `compile.cjs` writes it: a
+// The compiler's own prefix, written the same way `compile.js` writes it: a
 // name that begins with `__` and does not end with one, so Python's own dunders,
 // `__all__` and `__doc__`, stay free.
 //

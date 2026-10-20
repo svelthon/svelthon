@@ -8,7 +8,7 @@
 import { test, expect } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import { pythonExpressions, collector } from '../src/lib/markup.js';
-import '../src/lib/compile.cjs';
+import '../src/lib/compile.js';
 import ReadOrder from './fixtures/ReadOrder.svelte';
 import ReadOrderParent from './fixtures/ReadOrderParent.svelte';
 import BoundBranch from './fixtures/BoundBranch.svelte';

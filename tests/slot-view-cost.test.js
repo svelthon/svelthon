@@ -6,7 +6,7 @@
 // for it, not read off whole once per key, which made reading K slots cost K
 // times the size of the class.
 import { test, expect, vi } from 'vitest';
-import '../src/lib/compile.cjs';
+import '../src/lib/compile.js';
 import '../src/lib/bridge.js';
 
 test('reading every slot of an instance reads the class entries once', () => {

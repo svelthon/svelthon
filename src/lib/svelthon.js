@@ -1,4 +1,3 @@
-import { createRequire } from 'node:module';
 import { relative, resolve, dirname, basename } from 'node:path';
 import { readFileSync, existsSync, statSync } from 'node:fs';
 
@@ -15,16 +14,7 @@ import {
     blankBodies
 } from './markup.js';
 import { parse } from 'svelte/compiler';
-
-const require = createRequire(import.meta.url);
-
-// The engine first, which Bryntime loads and starts, and the compiler then
-// runs on (`compile.cjs`). Required, as this plugin only runs in Node: Vite
-// bundles its config and every file the config imports, and an import would
-// put the engine in that bundle, which `npm run test:quiet` would say (its
-// `eval` warned about); the bundle does not follow a `require`.
-require('bryntime');
-const {
+import {
     compile,
     VIRTUAL_PREFIX,
     virtualId,
@@ -35,7 +25,7 @@ const {
     PY_NAME,
     componentImports,
     importedNames
-} = require('./compile.cjs');
+} from './compile.js';
 
 // Generated modules, keyed by project and component name. Filled by the preprocessor when
 // Svelte transforms a component, read back when Vite resolves the import that
@@ -842,7 +832,7 @@ function pythonImports(names, fromDirectory, path) {
 }
 
 // A `.py` is served twice. Under the query, the module itself, whose body waits
-// for an import (`moduleLoad` in compile.cjs). Under its own path, what
+// for an import (`moduleLoad` in Bryc). Under its own path, what
 // JavaScript and SvelteKit import: the same module, its body run as this one is
 // evaluated, as importing a JavaScript module runs it. One module behind both,
 // so a name Python changes is the name JavaScript reads.

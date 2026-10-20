@@ -1,13 +1,11 @@
 // Three contracts the template relies on, each checked where it is kept.
 import { test, expect, describe, beforeEach } from 'vitest';
-import { createRequire } from 'node:module';
 import { mount, unmount, flushSync, settled } from './mounted.js';
 import AsyncDestroy from './fixtures/AsyncDestroy.svelte';
 import Detached from './fixtures/Detached.svelte';
 import LambdaWalrus from './fixtures/LambdaWalrus.svelte';
 import { events } from './fixtures/lifecycle_log.js';
-
-const { compile } = createRequire(import.meta.url)('../src/lib/compile.cjs');
+import { compile } from '../src/lib/compile.js';
 
 beforeEach(() => {
     events.length = 0;

@@ -1,6 +1,6 @@
 import { test, expect, describe, afterEach } from 'vitest';
-import { createRequire } from 'node:module';
 import { mount, flushSync } from './mounted.js';
+import { compile } from '../src/lib/compile.js';
 import './fixtures/Stepper.svelte';
 import WordHost from './fixtures/WordHost.svelte';
 import './fixtures/TypedElement.svelte';
@@ -213,7 +213,6 @@ describe('a component compiled as a custom element', () => {
     // Svelte refuses `$host()` at compile time outside a custom element, so the
     // binding is emitted only where the name is read.
     describe('the binding is conditional', () => {
-        const { compile } = createRequire(import.meta.url)('../src/lib/compile.cjs');
         const script = (src) => compile(src, 'Probe', 'probe.svelte', {}).script;
 
         test('present when the component reads it', () => {

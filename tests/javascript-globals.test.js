@@ -8,15 +8,13 @@
 // which it writes everywhere, is refused at its line, as a reserved word is.
 // Each value is what Python makes of the same module.
 import { test, expect } from 'vitest';
-import { createRequire } from 'node:module';
 import { mount, flushSync } from './mounted.js';
 import JavascriptGlobals from './fixtures/JavascriptGlobals.svelte';
 import GlobalsBindable from './fixtures/GlobalsBindable.svelte';
 import GlobalsBindableFunction from './fixtures/GlobalsBindableFunction.svelte';
 import GlobalsBindableNative from './fixtures/GlobalsBindableNative.svelte';
 import * as names from './fixtures/global_names.py';
-
-const { compile } = createRequire(import.meta.url)('../src/lib/compile.cjs');
+import { compile } from '../src/lib/compile.js';
 
 test('a name JavaScript gives its globals is the module’s own', () => {
     const target = document.body.appendChild(document.createElement('div'));

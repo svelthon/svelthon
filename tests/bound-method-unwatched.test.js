@@ -5,7 +5,7 @@
 // as themselves. Watching it as well would cost every method call on a watched
 // instance a marker, three times the call itself.
 import { test, expect } from 'vitest';
-import '../src/lib/compile.cjs';
+import '../src/lib/compile.js';
 import { track, marks } from '../src/lib/bridge.js';
 
 test('a method read off a watched instance is not watched itself', () => {

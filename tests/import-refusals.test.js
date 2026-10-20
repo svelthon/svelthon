@@ -8,11 +8,9 @@ import { test, expect } from 'vitest';
 import { mkdtempSync, writeFileSync, unlinkSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createRequire } from 'node:module';
 import { preprocess } from 'svelte/compiler';
 import { python, svelthon } from '../src/lib/svelthon.js';
-
-const { compile } = createRequire(import.meta.url)('../src/lib/compile.cjs');
+import { compile } from '../src/lib/compile.js';
 
 // Through the real preprocessor, which is what knows the file system. The file
 // has to exist, because the hook reads the source back to map its lines.

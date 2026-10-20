@@ -5,10 +5,8 @@
 // the value. So does a `.py`: `__all__` naming a `@derived` is refused, and
 // without `__all__` the functions alone are exported. Python reads it as before.
 import { test, expect } from 'vitest';
-import { createRequire } from 'node:module';
 import * as module from './fixtures/derived_module.py';
-
-const { compile } = createRequire(import.meta.url)('../src/lib/compile.cjs');
+import { compile } from '../src/lib/compile.js';
 
 test('a module cannot export a @derived, and is told what to export instead', () => {
     const src = '__all__ = ["total"]\ncounter = 0\n\n@derived\ndef total():\n    return counter * 2\n';

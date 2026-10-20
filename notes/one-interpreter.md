@@ -12,6 +12,11 @@ imported, the engine entered that bundle, 10 files where it held 6, loaded in
 360 to 375 ms where it took 160 to 220, and its `eval` was warned about on a
 green run. What follows describes the two loads as they were.*
 
+*2026-10-20: `compile.cjs` is `compile.js`, an ES module, and the plugin
+imports it: no file of Svelthon is CommonJS any more. Vite keeps the
+`bryntime` package out of the bundled config, which holds Svelthon's own
+fifteen files and none of Bryntime's, loaded in the time it took before.*
+
 ## Two loads of one file
 
 `compile.cjs` reaches Brython with `require`, because it is CommonJS. A component

@@ -1,7 +1,6 @@
-import { createRequire } from 'node:module';
-
 import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
+import { compile } from '../src/lib/compile.js';
 import NameV from './fixtures/NameV.svelte';
 import SvelteNamesTaken from './fixtures/SvelteNamesTaken.svelte';
 
@@ -18,8 +17,6 @@ test('names the engine takes from Svelte are left to the author', () => {
     expect(target.querySelector('p').textContent).toBe('1|1|own|value|True');
     target.remove();
 });
-
-const { compile } = createRequire(import.meta.url)('../src/lib/compile.cjs');
 
 // A third category of name, which the project had not named.
 //

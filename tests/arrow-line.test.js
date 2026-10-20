@@ -17,9 +17,7 @@
 // that exist write an arrow and a comment and never a `#` *inside* something.
 // Each row below puts one where it must not be read as a comment.
 import { test, expect, describe } from 'vitest';
-import { createRequire } from 'node:module';
-
-const { compile } = createRequire(import.meta.url)('../src/lib/compile.cjs');
+import { compile } from '../src/lib/compile.js';
 
 const build = (body) => compile(body, 'App', 'src/App.svelte');
 

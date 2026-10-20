@@ -14,14 +14,12 @@
 // rune — an ordinary expression, evaluated once, outside any tracking context.
 // Reading it inside the handler answers the warning and is the same call.
 import { test, expect, describe } from 'vitest';
-import { createRequire } from 'node:module';
 import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 import { compile as compileSvelte, compileModule, preprocess } from 'svelte/compiler';
 import { python, compileOptionsFor } from '../src/lib/svelthon.js';
-
-const { compile } = createRequire(import.meta.url)('../src/lib/compile.cjs');
+import { compile } from '../src/lib/compile.js';
 
 const FIXTURES = fileURLToPath(new URL('./fixtures/', import.meta.url));
 

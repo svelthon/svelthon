@@ -17,9 +17,7 @@
 // name it had, and published `__all__` itself as reactive state, with a revision
 // signal, a bump and a read behind it.
 import { test, expect, describe } from 'vitest';
-import { createRequire } from 'node:module';
-
-const { compile } = createRequire(import.meta.url)('../src/lib/compile.cjs');
+import { compile } from '../src/lib/compile.js';
 
 const plain = (src) => compile(src, 'M', 'src/m.py', { plain: true }).script;
 const store = (src) => compile(src, 'S', 'src/s.svelte.py', { store: true }).script;

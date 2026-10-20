@@ -4,7 +4,7 @@
 //
 // Five of the last passes found the same shape of defect, and twice the cause
 // was not a missed case but a rule that existed **twice**: once in
-// `bridge.js` and once as a template literal in `compile.cjs`. A rule added to
+// `bridge.js` and once as a template literal in `compile.js`. A rule added to
 // the first cannot reach the second — a string is not code anyone greps — so
 // the argument conversion arrived at two call boundaries out of three, and the
 // callback policy at one export route out of two. Both were silent.
@@ -27,7 +27,7 @@ import * as bryc from '../src/lib/bryc/bryc.js';
 // through its door, where the module body's wrapper is written under the name
 // the host's runtime gives `pyError`.
 const source = [
-    readFileSync(fileURLToPath(new URL('../src/lib/compile.cjs', import.meta.url)), 'utf8'),
+    readFileSync(fileURLToPath(new URL('../src/lib/compile.js', import.meta.url)), 'utf8'),
     ...Object.values(bryc).filter((one) => typeof one === 'function')
 ].join('\n');
 

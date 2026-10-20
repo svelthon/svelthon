@@ -9,13 +9,12 @@
 // `ast.parse("item(…)", mode="eval").body.args`, and a parameter list's with
 // `def item(…): pass`.
 import { test, expect, describe } from 'vitest';
-import { createRequire } from 'node:module';
 import { pythonExpressions, collector } from '../src/lib/markup.js';
 import { mount, flushSync } from './mounted.js';
 import RenderLambda from './fixtures/RenderLambda.svelte';
 
 // The engine, whose parser the pass reads expressions with.
-createRequire(import.meta.url)('../src/lib/compile.cjs');
+import '../src/lib/compile.js';
 
 const rewrite = (markup) => pythonExpressions(markup, collector([]));
 

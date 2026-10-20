@@ -21,7 +21,7 @@ import { pythonExpressions, collector } from '../src/lib/markup.js';
 import { python } from '../src/lib/svelthon.js';
 // The parser a binding's target is read with, which the plugin has loaded
 // before any markup is read.
-import '../src/lib/compile.cjs';
+import '../src/lib/compile.js';
 
 const ROW =
     '<li class="row" data-id="{item.id}" title="{item.title}" ' +

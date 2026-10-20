@@ -1,6 +1,6 @@
 // A component using every form Brython names with a generated number: a
 // function, a decorator, a lambda, a comprehension and a class.
-exports.SOURCE = `count = 0
+export const SOURCE = `count = 0
 double = lambda n: n * 2
 
 

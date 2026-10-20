@@ -11,7 +11,6 @@
 // to one, and so does Python now: a binding written in the source when the file
 // compiles, with its line, and a write at run time with a TypeError.
 import { test, expect, describe } from 'vitest';
-import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
 import { mount, flushSync } from './mounted.js';
 import * as Private from './fixtures/js_import_private.py';
@@ -21,8 +20,7 @@ import JsImportWrite from './fixtures/JsImportWrite.svelte';
 import JsImportComprehension from './fixtures/JsImportComprehension.svelte';
 import * as Reads from './fixtures/js_import_reads.py';
 import * as ReadsExported from './fixtures/js_import_reads_exported.py';
-
-const { compile } = createRequire(import.meta.url)('../src/lib/compile.cjs');
+import { compile } from '../src/lib/compile.js';
 
 const plain = (body) => compile(`__js__ = {"./source.js": ["counter"]}\n${body}`, 'M', 'src/m.py', { plain: true }).script;
 const component = (body) =>

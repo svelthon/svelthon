@@ -10,13 +10,11 @@
 // refuses it. CPython is the witness: `python3` gives each row below.
 import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
-import { createRequire } from 'node:module';
 import { pythonExpressions, collector } from '../src/lib/markup.js';
 
 // The engine, whose parser tells where an `{#await}` expression ends, as the
-// plugin loads it before any markup is read. Through Node's own module cache,
-// which a second evaluation of the engine in this environment would not share.
-createRequire(import.meta.url)('../src/lib/compile.cjs');
+// plugin loads it before any markup is read.
+import '../src/lib/compile.js';
 import StarredRows from './fixtures/StarredRows.svelte';
 import StarredShort from './fixtures/StarredShort.svelte';
 

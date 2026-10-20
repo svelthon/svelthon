@@ -30,11 +30,9 @@
 // function of the same name, in the same scope, and Svelte accepted it. The
 // script half had refused that since the beginning.
 import { test, expect, describe } from 'vitest';
-import { createRequire } from 'node:module';
 import { compile as compileSvelte } from 'svelte/compiler';
 import { overMarkup, pythonExpressions, collector } from '../src/lib/markup.js';
-
-const { compile } = createRequire(import.meta.url)('../src/lib/compile.cjs');
+import { compile } from '../src/lib/compile.js';
 
 const script = (source) => String(compile(source, 'Probe', 'Probe.svelte').script);
 const moduleOf = (source) => String(compile(source, 'Probe', 'Probe.py', { plain: true }).script);

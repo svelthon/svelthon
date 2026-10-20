@@ -6,10 +6,8 @@
 // (`growth`): twice the depth takes about as long, where a walk twice per level
 // took 2^13 times longer.
 import { test, expect } from 'vitest';
-import { createRequire } from 'node:module';
 import { growth, timed } from './growth.js';
-
-const { compile } = createRequire(import.meta.url)('../src/lib/compile.cjs');
+import { compile } from '../src/lib/compile.js';
 
 const nested = (depth, inner) =>
     Array.from({ length: depth }, (_, i) => `${'    '.repeat(i)}if True:`).join('\n') +

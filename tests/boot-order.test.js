@@ -20,20 +20,20 @@ const read = (name) =>
 describe('the engine is loaded and started by Bryntime alone', () => {
     // The compiler loads no engine of its own: neither the engine's file nor a
     // start.
-    test('compile.cjs loads no engine', () => {
-        const source = read('compile.cjs');
+    test('compile.js loads no engine', () => {
+        const source = read('compile.js');
 
-        expect(source).not.toMatch(/require\('[^']*brython_runtime\.js'\)/);
+        expect(source).not.toMatch(/['"][^'"]*brython_runtime\.js['"]/);
         expect(source).not.toContain('$B.brython(');
     });
 
-    // And the way JavaScript reaches it, `svelthon/compile`, imports Bryntime
-    // first, an ES module importing ES and then CommonJS, the order a bundler
-    // keeps.
-    test('compile.js imports Bryntime before compile.cjs', () => {
-        const imports = [...read('compile.js').matchAll(/^import\s+(?:\S+\s+from\s+)?'([^']+)';/gm)].map(([, from]) => from);
+    // And it imports Bryntime before anything else, which static imports run
+    // in the order written, the order a bundler keeps.
+    test('compile.js imports Bryntime first', () => {
+        const imports = [...read('compile.js').matchAll(/^import\b[^'"]*?['"]([^'"]+)['"];/gm)].map(([, from]) => from);
 
-        expect(imports).toEqual(['bryntime', './compile.cjs']);
+        expect(imports[0]).toBe('bryntime');
+        expect(imports.length).toBeGreaterThan(1);
     });
 
     // The import used to sit in `bridge.js`, two lines above the import of the

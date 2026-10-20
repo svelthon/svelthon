@@ -33,16 +33,13 @@
 // it ends on a letter `\w` does not know, and one of them is written in a script
 // with no ASCII letter at all.
 import { test, expect, describe } from 'vitest';
-import { createRequire } from 'node:module';
 import {
     overMarkup,
     pythonExpressions,
     collector,
     walrus
 } from '../src/lib/markup.js';
-
-const require = createRequire(import.meta.url);
-const { compile } = require('../src/lib/compile.cjs');
+import { compile } from '../src/lib/compile.js';
 
 // Distinct enough that substituting it cannot touch anything else in the output.
 const ASCII = 'eleve';
@@ -135,7 +132,7 @@ const SITES = [
     // `in:fondés.tw` reaches the module. A head whose name is not ASCII was
     // never found, and the directive reached a name that did not exist.
     ['a dotted directive finds its module', (n) => markup(`<p in:${n}.tw>a</p>`)],
-    // `compile.cjs` asked the same question in seven places with one pattern,
+    // `compile.js` asked the same question in seven places with one pattern,
     // and six of them read a *JavaScript* name, where ASCII is a defensible
     // line. The seventh read a Python one: what a `.py` exports. So
     // `__all__ = ["élèves"]` was filtered to nothing and the module exported

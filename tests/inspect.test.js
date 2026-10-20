@@ -1,6 +1,6 @@
 import { test, expect, describe, vi, afterEach } from 'vitest';
-import { createRequire } from 'node:module';
 import { mount, flushSync } from './mounted.js';
+import { compile } from '../src/lib/compile.js';
 import Inspect from './fixtures/Inspect.svelte';
 import InspectWithCounts from './fixtures/InspectWithCounts.svelte';
 import InspectLines from './fixtures/InspectLines.svelte';
@@ -110,7 +110,6 @@ describe('inspect', () => {
     });
 
     describe('the emission', () => {
-        const { compile } = createRequire(import.meta.url)('../src/lib/compile.cjs');
         const script = (src) => compile(src, 'Probe', 'probe.svelte', {}).script;
 
         // The call, not its result: Svelte wraps what it is given in a thunk of

@@ -14,11 +14,9 @@
 // debugger simply opens the right file at the wrong place, and the author
 // concludes that debugging Python does not work very well.
 import { test, expect, describe } from 'vitest';
-import { createRequire } from 'node:module';
 
 import { withPrelude } from '../src/lib/svelthon.js';
-
-const { compile } = createRequire(import.meta.url)('../src/lib/compile.cjs');
+import { compile } from '../src/lib/compile.js';
 
 const CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 
