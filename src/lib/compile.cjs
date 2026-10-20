@@ -608,19 +608,34 @@ const RUNTIME = {
     writeItem: '__setitem'
 };
 
+// What stands in for the standard modules an author reaches for first: a
+// builtin, the helpers the runtime injects, and `js`.
+const MODULE_INSTEAD = {
+    json: '`from_json(text)` reads JSON and `tojson(value)` writes it',
+    math: '`abs`, `round`, `min`, `max` and `pow` are builtins, and `js.Math` holds the rest',
+    random: '`js.Math.random()` draws a number',
+    datetime: '`date` and `fromnow` show a date, and `js.Date` reads the clock',
+    time: '`js.Date.now()` reads the clock'
+};
+
 // What Bryc is told of the framework it compiles for, by the interface its
 // door writes out: the name its refusals are said under, the tool the author
 // ran; the module the generated code imports its runtime from; the names it
 // reaches that runtime by; the words it reserves, the locked ones of its
-// injection, a component's alone free in a plain `.py`; and how a name becomes
-// a state, Svelte's state with a revision beside it, which a change in place
-// moves while the value keeps its identity, and which a read reads with the
-// value.
+// injection, a component's alone free in a plain `.py`, and what of its
+// injection may still be shadowed; what stands in for a standard module; and
+// how a name becomes a state, Svelte's state with a revision beside it, which
+// a change in place moves while the value keeps its identity, and which a read
+// reads with the value.
 const HOST = {
     name: 'svelthon',
     bridge: 'svelthon/bridge',
     runtime: RUNTIME,
-    reserved: INJECTED.filter((one) => one.locked).map((one) => ({ name: one.name, component: one.component === true })),
+    reserved: {
+        words: INJECTED.filter((one) => one.locked).map((one) => ({ name: one.name, component: one.component === true })),
+        said: 'The helpers, `date`, `slugify`, `tojson` and the rest, may still be shadowed; the decorators may not.'
+    },
+    instead: MODULE_INSTEAD,
     state: {
         cell: (name, cell, bumped) => [
             `let ${cell} = $state.raw(undefined);`,
