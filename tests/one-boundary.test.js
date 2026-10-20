@@ -21,8 +21,15 @@
 import { test, expect, describe } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import * as bryc from '../src/lib/bryc/bryc.js';
 
-const source = readFileSync(fileURLToPath(new URL('../src/lib/compile.cjs', import.meta.url)), 'utf8');
+// The compiler's text: this file's own, and that of what Bryc gives it, read
+// through its door, where the module body's wrapper is written under the name
+// the host's runtime gives `pyError`.
+const source = [
+    readFileSync(fileURLToPath(new URL('../src/lib/compile.cjs', import.meta.url)), 'utf8'),
+    ...Object.values(bryc).filter((one) => typeof one === 'function')
+].join('\n');
 
 // What a crossing is made of, in the runtime's own words.
 const CROSSING = ['schedule', 'scheduleAsync', 'plainData', 'pyNumbers', 'pyHandler', 'pyData'];
@@ -46,7 +53,7 @@ describe('the compiler emits no boundary of its own', () => {
     // body — and label the error, which is not a crossing. `on_destroy` goes
     // through `pyComponent`, which starts an `async def`.
     test('and the wrappers it still writes take no argument and convert nothing', () => {
-        const written = [...source.matchAll(/catch \(err\) \{ throw __pyError/g)];
+        const written = [...source.matchAll(/catch \(err\) \{ throw (?:__pyError|\$\{host\.runtime\.pyError\})/g)];
 
         expect(written.length).toBe(2);
         expect(source).not.toContain('.map(__pyArg)');

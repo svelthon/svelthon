@@ -12,6 +12,7 @@ export const {
     pythonModuleName,
     elementProps,
     scriptSurface,
+    runningNames,
     PY_NAME,
     componentImports,
     importedNames

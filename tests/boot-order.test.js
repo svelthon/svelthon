@@ -18,14 +18,13 @@ const read = (name) =>
     readFileSync(fileURLToPath(new URL(`../src/lib/${name}`, import.meta.url)), 'utf8');
 
 describe('the engine is loaded and started by Bryntime alone', () => {
-    // The compiler adds the parsing chain to the engine and loads no engine of
-    // its own: neither the engine's file nor a start.
+    // The compiler loads no engine of its own: neither the engine's file nor a
+    // start.
     test('compile.cjs loads no engine', () => {
         const source = read('compile.cjs');
 
         expect(source).not.toMatch(/require\('[^']*brython_runtime\.js'\)/);
         expect(source).not.toContain('$B.brython(');
-        expect(source).toContain("require('bryntime/compiler');");
     });
 
     // And the way JavaScript reaches it, `svelthon/compile`, imports Bryntime

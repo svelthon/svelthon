@@ -13,9 +13,10 @@ import { join } from 'node:path';
 // Svelthon's names the package, never a file of it, which is Bryntime's to
 // split, move or rename. Twice after the split a sentence here went on naming
 // one, a path into the package and then its list of the engine's repairs.
-// This file holds the pattern, so it is the one file not read.
+// This file holds the pattern, so it is the one file not read. An import of a
+// file beside the one that imports it, Bryc's `./errors.js`, names its own.
 const BRYNTIME_FILE =
-    /bryntime\/(?!compiler\b)[\w./-]+|BRYTHON_FIX|\b(?:globals|boot|core|mutations|views|calls|errors|modules|protocols|brython_runtime|brython_compiler)\.js\b/;
+    /bryntime\/(?!compiler\b)[\w./-]+|BRYTHON_FIX|\b(?<!\.\/)(?:globals|boot|core|mutations|views|calls|errors|modules|protocols|brython_runtime|brython_compiler)\.js\b/;
 
 test('no file of Svelthon names a file of Bryntime', () => {
     const within = (dir, keep) =>
@@ -54,8 +55,8 @@ test('Svelthon depends on Bryntime and keeps no copy of it or of the engine', ()
 
 // Svelthon reaches Bryntime through the package's entry alone, which starts the
 // engine and exports what Bryntime gives, so each of its files stays
-// Bryntime's own to split or to move; and the compiler reaches the engine's
-// other half through the entry Bryntime gives it.
+// Bryntime's own to split or to move. The engine's other half, the parsing
+// chain, is Bryc's to load, not its host's.
 test('Svelthon reaches Bryntime through its entry alone', () => {
     const doors = readdirSync('src/lib')
         .filter((file) => /\.c?js$/.test(file))
@@ -66,21 +67,23 @@ test('Svelthon reaches Bryntime through its entry alone', () => {
         );
 
     expect(doors.length).toBeGreaterThan(0);
-    expect(doors.filter((one) => !one.endsWith(': bryntime') && one !== 'compile.cjs: bryntime/compiler')).toEqual([]);
+    expect(doors.filter((one) => !one.endsWith(': bryntime'))).toEqual([]);
 });
 
 // And through that door alone: at run time only Bryntime touches the engine,
 // by its name or by the shape of its objects, and the host and the helpers ask
 // it through Bryntime's functions. The compiler, which builds with the engine's
 // other half and its AST, is exempted file by file, so a new file of the host
-// is held to the rule from its first line. Comments may name the engine.
-const COMPILER = ['compile.cjs', 'markup.js', 'expressions.js'];
+// is held to the rule from its first line, and Bryc, which is compiler
+// throughout, by its folder. Comments may name the engine.
+const COMPILER = ['compile.cjs', 'markup.js'];
+const BRYC = 'bryc/';
 const ENGINE_TOKENS = /\$B\b|__BRYTHON__|\b_b_\b|\btp_\w+|\bob_type\b|__traceback__|\.\$factory\b|\$store\b|\$js_func\b|\$lineno\b|\$proxy\b/;
 
 test('at run time, nothing of Svelthon touches the engine', () => {
     const files = readdirSync('src/lib', { recursive: true }).filter((file) => /\.[cm]?js$/.test(file));
     const touching = files
-        .filter((file) => !COMPILER.includes(file))
+        .filter((file) => !COMPILER.includes(file) && !file.startsWith(BRYC))
         .flatMap((file) =>
             readFileSync(`src/lib/${file}`, 'utf8')
                 .replace(/\/\*[\s\S]*?\*\//g, (comment) => comment.replace(/[^\n]/g, ''))
@@ -90,6 +93,6 @@ test('at run time, nothing of Svelthon touches the engine', () => {
                 .map(([where, code]) => `${where}: ${code.trim()}`)
         );
 
-    expect(files).toEqual(expect.arrayContaining([...COMPILER, 'bridge.js', 'helpers.js']));
+    expect(files).toEqual(expect.arrayContaining([...COMPILER, `${BRYC}bryc.js`, 'bridge.js', 'helpers.js']));
     expect(touching).toEqual([]);
 });

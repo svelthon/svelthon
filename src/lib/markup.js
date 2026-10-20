@@ -4,8 +4,9 @@
 // while the file next door needs `fs` and `path` and cannot be loaded there.
 import { parse } from 'svelte/compiler';
 import { attributeWrapper, truthBinding } from './attributes.js';
-import { atomic, replaceLiterals } from './lexical.js';
 import {
+    atomic,
+    replaceLiterals,
     NAME_CHAR,
     NAME,
     CONVERSION,
@@ -17,9 +18,7 @@ import {
     handedLate,
     computing as computingIn,
     costly as costlyIn
-} from './expressions.js';
-
-export { atomic };
+} from './bryc/bryc.js';
 
 // The scanners below look for a closing character and have to know which
 // characters are not code, and `atomic` says: the brace, the bracket, the

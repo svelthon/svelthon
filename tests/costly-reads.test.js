@@ -13,8 +13,7 @@ import ReadOrder from './fixtures/ReadOrder.svelte';
 import ReadOrderParent from './fixtures/ReadOrderParent.svelte';
 import BoundBranch from './fixtures/BoundBranch.svelte';
 import { seen } from './fixtures/read_order.js';
-import { scriptSurface } from '../src/lib/compile.js';
-import { runningNames } from '../src/lib/expressions.js';
+import { scriptSurface, runningNames } from '../src/lib/compile.js';
 
 test.for([
     ['default', 'first@1:second@2', ['first', 'second']],

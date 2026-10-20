@@ -24,6 +24,7 @@
 import { test, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import * as bryc from '../src/lib/bryc/bryc.js';
 
 const read = (name) =>
     readFileSync(fileURLToPath(new URL(`../src/lib/${name}`, import.meta.url)), 'utf8');
@@ -114,15 +115,11 @@ const published = (compiler) => {
 // exactly the rename this is meant to catch.
 //
 // Plus what the compiler writes into the template's functions itself: every dot
-// of the markup becomes a `__getattr` call there, in `templateDots`, so the
-// markup pass never spells it. Read off that function's own text, so a name it
-// stops writing leaves this list as well.
-const written = (markup, compiler = read('compile.cjs')) => {
-    const at = compiler.indexOf('function templateDots(');
-    const rewrite = compiler.slice(at, compiler.indexOf('\n}', at));
-
-    return new Set([...`${markup}\n${rewrite}`.matchAll(/__[a-z][\w]*/g)].map((one) => one[0]));
-};
+// of the markup becomes a `__getattr` call there, in Bryc's `templateDots`, so
+// the markup pass never spells it. Read off that function's own text, so a
+// name it stops writing leaves this list as well.
+const written = (markup) =>
+    new Set([...`${markup}\n${bryc.templateDots}`.matchAll(/__[a-z][\w]*/g)].map((one) => one[0]));
 
 // The markup pass, with the table of attribute wrappers it reads: `__class`
 // and `__truthy` are chosen there, by an attribute's name.
