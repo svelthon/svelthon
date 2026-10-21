@@ -69,12 +69,15 @@ describe('compiler', () => {
         expect(script).toContain('let __rev_items = $state.raw(0)');
         expect(script).toContain('const __bump_items = () => { __rev_items += 1; }');
         expect(script).toContain("bind(__proto, 'items', () => (__SHAPING.on ? __followOwn(items) : (__rev_items, items))");
-        // The list is the third argument, and the `onDestroy` below is what
-        // empties it, on the server too: a container reached through a store
-        // outlives the instance that read it, so subscribing without a way out
-        // accumulates.
+        // The list is the third argument, and `__leave` is what empties it,
+        // once: laid down by an effect run at once on the client, before the
+        // script can raise, and by `onDestroy` on the server. A container
+        // reached through a store outlives the instance that read it, so
+        // subscribing without a way out accumulates.
         expect(script).toContain('__track(__next, __bump_items, __subs)');
-        expect(script).toContain('__onDestroy(() => __unsubscribe(__subs));');
+        expect(script).toContain('const __leave = () => { if (__gone) return; __gone = true; __unsubscribe(__subs); };');
+        expect(script.indexOf('$effect.pre(() => __leave);')).toBeLessThan(script.indexOf('__init(__py)'));
+        expect(script).toContain('__onDestroy(__leave);');
     });
 
     test('a store folds annotations into state and registers itself for Python', () => {

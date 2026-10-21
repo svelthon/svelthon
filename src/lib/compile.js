@@ -1622,7 +1622,30 @@ function declarations(c) {
         // A store has no list, and that is the rule rather than an omission: its
         // own subscription is the module's, it is made once and it lasts as long
         // as the page does.
-        ...(!c.store && SUBSCRIBING(c) ? [`const ${SUBS} = [];`] : []),
+        //
+        // The list is let go once, when the instance goes (`__leave`), and the
+        // way it goes is laid down before anything can fail. A construction
+        // that raises, in the script, the template or an effect, is torn down
+        // by its boundary before any `onDestroy` has run, since Svelte's runs
+        // as a deferred effect: an effect run at once (`$effect.pre`) leaves its
+        // teardown in place from the start. `onDestroy` is the server's, which
+        // runs no effect and calls it when a render closes.
+        //
+        // A root outlives the component and reads the same names, so with roots
+        // the list goes when the last of them lets go: the component gone and
+        // every root destroyed, each root counting itself in when it starts.
+        ...(releases(c)
+            ? [
+                  `const ${SUBS} = [];`,
+                  ...(holders(c)
+                      ? [`let __holders = 1;`, `const __release = () => { if (--__holders === 0) __unsubscribe(${SUBS}); };`]
+                      : []),
+                  `let __gone = false;`,
+                  `const __leave = () => { if (__gone) return; __gone = true; ${holders(c) ? '__release();' : `__unsubscribe(${SUBS});`} };`,
+                  `$effect.pre(() => __leave);`,
+                  `__onDestroy(__leave);`
+              ]
+            : []),
         // How an error's Python line becomes a line of this file; see `inFile`
         // in the runtime. Only a component has template functions to place.
         // Registered under the file, the one place a frame's line is placed
@@ -2058,17 +2081,6 @@ function effectLines(c) {
                 ? `$inspect(...__invoke(__invoke(${fn(i.name)})[0])).with((...a) => __event(__invoke(__invoke(${fn(i.name)})[1]))(...a));`
                 : `$inspect(...__invoke(${fn(i.name)}));`
         ),
-        // A root outlives the component and reads the same names, so the
-        // subscriptions go when the last of them lets go: the component
-        // unmounted and every root destroyed. Declared before the roots, which
-        // count themselves in when they start: the server starts none.
-        ...(holders(c)
-            ? [
-                  ``,
-                  `let __holders = 1;`,
-                  `const __release = () => { if (--__holders === 0) __unsubscribe(${SUBS}); };`
-              ]
-            : []),
         // A root owns its own scope: it is not cleaned up when the component is,
         // which is the point: the destructor is handed to Python under the
         // decorated name, and calling it is what ends the effect.
@@ -2094,17 +2106,6 @@ function effectLines(c) {
             `    if (__cleanup) return () => { __cleanup(); };`,
             e.root ? (holders(c) ? `}); __holders += 1; return __release; }));` : `}); }));`) : `});`
         ]),
-        // The other end of `track`, through Svelte's `onDestroy`, which the
-        // server's renderer calls when a render closes: an effect never runs
-        // there, and a module's list a component reads would keep every render
-        // the server ever made. Its own call rather than a line in the hooks
-        // below, because those exist only when the author wrote one, and every
-        // instance that holds state has signed onto something.
-        ...(holders(c)
-            ? [``, `__onDestroy(__release);`]
-            : releases(c)
-              ? [``, `__onDestroy(() => __unsubscribe(${SUBS}));`]
-              : []),
         // untrack, because a hook reads the component's names through the
         // namespace accessors, and those reads are signal reads. `mounts += 1`
         // inside on_mount would otherwise make the effect depend on state it
