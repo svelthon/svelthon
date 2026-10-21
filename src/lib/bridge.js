@@ -2197,15 +2197,18 @@ export function directiveAnimate(node, rects, [where, head, ...value]) {
 // still hands Svelte both, which it reads off whatever it is handed. A dict
 // with `__call__` is still a dict, whose names are its entries: read as an
 // attribute, its `update` was `dict.update`, and its `destroy` none.
+//
+// A class of the author's is an instance whatever it derives from: `class
+// Lease(list)` keeps its `update` and `destroy`, where it was taken for a list
+// and copied without them. A dict of any class stays its entries.
 function directiveResult(value, where) {
     const called = declared(value) !== null;
     const instance =
         value !== null &&
         typeof value === 'object' &&
-        !Array.isArray(value) &&
         pyClass(ownType(value)) &&
-        pyScalar(value) === undefined &&
-        !isDict(value);
+        !isDict(value) &&
+        (authoredClass(ownType(value)) || (!Array.isArray(value) && pyScalar(value) === undefined));
 
     if (!called && !instance) return pyNumbers(value);
 

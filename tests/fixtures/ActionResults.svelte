@@ -2,7 +2,8 @@
 # An action written in Python answers in each shape Svelte reads `update` and
 # `destroy` off: a dict, an instance, a function carrying both, an instance
 # that is callable itself, and a dict that is, its entries read and not its
-# attributes, where `update` is `dict.update`.
+# attributes, where `update` is `dict.update`. And an instance of a class that
+# derives from a list, a str, an int or a float, an instance all the same.
 shape: str = "dict"
 log = []
 value = 1
@@ -30,6 +31,25 @@ class CallableRecord(dict):
         pass
 
 
+class ListLease(Lease, list):
+    pass
+
+
+class StrLease(Lease, str):
+    pass
+
+
+class IntLease(Lease, int):
+    pass
+
+
+class FloatLease(Lease, float):
+    pass
+
+
+DERIVED = {"list": lambda: ListLease(), "str": lambda: StrLease("lease"), "int": lambda: IntLease(1), "float": lambda: FloatLease(1.5)}
+
+
 def action(node, given):
     record(f"install:{given}")
 
@@ -43,6 +63,8 @@ def action(node, given):
         return Lease()
     if shape == "callable instance":
         return CallableLease()
+    if shape.endswith(" subclass"):
+        return DERIVED[shape.split()[0]]()
 
     def lease():
         pass

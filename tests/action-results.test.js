@@ -12,7 +12,10 @@ import ActionTypes from './fixtures/ActionTypes.svelte';
 // A dict that is callable too was read as an instance, by attribute: its
 // `update` was `dict.update`, called with the new value, and its `destroy` was
 // none. A dict's are its entries, callable or not, and an empty one has none.
-test.for(['dict', 'instance', 'function', 'callable instance', 'callable dict'])(
+//
+// And an instance of a class deriving from a list, a str, an int or a float
+// was taken for the list or the scalar, copied without its methods.
+test.for(['dict', 'instance', 'function', 'callable instance', 'callable dict', 'list subclass', 'str subclass', 'int subclass', 'float subclass'])(
     'an action answering with a %s is updated and destroyed',
     (shape) => {
         const target = document.body.appendChild(document.createElement('div'));
