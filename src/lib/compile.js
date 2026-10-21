@@ -605,7 +605,11 @@ const MODULE_INSTEAD = {
 // name of the plugin's option a module is also found on, `path`; how a name
 // becomes a state, Svelte's state with a revision beside it, which a change in
 // place moves while the value keeps its identity, and which a read reads with
-// the value; and Svelthon's own signs made Python (`takeArrows`).
+// the value; Svelthon's own signs made Python (`takeArrows`); and Svelte's
+// runes, whose names no binding of the component may take: Svelte reads
+// `$state` as a store once `state` is bound, so a JavaScript import of one is
+// held under another variable (Bryc's), and a `def`'s wrapper too
+// (`wrapperName`).
 const HOST = {
     name: 'svelthon',
     bridge: 'svelthon/bridge',
@@ -626,7 +630,8 @@ const HOST = {
         read: (name, cell) => `(${rev(name)}, ${cell})`,
         write: (cell, value) => `${cell} = ${value}`
     },
-    rewrite: (text, { source, lineOffset, component, bound }) => takeArrows(text, source, lineOffset, component, bound)
+    rewrite: (text, { source, lineOffset, component, bound }) => takeArrows(text, source, lineOffset, component, bound),
+    runes: ['state', 'derived', 'effect', 'props', 'bindable', 'inspect', 'host']
 };
 
 // How many positional arguments a caller may hand a Python function, read off
@@ -1393,8 +1398,9 @@ const local = (name) => `__local_${name}`;
 // every `$state.raw` of the component into a read of a store declared further
 // down, and one named `props` would do the same to `$props()`. A cell is
 // declared by a rune and is not read that way. Exported under its own name.
-const SVELTE_RUNES = new Set(['state', 'derived', 'effect', 'props', 'bindable', 'inspect', 'host']);
-const wrapperName = (name) => (SVELTE_RUNES.has(name) ? `__def_${name}` : name);
+// The runes are the host's list (`HOST.runes`), the one a JavaScript import
+// named like one is held under another variable by.
+const wrapperName = (name) => (HOST.runes.includes(name) ? `__def_${name}` : name);
 // What the parent passes a prop, which a write of the child's overrides, the
 // default it falls back on, and the choice between them.
 const given = (name) => `__given_${name}`;
@@ -1463,7 +1469,7 @@ function preamble(c) {
             ...(c.store ? [] : ['fileLines']),
             ...(c.jsImported.length ? ['readOnlyImport'] : [])
         ])} } from 'svelthon/bridge';`,
-        ...c.jsImports.map(jsImportLine),
+        ...c.jsImports.map((one) => jsImportLine(HOST, one)),
         // Under the engine's prefix like every other name it lends: the
         // author's names live in the same scope, and an `importjs { untrack }`
         // or a `def getContext()` of theirs is theirs.
@@ -2158,7 +2164,7 @@ function plainPreamble(c) {
             'pyData', 'pyExport', 'jsCall', 'ticking', 'pyBind', 'NONE', 'helpers',
             'pythonModule', 'group', 'invoke', 'liveExport', 'readOnlyImport'
         ])} } from 'svelthon/bridge';`,
-        ...c.jsImports.map(jsImportLine),
+        ...c.jsImports.map((one) => jsImportLine(HOST, one)),
         ``
     ];
 }
@@ -2244,7 +2250,7 @@ function storeOrModuleLoad(c) {
 // SvelteKit reads a route module's names off it, and refuses a default export
 // there: a `.py` exports by name only (Bryc's `moduleExports`), filled by the
 // body as it binds them (`liveExports`, `moduleLoad`).
-const plainExports = (c) => moduleExports(c);
+const plainExports = (c) => moduleExports(HOST, c);
 
 // The order, which is the one thing about this file that cannot be read off any
 // single section. Four constraints hold it, and `tests/sections.test.js` asserts

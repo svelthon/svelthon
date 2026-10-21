@@ -10,6 +10,7 @@ import ImportedMarkersNative from './fixtures/ImportedMarkersNative.svelte';
 import { seen } from './fixtures/imported_markers.js';
 import './fixtures/ImportedInspectElement.svelte';
 import ImportedDecorators from './fixtures/ImportedDecorators.svelte';
+import ImportedEffectMounted from './fixtures/ImportedEffectMounted.svelte';
 import ImportedBindable from './fixtures/ImportedBindable.svelte';
 import ImportedBindableAlias from './fixtures/ImportedBindableAlias.svelte';
 import ImportedBindableHost from './fixtures/ImportedBindableHost.svelte';
@@ -24,6 +25,18 @@ test('a decorator imported under a marker name is the library s', () => {
     flushSync();
 
     expect(['answer', 'ran'].map((k) => target.querySelector(`p[data-k="${k}"]`).textContent)).toEqual(['42', '0']);
+});
+
+// And beside a hook: the import held the name `effect`, so the `$effect` the
+// hook runs by was read by Svelte as a store of it, and the component did not
+// mount. The import is held under another variable, which Python reads as
+// `effect`.
+test('an import named like a rune leaves the rune to Svelte', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+    mount(ImportedEffectMounted, { target });
+    flushSync();
+
+    expect(['mounted', 'side'].map((k) => target.querySelector(`p[data-k="${k}"]`).textContent)).toEqual(['1', "the library's"]);
 });
 
 // The props a custom element observes are read by a second pass over the
