@@ -268,6 +268,11 @@ const instantiated = (node) => {
     });
 };
 
+// The specifiers of an import that bind a value at run time: an `import type`,
+// or a specifier written `type`, names a type, which the transform erases.
+const valueSpecifiers = (node) =>
+    node.importKind === 'type' ? [] : node.specifiers.filter((one) => one.importKind !== 'type');
+
 // The names a statement at the top of the module binds there, at run time. A
 // TypeScript `import type`, `export type` or `declare` names a type or an
 // ambient value, which no code at run time holds, so it binds nothing. An
@@ -278,7 +283,7 @@ const declares = (node) => {
 
     switch (node.type) {
         case 'ImportDeclaration':
-            return node.specifiers.filter((one) => one.importKind !== 'type').map((one) => one.local.name);
+            return valueSpecifiers(node).map((one) => one.local.name);
         case 'VariableDeclaration':
             return node.declarations.flatMap((one) => declaredBy(one.id));
         case 'FunctionDeclaration':
@@ -347,7 +352,10 @@ const moduleBody = (content) => {
 // The components the `<script module>` imports by default from a `.svelte`
 // file, `import Child from "./Child.svelte"` or `import { default as Child }
 // from …`: what each local name is, and where it comes from. The other half of
-// `componentImports`, which reads the same of `importjs`.
+// `componentImports`, which reads the same of `importjs`. A type imported so
+// is no component: the name it gives holds nothing at run time, and the
+// instance may be handed a component of the other language under it, whose
+// props then crossed as the type's file said.
 const defaultImport = (one) =>
     one.type === 'ImportDefaultSpecifier' ||
     (one.type === 'ImportSpecifier' && (one.imported.name ?? one.imported.value) === 'default');
@@ -356,7 +364,7 @@ const moduleComponents = (content) =>
     moduleBody(content)
         .filter((node) => node.type === 'ImportDeclaration' && importedFile(String(node.source.value)).endsWith('.svelte'))
         .flatMap((node) =>
-            node.specifiers
+            valueSpecifiers(node)
                 .filter(defaultImport)
                 .map((one) => ({ local: one.local.name, from: String(node.source.value) }))
         );
