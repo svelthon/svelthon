@@ -16,9 +16,12 @@ import ActionStateHost from './fixtures/ActionStateHost.svelte';
 // dict or a tuple, where the walk of the container stopped at it. Or it reads
 // the state by a property, which the walk did not run, as Svelte runs the
 // getters of the prototype; one of a base's it does not, and neither does this.
+// And a container of a class of the author's, whose property the walk of what
+// it holds did not run, read by the Python action: to a JavaScript reader its
+// view is what it holds.
 const KINDS = [
     'direct', 'list', 'dict', 'nested', 'instance', 'slots', 'mixed', 'local', 'listbox', 'dictbox', 'tuplebox', 'listslots',
-    'gauged', 'inherited'
+    'gauged', 'inherited', 'countedlist', 'counteddict', 'countedset', 'countedtuple'
 ];
 
 const READS = {
@@ -35,7 +38,11 @@ const READS = {
     tuplebox: (value) => value[0].model.n,
     listslots: (value) => value[0].model.n,
     gauged: (value) => value[0].amount,
-    inherited: (value) => value[0].amount
+    inherited: (value) => value[0].amount,
+    countedlist: (value) => value[0].amount,
+    counteddict: (value) => value[0].amount,
+    countedset: (value) => value[0].amount,
+    countedtuple: (value) => value[0].amount
 };
 
 const LAST = { local: ['local', 'update', 2], inherited: ['inherited', 'install', 1] };
@@ -69,7 +76,7 @@ const run = (Child, python_action) => {
     return { log, page: target.querySelector('p').textContent };
 };
 
-test.for(KINDS.flatMap((kind) => [['JavaScript', kind], ['Python', kind]]))(
+test.for(KINDS.flatMap((kind) => [...(kind.startsWith('counted') ? [] : [['JavaScript', kind]]), ['Python', kind]]))(
     'a %s action handed a state (%s) is updated at each change inside it, as in Svelte',
     ([action, kind]) => {
         const native = run(ActionStateNative, false);

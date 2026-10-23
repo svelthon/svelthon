@@ -27,6 +27,8 @@ import EachMadePairs from './fixtures/EachMadePairs.svelte';
 import EachMadePairsNative from './fixtures/EachMadePairsNative.svelte';
 import EachPairIdentity from './fixtures/EachPairIdentity.svelte';
 import EachPairIdentityNative from './fixtures/EachPairIdentityNative.svelte';
+import EachForeignKey from './fixtures/EachForeignKey.svelte';
+import EachForeignKeyNative from './fixtures/EachForeignKeyNative.svelte';
 
 // What a component counted and showed after mounting and after each action.
 const steps = (Component, props, ...actions) => {
@@ -134,6 +136,17 @@ test.for([['enumerate'], ['zip'], ['items']])('pairs made anew under a key read 
         [false, 'draft-0'],
         [true, '']
     ]);
+});
+
+// Rows handed anew, `rows = list(rows)`, the same row in them, under a key that
+// reads what nothing follows, a JavaScript object's field changed before: the
+// block kept the key it noted, and the input its text. Svelte reads every key
+// again, and makes a new row, twice.
+test.for([['list'], ['star'], ['tuple']])('rows handed anew under a key reading a foreign field, %s, are keyed again, as in Svelte', ([kind]) => {
+    const native = walks(EachForeignKeyNative, {});
+
+    expect(native).toEqual([[[true, 'draft']], [[true, 'draft']]]);
+    expect(walks(EachForeignKey, { kind })).toEqual(native);
 });
 
 // The other half: a key changed in place is a new row to Svelte, made again,

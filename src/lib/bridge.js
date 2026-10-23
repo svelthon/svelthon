@@ -832,9 +832,13 @@ export const __pybridge = {
         // since, and otherwise against the key of that one, read again. One key
         // read per pair made anew, as Svelte reads every key when its iterable
         // runs again. Unfollowed.
-        const renewed = (rows) => {
+        //
+        // And every row of an iterable made anew, `rows = list(rows)`: a key
+        // may read what nothing follows, a JavaScript object's field, and the
+        // block kept the key noted where Svelte's reads it again.
+        const renewed = (rows, anew) => {
             for (let at = 0; at < held.length; at++) {
-                if (held[at] === rows[at] || !(at in keys)) continue;
+                if ((held[at] === rows[at] && !anew) || !(at in keys)) continue;
 
                 const was = seenUnder(held[at]) === moved[at] ? keys[at] : untrack(() => keyOf(held[at], at));
 
@@ -882,11 +886,12 @@ export const __pybridge = {
                 const marker = MARKS.get(rows);
                 let unchanged =
                     walked && ((rows === source && marker !== undefined && marker.stamp === stamp) || sameRows(held, rows));
+                const anew = rows !== source;
 
                 source = rows;
                 stamp = marker?.stamp;
 
-                if (unchanged && keyOf !== undefined && renewed(rows)) unchanged = false;
+                if (unchanged && keyOf !== undefined && renewed(rows, anew)) unchanged = false;
                 if (unchanged && !(keyOf !== undefined && rekeyed())) return false;
 
                 held = Array.from(unchanged ? held : rows);
@@ -1449,6 +1454,11 @@ const storedFields = (value) => {
 // `amount` returns a `count` followed `count` no more, where an interpolation
 // of `box.amount` did. Its class is read for them once in a walk, where each
 // of two thousand rows reading it made an update near three times the cost.
+//
+// And so is a container's of a class of the author's, `class Rows(list)` or
+// `class Tags(set)`, as Svelte runs a subclass's getters past its rows: `[rows]`
+// whose `amount` returned a `count` followed it no more. A set's members are
+// not walked, as Svelte reads none of a `Set`'s.
 const heldStates = (value, visited, accessors = new Map()) => {
     if (visited.has(value)) return;
 
@@ -1457,23 +1467,23 @@ const heldStates = (value, visited, accessors = new Map()) => {
     const visit = (one) => {
         if (typeof one !== 'object' || one === null) return;
 
-        if (pyContainer(one) || authoredInstance(one)) heldStates(one, visited, accessors);
+        if (pyContainer(one) || isSet(one) || authoredInstance(one)) heldStates(one, visited, accessors);
         else deepRead(one, visited);
     };
 
     if (Array.isArray(value)) for (const one of value) visit(one);
     else if (pyContainer(value)) for (const [, one] of heldEntries(value)) visit(one);
-    else {
-        const type = ownType(value);
 
-        if (!accessors.has(type)) accessors.set(type, ownAccessors(type));
-        for (const one of storedFields(value)) visit(one);
-        for (const name of accessors.get(type)) {
-            try {
-                pyGetattr(value, name);
-            } catch {
-                // Read on, as Svelte does.
-            }
+    const type = quietPyType(value);
+
+    if (type === undefined || !authoredClass(type)) return;
+    if (!accessors.has(type)) accessors.set(type, ownAccessors(type));
+    for (const one of storedFields(value)) visit(one);
+    for (const name of accessors.get(type)) {
+        try {
+            pyGetattr(value, name);
+        } catch {
+            // Read on, as Svelte does.
         }
     }
 };

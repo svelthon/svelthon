@@ -32,6 +32,25 @@
     class Inherited extends Gauge {}
     let gauged = $state([new Gauge()]);
     let inherited = $state([new Inherited()]);
+    class CountedList extends Array {
+        get amount() {
+            return model.n;
+        }
+    }
+    class CountedDict {
+        get amount() {
+            return model.n;
+        }
+    }
+    class CountedSet extends Set {
+        get amount() {
+            return model.n;
+        }
+    }
+    let countedlist = $state([new CountedList(1)]);
+    let counteddict = $state([new CountedDict()]);
+    let countedset = $state([new CountedSet([1])]);
+    let countedtuple = $state([new CountedList(1)]);
 
     export function bump_local() {
         local[0].n += 1;
@@ -52,4 +71,8 @@
 <div data-k="listslots" use:observe={listslots}></div>
 <div data-k="gauged" use:observe={gauged}></div>
 <div data-k="inherited" use:observe={inherited}></div>
+<div data-k="countedlist" use:observe={countedlist}></div>
+<div data-k="counteddict" use:observe={counteddict}></div>
+<div data-k="countedset" use:observe={countedset}></div>
+<div data-k="countedtuple" use:observe={countedtuple}></div>
 <p>{model.n}|{rows[0].n}|{record.child.n}|{nested.child.inner.n}|{box.model.n}|{slotted.model.n}|{mixed.model.n}|{local[0].n}</p>

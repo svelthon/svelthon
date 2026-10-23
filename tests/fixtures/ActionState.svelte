@@ -36,6 +36,11 @@ class Inherited(Gauge):
     pass
 
 
+def counted(base, held):
+    # A container of the author's, its property read past what it holds.
+    return [type("Counted", (base,), {"amount": property(lambda self: model.n)})(held)]
+
+
 rows = [model]
 record = {"child": model}
 nested = {"child": {"inner": model}}
@@ -50,6 +55,10 @@ tuplebox = (Box(model),)
 listslots = [Slotted(model)]
 gauged = [Gauge()]
 inherited = [Inherited()]
+countedlist = counted(list, [1])
+counteddict = counted(dict, {"a": 1})
+countedset = counted(set, {1})
+countedtuple = counted(tuple, (1,))
 
 
 def number(kind, value):
@@ -67,7 +76,7 @@ def number(kind, value):
         return value["child"].n
     if kind == "local":
         return value[0]["n"]
-    if kind in ("gauged", "inherited"):
+    if kind in ("gauged", "inherited") or kind.startswith("counted"):
         return value[0].amount
     return value[0].n
 
@@ -104,4 +113,8 @@ def bump_local():
 <div data-k="listslots" use:chosen={listslots}></div>
 <div data-k="gauged" use:chosen={gauged}></div>
 <div data-k="inherited" use:chosen={inherited}></div>
+<div data-k="countedlist" use:chosen={countedlist}></div>
+<div data-k="counteddict" use:chosen={counteddict}></div>
+<div data-k="countedset" use:chosen={countedset}></div>
+<div data-k="countedtuple" use:chosen={countedtuple}></div>
 <p>{model.n}|{rows[0].n}|{record["child"].n}|{nested["child"]["inner"].n}|{box.model.n}|{slotted.model.n}|{mixed.model.n}|{local[0]["n"]}</p>
