@@ -555,7 +555,7 @@ export function python(options = {}) {
             let running;
             const runs = (name) => {
                 if (running === undefined) {
-                    const declared = scriptSurface(python);
+                    const declared = scriptSurface(python, moduleImports(content));
 
                     running = declared === null ? null : runningNames(declared);
                 }
@@ -579,7 +579,7 @@ export function python(options = {}) {
                     })
             );
 
-            return { code: announced(tagged(elementOptions(code, python), calls.open(file)), filename), dependencies: read };
+            return { code: announced(tagged(elementOptions(code, python, moduleImports(content)), calls.open(file)), filename), dependencies: read };
         },
         script({ content, attributes, filename }) {
             // Read as `pythonScript` reads the tag, by names in any case: Svelte
@@ -684,12 +684,16 @@ function elementTag(code) {
     return Array.isArray(value) ? value.map((one) => one.data ?? '').join('') : null;
 }
 
-function elementOptions(code, python) {
+// The props are read off the script with the names the `<script module>` gives
+// it (`jsNames`), as the compile reads them: `amount: int = inspect(1)`, its
+// `inspect` the module's, is a prop, where taken for the marker it was left out
+// of the list and its attribute read as a string.
+function elementOptions(code, python, jsNames = []) {
     const key = (one) => (one.type === 'Property' ? (one.key.name ?? one.key.value) : undefined);
     const entry = ({ name, type }) => `${name}: {${type ? ` type: ${JSON.stringify(type)} ` : ''}}`;
     // Read only for a component that is an element: every Python component
     // comes through here.
-    const props = () => elementProps(python).map(entry).join(', ');
+    const props = () => elementProps(python, jsNames).map(entry).join(', ');
 
     const text = markupOnly(code);
 
@@ -713,7 +717,7 @@ function elementOptions(code, python) {
         // line for line.
         const written = named.value.properties;
         const names = new Set(written.map(key));
-        const missing = elementProps(python).filter(({ name }) => !names.has(name)).map(entry);
+        const missing = elementProps(python, jsNames).filter(({ name }) => !names.has(name)).map(entry);
 
         if (missing.length === 0) return code;
 

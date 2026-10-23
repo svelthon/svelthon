@@ -4,6 +4,7 @@ import { compile } from '../src/lib/compile.js';
 import './fixtures/Stepper.svelte';
 import WordHost from './fixtures/WordHost.svelte';
 import StarHost from './fixtures/StarHost.svelte';
+import './fixtures/ModuleInspectElement.svelte';
 import './fixtures/TypedElement.svelte';
 import './fixtures/ObjectFormElement.svelte';
 import './fixtures/PartialPropsElement.svelte';
@@ -90,6 +91,30 @@ test('a partial props option keeps the other props, as Svelte does', async () =>
 
     expect(native).toBe('b|7|x');
     expect(await read('partial-props-element')).toEqual(native);
+});
+
+// A prop whose default calls a function of the `<script module>`, named like a
+// marker of Svelthon's: the props were read off the script without the
+// module's names, the call taken for the marker and the prop left without its
+// type, so an attribute arrived a string.
+test('a prop whose default calls a function of the module is read as the type it declares', async () => {
+    const element = document.createElement('module-inspect-element');
+    element.setAttribute('amount', '5');
+    document.body.appendChild(element);
+    await Promise.resolve();
+    flushSync();
+
+    try {
+        const seen = [element.amount];
+
+        element.setAttribute('amount', '8');
+        flushSync();
+        seen.push(element.amount);
+
+        expect(seen).toEqual([5, 8]);
+    } finally {
+        element.remove();
+    }
 });
 
 // The written-out form of the option, `customElement={{ tag, shadow }}`, gets

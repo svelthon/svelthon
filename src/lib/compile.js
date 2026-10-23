@@ -1405,6 +1405,8 @@ const local = (name) => `__local_${name}`;
 // The runes are the host's list (`HOST.runes`), the one a JavaScript import
 // named like one is held under another variable by.
 const wrapperName = (name) => (HOST.runes.includes(name) ? `__def_${name}` : name);
+// And a `bindable` prop's variable, its key in the props still the name.
+const bindableVariable = (name) => (HOST.runes.includes(name) ? `__prop_${name}` : name);
 // What the parent passes a prop, which a write of the child's overrides, the
 // default it falls back on, and the choice between them.
 const given = (name) => `__given_${name}`;
@@ -1526,10 +1528,11 @@ function declarations(c) {
                   ...(defaulted.length ? [`class __Declared { value = $state.raw(); py = undefined; }`] : []),
                   ...defaulted.map((b) => `const ${bindableDefault(b)} = new __Declared();`),
                   `let { ${c.bindables
-                      .map((b) =>
+                      .map((b) => [b, b === bindableVariable(b) ? b : `${b}: ${bindableVariable(b)}`])
+                      .map(([b, bound]) =>
                           defaulted.includes(b)
-                              ? `${b} = $bindable(${bindableDefault(b)}.value)${c.element ? '' : `, ${b}: ${passed(b)}`}`
-                              : `${b} = $bindable()`
+                              ? `${bound} = $bindable(${bindableDefault(b)}.value)${c.element ? '' : `, ${b}: ${passed(b)}`}`
+                              : `${bound} = $bindable()`
                       )
                       .join(', ')}, ...__props } =` + ` $props();`,
                   ...c.bindables.flatMap((b) => [
@@ -1799,22 +1802,23 @@ function authorBindings(c) {
         ...c.bindables.map((b) => {
             const declared = c.defaulted.includes(b);
             const box = bindableDefault(b);
+            const bound = bindableVariable(b);
             const held = declared
-                ? `__unproxied(${b}, ${crossed(b)}, ${c.element ? 'undefined' : passed(b)}, ${box})`
-                : `__unproxied(${b}, ${crossed(b)})`;
+                ? `__unproxied(${bound}, ${crossed(b)}, ${c.element ? 'undefined' : passed(b)}, ${box})`
+                : `__unproxied(${bound}, ${crossed(b)})`;
             const written = `const __written = __track(${NEXT_VALUE}, ${bump(b)}${c.store ? '' : `, ${SUBS}`});`;
             const handed =
                 `const __was = __untrack(() => ${held});` +
-                ` ${crossed(b)} = __handOver(__written, (__crossing) => { ${b} = __crossing; });` +
+                ` ${crossed(b)} = __handOver(__written, (__crossing) => { ${bound} = __crossing; });` +
                 ` if (!__changesNothing(__pyBind(__untrack(() => ${held})), __pyBind(__was))) ${bump(b)}();`;
             const set = declared
                 ? `${written} if (__initialising) { ${box}.py = __written;` +
                   ` __handOver(__written, (__crossing) => { ${box}.value = __crossing; });` +
-                  ` if (${b} !== undefined) return; } ${handed}`
-                : `if (!__initialising || ${b} === undefined) { ${written} ${handed} }`;
+                  ` if (${bound} !== undefined) return; } ${handed}`
+                : `if (!__initialising || ${bound} === undefined) { ${written} ${handed} }`;
             return (
                 `__bind(__proto, '${b}', () => (__SHAPING.on ? __followOwn(__pyBind(${held})) : (${rev(b)}, __follow(__pyBind(${held})))),` +
-                ` (${NEXT_VALUE}) => { ${set} }, () => ${b});`
+                ` (${NEXT_VALUE}) => { ${set} }, () => ${bound});`
             );
         }),
         // Bryc's accessor (`stateBinding`): the rows of an `{#each}` follow
@@ -2637,12 +2641,13 @@ function importedNames(src, where) {
 
 // The script alone, read before the compile by what has to know what it
 // declares: parsed with its signs rewritten as the compile rewrites them, and
-// the names JavaScript brings in (`theirs`), which `surface` sets apart. A
-// script that does not parse gives null: the compile says why.
-function readScript(src, where) {
+// the names JavaScript brings in (`theirs`), which `surface` sets apart, the
+// `<script module>`'s (`jsNames`) as the compile has them. A script that does
+// not parse gives null: the compile says why.
+function readScript(src, where, jsNames = []) {
     try {
         const lifted = takeImportJs(HOST, $B.unindent(src), where, 0, true);
-        const theirs = new Set(lifted.imports.flatMap((one) => one.entries.map((e) => e.local)));
+        const theirs = new Set([...lifted.imports.flatMap((one) => one.entries.map((e) => e.local)), ...jsNames.map(pythonName)]);
         const body = takeArrows(lifted.source, where, 0, true, theirs);
         const tree = $B._PyPegen.run_parser(new $B.Parser(body, where, 'file'));
 
@@ -2659,8 +2664,8 @@ function readScript(src, where) {
 // What the script declares, `surface`'s answer, which the compile acts on: its
 // props, its deriveds and the rest. What the markup pass asks before it reads a
 // name ahead of an expression. Null for a script that does not parse.
-function scriptSurface(src) {
-    const read = readScript(src, '<script>');
+function scriptSurface(src, jsNames = []) {
+    const read = readScript(src, '<script>', jsNames);
 
     return read === null ? null : surface(read.tree.body, read.theirs);
 }
@@ -2674,8 +2679,8 @@ const runningNames = ({ props, bindables, deriveds }) => [...props, ...bindables
 // learns what to observe from a destructured `$props()`, which Svelthon does not
 // write, or from `customElement.props`, which this fills. Read off the script
 // alone (`readScript`). A script that does not parse declares nothing here.
-function elementProps(src) {
-    const read = readScript(src, '<props>');
+function elementProps(src, jsNames = []) {
+    const read = readScript(src, '<props>', jsNames);
 
     if (read === null) return [];
 
