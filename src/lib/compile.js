@@ -1485,7 +1485,7 @@ function preamble(c) {
         // or a `def getContext()` of theirs is theirs.
         `import { ${['getContext as __getContext', 'setContext as __setContext', 'getAllContexts as __getAllContexts']
             .concat(c.lifecycle('on_mount') || c.lifecycle('on_destroy') || c.bindables.length ? ['untrack as __untrack'] : [])
-            .concat(c.lifecycle('on_destroy') ? ['onDestroy as __onDestroy'] : [])
+            .concat(c.lifecycle('on_destroy') || releases(c) ? ['onDestroy as __onDestroy'] : [])
             .join(', ')} } from 'svelte';`,
         // The three questions the runtime asks of Svelte, answered by runes: a
         // plain module has none. Whether a reaction is reading
@@ -1645,6 +1645,11 @@ function declarations(c) {
         // since Svelte's runs as a deferred effect: an effect run at once
         // (`$effect.pre`) leaves its teardown in place from the start.
         //
+        // A server is told by the `document` it lacks, and one that has one, a
+        // DOM laid down for a library or a test run under jsdom, lets its list
+        // go when a render closes, as Svelte's calls `onDestroy` then: each
+        // render that succeeded kept one more. One that fails there still does.
+        //
         // A root outlives the component and reads the same names, so with roots
         // the list goes when the last of them lets go: the component gone and
         // every root destroyed, each root counting itself in when it starts.
@@ -1657,7 +1662,8 @@ function declarations(c) {
                       : []),
                   `let __gone = false;`,
                   `const __leave = () => { if (__gone) return; __gone = true; ${holders(c) ? '__release();' : `__unsubscribe(${SUBS});`} };`,
-                  `$effect.pre(() => __leave);`
+                  `$effect.pre(() => __leave);`,
+                  `__onDestroy(__leave);`
               ]
             : []),
         // How an error's Python line becomes a line of this file; see `inFile`

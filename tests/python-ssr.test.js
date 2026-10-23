@@ -208,6 +208,28 @@ test.for([
     expect(counts).toEqual([1, 1, 1]);
 });
 
+// And one that succeeds, on a server with a `document` on its global, a DOM laid
+// down for a library or a test run under jsdom: told from a browser by the
+// `document` it lacks, a server with one closed nothing, and each render kept
+// one more.
+test('a server render that succeeds with a document on the global keeps no subscription', () => {
+    const list = __pybridge.list([1]);
+    const counts = [];
+
+    track(list, () => {});
+    globalThis.document = {};
+    try {
+        for (let i = 0; i < 3; i++) {
+            expect(render(SharedReader, { props: { shared: list } }).body).toContain('1');
+            counts.push(marks(list).bumps.length);
+        }
+    } finally {
+        delete globalThis.document;
+    }
+
+    expect(counts).toEqual([1, 1, 1]);
+});
+
 // A component that reads a module's list, imported, assigned to a name, or
 // with a root effect beside it, is let go once its server render closes, as
 // Svelte's own is. The subscription its names make on the list was dropped by
