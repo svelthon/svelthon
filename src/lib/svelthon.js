@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { relative, resolve, dirname } from 'node:path';
 import { readFileSync, existsSync, statSync } from 'node:fs';
 
@@ -45,6 +46,15 @@ import {
 // each plugin serves its own.
 const generated = (globalThis[Symbol.for('svelthon.generated')] ??= new Map());
 const generatedKey = (root, id) => `${root}\n${id}`;
+
+// A component's body is told apart by what it was compiled from, under its
+// name: one file may be compiled to two components at once, a plugin before
+// Svelte's writing it otherwise for `?variant=alpha` and `?variant=beta`, and
+// one module for both ran the same Python in each. What it was compiled from is
+// the only key there is: the preprocessor is handed the file without the query
+// it was asked under.
+const bodyId = (name, content, about) =>
+    `${virtualId(name)}?h=${createHash('sha256').update(content).update(JSON.stringify(about ?? null)).digest('hex').slice(0, 12)}`;
 
 // Which file claimed each generated name, on the same global registry and for
 // the same reason: the preprocessor and the plugin are not always the same
@@ -627,12 +637,14 @@ export function python(options = {}) {
             const directory = filename ? dirname(filename) : root;
 
             const name = nameFor(filename, root);
+            const body = bodyId(name, content, about);
             const { script, module, map, imports } = compile(content, name, shownPath(filename, root), {
                 // The block alone when no markup pass came first; the whole file
                 // the markup pass was handed when one did (`about`).
                 sourceContent: content,
                 ...about,
-                resolves: (mod) => moduleKind(mod, directory, searchPath)
+                resolves: (mod) => moduleKind(mod, directory, searchPath),
+                body
             });
 
             // `import counter_store` in a component resolves to a .py file, its
@@ -641,7 +653,7 @@ export function python(options = {}) {
             // its body runs at that statement (`pythonImports`).
             const prelude = pythonImports(imports, directory, searchPath);
 
-            generated.set(generatedKey(root, virtualId(name)), withPrelude(module, map, prelude));
+            generated.set(generatedKey(root, body), withPrelude(module, map, prelude));
 
             // The content is JavaScript now, so the tag must stop claiming
             // otherwise. Leaving `lang="python"` in place is invisible to the
@@ -1035,6 +1047,11 @@ export function svelthon(options = {}) {
         // Order holds on its own: the browser refetches the component first,
         // which re-runs the preprocessor and refreshes `generated`, and only
         // then follows its import to the virtual module.
+        //
+        // A component's bodies are told apart by what they were compiled from
+        // (`bodyId`), so each save makes one more: the file's are forgotten
+        // here, in the graph and in `generated`, and it keeps one per variant
+        // in use. A `.py` keeps its one body under its name.
         hotUpdate({ file, modules }) {
             const graph = this.environment.moduleGraph;
             const stale = [];
@@ -1055,9 +1072,15 @@ export function svelthon(options = {}) {
             // `mangle` and not `nameFor`: this hook sees every changed file in
             // the project and is only asking whether one of them is ours.
             const name = mangle(file, root);
-            if (!generated.has(key(virtualId(name)))) return;
+            const own = key(virtualId(name));
+            const bodies = [...generated.keys()].filter((one) => one === own || one.startsWith(`${own}?`));
 
-            forget('\0' + virtualId(name));
+            if (bodies.length === 0) return;
+
+            for (const one of bodies) {
+                forget('\0' + one.slice(key('').length));
+                if (one !== own) generated.delete(one);
+            }
 
             // A store's .py is watched, not imported, so its own module has to
             // be invalidated too, otherwise its load() never reruns and

@@ -29,8 +29,14 @@ for _ in $(seq 30); do
     curl -sf -o /dev/null "$V/demo/" && break
 done
 
-# Reads the value of `count` in the generated body, whichever virtual module.
-generated() { curl -s "$V/@id/__x00__virtual:svelthon/$1" | grep -o '\.count = [0-9]*' | head -1 | grep -o '[0-9]*'; }
+# Reads the value of `count` in the generated body, whichever virtual module: a
+# component's, told apart by what it was compiled from, as the component names
+# it, and a store's under its name.
+generated() {
+    local body
+    body=$(curl -s "$V/$1" | grep -o "/@id/__x00__virtual:svelthon/$2[^\"']*" | head -1)
+    curl -s "$V${body:-/@id/__x00__virtual:svelthon/$2}" | grep -o '\.count = [0-9]*' | head -1 | grep -o '[0-9]*'
+}
 
 status=0
 
@@ -38,13 +44,13 @@ check() {
     local label=$1 file=$2 virtual=$3 warm=$4
     curl -s "$V/$warm" >/dev/null
     local before after
-    before=$(generated "$virtual")
+    before=$(generated "$warm" "$virtual")
 
     sed -i 's/^count = 0$/count = 7/' "$file"
     sleep 2
     curl -s "$V/$warm" >/dev/null
     sleep 1
-    after=$(generated "$virtual")
+    after=$(generated "$warm" "$virtual")
 
     if [ "$before" = "0" ] && [ "$after" = "7" ]; then
         echo "✓ HMR $label — the virtual module follows the edit ($before → $after)"

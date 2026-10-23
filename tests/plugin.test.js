@@ -18,6 +18,10 @@ const fixtures = resolve(import.meta.dirname, 'fixtures');
 const preprocessed = (filename, pre = python()) =>
     preprocess(readFileSync(filename, 'utf8'), [pre], { filename });
 
+// The generated body a preprocessed component imports: its name, told apart by
+// what it was compiled from.
+const bodyOf = (code) => code.match(/from "(virtual:svelthon\/[^"]+)"/)[1];
+
 // What the preprocessor writes into a custom element's written-out option,
 // read back with Svelte's parser: the author's entries, then the declared props
 // they do not name, which is the order Svelte lists them in, and the file on as
@@ -335,13 +339,14 @@ describe('the plugin resolves what Vite cannot', () => {
     test('a compiled component is served with its source map', async () => {
         const filename = resolve(fixtures, 'BlockScope.svelte');
 
-        await preprocessed(filename);
+        const { code } = await preprocessed(filename);
 
         // The module is filed under the path, not the basename: two components
         // may share a name and only the path tells them apart.
         const name = relative(process.cwd(), filename).replace(/\W/g, '_');
-        const served = plugin.load('\0' + VIRTUAL_PREFIX + name);
+        const served = plugin.load('\0' + bodyOf(code));
 
+        expect(bodyOf(code).startsWith(`${VIRTUAL_PREFIX}${name}?`)).toBe(true);
         expect(served.code).toContain('$B');
         expect(served.map.sources[0]).toContain('BlockScope.svelte');
         expect(served.map.sourcesContent[0]).toContain('<script lang="python">');
@@ -442,14 +447,29 @@ describe('hot update invalidates the generated module too', () => {
     test('editing a component forgets its generated body', async () => {
         const filename = resolve(fixtures, 'BlockScope.svelte');
 
-        await preprocessed(filename);
+        const { code } = await preprocessed(filename);
 
         const env = graph();
         const out = plugin.hotUpdate.call({ environment: env }, { file: filename, modules: [] });
-        const name = relative(process.cwd(), filename).replace(/\W/g, '_');
 
-        expect(env.invalidated).toContain('\0' + VIRTUAL_PREFIX + name);
-        expect(out).toHaveLength(1);
+        expect(env.invalidated).toContain('\0' + bodyOf(code));
+        expect(out.map((one) => one.id)).toEqual(env.invalidated);
+    });
+
+    // Each save is compiled to a body of its own, and the ones an edit leaves
+    // are let go: a file keeps one per variant in use, not one per save.
+    test('and lets go of the body an edit leaves', async () => {
+        const filename = resolve(fixtures, 'BlockScope.svelte');
+        const source = readFileSync(filename, 'utf8');
+        const saved = async (edit) => bodyOf((await preprocess(source + edit, [python()], { filename })).code);
+
+        const before = await saved('');
+        plugin.hotUpdate.call({ environment: graph() }, { file: filename, modules: [] });
+        const after = await saved('\n');
+
+        expect(after).not.toBe(before);
+        expect(plugin.load('\0' + before)).toBeUndefined();
+        expect(plugin.load('\0' + after).code).toContain('$B');
     });
 
     // A store's `.py` is watched, not imported, so its own module has to go too
@@ -524,10 +544,8 @@ describe('a component importing a module', () => {
     test('is served with the import ahead of its own body', async () => {
         const filename = resolve(fixtures, 'RootStore.svelte');
 
-        await preprocessed(filename);
-
-        const name = relative(process.cwd(), filename).replace(/\W/g, '_');
-        const served = svelthon().load('\0' + VIRTUAL_PREFIX + name);
+        const { code } = await preprocessed(filename);
+        const served = svelthon().load('\0' + bodyOf(code));
 
         expect(served.code).toMatch(/^import ".*root_store\.svelte\.py\?python";$/m);
 

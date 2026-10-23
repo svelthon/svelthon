@@ -25,7 +25,7 @@ const temporary = mkdtempSync(join(tmpdir(), 'svelthon-isolation-'));
 afterAll(() => rmSync(temporary, { recursive: true, force: true }));
 
 const served = (plugin, code) => {
-    const id = code.match(/virtual:svelthon\/\w+/)[0];
+    const id = code.match(/virtual:svelthon\/[^"']+/)[0];
     const loaded = plugin.load('\0' + id);
 
     return typeof loaded === 'string' ? loaded : loaded?.code;
@@ -57,7 +57,8 @@ describe('two projects in one process', () => {
             process.chdir(original);
         }
 
-        // The two ids are the same, which is what makes this a question at all.
+        // The two names are the same, which is what makes this a question at
+        // all; what each body was compiled from tells them apart as well.
         expect(projects[0].code.match(/virtual:svelthon\/\w+/)[0]).toBe(
             projects[1].code.match(/virtual:svelthon\/\w+/)[0]
         );
@@ -276,7 +277,7 @@ describe('an edit reaches its module, whatever the process is in', () => {
             process.chdir(first.root);
             const plugin = svelthon();
             const { code } = await preprocess(first.source, [python()], { filename: first.filename });
-            const id = code.match(/virtual:svelthon\/\w+/)[0];
+            const id = code.match(/virtual:svelthon\/[^"']+/)[0];
 
             if (moved) process.chdir(second.root);
             const environment = graph();

@@ -1454,7 +1454,7 @@ const rev = (name) => `__rev_${name}`;
 
 function preamble(c) {
     return [
-        `import { init as __init } from ${JSON.stringify(virtualId(c.name))};`,
+        `import { init as __init } from ${JSON.stringify(c.body)};`,
         // The bridge behind `__truthy` and the three beside it. Imported under a
         // name no one would type: only generated code touches it, and `py` is a
         // name an author may want.
@@ -2180,7 +2180,7 @@ function effectLines(c) {
 
 function plainPreamble(c) {
     return [
-        `import { init as __init } from ${JSON.stringify(virtualId(c.name))};`,
+        `import { init as __init } from ${JSON.stringify(c.body)};`,
         `import { ${runtimeAliases(HOST, [
             'bind', '__pybridge', 'jsGlobal', 'pyCall', 'pyError', 'plainData', 'pyArg',
             'pyData', 'pyExport', 'jsCall', 'ticking', 'pyBind', 'NONE', 'helpers',
@@ -2332,7 +2332,10 @@ function compile(
         // `'file'`, or names a directory of the project, `'package'`, asked by
         // whoever can read the file system. Without it the imports are not
         // checked.
-        resolves = null
+        resolves = null,
+        // The module the script takes its body from (`init`), the name's
+        // unless the caller tells the body apart.
+        body = virtualId(name)
     } = {}
 ) {
     // A component has markup, so it has the dialect; a module is a module and
@@ -2524,6 +2527,7 @@ function compile(
     // below it is the writing.
     const c = {
         name,
+        body,
         source,
         lineOffset,
         // How a Python line becomes a file line, read by `pyError`: the offset

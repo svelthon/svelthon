@@ -6,9 +6,10 @@ import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { python, svelthon, compileOptionsFor } from './src/lib/svelthon.js';
 import { demoStats } from './demo/stats.js';
+import { variants } from './tests/variants.js';
 
 export default defineConfig({
-    plugins: [demoStats(), svelthon(), svelte({
+    plugins: [demoStats(), variants(), svelthon(), svelte({
             preprocess: [python({ path: ['demo'] })],
             // vite-plugin-svelte's module filter, widened to Python: a
             // `.svelte.py` compiles as a `.svelte.ts` does, under its own name.
