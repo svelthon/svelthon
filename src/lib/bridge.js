@@ -18,7 +18,6 @@ const {
     plainObject,
     ownAttributes,
     ownAccessors,
-    authoredInstance,
     declares,
     declaresSlots,
     behaves,
@@ -1441,6 +1440,13 @@ const storedFields = (value) => {
     return fields;
 };
 
+// The class of a value, when its author wrote it.
+const authoredType = (value) => {
+    const type = quietPyType(value);
+
+    return type !== undefined && authoredClass(type) ? type : undefined;
+};
+
 // What a Python container holds, as Svelte reads what its own state holds: an
 // object of JavaScript's is read to its end (`deepRead`), and a container is
 // walked in its turn, and so is an instance of the author's, by its fields, as
@@ -1455,10 +1461,11 @@ const storedFields = (value) => {
 // of `box.amount` did. Its class is read for them once in a walk, where each
 // of two thousand rows reading it made an update near three times the cost.
 //
-// And so is a container's of a class of the author's, `class Rows(list)` or
-// `class Tags(set)`, as Svelte runs a subclass's getters past its rows: `[rows]`
-// whose `amount` returned a `count` followed it no more. A set's members are
-// not walked, as Svelte reads none of a `Set`'s.
+// And so is any value's of a class of the author's, whatever it descends from,
+// `class Rows(list)`, `class Tags(set)` or `class Price(float)`, as Svelte runs
+// a subclass's getters past its rows or its number: `[rows]` whose `amount`
+// returned a `count` followed it no more. A set's members are not walked, as
+// Svelte reads none of a `Set`'s.
 const heldStates = (value, visited, accessors = new Map()) => {
     if (visited.has(value)) return;
 
@@ -1467,16 +1474,16 @@ const heldStates = (value, visited, accessors = new Map()) => {
     const visit = (one) => {
         if (typeof one !== 'object' || one === null) return;
 
-        if (pyContainer(one) || isSet(one) || authoredInstance(one)) heldStates(one, visited, accessors);
+        if (pyContainer(one) || authoredType(one) !== undefined) heldStates(one, visited, accessors);
         else deepRead(one, visited);
     };
 
     if (Array.isArray(value)) for (const one of value) visit(one);
     else if (pyContainer(value)) for (const [, one] of heldEntries(value)) visit(one);
 
-    const type = quietPyType(value);
+    const type = authoredType(value);
 
-    if (type === undefined || !authoredClass(type)) return;
+    if (type === undefined) return;
     if (!accessors.has(type)) accessors.set(type, ownAccessors(type));
     for (const one of storedFields(value)) visit(one);
     for (const name of accessors.get(type)) {

@@ -51,6 +51,26 @@
     let counteddict = $state([new CountedDict()]);
     let countedset = $state([new CountedSet([1])]);
     let countedtuple = $state([new CountedList(1)]);
+    class CountedNumber extends Number {
+        get amount() {
+            return model.n;
+        }
+    }
+    class CountedString extends String {
+        get amount() {
+            return model.n;
+        }
+    }
+    class CountedBytes extends Uint8Array {
+        get amount() {
+            return model.n;
+        }
+    }
+    let countedint = $state([new CountedNumber(1)]);
+    let countedfloat = $state([new CountedNumber(1.5)]);
+    let countedstr = $state([new CountedString('a')]);
+    let countedbytes = $state([new CountedBytes([97])]);
+    let countedbytearray = $state([new CountedBytes([97])]);
 
     export function bump_local() {
         local[0].n += 1;
@@ -75,4 +95,9 @@
 <div data-k="counteddict" use:observe={counteddict}></div>
 <div data-k="countedset" use:observe={countedset}></div>
 <div data-k="countedtuple" use:observe={countedtuple}></div>
+<div data-k="countedint" use:observe={countedint}></div>
+<div data-k="countedfloat" use:observe={countedfloat}></div>
+<div data-k="countedstr" use:observe={countedstr}></div>
+<div data-k="countedbytes" use:observe={countedbytes}></div>
+<div data-k="countedbytearray" use:observe={countedbytearray}></div>
 <p>{model.n}|{rows[0].n}|{record.child.n}|{nested.child.inner.n}|{box.model.n}|{slotted.model.n}|{mixed.model.n}|{local[0].n}</p>

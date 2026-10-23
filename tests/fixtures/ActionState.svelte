@@ -37,7 +37,7 @@ class Inherited(Gauge):
 
 
 def counted(base, held):
-    # A container of the author's, its property read past what it holds.
+    # A builtin's subclass of the author's, its property read past its value.
     return [type("Counted", (base,), {"amount": property(lambda self: model.n)})(held)]
 
 
@@ -59,6 +59,11 @@ countedlist = counted(list, [1])
 counteddict = counted(dict, {"a": 1})
 countedset = counted(set, {1})
 countedtuple = counted(tuple, (1,))
+countedint = counted(int, 1)
+countedfloat = counted(float, 1.5)
+countedstr = counted(str, "a")
+countedbytes = counted(bytes, b"a")
+countedbytearray = counted(bytearray, b"a")
 
 
 def number(kind, value):
@@ -117,4 +122,9 @@ def bump_local():
 <div data-k="counteddict" use:chosen={counteddict}></div>
 <div data-k="countedset" use:chosen={countedset}></div>
 <div data-k="countedtuple" use:chosen={countedtuple}></div>
+<div data-k="countedint" use:chosen={countedint}></div>
+<div data-k="countedfloat" use:chosen={countedfloat}></div>
+<div data-k="countedstr" use:chosen={countedstr}></div>
+<div data-k="countedbytes" use:chosen={countedbytes}></div>
+<div data-k="countedbytearray" use:chosen={countedbytearray}></div>
 <p>{model.n}|{rows[0].n}|{record["child"].n}|{nested["child"]["inner"].n}|{box.model.n}|{slotted.model.n}|{mixed.model.n}|{local[0]["n"]}</p>
