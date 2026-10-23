@@ -2553,18 +2553,18 @@ export function group(node, [current, write, chosen, fielded, binding, scope, wh
 
     node.$svelthonGroup = targetOf(token, where);
 
-    // The value the markup pass compiled from the tag, and whether it was
-    // written braced or as the shorthand, which Svelte writes typed. It is
-    // also what makes the action update when the value changes, as Svelte's
-    // own group reads its value with the model. `undefined` for a value that
-    // is static text, which the node holds and nothing can move.
+    // The value the markup pass compiled from the tag, and whether the field
+    // evaluates it, as any value but static text. It is also what makes the
+    // action update when the value changes, as Svelte's own group reads its
+    // value with the model. `undefined` for a value that is static text, which
+    // the node holds and nothing can move.
     let picked = chosen;
 
     // Read at each use, after Svelte has written the attributes of the turn: a
-    // spread's value, its own or an attribute's it overrides, then a braced
-    // value as the field evaluated it, then what the tag's text compiled to (a
-    // lone interpolation keeps its type there, as in Svelte, where the field
-    // holds its text). A value only itself is equal to was handed over boxed
+    // spread's value, its own or an attribute's it overrides, then the value as
+    // the field evaluated it (a lone interpolation keeps its type there, as in
+    // Svelte), then what the tag compiled to, where the field holds none. A
+    // value only itself is equal to was handed over boxed
     // (`choice`), and is taken back as itself.
     //
     // And a control with none of those holds no value: no text the node

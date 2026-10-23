@@ -2908,11 +2908,13 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 ? ''
                 : ` checked={__pybridge.groupChecked(() => ${read}, () => ${served}, ${boxes})}`;
 
-        // And whether the value is braced, the shorthand or a lone
-        // interpolation between quotes, all three compiled typed for the
-        // field: the browser then reads the one the field evaluated, where
-        // Svelte wrote it (`group`).
-        const fielded = found !== null && (found.braced || loneInterpolation(markup, found.start - 1, closingBrace) !== -1);
+        // And whether the field evaluates its value, which any value but static
+        // text is, braced, the shorthand, or text between quotes holding an
+        // interpolation: the browser then reads the one the field evaluated,
+        // where Svelte wrote it (`group`). Evaluated a second time for the
+        // group, `"v-{next_id()}"` gave the model another value than the
+        // field's, and the control unchecked itself.
+        const fielded = found !== null && (found.braced || value !== 'undefined');
 
         return (
             `use:${GROUP_ACTION}={[${read}, (${BOUND_VALUE}) => ${write}, ${value}, ${fielded}, ` +

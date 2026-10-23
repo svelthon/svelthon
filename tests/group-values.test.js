@@ -4,6 +4,8 @@ import GroupTypes from './fixtures/GroupTypes.svelte';
 import FloatForm from './fixtures/FloatForm.svelte';
 import GroupValueShapes from './fixtures/GroupValueShapes.svelte';
 import GroupValueShapesNative from './fixtures/GroupValueShapesNative.svelte';
+import GroupMixedValues from './fixtures/GroupMixedValues.svelte';
+import GroupMixedValuesNative from './fixtures/GroupMixedValuesNative.svelte';
 
 // The value a group binds is the one the field holds, however it was written:
 // longhand, shorthand, spread, a longhand a spread overrides, and an
@@ -37,6 +39,43 @@ test('a group binds the value its field holds, however written', () => {
     };
 
     expect(states(GroupValueShapes)).toEqual(states(GroupValueShapesNative));
+});
+
+// And text holding an interpolation, whose counter is called a number of times
+// that is each framework's own, so what is compared is whether the model holds
+// the value the field shows, and the control's state. Evaluated a second time
+// for the group, `"v-{next_value()}"` showed `v-1` and wrote `v-2`, and the
+// radio unchecked itself.
+test('a group binds the value its field holds, written as text around an interpolation', () => {
+    const states = (Component) => {
+        let calls = 0;
+        const target = document.body.appendChild(document.createElement('div'));
+
+        mount(Component, { target, props: { next_value: () => ++calls } });
+        flushSync();
+
+        const at = (key) => target.querySelector(`[data-k="${key}"]`);
+
+        return ['radio', 'first', 'box', 'twice'].map((key) => {
+            const seen = [at(key).checked];
+
+            for (let click = 0; click < 2; click++) {
+                at(key).click();
+                flushSync();
+                seen.push(at(key).checked, at(`${key}-model`).textContent === at(key).value);
+            }
+
+            return [key, ...seen];
+        });
+    };
+
+    expect(states(GroupMixedValuesNative)).toEqual([
+        ['radio', false, true, true, true, true],
+        ['first', false, true, true, true, true],
+        ['box', false, true, true, false, false],
+        ['twice', false, true, true, false, false]
+    ]);
+    expect(states(GroupMixedValues)).toEqual(states(GroupMixedValuesNative));
 });
 
 // A binding compares a container by identity: a dict holding a float keeps its

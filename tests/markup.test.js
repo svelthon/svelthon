@@ -1053,14 +1053,13 @@ describe('the attribute pass', () => {
 
     // The tag's own value, which is the only attribute a directive reads beside
     // itself: a DOM value is text, so the action cannot ask the node for it. It
-    // is passed on either side of the binding, and only in the braced spelling —
-    // a quoted value is text, and the node's own is then exactly right.
+    // is passed on either side of the binding.
     // The tag's value goes with the binding, and to the server for `checked`,
     // whether written longhand, as the shorthand or as a lone interpolation
     // between quotes, each marked as the field's own, which the browser reads
-    // off the element; text between quotes is not, and static text is the
-    // node's. The value goes as Python's, which the group compares as Python
-    // does.
+    // off the element, as is text holding an interpolation; static text is
+    // the node's. The value goes as Python's, which the group compares as
+    // Python does.
     test('and takes the tag value with it', () => {
         const served = /checked=\{__pybridge\.groupChecked\(\(\) => __expr_py_\d+\(\), \(\) => __expr_py_\d+\(\), (?:true|false)\)\}/;
         const action = /use:__group=\{\[.+, __expr_py_\d+\(\), true, "(?:[^"\\]|\\.)*", __py, \[\]\]\}/;
@@ -1077,7 +1076,7 @@ describe('the attribute pass', () => {
         }
 
         expect(rewrite('<input bind:group={choix} value="a">').out).toMatch(/, undefined, false, /);
-        expect(rewrite('<input bind:group={choix} value="a-{n}">').out).toMatch(/, "a-" \+ __expr_\d+\(\), false, /);
+        expect(rewrite('<input bind:group={choix} value="a-{n}">').out).toMatch(/, "a-" \+ __expr_\d+\(\), true, /);
     });
 
     // Svelte reads `<svelte:options>` at compile time and requires literals, so
