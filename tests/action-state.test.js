@@ -17,9 +17,13 @@ import ActionStateHost from './fixtures/ActionStateHost.svelte';
 // the state by a property, which the walk did not run, as Svelte runs the
 // getters of the prototype; one of a base's it does not, and neither does this.
 // And a builtin's subclass of the author's, a container, a number, a string or
-// bytes, whose property the walk did not run, read by the Python action: to a
-// JavaScript reader it is what it holds, its rows or its number.
-const COUNTED = ['list', 'dict', 'set', 'tuple', 'int', 'float', 'str', 'bytes', 'bytearray'].map((base) => `counted${base}`);
+// bytes, whose property the walk did not run. A container's view shows its
+// class's property to a JavaScript action too, as a subclass of Array shows
+// its getter; a number, a string or bytes crosses as what it holds, and is read
+// by the Python action alone.
+const CONTAINERS = ['list', 'dict', 'set', 'tuple'].map((base) => `counted${base}`);
+const SCALARS = ['int', 'float', 'str', 'bytes', 'bytearray'].map((base) => `counted${base}`);
+const COUNTED = [...CONTAINERS, ...SCALARS];
 const KINDS = [
     'direct', 'list', 'dict', 'nested', 'instance', 'slots', 'mixed', 'local', 'listbox', 'dictbox', 'tuplebox', 'listslots',
     'gauged', 'inherited', ...COUNTED
@@ -74,7 +78,7 @@ const run = (Child, python_action) => {
     return { log, page: target.querySelector('p').textContent };
 };
 
-test.for(KINDS.flatMap((kind) => [...(COUNTED.includes(kind) ? [] : [['JavaScript', kind]]), ['Python', kind]]))(
+test.for(KINDS.flatMap((kind) => [...(SCALARS.includes(kind) ? [] : [['JavaScript', kind]]), ['Python', kind]]))(
     'a %s action handed a state (%s) is updated at each change inside it, as in Svelte',
     ([action, kind]) => {
         const native = run(ActionStateNative, false);
