@@ -53,8 +53,24 @@ const generatedKey = (root, id) => `${root}\n${id}`;
 // one module for both ran the same Python in each. What it was compiled from is
 // the only key there is: the preprocessor is handed the file without the query
 // it was asked under.
-const bodyId = (name, content, about) =>
-    `${virtualId(name)}?h=${createHash('sha256').update(content).update(JSON.stringify(about ?? null)).digest('hex').slice(0, 12)}`;
+//
+// Each content takes a number, the next one free, and an edit of the file
+// hands them out again (`hotUpdate`): a save keeps its ids, which every
+// environment asks for again and Vite replaces, where an id per content left
+// the server's runner one body more per save, a module nobody asked for again
+// being one Vite never lets go. Under `body`, as `v` is the version Vite tells
+// a dependency by and serves to be cached for a year.
+const slots = (globalThis[Symbol.for('svelthon.slots')] ??= new Map());
+
+const bodyId = (root, name, content, about) => {
+    const hash = createHash('sha256').update(content).update(JSON.stringify(about ?? null)).digest('hex');
+    const own = generatedKey(root, virtualId(name));
+    const taken = slots.get(own) ?? slots.set(own, new Map()).get(own);
+
+    if (!taken.has(hash)) taken.set(hash, taken.size);
+
+    return `${virtualId(name)}?body=${taken.get(hash)}`;
+};
 
 // Which file claimed each generated name, on the same global registry and for
 // the same reason: the preprocessor and the plugin are not always the same
@@ -637,7 +653,7 @@ export function python(options = {}) {
             const directory = filename ? dirname(filename) : root;
 
             const name = nameFor(filename, root);
-            const body = bodyId(name, content, about);
+            const body = bodyId(root, name, content, about);
             const { script, module, map, imports } = compile(content, name, shownPath(filename, root), {
                 // The block alone when no markup pass came first; the whole file
                 // the markup pass was handed when one did (`about`).
@@ -1048,10 +1064,11 @@ export function svelthon(options = {}) {
         // which re-runs the preprocessor and refreshes `generated`, and only
         // then follows its import to the virtual module.
         //
-        // A component's bodies are told apart by what they were compiled from
-        // (`bodyId`), so each save makes one more: the file's are forgotten
-        // here, in the graph and in `generated`, and it keeps one per variant
-        // in use. A `.py` keeps its one body under its name.
+        // A component's bodies are told apart by a number per content
+        // (`bodyId`): the file's are forgotten here, in each environment's
+        // graph, and the numbers handed out again, so a save keeps its ids and
+        // `generated` one body per variant in use. A `.py` keeps its one body
+        // under its name.
         hotUpdate({ file, modules }) {
             const graph = this.environment.moduleGraph;
             const stale = [];
@@ -1077,10 +1094,8 @@ export function svelthon(options = {}) {
 
             if (bodies.length === 0) return;
 
-            for (const one of bodies) {
-                forget('\0' + one.slice(key('').length));
-                if (one !== own) generated.delete(one);
-            }
+            for (const one of bodies) forget('\0' + one.slice(key('').length));
+            slots.delete(own);
 
             // A store's .py is watched, not imported, so its own module has to
             // be invalidated too, otherwise its load() never reruns and

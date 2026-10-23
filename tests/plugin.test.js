@@ -456,20 +456,42 @@ describe('hot update invalidates the generated module too', () => {
         expect(out.map((one) => one.id)).toEqual(env.invalidated);
     });
 
-    // Each save is compiled to a body of its own, and the ones an edit leaves
-    // are let go: a file keeps one per variant in use, not one per save.
-    test('and lets go of the body an edit leaves', async () => {
+    // Each save is compiled under the id of the one before, the numbers handed
+    // out again when the file changes, so every environment asks for the same
+    // module again and Vite replaces it: an id per save left the server's
+    // runner one body more each time. A file keeps one body per variant in use.
+    test('and compiles an edit under the id it had', async () => {
         const filename = resolve(fixtures, 'BlockScope.svelte');
         const source = readFileSync(filename, 'utf8');
-        const saved = async (edit) => bodyOf((await preprocess(source + edit, [python()], { filename })).code);
+        const ids = [];
 
-        const before = await saved('');
-        plugin.hotUpdate.call({ environment: graph() }, { file: filename, modules: [] });
-        const after = await saved('\n');
+        for (const save of [0, 1, 2]) {
+            plugin.hotUpdate.call({ environment: graph() }, { file: filename, modules: [] });
+            ids.push(bodyOf((await preprocess(`${source}<!-- save ${save} -->\n`, [python()], { filename })).code));
+        }
 
-        expect(after).not.toBe(before);
-        expect(plugin.load('\0' + before)).toBeUndefined();
-        expect(plugin.load('\0' + after).code).toContain('$B');
+        expect(new Set(ids).size).toBe(1);
+        expect(plugin.load('\0' + ids[0]).map.sourcesContent[0]).toContain('save 2');
+    });
+
+    // And two contents at once, two variants of the file, keep two ids across an
+    // edit, each its own body, whichever is compiled first.
+    test('and keeps two variants apart across an edit', async () => {
+        const filename = resolve(fixtures, 'Variant.svelte');
+        const source = readFileSync(filename, 'utf8');
+        const compiled = async (word) =>
+            bodyOf((await preprocess(source.replace('"BASE"', JSON.stringify(word)), [python()], { filename })).code);
+        const served = (id) => plugin.load('\0' + id).code;
+
+        for (const order of [['alpha', 'beta'], ['beta', 'alpha']]) {
+            plugin.hotUpdate.call({ environment: graph() }, { file: filename, modules: [] });
+
+            const ids = [await compiled(order[0]), await compiled(order[1])];
+
+            expect(ids[0]).not.toBe(ids[1]);
+            expect([served(ids[0]).includes(order[0]), served(ids[0]).includes(order[1])]).toEqual([true, false]);
+            expect([served(ids[1]).includes(order[1]), served(ids[1]).includes(order[0])]).toEqual([true, false]);
+        }
     });
 
     // A store's `.py` is watched, not imported, so its own module has to go too
