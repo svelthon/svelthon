@@ -17,10 +17,12 @@ const held = () => {
     return process.memoryUsage().heapUsed / 1e6;
 };
 
-// What a third batch of eight rounds adds to what two left held, all in one
-// job. What a round keeps for good grows with every batch; the room the
-// engine's own tables keep, for the most they held between two collections,
-// stops growing by the second.
+// What a batch of eight rounds adds once two have run, all in one job. What a
+// round keeps for good grows with every batch; the room the engine's own
+// tables keep, for the most they held between two collections, grows once,
+// 21 MB, by the second batch or, as the collections fall on a loaded machine,
+// the third. So the less of what the third and the fourth add: a leak adds to
+// both.
 const kept = (round) => {
     const batch = () => {
         for (let at = 0; at < 8; at++) round();
@@ -29,9 +31,9 @@ const kept = (round) => {
     };
 
     batch();
-    const before = batch();
+    const [second, third, fourth] = [batch(), batch(), batch()];
 
-    return batch() - before;
+    return Math.min(third - second, fourth - third);
 };
 
 // **A value that cannot change is not watched**: a tuple or a frozenset holding
