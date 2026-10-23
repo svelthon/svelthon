@@ -6,6 +6,6 @@ import { test, expect } from 'vitest';
 import { render } from 'svelte/server';
 import QueriedChild from './fixtures/QueriedChild.svelte';
 
-test.for([['importjs'], ['module'], ['reexport']])('a Python child imported under a query, by %s, renders the Price on a server', ([mode]) => {
+test.for([['importjs'], ['module'], ['reexport'], ['quoted']])('a Python child imported under a query, by %s, renders the Price on a server', ([mode]) => {
     expect(render(QueriedChild, { props: { mode } }).body.replace(/<!--[^>]*-->/g, '')).toContain('<output>Price|EUR</output>');
 });

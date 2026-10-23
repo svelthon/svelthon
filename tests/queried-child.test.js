@@ -4,11 +4,14 @@
 // took the path for no `.svelte` file: the child was taken for a JavaScript
 // one, and the `Price` reached it a plain float without its `currency`. The
 // witness is the same child imported as it is (`held-provenance.test.js`).
+//
+// Its import of itself then took the query into its source, which a quote in
+// it broke: the module names no file now, and is resolved to itself.
 import { test, expect } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import QueriedChild from './fixtures/QueriedChild.svelte';
 
-test.for([['importjs'], ['module'], ['reexport']])('a Python child imported under a query, by %s, keeps the Price it is handed', ([mode]) => {
+test.for([['importjs'], ['module'], ['reexport'], ['quoted']])('a Python child imported under a query, by %s, keeps the Price it is handed', ([mode]) => {
     const target = document.body.appendChild(document.createElement('div'));
     mount(QueriedChild, { target, props: { mode } });
     flushSync();

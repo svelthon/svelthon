@@ -1,4 +1,4 @@
-import { relative, resolve, dirname, basename } from 'node:path';
+import { relative, resolve, dirname } from 'node:path';
 import { readFileSync, existsSync, statSync } from 'node:fs';
 
 import {
@@ -451,20 +451,25 @@ function tagged(code, key) {
 // asks, since Svelte sets `export default` last when it wraps the component for
 // hot reload. Said in the `<script module>`, at its start, or in one of its own
 // after the file's last line, so nothing the author wrote moves.
+//
+// The module is the one asked for, `./Child.svelte?variant=one` a module and a
+// component of its own: its import of itself names no file, and the plugin
+// resolves it to the module that imports it (`SELF`). By its file, the one
+// without the query announced itself, and a parent took the other for a
+// JavaScript child, which it handed JavaScript's values.
+const SELF = 'virtual:svelthon-self';
+
 const announced = (code, filename) => {
     if (!filename) return code;
 
     const statement =
-        `import __svelthon_self from ${JSON.stringify(`./${basename(filename)}`)};` +
+        `import __svelthon_self from ${JSON.stringify(SELF)};` +
         `import { __pybridge as __svelthon_bridge } from 'svelthon/bridge';` +
         `__svelthon_bridge.python(() => __svelthon_self);`;
     const at = moduleScriptStart(code);
 
     return at === -1 ? `${code}<script module>${statement}</script>` : code.slice(0, at) + statement + code.slice(at);
 };
-
-// That import, as Svelte prints it: the specifier, and the quote that closes it.
-const SELF_IMPORT = /(import __svelthon_self from (['"])[^'"]*)(\2)/;
 
 export function python(options = {}) {
     const calls = perCall();
@@ -974,24 +979,10 @@ export function svelthon(options = {}) {
         configResolved(config) {
             routes = config.root;
         },
-        // A component imported under a query, `./Child.svelte?variant=one`, is
-        // a module of its own and a component of its own, which named itself
-        // by its file alone (`announced`): a parent took it for a JavaScript
-        // child and handed it JavaScript's values. It names itself as it was
-        // asked for, once Svelte has compiled it.
-        transform: {
-            order: 'post',
-            handler(code, id) {
-                const at = id.indexOf('?');
-
-                if (at === -1 || !id.slice(0, at).endsWith('.svelte')) return;
-
-                const named = code.replace(SELF_IMPORT, (_, specifier, quote, close) => specifier + id.slice(at) + close);
-
-                return named === code ? undefined : { code: named, map: null };
-            }
-        },
         resolveId(specifier, importer) {
+            // A component's import of itself is the module that imports it, as
+            // it was asked for (`announced`).
+            if (specifier === SELF && importer !== undefined) return importer;
             if (isVirtual(specifier)) return '\0' + specifier;
 
             // The module as Python reaches it is resolved as its file is, and

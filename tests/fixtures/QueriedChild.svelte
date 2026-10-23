@@ -5,7 +5,8 @@
 
 <script lang="python">
     # A Python child imported under a query: by `importjs`, by the
-    # `<script module>`, or through a JavaScript module that re-exports it.
+    # `<script module>`, or through a JavaScript module that re-exports it,
+    # under a query that holds both quotes too.
     importjs Child from "./HeldPriceChild.svelte?variant=importjs"
 
     mode: str = "importjs"
@@ -21,6 +22,8 @@
     <Child {value} />
 {:else if mode == "module"}
     <ModuleChild {value} />
-{:else}
+{:else if mode == "reexport"}
     <held.Child {value} />
+{:else}
+    <held.Quoted {value} />
 {/if}
