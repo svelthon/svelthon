@@ -13,8 +13,11 @@ import {
     __pybridge,
     callable,
     ownType,
+    quietPyType,
+    declares,
     plainData,
     plainObject,
+    pyBind,
     pyClass,
     pyCoroutine,
     pyScalar,
@@ -659,6 +662,21 @@ function mapping(value) {
     return !pyClass(ownType(value)) && plainObject(value);
 }
 
+// Whether Python's loop walks a value, asked of its class as `iter()` asks, an
+// `__iter__` or a sequence's `__getitem__`, and of a JavaScript object by its
+// `Symbol.iterator`; nothing of the author's run. A string and bytes are walked
+// by Python and are a value to whoever reads a row of pairs, as they were.
+const walkable = (one) => {
+    if (Array.isArray(one)) return true;
+    if (one === null || typeof one !== 'object' || pyScalar(one) !== undefined || pyBytes(one)) return false;
+
+    const type = quietPyType(one);
+
+    if (type === undefined) return Symbol.iterator in one;
+
+    return ['__iter__', '__getitem__'].some((name) => callable(declares(type, name)));
+};
+
 // Jinja's shape: a string, or a mapping or a sequence of pairs that becomes a
 // whole query string. Not
 // Jinja's behaviour, and not Django's either: both leave `/` unquoted, which
@@ -699,7 +717,19 @@ export function urlencode(value) {
     // storage, the link carried the filters a class no longer yields. A
     // mapping's are its `items()`, which is what CPython asks of it
     // (`pyItems`), for the same reason.
-    const rows = Array.isArray(value) ? yielded(value).map((one) => (Array.isArray(one) ? yielded(one) : one)) : null;
+    //
+    // A pair is anything the loop walks (`walkable`), an object of the
+    // author's, a range or a generator as well as a list: read only when it
+    // was an array, the query was the list's repr, and a walk that refused
+    // was never run. A view a JavaScript caller hands over is its container
+    // again (`pyBind`), its rows the Python values they are.
+    const rows = Array.isArray(value)
+        ? yielded(value).map((one) => {
+              const row = one !== null && typeof one === 'object' ? pyBind(one) : one;
+
+              return walkable(row) ? yielded(row) : one;
+          })
+        : null;
     const entries = mapping(value)
         ? pyItems(value, unpackedPair)
         : rows !== null && rows.every((one) => Array.isArray(one) && one.length === 2)

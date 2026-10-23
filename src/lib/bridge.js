@@ -180,6 +180,8 @@ export {
     NONE,
     pyClass,
     ownType,
+    quietPyType,
+    declares,
     pyScalar,
     plainScalar,
     plainObject,

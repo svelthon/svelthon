@@ -1136,6 +1136,23 @@ describe('urlencode', () => {
         expect(urlencode(raw(pairs.selected))).toBe('tag=selected&page=2');
         expect(urlencode(raw(pairs.rewritten))).toBe('tag=selected');
         expect(urlencode(raw(pairs.empty))).toBe('');
+
+        // A pair that is no list or tuple is walked all the same, as the loop
+        // walks it, and what its walk raises reaches the template: read only
+        // when it was an array, the query was the list's repr.
+        expect([urlencode(raw(pairs.walked)), urlencode(raw(pairs.ranged))]).toEqual(['tag=selected', '0=1']);
+        expect(urlencode(raw(pairs.generated()))).toBe('tag=selected');
+        expect([urlencode(pairs.walked), urlencode(pairs.ranged)]).toEqual(['tag=selected', '0=1']);
+
+        let caught = 'nothing raised';
+
+        try {
+            urlencode(raw(pairs.refusing));
+        } catch (error) {
+            caught = `${globalThis.__BRYTHON__.class_name(error)}: ${_b_.str.$factory(error)}`;
+        }
+
+        expect(caught).toBe('ValueError: pair iterator failed');
     });
 
     // A dict's pairs are its `items()`, which CPython's `urlencode` and
