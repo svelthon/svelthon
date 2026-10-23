@@ -671,9 +671,13 @@ const HANDED = /^__expr_child_/;
 // render.
 const WRITES = /^__expr_set_/;
 
-const injectable = (one, { declared, names, starred, element }, component) =>
+// A helper takes no name the author's script or JavaScript already gives the
+// module (`foreign`): `importjs {host}` is the author's `host`, which the helper
+// would replace, and would write a `$host()` a component may not hold.
+const injectable = (one, { declared, foreign = [], names, starred, element }, component) =>
     (component || !one.component) &&
     !declared.includes(one.name) &&
+    !foreign.includes(one.name) &&
     (!one.whenRead || names.has(one.name)) &&
     (!one.element || element || !starred);
 
@@ -1475,7 +1479,7 @@ function preamble(c) {
         // or a `def getContext()` of theirs is theirs.
         `import { ${['getContext as __getContext', 'setContext as __setContext', 'getAllContexts as __getAllContexts']
             .concat(c.lifecycle('on_mount') || c.lifecycle('on_destroy') || c.bindables.length ? ['untrack as __untrack'] : [])
-            .concat(c.lifecycle('on_destroy') || releases(c) ? ['onDestroy as __onDestroy'] : [])
+            .concat(c.lifecycle('on_destroy') ? ['onDestroy as __onDestroy'] : [])
             .join(', ')} } from 'svelte';`,
         // The three questions the runtime asks of Svelte, answered by runes: a
         // plain module has none. Whether a reaction is reading
@@ -1623,13 +1627,16 @@ function declarations(c) {
         // own subscription is the module's, it is made once and it lasts as long
         // as the page does.
         //
-        // The list is let go once, when the instance goes (`__leave`), and the
-        // way it goes is laid down before anything can fail. A construction
-        // that raises, in the script, the template or an effect, is torn down
-        // by its boundary before any `onDestroy` has run, since Svelte's runs
-        // as a deferred effect: an effect run at once (`$effect.pre`) leaves its
-        // teardown in place from the start. `onDestroy` is the server's, which
-        // runs no effect and calls it when a render closes.
+        // On a server a component renders once and nothing follows it after,
+        // and a render that fails is never closed: its list is closed from the
+        // start (`unsubscribe`), so it signs onto nothing.
+        //
+        // In a browser the list is let go once, when the instance goes
+        // (`__leave`), and the way it goes is laid down before anything can
+        // fail. A construction that raises, in the script, the template or an
+        // effect, is torn down by its boundary before any `onDestroy` has run,
+        // since Svelte's runs as a deferred effect: an effect run at once
+        // (`$effect.pre`) leaves its teardown in place from the start.
         //
         // A root outlives the component and reads the same names, so with roots
         // the list goes when the last of them lets go: the component gone and
@@ -1637,13 +1644,13 @@ function declarations(c) {
         ...(releases(c)
             ? [
                   `const ${SUBS} = [];`,
+                  `if (typeof document === 'undefined') __unsubscribe(${SUBS});`,
                   ...(holders(c)
                       ? [`let __holders = 1;`, `const __release = () => { if (--__holders === 0) __unsubscribe(${SUBS}); };`]
                       : []),
                   `let __gone = false;`,
                   `const __leave = () => { if (__gone) return; __gone = true; ${holders(c) ? '__release();' : `__unsubscribe(${SUBS});`} };`,
-                  `$effect.pre(() => __leave);`,
-                  `__onDestroy(__leave);`
+                  `$effect.pre(() => __leave);`
               ]
             : []),
         // How an error's Python line becomes a line of this file; see `inFile`
@@ -2349,8 +2356,13 @@ function compile(
 
     if (component) refuseTemplateWalrus(root._ast, table, source, exprLines);
 
+    // The names JavaScript gives the module, an `importjs` and its `<script
+    // module>` alike, under the names Python reads: the author's, never a
+    // marker of Svelthon's nor a name a helper of it may take.
+    const foreign = new Set([...jsImported, ...jsNames.map(pythonName)]);
+
     let { props, bindables, defaulted, state, funcs, classes, deriveds, effects, inspects, reserved, bound, lines, remarked, starred } =
-        surface(root._ast.body, new Set(jsImported));
+        surface(root._ast.body, foreign);
 
     // A custom element's props belong to its element, which reads each back,
     // as `element.middle` and as the attribute `reflect` writes. Svelte answers
@@ -2446,8 +2458,9 @@ function compile(
     refuseLocked([...declared, ...reserved], !plain && !store, source, lines, lineOffset);
     refuseReserved(HOST, reserved, source, lines, lineOffset);
     refuseRemarked(remarked, source, lines, lineOffset);
-    // What the author took, an `importjs {inspect}` among them, is no rune.
-    const theirs = new Set([...declared, ...jsImported]);
+    // What the author took, an `importjs {inspect}` or a function of the
+    // `<script module>` among them, is no rune.
+    const theirs = new Set([...declared, ...foreign]);
     refuseNestedRunes(root._ast.body, source, lineOffset, theirs, table);
     refuseMisplacedMarkers(root._ast.body, source, lineOffset, theirs, component, table);
 
@@ -2543,6 +2556,7 @@ function compile(
         jsImports,
         jsImported,
         jsNames,
+        foreign: [...foreign],
         exported,
         isFunction,
         lifecycle,
@@ -2553,12 +2567,46 @@ function compile(
         .flatMap((section) => section(c))
         .join('\n');
 
+    refuseShadowedRunes(jsNames, script, source);
+
     return {
         script,
         module,
         map,
         imports: imported
     };
+}
+
+// A name the `<script module>` binds, `state` or `effect`, is one Svelte reads
+// `$state` and `$effect` as a store of, and the script this component compiles
+// to writes those runes: it would not mount, `store.subscribe is not a
+// function`. Svelte's own answer is to rename it (`store_rune_conflict`), and
+// the author's JavaScript is the author's to rename, so it is refused, said
+// where.
+//
+// Only for a rune the component runs as it is built, which certainly fails: one
+// written on a line of the script's own level, ahead of any arrow on it. A rune
+// inside a function, the `$derived` of a helper or the `$host()` of another,
+// runs only if it is called, and Svelte warns of it as it compiles.
+const builtWith = (script, name) =>
+    script.split('\n').some((line) => {
+        const at = line.search(new RegExp(`\\$${name}\\b`));
+        const arrow = line.indexOf('=>');
+
+        return at !== -1 && !/^\s/.test(line) && (arrow === -1 || at < arrow);
+    });
+
+function refuseShadowedRunes(jsNames, script, source) {
+    const shadowed = jsNames.find((name) => HOST.runes.includes(name) && builtWith(script, name));
+
+    if (shadowed === undefined) return;
+
+    throw refuse(
+        `svelthon — the \`<script module>\` binds \`${shadowed}\`, and Svelte reads the ` +
+            `\`$${shadowed}\` this component compiles to as a store of it (${source}): ` +
+            `give it another name, as Svelte asks of a name a rune shadows.`,
+        source
+    );
 }
 
 const VIRTUAL_PREFIX = 'virtual:svelthon/';

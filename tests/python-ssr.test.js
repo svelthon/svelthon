@@ -43,6 +43,11 @@ import StarSnippet from './fixtures/StarSnippet.svelte';
 import StarSnippetNative from './fixtures/StarSnippetNative.svelte';
 import StarHooks from './fixtures/StarHooks.svelte';
 import { records, reset } from './fixtures/star_records.js';
+import FailedScript from './fixtures/FailedScript.svelte';
+import FailedTemplate from './fixtures/FailedTemplate.svelte';
+import SharedReader from './fixtures/SharedReader.svelte';
+import ParentFailsAfterChild from './fixtures/ParentFailsAfterChild.svelte';
+import { __pybridge, marks, track } from '../src/lib/bridge.js';
 import * as html from './fixtures/python-ssr-html.js';
 
 // `set_context` hands back what it was given on the server too, as Svelte's
@@ -180,6 +185,27 @@ test('on_destroy runs when the server render closes: brought by a star import', 
     void render(StarHooks).body;
 
     expect(records).toEqual(['destroy']);
+});
+
+// A server render that fails keeps no subscription of a component to a shared
+// list it read: the server calls `onDestroy` when a render closes, and a render
+// that raises, in the component or in a parent rendered after it, never closes.
+// Each failed render kept one more.
+test.for([
+    ['in its script', FailedScript, {}],
+    ['in its template', FailedTemplate, {}],
+    ['in a parent, after it', ParentFailsAfterChild, { Child: SharedReader }]
+])('a server render that fails %s keeps no subscription to a shared list', ([, Component, props]) => {
+    const list = __pybridge.list([1]);
+    const counts = [];
+
+    track(list, () => {});
+    for (let i = 0; i < 3; i++) {
+        expect(() => render(Component, { props: { ...props, shared: list } }).body).toThrow();
+        counts.push(marks(list).bumps.length);
+    }
+
+    expect(counts).toEqual([1, 1, 1]);
 });
 
 // A component that reads a module's list, imported, assigned to a name, or

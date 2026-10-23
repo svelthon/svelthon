@@ -11,6 +11,9 @@ import { seen } from './fixtures/imported_markers.js';
 import './fixtures/ImportedInspectElement.svelte';
 import ImportedDecorators from './fixtures/ImportedDecorators.svelte';
 import ImportedEffectMounted from './fixtures/ImportedEffectMounted.svelte';
+import ModuleInspect from './fixtures/ModuleInspect.svelte';
+import ImportedHost from './fixtures/ImportedHost.svelte';
+import { compile } from '../src/lib/compile.js';
 import ImportedBindable from './fixtures/ImportedBindable.svelte';
 import ImportedBindableAlias from './fixtures/ImportedBindableAlias.svelte';
 import ImportedBindableHost from './fixtures/ImportedBindableHost.svelte';
@@ -37,6 +40,30 @@ test('an import named like a rune leaves the rune to Svelte', () => {
     flushSync();
 
     expect(['mounted', 'side'].map((k) => target.querySelector(`p[data-k="${k}"]`).textContent)).toEqual(['1', "the library's"]);
+});
+
+// A function of the author's JavaScript is the author's wherever it comes from:
+// one the `<script module>` declares, `inspect`, was taken for the marker and
+// its call refused; one `importjs` brings, `host`, was covered by Svelthon's
+// helper, whose `$host()` Svelte refuses outside a custom element.
+test.for([
+    ['declared by the <script module>', ModuleInspect],
+    ['imported by importjs, named like host()', ImportedHost]
+])('a function of the author named like one of Svelthon’s, %s, is the author’s', ([, Component]) => {
+    const target = document.body.appendChild(document.createElement('div'));
+    mount(Component, { target });
+    flushSync();
+
+    expect(target.querySelector('output').textContent).toBe('7');
+});
+
+// A name the `<script module>` binds that a rune shadows, `state`, made the
+// `$state` the component compiles to a read of a store, and the component did
+// not mount: refused, as Svelte asks it renamed.
+test.for(['state', 'effect'])('a `<script module>` binding `%s` is refused, the component writing that rune', (name) => {
+    expect(() => compile('count = 0\n', 'C', 'src/C.svelte', { jsNames: [name] })).toThrow(
+        new RegExp(`^svelthon — the \`<script module>\` binds \`${name}\`, and Svelte reads the \`\\$${name}\``)
+    );
 });
 
 // The props a custom element observes are read by a second pass over the
