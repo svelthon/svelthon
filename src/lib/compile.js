@@ -501,6 +501,10 @@ function takeArrows(src, where, lineOffset, allowed, theirs = new Set()) {
     return out.join('\n');
 }
 
+// The file an import names, without the query or the hash a bundler reads, as
+// Vite reads it: `./Child.svelte?variant=one` is `./Child.svelte`.
+const importedFile = (from) => from.replace(/[?#].*$/s, '');
+
 // The components a component's Python imports by default from a `.svelte`
 // file, `importjs Child from "./Child.svelte"`, read by the same rule as the
 // compiler reads the line: what each local name is, and where it comes from.
@@ -508,7 +512,7 @@ function takeArrows(src, where, lineOffset, allowed, theirs = new Set()) {
 function componentImports(src, where) {
     try {
         return takeImportJs(HOST, src, where, 0, true)
-            .imports.filter((one) => one.from.endsWith('.svelte'))
+            .imports.filter((one) => importedFile(one.from).endsWith('.svelte'))
             .flatMap((one) =>
                 one.entries
                     .filter((entry) => entry.name === null || entry.name === 'default')
@@ -2722,5 +2726,6 @@ export {
     runningNames,
     PY_NAME,
     componentImports,
+    importedFile,
     importedNames
 };

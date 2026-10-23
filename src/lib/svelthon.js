@@ -24,6 +24,7 @@ import {
     runningNames,
     PY_NAME,
     componentImports,
+    importedFile,
     importedNames
 } from './compile.js';
 
@@ -327,7 +328,7 @@ const defaultImport = (one) =>
 
 const moduleComponents = (content) =>
     moduleBody(content)
-        .filter((node) => node.type === 'ImportDeclaration' && String(node.source.value).endsWith('.svelte'))
+        .filter((node) => node.type === 'ImportDeclaration' && importedFile(String(node.source.value)).endsWith('.svelte'))
         .flatMap((node) =>
             node.specifiers
                 .filter(defaultImport)
@@ -462,6 +463,9 @@ const announced = (code, filename) => {
     return at === -1 ? `${code}<script module>${statement}</script>` : code.slice(0, at) + statement + code.slice(at);
 };
 
+// That import, as Svelte prints it: the specifier, and the quote that closes it.
+const SELF_IMPORT = /(import __svelthon_self from (['"])[^'"]*)(\2)/;
+
 export function python(options = {}) {
     const calls = perCall();
 
@@ -539,7 +543,7 @@ export function python(options = {}) {
             for (const { local, from } of [...componentImports(python, filename ?? 'component'), ...moduleComponents(content)]) {
                 if (!filename || !from.startsWith('.')) continue;
 
-                const path = resolve(dirname(filename), from);
+                const path = resolve(dirname(filename), importedFile(from));
 
                 if (!existsSync(path)) continue;
 
@@ -969,6 +973,23 @@ export function svelthon(options = {}) {
         enforce: 'pre',
         configResolved(config) {
             routes = config.root;
+        },
+        // A component imported under a query, `./Child.svelte?variant=one`, is
+        // a module of its own and a component of its own, which named itself
+        // by its file alone (`announced`): a parent took it for a JavaScript
+        // child and handed it JavaScript's values. It names itself as it was
+        // asked for, once Svelte has compiled it.
+        transform: {
+            order: 'post',
+            handler(code, id) {
+                const at = id.indexOf('?');
+
+                if (at === -1 || !id.slice(0, at).endsWith('.svelte')) return;
+
+                const named = code.replace(SELF_IMPORT, (_, specifier, quote, close) => specifier + id.slice(at) + close);
+
+                return named === code ? undefined : { code: named, map: null };
+            }
         },
         resolveId(specifier, importer) {
             if (isVirtual(specifier)) return '\0' + specifier;
