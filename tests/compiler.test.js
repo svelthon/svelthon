@@ -75,7 +75,7 @@ describe('compiler', () => {
         // onto it. A container reached through a store outlives the instance
         // that read it, so subscribing without a way out accumulates.
         expect(script).toContain('__track(__next, __bump_items, __subs)');
-        expect(script).toContain("if (typeof document === 'undefined') __unsubscribe(__subs);");
+        expect(script).toContain('if (!__pybridge.browser) __unsubscribe(__subs);');
         expect(script).toContain('const __leave = () => { if (__gone) return; __gone = true; __unsubscribe(__subs); };');
         expect(script.indexOf('$effect.pre(() => __leave);')).toBeLessThan(script.indexOf('__init(__py)'));
     });

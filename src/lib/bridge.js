@@ -4,6 +4,7 @@
 import * as core from 'bryntime';
 import { untrack } from 'svelte';
 import { createSubscriber } from 'svelte/reactivity';
+import BROWSER from 'esm-env/browser';
 import { attributeWrapper } from './attributes.js';
 
 // Held here as constants of this module: a binding imported is read through the
@@ -388,6 +389,15 @@ const optionValue = (scope, place, value) =>
     });
 
 export const __pybridge = {
+    // Whether the components run in a browser or render on a server, as Svelte
+    // tells them apart: by what the code was resolved for (`esm-env`), and not
+    // by a `document`, which a server lays down for a library or a test run
+    // under jsdom. Told by one, a server with it wrote no group's selection and
+    // handed a snippet reads of its arguments. Its `browser` entry, resolved by
+    // the bundler under the conditions it resolves this file under, where the
+    // package's index, left to Node, reads a `window` instead.
+    browser: BROWSER,
+
     // Called by the module of each component written in Python as it loads,
     // with a function that reads the component (`pythonComponent`).
     python(read) {
@@ -970,19 +980,18 @@ export const __pybridge = {
         if (crossing === undefined) {
             const crossed = (one) => pyNumbers(__pybridge.bound(one));
 
-            crossing =
-                typeof document === 'undefined'
-                    ? (renderer, ...values) => {
-                          SERVED_ARGUMENTS.push({ fn, values });
+            crossing = BROWSER
+                ? (anchor, ...args) =>
+                      fn(anchor, ...args.map((one) => () => (standsFor(fn, PYTHON_SNIPPETS) ? one() : crossed(one()))))
+                : (renderer, ...values) => {
+                      SERVED_ARGUMENTS.push({ fn, values });
 
-                          try {
-                              return fn(renderer, ...values.map(crossed));
-                          } finally {
-                              SERVED_ARGUMENTS.pop();
-                          }
+                      try {
+                          return fn(renderer, ...values.map(crossed));
+                      } finally {
+                          SERVED_ARGUMENTS.pop();
                       }
-                    : (anchor, ...args) =>
-                          fn(anchor, ...args.map((one) => () => (standsFor(fn, PYTHON_SNIPPETS) ? one() : crossed(one()))));
+                  };
             CROSSING_SNIPPETS.set(fn, crossing);
         }
 
@@ -1009,7 +1018,7 @@ export const __pybridge = {
     // and this answers nothing, which Svelte leaves alone; the model and the
     // value are handed over as reads, so the browser reads neither.
     groupChecked(model, chosen, boxes) {
-        if (typeof document !== 'undefined') return undefined;
+        if (BROWSER) return undefined;
 
         const value = chosen();
 

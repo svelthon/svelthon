@@ -208,11 +208,14 @@ test.for([
     expect(counts).toEqual([1, 1, 1]);
 });
 
-// And one that succeeds, on a server with a `document` on its global, a DOM laid
-// down for a library or a test run under jsdom: told from a browser by the
-// `document` it lacks, a server with one closed nothing, and each render kept
-// one more.
-test('a server render that succeeds with a document on the global keeps no subscription', () => {
+// And on a server with a `document` on its global, a DOM laid down for a
+// library or a test run under jsdom, a render that succeeds and one that
+// fails: told from a browser by the `document` it lacks, a server with one
+// closed nothing, and each render kept one more.
+test.for([
+    ['succeeds', SharedReader, {}],
+    ['fails', ParentFailsAfterChild, { Child: SharedReader }]
+])('a server render that %s with a document on the global keeps no subscription', ([outcome, Component, props]) => {
     const list = __pybridge.list([1]);
     const counts = [];
 
@@ -220,7 +223,10 @@ test('a server render that succeeds with a document on the global keeps no subsc
     globalThis.document = {};
     try {
         for (let i = 0; i < 3; i++) {
-            expect(render(SharedReader, { props: { shared: list } }).body).toContain('1');
+            const body = () => render(Component, { props: { ...props, shared: list } }).body;
+
+            if (outcome === 'fails') expect(body).toThrow();
+            else expect(body()).toContain('1');
             counts.push(marks(list).bumps.length);
         }
     } finally {

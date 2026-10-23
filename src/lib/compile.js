@@ -1645,10 +1645,11 @@ function declarations(c) {
         // since Svelte's runs as a deferred effect: an effect run at once
         // (`$effect.pre`) leaves its teardown in place from the start.
         //
-        // A server is told by the `document` it lacks, and one that has one, a
-        // DOM laid down for a library or a test run under jsdom, lets its list
-        // go when a render closes, as Svelte's calls `onDestroy` then: each
-        // render that succeeded kept one more. One that fails there still does.
+        // A server is told as Svelte tells it (`__pybridge.browser`), and not by
+        // the `document` it lacks: one that has one, a DOM laid down for a
+        // library or a test run under jsdom, kept a list for every render. And
+        // the list goes when a render closes too, as Svelte calls `onDestroy`
+        // then.
         //
         // A root outlives the component and reads the same names, so with roots
         // the list goes when the last of them lets go: the component gone and
@@ -1656,7 +1657,7 @@ function declarations(c) {
         ...(releases(c)
             ? [
                   `const ${SUBS} = [];`,
-                  `if (typeof document === 'undefined') __unsubscribe(${SUBS});`,
+                  `if (!__pybridge.browser) __unsubscribe(${SUBS});`,
                   ...(holders(c)
                       ? [`let __holders = 1;`, `const __release = () => { if (--__holders === 0) __unsubscribe(${SUBS}); };`]
                       : []),
