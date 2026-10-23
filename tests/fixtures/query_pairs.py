@@ -1,6 +1,6 @@
 # Sequences of pairs whose class says what a loop yields, and a pair that does:
 # `urllib.parse.urlencode` under `python3` gives the strings the test expects.
-__all__ = ["selected", "empty", "rewritten", "grown", "refused", "walked", "ranged", "generated", "refusing"]
+__all__ = ["selected", "empty", "rewritten", "grown", "refused", "walked", "ranged", "generated", "refusing", "bound", "unwalked"]
 
 
 class Selected(list):
@@ -40,6 +40,41 @@ class Refusing:
 
 def generated():
     return [(one for one in ("tag", "selected"))]
+
+
+# A sequence whose `__getitem__` a property, a classmethod or a descriptor
+# hands out, which `iter()` takes as it takes a method, and one whose class
+# sets `__iter__` to None, which it does not, its `__getitem__` notwithstanding.
+class PropertyItem:
+    @property
+    def __getitem__(self):
+        return lambda at: ["tag", "selected"][at]
+
+
+class ClassItem:
+    @classmethod
+    def __getitem__(cls, at):
+        return ["tag", "selected"][at]
+
+
+class Handed:
+    def __get__(self, owner, kind=None):
+        return lambda at: ["tag", "selected"][at]
+
+
+class DescriptorItem:
+    __getitem__ = Handed()
+
+
+class Unwalked:
+    __iter__ = None
+
+    def __getitem__(self, at):
+        return ["tag", "selected"][at]
+
+
+bound = [[PropertyItem()], [ClassItem()], [DescriptorItem()]]
+unwalked = [Unwalked()]
 
 
 selected = Selected([("tag", "stale")])

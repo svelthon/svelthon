@@ -69,6 +69,7 @@ const {
     boundMethod,
     pyItems,
     unpackedPair,
+    pyIterable,
     define,
     crossedAs,
     jsonCopy,
@@ -180,8 +181,6 @@ export {
     NONE,
     pyClass,
     ownType,
-    quietPyType,
-    declares,
     pyScalar,
     plainScalar,
     plainObject,
@@ -201,6 +200,7 @@ export {
     callable,
     pyItems,
     unpackedPair,
+    pyIterable,
     jsonCopy,
     plainData
 };

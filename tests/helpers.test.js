@@ -1144,6 +1144,13 @@ describe('urlencode', () => {
         expect(urlencode(raw(pairs.generated()))).toBe('tag=selected');
         expect([urlencode(pairs.walked), urlencode(pairs.ranged)]).toEqual(['tag=selected', '0=1']);
 
+        // Whatever form its protocol takes, as `iter()` answers: a
+        // `__getitem__` a property, a classmethod or a descriptor hands out
+        // read as no sequence. And a class that sets `__iter__` to None is no
+        // sequence, a value as any other.
+        expect(Array.from(raw(pairs.bound), (one) => urlencode(one))).toEqual(['tag=selected', 'tag=selected', 'tag=selected']);
+        expect(urlencode(raw(pairs.unwalked))).toMatch(/^%5B%3C.*Unwalked/);
+
         let caught = 'nothing raised';
 
         try {

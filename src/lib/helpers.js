@@ -13,8 +13,7 @@ import {
     __pybridge,
     callable,
     ownType,
-    quietPyType,
-    declares,
+    pyIterable,
     plainData,
     plainObject,
     pyBind,
@@ -662,19 +661,15 @@ function mapping(value) {
     return !pyClass(ownType(value)) && plainObject(value);
 }
 
-// Whether Python's loop walks a value, asked of its class as `iter()` asks, an
-// `__iter__` or a sequence's `__getitem__`, and of a JavaScript object by its
-// `Symbol.iterator`; nothing of the author's run. A string and bytes are walked
-// by Python and are a value to whoever reads a row of pairs, as they were.
+// Whether Python's loop walks a value, as `iter()` answers it (`pyIterable`),
+// whatever form its `__iter__` or its `__getitem__` takes. A string and bytes
+// are walked by Python and are a value to whoever reads a row of pairs, as
+// they were.
 const walkable = (one) => {
     if (Array.isArray(one)) return true;
     if (one === null || typeof one !== 'object' || pyScalar(one) !== undefined || pyBytes(one)) return false;
 
-    const type = quietPyType(one);
-
-    if (type === undefined) return Symbol.iterator in one;
-
-    return ['__iter__', '__getitem__'].some((name) => callable(declares(type, name)));
+    return pyIterable(one);
 };
 
 // Jinja's shape: a string, or a mapping or a sequence of pairs that becomes a
