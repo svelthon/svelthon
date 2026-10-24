@@ -302,6 +302,15 @@ describe('the plugin resolves what Vite cannot', () => {
         expect(plugin.enforce).toBe('pre');
     });
 
+    // And it has Vite transform Svelthon for the server, as vite-plugin-svelte
+    // has it transform Svelte and `esm-env`. Left to Node, as a package from
+    // npm was, the bridge's `esm-env` read a `window`, and a server with a DOM
+    // on its global rendered as a browser. The repository cannot show it: its
+    // alias puts the bridge outside `node_modules`, which Vite transforms.
+    test('it has Vite transform Svelthon for the server', () => {
+        expect(plugin.config().ssr.noExternal).toContain('svelthon');
+    });
+
     test('a virtual id is claimed with a null byte', () => {
         expect(plugin.resolveId(`${VIRTUAL_PREFIX}Counter`)).toBe(`\0${VIRTUAL_PREFIX}Counter`);
     });

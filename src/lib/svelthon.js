@@ -1012,6 +1012,13 @@ export function svelthon(options = {}) {
         // 'pre', or Vite's own resolver claims `./store.py` as a plain file and
         // hands its Python straight to the JS parser.
         enforce: 'pre',
+        // Svelthon transformed for the server, as vite-plugin-svelte declares
+        // Svelte and `esm-env`: the bridge tells a server from a browser by the
+        // conditions it is resolved under (`__pybridge.browser`), and a package
+        // left to Node is resolved under none, where `esm-env` reads a
+        // `window`. Installed from npm, a server with a DOM on its global was a
+        // browser again; a linked checkout, which Vite transforms, was not.
+        config: () => ({ ssr: { noExternal: ['svelthon'] } }),
         configResolved(config) {
             routes = config.root;
         },
