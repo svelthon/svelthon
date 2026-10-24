@@ -388,18 +388,12 @@ const optionValue = (scope, place, value) =>
         return false;
     });
 
-// How many markers of a rune's declaration each namespace's code has called,
-// and the names it has bound (`__pybridge.declaration`).
-const RUNE_MARKS = new WeakMap();
+// The declarations whose marker each namespace's code has called, by the
+// number of their statement, the marker of each number, and the names each
+// namespace has bound (`__pybridge.declaration`).
+const RUNE_MARKED = new WeakMap();
+const RUNE_MARKERS = [];
 const BOUND = new WeakMap();
-
-const runeMarker = (body) => {
-    const namespace = core.runningModule()?.namespace;
-
-    if (namespace !== null && typeof namespace === 'object') RUNE_MARKS.set(namespace, (RUNE_MARKS.get(namespace) ?? 0) + 1);
-
-    return body;
-};
 
 export const __pybridge = {
     // Whether the components run in a browser or render on a server, as Svelte
@@ -433,19 +427,36 @@ export const __pybridge = {
         return value;
     },
 
-    // The markers a declaration calls, `derived` and `effect` with its `pre`
-    // and `root`: each counts one for the namespace whose code calls it
-    // (`declaration`).
-    derived: runeMarker,
-    effect: Object.assign((body) => runeMarker(body), { pre: runeMarker, root: runeMarker }),
+    // The marker the JavaScript reads at the declaration numbered `mark`, in
+    // place of `derived` or `effect` (`translateMarkers`): `effect`'s own
+    // `pre` and `root` included, it hands its function back, and notes the
+    // number for the namespace whose code calls it (`declaration`).
+    rune(mark) {
+        if (RUNE_MARKERS[mark] === undefined) {
+            const marker = (body) => {
+                const namespace = core.runningModule()?.namespace;
 
-    // A write to a rune's name. Markers are called by declarations alone, at
-    // the top of the module, once each and in the order of the source, so the
-    // compiler knows how many the namespace has called once a declaration's
-    // own have run, its `mark`; and a name is declared once.
+                if (namespace !== null && typeof namespace === 'object') {
+                    let marked = RUNE_MARKED.get(namespace);
+
+                    if (marked === undefined) RUNE_MARKED.set(namespace, (marked = new Set()));
+                    marked.add(mark);
+                }
+
+                return body;
+            };
+
+            RUNE_MARKERS[mark] = Object.assign(marker, { pre: marker, root: marker });
+        }
+
+        return RUNE_MARKERS[mark];
+    },
+
+    // A write to a rune's name, whose declaration is the statement numbered
+    // `mark`; a name is declared once.
     //
     // - `1`, the binding: the first write of the name the namespace's own code
-    //   makes once its declaration's markers have run. Each target of `a = b =
+    //   makes once that statement's marker has run. Each target of `a = b =
     //   derived(…)` makes its own.
     // - `-1`, before the binding: one the namespace's own code makes before,
     //   what a `:=` in a default, a decorator or the marker's argument writes,
@@ -455,12 +466,11 @@ export const __pybridge = {
     //   line among them, or from a frame of a function's or a decorator's. It
     //   is the name's, as Svelte's `doubled = 99` is to its derived.
     //
-    // Asked of the write and of the count, not of a flag or of lines: one flag
-    // for the page was taken by the next write of any rune name, left raised
-    // by a decorator that failed, for every request after it; the lines could
-    // not tell two statements sharing one, and the marker of a second
-    // declaration there made the first one's name take a write after its
-    // binding for its body.
+    // Asked of the write and of the declaration's own marker: one flag for the
+    // page was taken by the next write of any rune name, and left raised by a
+    // decorator that failed; the lines could not tell two statements sharing
+    // one; and a count of every marker called took an alias of `derived`,
+    // called once, for the marker of every declaration after it.
     declaration(namespace, name, mark) {
         if (core.runningLine(namespace) === undefined) return 0;
 
@@ -468,7 +478,7 @@ export const __pybridge = {
 
         if (bound === undefined) BOUND.set(namespace, (bound = new Set()));
         if (bound.has(name)) return 0;
-        if ((RUNE_MARKS.get(namespace) ?? 0) < mark) return -1;
+        if (!RUNE_MARKED.get(namespace)?.has(mark)) return -1;
 
         bound.add(name);
         return 1;

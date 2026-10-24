@@ -14,6 +14,7 @@ import DerivedSharedLines from './fixtures/DerivedSharedLines.svelte';
 import DerivedSharedLinesNative from './fixtures/DerivedSharedLinesNative.svelte';
 import DerivedCrossLines from './fixtures/DerivedCrossLines.svelte';
 import DerivedCrossLinesNative from './fixtures/DerivedCrossLinesNative.svelte';
+import DerivedAliases from './fixtures/DerivedAliases.svelte';
 
 test('the server renders a derived written past its declaration as the value written', () => {
     const shown = (Component) => render(Component).body.match(/<output>(.*?)<\/output>/)[1];
@@ -53,4 +54,9 @@ test('the server renders a write after two declarations sharing a line as the va
 
     expect(shown(DerivedCrossLinesNative)).toBe('99 3 5 6 7');
     expect(shown(DerivedCrossLines)).toBe(shown(DerivedCrossLinesNative));
+});
+
+// And a declaration after a marker called under another name.
+test('the server renders a declaration after an aliased marker as its result', () => {
+    expect(render(DerivedAliases).body.match(/<p data-k="shown">(.*?)<\/p>/)[1]).toBe('2');
 });

@@ -635,6 +635,8 @@ const HOST = {
         write: (cell, value) => `${cell} = ${value}`
     },
     rewrite: (text, { source, lineOffset, component, bound }) => takeArrows(text, source, lineOffset, component, bound),
+    // Each declaration's marker read as its own statement's (`runeMarkerWords`).
+    translate: (text, tree, names) => translateMarkers(text, tree, names),
     runes: ['state', 'derived', 'effect', 'props', 'bindable', 'inspect', 'host']
 };
 
@@ -1022,31 +1024,96 @@ const DIRECTIVES = new Set(['__all__', '__js__']);
 // The calls that declare what a name is, in their call spelling.
 const MARKERS = ['derived', 'effect', 'inspect', 'inspect_with', 'export'];
 
-// How many times a statement calls the markers that note a declaration as it
-// runs (`__pybridge.derived`, `__pybridge.effect`): once for `name =
-// derived(…)`, `effect(…)`, `effect.pre(…)` or `effect.root(…)`, and once per
-// such decorator of a `def`. Counted in the order the module runs them, the
-// markers a namespace has called say which declarations have reached their
-// binding (`__pybridge.declaration`).
+// The words of the markers a declaration calls, `derived` and `effect` with its
+// `pre` and `root`, where the analysis reads a declaration: the whole value of
+// an assignment at the top of the module, or a decorator of a `def` there. Each
+// statement holding one is numbered, in the order of the source, its `mark`.
+//
+// The JavaScript reads each of those words as a marker of its own statement
+// (`translate`, `__pybridge.rune`): the binding of a declaration is the first
+// write of its name once its own marker has run (`__pybridge.declaration`).
+// Any other `derived`, an alias, `globals()["derived"]`, is the identity, and
+// marks nothing: counted, an alias called once made every declaration after it
+// take what a `:=` wrote before its binding for its body.
 const RUNE_MARKERS = new Set(['derived', 'effect']);
 const EFFECT_MOMENTS = new Set(['pre', 'root']);
 
-const markerCalls = (node, theirs) => {
+function runeMarkerWords(body, theirs) {
     const $B = globalThis.__BRYTHON__;
-    const marker = (one) =>
-        (one instanceof $B.ast.Name && RUNE_MARKERS.has(one.id) && !theirs(one.id)) ||
-        (one instanceof $B.ast.Attribute &&
-            one.value instanceof $B.ast.Name &&
-            one.value.id === 'effect' &&
-            EFFECT_MOMENTS.has(one.attr) &&
-            !theirs('effect'));
+    const word = (one) =>
+        one instanceof $B.ast.Name && RUNE_MARKERS.has(one.id) && !theirs(one.id)
+            ? one
+            : one instanceof $B.ast.Attribute &&
+                one.value instanceof $B.ast.Name &&
+                one.value.id === 'effect' &&
+                EFFECT_MOMENTS.has(one.attr) &&
+                !theirs('effect')
+              ? one.value
+              : null;
+    const found = [];
 
-    if (node instanceof $B.ast.Assign || node instanceof $B.ast.AnnAssign) {
-        return node.value instanceof $B.ast.Call && marker(node.value.func) ? 1 : 0;
+    for (const node of body) {
+        const words =
+            node instanceof $B.ast.Assign || node instanceof $B.ast.AnnAssign
+                ? [node.value instanceof $B.ast.Call ? word(node.value.func) : null]
+                : node instanceof $B.ast.FunctionDef || node instanceof $B.ast.AsyncFunctionDef
+                  ? node.decorator_list.map(word)
+                  : [];
+        const own = words.filter((one) => one !== null);
+
+        if (own.length) found.push({ node, words: own, mark: found.length + 1 });
     }
 
-    return (node.decorator_list ?? []).filter(marker).length;
+    return found;
+}
+
+// The word the JavaScript reads for a marker of statement `mark`, as long as
+// the author's, so that every column of the line stays where it stood.
+const markerWord = (word, mark) => {
+    const digits = word.length - 3;
+    const spelled = `${word === 'derived' ? '__R' : '__E'}${mark.toString(36).padStart(digits, '0')}`;
+
+    if (spelled.length !== word.length) {
+        throw new Error(`svelthon — more than ${36 ** digits - 1} rune declarations in one module`);
+    }
+
+    return spelled;
 };
+
+// The markers the JavaScript reads in place of `derived` and `effect` at each
+// declaration, published as helpers are, no name of the module's own.
+const markerBindings = (c) =>
+    Array.from({ length: c.marked }, (_, at) =>
+        ['derived', 'effect'].map(
+            (word) => `__bind(__proto, '${markerWord(word, at + 1)}', () => __pybridge.rune(${at + 1}), undefined, undefined, false);`
+        )
+    ).flat();
+
+// The text the JavaScript is compiled from (Bryc's `host.translate`): the
+// author's, each marker word of a declaration spelled for its statement.
+function translateMarkers(text, tree, names) {
+    const foreign = new Set(names.map(pythonName));
+    const found = runeMarkerWords(tree.body, (one) => foreign.has(one));
+
+    if (found.length === 0) return text;
+
+    const lines = text.split('\n');
+
+    for (const { words, mark } of found) {
+        for (const one of words) {
+            const line = lines[one.lineno - 1];
+
+            if (line.slice(one.col_offset, one.col_offset + one.id.length) !== one.id) {
+                throw new Error(`svelthon — the marker \`${one.id}\` is not where its line says, line ${one.lineno}`);
+            }
+
+            lines[one.lineno - 1] =
+                line.slice(0, one.col_offset) + markerWord(one.id, mark) + line.slice(one.col_offset + one.id.length);
+        }
+    }
+
+    return lines.join('\n');
+}
 
 // `theirs` names what the author imported from JavaScript, an `importjs
 // {inspect}` among them: a call to it is theirs, and its value is data.
@@ -1227,15 +1294,13 @@ function surface(body, theirs = new Set()) {
         node.target instanceof $B.ast.Name &&
         MARKERS.some((one) => marked(node, one));
 
-    // The markers the module has called once each statement has run, in the
-    // order it runs them: a declaration's `mark` is the count once its own have
-    // run (`markerCalls`).
-    let marks = 0;
+    // The number of the statement whose marker a declaration calls
+    // (`runeMarkerWords`).
+    const marks = new Map(runeMarkerWords(body, mine).map((one) => [one.node, one.mark]));
 
     const visit = (statements) => {
         for (const node of statements) {
             statement = node.lineno;
-            marks += markerCalls(node, mine);
 
             if (node instanceof $B.ast.Assign || annotatedMarker(node)) {
                 for (const target of node.targets ?? [node.target]) {
@@ -1269,8 +1334,8 @@ function surface(body, theirs = new Set()) {
                     // below needs no special case for either: it already writes
                     // `$derived.by(() => __fn_x())` and `$effect(() => __fn_x())`,
                     // and a lambda answers a call exactly as a `def` does.
-                    if (marked(node, 'derived')) deriveds.push({ name: target.id, arity: 0, mark: marks });
-                    else if (marked(node, 'effect')) effects.push({ name: target.id, arity: 0, mark: marks });
+                    if (marked(node, 'derived')) deriveds.push({ name: target.id, arity: 0, mark: marks.get(node) });
+                    else if (marked(node, 'effect')) effects.push({ name: target.id, arity: 0, mark: marks.get(node) });
                     else if (marked(node, 'inspect')) inspects.push({ name: target.id, arity: 0 });
                     // The callable comes first, so the emission takes it off the
                     // front of the evaluated list rather than out of the source.
@@ -1336,7 +1401,7 @@ function surface(body, theirs = new Set()) {
                 const entry = {
                     name: node.name,
                     arity: arityOf(node.args),
-                    mark: marks,
+                    mark: marks.get(node),
                     ...(pre ? { pre: true } : {}),
                     ...(root ? { root: true } : {}),
                     // `@export` leaves the function where it was: it is an
@@ -1966,6 +2031,7 @@ function injectedBindings(c) {
     return [
         ...injectedPreamble(c, true),
         ...injections(c, true),
+        ...markerBindings(c),
 
         // Wrappers for compiled template expressions. Not Python's own bool()
         // and str(): a template may hold a foreign JavaScript value, a DOM node
@@ -2305,6 +2371,7 @@ function plainBindings(c) {
             `__bind(__proto, '${n}', () => __pybridge.declared(__classes[${JSON.stringify(n)}]), function (${NEXT_VALUE}) { __pybridge.declare(this, '${n}', ${NEXT_VALUE}, __classes); });`
         ]),
         ...injections(c, false),
+        ...markerBindings(c),
 
         // A module has no `<script module>`, so nothing joins its own imports.
         ...jsNameBindings(HOST, c),
@@ -2655,6 +2722,9 @@ function compile(
         listedAt,
         unsignalled,
         plainDeriveds,
+        // How many statements call a marker of a declaration, each read as
+        // its own (`translateMarkers`).
+        marked: runeMarkerWords(root._ast.body, (one) => foreign.has(one)).length,
         jsImports,
         jsImported,
         jsNames,

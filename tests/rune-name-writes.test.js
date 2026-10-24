@@ -23,6 +23,7 @@ import RuneWalrus from './fixtures/RuneWalrus.svelte';
 import DerivedSharedLines from './fixtures/DerivedSharedLines.svelte';
 import DerivedImportingDecorator from './fixtures/DerivedImportingDecorator.svelte';
 import DerivedCrossLines from './fixtures/DerivedCrossLines.svelte';
+import DerivedAliases from './fixtures/DerivedAliases.svelte';
 import DerivedCrossLinesNative from './fixtures/DerivedCrossLinesNative.svelte';
 import DerivedSharedLinesNative from './fixtures/DerivedSharedLinesNative.svelte';
 import EffectNameWrites from './fixtures/EffectNameWrites.svelte';
@@ -166,6 +167,24 @@ test('two declarations sharing a line leave a write of the first after both a va
     expect(run(DerivedCrossLinesNative)).toEqual(['99 3 True 5 6 7 99', '99 3 5 6 7', '4 6 False 10 12 14 99', '4 6 10 12 14']);
     expect(run(DerivedCrossLines, (one) => ran.push(one))).toEqual(run(DerivedCrossLinesNative));
     expect(ran).toEqual(['run 1', 'run 2']);
+});
+
+// A declaration's marker is its own statement's: `derived` or `effect` under
+// another name is the identity, and marks nothing. Counted with every marker
+// called, an alias called once made the declaration after it take what a
+// `:=` wrote before its binding for its body, `TypeError: 'int' object is not
+// callable`, and the binding for a value.
+test('a marker called under another name leaves the declarations after it their bindings', () => {
+    const ran = [];
+    const { instance, shown } = mounted(DerivedAliases, { notify: (one) => ran.push(one) });
+    const seen = [instance.held(), shown()];
+
+    instance.bump();
+    flushSync();
+    seen.push(instance.held(), shown());
+
+    expect(seen).toEqual(['True True 5 False 2', '2', 'True True 5 False 4', '4']);
+    expect(ran).toEqual(['watch 1', 'watch 2']);
 });
 
 // The mark of a declaration is its namespace's: one mark for the page was
