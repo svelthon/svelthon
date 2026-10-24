@@ -30,7 +30,9 @@ const PROPS_ID = '__props_id';
 
 const INJECTED = [
     // The decorators only mark; the compiler has read them off the AST already.
-    { name: 'derived', value: '() => (f) => f', locked: true },
+    // `derived` and `effect` note, besides, where their declaration runs
+    // (`__pybridge.declaration`).
+    { name: 'derived', value: '() => __pybridge.derived', locked: true },
     { name: 'bindable', value: '() => (v) => v', locked: true },
     // `@export` is what Svelte writes as `export function focus()`: the one
     // thing a parent can reach on a child that is not a prop. It marks the
@@ -55,11 +57,7 @@ const INJECTED = [
     // `effect` carries `pre` because Python really applies the decorator at run
     // time: `@effect.pre` reads the attribute before calling it, and an identity
     // without one would raise before the compiler's own wiring ever ran.
-    {
-        name: 'effect',
-        value: '() => __global.Object.assign((f) => f, { pre: (f) => f, root: (f) => f })',
-        locked: true
-    },
+    { name: 'effect', value: '() => __pybridge.effect', locked: true },
 
     // The two bridges, each way. `to_py` is what makes `.get()`, `.items()`
     // and `isinstance(x, dict)` work on something that only ever crossed from

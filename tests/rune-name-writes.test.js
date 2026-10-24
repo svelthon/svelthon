@@ -20,10 +20,12 @@ import DerivedDeclarations from './fixtures/DerivedDeclarations.svelte';
 import DerivedDeclarationsNative from './fixtures/DerivedDeclarationsNative.svelte';
 import DerivedDeclarationFails from './fixtures/DerivedDeclarationFails.svelte';
 import RuneWalrus from './fixtures/RuneWalrus.svelte';
+import DerivedSharedLines from './fixtures/DerivedSharedLines.svelte';
+import DerivedImportingDecorator from './fixtures/DerivedImportingDecorator.svelte';
+import DerivedSharedLinesNative from './fixtures/DerivedSharedLinesNative.svelte';
 import EffectNameWrites from './fixtures/EffectNameWrites.svelte';
 import store from './fixtures/derived_writes.svelte.py';
 import { held, write, bump } from './fixtures/derived_writes_plain.py';
-import { compile } from '../src/lib/compile.js';
 
 const mounted = (Component, props) => {
     const target = document.body.appendChild(document.createElement('div'));
@@ -123,14 +125,36 @@ test('a := of the name inside its declaration is written over by the declaration
     expect(seen.toSorted()).toEqual(['early 1', 'early 2', 'watched 1', 'watched 2']);
 });
 
-// What the module writes on a declaration's lines is the declaration's, so a
-// declaration stands on lines of its own: another statement there would be
-// read as the declaration too, and a value written there taken for the body.
-test.for([
-    ['a second statement after it', 'd = derived(lambda: 1); d = 99\n'],
-    ['a statement before it', 'x = 1; d = derived(lambda: x)\n']
-])('a declaration with %s is refused', ([, source]) => {
-    expect(() => compile(source, 'S', 'src/S.svelte')).toThrow(/shares with another statement/);
+// A declaration sharing its line with another statement is Python, and so is a
+// read of the name between a `:=` and the binding: the binding is the write
+// after the declaration's marker ran, and what a statement after it writes is
+// Svelte's write to its derived. Told by the line alone, both were refused.
+test('a declaration sharing its line, and a read before its binding, run as Python and Svelte run them', () => {
+    const trace = (Component) => {
+        const { instance, shown } = mounted(Component);
+        const seen = [instance.held(), shown()];
+
+        instance.bump();
+        flushSync();
+        seen.push(instance.held(), shown());
+        return seen;
+    };
+
+    expect(trace(DerivedSharedLinesNative)).toEqual(['2 1 1 99 9', '2 1 1 99 9', '4 1 1 6 13', '4 1 1 6 13']);
+    expect(trace(DerivedSharedLines)).toEqual(trace(DerivedSharedLinesNative));
+});
+
+// The mark of a declaration is its namespace's: one mark for the page was
+// replaced by the markers of a store a decorator above `@derived` imported,
+// and the binding taken for a write before it, the function held as a value.
+test('a decorator importing a store with runes leaves the declaration its binding', () => {
+    const { instance, shown } = mounted(DerivedImportingDecorator);
+    const seen = [instance.held(), shown()];
+
+    instance.bump();
+    flushSync();
+    seen.push(instance.held(), shown());
+    expect(seen).toEqual(['2 3', '2', '4 3', '4']);
 });
 
 test('a declaration that fails leaves the next write elsewhere a value', () => {

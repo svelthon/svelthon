@@ -1029,31 +1029,6 @@ const declaredOn = (node) => ({
     to: node.end_lineno ?? node.lineno
 });
 
-// A rune's declaration stands on lines of its own. What the module's own code
-// writes to the name on those lines is the declaration's, and the last of it
-// the body (`__pybridge.declaration`), so another statement there, `d =
-// derived(…); d = 99`, would be read as the declaration too, as `inspect(…)`
-// sharing a line is wired to nothing. A `:=` of the name inside the
-// declaration is no other statement: the binding after it writes over it, as
-// Python's does.
-function refuseCrowdedDeclarations(body, declarations, source, lineOffset) {
-    const spans = body.map(declaredOn);
-
-    for (const one of declarations) {
-        if (spans.filter((span) => span.from <= one.to && span.to >= one.from).length > 1) {
-            const line = one.from + lineOffset;
-
-            throw refuse(
-                `svelthon — \`${one.name}\` is declared on a line it shares with another statement; a rune's ` +
-                    `declaration stands on lines of its own, where what the module writes to the name is the ` +
-                    `declaration's (${source}:${line})`,
-                source,
-                line
-            );
-        }
-    }
-}
-
 // `theirs` names what the author imported from JavaScript, an `importjs
 // {inspect}` among them: a call to it is theirs, and its value is data.
 function surface(body, theirs = new Set()) {
@@ -1465,33 +1440,40 @@ const destroyer = (name) => `__root_${name}`;
 // write at all. The effect keeps the body it was declared with, as Python
 // keeps the function a decorator registered when the name is bound again.
 const named = (name) => `__named_${name}`;
+// Whether a derived's declaration has bound its body: until then the name
+// reads what it holds through its cell, and not through Svelte's derived, which
+// on a server keeps the first value read from it.
+const installed = (name) => `__installed_${name}`;
 
-// A write to a rune's name: the declaration's installs its body, as the
-// namespace's own code writes it on the statement's lines
-// (`__pybridge.declaration`), and any other is the name's. The setter is a
-// `function`, whose `this` is the namespace written.
+// A write to a rune's name: the binding of its declaration installs its body,
+// and any other is the name's, a write before the binding included
+// (`__pybridge.declaration`, `1`, `-1`, `0`). The setter is a `function`,
+// whose `this` is the namespace written.
 //
 // A derived's is Svelte's write to its derived, `doubled = 99`: the name holds
 // the value until something its body read changes, then its result again.
-// With no body to come back to, a name `del` removed, or in a plain module,
-// which follows nothing, it holds the value for good. `del` writes `undefined`,
-// which leaves no body, and runs nothing. Taken for a body, 99 was called at
-// the next read.
-const declaration = (one) => `__pybridge.declaration(this, ${one.from}, ${one.to})`;
+// With no body to come back to, before its binding, once `del` removed it, or
+// in a plain module, which follows nothing, it holds the value for good. `del`
+// writes `undefined`, which leaves no body, and runs nothing. Taken for a
+// body, 99 was called at the next read.
+const declaration = (one) => `__pybridge.declaration(this, '${one.name}', ${one.from}, ${one.to})`;
 
 const derivedWrite = (d, plain = false) => {
     const held = `${fn(d.name)} = () => ${NEXT_VALUE};`;
+    const bound = plain ? `${fn(d.name)} = ${NEXT_VALUE};` : `{ ${fn(d.name)} = ${NEXT_VALUE}; ${installed(d.name)} = true; }`;
 
     return (
-        `if (${NEXT_VALUE} === undefined || ${declaration(d)}) ${fn(d.name)} = ${NEXT_VALUE};` +
-        (plain ? ` else ${held}` : ` else if (${fn(d.name)} === undefined) ${held} else ${d.name} = ${NEXT_VALUE};`)
+        `if (${NEXT_VALUE} === undefined) ${fn(d.name)} = ${NEXT_VALUE};` +
+        ` else { const __at = ${declaration(d)}; if (__at > 0) ${bound}` +
+        (plain ? ` else ${held}` : ` else if (__at < 0 || ${fn(d.name)} === undefined) ${held} else ${d.name} = ${NEXT_VALUE};`) +
+        ` }`
     );
 };
 
 // An effect's is the name's alone (`named`), and the effect keeps its body: a
 // body replaced was called at the effect's next run.
 const effectWrite = (e) =>
-    `if (${NEXT_VALUE} !== undefined && ${declaration(e)}) { ${fn(e.name)} = ${NEXT_VALUE}; ${named(e.name)} = undefined; }` +
+    `if (${NEXT_VALUE} !== undefined && ${declaration(e)} > 0) { ${fn(e.name)} = ${NEXT_VALUE}; ${named(e.name)} = undefined; }` +
     ` else ${named(e.name)} = { value: ${NEXT_VALUE} };`;
 
 const effectName = (name) => `(${named(name)} === undefined ? ${fn(name)} : ${named(name)}.value)`;
@@ -1694,6 +1676,7 @@ function declarations(c) {
         // its derived (`authorBindings`).
         ...c.deriveds.flatMap((d) => [
             `let ${fn(d.name)} = $state.raw(undefined);`,
+            `let ${installed(d.name)} = false;`,
             `let ${d.name} = $derived.by(() => __invoke(${fn(d.name)}));`
         ]),
         // Which containers this instance signed onto, so it can sign off when
@@ -1935,9 +1918,12 @@ function authorBindings(c) {
         // __follow(): a @derived that hands back a container it was given is the one
         // place the revision cannot travel by itself: Svelte memoises the
         // derived on `===`, so the reader subscribes to the object instead.
+        // Read through its cell until its declaration binds the body
+        // (`installed`): what a `:=` wrote before.
         ...c.deriveds.map(
             (d) =>
-                `__bind(__proto, '${d.name}', () => __follow(${d.name}), function (${NEXT_VALUE}) { ${derivedWrite(d)} }, () => ${fn(d.name)}, true, true);`
+                `__bind(__proto, '${d.name}', () => (${installed(d.name)} ? __follow(${d.name}) : __invoke(${fn(d.name)})), ` +
+                `function (${NEXT_VALUE}) { ${derivedWrite(d)} }, () => ${fn(d.name)}, true, true);`
         )
     ];
 }
@@ -2553,7 +2539,6 @@ function compile(
     const theirs = new Set([...declared, ...foreign]);
     refuseNestedRunes(root._ast.body, source, lineOffset, theirs, table);
     refuseMisplacedMarkers(root._ast.body, source, lineOffset, theirs, component, table);
-    refuseCrowdedDeclarations(root._ast.body, [...plainDeriveds, ...deriveds, ...effects], source, lineOffset);
 
     // Functions by default, what a framework calls by name. A module that wants
     // to export values says so with `__all__`, exactly as it would to a Python

@@ -10,6 +10,8 @@ import DerivedWritesServerNative from './fixtures/DerivedWritesServerNative.svel
 import DerivedDeclarations from './fixtures/DerivedDeclarations.svelte';
 import DerivedDeclarationsNative from './fixtures/DerivedDeclarationsNative.svelte';
 import RuneWalrus from './fixtures/RuneWalrus.svelte';
+import DerivedSharedLines from './fixtures/DerivedSharedLines.svelte';
+import DerivedSharedLinesNative from './fixtures/DerivedSharedLinesNative.svelte';
 
 test('the server renders a derived written past its declaration as the value written', () => {
     const shown = (Component) => render(Component).body.match(/<output>(.*?)<\/output>/)[1];
@@ -32,4 +34,13 @@ test('the server tells a declaration from the writes beside it, as Svelte does',
 // function it was given back.
 test('the server renders a derived whose declaration holds a := of its name as its result', () => {
     expect(render(RuneWalrus).body.match(/<p data-k="shown">(.*?)<\/p>/)[1]).toBe('2 3 4 4');
+});
+
+// And a declaration sharing its line, and a read of the name between a `:=`
+// and the binding, which Svelte's derived on the server would have kept.
+test('the server renders a declaration sharing its line, and a read before its binding, as Svelte and Python do', () => {
+    const shown = (Component) => render(Component).body.match(/<p data-k="shown">(.*?)<\/p>/)[1];
+
+    expect(shown(DerivedSharedLinesNative)).toBe('2 1 1 99 9');
+    expect(shown(DerivedSharedLines)).toBe(shown(DerivedSharedLinesNative));
 });

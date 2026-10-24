@@ -388,6 +388,23 @@ const optionValue = (scope, place, value) =>
         return false;
     });
 
+// The last marker of a rune's declaration each namespace's code called, its
+// line and its number, and the number each of its names has taken
+// (`__pybridge.declaration`).
+const MARKED = new WeakMap();
+const TAKEN = new WeakMap();
+let runeMarks = 0;
+
+const runeMarker = (body) => {
+    const running = core.runningModule();
+
+    if (running !== undefined && running.namespace !== null && typeof running.namespace === 'object') {
+        MARKED.set(running.namespace, { line: running.line, seq: ++runeMarks });
+    }
+
+    return body;
+};
+
 export const __pybridge = {
     // Whether the components run in a browser or render on a server, as Svelte
     // tells them apart: by what the code was resolved for (`esm-env`), and not
@@ -420,27 +437,50 @@ export const __pybridge = {
         return value;
     },
 
-    // A rune's declaration, told from any other write to its name: a write the
-    // namespace's own code makes on the lines of the statement that declares
-    // it, `from` to `to` (`runningLine`), the last of which is the statement's
-    // own binding, its body. What a decorator writes, it writes from a frame of
-    // its own; `a = b = derived(…)` writes both its names there; and what the
-    // statement writes before its binding, by a `:=` in a default, a decorator
-    // or the marker's argument, or by `globals()`, its binding writes over, as
-    // Python's does. The compiler keeps every other
-    // statement off those lines (`refuseCrowdedDeclarations`). Any other write
-    // is the name's, as Svelte's `doubled = 99` is to its derived.
+    // The markers a declaration calls, `derived` and `effect` with its `pre`
+    // and `root`: each notes, for the namespace whose statement calls it, the
+    // line it runs on, numbered (`declaration`).
+    derived: runeMarker,
+    effect: Object.assign((body) => runeMarker(body), { pre: runeMarker, root: runeMarker }),
+
+    // A write to a rune's name, told by where the namespace's own code makes
+    // it (`runningLine`), against the lines of the statement that declares it,
+    // `from` to `to`, and the marker that statement called:
     //
-    // Asked of the write itself, and not of a marker the declaration raised:
-    // a flag raised by `derived` was taken by the next write of any rune name,
-    // a decorator's above it among them, left raised by one that failed, for
-    // the page and every request after it, and taken once for two targets. And
-    // the first write there was a `:=` of the name in a default or a
-    // decorator, which the binding after it writes over.
-    declaration(namespace, from, to) {
+    // - `1`, the binding: on those lines, after the marker ran there, and the
+    //   first write of the name it is the marker of. Each target of `a = b =
+    //   derived(…)` takes it once.
+    // - `-1`, before the binding: on those lines, before the marker ran, what a
+    //   `:=` in a default, a decorator or the marker's argument writes, or
+    //   `globals()`. The name holds it, as Python's does, until the binding
+    //   writes over it.
+    // - `0`, any other: a function's or a decorator's, which writes from a
+    //   frame of its own, one made elsewhere, or after the binding on its line,
+    //   `d = derived(…); d = 99`. It is the name's, as Svelte's `doubled = 99`
+    //   is to its derived.
+    //
+    // A mark per namespace, which the next marker of that namespace replaces:
+    // one flag for the page was taken by the next write of any rune name, left
+    // raised by a decorator that failed, for every request after it, and
+    // replaced by the markers of a module a decorator above `@derived`
+    // imported. And told by the lines alone, the first write there was a `:=`
+    // of the name, and two statements sharing the lines were one.
+    declaration(namespace, name, from, to) {
         const line = core.runningLine(namespace);
 
-        return line !== undefined && line >= from && line <= to;
+        if (line === undefined || line < from || line > to) return 0;
+
+        const mark = MARKED.get(namespace);
+
+        if (mark === undefined || mark.line < from || mark.line > to) return -1;
+
+        let taken = TAKEN.get(namespace);
+
+        if (taken === undefined) TAKEN.set(namespace, (taken = new Map()));
+        if (taken.get(name) === mark.seq) return 0;
+
+        taken.set(name, mark.seq);
+        return 1;
     },
 
     // A class the script declares, read: a reaction follows the special
