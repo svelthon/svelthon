@@ -1492,7 +1492,12 @@ const destructured = (text, declare, call, tuple, refuse) => {
 // Python values: in development Svelte reads them at once to check them, and a
 // server hands values rather than reads, so they had crossed already. A server
 // keeps what it was handed before crossing, which the announcement takes back.
-function snippetParameters(trimmed, declare, call, refuse, frame) {
+//
+// `identity` is the snippet itself under a name of the compiler's, read
+// outside it, where a parameter of its name has not hidden it: a default or a
+// pattern is a `{const}` of the snippet's scope, and `row(row="ok")` announced
+// a `row` that was not initialized yet.
+function snippetParameters(trimmed, declare, call, refuse, frame, identity = null) {
     const open = trimmed.indexOf('(');
     const head = open === -1 ? trimmed : trimmed.slice(0, open);
     const close = open === -1 ? -1 : closingPair(trimmed, open);
@@ -1511,6 +1516,19 @@ function snippetParameters(trimmed, declare, call, refuse, frame) {
 
     const parts = arguments_(trimmed.slice(open + 1, close));
     const first = unpacker(refuse);
+
+    // A name the list binds twice, as Python reads names, is refused, as
+    // Python refuses it and Svelte does in JavaScript: once each position is a
+    // name of the compiler's, Svelte saw no clash, and one of the two values
+    // was taken silently, not always the same.
+    const taken = new Set();
+
+    for (const one of boundBy(parts, false, unpacker(refuse))) {
+        const named = pythonName(one);
+
+        if (taken.has(named)) refuse(`duplicate argument '${named}' in snippet definition`);
+        taken.add(named);
+    }
 
     // A bare parameter, a name with no default, declares nothing of its own:
     // each read of it reads the argument again (`__pybridge.param`), as Svelte
@@ -1560,7 +1578,7 @@ function snippetParameters(trimmed, declare, call, refuse, frame) {
 
     return (
         `${name}(${given.join(', ')})${trimmed.slice(close + 1)}}` +
-        `{let ${frame} = __pybridge.pythonSnippet(${name})}${reads.join('')}`
+        `{let ${frame} = __pybridge.pythonSnippet(${identity ?? name})}${reads.join('')}`
     );
 }
 
@@ -3717,6 +3735,18 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 // `push` goes *into* the function rather than after it, because
                 // a default reads the parameters beside it: `(j, k = j)` is
                 // ordinary JavaScript and Svelte compiles it as one.
+                //
+                // A snippet one of whose parameters carries its name is read
+                // under another before it opens (`snippetParameters`).
+                const serial = snippetCount++;
+                const named = declares ? pythonName(declares[1]) : '';
+                const opening = trimmed.indexOf('(');
+                const closing = opening === -1 ? -1 : closingPair(trimmed, opening);
+                const names =
+                    closing === -1 ? [] : boundBy(arguments_(trimmed.slice(opening + 1, closing)), false, unpacker(refusePattern));
+                const identity = names.some((one) => sameName(one, named)) ? `${SNIPPET_FRAME}identity_${serial}` : null;
+
+                if (identity !== null) out += derivedTag(identity, named);
                 out += `{#snippet ${snippetParameters(
                     trimmed,
                     (names, aliases, costly, rereads) => {
@@ -3726,7 +3756,8 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                     },
                     call,
                     refusePattern,
-                    `${SNIPPET_FRAME}${snippetCount++}`
+                    `${SNIPPET_FRAME}${serial}`,
+                    identity
                 )}`;
             } else {
                 throw refuse(unknownTag(trimmed, 'block', BLOCKS, said()));
