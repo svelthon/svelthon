@@ -1,0 +1,99 @@
+// **A write to a rune's name is the name's, unless it is the declaration's.**
+// The declaration, the statement carrying `@derived`, `derived(…)`, `=>` or
+// `@effect`, installs the body; every other write, by `=` or `del`, from the
+// script, a function or a parent's store access, is a value. A derived holds
+// it as Svelte's `doubled = 99` holds it for `let doubled = $derived(…)`, until
+// what its body read changes; with no body to come back to, a name `del`
+// removed or a plain module's, it holds it for good. An effect keeps running
+// the body it was declared with, as Python keeps the function a decorator
+// registered.
+//
+// The setter wrote every value as the body: `doubled = 99` was called at the
+// next read, `TypeError: 'int' object is not callable`, and an effect whose
+// name was bound again raised at its next run.
+import { test, expect } from 'vitest';
+import { mount, unmount, flushSync } from './mounted.js';
+import DerivedWrites from './fixtures/DerivedWrites.svelte';
+import DerivedWritesNative from './fixtures/DerivedWritesNative.svelte';
+import DerivedDrops from './fixtures/DerivedDrops.svelte';
+import EffectNameWrites from './fixtures/EffectNameWrites.svelte';
+import store from './fixtures/derived_writes.svelte.py';
+import { held, write, bump } from './fixtures/derived_writes_plain.py';
+
+const mounted = (Component, props) => {
+    const target = document.body.appendChild(document.createElement('div'));
+    const instance = mount(Component, { target, props });
+    flushSync();
+    return { instance, shown: () => target.querySelector('[data-k="shown"]')?.textContent };
+};
+
+test('a derived written holds the value, until what its body read changes, as Svelte’s does', () => {
+    const trace = (Component) => {
+        const { instance, shown } = mounted(Component);
+        const seen = [instance.held()];
+
+        instance.write(99);
+        flushSync();
+        seen.push(instance.held(), shown());
+        instance.bump();
+        flushSync();
+        seen.push(instance.held(), shown());
+        return seen;
+    };
+
+    expect(trace(DerivedWritesNative)).toEqual(['2 3 4', '99 99 99', '99 99 99', '4 6 8', '4 6 8']);
+    expect(trace(DerivedWrites)).toEqual(trace(DerivedWritesNative));
+});
+
+test('a derived written a function holds it, uncalled', () => {
+    const { instance } = mounted(DerivedWrites);
+
+    expect(instance.write_function()).toBe('held held held');
+    instance.bump();
+    flushSync();
+    expect(instance.held()).toBe('4 6 8');
+});
+
+test('a derived deleted, then written, holds the value for good', () => {
+    const { instance } = mounted(DerivedDrops);
+
+    expect(instance.drop()).toBe('NameError NameError NameError False False False');
+    expect(instance.write(7)).toBe('7 7 7 True True True');
+    expect(instance.bump()).toBe('7 7 7 True True True');
+});
+
+test('a derived of a store written holds the value, until what its body read changes', () => {
+    expect(store.held()).toBe('3 4');
+    store.write(99);
+    expect([store.held(), store.decorated, store.called]).toEqual(['99 99', 99, 99]);
+    store.bump();
+    expect([store.held(), store.decorated, store.called]).toEqual(['6 8', 6, 8]);
+});
+
+test('a derived of a plain module written holds the value for good', () => {
+    expect(held()).toBe(2);
+    write(99);
+    expect(held()).toBe(99);
+    bump();
+    expect(held()).toBe(99);
+});
+
+test.for(['rename', 'drop'])('an effect whose name a function binds again by %s runs its body', (operation) => {
+    const seen = [];
+    const { instance } = mounted(EffectNameWrites, { notify: (one) => seen.push(one) });
+
+    expect(instance[operation]()).toBe(operation === 'rename' ? '5 5 5' : 'False False False');
+    flushSync();
+    seen.length = 0;
+    instance.bump();
+    flushSync();
+    expect(seen.toSorted()).toEqual(['early 2', 'rooted 2', 'watch 2']);
+
+    // And the root's destructor, read before, still ends it.
+    instance.stop();
+    seen.length = 0;
+    instance.bump();
+    flushSync();
+    expect(seen.toSorted()).toEqual(['early 3', 'watch 3']);
+    unmount(instance);
+});

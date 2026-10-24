@@ -388,6 +388,14 @@ const optionValue = (scope, place, value) =>
         return false;
     });
 
+// Whether a rune's marker has just handed its function back (`declaration`).
+let runeMarked = false;
+
+const runeMarker = (body) => {
+    runeMarked = true;
+    return body;
+};
+
 export const __pybridge = {
     // Whether the components run in a browser or render on a server, as Svelte
     // tells them apart: by what the code was resolved for (`esm-env`), and not
@@ -418,6 +426,22 @@ export const __pybridge = {
         if (watchable(value)) BLOCK_STATE.add(value);
 
         return value;
+    },
+
+    // A rune's declaration, told from any other write to its name. The markers
+    // a declaration calls, `derived` and `effect` with its `pre` and `root`,
+    // hand their function back and say so, and the name's setter asks once
+    // (`declaration`): the write that follows a marker is the statement's own,
+    // which installs the body, since only a decorator above it runs between
+    // the two. Any other write is the name's, as Svelte's `doubled = 99` is to
+    // its derived, and a body the setter took for one ran 99 at the next read.
+    derived: runeMarker,
+    effect: Object.assign((body) => runeMarker(body), { pre: runeMarker, root: runeMarker }),
+    declaration() {
+        const declared = runeMarked;
+
+        runeMarked = false;
+        return declared;
     },
 
     // A class the script declares, read: a reaction follows the special

@@ -71,7 +71,7 @@ def rebind(name):
     elif name == "helper":
         helper = lambda: 7
     elif name == "twice":
-        twice = lambda: 7
+        twice = 7
 
 
 @export

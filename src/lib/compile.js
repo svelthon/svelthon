@@ -1427,6 +1427,37 @@ const passed = (name) => `__passed_${name}`;
 // this, exactly as JavaScript reads `const destroy = $effect.root(…)`, and
 // the name belongs to the destructor on both sides.
 const destroyer = (name) => `__root_${name}`;
+// What an effect's name holds once a write other than its declaration's has
+// reached it, boxed, so that `del`, which writes `undefined`, is told from no
+// write at all. The effect keeps the body it was declared with, as Python
+// keeps the function a decorator registered when the name is bound again.
+const named = (name) => `__named_${name}`;
+
+// A write to a rune's name: the declaration's installs its body, as the marker
+// it called says (`__pybridge.declaration`), and any other is the name's.
+//
+// A derived's is Svelte's write to its derived, `doubled = 99`: the name holds
+// the value until something its body read changes, then its result again.
+// With no body to come back to, a name `del` removed, or in a plain module,
+// which follows nothing, it holds the value for good. `del` writes `undefined`,
+// which leaves no body, and runs nothing. Taken for a body, 99 was called at
+// the next read.
+const derivedWrite = (name, plain = false) => {
+    const held = `${fn(name)} = () => ${NEXT_VALUE};`;
+
+    return (
+        `if (__pybridge.declaration() || ${NEXT_VALUE} === undefined) ${fn(name)} = ${NEXT_VALUE};` +
+        (plain ? ` else ${held}` : ` else if (${fn(name)} === undefined) ${held} else ${name} = ${NEXT_VALUE};`)
+    );
+};
+
+// An effect's is the name's alone (`named`), and the effect keeps its body: a
+// body replaced was called at the effect's next run.
+const effectWrite = (name) =>
+    `if (__pybridge.declaration()) { ${fn(name)} = ${NEXT_VALUE}; ${named(name)} = undefined; }` +
+    ` else ${named(name)} = { value: ${NEXT_VALUE} };`;
+
+const effectName = (name) => `(${named(name)} === undefined ? ${fn(name)} : ${named(name)}.value)`;
 
 // Whether the component's subscriptions have holders besides the component:
 // a root effect, which lives until its destructor is called.
@@ -1614,17 +1645,19 @@ function declarations(c) {
         // list there, and its mutations are followed as any name's are.
         ...c.funcs.flatMap((f) => stateCell(HOST, f.name, fn(f.name))),
         ...c.inspects.map((i) => `let ${fn(i.name)} = $state.raw(undefined);`),
-        ...c.effects.flatMap((e) =>
-            e.root
-                ? [`let ${fn(e.name)} = $state.raw(undefined);`, `let ${destroyer(e.name)} = ${RUNTIME.laterRoot}();`]
-                : [`let ${fn(e.name)} = $state.raw(undefined);`]
-        ),
+        ...c.effects.flatMap((e) => [
+            `let ${fn(e.name)} = $state.raw(undefined);`,
+            `let ${named(e.name)} = $state.raw(undefined);`,
+            ...(e.root ? [`let ${destroyer(e.name)} = ${RUNTIME.laterRoot}();`] : [])
+        ]),
         // A @derived name reads as its result, on both sides. The body runs
         // inside $derived.by, and every global it touches goes through a
         // namespace accessor, so Svelte discovers the dependencies by itself.
+        // Written by `let`, since a write to the name is Svelte's own write to
+        // its derived (`authorBindings`).
         ...c.deriveds.flatMap((d) => [
             `let ${fn(d.name)} = $state.raw(undefined);`,
-            `const ${d.name} = $derived.by(() => __invoke(${fn(d.name)}));`
+            `let ${d.name} = $derived.by(() => __invoke(${fn(d.name)}));`
         ]),
         // Which containers this instance signed onto, so it can sign off when
         // it goes. A container reached through a store outlives the components
@@ -1852,20 +1885,22 @@ function authorBindings(c) {
             (i) => `__bind(__proto, '${i.name}', () => ${fn(i.name)}, (${NEXT_VALUE}) => { ${fn(i.name)} = ${NEXT_VALUE}; });`
         ),
         // A root's name reads as its destructor, once its `def` has run and
-        // before the root is made (`laterRoot`); the setter still takes the
-        // function, since that is what Brython writes when the `def` runs.
+        // before the root is made (`laterRoot`); the setter takes the function
+        // its declaration writes, which is what Brython writes when the `def`
+        // runs, and any other write is the name's (`effectWrite`).
         ...c.effects.map((e) =>
             e.root
-                ? `__bind(__proto, '${e.name}', () => (${fn(e.name)} === undefined ? undefined : ${destroyer(e.name)}.stop), ` +
-                  `(${NEXT_VALUE}) => { ${fn(e.name)} = ${NEXT_VALUE}; }, () => ${fn(e.name)});`
-                : `__bind(__proto, '${e.name}', () => ${fn(e.name)}, (${NEXT_VALUE}) => { ${fn(e.name)} = ${NEXT_VALUE}; });`
+                ? `__bind(__proto, '${e.name}', () => (${named(e.name)} !== undefined ? ${named(e.name)}.value : ` +
+                  `${fn(e.name)} === undefined ? undefined : ${destroyer(e.name)}.stop), ` +
+                  `(${NEXT_VALUE}) => { ${effectWrite(e.name)} }, () => ${effectName(e.name)});`
+                : `__bind(__proto, '${e.name}', () => ${effectName(e.name)}, (${NEXT_VALUE}) => { ${effectWrite(e.name)} });`
         ),
         // __follow(): a @derived that hands back a container it was given is the one
         // place the revision cannot travel by itself: Svelte memoises the
         // derived on `===`, so the reader subscribes to the object instead.
         ...c.deriveds.map(
             (d) =>
-                `__bind(__proto, '${d.name}', () => __follow(${d.name}), (${NEXT_VALUE}) => { ${fn(d.name)} = ${NEXT_VALUE}; }, () => ${fn(d.name)}, true, true);`
+                `__bind(__proto, '${d.name}', () => __follow(${d.name}), (${NEXT_VALUE}) => { ${derivedWrite(d.name)} }, () => ${fn(d.name)}, true, true);`
         )
     ];
 }
@@ -2213,7 +2248,7 @@ function plainBindings(c) {
         ),
         ...c.plainDeriveds.map(
             (d) =>
-                `__bind(__proto, '${d.name}', () => __invoke(${fn(d.name)}), (${NEXT_VALUE}) => { ${fn(d.name)} = ${NEXT_VALUE}; }, () => ${fn(d.name)}, true, true);`
+                `__bind(__proto, '${d.name}', () => __invoke(${fn(d.name)}), (${NEXT_VALUE}) => { ${derivedWrite(d.name, true)} }, () => ${fn(d.name)}, true, true);`
         ),
         // A class is bound as in a component (`authorBindings`), so the
         // namespace sees its statement add the name, as `globals()` does.

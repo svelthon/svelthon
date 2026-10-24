@@ -650,6 +650,12 @@ the dependencies by itself**, nothing to declare. A derived may read another.
 It must be **pure**: writing state inside a derived is rejected by Svelte, and
 rightly so.
 
+Writing the name itself is Svelte's write to its derived: after `doubled = 99`
+the name is `99` until what the body read changes, then its result again. Only
+the declaration installs the body, and a function written there is a value
+like any other. An `@effect`'s name bound again holds the new value, and the
+effect keeps the body it declared.
+
 `bind:` has to read *and* write, which no single expression does, so its value is
 compiled twice, once as an expression and once as an assignment target, into the
 pair Svelte takes for exactly this (`bind:value={() => v, (n) => v = n}`). That
@@ -1594,7 +1600,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 1 865 tests as written (vitest reports more, one per
+Validated by `npm test`, 1 871 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;
