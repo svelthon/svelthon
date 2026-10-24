@@ -594,7 +594,10 @@ export function fromnow(value, locale) {
 // letter, digit and mark, turn the rest into a dash.
 //
 // NFC, not NFD: `é` written as one code point and as `e` plus a combining acute
-// look the same and must give the same URL.
+// look the same and must give the same URL. And NFC again once lowercased,
+// which may make a sequence composable that was not: `J` and a caron have no
+// composed form, `j` and a caron have one, `ǰ`. Lowercased last, `J̌` and `ǰ`
+// gave two slugs, and a link missed the anchor its own title made.
 //
 // And marks are *kept*, which is not decoration: a Devanagari vowel sign is a
 // combining mark with no composed form, so dropping marks turns `हिन्दी भाषा`
@@ -604,6 +607,7 @@ export function slugify(value) {
         .str(value)
         .normalize('NFC')
         .toLowerCase()
+        .normalize('NFC')
         .replace(/[^\p{L}\p{N}\p{M}_]+/gu, '-')
         // Django's `strip("-_")`: an underscore is kept inside, not at the ends.
         .replace(/^[-_]+|[-_]+$/g, '');

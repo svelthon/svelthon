@@ -1069,6 +1069,25 @@ describe('slugify', () => {
         expect(slugify('café')).toBe(slugify('café'));
     });
 
+    // And NFC again once lowercased, which may make a sequence composable that
+    // was not: `J` and a caron have no composed form, `j` and a caron have one,
+    // `ǰ`. Lowercased last, two cases of one title gave two slugs, and the
+    // slug was renamed when made a slug again, so a link missed its anchor.
+    test.for([
+        ['J̌', 'ǰ'],
+        ['H̱', 'ẖ'],
+        ['T̈', 'ẗ'],
+        ['W̊', 'ẘ'],
+        ['Y̊', 'ẙ'],
+        ['Ϊ́', 'ΐ'],
+        ['Ϋ́', 'ΰ'],
+        ['J̌ Ϊ́', 'ǰ-ΐ']
+    ])('a title whose lowercase composes, %s, gives the composed slug %s for either case, and keeps it', ([upper, slug]) => {
+        expect(slugify(upper)).toBe(slug);
+        expect(slugify(upper.toLowerCase())).toBe(slug);
+        expect(slugify(slugify(upper))).toBe(slug);
+    });
+
     // A Devanagari vowel sign is a combining mark with no composed form, so
     // dropping marks would shred the word rather than fold it.
     test('marks are kept, which is what stops a script being shredded', () => {
