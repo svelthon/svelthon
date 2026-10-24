@@ -760,19 +760,38 @@ function elementOptions(code, python, jsNames = []) {
         // are declared, which is the order Svelte lists them in for the same
         // element written with `$props()`. The author's text stays where it is,
         // line for line.
+        //
+        // And an entry the author wrote keeps every field it writes, and is
+        // given the type its annotation names when it writes none, as Svelte
+        // infers one for a prop of `$props()` whose entry configures something
+        // else: `{ reflect: true }` on a `bool` lost the type, and an attribute
+        // present but empty arrived as the empty string, which Python reads
+        // false.
         const written = named.value.properties;
         const names = new Set(written.map(key));
-        const missing = elementProps(python, jsNames).filter(({ name }) => !names.has(name)).map(entry);
+        const declared = elementProps(python, jsNames);
+        const types = new Map(declared.map(({ name, type }) => [name, type]));
+        const missing = declared.filter(({ name }) => !names.has(name)).map(entry);
+        const edits = written.flatMap((one) => {
+            const type = types.get(key(one));
+            const value = one.value;
 
-        if (missing.length === 0) return code;
+            return type && value?.type === 'ObjectExpression' && !value.properties.some((part) => key(part) === 'type')
+                ? [{ at: value.start + 1, text: ` type: ${JSON.stringify(type)},` }]
+                : [];
+        });
 
-        if (written.length === 0) {
-            const at = named.value.start + 1;
-            return `${code.slice(0, at)} ${missing.join(', ')} ${code.slice(at)}`;
+        if (missing.length > 0) {
+            edits.push(
+                written.length === 0
+                    ? { at: named.value.start + 1, text: ` ${missing.join(', ')} ` }
+                    : { at: written.at(-1).end, text: `, ${missing.join(', ')}` }
+            );
         }
 
-        const at = written.at(-1).end;
-        return `${code.slice(0, at)}, ${missing.join(', ')}${code.slice(at)}`;
+        return edits
+            .sort((one, other) => other.at - one.at)
+            .reduce((text, { at, text: added }) => `${text.slice(0, at)}${added}${text.slice(at)}`, code);
     }
 
     const found = ELEMENT_OPTION.exec(text);

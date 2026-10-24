@@ -12,6 +12,45 @@ import './fixtures/PartialPropsElementNative.svelte';
 import './fixtures/ReflectElement.svelte';
 import './fixtures/ReflectElementNative.svelte';
 import './fixtures/EntityNamedElement.svelte';
+import './fixtures/FlagElement.svelte';
+import './fixtures/FlagElementNative.svelte';
+
+// **An entry of `customElement.props` that writes no type keeps the type the
+// annotation names**, as Svelte infers one from a default of `$props()`:
+// `{ reflect: true }`, `{ attribute: … }` or `{}` on a `bool` lost it, and an
+// attribute present but empty arrived as the empty string, which Python reads
+// false. A type the entry writes is the author's.
+test('a flag whose entry configures something else than its type is a flag, as Svelte’s is', async () => {
+    const read = async (tag) => {
+        const element = document.createElement(tag);
+
+        for (const name of ['reflected', 'active', 'empty', 'both-on', 'spelled']) element.setAttribute(name, '');
+        document.body.appendChild(element);
+        flushSync();
+        await Promise.resolve();
+        flushSync();
+
+        try {
+            return [
+                ...['reflected', 'renamed', 'empty', 'both', 'spelled'].map((name) => [name, element[name]]),
+                element.querySelector('p').textContent
+            ];
+        } finally {
+            element.remove();
+        }
+    };
+    const native = await read('flag-element-native');
+
+    expect(native).toEqual([
+        ['reflected', true],
+        ['renamed', true],
+        ['empty', true],
+        ['both', true],
+        ['spelled', ''],
+        'on|on|on|on|off'
+    ]);
+    expect(await read('flag-element')).toEqual(native);
+});
 
 // A prop declared `reflect` is written back to its attribute, as Svelte writes
 // it: its default, a value the page sets, an attribute the page writes, and a
