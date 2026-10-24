@@ -425,8 +425,9 @@ export const __pybridge = {
     // it, `from` to `to` (`runningLine`), the last of which is the statement's
     // own binding, its body. What a decorator writes, it writes from a frame of
     // its own; `a = b = derived(…)` writes both its names there; and what the
-    // statement writes before its binding, by `globals()` or `exec`, its
-    // binding writes over, as Python's does. The compiler keeps every other
+    // statement writes before its binding, by a `:=` in a default, a decorator
+    // or the marker's argument, or by `globals()`, its binding writes over, as
+    // Python's does. The compiler keeps every other
     // statement off those lines (`refuseCrowdedDeclarations`). Any other write
     // is the name's, as Svelte's `doubled = 99` is to its derived.
     //

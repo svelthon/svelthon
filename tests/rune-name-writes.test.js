@@ -19,6 +19,7 @@ import DerivedDrops from './fixtures/DerivedDrops.svelte';
 import DerivedDeclarations from './fixtures/DerivedDeclarations.svelte';
 import DerivedDeclarationsNative from './fixtures/DerivedDeclarationsNative.svelte';
 import DerivedDeclarationFails from './fixtures/DerivedDeclarationFails.svelte';
+import RuneWalrus from './fixtures/RuneWalrus.svelte';
 import EffectNameWrites from './fixtures/EffectNameWrites.svelte';
 import store from './fixtures/derived_writes.svelte.py';
 import { held, write, bump } from './fixtures/derived_writes_plain.py';
@@ -104,29 +105,32 @@ test('a declaration is told from a decorator’s write, a second target and a wr
     expect(trace(DerivedDeclarations)).toEqual(trace(DerivedDeclarationsNative));
 });
 
-// What the module writes on a declaration's lines is the declaration's, so a
-// declaration stands on lines of its own, and binds its name once: another
-// statement there would be read as the declaration, and a `:=` of the name
-// inside it, which the declaration binds again at once, was installed as the
+// A `:=` of the name inside its own declaration is valid Python, and the
+// declaration's binding writes over it: the body is the last write on the
+// declaration's lines. Taken for the first one, the `:=` was installed as the
 // body, `TypeError: 'int' object is not callable`, in a default, a decorator's
 // argument or the marker's, for an effect as for a derived.
-const BUILD = 'def build(value):\n    return lambda: 1\n\n';
+test('a := of the name inside its declaration is written over by the declaration, as Python’s is', () => {
+    const seen = [];
+    const { instance, shown } = mounted(RuneWalrus, { notify: (one) => seen.push(one) });
+    const trace = [instance.held(), shown()];
 
-test.for([
-    ['a second statement after it', 'd = derived(lambda: 1); d = 99\n', /shares with another statement/],
-    ['a statement before it', 'x = 1; d = derived(lambda: x)\n', /shares with another statement/],
-    ['a := in a default', '@derived\ndef d(ignored=(d := 99)):\n    return 1\n', /binds the name inside its own declaration/],
-    ['a := in a decorator', `${BUILD}@build(d := 99)\n@derived\ndef d():\n    return 1\n`, /binds the name inside/],
-    ['a := in the marker’s argument', `${BUILD}d = derived(build(d := 99))\n`, /binds the name inside/],
-    ['a := in a comprehension', `${BUILD}d = derived(build([d := 1 for _ in [0]]))\n`, /binds the name inside/],
-    ['a := in an effect’s default', '@effect\ndef w(ignored=(w := 99)):\n    pass\n', /binds the name inside/],
-    ['a := in an effect.pre’s default', '@effect.pre\ndef w(ignored=(w := 99)):\n    pass\n', /binds the name inside/]
-])('a declaration with %s is refused', ([, source, said]) => {
-    expect(() => compile(source, 'S', 'src/S.svelte')).toThrow(said);
+    instance.bump();
+    flushSync();
+    trace.push(instance.held(), shown());
+
+    expect(trace).toEqual(['2 3 4 4', '2 3 4 4', '4 6 8 8', '4 6 8 8']);
+    expect(seen.toSorted()).toEqual(['early 1', 'early 2', 'watched 1', 'watched 2']);
 });
 
-test('a := inside the body a declaration hands over binds the body’s own name, and is no write of the declaration', () => {
-    expect(() => compile('d = derived(lambda: (d := 5))\n', 'S', 'src/S.svelte')).not.toThrow();
+// What the module writes on a declaration's lines is the declaration's, so a
+// declaration stands on lines of its own: another statement there would be
+// read as the declaration too, and a value written there taken for the body.
+test.for([
+    ['a second statement after it', 'd = derived(lambda: 1); d = 99\n'],
+    ['a statement before it', 'x = 1; d = derived(lambda: x)\n']
+])('a declaration with %s is refused', ([, source]) => {
+    expect(() => compile(source, 'S', 'src/S.svelte')).toThrow(/shares with another statement/);
 });
 
 test('a declaration that fails leaves the next write elsewhere a value', () => {

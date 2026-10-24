@@ -655,9 +655,8 @@ the name is `99` until what the body read changes, then its result again. Only
 the declaration installs the body, and a function written there is a value
 like any other. An `@effect`'s name bound again holds the new value, and the
 effect keeps the body it declared. What the module writes to the name on the
-declaration's lines is the declaration's, so a declaration stands on lines of
-its own, and a `:=` of the name inside it, which it binds again at once, is
-refused.
+declaration's lines is the declaration's, the last write its body, as Python
+binds the name last, so a declaration stands on lines of its own.
 
 `bind:` has to read *and* write, which no single expression does, so its value is
 compiled twice, once as an expression and once as an assignment target, into the
@@ -1603,7 +1602,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 1 876 tests as written (vitest reports more, one per
+Validated by `npm test`, 1 877 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;

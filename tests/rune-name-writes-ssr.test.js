@@ -9,6 +9,7 @@ import DerivedWritesServer from './fixtures/DerivedWritesServer.svelte';
 import DerivedWritesServerNative from './fixtures/DerivedWritesServerNative.svelte';
 import DerivedDeclarations from './fixtures/DerivedDeclarations.svelte';
 import DerivedDeclarationsNative from './fixtures/DerivedDeclarationsNative.svelte';
+import RuneWalrus from './fixtures/RuneWalrus.svelte';
 
 test('the server renders a derived written past its declaration as the value written', () => {
     const shown = (Component) => render(Component).body.match(/<output>(.*?)<\/output>/)[1];
@@ -24,4 +25,11 @@ test('the server tells a declaration from the writes beside it, as Svelte does',
 
     expect(shown(DerivedDeclarationsNative)).toBe('99 2 3 3 4');
     expect(shown(DerivedDeclarations)).toBe(shown(DerivedDeclarationsNative));
+});
+
+// And a `:=` of the name inside its own declaration, which the declaration's
+// binding writes over: the server rendered the value of the `:=`, or the
+// function it was given back.
+test('the server renders a derived whose declaration holds a := of its name as its result', () => {
+    expect(render(RuneWalrus).body.match(/<p data-k="shown">(.*?)<\/p>/)[1]).toBe('2 3 4 4');
 });
