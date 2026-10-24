@@ -8,6 +8,8 @@ import { test, expect } from 'vitest';
 import { render } from 'svelte/server';
 import GroupChecked from './fixtures/GroupChecked.svelte';
 import GroupCheckedNative from './fixtures/GroupCheckedNative.svelte';
+import GroupEncodedType from './fixtures/GroupEncodedType.svelte';
+import GroupEncodedTypeNative from './fixtures/GroupEncodedTypeNative.svelte';
 
 const boxes = (Component, props) =>
     [...render(Component, { props }).body.matchAll(/<input[^>]*>/g)].map(([tag]) => [
@@ -26,4 +28,20 @@ test.for([
         ['b', false]
     ]);
     expect(boxes(GroupChecked, { reverse, initial })).toEqual(boxes(GroupCheckedNative, { reverse, initial }));
+});
+
+// **A checkbox whose `type` is written with character references is checked
+// on a server as one**, as Svelte reads the attribute, decoded. Its notation
+// compared, `check&#98;ox` was no checkbox, the group was read as a radio's,
+// and the box the model holds was written unchecked.
+test('a box whose type holds a character reference is checked on a server as Svelte’s is', () => {
+    const checked = (Component) =>
+        [...render(Component).body.matchAll(/<input[^>]*>/g)].map(([tag]) => [
+            tag.match(/data-k="([^"]*)"/)[1],
+            /\schecked(=|\s|\/|>)/.test(tag)
+        ]);
+    const native = checked(GroupEncodedTypeNative);
+
+    expect(native.every(([, on]) => on)).toBe(true);
+    expect(checked(GroupEncodedType)).toEqual(native);
 });

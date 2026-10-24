@@ -3001,8 +3001,13 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         // that writes `checked` itself, by the attribute or by `bind:checked`,
         // is checked by it, as Svelte's is, and gets no second one, which
         // Svelte refused beside the binding as `attribute_duplicate`.
+        //
+        // The text as Svelte reads it, its character references decoded
+        // (`attributeText`): `type="check&#98;ox"` is a checkbox, which, its
+        // notation compared, the server took for a radio, and wrote unchecked.
         const kind = tag === null ? null : tagValue(markup, tag.start, 'type');
-        const boxes = kind !== null && !kind.braced && markup.slice(kind.start, kind.end) === 'checkbox';
+        const boxes =
+            kind !== null && !kind.braced && attributeText(markup.slice(kind.start, kind.end), kind.quote) === 'checkbox';
         const served =
             found !== null && value === 'undefined'
                 ? JSON.stringify(attributeText(markup.slice(found.start, found.end), found.quote))
