@@ -5,8 +5,9 @@
 // them — 16 % measured on a module that runs for every file in the project.
 // These call the hooks the way Svelte and Vite do.
 import { test, expect, describe } from 'vitest';
-import { resolve, relative } from 'node:path';
-import { readFileSync } from 'node:fs';
+import { resolve, relative, join } from 'node:path';
+import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, symlinkSync, realpathSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { preprocess, parse } from 'svelte/compiler';
 import { python, svelthon, withPrelude } from '../src/lib/svelthon.js';
 import { VIRTUAL_PREFIX } from '../src/lib/compile.js';
@@ -309,6 +310,30 @@ describe('the plugin resolves what Vite cannot', () => {
     // alias puts the bridge outside `node_modules`, which Vite transforms.
     test('it has Vite transform Svelthon for the server', () => {
         expect(plugin.config().ssr.noExternal).toContain('svelthon');
+    });
+
+    // A `.py` reached by a link is the file the link leads to, as Vite resolves
+    // a file unless told to keep links: taken by its two paths, one file was
+    // two of one Python name, and its second import was refused as a clash.
+    test('a link to a .py, or to its folder, resolves to the file it leads to, unless links are kept', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'svelthon-links-'));
+
+        mkdirSync(join(dir, 'real'));
+        mkdirSync(join(dir, 'alias'));
+        writeFileSync(join(dir, 'real', 'shared.py'), 'answer = 42\n');
+        symlinkSync(join('..', 'real', 'shared.py'), join(dir, 'alias', 'shared.py'));
+        symlinkSync('real', join(dir, 'folder'));
+
+        const importer = join(dir, 'Main.svelte');
+        const real = realpathSync(join(dir, 'real', 'shared.py'));
+        const linked = svelthon();
+
+        expect(['./real/shared.py', './alias/shared.py', './folder/shared.py'].map((one) => linked.resolveId(one, importer))).toEqual(
+            [real, real, real]
+        );
+
+        linked.configResolved({ root: dir, resolve: { preserveSymlinks: true } });
+        expect(linked.resolveId('./alias/shared.py', importer)).toBe(join(dir, 'alias', 'shared.py'));
     });
 
     test('a virtual id is claimed with a null byte', () => {

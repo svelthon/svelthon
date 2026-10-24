@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { relative, resolve, dirname } from 'node:path';
-import { readFileSync, existsSync, statSync } from 'node:fs';
+import { readFileSync, existsSync, statSync, realpathSync } from 'node:fs';
 
 import {
     overMarkup,
@@ -1007,9 +1007,16 @@ export function svelthon(options = {}) {
     // made in. Never the directory the process happens to be in when it asks.
     let routes = root;
 
+    // A file is the one its path leads to, as Vite resolves one unless told to
+    // keep links (`resolve.preserveSymlinks`): a link and its target are one
+    // module, which, taken by their two paths, were two files of one Python
+    // name, and the second import was refused as a clash.
+    let preserveSymlinks = false;
+    const fileOf = (path) => (preserveSymlinks ? path : realpathSync(path));
+
     const pyFile = (id, importer) => {
         const direct = importer ? resolve(dirname(importer), id) : resolve(routes, id);
-        if (existsSync(direct)) return direct;
+        if (existsSync(direct)) return fileOf(direct);
 
         // A leading slash means two different things. An alias has already
         // produced a real filesystem path; SvelteKit's own route entries are
@@ -1020,7 +1027,7 @@ export function svelthon(options = {}) {
         // `ENOENT: stat '/src/routes/+page.server.py'`.
         if (id.startsWith('/')) {
             const fromRoot = resolve(routes, `.${id}`);
-            if (existsSync(fromRoot)) return fromRoot;
+            if (existsSync(fromRoot)) return fileOf(fromRoot);
         }
 
         return direct;
@@ -1040,6 +1047,7 @@ export function svelthon(options = {}) {
         config: () => ({ ssr: { noExternal: ['svelthon'] } }),
         configResolved(config) {
             routes = config.root;
+            preserveSymlinks = config.resolve?.preserveSymlinks === true;
         },
         resolveId(specifier, importer) {
             // A component's import of itself is the module that imports it, as
