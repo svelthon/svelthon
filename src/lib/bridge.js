@@ -373,6 +373,7 @@ const multipleSelect = (scope, place, read) => {
         SELECT_READS.set(read, shape);
     }
 
+    shape.mode();
     return shape.node.multiple === true;
 };
 
@@ -644,9 +645,27 @@ export const __pybridge = {
     // Svelte reads `select.multiple` as it binds, and so does the read, through
     // the select this action registers under its place. Written before the
     // binding, it runs before Svelte first reads it.
+    //
+    // And the read follows the element's mode (`mode`), as Svelte's own select
+    // is told of its options by observing it: a spread that turns `multiple`
+    // off leaves Svelte selecting with the read it holds, the list of the
+    // selection's values made for a multiple select, which a single one's
+    // option holding the list itself is not; no option stayed selected.
     selectShape(node, [scope, place]) {
         const shapes = shapesOf(scope, place);
-        const shape = { node, claimed: false };
+        const mode = createSubscriber((update) => {
+            let multiple = node.multiple;
+            const observer = new MutationObserver(() => {
+                if (node.multiple !== multiple) {
+                    multiple = node.multiple;
+                    update();
+                }
+            });
+
+            observer.observe(node, { attributes: true, attributeFilter: ['multiple'] });
+            return () => observer.disconnect();
+        });
+        const shape = { node, claimed: false, mode };
 
         shapes.push(shape);
 
