@@ -1067,30 +1067,29 @@ function runeMarkerWords(body, theirs) {
     return found;
 }
 
-// The word the JavaScript reads for a marker of statement `mark`, as long as
-// the author's, so that every column of the line stays where it stood.
-const markerWord = (word, mark) => {
-    const digits = word.length - 3;
-    const spelled = `${word === 'derived' ? '__R' : '__E'}${mark.toString(36).padStart(digits, '0')}`;
-
-    if (spelled.length !== word.length) {
-        throw new Error(`svelthon — more than ${36 ** digits - 1} rune declarations in one module`);
-    }
-
-    return spelled;
-};
+// The name the JavaScript reads for the marker of statement `mark`, whichever
+// of `derived` and `effect` the statement wrote.
+const markerName = (mark) => `__R${mark.toString(36)}`;
 
 // The markers the JavaScript reads in place of `derived` and `effect` at each
 // declaration, published as helpers are, no name of the module's own.
 const markerBindings = (c) =>
-    Array.from({ length: c.marked }, (_, at) =>
-        ['derived', 'effect'].map(
-            (word) => `__bind(__proto, '${markerWord(word, at + 1)}', () => __pybridge.rune(${at + 1}), undefined, undefined, false);`
-        )
-    ).flat();
+    Array.from(
+        { length: c.marked },
+        (_, at) => `__bind(__proto, '${markerName(at + 1)}', () => __pybridge.rune(${at + 1}), undefined, undefined, false);`
+    );
 
 // The text the JavaScript is compiled from (Bryc's `host.translate`): the
 // author's, each marker word of a declaration spelled for its statement.
+//
+// The word as the author spelled it, which Python reads by its NFKC form:
+// `ｄｅｒｉｖｅｄ`, `eﬀect` or `𝒅𝒆𝒓𝒊𝒗𝒆𝒅` is `derived` or `effect`, in fewer
+// or more characters. The marker's name is written over the whole spelling and
+// filled with spaces, which Python reads before `(`, `.pre` or the end of a
+// decorator, so that every column of the line stays where it stood; and each
+// line from its end, should a name ever be longer than a spelling of five
+// characters, the shortest of `effect`'s. Compared with the AST's name by its
+// own text, the marker of `eﬀect` was refused as not where its line said.
 function translateMarkers(text, tree, names) {
     const foreign = new Set(names.map(pythonName));
     const found = runeMarkerWords(tree.body, (one) => foreign.has(one));
@@ -1098,18 +1097,20 @@ function translateMarkers(text, tree, names) {
     if (found.length === 0) return text;
 
     const lines = text.split('\n');
+    const words = found
+        .flatMap(({ words: own, mark }) => own.map((one) => ({ one, mark })))
+        .sort((left, right) => right.one.lineno - left.one.lineno || right.one.col_offset - left.one.col_offset);
 
-    for (const { words, mark } of found) {
-        for (const one of words) {
-            const line = lines[one.lineno - 1];
+    for (const { one, mark } of words) {
+        const line = lines[one.lineno - 1];
+        const spelled = line.slice(one.col_offset, one.end_col_offset);
 
-            if (line.slice(one.col_offset, one.col_offset + one.id.length) !== one.id) {
-                throw new Error(`svelthon — the marker \`${one.id}\` is not where its line says, line ${one.lineno}`);
-            }
-
-            lines[one.lineno - 1] =
-                line.slice(0, one.col_offset) + markerWord(one.id, mark) + line.slice(one.col_offset + one.id.length);
+        if (spelled.normalize('NFKC') !== one.id) {
+            throw new Error(`svelthon — the marker \`${one.id}\` is not where its line says, line ${one.lineno}`);
         }
+
+        lines[one.lineno - 1] =
+            line.slice(0, one.col_offset) + markerName(mark).padEnd(spelled.length, ' ') + line.slice(one.end_col_offset);
     }
 
     return lines.join('\n');

@@ -15,6 +15,7 @@ import DerivedSharedLinesNative from './fixtures/DerivedSharedLinesNative.svelte
 import DerivedCrossLines from './fixtures/DerivedCrossLines.svelte';
 import DerivedCrossLinesNative from './fixtures/DerivedCrossLinesNative.svelte';
 import DerivedAliases from './fixtures/DerivedAliases.svelte';
+import RuneSpellings from './fixtures/RuneSpellings.svelte';
 
 test('the server renders a derived written past its declaration as the value written', () => {
     const shown = (Component) => render(Component).body.match(/<output>(.*?)<\/output>/)[1];
@@ -59,4 +60,9 @@ test('the server renders a write after two declarations sharing a line as the va
 // And a declaration after a marker called under another name.
 test('the server renders a declaration after an aliased marker as its result', () => {
     expect(render(DerivedAliases).body.match(/<p data-k="shown">(.*?)<\/p>/)[1]).toBe('2');
+});
+
+// And markers spelled as Python reads them by their NFKC form.
+test('the server renders declarations whose markers Python reads by their NFKC form', () => {
+    expect(render(RuneSpellings).body.match(/<p data-k="shown">(.*?)<\/p>/)[1]).toBe('2 3 4 5');
 });

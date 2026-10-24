@@ -24,6 +24,7 @@ import DerivedSharedLines from './fixtures/DerivedSharedLines.svelte';
 import DerivedImportingDecorator from './fixtures/DerivedImportingDecorator.svelte';
 import DerivedCrossLines from './fixtures/DerivedCrossLines.svelte';
 import DerivedAliases from './fixtures/DerivedAliases.svelte';
+import RuneSpellings from './fixtures/RuneSpellings.svelte';
 import DerivedCrossLinesNative from './fixtures/DerivedCrossLinesNative.svelte';
 import DerivedSharedLinesNative from './fixtures/DerivedSharedLinesNative.svelte';
 import EffectNameWrites from './fixtures/EffectNameWrites.svelte';
@@ -185,6 +186,23 @@ test('a marker called under another name leaves the declarations after it their 
 
     expect(seen).toEqual(['True True 5 False 2', '2', 'True True 5 False 4', '4']);
     expect(ran).toEqual(['watch 1', 'watch 2']);
+});
+
+// A marker is the word Python reads, by its NFKC form, however spelled:
+// full-width, a ligature shorter than `effect`, mathematical letters longer
+// than `derived`. Compared with the AST's name by its own text, each was
+// refused, `the marker \`derived\` is not where its line says`.
+test('a marker spelled as Python reads it by its NFKC form declares as the plain one does', () => {
+    const ran = [];
+    const { instance, shown } = mounted(RuneSpellings, { notify: (one) => ran.push(one) });
+    const seen = [instance.held(), shown()];
+
+    instance.bump();
+    flushSync();
+    seen.push(instance.held(), shown());
+
+    expect(seen).toEqual(['2 3 4 5 ｄｅｒｉｖｅｄ', '2 3 4 5', '4 6 8 10 ｄｅｒｉｖｅｄ', '4 6 8 10']);
+    expect(ran.toSorted()).toEqual(['early 1', 'early 2', 'run 1', 'run 2']);
 });
 
 // The mark of a declaration is its namespace's: one mark for the page was
