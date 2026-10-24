@@ -2479,10 +2479,73 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     // to say (`where.runs`); without a script to ask, any may.
     const scriptRuns = (name) => where?.runs?.(name) ?? true;
 
+    // And a name the expression reads in a body that runs after it has, a
+    // lambda's, or what a generator expression makes past its first iterable,
+    // is handed late too: that body reads the name as its block holds it then,
+    // as Python's closure reads its variable. Handed as a value, a function an
+    // action kept read the row it was made with after the row was replaced, and
+    // an index its old position. A name the body binds for itself, a
+    // parameter or a target, is its own; a lambda's defaults run as it is made.
+    const readLater = (text) => {
+        if (!/\b(?:lambda|for)\b/.test(text)) return [];
+
+        const tree = targetTree(`(${text}\n)`);
+        const $B = globalThis.__BRYTHON__;
+        const found = [];
+        const targets = (node) => {
+            const names = [];
+            const visit = (one) => {
+                if (Array.isArray(one)) return one.forEach(visit);
+                if (one === null || typeof one !== 'object' || !Array.isArray(one.constructor?._fields)) return;
+                if (one instanceof $B.ast.Name) names.push(one.id);
+                else one.constructor._fields.forEach((field) => visit(one[field]));
+            };
+
+            visit(node);
+            return names;
+        };
+        const visit = (node, later, own) => {
+            if (Array.isArray(node)) return node.forEach((one) => visit(one, later, own));
+            if (node === null || typeof node !== 'object' || !Array.isArray(node.constructor?._fields)) return;
+
+            if (node instanceof $B.ast.Name) {
+                if (later && node.ctx instanceof $B.ast.Load && !own.some((one) => sameName(one, node.id))) found.push(node.id);
+                return;
+            }
+            if (node instanceof $B.ast.Lambda) {
+                const { args } = node;
+
+                visit([args.defaults, args.kw_defaults], later, own);
+                visit(node.body, true, [
+                    ...own,
+                    ...[...args.posonlyargs, ...args.args, ...args.kwonlyargs, args.vararg, args.kwarg]
+                        .filter(Boolean)
+                        .map((one) => one.arg)
+                ]);
+                return;
+            }
+            if (node.generators !== undefined) {
+                const lazy = later || node instanceof $B.ast.GeneratorExp;
+                const bound = [...own, ...node.generators.flatMap((one) => targets(one.target))];
+
+                visit(node.generators[0].iter, later, own);
+                visit([node.elt, node.key, node.value, node.generators.map((one) => one.ifs)], lazy, bound);
+                visit(node.generators.slice(1).map((one) => one.iter), lazy, bound);
+                return;
+            }
+            node.constructor._fields.forEach((field) => visit(node[field], later, own));
+        };
+
+        if (tree !== null) visit(tree, false, []);
+        return found;
+    };
+
     const call = (expr, wrapper, source = expr, kind = '', bound = [], followed = true) => {
         const trimmed = expr.trim();
         const args = mentioned(trimmed).filter((one) => !bound.some((name) => sameName(name, one)));
-        const late = args.length > 0 && (kind === 'lazy' || handedLate(trimmed, args, costly, scriptRuns));
+        const later = args.length > 0 ? readLater(trimmed) : [];
+        const runs = (name) => costly(name) || later.some((one) => sameName(one, name));
+        const late = args.length > 0 && (kind === 'lazy' || handedLate(trimmed, args, runs, scriptRuns));
 
         locate(source.trim());
         // The column of its opening brace, counted from zero: where every
