@@ -8,7 +8,7 @@
 import { test, expect } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import TemplateClosures from './fixtures/TemplateClosures.svelte';
-import { saved } from './fixtures/template_closures.js';
+import { saved, writeSaved } from './fixtures/template_closures.js';
 
 test('a function the template hands an action reads its block as it is when called', () => {
     const target = document.body.appendChild(document.createElement('div'));
@@ -36,6 +36,46 @@ test('a function the template hands an action reads its block as it is when call
         ['factory', 'first'],
         ['cell', 'second'],
         ['scalar', 'second'],
+        ['index-1', '1']
+    ]);
+});
+
+// And the write half of a binding, which makes its target again as it writes:
+// a function the target keeps then reads the block as the read half's does.
+// Asked of the read alone, the write's kept the row, the cell and the index it
+// was handed, while a default stays what it read.
+test('a function a binding’s write makes reads its block as it is when called', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+    const instance = mount(TemplateClosures, { target });
+    flushSync();
+
+    const type = (key, text) => {
+        const input = target.querySelector(`[data-k="${key}"]`);
+        input.value = text;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        flushSync();
+    };
+
+    for (const key of ['write-object', 'write-mixed', 'write-cell', 'write-index-1']) type(key, 'typed');
+
+    const keys = ['object', 'mixed', 'cell', 'index-1'];
+    const kept = Object.fromEntries(keys.map((key) => [key, writeSaved[key]]));
+    const read = () => keys.map((key) => [key, String(kept[key]())]);
+    const before = read();
+
+    instance.change();
+    type('field', 'second');
+
+    expect(before).toEqual([
+        ['object', 'first'],
+        ['mixed', 'first first'],
+        ['cell', 'first'],
+        ['index-1', '0']
+    ]);
+    expect(read()).toEqual([
+        ['object', 'second'],
+        ['mixed', 'first second'],
+        ['cell', 'second'],
         ['index-1', '1']
     ]);
 });

@@ -1,12 +1,12 @@
 <script module>
-    import { keep } from './template_closures.js';
+    import { keep, slot } from './template_closures.js';
 </script>
 
 <script lang="python">
-# Functions the template makes and hands an action, which keeps them: each
-# reads its block's name as the block holds it when called, as a closure reads
-# its variable, save what Python reads as the function is made, a default or a
-# factory's argument.
+# Functions the template makes and hands an action, which keeps them, or a
+# binding's target as it is written: each reads its block's name as the block
+# holds it when called, as a closure reads its variable, save what Python
+# reads as the function is made, a default or a factory's argument.
 rows = [{"label": "first"}]
 words = ["first"]
 ordered = [{"id": 1}, {"id": 2}]
@@ -33,10 +33,14 @@ def change():
     {label = "first"}
     <input data-k="field" bind:value={label} />
     <i data-k="cell" use:keep={lambda: label}></i>
+    <input data-k="write-object" bind:value={slot("object", lambda: row["label"]).value} />
+    <input data-k="write-mixed" bind:value={slot("mixed", lambda kept=row["label"]: f"{kept} {row['label']}").value} />
+    <input data-k="write-cell" bind:value={slot("cell", lambda: label).value} />
 {/each}
 {#each words as word}
     <i data-k="scalar" use:keep={lambda: word}></i>
 {/each}
 {#each ordered as row, at (row["id"])}
     <i data-k={f"index-{row['id']}"} use:keep={lambda: at}></i>
+    <input data-k={f"write-index-{row['id']}"} bind:value={slot(f"index-{row['id']}", lambda: at).value} />
 {/each}

@@ -2540,12 +2540,22 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         return found;
     };
 
+    // Whether an expression is handed its names late (`handedLate`): one whose
+    // read runs code, or that a body run later reads (`readLater`). The one
+    // rule for the two halves of a binding, the read (`call`) and the write
+    // (`assign`): asked of the read alone, a function the write made kept the
+    // row it was made with.
+    const handedLater = (text, args, target = false) => {
+        const later = args.length > 0 ? readLater(text) : [];
+        const runs = (name) => costly(name) || later.some((one) => sameName(one, name));
+
+        return handedLate(text, args, runs, scriptRuns, target);
+    };
+
     const call = (expr, wrapper, source = expr, kind = '', bound = [], followed = true) => {
         const trimmed = expr.trim();
         const args = mentioned(trimmed).filter((one) => !bound.some((name) => sameName(name, one)));
-        const later = args.length > 0 ? readLater(trimmed) : [];
-        const runs = (name) => costly(name) || later.some((one) => sameName(one, name));
-        const late = args.length > 0 && (kind === 'lazy' || handedLate(trimmed, args, runs, scriptRuns));
+        const late = args.length > 0 && (kind === 'lazy' || handedLater(trimmed, args));
 
         locate(source.trim());
         // The column of its opening brace, counted from zero: where every
@@ -2576,7 +2586,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     // was typed.
     const assign = (expr, crossing = BIND_VALUE) => {
         const args = mentioned(expr.trim());
-        const late = handedLate(expr.trim(), args, costly, scriptRuns, true);
+        const late = handedLater(expr.trim(), args, true);
         const at = position();
         const name = collect(expr.trim(), '', args, true, at?.line, '', at?.column, late);
         const value = (arg) => `${FOLLOW}(${received(arg)})`;
