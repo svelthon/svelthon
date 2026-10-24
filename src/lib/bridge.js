@@ -388,19 +388,15 @@ const optionValue = (scope, place, value) =>
         return false;
     });
 
-// The last marker of a rune's declaration each namespace's code called, its
-// line and its number, and the number each of its names has taken
-// (`__pybridge.declaration`).
-const MARKED = new WeakMap();
-const TAKEN = new WeakMap();
-let runeMarks = 0;
+// How many markers of a rune's declaration each namespace's code has called,
+// and the names it has bound (`__pybridge.declaration`).
+const RUNE_MARKS = new WeakMap();
+const BOUND = new WeakMap();
 
 const runeMarker = (body) => {
-    const running = core.runningModule();
+    const namespace = core.runningModule()?.namespace;
 
-    if (running !== undefined && running.namespace !== null && typeof running.namespace === 'object') {
-        MARKED.set(running.namespace, { line: running.line, seq: ++runeMarks });
-    }
+    if (namespace !== null && typeof namespace === 'object') RUNE_MARKS.set(namespace, (RUNE_MARKS.get(namespace) ?? 0) + 1);
 
     return body;
 };
@@ -438,48 +434,43 @@ export const __pybridge = {
     },
 
     // The markers a declaration calls, `derived` and `effect` with its `pre`
-    // and `root`: each notes, for the namespace whose statement calls it, the
-    // line it runs on, numbered (`declaration`).
+    // and `root`: each counts one for the namespace whose code calls it
+    // (`declaration`).
     derived: runeMarker,
     effect: Object.assign((body) => runeMarker(body), { pre: runeMarker, root: runeMarker }),
 
-    // A write to a rune's name, told by where the namespace's own code makes
-    // it (`runningLine`), against the lines of the statement that declares it,
-    // `from` to `to`, and the marker that statement called:
+    // A write to a rune's name. Markers are called by declarations alone, at
+    // the top of the module, once each and in the order of the source, so the
+    // compiler knows how many the namespace has called once a declaration's
+    // own have run, its `mark`; and a name is declared once.
     //
-    // - `1`, the binding: on those lines, after the marker ran there, and the
-    //   first write of the name it is the marker of. Each target of `a = b =
-    //   derived(…)` takes it once.
-    // - `-1`, before the binding: on those lines, before the marker ran, what a
-    //   `:=` in a default, a decorator or the marker's argument writes, or
-    //   `globals()`. The name holds it, as Python's does, until the binding
+    // - `1`, the binding: the first write of the name the namespace's own code
+    //   makes once its declaration's markers have run. Each target of `a = b =
+    //   derived(…)` makes its own.
+    // - `-1`, before the binding: one the namespace's own code makes before,
+    //   what a `:=` in a default, a decorator or the marker's argument writes,
+    //   or `globals()`. The name holds it, as Python's does, until the binding
     //   writes over it.
-    // - `0`, any other: a function's or a decorator's, which writes from a
-    //   frame of its own, one made elsewhere, or after the binding on its line,
-    //   `d = derived(…); d = 99`. It is the name's, as Svelte's `doubled = 99`
-    //   is to its derived.
+    // - `0`, any other: once the name is bound, `d = derived(…); d = 99` on one
+    //   line among them, or from a frame of a function's or a decorator's. It
+    //   is the name's, as Svelte's `doubled = 99` is to its derived.
     //
-    // A mark per namespace, which the next marker of that namespace replaces:
-    // one flag for the page was taken by the next write of any rune name, left
-    // raised by a decorator that failed, for every request after it, and
-    // replaced by the markers of a module a decorator above `@derived`
-    // imported. And told by the lines alone, the first write there was a `:=`
-    // of the name, and two statements sharing the lines were one.
-    declaration(namespace, name, from, to) {
-        const line = core.runningLine(namespace);
+    // Asked of the write and of the count, not of a flag or of lines: one flag
+    // for the page was taken by the next write of any rune name, left raised
+    // by a decorator that failed, for every request after it; the lines could
+    // not tell two statements sharing one, and the marker of a second
+    // declaration there made the first one's name take a write after its
+    // binding for its body.
+    declaration(namespace, name, mark) {
+        if (core.runningLine(namespace) === undefined) return 0;
 
-        if (line === undefined || line < from || line > to) return 0;
+        let bound = BOUND.get(namespace);
 
-        const mark = MARKED.get(namespace);
+        if (bound === undefined) BOUND.set(namespace, (bound = new Set()));
+        if (bound.has(name)) return 0;
+        if ((RUNE_MARKS.get(namespace) ?? 0) < mark) return -1;
 
-        if (mark === undefined || mark.line < from || mark.line > to) return -1;
-
-        let taken = TAKEN.get(namespace);
-
-        if (taken === undefined) TAKEN.set(namespace, (taken = new Map()));
-        if (taken.get(name) === mark.seq) return 0;
-
-        taken.set(name, mark.seq);
+        bound.add(name);
         return 1;
     },
 

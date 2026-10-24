@@ -22,6 +22,8 @@ import DerivedDeclarationFails from './fixtures/DerivedDeclarationFails.svelte';
 import RuneWalrus from './fixtures/RuneWalrus.svelte';
 import DerivedSharedLines from './fixtures/DerivedSharedLines.svelte';
 import DerivedImportingDecorator from './fixtures/DerivedImportingDecorator.svelte';
+import DerivedCrossLines from './fixtures/DerivedCrossLines.svelte';
+import DerivedCrossLinesNative from './fixtures/DerivedCrossLinesNative.svelte';
 import DerivedSharedLinesNative from './fixtures/DerivedSharedLinesNative.svelte';
 import EffectNameWrites from './fixtures/EffectNameWrites.svelte';
 import store from './fixtures/derived_writes.svelte.py';
@@ -142,6 +144,28 @@ test('a declaration sharing its line, and a read before its binding, run as Pyth
 
     expect(trace(DerivedSharedLinesNative)).toEqual(['2 1 1 99 9', '2 1 1 99 9', '4 1 1 6 13', '4 1 1 6 13']);
     expect(trace(DerivedSharedLines)).toEqual(trace(DerivedSharedLinesNative));
+});
+
+// A declaration's binding is the first write of its name once its own markers
+// have run, and a name binds once. Told by the last marker on the line, the
+// second declaration's made `a = 99` after it the first's body,
+// `TypeError: 'int' object is not callable`, and a function written so the
+// body, called; an effect's name written so ran 99 as the effect.
+test('two declarations sharing a line leave a write of the first after both a value, as Svelte’s', () => {
+    const run = (Component, notify) => {
+        const { instance, shown } = mounted(Component, notify ? { notify } : undefined);
+        const seen = [instance.held(), shown()];
+
+        instance.bump();
+        flushSync();
+        seen.push(instance.held(), shown());
+        return seen;
+    };
+    const ran = [];
+
+    expect(run(DerivedCrossLinesNative)).toEqual(['99 3 True 5 6 7 99', '99 3 5 6 7', '4 6 False 10 12 14 99', '4 6 10 12 14']);
+    expect(run(DerivedCrossLines, (one) => ran.push(one))).toEqual(run(DerivedCrossLinesNative));
+    expect(ran).toEqual(['run 1', 'run 2']);
 });
 
 // The mark of a declaration is its namespace's: one mark for the page was

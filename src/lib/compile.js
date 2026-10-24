@@ -1022,12 +1022,31 @@ const DIRECTIVES = new Set(['__all__', '__js__']);
 // The calls that declare what a name is, in their call spelling.
 const MARKERS = ['derived', 'effect', 'inspect', 'inspect_with', 'export'];
 
-// The lines a declaration's statement spans, its decorators included: where
-// the module's own code writes the name it declares (`__pybridge.declaration`).
-const declaredOn = (node) => ({
-    from: Math.min(node.lineno, ...(node.decorator_list ?? []).map((one) => one.lineno)),
-    to: node.end_lineno ?? node.lineno
-});
+// How many times a statement calls the markers that note a declaration as it
+// runs (`__pybridge.derived`, `__pybridge.effect`): once for `name =
+// derived(…)`, `effect(…)`, `effect.pre(…)` or `effect.root(…)`, and once per
+// such decorator of a `def`. Counted in the order the module runs them, the
+// markers a namespace has called say which declarations have reached their
+// binding (`__pybridge.declaration`).
+const RUNE_MARKERS = new Set(['derived', 'effect']);
+const EFFECT_MOMENTS = new Set(['pre', 'root']);
+
+const markerCalls = (node, theirs) => {
+    const $B = globalThis.__BRYTHON__;
+    const marker = (one) =>
+        (one instanceof $B.ast.Name && RUNE_MARKERS.has(one.id) && !theirs(one.id)) ||
+        (one instanceof $B.ast.Attribute &&
+            one.value instanceof $B.ast.Name &&
+            one.value.id === 'effect' &&
+            EFFECT_MOMENTS.has(one.attr) &&
+            !theirs('effect'));
+
+    if (node instanceof $B.ast.Assign || node instanceof $B.ast.AnnAssign) {
+        return node.value instanceof $B.ast.Call && marker(node.value.func) ? 1 : 0;
+    }
+
+    return (node.decorator_list ?? []).filter(marker).length;
+};
 
 // `theirs` names what the author imported from JavaScript, an `importjs
 // {inspect}` among them: a call to it is theirs, and its value is data.
@@ -1208,9 +1227,15 @@ function surface(body, theirs = new Set()) {
         node.target instanceof $B.ast.Name &&
         MARKERS.some((one) => marked(node, one));
 
+    // The markers the module has called once each statement has run, in the
+    // order it runs them: a declaration's `mark` is the count once its own have
+    // run (`markerCalls`).
+    let marks = 0;
+
     const visit = (statements) => {
         for (const node of statements) {
             statement = node.lineno;
+            marks += markerCalls(node, mine);
 
             if (node instanceof $B.ast.Assign || annotatedMarker(node)) {
                 for (const target of node.targets ?? [node.target]) {
@@ -1244,8 +1269,8 @@ function surface(body, theirs = new Set()) {
                     // below needs no special case for either: it already writes
                     // `$derived.by(() => __fn_x())` and `$effect(() => __fn_x())`,
                     // and a lambda answers a call exactly as a `def` does.
-                    if (marked(node, 'derived')) deriveds.push({ name: target.id, arity: 0, ...declaredOn(node) });
-                    else if (marked(node, 'effect')) effects.push({ name: target.id, arity: 0, ...declaredOn(node) });
+                    if (marked(node, 'derived')) deriveds.push({ name: target.id, arity: 0, mark: marks });
+                    else if (marked(node, 'effect')) effects.push({ name: target.id, arity: 0, mark: marks });
                     else if (marked(node, 'inspect')) inspects.push({ name: target.id, arity: 0 });
                     // The callable comes first, so the emission takes it off the
                     // front of the evaluated list rather than out of the source.
@@ -1311,7 +1336,7 @@ function surface(body, theirs = new Set()) {
                 const entry = {
                     name: node.name,
                     arity: arityOf(node.args),
-                    ...declaredOn(node),
+                    mark: marks,
                     ...(pre ? { pre: true } : {}),
                     ...(root ? { root: true } : {}),
                     // `@export` leaves the function where it was: it is an
@@ -1456,7 +1481,7 @@ const installed = (name) => `__installed_${name}`;
 // in a plain module, which follows nothing, it holds the value for good. `del`
 // writes `undefined`, which leaves no body, and runs nothing. Taken for a
 // body, 99 was called at the next read.
-const declaration = (one) => `__pybridge.declaration(this, '${one.name}', ${one.from}, ${one.to})`;
+const declaration = (one) => `__pybridge.declaration(this, '${one.name}', ${one.mark})`;
 
 const derivedWrite = (d, plain = false) => {
     const held = `${fn(d.name)} = () => ${NEXT_VALUE};`;

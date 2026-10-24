@@ -12,6 +12,8 @@ import DerivedDeclarationsNative from './fixtures/DerivedDeclarationsNative.svel
 import RuneWalrus from './fixtures/RuneWalrus.svelte';
 import DerivedSharedLines from './fixtures/DerivedSharedLines.svelte';
 import DerivedSharedLinesNative from './fixtures/DerivedSharedLinesNative.svelte';
+import DerivedCrossLines from './fixtures/DerivedCrossLines.svelte';
+import DerivedCrossLinesNative from './fixtures/DerivedCrossLinesNative.svelte';
 
 test('the server renders a derived written past its declaration as the value written', () => {
     const shown = (Component) => render(Component).body.match(/<output>(.*?)<\/output>/)[1];
@@ -43,4 +45,12 @@ test('the server renders a declaration sharing its line, and a read before its b
 
     expect(shown(DerivedSharedLinesNative)).toBe('2 1 1 99 9');
     expect(shown(DerivedSharedLines)).toBe(shown(DerivedSharedLinesNative));
+});
+
+// And two declarations sharing a line, then a write of the first.
+test('the server renders a write after two declarations sharing a line as the value written, as Svelte does', () => {
+    const shown = (Component) => render(Component).body.match(/<p data-k="shown">(.*?)<\/p>/)[1];
+
+    expect(shown(DerivedCrossLinesNative)).toBe('99 3 5 6 7');
+    expect(shown(DerivedCrossLines)).toBe(shown(DerivedCrossLinesNative));
 });
