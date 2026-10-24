@@ -1022,6 +1022,13 @@ const DIRECTIVES = new Set(['__all__', '__js__']);
 // The calls that declare what a name is, in their call spelling.
 const MARKERS = ['derived', 'effect', 'inspect', 'inspect_with', 'export'];
 
+// The lines a declaration's statement spans, its decorators included: where
+// the module's own code writes the name it declares (`__pybridge.declaration`).
+const declaredOn = (node) => ({
+    from: Math.min(node.lineno, ...(node.decorator_list ?? []).map((one) => one.lineno)),
+    to: node.end_lineno ?? node.lineno
+});
+
 // `theirs` names what the author imported from JavaScript, an `importjs
 // {inspect}` among them: a call to it is theirs, and its value is data.
 function surface(body, theirs = new Set()) {
@@ -1237,8 +1244,8 @@ function surface(body, theirs = new Set()) {
                     // below needs no special case for either: it already writes
                     // `$derived.by(() => __fn_x())` and `$effect(() => __fn_x())`,
                     // and a lambda answers a call exactly as a `def` does.
-                    if (marked(node, 'derived')) deriveds.push({ name: target.id, arity: 0 });
-                    else if (marked(node, 'effect')) effects.push({ name: target.id, arity: 0 });
+                    if (marked(node, 'derived')) deriveds.push({ name: target.id, arity: 0, ...declaredOn(node) });
+                    else if (marked(node, 'effect')) effects.push({ name: target.id, arity: 0, ...declaredOn(node) });
                     else if (marked(node, 'inspect')) inspects.push({ name: target.id, arity: 0 });
                     // The callable comes first, so the emission takes it off the
                     // front of the evaluated list rather than out of the source.
@@ -1304,6 +1311,7 @@ function surface(body, theirs = new Set()) {
                 const entry = {
                     name: node.name,
                     arity: arityOf(node.args),
+                    ...declaredOn(node),
                     ...(pre ? { pre: true } : {}),
                     ...(root ? { root: true } : {}),
                     // `@export` leaves the function where it was: it is an
@@ -1433,8 +1441,10 @@ const destroyer = (name) => `__root_${name}`;
 // keeps the function a decorator registered when the name is bound again.
 const named = (name) => `__named_${name}`;
 
-// A write to a rune's name: the declaration's installs its body, as the marker
-// it called says (`__pybridge.declaration`), and any other is the name's.
+// A write to a rune's name: the declaration's installs its body, as the
+// namespace's own code writes it on the statement's lines
+// (`__pybridge.declaration`), and any other is the name's. The setter is a
+// `function`, whose `this` is the namespace written.
 //
 // A derived's is Svelte's write to its derived, `doubled = 99`: the name holds
 // the value until something its body read changes, then its result again.
@@ -1442,20 +1452,22 @@ const named = (name) => `__named_${name}`;
 // which follows nothing, it holds the value for good. `del` writes `undefined`,
 // which leaves no body, and runs nothing. Taken for a body, 99 was called at
 // the next read.
-const derivedWrite = (name, plain = false) => {
-    const held = `${fn(name)} = () => ${NEXT_VALUE};`;
+const declaration = (one) => `__pybridge.declaration(this, '${one.name}', ${one.from}, ${one.to})`;
+
+const derivedWrite = (d, plain = false) => {
+    const held = `${fn(d.name)} = () => ${NEXT_VALUE};`;
 
     return (
-        `if (__pybridge.declaration() || ${NEXT_VALUE} === undefined) ${fn(name)} = ${NEXT_VALUE};` +
-        (plain ? ` else ${held}` : ` else if (${fn(name)} === undefined) ${held} else ${name} = ${NEXT_VALUE};`)
+        `if (${NEXT_VALUE} === undefined || ${declaration(d)}) ${fn(d.name)} = ${NEXT_VALUE};` +
+        (plain ? ` else ${held}` : ` else if (${fn(d.name)} === undefined) ${held} else ${d.name} = ${NEXT_VALUE};`)
     );
 };
 
 // An effect's is the name's alone (`named`), and the effect keeps its body: a
 // body replaced was called at the effect's next run.
-const effectWrite = (name) =>
-    `if (__pybridge.declaration()) { ${fn(name)} = ${NEXT_VALUE}; ${named(name)} = undefined; }` +
-    ` else ${named(name)} = { value: ${NEXT_VALUE} };`;
+const effectWrite = (e) =>
+    `if (${NEXT_VALUE} !== undefined && ${declaration(e)}) { ${fn(e.name)} = ${NEXT_VALUE}; ${named(e.name)} = undefined; }` +
+    ` else ${named(e.name)} = { value: ${NEXT_VALUE} };`;
 
 const effectName = (name) => `(${named(name)} === undefined ? ${fn(name)} : ${named(name)}.value)`;
 
@@ -1892,15 +1904,15 @@ function authorBindings(c) {
             e.root
                 ? `__bind(__proto, '${e.name}', () => (${named(e.name)} !== undefined ? ${named(e.name)}.value : ` +
                   `${fn(e.name)} === undefined ? undefined : ${destroyer(e.name)}.stop), ` +
-                  `(${NEXT_VALUE}) => { ${effectWrite(e.name)} }, () => ${effectName(e.name)});`
-                : `__bind(__proto, '${e.name}', () => ${effectName(e.name)}, (${NEXT_VALUE}) => { ${effectWrite(e.name)} });`
+                  `function (${NEXT_VALUE}) { ${effectWrite(e)} }, () => ${effectName(e.name)});`
+                : `__bind(__proto, '${e.name}', () => ${effectName(e.name)}, function (${NEXT_VALUE}) { ${effectWrite(e)} });`
         ),
         // __follow(): a @derived that hands back a container it was given is the one
         // place the revision cannot travel by itself: Svelte memoises the
         // derived on `===`, so the reader subscribes to the object instead.
         ...c.deriveds.map(
             (d) =>
-                `__bind(__proto, '${d.name}', () => __follow(${d.name}), (${NEXT_VALUE}) => { ${derivedWrite(d.name)} }, () => ${fn(d.name)}, true, true);`
+                `__bind(__proto, '${d.name}', () => __follow(${d.name}), function (${NEXT_VALUE}) { ${derivedWrite(d)} }, () => ${fn(d.name)}, true, true);`
         )
     ];
 }
@@ -2248,7 +2260,7 @@ function plainBindings(c) {
         ),
         ...c.plainDeriveds.map(
             (d) =>
-                `__bind(__proto, '${d.name}', () => __invoke(${fn(d.name)}), (${NEXT_VALUE}) => { ${derivedWrite(d.name, true)} }, () => ${fn(d.name)}, true, true);`
+                `__bind(__proto, '${d.name}', () => __invoke(${fn(d.name)}), function (${NEXT_VALUE}) { ${derivedWrite(d, true)} }, () => ${fn(d.name)}, true, true);`
         ),
         // A class is bound as in a component (`authorBindings`), so the
         // namespace sees its statement add the name, as `globals()` does.

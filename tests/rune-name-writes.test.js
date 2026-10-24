@@ -16,6 +16,9 @@ import { mount, unmount, flushSync } from './mounted.js';
 import DerivedWrites from './fixtures/DerivedWrites.svelte';
 import DerivedWritesNative from './fixtures/DerivedWritesNative.svelte';
 import DerivedDrops from './fixtures/DerivedDrops.svelte';
+import DerivedDeclarations from './fixtures/DerivedDeclarations.svelte';
+import DerivedDeclarationsNative from './fixtures/DerivedDeclarationsNative.svelte';
+import DerivedDeclarationFails from './fixtures/DerivedDeclarationFails.svelte';
 import EffectNameWrites from './fixtures/EffectNameWrites.svelte';
 import store from './fixtures/derived_writes.svelte.py';
 import { held, write, bump } from './fixtures/derived_writes_plain.py';
@@ -76,6 +79,34 @@ test('a derived of a plain module written holds the value for good', () => {
     expect(held()).toBe(99);
     bump();
     expect(held()).toBe(99);
+});
+
+// The declaration is the first write of the name the module's own code makes on
+// the statement's lines. Told by a flag the marker raised, the next write of
+// any rune name took it: a decorator above `@derived` writing another derived,
+// the second target of `first = second = derived(…)` left the lambda, and a
+// decorator that raised left the flag for the next write anywhere.
+test('a declaration is told from a decorator’s write, a second target and a second statement, as Svelte’s', () => {
+    const trace = (Component) => {
+        const { instance, shown } = mounted(Component);
+        const seen = [instance.held(), shown()];
+
+        instance.bump();
+        flushSync();
+        seen.push(instance.held(), shown());
+        return seen;
+    };
+
+    expect(trace(DerivedDeclarationsNative)).toEqual(['99 2 3 3 40', '99 2 3 3 40', '20 4 6 6 8', '20 4 6 6 8']);
+    expect(trace(DerivedDeclarations)).toEqual(trace(DerivedDeclarationsNative));
+});
+
+test('a declaration that fails leaves the next write elsewhere a value', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+
+    expect(() => mount(DerivedDeclarationFails, { target })).toThrow();
+    write(5);
+    expect(held()).toBe(5);
 });
 
 test.for(['rename', 'drop'])('an effect whose name a function binds again by %s runs its body', (operation) => {

@@ -7,10 +7,21 @@ import { test, expect } from 'vitest';
 import { render } from 'svelte/server';
 import DerivedWritesServer from './fixtures/DerivedWritesServer.svelte';
 import DerivedWritesServerNative from './fixtures/DerivedWritesServerNative.svelte';
+import DerivedDeclarations from './fixtures/DerivedDeclarations.svelte';
+import DerivedDeclarationsNative from './fixtures/DerivedDeclarationsNative.svelte';
 
 test('the server renders a derived written past its declaration as the value written', () => {
     const shown = (Component) => render(Component).body.match(/<output>(.*?)<\/output>/)[1];
 
     expect(shown(DerivedWritesServerNative)).toBe('99 99 99');
     expect(shown(DerivedWritesServer)).toBe(shown(DerivedWritesServerNative));
+});
+
+// And a declaration told from a decorator's write above its marker, from its
+// second target and from a second statement on its line.
+test('the server tells a declaration from the writes beside it, as Svelte does', () => {
+    const shown = (Component) => render(Component).body.match(/<p data-k="shown">(.*?)<\/p>/)[1];
+
+    expect(shown(DerivedDeclarationsNative)).toBe('99 2 3 3 40');
+    expect(shown(DerivedDeclarations)).toBe(shown(DerivedDeclarationsNative));
 });
