@@ -669,7 +669,10 @@ dérivé est refusé par Svelte, à juste titre.
 `doubled = 99`, le nom vaut `99` jusqu'à ce que change ce que le corps a lu, puis
 de nouveau son résultat. Seule la déclaration installe le corps, et une fonction
 écrite là est une valeur comme une autre. Le nom d'un `@effect` écrit de nouveau
-change de valeur, et l'effet garde le corps qu'il a déclaré.
+change de valeur, et l'effet garde le corps qu'il a déclaré. Ce que le module
+écrit dans le nom sur les lignes de la déclaration appartient à la déclaration :
+une déclaration tient donc sur ses propres lignes, et un `:=` du nom en son sein,
+qu'elle lie de nouveau aussitôt, est refusé.
 
 `bind:` doit lire *et* écrire, ce qu'aucune expression ne fait seule : sa valeur
 est donc compilée deux fois, en expression puis en cible d'affectation, pour
@@ -1620,7 +1623,7 @@ parsing, que seul le compilateur charge ; le README de Bryntime en donne le poid
 
 ## État
 
-Validé par `npm test`, 1 875 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 1 876 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;

@@ -1029,6 +1029,61 @@ const declaredOn = (node) => ({
     to: node.end_lineno ?? node.lineno
 });
 
+// A `:=` of `name` in what a statement evaluates as it runs: not in a
+// function's or a lambda's body, which binds its own, and in a comprehension,
+// which binds the module's.
+function walrusOf(node, name) {
+    const $B = globalThis.__BRYTHON__;
+
+    if (Array.isArray(node)) {
+        for (const one of node) {
+            const found = walrusOf(one, name);
+            if (found !== null) return found;
+        }
+        return null;
+    }
+    if (node === null || typeof node !== 'object' || !Array.isArray(node.constructor?._fields)) return null;
+    if (node instanceof $B.ast.NamedExpr && node.target.id === name) return node;
+    if (node instanceof $B.ast.Lambda) return walrusOf(node.args, name);
+    if (node instanceof $B.ast.FunctionDef || node instanceof $B.ast.AsyncFunctionDef) {
+        return walrusOf([node.decorator_list, node.args, node.returns], name);
+    }
+    return walrusOf(node.constructor._fields.map((field) => node[field]), name);
+}
+
+// A rune's declaration stands on lines of its own and binds its name once.
+// What the module's own code writes to the name on those lines is the
+// declaration's, and the last of it the body (`__pybridge.declaration`). So
+// another statement there, `d = derived(…); d = 99`, would be read as the
+// declaration too, as `inspect(…)` sharing a line is wired to nothing; and a
+// `:=` of the name inside the declaration, which binds it again at once, is
+// a value only to a read between the two, as the body it is not.
+function refuseCrowdedDeclarations(body, declarations, source, lineOffset) {
+    const spans = body.map((node) => ({ node, ...declaredOn(node) }));
+
+    for (const one of declarations) {
+        const sharing = spans.filter((span) => span.from <= one.to && span.to >= one.from);
+        const line = one.from + lineOffset;
+        const fail = (sentence) => {
+            throw refuse(`svelthon — ${sentence} (${source}:${line})`, source, line);
+        };
+
+        if (sharing.length > 1) {
+            fail(
+                `\`${one.name}\` is declared on a line it shares with another statement; a rune's ` +
+                    `declaration stands on lines of its own, where what the module writes to the name is the declaration's`
+            );
+        }
+
+        if (sharing.length === 1 && walrusOf(sharing[0].node, one.name) !== null) {
+            fail(
+                `\`${one.name} := …\` binds the name inside its own declaration, which binds it again ` +
+                    `at once; bind another name`
+            );
+        }
+    }
+}
+
 // `theirs` names what the author imported from JavaScript, an `importjs
 // {inspect}` among them: a call to it is theirs, and its value is data.
 function surface(body, theirs = new Set()) {
@@ -1452,7 +1507,7 @@ const named = (name) => `__named_${name}`;
 // which follows nothing, it holds the value for good. `del` writes `undefined`,
 // which leaves no body, and runs nothing. Taken for a body, 99 was called at
 // the next read.
-const declaration = (one) => `__pybridge.declaration(this, '${one.name}', ${one.from}, ${one.to})`;
+const declaration = (one) => `__pybridge.declaration(this, ${one.from}, ${one.to})`;
 
 const derivedWrite = (d, plain = false) => {
     const held = `${fn(d.name)} = () => ${NEXT_VALUE};`;
@@ -2528,6 +2583,7 @@ function compile(
     const theirs = new Set([...declared, ...foreign]);
     refuseNestedRunes(root._ast.body, source, lineOffset, theirs, table);
     refuseMisplacedMarkers(root._ast.body, source, lineOffset, theirs, component, table);
+    refuseCrowdedDeclarations(root._ast.body, [...plainDeriveds, ...deriveds, ...effects], source, lineOffset);
 
     // Functions by default, what a framework calls by name. A module that wants
     // to export values says so with `__all__`, exactly as it would to a Python

@@ -388,9 +388,6 @@ const optionValue = (scope, place, value) =>
         return false;
     });
 
-// The rune names each namespace has seen declared (`declaration`).
-const DECLARED = new WeakMap();
-
 export const __pybridge = {
     // Whether the components run in a browser or render on a server, as Svelte
     // tells them apart: by what the code was resolved for (`esm-env`), and not
@@ -423,30 +420,26 @@ export const __pybridge = {
         return value;
     },
 
-    // A rune's declaration, told from any other write to its name: the first
-    // write of the name the namespace's own code makes on the lines of the
-    // statement that declares it, `from` to `to` (`runningLine`). What a
-    // decorator writes, it writes from a frame of its own; `a = b =
-    // derived(…)` writes both its names there; and a second statement on the
-    // line, `d = derived(…); d = 99`, writes the name a second time. Any other
-    // write is the name's, as Svelte's `doubled = 99` is to its derived.
+    // A rune's declaration, told from any other write to its name: a write the
+    // namespace's own code makes on the lines of the statement that declares
+    // it, `from` to `to` (`runningLine`), the last of which is the statement's
+    // own binding, its body. What a decorator writes, it writes from a frame of
+    // its own; `a = b = derived(…)` writes both its names there; and what the
+    // statement writes before its binding, by `globals()` or `exec`, its
+    // binding writes over, as Python's does. The compiler keeps every other
+    // statement off those lines (`refuseCrowdedDeclarations`). Any other write
+    // is the name's, as Svelte's `doubled = 99` is to its derived.
     //
     // Asked of the write itself, and not of a marker the declaration raised:
     // a flag raised by `derived` was taken by the next write of any rune name,
     // a decorator's above it among them, left raised by one that failed, for
-    // the page and every request after it, and taken once for two targets.
-    declaration(namespace, name, from, to) {
+    // the page and every request after it, and taken once for two targets. And
+    // the first write there was a `:=` of the name in a default or a
+    // decorator, which the binding after it writes over.
+    declaration(namespace, from, to) {
         const line = core.runningLine(namespace);
 
-        if (line === undefined || line < from || line > to) return false;
-
-        let names = DECLARED.get(namespace);
-
-        if (names === undefined) DECLARED.set(namespace, (names = new Set()));
-        if (names.has(name)) return false;
-
-        names.add(name);
-        return true;
+        return line !== undefined && line >= from && line <= to;
     },
 
     // A class the script declares, read: a reaction follows the special

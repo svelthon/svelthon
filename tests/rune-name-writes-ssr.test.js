@@ -18,10 +18,10 @@ test('the server renders a derived written past its declaration as the value wri
 });
 
 // And a declaration told from a decorator's write above its marker, from its
-// second target and from a second statement on its line.
+// second target and from a write it makes before its binding.
 test('the server tells a declaration from the writes beside it, as Svelte does', () => {
     const shown = (Component) => render(Component).body.match(/<p data-k="shown">(.*?)<\/p>/)[1];
 
-    expect(shown(DerivedDeclarationsNative)).toBe('99 2 3 3 40');
+    expect(shown(DerivedDeclarationsNative)).toBe('99 2 3 3 4');
     expect(shown(DerivedDeclarations)).toBe(shown(DerivedDeclarationsNative));
 });

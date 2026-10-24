@@ -22,6 +22,7 @@ import DerivedDeclarationFails from './fixtures/DerivedDeclarationFails.svelte';
 import EffectNameWrites from './fixtures/EffectNameWrites.svelte';
 import store from './fixtures/derived_writes.svelte.py';
 import { held, write, bump } from './fixtures/derived_writes_plain.py';
+import { compile } from '../src/lib/compile.js';
 
 const mounted = (Component, props) => {
     const target = document.body.appendChild(document.createElement('div'));
@@ -81,12 +82,14 @@ test('a derived of a plain module written holds the value for good', () => {
     expect(held()).toBe(99);
 });
 
-// The declaration is the first write of the name the module's own code makes on
-// the statement's lines. Told by a flag the marker raised, the next write of
-// any rune name took it: a decorator above `@derived` writing another derived,
-// the second target of `first = second = derived(…)` left the lambda, and a
-// decorator that raised left the flag for the next write anywhere.
-test('a declaration is told from a decorator’s write, a second target and a second statement, as Svelte’s', () => {
+// The declaration is what the module's own code writes to the name on the
+// statement's lines, the last of it its binding. Told by a flag the marker
+// raised, the next write of any rune name took it: a decorator above
+// `@derived` writing another derived, the second target of `first = second =
+// derived(…)` left the lambda, and a decorator that raised left the flag for
+// the next write anywhere. Told by the first write there, a write the
+// statement made before its binding was taken for the body.
+test('a declaration is told from a decorator’s write, a second target and a write before its binding, as Svelte’s', () => {
     const trace = (Component) => {
         const { instance, shown } = mounted(Component);
         const seen = [instance.held(), shown()];
@@ -97,8 +100,33 @@ test('a declaration is told from a decorator’s write, a second target and a se
         return seen;
     };
 
-    expect(trace(DerivedDeclarationsNative)).toEqual(['99 2 3 3 40', '99 2 3 3 40', '20 4 6 6 8', '20 4 6 6 8']);
+    expect(trace(DerivedDeclarationsNative)).toEqual(['99 2 3 3 4', '99 2 3 3 4', '20 4 6 6 8', '20 4 6 6 8']);
     expect(trace(DerivedDeclarations)).toEqual(trace(DerivedDeclarationsNative));
+});
+
+// What the module writes on a declaration's lines is the declaration's, so a
+// declaration stands on lines of its own, and binds its name once: another
+// statement there would be read as the declaration, and a `:=` of the name
+// inside it, which the declaration binds again at once, was installed as the
+// body, `TypeError: 'int' object is not callable`, in a default, a decorator's
+// argument or the marker's, for an effect as for a derived.
+const BUILD = 'def build(value):\n    return lambda: 1\n\n';
+
+test.for([
+    ['a second statement after it', 'd = derived(lambda: 1); d = 99\n', /shares with another statement/],
+    ['a statement before it', 'x = 1; d = derived(lambda: x)\n', /shares with another statement/],
+    ['a := in a default', '@derived\ndef d(ignored=(d := 99)):\n    return 1\n', /binds the name inside its own declaration/],
+    ['a := in a decorator', `${BUILD}@build(d := 99)\n@derived\ndef d():\n    return 1\n`, /binds the name inside/],
+    ['a := in the marker’s argument', `${BUILD}d = derived(build(d := 99))\n`, /binds the name inside/],
+    ['a := in a comprehension', `${BUILD}d = derived(build([d := 1 for _ in [0]]))\n`, /binds the name inside/],
+    ['a := in an effect’s default', '@effect\ndef w(ignored=(w := 99)):\n    pass\n', /binds the name inside/],
+    ['a := in an effect.pre’s default', '@effect.pre\ndef w(ignored=(w := 99)):\n    pass\n', /binds the name inside/]
+])('a declaration with %s is refused', ([, source, said]) => {
+    expect(() => compile(source, 'S', 'src/S.svelte')).toThrow(said);
+});
+
+test('a := inside the body a declaration hands over binds the body’s own name, and is no write of the declaration', () => {
+    expect(() => compile('d = derived(lambda: (d := 5))\n', 'S', 'src/S.svelte')).not.toThrow();
 });
 
 test('a declaration that fails leaves the next write elsewhere a value', () => {
