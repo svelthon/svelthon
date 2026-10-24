@@ -1517,6 +1517,13 @@ function snippetParameters(trimmed, declare, call, refuse, frame, identity = nul
     const parts = arguments_(trimmed.slice(open + 1, close));
     const first = unpacker(refuse);
 
+    // A position with nothing in it, but after a trailing comma, is refused,
+    // as Python and Svelte refuse it: dropped, `row(first,,second)` compiled
+    // and handed `second` what the second position was given.
+    if (parts.some((part, at) => part.trim() === '' && at < parts.length - 1)) {
+        refuse('empty parameter position in snippet definition');
+    }
+
     // A name the list binds twice, as Python reads names, is refused, as
     // Python refuses it and Svelte does in JavaScript: once each position is a
     // name of the compiler's, Svelte saw no clash, and one of the two values
@@ -2017,6 +2024,13 @@ const lineStarts = (content) => {
 // compile a fragment that belongs to no file.
 export function pythonExpressions(markup, collect, onPython, where) {
     const named = new Map();
+
+    // And what the first walk learns of each snippet's own scope, for the
+    // announcement of the snippet, which reads it by its name there: the
+    // names the markup declares in each scope, and the scope of each
+    // snippet's body, by its number.
+    named.locals = new Map();
+    named.bodies = new Map();
 
     const indexed = new Set();
 
@@ -3736,21 +3750,29 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 // a default reads the parameters beside it: `(j, k = j)` is
                 // ordinary JavaScript and Svelte compiles it as one.
                 //
-                // A snippet one of whose parameters carries its name is read
-                // under another before it opens (`snippetParameters`).
+                // A snippet whose own scope binds its name is read under
+                // another before it opens (`snippetParameters`): a parameter
+                // of that name, a value the body declares, `{row = "ok"}`, or a
+                // snippet the body declares, which the first walk recorded. A
+                // declaration hid the snippet from its announcement, and a
+                // snippet of the same name inside was announced in its place,
+                // its arguments then crossing as a JavaScript snippet's.
                 const serial = snippetCount++;
                 const named = declares ? pythonName(declares[1]) : '';
                 const opening = trimmed.indexOf('(');
                 const closing = opening === -1 ? -1 : closingPair(trimmed, opening);
                 const names =
                     closing === -1 ? [] : boundBy(arguments_(trimmed.slice(opening + 1, closing)), false, unpacker(refusePattern));
-                const identity = names.some((one) => sameName(one, named)) ? `${SNIPPET_FRAME}identity_${serial}` : null;
+                const body = seed.bodies?.get(serial);
+                const inner = [...(seed.locals?.get(body) ?? []), ...(seed.get(body) ?? [])];
+                const identity = [...names, ...inner].some((one) => sameName(one, named)) ? `${SNIPPET_FRAME}identity_${serial}` : null;
 
                 if (identity !== null) out += derivedTag(identity, named);
                 out += `{#snippet ${snippetParameters(
                     trimmed,
                     (names, aliases, costly, rereads) => {
                         push(names, aliases);
+                        if (record) record.bodies.set(serial, chain.id());
                         parameters([...names, ...aliases], rereads);
                         computing(costly);
                     },
@@ -3957,6 +3979,11 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                         ? `{let ${declared.name} = $state.raw(__pybridge.state(${value}))}`
                         : `{const ${declared.name} = $derived(${value})}`;
 
+                if (record) {
+                    const scope = chain.id();
+
+                    record.locals.set(scope, [...(record.locals.get(scope) ?? []), declared.name]);
+                }
                 declare([declared.name]);
 
                 // A derived runs its expression when it is read; a state cell
