@@ -307,7 +307,12 @@ function walrusTarget(text) {
             if (atTopLevel(inner, (i) => inner[i] === ':') !== -1) return null;
 
             object = text.slice(0, index).trim();
-            key = inner;
+            // The key is one argument of the call it goes into. Python reads a
+            // comma or a star between the brackets as a tuple, `grid[1, 2]`
+            // being `grid[(1, 2)]` and `grid[*keys]` being `grid[(*keys,)]`;
+            // passed bare, `1, 2` was two arguments and wrote `2` under `1`.
+            const comma = atTopLevel(inner, (i) => inner[i] === ',') !== -1;
+            key = comma || inner.startsWith('*') ? `(${inner}${comma ? '' : ','})` : inner;
             subscript = true;
             index = close + 1;
         } else break;
