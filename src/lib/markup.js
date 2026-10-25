@@ -1058,7 +1058,11 @@ function valueEnd(markup, at) {
 }
 
 // The names of a tag's attributes, read from its start to its `>`, each value
-// skipped whole, so a name written inside one is not counted.
+// skipped whole, so a name written inside one is not counted; and the
+// shorthand's, `{checked}`, which is `checked={checked}`, as the walk expands
+// it. Skipped with the values, `{checked}` beside `bind:group` was given a
+// second `checked`, which Svelte refused, and `{MULTIPLE}` made a select whose
+// choices came back no list.
 function tagNames(markup, from) {
     let names = '';
 
@@ -1074,7 +1078,10 @@ function tagNames(markup, from) {
         const end = valueEnd(markup, at);
 
         if (end === -1) break;
-        names += ' ';
+
+        const shorthand = char === '{' && ATTRIBUTE_START.test(markup[at - 1]) ? markup.slice(at + 1, end).trim() : '';
+
+        names += SHORTHAND_ATTRIBUTE.test(shorthand) ? ` ${shorthand} ` : ' ';
         at = end + 1;
     }
 
