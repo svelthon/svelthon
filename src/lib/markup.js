@@ -863,9 +863,13 @@ const ATTACH_WRAPPER = '__attach';
 const CLASS_DIRECTIVE = /^class:/;
 
 // On an element, and only there: a component's prop of the same name is the
-// author's own value, handed on as it is. `<svelte:element>` makes one.
+// author's own value, handed on as it is. `<svelte:element>` makes one. An
+// element is what Svelte reads as one, a tag that is neither a component nor
+// one of its `svelte:` tags, so the answer is `isComponent`'s: asked of a
+// lowercase first letter, it left `<Dashed-Tag>`, an element to Svelte, with
+// no wrapper, and its `class={…}` read with JavaScript's truth.
 const onElement = (tag) =>
-    tag !== null && (tag.name === 'svelte:element' || (/^[a-z]/.test(tag.name) && !tag.name.includes(':')));
+    tag !== null && !isComponent(tag) && (tag.name === 'svelte:element' || !tag.name.startsWith('svelte:'));
 
 // The wrapper an attribute of this name goes through on this tag, or null: the
 // one decision every way of writing an attribute asks for. On a custom element
