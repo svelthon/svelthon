@@ -6,7 +6,7 @@
 // These call the hooks the way Svelte and Vite do.
 import { test, expect, describe } from 'vitest';
 import { resolve, relative, join } from 'node:path';
-import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, symlinkSync, realpathSync } from 'node:fs';
+import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, symlinkSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { preprocess, parse } from 'svelte/compiler';
 import { python, svelthon, withPrelude } from '../src/lib/svelthon.js';
@@ -324,16 +324,20 @@ describe('the plugin resolves what Vite cannot', () => {
         symlinkSync(join('..', 'real', 'shared.py'), join(dir, 'alias', 'shared.py'));
         symlinkSync('real', join(dir, 'folder'));
 
-        const importer = join(dir, 'Main.svelte');
-        const real = realpathSync(join(dir, 'real', 'shared.py'));
-        const linked = svelthon();
+        try {
+            const importer = join(dir, 'Main.svelte');
+            const real = realpathSync(join(dir, 'real', 'shared.py'));
+            const linked = svelthon();
 
-        expect(['./real/shared.py', './alias/shared.py', './folder/shared.py'].map((one) => linked.resolveId(one, importer))).toEqual(
-            [real, real, real]
-        );
+            expect(
+                ['./real/shared.py', './alias/shared.py', './folder/shared.py'].map((one) => linked.resolveId(one, importer))
+            ).toEqual([real, real, real]);
 
-        linked.configResolved({ root: dir, resolve: { preserveSymlinks: true } });
-        expect(linked.resolveId('./alias/shared.py', importer)).toBe(join(dir, 'alias', 'shared.py'));
+            linked.configResolved({ root: dir, resolve: { preserveSymlinks: true } });
+            expect(linked.resolveId('./alias/shared.py', importer)).toBe(join(dir, 'alias', 'shared.py'));
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
     });
 
     test('a virtual id is claimed with a null byte', () => {
