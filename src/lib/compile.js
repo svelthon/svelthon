@@ -219,10 +219,14 @@ function firstArgument(text) {
     if (first === undefined || first instanceof $B.ast.Starred) return null;
 
     // Where the first argument ends, by its line and its column, since a call
-    // laid out by a formatter puts it on a line of its own; past `f(`.
+    // laid out by a formatter puts it on a line of its own; past `f(`. The node
+    // ends inside the parentheses that group it, `record` in `(record)`, and
+    // the argument ends where they close: cut at the node, `(record` was the
+    // callable and `), count` the values.
     const starts = [0];
     for (let i = 0; i < call.length; i++) if (call[i] === '\n') starts.push(i + 1);
-    const end = starts[first.end_lineno - 1] + first.end_col_offset - 2;
+    let end = starts[first.end_lineno - 1] + first.end_col_offset - 2;
+    while (end < text.length && opened(text.slice(0, end)) > 0) end++;
 
     return [text.slice(0, end).trim(), text.slice(end).replace(/^\s*,/, '').trim()];
 }
