@@ -279,8 +279,12 @@ function walrusTarget(text) {
     let subscript = false;
 
     // The *last* step is the one being assigned; everything before it is the
-    // object to assign into. `a.b.c := 1` writes `c` on `a.b`.
+    // object to assign into. `a.b.c := 1` writes `c` on `a.b`. Python lets
+    // blanks stand before each step, `items [0]` and `model .value` being
+    // `items[0]` and `model.value`.
     while (index < text.length) {
+        index += text.slice(index).match(/^[ \t\f\r\n]*/)[0].length;
+
         if (text[index] === '.') {
             const attribute = text.slice(index + 1).match(WALRUS_NAME);
             if (!attribute) return null;
