@@ -1116,11 +1116,14 @@ const VOID = new Set([
     'link', 'meta', 'param', 'source', 'track', 'wbr'
 ]);
 
-// Svelte's own rule for telling a component from an element: a capital first
-// letter, a dot in the name, or one of the two `svelte:` forms that stand for a
-// component. `svelte:element` renders an element and is not one of them. The
-// capital is Unicode's, `\p{Lu}`, as in Svelte's `regex_valid_component_name`:
-// `<Étiquette>` and `<Δ>` are components.
+// Svelte's own rule for telling a component from an element: a name its
+// `regex_valid_component_name` takes whole, a capital first letter and no
+// character a name cannot hold, or names joined by dots; or one of the two
+// `svelte:` forms that stand for a component. `svelte:element` renders an
+// element and is not one of them. The capital is Unicode's, `\p{Lu}`:
+// `<Étiquette>` and `<Δ>` are components. Read off its first letter, a tag
+// such as `<My-Card>`, an element to Svelte, was a component, and its name the
+// Python expression `My - Card`.
 //
 // It is what `bind:group` has to ask before rewriting itself into an action.
 // Every word of the argument for that rewrite is about `<input>`: Svelte works
@@ -1128,7 +1131,8 @@ const VOID = new Set([
 // getter/setter pair has nothing to compare. A component has no group machinery
 // at all (Svelte reads `bind:group={x}` there as the prop of that name), and it
 // refuses `use:` outright.
-const COMPONENT = /^(?:\p{Lu}|svelte:(?:component|self)\b)|\./u;
+const COMPONENT =
+    /^(?:\p{Lu}[$‌‍\p{ID_Continue}.]*|\p{ID_Start}[$‌‍\p{ID_Continue}]*(?:\.[$‌‍\p{ID_Continue}]+)+|svelte:(?:component|self))$/u;
 
 const isComponent = (tag) => tag !== null && COMPONENT.test(tag.name);
 
