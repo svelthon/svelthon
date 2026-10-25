@@ -2495,6 +2495,13 @@ function compile(
     // and Brython would rightly refuse it.
     const component = !store && !plain;
 
+    // Every line ends as Python ends one, `\r\n` and `\r` being `\n`: what the
+    // compiler rewrites, it rewrites line by line, and kept, a line's `\r`
+    // ended up inside what it wrote, `bindable((1\r))`, where Python read it
+    // as a new line, and the lines the tree gave were no longer the text's.
+    // Nothing moves: the `\r` stands at the end of its line.
+    src = src.replace(/\r\n?/g, '\n');
+
     refuseGeneratedSpelling(src, source, lineOffset);
 
     // The common half, Bryc's: a component's script joined with its template's
