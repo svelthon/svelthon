@@ -1413,8 +1413,10 @@ function unpackByKey(inside, call, names, tuple, unpack) {
         }
 
         // A key written bare is a name, which Python reads normalized: `ﬁeld` is
-        // `field`, as in `row.ﬁeld`. A quoted one is a string, kept as written.
-        const named = computed ? held : /^['"]/.test(key) ? key : JSON.stringify(pythonName(key));
+        // `field`, as in `row.ﬁeld`. Any other is a literal, which Python reads
+        // as it is written, `r"name"` and `"na" "me"` being `"name"`: told by
+        // its opening quote, a string with a prefix was a name, `'r"name"'`.
+        const named = computed ? held : DECLARED_NAME.test(key) ? JSON.stringify(pythonName(key)) : key;
 
         keys.push(named);
 
