@@ -1387,8 +1387,12 @@ function unpackByKey(inside, call, names, tuple, unpack) {
         }
 
         // `id`, `id=0`, `id: target` or `id: target=0`: the default belongs to
-        // the target, and a computed key holds an expression of its own.
-        const colon = atTopLevel(text, (i) => text[i] === ':');
+        // the target, and a computed key holds an expression of its own. The
+        // colon that renames stands before the default, the default being an
+        // expression of its own too: in `cb=lambda x: x + 1`, the lambda's.
+        const defaultAt = atTopLevel(text, (i) => text[i] === '=');
+        const naming = defaultAt === -1 ? text : text.slice(0, defaultAt);
+        const colon = atTopLevel(naming, (i) => naming[i] === ':');
         const value = colon === -1 ? text : text.slice(colon + 1);
         const equals = atTopLevel(value, (i) => value[i] === '=');
         const target = equals === -1 ? value : value.slice(0, equals);
@@ -1443,14 +1447,18 @@ function unpackByKey(inside, call, names, tuple, unpack) {
 // stop compiling the day Svelte drops it.
 const derivedTag = (target, expression) => `{const ${target} = $derived(${expression})}`;
 
-const unpacked = (unpack, call) =>
-    unpack.consts
-        .map(({ target, read, source, lazy, missing, fallback }) =>
-            missing === undefined
-                ? derivedTag(target, call(read, '', source, lazy ? 'lazy' : 'python'))
-                : derivedTag(target, `${missing} === undefined ? ${call(fallback, '', undefined, 'lazy')} : ${missing}`)
-        )
-        .join('');
+// What one name a pattern unpacks holds, as JavaScript reads it: its `read`,
+// or, for a default that waits for the row, the alias where it is not
+// `undefined` and the default where it is, as JavaScript takes a default. The
+// one reading for the block (`unpacked`) and for its key (`eachKey`): asked in
+// Python, `undefined` and an explicit `None` arrive as the same `None`, where a
+// row holding `None` holds a value.
+const entryValue = ({ read, source, lazy, missing, fallback }, call, followed = true) =>
+    missing === undefined
+        ? call(read, '', source, lazy ? 'lazy' : 'python', [], followed)
+        : `${missing} === undefined ? ${call(fallback, '', undefined, 'lazy', [], followed)} : ${missing}`;
+
+const unpacked = (unpack, call) => unpack.consts.map((one) => derivedTag(one.target, entryValue(one, call))).join('');
 
 // The names a declaration binds, read without compiling anything.
 //
@@ -1748,9 +1756,12 @@ const walked = (rows, iterable, key) =>
     `{const ${rows} = __collection(() => ${iterable}${key === null ? '' : `, ${key}`})}`;
 
 // The key of an `{#each}` is computed outside the block, from the pattern's own
-// names, and a key unpacked by key is a `{@const}` of the block. So such a name
-// is bound again in the key's own expression, by a comprehension over the row,
-// and is not handed in from a scope the key does not see.
+// names, and a name unpacked by key or around a star is a derived of the block.
+// So such a name is bound again for the key, as the block binds it
+// (`entryValue`), and is not handed in from a scope the key does not see. A
+// comprehension over the row bound it in Python, and lost the default that
+// waits for the row: it holds no `read`, and the key's Python held the word
+// `undefined`.
 //
 // **The rows are handed in unfollowed.** Svelte computes every key at each run
 // of the block, inside it, so what a key reads, the block reads: a row followed
@@ -1759,11 +1770,13 @@ const walked = (rows, iterable, key) =>
 // still the block's, as in Svelte, and a key a change in its row moves is told
 // by what the block walks.
 function eachKey(key, unpack, call) {
-    if (unpack.consts.length === 0) return call(key, '__key', key, '', [], false);
+    const keyed = call(key, '__key', key, '', [], false);
 
-    const loops = unpack.consts.map(({ target, read }) => ` for ${target} in [${read}]`).join('');
+    if (unpack.consts.length === 0) return keyed;
 
-    return call(`[(${key})${loops}][0]`, '__key', key, '', [...unpack.bound], false);
+    const bound = unpack.consts.map((one) => `const ${one.target} = ${entryValue(one, call, false)};`).join(' ');
+
+    return `(() => { ${bound} return ${keyed}; })()`;
 }
 
 // What Svelte's template language holds, named here so that anything else stops
