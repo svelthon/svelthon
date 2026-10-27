@@ -1,9 +1,10 @@
 // @vitest-environment node
 //
-// A compiled `.py` is kept on its date, since compiling Python is the
-// expensive half and a store is served on every request in dev. A file Vite
-// reports changed is compiled again whatever its date says: a copy or a tool
-// that keeps `mtimeMs` left the cache serving the code it had before.
+// A compiled `.py` is kept on what it holds, since compiling Python is the
+// expensive half and a store is served on every request in dev. Kept on its
+// date, a file a copy or a tool wrote again under the date it had was served
+// as the code it held before: to a save Vite reported, and to a second build
+// in the same process, which nothing reports.
 import { test, expect } from 'vitest';
 import { mkdtempSync, writeFileSync, utimesSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -43,6 +44,32 @@ test.for([['a .py', '.py'], ['a .svelte.py', '.svelte.py']])(
             plugin.hotUpdate.call({ environment: { moduleGraph: graph } }, { file, modules: [] });
 
             expect(served(plugin, file)).not.toBe(before);
+        } finally {
+            rmSync(room, { recursive: true, force: true });
+        }
+    }
+);
+
+test.for([['a .py', '.py'], ['a .svelte.py', '.svelte.py']])(
+    '%s rewritten under the same date is compiled again by a second build of the process',
+    ([, extension]) => {
+        const room = mkdtempSync(join(tmpdir(), 'svelthon-cache-'));
+        const file = join(room, `${room.split('/').pop().replace(/\W/g, '_')}${extension}`);
+
+        try {
+            writeFileSync(file, 'old_message = 1\n');
+            utimesSync(file, 1000, 1000);
+            const before = served(svelthon(), file);
+
+            writeFileSync(file, 'new_message = 1\n');
+            utimesSync(file, 1000, 1000);
+            const after = served(svelthon(), file);
+
+            expect([before.includes('old_message'), after.includes('new_message'), after.includes('old_message')]).toEqual([
+                true,
+                true,
+                false
+            ]);
         } finally {
             rmSync(room, { recursive: true, force: true });
         }

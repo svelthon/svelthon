@@ -822,7 +822,10 @@ function sameLines(code, content) {
 }
 
 // A store is served on every request in dev, and compiling Python is the
-// expensive half. Keyed on mtime, so an edit still recompiles.
+// expensive half. Keyed on what the file holds, read at each ask, which costs
+// nothing beside a compile: keyed on its date, a file a copy or a tool wrote
+// again under the date it had served the code it held before, to a second
+// build in the same process as to a save Vite reports.
 const compiledStores = new Map();
 
 // A shared store is a plain .py file. It compiles to module-scope signals,
@@ -839,20 +842,19 @@ const compiledStores = new Map();
 // shared by two projects is `../shared/x.py` from one and `../../shared/x.py`
 // from the other, and each project imports the module of its own path.
 function compilePython(file, path, root) {
-    const stamp = statSync(file).mtimeMs;
+    const source = readFileSync(file, 'utf8');
     const shown = relative(root, file);
     const cached = compiledStores.get(file);
     const found = (imports) => imports.map((mod) => moduleFile(mod, dirname(file), path) ?? '').join('\n');
     if (
         cached &&
-        cached.stamp === stamp &&
+        cached.source === source &&
         cached.shown === shown &&
         cached.found === found(cached.result.imports)
     ) {
         return cached.result;
     }
 
-    const source = readFileSync(file, 'utf8');
     const mode = isReactive(file) ? { store: true } : { plain: true, eager: isRemote(file) };
     const result = compile(source, nameFor(file, root), shown, {
         ...mode,
@@ -860,7 +862,7 @@ function compilePython(file, path, root) {
         resolves: (mod) => moduleKind(mod, dirname(file), path)
     });
 
-    compiledStores.set(file, { stamp, shown, result, found: found(result.imports) });
+    compiledStores.set(file, { source, shown, result, found: found(result.imports) });
     return result;
 }
 
@@ -1114,11 +1116,6 @@ export function svelthon(options = {}) {
         hotUpdate({ file, modules }) {
             const graph = this.environment.moduleGraph;
             const stale = [];
-
-            // A Python file Vite reports changed is compiled again, whatever its
-            // date says: a copy or a tool that keeps `mtimeMs` left the cache
-            // serving the code it had before.
-            compiledStores.delete(file);
 
             const forget = (id) => {
                 const mod = graph.getModuleById(id);
