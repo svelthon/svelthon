@@ -1141,6 +1141,24 @@ export const __pybridge = {
         return given === undefined && fallback !== undefined ? fallback() : pyBind(given);
     },
 
+    // The row a snippet's positional pattern takes apart, as Svelte's own
+    // `to_array` takes one: an array as it is, so that an element is read where
+    // it is read and a change made in place is seen, and another iterable as
+    // its first `length` elements, which is as far as the pattern reads.
+    positional(value, length) {
+        if (Array.isArray(value)) return value;
+        if (!(Symbol.iterator in value)) return Array.from(value);
+
+        const row = [];
+
+        for (const one of value) {
+            row.push(one);
+            if (row.length === length) break;
+        }
+
+        return row;
+    },
+
     // `set_context` and `get_context`. A scalar is set as JavaScript's own, for
     // a JavaScript reader, and its original kept in the context too, for a
     // Python one: `Price(0.5)` reads back a `Price` and `1.0` a float, where the

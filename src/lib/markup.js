@@ -1376,7 +1376,8 @@ function unpackByKey(inside, call, names, tuple, unpack) {
                 target,
                 read: `__rest(${alias}, (${keys.map((one) => `${one}, `).join('')}))`,
                 source: '',
-                lazy: false
+                lazy: false,
+                once: true
             });
             names.push(...identifiers(target));
             continue;
@@ -1409,7 +1410,7 @@ function unpackByKey(inside, call, names, tuple, unpack) {
         if (computed) {
             unpack.aliases.push(held);
             unpack.bound.add(held);
-            unpack.consts.push({ target: held, read: `(${key.slice(1, -1)})`, source: key.slice(1, -1), lazy: false });
+            unpack.consts.push({ target: held, read: `(${key.slice(1, -1)})`, source: key.slice(1, -1), lazy: false, once: true });
         }
 
         // A key written bare is a name, which Python reads normalized: `ﬁeld` is
@@ -1460,7 +1461,34 @@ const entryValue = ({ read, source, lazy, missing, fallback }, call, followed = 
         ? call(read, '', source, lazy ? 'lazy' : 'python', [], followed)
         : `${missing} === undefined ? ${call(fallback, '', undefined, 'lazy', [], followed)} : ${missing}`;
 
-const unpacked = (unpack, call) => unpack.consts.map((one) => derivedTag(one.target, entryValue(one, call))).join('');
+// **A field read by key with no default is read again at each read**, where
+// the block reads it, as Svelte reads a field it destructures in an `{#each}`
+// or a snippet: held in a derived, it kept its first value until what the read
+// followed changed, and the field of a JavaScript object a library changes in
+// place, and then asks the view to render again, stayed what it was. So such
+// a name declares nothing, and its read goes to `again`, the block's rereads,
+// one for a read that follows the row and one for the key's, which does not.
+// What stays a derived is what Svelte holds too, a default, and what reads no
+// field: a computed key, evaluated once; `**rest`, a dict of its own; and a
+// starred row, a list of its own. An `{#await}` holds them all, as Svelte does.
+const rereadable = ({ target, missing, lazy, once }) =>
+    missing === undefined && !lazy && !once && DECLARED_NAME.test(target);
+
+const unpacked = (unpack, call, again = null) =>
+    unpack.consts
+        .map((one) => {
+            if (again === null || !rereadable(one)) return derivedTag(one.target, entryValue(one, call));
+
+            // Compiled where it is declared, as the derived it was, so that what
+            // it reports points at the pattern; the key's, in the block's head
+            // too, when the key asks for it.
+            const followed = entryValue(one, call);
+            let unfollowed = null;
+
+            again.set(one.target, (follows) => (follows ? followed : (unfollowed ??= entryValue(one, call, false))));
+            return '';
+        })
+        .join('');
 
 // The names a declaration binds, read without compiling anything.
 //
@@ -1498,16 +1526,16 @@ const unpacking = (parts, tuple, refuse) =>
 // parameters, an `{#each}` target, and the value an `{#await}` hands to `then`
 // or `catch`. `consts` is what the block opens with. `refuse` throws a refusal
 // at the block.
-const destructured = (text, declare, call, tuple, refuse) => {
+const destructured = (text, declare, call, tuple, refuse, again = null) => {
     const parts = arguments_(text.trim());
     const first = unpacker(refuse);
 
-    declare(boundBy(parts, tuple, first), first.aliases, unpacking(parts, tuple, refuse));
+    declare(boundBy(parts, tuple, first), first.aliases, unpacking(parts, tuple, refuse), again);
 
     const unpack = unpacker(refuse);
     const pattern = parts.map((part) => parameterPattern(part, call, [], tuple, unpack)).join(',');
 
-    return { pattern, unpack, consts: unpacked(unpack, call) };
+    return { pattern, unpack, consts: unpacked(unpack, call, again) };
 };
 
 // `{#snippet row(one, value=True)}` read apart: the names go to `declare`,
@@ -1611,9 +1639,11 @@ function snippetParameters(trimmed, declare, call, refuse, frame, identity = nul
         // nothing reads ahead: Svelte reads a `{@const}` as soon as it is
         // declared, in development, and the `{@render}` argument then ran where
         // its snippet's branch did not read it.
+        const row = `__pybridge.param(${argument}, ${frame}, ${at}${fallback})`;
+
         reads.push(
-            derivedTag(target, `__pybridge.param(${argument}, ${frame}, ${at}${fallback})`) +
-                unpacked({ consts: unpack.consts.slice(from) }, call)
+            (target.startsWith('[') ? positionalReads(target, row, `${frame}_row${at}`, rereads) : derivedTag(target, row)) +
+                unpacked({ consts: unpack.consts.slice(from) }, call, rereads)
         );
     });
 
@@ -1621,6 +1651,35 @@ function snippetParameters(trimmed, declare, call, refuse, frame, identity = nul
         `${name}(${given.join(', ')})${trimmed.slice(close + 1)}}` +
         `{let ${frame} = __pybridge.pythonSnippet(${identity ?? name})}${reads.join('')}`
     );
+}
+
+// A snippet's positional pattern, `[value]`, read as Svelte reads its own: the
+// row taken apart once (`__pybridge.positional`), as Svelte's `to_array`
+// takes it, and each element where it is read (`rereads`). Held in one
+// derived, `{const [value] = …}`, an element kept what it was when the row
+// changed in place. A default is held, as Svelte holds one, and so is a row
+// unpacked by key, whose fields are read again in their turn (`unpacked`).
+function positionalReads(target, row, base, rereads) {
+    const elements = arguments_(target.slice(1, -1));
+    let out = derivedTag(base, `__pybridge.positional(${row}, ${elements.length})`);
+
+    elements.forEach((element, i) => {
+        const text = element.trim();
+        const read = `${base}[${i}]`;
+
+        // A hole, `[, b]`, or what follows a trailing comma.
+        if (text === '') return;
+
+        const equals = atTopLevel(text, (j) => text[j] === '=');
+        const left = (equals === -1 ? text : text.slice(0, equals)).trim();
+        const value = equals === -1 ? read : `${read} === undefined ? ${text.slice(equals + 1).trim()} : ${read}`;
+
+        if (left.startsWith('[')) out += positionalReads(left, value, `${base}_${i}`, rereads);
+        else if (equals === -1 && DECLARED_NAME.test(left) && !left.startsWith(UNPACKED)) rereads.set(left, read);
+        else out += derivedTag(left, value);
+    });
+
+    return out;
 }
 
 // The key that trails an `{#each}` target: `[target, key]`, or null when the line
@@ -1728,7 +1787,7 @@ function eachBlock(trimmed, declare, call, refuse, loop) {
     // numbers, and a row would have no identity left to key by.
     const iterable = call(body.slice(0, at), '__seq', undefined, 'python');
     const target = keyed ? keyed[0] : named;
-    const { pattern, unpack, consts } = destructured(target, declare, call, true, refuse);
+    const { pattern, unpack, consts } = destructured(target, declare, call, true, refuse, new Map());
 
     // Svelte's index is the second of two, `as row, at`; one the author did
     // not write is added when a group needs it, or a key, under the walk's
@@ -1771,12 +1830,16 @@ const walked = (rows, iterable, key) =>
 // where Svelte's key reads the one field it names. A name the key reads is
 // still the block's, as in Svelte, and a key a change in its row moves is told
 // by what the block walks.
+//
+// A field read again at each read (`rereadable`) needs no binding: the key
+// reads it where it reads it, as the block does.
 function eachKey(key, unpack, call) {
     const keyed = call(key, '__key', key, '', [], false);
+    const held = unpack.consts.filter((one) => !rereadable(one));
 
-    if (unpack.consts.length === 0) return keyed;
+    if (held.length === 0) return keyed;
 
-    const bound = unpack.consts.map((one) => `const ${one.target} = ${entryValue(one, call, false)};`).join(' ');
+    const bound = held.map((one) => `const ${one.target} = ${entryValue(one, call, false)};`).join(' ');
 
     return `(() => { ${bound} return ${keyed}; })()`;
 }
@@ -2188,16 +2251,31 @@ function scopeChain(seed, indexed, refuseCompilerName) {
     // are written, each by what reads its argument (`rereads`).
     const parameters = (names, rereads = new Map()) => {
         scopes[scopes.length - 1].parameters = new Set(names);
-        scopes[scopes.length - 1].rereads = rereads;
+        rereading(rereads);
         computingIn(scopes[scopes.length - 1], names);
     };
 
-    // What reads the parameter `name` is, where it is read rather than
-    // declared, or null.
-    const reread = (name) => {
+    // The innermost scope's names read where they are written (`rereads`).
+    const rereading = (rereads) => {
+        scopes[scopes.length - 1].rereads = rereads;
+    };
+
+    // What reads `name` is, where it is read rather than declared, or null: a
+    // snippet's bare parameter, or a field a pattern reads by key (`unpacked`),
+    // read as a read that follows the row does or as a key does.
+    const reread = (name, followed = true) => {
+        const held = found(name);
+        const again = held === null ? null : (scopes[held.at].rereads?.get(held.declared) ?? null);
+
+        return typeof again === 'function' ? again(followed) : again;
+    };
+
+    // Whether `name` is a snippet's parameter, rather than a name an
+    // `{#each}` unpacks.
+    const parameter = (name) => {
         const held = found(name);
 
-        return held === null ? null : (scopes[held.at].rereads?.get(held.declared) ?? null);
+        return held !== null && scopes[held.at].parameters?.has(held.declared) === true;
     };
 
     // The innermost scope's names whose read may run code (`computing`).
@@ -2243,10 +2321,11 @@ function scopeChain(seed, indexed, refuseCompilerName) {
     // every value coming into Python is (`__pybridge.received`), so a callable
     // Python handed out is itself again. The innermost scope holding the name
     // says whether it is one.
-    const received = (name) => {
+    const received = (name, followed = true) => {
         const held = found(name);
+        const read = reread(name, followed) ?? name;
 
-        return held !== null && scopes[held.at].parameters?.has(held.declared) ? `${RECEIVED}(${reread(name) ?? name})` : name;
+        return held !== null && scopes[held.at].parameters?.has(held.declared) ? `${RECEIVED}(${read})` : read;
     };
 
     // The block names an expression actually reads, rather than every name in
@@ -2298,11 +2377,13 @@ function scopeChain(seed, indexed, refuseCompilerName) {
         seeded,
         declare,
         parameters,
+        rereading,
         computing,
         costly,
         inScope,
         received,
         reread,
+        parameter,
         mentioned,
         scoped,
         iterations,
@@ -2413,7 +2494,8 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     };
 
     const chain = scopeChain(seed, indexed, refuseCompilerName);
-    const { push, pop, closeElement, branch, seeded, declare, parameters, computing, costly, received, mentioned, scoped, iterations, holds } = chain;
+    const { push, pop, closeElement, branch, seeded, declare, parameters, rereading, computing, costly, received, mentioned, scoped, iterations, holds } =
+        chain;
 
     // The `{` of the construct being read, as the author sees it. `region.start`
     // is the character after the brace, so this steps back onto it.
@@ -2637,7 +2719,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         // follow() on the block's own names: a row of an {#each} is a plain
         // JavaScript value, not a signal, so reading `it.label` registers
         // nothing by itself. This is what subscribes the row's block to the row.
-        const value = (arg) => (followed ? `${FOLLOW}(${received(arg)})` : received(arg));
+        const value = (arg) => (followed ? `${FOLLOW}(${received(arg)})` : received(arg, false));
         const handed = (arg) => (late ? `() => ${value(arg)}` : value(arg));
 
         return `${name}(${args.map(handed).join(', ')})`;
@@ -3121,13 +3203,26 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     //
     // A bare parameter of a snippet is no cell, read where it is written
     // (`snippetParameters`), and Svelte refuses to bind its own parameter.
+    //
+    // A field an `{#each}` unpacks by key is read where it is written too, and
+    // Svelte refuses to bind one, `each_item_invalid_assignment`: what it
+    // reads is the row's.
     const declaredWrite = (expr, crossing) => {
-        if (chain.reread(bareName(expr)) !== null) {
+        if (chain.reread(bareName(expr)) !== null && chain.parameter(bareName(expr))) {
             throw refuse(
                 new SyntaxError(
                     `svelthon — \`${bareName(expr)}\` is a parameter of its snippet${said()}, which Svelte ` +
                         `refuses to bind or reassign: it reads what \`{@render}\` hands it. Bind what the ` +
                         `argument holds instead, where the snippet is rendered.`
+                )
+            );
+        }
+        if (chain.reread(bareName(expr)) !== null) {
+            throw refuse(
+                new SyntaxError(
+                    `svelthon — \`${bareName(expr)}\` is unpacked from a row of its \`{#each}\`${said()}, which ` +
+                        `Svelte refuses to bind or reassign: it reads the row. Bind the row's own field instead, ` +
+                        `\`row.${bareName(expr)}\` with the row named, or the list and its index.`
                 )
             );
         }
@@ -3706,9 +3801,10 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
             } else if (opens('each')) {
                 // The block's scope, known once its names are declared.
                 let id;
-                const declare = (names, generated, costly) => {
+                const declare = (names, generated, costly, rereads) => {
                     push(names, generated);
                     computing(costly);
+                    rereading(rereads);
                     id = chain.id();
                 };
 

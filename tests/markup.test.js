@@ -850,11 +850,13 @@ describe('{@render}', () => {
     // A snippet this markup declares says it is Python's first of all, and only
     // then takes its arguments apart, by position, a pattern and a default
     // included: Svelte is handed plain parameters and reads none of them first.
+    // A positional pattern's row is taken apart once, and its elements are read
+    // where they are read (`positionalReads`).
     test('a snippet the markup declares announces itself, then takes its arguments apart', () => {
         const { out } = rewrite('{#snippet row([x, z], y=1)}{y}{/snippet}');
 
         expect(out).toMatch(
-            /^\{#snippet row\(__argument_0, __argument_1\)\}\{let __snippet_0 = __pybridge\.pythonSnippet\(row\)\}\{const \[x, z\] = \$derived\(__pybridge\.param\(__argument_0, __snippet_0, 0\)\)\}\{const y = \$derived\(__pybridge\.param\(__argument_1, __snippet_0, 1, \(\) => __expr_lazy_\d+\(/
+            /^\{#snippet row\(__argument_0, __argument_1\)\}\{let __snippet_0 = __pybridge\.pythonSnippet\(row\)\}\{const __snippet_0_row0 = \$derived\(__pybridge\.positional\(__pybridge\.param\(__argument_0, __snippet_0, 0\), 2\)\)\}\{const y = \$derived\(__pybridge\.param\(__argument_1, __snippet_0, 1, \(\) => __expr_lazy_\d+\(/
         );
     });
 
