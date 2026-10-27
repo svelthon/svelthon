@@ -1459,7 +1459,13 @@ const derivedTag = (target, expression) => `{const ${target} = $derived(${expres
 const entryValue = ({ read, source, lazy, missing, fallback }, call, followed = true) =>
     missing === undefined
         ? call(read, '', source, lazy ? 'lazy' : 'python', [], followed)
-        : `${missing} === undefined ? ${call(fallback, '', undefined, 'lazy', [], followed)} : ${missing}`;
+        : orDefault(missing, call(fallback, '', undefined, 'lazy', [], followed));
+
+// A default as JavaScript takes one, where what it stands for is `undefined`,
+// with what it stands for read once: an element Svelte reads again at each
+// read, or one held behind a getter, was read twice where it was there, and a
+// getter that counts answered twice.
+const orDefault = (read, fallback) => `((__given) => (__given === undefined ? ${fallback} : __given))(${read})`;
 
 // **A field read by key with no default is read again at each read**, where
 // the block reads it, as Svelte reads a field it destructures in an `{#each}`
@@ -1659,9 +1665,15 @@ function snippetParameters(trimmed, declare, call, refuse, frame, identity = nul
 // derived, `{const [value] = …}`, an element kept what it was when the row
 // changed in place. A default is held, as Svelte holds one, and so is a row
 // unpacked by key, whose fields are read again in their turn (`unpacked`).
+//
+// The row is read as far as the pattern names positions, a hole being one and
+// what follows a trailing comma none, as JavaScript counts them: counted, the
+// empty text after `[value,]` read a second element of an iterator, which may
+// run code or raise.
 function positionalReads(target, row, base, rereads) {
     const elements = arguments_(target.slice(1, -1));
-    let out = derivedTag(base, `__pybridge.positional(${row}, ${elements.length})`);
+    const named = elements.length > 0 && elements.at(-1).trim() === '' ? elements.length - 1 : elements.length;
+    let out = derivedTag(base, `__pybridge.positional(${row}, ${named})`);
 
     elements.forEach((element, i) => {
         const text = element.trim();
@@ -1672,7 +1684,7 @@ function positionalReads(target, row, base, rereads) {
 
         const equals = atTopLevel(text, (j) => text[j] === '=');
         const left = (equals === -1 ? text : text.slice(0, equals)).trim();
-        const value = equals === -1 ? read : `${read} === undefined ? ${text.slice(equals + 1).trim()} : ${read}`;
+        const value = equals === -1 ? read : orDefault(read, text.slice(equals + 1).trim());
 
         if (left.startsWith('[')) out += positionalReads(left, value, `${base}_${i}`, rereads);
         else if (equals === -1 && DECLARED_NAME.test(left) && !left.startsWith(UNPACKED)) rereads.set(left, read);
