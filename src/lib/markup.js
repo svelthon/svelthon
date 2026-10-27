@@ -258,6 +258,42 @@ function calledAtTop(expression) {
 const WALRUS_NAME = new RegExp(`^\\s*(${NAME})`, 'u');
 const WALRUS_ARROW = /^\s*:=\s*/;
 
+// What is written between a key's brackets, as one argument of a call: a
+// slice as Python spells it as an expression, `slice(start, stop, step)`, a
+// bound left out being `None`, so that `items[0:1] := [9]` writes what
+// `items[0:1] = [9]` writes; left to Python, the walrus was refused as CPython
+// refuses one on a subscript, where every other key was written. A `lambda`'s
+// colon cuts no slice. Null for a part with three colons.
+function slices(inner) {
+    const parts = arguments_(inner);
+    const colons = (part) => {
+        const at = [];
+
+        if (/^\s*lambda\b/.test(part)) return at;
+        atTopLevel(part, (i) => {
+            if (part[i] === ':') at.push(i);
+            return false;
+        });
+        return at;
+    };
+
+    if (!parts.some((part) => colons(part).length > 0)) return inner;
+
+    const written = parts.map((part) => {
+        const at = colons(part);
+
+        if (at.length === 0) return part.trim();
+        if (at.length > 2) return null;
+
+        const cuts = [-1, ...at, part.length];
+        const bounds = cuts.slice(1).map((end, n) => part.slice(cuts[n] + 1, end).trim() || 'None');
+
+        return `slice(${bounds.join(', ')})`;
+    });
+
+    return written.includes(null) ? null : written.join(', ');
+}
+
 // What a walrus aims at, which is more than Python's own grammar allows it.
 //
 // PEP 572 restricts the target to a single name; JavaScript's `=` takes a name,
@@ -299,12 +335,10 @@ function walrusTarget(text) {
             if (close === -1) return null;
 
             const inner = text.slice(index + 1, close).trim();
+            const sliced = slices(inner);
 
-            // A slice is a target Python assigns to and an expression it has no
-            // spelling for: `items[1:]` cannot be passed as a key. Rather than
-            // emit something that will not parse, leave the whole walrus alone
-            // and let Python report it in its own words.
-            if (atTopLevel(inner, (i) => inner[i] === ':') !== -1) return null;
+            // Three colons, which no slice holds: Python says so in its words.
+            if (sliced === null) return null;
 
             object = text.slice(0, index).trim();
             // The key is one argument of the call it goes into. Python reads a
@@ -312,7 +346,7 @@ function walrusTarget(text) {
             // being `grid[(1, 2)]` and `grid[*keys]` being `grid[(*keys,)]`;
             // passed bare, `1, 2` was two arguments and wrote `2` under `1`.
             const comma = atTopLevel(inner, (i) => inner[i] === ',') !== -1;
-            key = comma || inner.startsWith('*') ? `(${inner}${comma ? '' : ','})` : inner;
+            key = comma || inner.startsWith('*') ? `(${sliced}${comma ? '' : ','})` : sliced;
             subscript = true;
             index = close + 1;
         } else break;

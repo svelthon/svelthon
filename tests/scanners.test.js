@@ -89,11 +89,11 @@ describe('walrusTarget reads through a string', () => {
         expect(walrus('(d["a\\"]b"] := 1)')).toBe('__setitem(d, "a\\"]b", 1)');
     });
 
-    // A slice is a target Python assigns to and has no spelling for as a key, so
-    // the whole walrus is left alone rather than emitted as something that will
-    // not parse.
-    test('a slice is left for Python to report', () => {
-        expect(walrus('(d[1:] := 1)')).toBe('(d[1:] := 1)');
+    // A slice is a target Python assigns to, and a key spelt as Python spells it
+    // as an expression, `slice(start, stop)`; three colons, which no slice
+    // holds, are left for Python to report.
+    test('a slice is written as the key Python spells it', () => {
+        expect([walrus('(d[1:] := 1)'), walrus('(d[1:2:3:4] := 1)')]).toEqual(['__setitem(d, slice(1, None), 1)', '(d[1:2:3:4] := 1)']);
     });
 });
 

@@ -45,10 +45,11 @@ describe('what a walrus may aim at', () => {
             'lambda: (__assign("a", 1), __setattr(b, "c", 2), __setitem(d, k, 3))'
         ],
 
-        // A colon inside the key is a slice, which Python assigns to and has no
-        // way to pass as an argument. Left alone, so Python reports it itself
-        // rather than the rewrite emitting something that will not parse.
-        ['lambda: (items[1:] := 2)', 'lambda: (items[1:] := 2)'],
+        // A colon inside the key is a slice, which Python assigns to and passes
+        // as an argument spelt `slice(start, stop, step)`, a bound left out
+        // being `None`; one per part of a tuple key.
+        ['lambda: (items[1:] := 2)', 'lambda: __setitem(items, slice(1, None), 2)'],
+        ['lambda: (grid[::2, 0] := 2)', 'lambda: __setitem(grid, (slice(None, None, 2), 0), 2)'],
 
         // ...but a colon inside a string is just a string.
         ['lambda: (d["a:b"] := 1)', 'lambda: __setitem(d, "a:b", 1)'],
