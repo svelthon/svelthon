@@ -93,7 +93,7 @@ describe('walrusTarget reads through a string', () => {
     // as an expression, `slice(start, stop)`; three colons, which no slice
     // holds, are left for Python to report.
     test('a slice is written as the key Python spells it', () => {
-        expect([walrus('(d[1:] := 1)'), walrus('(d[1:2:3:4] := 1)')]).toEqual(['__setitem(d, slice(1, None), 1)', '(d[1:2:3:4] := 1)']);
+        expect([walrus('(d[1:] := 1)'), walrus('(d[1:2:3:4] := 1)')]).toEqual(['__setitem(d, __slice(1, None), 1)', '(d[1:2:3:4] := 1)']);
     });
 });
 

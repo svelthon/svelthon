@@ -46,10 +46,16 @@ describe('what a walrus may aim at', () => {
         ],
 
         // A colon inside the key is a slice, which Python assigns to and passes
-        // as an argument spelt `slice(start, stop, step)`, a bound left out
-        // being `None`; one per part of a tuple key.
-        ['lambda: (items[1:] := 2)', 'lambda: __setitem(items, slice(1, None), 2)'],
-        ['lambda: (grid[::2, 0] := 2)', 'lambda: __setitem(grid, (slice(None, None, 2), 0), 2)'],
+        // as an argument spelt `slice(start, stop, step)`, under the compiler's
+        // name, a bound left out being `None`; one per part of a tuple key.
+        ['lambda: (items[1:] := 2)', 'lambda: __setitem(items, __slice(1, None), 2)'],
+        ['lambda: (grid[::2, 0] := 2)', 'lambda: __setitem(grid, (__slice(None, None, 2), 0), 2)'],
+
+        // ...but each `lambda` takes the next colon, as Python reads it, before
+        // or after a slice's own, or with none at all.
+        ['lambda: (d[1:lambda: 2] := 1)', 'lambda: __setitem(d, __slice(1, lambda: 2), 1)'],
+        ['lambda: (d[lambda: 1:2] := 1)', 'lambda: __setitem(d, __slice(lambda: 1, 2), 1)'],
+        ['lambda: (d[1 if True else lambda: 2] := 1)', 'lambda: __setitem(d, 1 if True else lambda: 2, 1)'],
 
         // ...but a colon inside a string is just a string.
         ['lambda: (d["a:b"] := 1)', 'lambda: __setitem(d, "a:b", 1)'],

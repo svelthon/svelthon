@@ -2504,6 +2504,11 @@ export function writeItem(target, key, value) {
     return value;
 }
 
+// The engine's `slice`, which a template `:=` through a slice writes its key
+// with (`slices`), under a name of the compiler's: the author's `slice`, a
+// function or a number, is no business of a subscript's.
+export { pySlice } from 'bryntime';
+
 // `bind:group`, which Svelte will not take a getter/setter pair for: it works
 // out which inputs form one group from the *text* of the expression, and two
 // anonymous functions have none. So the markup pass turns it into this action

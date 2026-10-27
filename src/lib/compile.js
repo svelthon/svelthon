@@ -591,7 +591,8 @@ const RUNTIME = {
     restOf: '__rest',
     unpackStarred: '__unpack',
     writeAttr: '__setattr',
-    writeItem: '__setitem'
+    writeItem: '__setitem',
+    pySlice: '__slice'
 };
 
 // What stands in for the standard modules an author reaches for first: a
@@ -1619,7 +1620,7 @@ function preamble(c) {
             ...(c.effects.some((e) => e.root) ? ['laterRoot'] : []),
             // Three that keep the spelling the markup pass emits, and the read
             // half of the dot, which `templateDots` writes.
-            'group', 'readAttr', 'restOf', 'unpackStarred', 'writeAttr', 'writeItem',
+            'group', 'readAttr', 'restOf', 'unpackStarred', 'writeAttr', 'writeItem', 'pySlice',
             ...(c.templateLine === undefined ? [] : ['templateFrom']),
             ...(c.store ? [] : ['fileLines']),
             ...(c.jsImported.length ? ['readOnlyImport'] : [])
@@ -2064,7 +2065,8 @@ function injectedBindings(c) {
                   `__bind(__proto, '__rest', () => __rest);`,
                   `__bind(__proto, '__unpack', () => __unpack);`,
                   `__bind(__proto, '__setattr', () => __setattr);`,
-                  `__bind(__proto, '__setitem', () => __setitem);`
+                  `__bind(__proto, '__setitem', () => __setitem);`,
+                  `__bind(__proto, '__slice', () => __slice);`
               ]),
         // The second argument is what the component imported in its
         // `<script module>`, published so Python can read it.

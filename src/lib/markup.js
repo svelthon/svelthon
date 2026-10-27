@@ -262,16 +262,30 @@ const WALRUS_ARROW = /^\s*:=\s*/;
 // slice as Python spells it as an expression, `slice(start, stop, step)`, a
 // bound left out being `None`, so that `items[0:1] := [9]` writes what
 // `items[0:1] = [9]` writes; left to Python, the walrus was refused as CPython
-// refuses one on a subscript, where every other key was written. A `lambda`'s
-// colon cuts no slice. Null for a part with three colons.
+// refuses one on a subscript, where every other key was written. Null for a
+// part with three colons.
+//
+// The slice is the engine's, under the compiler's name (`__slice`): a `slice`
+// of the author's, a function or a number, was called in its place.
+//
+// **Each `lambda` takes the next colon**, as Python reads one: its body is an
+// expression, which holds none, so `lambda: 1 : 2` is a slice from a lambda
+// and `1 if True else lambda: 2` is no slice at all. Told by where the part
+// starts, a lambda after its first word cut a slice through its own colon,
+// and one that opened the part hid the slice after it.
+const LAMBDA = /^lambda(?!\p{XID_Continue})/u;
+const NAME_BEFORE = /\p{XID_Continue}$/u;
+
 function slices(inner) {
     const parts = arguments_(inner);
     const colons = (part) => {
         const at = [];
+        let lambdas = 0;
 
-        if (/^\s*lambda\b/.test(part)) return at;
         atTopLevel(part, (i) => {
-            if (part[i] === ':') at.push(i);
+            if (LAMBDA.test(part.slice(i)) && !NAME_BEFORE.test(part.slice(0, i))) lambdas++;
+            else if (part[i] === ':' && lambdas > 0) lambdas--;
+            else if (part[i] === ':') at.push(i);
             return false;
         });
         return at;
@@ -288,7 +302,7 @@ function slices(inner) {
         const cuts = [-1, ...at, part.length];
         const bounds = cuts.slice(1).map((end, n) => part.slice(cuts[n] + 1, end).trim() || 'None');
 
-        return `slice(${bounds.join(', ')})`;
+        return `__slice(${bounds.join(', ')})`;
     });
 
     return written.includes(null) ? null : written.join(', ');
