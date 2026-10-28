@@ -398,6 +398,9 @@ const RUNE_MARKED = new WeakMap();
 const RUNE_MARKERS = [];
 const BOUND = new WeakMap();
 
+// The tokens of the defaults being taken (`__pybridge.initializing`).
+const INITIALIZING = new Set();
+
 export const __pybridge = {
     // Whether the components run in a browser or render on a server, as Svelte
     // tells them apart: by what the code was resolved for (`esm-env`), and not
@@ -1141,6 +1144,26 @@ export const __pybridge = {
         const given = served !== null && at < served.length ? served[at] : value;
 
         return given === undefined && fallback !== undefined ? fallback() : pyBind(given);
+    },
+
+    // A default of a positional pattern taken under its token, and a name an
+    // element after it binds read through that token: JavaScript's error while
+    // the default is taken, the name not bound yet, and the name once it is,
+    // as a function the default made reads it when it is called.
+    initializing(token, run) {
+        INITIALIZING.add(token);
+
+        try {
+            return run();
+        } finally {
+            INITIALIZING.delete(token);
+        }
+    },
+
+    ahead(token, name, read) {
+        if (INITIALIZING.has(token)) throw new ReferenceError(`Cannot access '${name}' before initialization`);
+
+        return read();
     },
 
     // The row a snippet's positional pattern takes apart, as Svelte's own
