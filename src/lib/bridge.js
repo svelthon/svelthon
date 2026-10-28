@@ -129,6 +129,7 @@ const {
     standsFor,
     jsCall,
     jsMethod,
+    pyLeading,
     pyExport,
     STALE,
     flushExports,
@@ -1145,8 +1146,14 @@ export const __pybridge = {
     // The row a snippet's positional pattern takes apart, as Svelte's own
     // `to_array` takes one: an array as it is, so that an element is read where
     // it is read and a change made in place is seen, and another iterable as
-    // its first `length` elements, which is as far as the pattern reads.
+    // its first `length` elements, which is as far as the pattern reads. A
+    // value of Python's is walked as Python walks it (`pyLeading`): asked for
+    // JavaScript's protocol, a `range`, a generator or an `__iter__` had none,
+    // and the pattern read empty positions without a word.
     positional(value, length) {
+        const python = pyLeading(value, length);
+
+        if (python !== null) return python;
         if (Array.isArray(value)) return value;
         if (!(Symbol.iterator in value)) return Array.from(value);
 
