@@ -1306,6 +1306,7 @@ function parameterPattern(part, call, names, tuple, unpack) {
         if (positional && parts.some((one) => one.trim().startsWith('*'))) {
             return `${lead}${unpackStarred(parts, call, names, tuple, unpack)}${tail}`;
         }
+        if (positional) return `${lead}${unpackPositional(parts, call, names, tuple, unpack)}${tail}`;
 
         const inside = parts.map((one) => parameterPattern(one, call, names, tuple, unpack)).join(',');
 
@@ -1323,6 +1324,71 @@ function parameterPattern(part, call, names, tuple, unpack) {
 // The name a row unpacked by key stands under, inside the block that unpacks it.
 const UNPACKED = '__unpacked_';
 
+// `[first, second]`: a row unpacked by position, which Svelte destructures in
+// JavaScript, asking the row for JavaScript's protocol, which a `range`, a
+// generator or an instance that defines its own iteration do not have: the row was empty on a
+// page, or raised on the server. So the brackets become one name, the row as
+// given; the row is taken apart once, as Svelte's `to_array` takes one and as
+// Python walks one of Python's, as far as the pattern names positions
+// (`__pybridge.positional`); and each element is read off it where it is read,
+// a default held as Svelte holds one, read once (`orDefault`). The one rule of
+// every positional pattern, a snippet's, an `{#each}`'s, a `then`'s and one
+// inside braces or brackets alike, where each had its own.
+function unpackPositional(parts, call, names, tuple, unpack) {
+    const alias = unpack.alias();
+    const row = unpack.alias();
+    const before = names.length;
+
+    // As far as the pattern names positions, a hole being one and what follows
+    // a trailing comma none, as JavaScript counts them.
+    const named = parts.length > 0 && parts.at(-1).trim() === '' ? parts.length - 1 : parts.length;
+
+    unpack.aliases.push(alias, row);
+    unpack.rows.add(alias);
+    unpack.consts.push({ target: row, js: `__pybridge.positional(${alias}, ${named})`, once: true });
+
+    // The defaults, each with the names the elements after it bind.
+    const defaults = [];
+
+    parts.slice(0, named).forEach((part, at) => {
+        const text = part.trim();
+
+        if (text === '') return;
+
+        const read = `${row}[${at}]`;
+        const equals = atTopLevel(text, (i) => text[i] === '=');
+        const left = (equals === -1 ? text : text.slice(0, equals)).trim();
+
+        // The slot is taken before the target is walked, since a pattern there
+        // reads the value this one binds.
+        const slot = unpack.consts.length;
+        const from = names.length;
+
+        unpack.consts.push(null);
+
+        const bare = DECLARED_NAME.test(left);
+        const target = bare ? left : parameterPattern(left, call, names, tuple, unpack).trim();
+
+        if (bare) names.push(left);
+
+        // The default compiled where its entry is, once the names before it
+        // are bound (`entryValue`), as a default that waits for its row is. A
+        // pattern's alias is held, a derived its own rows are read off by name;
+        // its own fields are read again in their turn.
+        unpack.consts[slot] =
+            equals === -1
+                ? { target, js: read, ...(bare ? {} : { once: true }) }
+                : { target, js: read, fallback: text.slice(equals + 1), once: true };
+
+        for (const one of defaults) one.ahead.push(...names.slice(from));
+        if (equals !== -1) defaults.push(Object.assign(unpack.consts[slot], { ahead: [] }));
+    });
+
+    for (const one of names.slice(before)) unpack.bound.add(one);
+
+    return alias;
+}
+
 // What one declaration list unpacks by key or around a starred name, gathered
 // while its patterns are walked: the aliases standing where the braces or the
 // brackets stood, in order, and the `{@const}` lines that read them. `refuse`
@@ -1330,7 +1396,8 @@ const UNPACKED = '__unpacked_';
 const unpacker = (refuse) => {
     let next = 0;
 
-    return { alias: () => `${UNPACKED}${next++}`, aliases: [], consts: [], bound: new Set(), refuse };
+    // `rows`, the aliases a positional pattern takes apart (`unpackPositional`).
+    return { alias: () => `${UNPACKED}${next++}`, aliases: [], consts: [], bound: new Set(), rows: new Set(), refuse };
 };
 
 // A target is Python's: `**rest` takes the rest of a row by key, `*rest` the
@@ -1481,11 +1548,17 @@ function unpackByKey(inside, call, names, tuple, unpack) {
         const slot = unpack.consts.length;
 
         unpack.consts.push(null);
+        const walked = parameterPattern(target, call, names, tuple, unpack).trim();
+
+        // A row unpacked by position under the key is held, as an element of
+        // one is (`unpackPositional`): the row it is taken apart from is read
+        // by its name.
         unpack.consts[slot] = {
-            target: parameterPattern(target, call, names, tuple, unpack).trim(),
+            target: walked,
             read: `__getattr(${alias}, ${named}${fallback === null ? '' : `, lambda: (${fallback})`})`,
             source: fallback ?? (computed ? key.slice(1, -1) : ''),
-            lazy: fallback !== null
+            lazy: fallback !== null,
+            ...(unpack.rows.has(walked) ? { once: true } : {})
         };
     }
 
@@ -1510,17 +1583,30 @@ const derivedTag = (target, expression) => `{const ${target} = $derived(${expres
 // `undefined` and the default where it is, as JavaScript takes a default. The
 // one reading for the block (`unpacked`) and for its key (`eachKey`): asked in
 // Python, `undefined` and an explicit `None` arrive as the same `None`, where a
-// row holding `None` holds a value.
-const entryValue = ({ read, source, lazy, missing, fallback }, call, followed = true) =>
-    missing === undefined
-        ? call(read, '', source, lazy ? 'lazy' : 'python', [], followed)
-        : orDefault(missing, call(fallback, '', undefined, 'lazy', [], followed));
+// row holding `None` holds a value. An element of a row unpacked by position
+// is read in JavaScript, off the row taken apart (`unpackPositional`).
+const entryValue = ({ read, source, lazy, missing, fallback, js }, call, followed = true) =>
+    js !== undefined
+        ? fallback === undefined
+            ? js
+            : orDefault(js, call(fallback, '', undefined, 'lazy', [], followed))
+        : missing === undefined
+          ? call(read, '', source, lazy ? 'lazy' : 'python', [], followed)
+          : orDefault(missing, call(fallback, '', undefined, 'lazy', [], followed));
 
 // A default as JavaScript takes one, where what it stands for is `undefined`,
 // with what it stands for read once: an element Svelte reads again at each
 // read, or one held behind a getter, was read twice where it was there, and a
 // getter that counts answered twice.
 const orDefault = (read, fallback) => `((__given) => (__given === undefined ? ${fallback} : __given))(${read})`;
+
+// What a name an element after a default binds reads while the default is
+// compiled, `ahead` in `[one=ahead, ahead]`: JavaScript's error, raised where
+// the default reads it and nowhere else, since a default is handed its names
+// late. As an entry of its own, the default read the script's `ahead` in its
+// place, where JavaScript raises, the pattern's own name not bound yet.
+const notYetBound = (name) =>
+    `(() => { throw new ReferenceError(${JSON.stringify(`Cannot access '${name}' before initialization`)}); })()`;
 
 // **A field read by key with no default is read again at each read**, where
 // the block reads it, as Svelte reads a field it destructures in an `{#each}`
@@ -1538,7 +1624,16 @@ const rereadable = ({ target, missing, lazy, once }) =>
 const unpacked = (unpack, call, again = null) =>
     unpack.consts
         .map((one) => {
-            if (again === null || !rereadable(one)) return derivedTag(one.target, entryValue(one, call));
+            // A name an element after this default binds is not bound yet while
+            // the default is compiled (`notYetBound`); its own entry binds it.
+            for (const name of one.ahead ?? []) if (!again?.has(name)) again?.set(name, notYetBound(name));
+
+            if (again === null || !rereadable(one)) {
+                const tag = derivedTag(one.target, entryValue(one, call));
+
+                again?.delete(one.target);
+                return tag;
+            }
 
             // Compiled where it is declared, as the derived it was, so that what
             // it reports points at the pattern; the key's, in the block's head
@@ -1702,51 +1797,13 @@ function snippetParameters(trimmed, declare, call, refuse, frame, identity = nul
         // its snippet's branch did not read it.
         const row = `__pybridge.param(${argument}, ${frame}, ${at}${fallback})`;
 
-        reads.push(
-            (target.startsWith('[') ? positionalReads(target, row, `${frame}_row${at}`, rereads) : derivedTag(target, row)) +
-                unpacked({ consts: unpack.consts.slice(from) }, call, rereads)
-        );
+        reads.push(derivedTag(target, row) + unpacked({ consts: unpack.consts.slice(from) }, call, rereads));
     });
 
     return (
         `${name}(${given.join(', ')})${trimmed.slice(close + 1)}}` +
         `{let ${frame} = __pybridge.pythonSnippet(${identity ?? name})}${reads.join('')}`
     );
-}
-
-// A snippet's positional pattern, `[value]`, read as Svelte reads its own: the
-// row taken apart once (`__pybridge.positional`), as Svelte's `to_array`
-// takes it, and each element where it is read (`rereads`). Held in one
-// derived, `{const [value] = …}`, an element kept what it was when the row
-// changed in place. A default is held, as Svelte holds one, and so is a row
-// unpacked by key, whose fields are read again in their turn (`unpacked`).
-//
-// The row is read as far as the pattern names positions, a hole being one and
-// what follows a trailing comma none, as JavaScript counts them: counted, the
-// empty text after `[value,]` read a second element of an iterator, which may
-// run code or raise.
-function positionalReads(target, row, base, rereads) {
-    const elements = arguments_(target.slice(1, -1));
-    const named = elements.length > 0 && elements.at(-1).trim() === '' ? elements.length - 1 : elements.length;
-    let out = derivedTag(base, `__pybridge.positional(${row}, ${named})`);
-
-    elements.forEach((element, i) => {
-        const text = element.trim();
-        const read = `${base}[${i}]`;
-
-        // A hole, `[, b]`, or what follows a trailing comma.
-        if (text === '') return;
-
-        const equals = atTopLevel(text, (j) => text[j] === '=');
-        const left = (equals === -1 ? text : text.slice(0, equals)).trim();
-        const value = equals === -1 ? read : orDefault(read, text.slice(equals + 1).trim());
-
-        if (left.startsWith('[')) out += positionalReads(left, value, `${base}_${i}`, rereads);
-        else if (equals === -1 && DECLARED_NAME.test(left) && !left.startsWith(UNPACKED)) rereads.set(left, read);
-        else out += derivedTag(left, value);
-    });
-
-    return out;
 }
 
 // The key that trails an `{#each}` target: `[target, key]`, or null when the line
@@ -1900,9 +1957,28 @@ const walked = (rows, iterable, key) =>
 //
 // A field read again at each read (`rereadable`) needs no binding: the key
 // reads it where it reads it, as the block does.
+//
+// **And only what the key reads**, the names it mentions and what those read
+// in their turn: a key of the index alone, `(at)`, took the row apart all the
+// same, and a generator it took apart was spent before its block read it,
+// `not enough values to unpack`.
+const IDENTIFIER = /[\p{XID_Start}_$][\p{XID_Continue}$]*/gu;
+
 function eachKey(key, unpack, call) {
     const keyed = call(key, '__key', key, '', [], false);
-    const held = unpack.consts.filter((one) => !rereadable(one));
+    const needed = new Set(freeNames(key).map(pythonName));
+    const read = [];
+
+    for (const one of [...unpack.consts].reverse()) {
+        if (!(one.target.match(IDENTIFIER) ?? []).some((name) => needed.has(pythonName(name)))) continue;
+
+        read.unshift(one);
+        for (const text of [one.read, one.js, one.missing, one.fallback]) {
+            for (const name of text?.match(IDENTIFIER) ?? []) needed.add(pythonName(name));
+        }
+    }
+
+    const held = read.filter((one) => !rereadable(one));
 
     if (held.length === 0) return keyed;
 

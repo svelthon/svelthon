@@ -22,11 +22,12 @@ describe('an {#each} the walker still has to place', () => {
         expect(defs[0]).toContain('__seq(items)');
     });
 
-    // `as (k, v)` destructures a tuple, which is what `.items()` hands over.
+    // `as (k, v)` destructures a tuple, which is what `.items()` hands over: the
+    // row taken apart by position, as Python walks it (`unpackPositional`).
     test('destructuring a tuple', () => {
         const { out } = rewrite('{#each d.items() as (k, v)}<li>{k}</li>{/each}');
 
-        expect(out).toContain('as [k, v]');
+        expect(out).toContain('as __unpacked_0}{const __unpacked_1 = $derived(__pybridge.positional(__unpacked_0, 2))}');
     });
 
     test('and keeping Svelte s item and index', () => {

@@ -135,8 +135,11 @@ describe('trailingKey reads through a string', () => {
     });
 
     // The three shapes that are *not* a key, each for its own reason.
+    // Taken apart by position, as Python walks the row (`unpackPositional`).
     test('a tuple target is a target, not a key with nothing before it', () => {
-        expect(each('pairs as (name, count)')).toBe(walked('[name, count]'));
+        expect(each('pairs as (name, count)')).toBe(
+            walked('__unpacked_0').replace('}x{', '}{const __unpacked_1 = $derived(__pybridge.positional(__unpacked_0, 2))}x{')
+        );
     });
 
     // A tuple target *followed by an index*: the parentheses are the target's,
