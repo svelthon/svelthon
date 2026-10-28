@@ -57,6 +57,10 @@ describe('what a walrus may aim at', () => {
         ['lambda: (d[lambda: 1:2] := 1)', 'lambda: __setitem(d, __slice(lambda: 1, 2), 1)'],
         ['lambda: (d[1 if True else lambda: 2] := 1)', 'lambda: __setitem(d, 1 if True else lambda: 2, 1)'],
 
+        // A `:=` alone between the brackets is the key it binds, written as the
+        // parenthesised one is, the component's name with it.
+        ['lambda: (items[i := 0] := 9)', 'lambda: __setitem(items, __assign("i", 0), 9)'],
+
         // ...but a colon inside a string is just a string.
         ['lambda: (d["a:b"] := 1)', 'lambda: __setitem(d, "a:b", 1)'],
 

@@ -284,8 +284,9 @@ function slices(inner) {
 
         atTopLevel(part, (i) => {
             if (LAMBDA.test(part.slice(i)) && !NAME_BEFORE.test(part.slice(0, i))) lambdas++;
-            else if (part[i] === ':' && lambdas > 0) lambdas--;
-            else if (part[i] === ':') at.push(i);
+            else if (part[i] !== ':' || part[i + 1] === '=') return false;
+            else if (lambdas > 0) lambdas--;
+            else at.push(i);
             return false;
         });
         return at;
@@ -360,7 +361,13 @@ function walrusTarget(text) {
             // being `grid[(1, 2)]` and `grid[*keys]` being `grid[(*keys,)]`;
             // passed bare, `1, 2` was two arguments and wrote `2` under `1`.
             const comma = atTopLevel(inner, (i) => inner[i] === ',') !== -1;
-            key = comma || inner.startsWith('*') ? `(${sliced}${comma ? '' : ','})` : sliced;
+            // And a `:=` alone between the brackets, `items[i := 0]`, which
+            // Python reads as the key `i := 0` binds: the key written in the
+            // parentheses it then stands in, as `items[(i := 0)]` writes it,
+            // the component's `i` with it. Cut at its colon, it was a slice.
+            const named = !comma && atTopLevel(inner, (i) => inner[i] === ':' && inner[i + 1] === '=') !== -1;
+
+            key = comma || inner.startsWith('*') ? `(${sliced}${comma ? '' : ','})` : named ? `(${sliced})` : sliced;
             subscript = true;
             index = close + 1;
         } else break;
