@@ -128,6 +128,7 @@ const {
     ADAPTERS,
     standsFor,
     jsCall,
+    jsMethod,
     pyExport,
     STALE,
     flushExports,
@@ -2446,13 +2447,15 @@ export function readAttr(target, name, otherwise) {
         return member === MISSING ? invoke(otherwise) : member;
     }
 
-    // A function a module's namespace exports, `importjs * as callbacks`, is the
-    // function the same import by name gives: `jsCall`'s adapter, which hands
-    // the call the receiver it is called with. Read as the engine reads any
-    // object's member, it would be bound to the namespace, and
-    // `onclick={callbacks.receiver}` called with it where Svelte hands the
-    // element.
-    if (moduleNamespace(target) && typeof target[name] === 'function') return jsCall(target[name]);
+    // A function a module's namespace exports, `importjs * as callbacks`, is
+    // called as JavaScript calls a member (`jsMethod`): on the receiver it is
+    // called with, so `onclick={callbacks.receiver}` is handed the element, as
+    // Svelte hands it; and on the namespace when it is called with none, so
+    // `{actions.who()}` and `use:actions.stamp` read `this` as the script's
+    // `actions.who()` does, where the function alone was called on nothing.
+    // Read as the engine reads any object's member, it would be bound to the
+    // namespace, a handler included.
+    if (moduleNamespace(target) && typeof target[name] === 'function') return jsMethod(target, target[name]);
 
     // With a default, so a miss costs no exception: building one on every field
     // read of every dict would be the whole cost of this feature.
