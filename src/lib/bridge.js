@@ -2041,14 +2041,17 @@ export const pyComponent = (read, where, exported = false) => {
 
 // What a store hands JavaScript for one of its names: the value the name holds
 // when it is read, for what it is, whatever bound the name. A Python callable
-// crosses as the store's own functions do, through `call` when the name is a
-// `def` and has its wrapper, through one made once per callable otherwise;
-// anything else as `plainScalar` hands it.
+// crosses as the store's own functions do, through a wrapper made once per
+// callable, which calls that callable: a function JavaScript kept is the one it
+// read, as one kept from a JavaScript module is. Handed the name's own wrapper
+// when the name was a `def`, it called whatever the name held at the call, the
+// function the name was bound to next, and failed once the name was deleted;
+// two names holding one function handed two. Anything else crosses as
+// `plainScalar` hands it.
 const STORE_CALLS = new WeakMap();
 
-export function storeMember(value, where, call) {
+export function storeMember(value, where) {
     if (declared(value) === null) return plainScalar(value);
-    if (call !== undefined) return call;
 
     let wrapped = STORE_CALLS.get(value);
     if (wrapped === undefined) STORE_CALLS.set(value, (wrapped = pyComponent(() => value, where)));

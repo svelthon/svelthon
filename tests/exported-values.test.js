@@ -115,15 +115,16 @@ describe("a store's def", () => {
         expect(replacedStore.kept).toBe(replacedExports.kept);
     });
 
-    // A function held across the assignment is the name's, as a `def` is
-    // everywhere in the project, and calls what the name holds now.
-    test('and is read when it is read, so a later assignment shows', () => {
+    // A function held across the assignment is the function it read, as one
+    // held from a `.py`, from a JavaScript module or in Python is; the name is
+    // read when it is read, so a later assignment shows there. Held as the
+    // name's, it called the next function, and failed once the name was
+    // deleted (`store-kept-function.test.js`).
+    test('and keeps the function it read, where the name shows a later assignment', () => {
         const held = replacedStore.kept;
 
         replacedStore.rebind();
 
-        expect(held()).toBe(0.75);
-        expect(replacedStore.kept).toBe(held);
-        expect(replacedStore.item).toBe(43);
+        expect([held(), replacedStore.kept(), replacedStore.kept === held, replacedStore.item]).toEqual([0.25, 0.75, false, 43]);
     });
 });

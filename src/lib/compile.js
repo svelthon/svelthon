@@ -2103,9 +2103,8 @@ function injectedBindings(c) {
 // Running the module body, which is what fills every cell the sections above
 // declared. Nothing that reads a Python name may come before it.
 // A store's name as JavaScript reads it, from `value`, the expression that reads
-// what it holds now; `call` is a `def`'s own wrapper.
-const storeRead = (c, name, value, call) =>
-    `${RUNTIME.storeMember}(${value}, ${JSON.stringify(`${name}() — ${c.source}`)}${call === undefined ? '' : `, ${call}`})`;
+// what it holds now.
+const storeRead = (c, name, value) => `${RUNTIME.storeMember}(${value}, ${JSON.stringify(`${name}() — ${c.source}`)})`;
 
 
 // And the names those star imports brought, on a store with no `__all__`: it
@@ -2190,7 +2189,7 @@ function instanceExports(c) {
                   // way, decided by the value the name holds when it is read and
                   // not by what bound the name: `__storeMember` makes a float a
                   // number, keeps a container itself, and hands a Python
-                  // callable over as a call, a `def` through its own wrapper.
+                  // callable over as a call of that callable, a `def` too.
                   //
                   // Under a name of the compiler's, and exported as `store`:
                   // `store` may be a name of the module's own, whose cell or
@@ -2228,7 +2227,7 @@ function instanceExports(c) {
                       .map((d) => `    get ${d.name}() { return ${storeRead(c, d.name, `${NS}.${d.name}`)}; },`),
                   ...c.funcs
                       .filter((f) => c.published(f.name))
-                      .map((f) => `    get ${f.name}() { return ${storeRead(c, f.name, `${NS}.${f.name}`, wrapperName(f.name))}; },`),
+                      .map((f) => `    get ${f.name}() { return ${storeRead(c, f.name, `${NS}.${f.name}`)}; },`),
                   `};`,
                   `export { ${STORE_FACADE} as store };`,
                   // Its default export too, made by the module JavaScript
@@ -2435,7 +2434,7 @@ const liveExports = (c) =>
               .map(
                   (f) =>
                       `__liveExport(${NS}, ${JSON.stringify(f.name)}, (__value) => { __export_${f.name} = ` +
-                      `${storeRead(c, f.name, '__value', wrapperName(f.name))}; });`
+                      `${storeRead(c, f.name, '__value')}; });`
               )
         : liveExportLines(HOST, c);
 
