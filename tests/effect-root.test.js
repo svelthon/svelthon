@@ -6,6 +6,8 @@ import RootStore from './fixtures/RootStore.svelte';
 import RootOutlives, { held } from './fixtures/RootOutlives.svelte';
 import RootEarly from './fixtures/RootEarly.svelte';
 import RootStopsItself from './fixtures/RootStopsItself.svelte';
+import RootCleanupReads from './fixtures/RootCleanupReads.svelte';
+import PreCleanupGlobal from './fixtures/PreCleanupGlobal.svelte';
 import './fixtures/root_early.svelte.py';
 import { runs } from './fixtures/root_early_log.js';
 import { attempt, stop_first, bump, same, kept_name, stop_kept } from './fixtures/root_retry_driver.py';
@@ -128,6 +130,31 @@ test('a root stopped while it is made is destroyed once made', () => {
     expect(seen).toEqual(['run:0', 'clean:0']);
 });
 
+// And its cleanup, run before the first flush, reads each name as the body
+// left it. A name's cell is born `undefined` and the body writes it, and
+// Svelte hands a cleanup run before the batch ends what a state held before
+// it: the placeholder, read as a name not bound, so a cleanup reading a state,
+// a function or a rune's name raised NameError and the mount failed.
+const RUNS = { state: 7, function: 'h', derived: 14, effect: true, root: true, prop: 'x', bindable: 't', def: 7 };
+
+test.for(Object.entries(RUNS))('a cleanup run as its root is made reads %s as the body left it', ([mode, value]) => {
+    const seen = [];
+    const target = document.body.appendChild(document.createElement('div'));
+    const instance = mount(RootCleanupReads, { target, props: { mode, capture: (...row) => seen.push(row.join(':')) } });
+    flushSync();
+    unmount(instance);
+
+    expect(seen).toEqual(['run:7', `clean:${value}`]);
+});
+
+test('a pre cleanup run before the first flush reads a global as the body left it', () => {
+    const seen = [];
+    const target = document.body.appendChild(document.createElement('div'));
+    unmount(mount(PreCleanupGlobal, { target, props: { capture: (...row) => seen.push(row.join(':')) } }));
+
+    expect(seen).toEqual(['run:7', 'clean:7']);
+});
+
 test('and so in a module, by its name or another', () => {
     flushSync();
     expect(runs).toEqual([]);
@@ -181,7 +208,7 @@ describe('a root and a pre together', () => {
     const emitted = (decorators) =>
         compile(`c = 0\n\n${decorators}\ndef destroy():\n    js.String(c)\n`, 'Probe', 'probe.svelte', {})
             .script.split('\n')
-            .find((line) => line.includes('$effect.root'));
+            .find((line) => line.includes('$effect.root(() => {'));
 
     test('nest', () => {
         expect(emitted('@effect.root\n@effect.pre')).toContain('$effect.root(() => { $effect.pre(');
