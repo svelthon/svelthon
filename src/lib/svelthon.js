@@ -12,8 +12,7 @@ import {
     moduleScriptStart,
     withoutComments,
     markupOnly,
-    blankBodies,
-    rendersComponent
+    blankBodies
 } from './markup.js';
 import { parse } from 'svelte/compiler';
 import {
@@ -622,10 +621,6 @@ export function python(options = {}) {
                         runs
                     })
             );
-
-            // Whether the markup renders a component, whose cleanup may read
-            // this one's names through its props before the first flush.
-            file.renders = rendersComponent(content);
 
             return { code: announced(tagged(elementOptions(code, python, moduleImports(content)), calls.open(file)), filename), dependencies: read };
         },

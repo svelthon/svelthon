@@ -8,8 +8,6 @@ import RootEarly from './fixtures/RootEarly.svelte';
 import RootStopsItself from './fixtures/RootStopsItself.svelte';
 import RootCleanupReads from './fixtures/RootCleanupReads.svelte';
 import PreCleanupGlobal from './fixtures/PreCleanupGlobal.svelte';
-import { preprocess } from 'svelte/compiler';
-import { python } from '../src/lib/svelthon.js';
 import './fixtures/root_early.svelte.py';
 import { runs } from './fixtures/root_early_log.js';
 import { attempt, stop_first, bump, same, kept_name, stop_kept } from './fixtures/root_retry_driver.py';
@@ -136,7 +134,8 @@ test('a root stopped while it is made is destroyed once made', () => {
 // left it. A name's cell is born `undefined` and the body writes it, and
 // Svelte hands a cleanup run before the batch ends what a state held before
 // it: the placeholder, read as a name not bound, so a cleanup reading a state,
-// a function or a rune's name raised NameError and the mount failed.
+// a function or a rune's name raised NameError and the mount failed. Each is
+// read off what its cell holds as itself (`orHeld`).
 const RUNS = { state: 7, function: 'h', derived: 14, effect: true, root: true, prop: 'x', bindable: 't', def: 7 };
 
 test.for(Object.entries(RUNS))('a cleanup run as its root is made reads %s as the body left it', ([mode, value]) => {
@@ -157,46 +156,8 @@ test('a pre cleanup run before the first flush reads a global as the body left i
     expect(seen).toEqual(['run:7', 'clean:7']);
 });
 
-// A birth makes a root, which every mount paid. Only where a cleanup may read
-// the names before the first flush: a component with a root or a pre effect,
-// its own, and one whose markup renders a component, whose cleanup reads them
-// through its props, in Python or in JavaScript. Asked of a flag a page raised
-// when a module with such an effect loaded, a parent missed the effect of a
-// JavaScript child and of one spelled over two lines, and its child's cleanup
-// called a function the parent had not yet been born with. What a child's
-// cleanup reads of its parent is `early-cleanup-props.test.js`'s, alone in its
-// file: no module with such an effect loads beside it.
-test('a body writes births where a cleanup may read its names before the first flush', () => {
-    const born = (src, renders) =>
-        compile(src, 'Probe', 'probe.svelte', { renders })
-            .script.split('\n')
-            .find((line) => line.startsWith('const __born'));
-    const root = 'const __born = (write) => { if (__pybridge.browser) $effect.root(() => write)(); else write(); };';
-
-    expect([
-        born('count = 0\n', false),
-        born('count = 0\n', true),
-        born('count = 0\n\n@(effect.\n    # spelled over two lines\n    pre)\ndef watch():\n    js.String(count)\n', false)
-    ]).toEqual(['const __born = (write) => write();', root, root]);
-});
-
-test('and the markup pass tells a markup that renders a component', async () => {
-    const born = async (markup) => {
-        const { code } = await preprocess(`<script lang="python">\ncount = 0\n</script>\n${markup}\n`, python(), {
-            filename: '/tmp/Early.svelte'
-        });
-
-        if (code.includes('const __born = (write) => { if (__pybridge.browser) $effect.root(() => write)();')) return 'root';
-        return code.includes('const __born = (write) => write();') ? 'plain' : null;
-    };
-
-    expect([
-        await born('<p>{count}</p>\n<!-- <Child /> -->'),
-        await born('<Child n={count} />'),
-        await born('<item.view n={count} />'),
-        await born('{@render children(count)}')
-    ]).toEqual(['plain', 'root', 'root', 'root']);
-});
+// What another component's cleanup reads of a component's names is
+// `early-cleanup-props.test.js`'s.
 
 test('and so in a module, by its name or another', () => {
     flushSync();

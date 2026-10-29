@@ -613,9 +613,9 @@ const MODULE_INSTEAD = {
 // injection may still be shadowed; what stands in for a standard module; the
 // name of the plugin's option a module is also found on, `path`; how a name
 // becomes a state, Svelte's state with a revision beside it, which a change in
-// place moves while the value keeps its identity, which a read reads with the
-// value, and which the module's body writes as its birth (`birth`); Svelthon's
-// own signs made Python (`takeArrows`); and Svelte's
+// place moves while the value keeps its identity, and which a read reads with
+// the value, or with what it holds as itself (`orHeld`); Svelthon's own signs
+// made Python (`takeArrows`); and Svelte's
 // runes, whose names no binding of the component may take: Svelte reads
 // `$state` as a store once `state` is bound, so a JavaScript import of one is
 // held under another variable (Bryc's), and a `def`'s wrapper too
@@ -637,8 +637,8 @@ const HOST = {
             `const ${bumped} = () => { ${rev(name)} += 1; };`
         ],
         value: (cell) => cell,
-        read: (name, cell) => `(${rev(name)}, ${cell})`,
-        write: (cell, value) => birth(`${cell} = ${value}`)
+        read: (name, cell) => `(${rev(name)}, ${orHeld(cell, `${bump(name)}.held`)})`,
+        write: (cell, value) => `${cell} = ${value}`
     },
     rewrite: (text, { source, lineOffset, component, bound }) => takeArrows(text, source, lineOffset, component, bound),
     // Each declaration's marker read as its own statement's (`runeMarkerWords`).
@@ -1555,18 +1555,26 @@ const installed = (name) => `__installed_${name}`;
 // body, 99 was called at the next read.
 const declaration = (one) => `__pybridge.declaration(this, '${one.name}', ${one.mark})`;
 
-// A write to a cell, which the module's body makes the name's birth
-// (`__born`): a state, a function, and the body a rune's declaration binds.
-const birth = (write) => `(__initialising ? __born(() => { ${write}; }) : (${write}))`;
+// What a cell holds as itself, kept beside it and written with it. Svelte hands
+// a cleanup run before the batch that wrote a state ends what the state held
+// before, and a cell is born `undefined`: a cleanup run before the first flush,
+// a root stopped as it is made or a pre effect unmounted at once, whichever
+// component's it is, read a name the body had bound as one not bound, raised
+// NameError, or called `undefined`. Read off the cell when it holds nothing
+// (`orHeld`): the two are written together, so only such a cleanup tells them
+// apart, and no write pays for it. A state's and a function's is what `track`
+// keeps on its `bump`; a rune's body is kept here (`heldOf`).
+const heldOf = (name) => `__held_${name}`;
+const orHeld = (cell, held) => `(${cell} ?? ${held})`;
+const cellWrite = (name, value) => `${fn(name)} = ${heldOf(name)} = ${value}`;
 
 const derivedWrite = (d, plain = false) => {
-    const held = `${fn(d.name)} = () => ${NEXT_VALUE};`;
-    const bound = plain
-        ? `${fn(d.name)} = ${NEXT_VALUE};`
-        : `{ ${birth(`${fn(d.name)} = ${NEXT_VALUE}`)}; ${installed(d.name)} = true; }`;
+    const write = (value) => (plain ? `${fn(d.name)} = ${value}` : cellWrite(d.name, value));
+    const held = `${write(`() => ${NEXT_VALUE}`)};`;
+    const bound = plain ? `${write(NEXT_VALUE)};` : `{ ${write(NEXT_VALUE)}; ${installed(d.name)} = true; }`;
 
     return (
-        `if (${NEXT_VALUE} === undefined) ${fn(d.name)} = ${NEXT_VALUE};` +
+        `if (${NEXT_VALUE} === undefined) ${write(NEXT_VALUE)};` +
         ` else { const __at = ${declaration(d)}; if (__at > 0) ${bound}` +
         (plain ? ` else ${held}` : ` else if (__at < 0 || ${fn(d.name)} === undefined) ${held} else ${d.name} = ${NEXT_VALUE};`) +
         ` }`
@@ -1576,10 +1584,10 @@ const derivedWrite = (d, plain = false) => {
 // An effect's is the name's alone (`named`), and the effect keeps its body: a
 // body replaced was called at the effect's next run.
 const effectWrite = (e) =>
-    `if (${NEXT_VALUE} !== undefined && ${declaration(e)} > 0) { ${birth(`${fn(e.name)} = ${NEXT_VALUE}`)}; ${named(e.name)} = undefined; }` +
+    `if (${NEXT_VALUE} !== undefined && ${declaration(e)} > 0) { ${cellWrite(e.name, NEXT_VALUE)}; ${named(e.name)} = undefined; }` +
     ` else ${named(e.name)} = { value: ${NEXT_VALUE} };`;
 
-const effectName = (name) => `(${named(name)} === undefined ? ${fn(name)} : ${named(name)}.value)`;
+const effectName = (name) => `(${named(name)} === undefined ? ${orHeld(fn(name), heldOf(name))} : ${named(name)}.value)`;
 
 // Whether the component's subscriptions have holders besides the component:
 // a root effect, which lives until its destructor is called.
@@ -1657,28 +1665,6 @@ function preamble(c) {
         // to it is allowed wherever the call is made.
         `class __StateBox { value = $state(); }`,
         `__pybridge.proxying((value) => { const box = new __StateBox(); box.value = value; return box.value; });`,
-        // The module's body runs (`init()`): a write it makes to a prop is the
-        // default its annotation declares, which travels up to no parent, and
-        // one to any name is that name's birth (`birth`). Only writes made
-        // after init() are real ones.
-        `let __initialising = true;`,
-        // A birth written as a cleanup is run, `$effect.root`'s own destroyer
-        // running it, for which Svelte keeps the value written as the one a
-        // cleanup reads until the batch ends. A cell is born `undefined`, and
-        // a cleanup run before the first flush read it as a name not bound: a
-        // root stopped as it is made raised NameError, where Svelte's state,
-        // born with its value, reads it. A server runs no cleanup.
-        //
-        // A root made by each write costs every mount, so only where a
-        // cleanup may read the names that early: in a store, which a
-        // component's may read as it loads with the page; in a component with
-        // a root or a pre effect, its own; and in one whose markup renders a
-        // component (`renders`), whose cleanup, in Python or JavaScript, reads
-        // them through its props. A component that renders none, the row of a
-        // long list, pays nothing.
-        c.store || c.renders || c.effects.some((e) => e.root || e.pre)
-            ? `const __born = (write) => { if (__pybridge.browser) $effect.root(() => write)(); else write(); };`
-            : `const __born = (write) => write();`,
         ``
     ];
 }
@@ -1719,10 +1705,15 @@ function declarations(c) {
                       `let ${rev(b)} = $state.raw(0);`,
                       `const ${bump(b)} = () => { ${rev(b)} += 1; };`
                   ]),
+                  // The module body applies the annotation's default by writing
+                  // to the name, and that write is the default, which travels
+                  // up to no parent. Only writes made after init() are real
+                  // ones.
+                  `let __initialising = true;`,
                   ``
               ]
             : c.props.length
-              ? [`const __props = $props();`, ``]
+              ? [`const __props = $props();`, `let __initialising = true;`, ``]
               : []),
         // A prop's value comes from the parent when it was passed, and from the
         // annotation's default otherwise, the default being whatever the Python
@@ -1783,9 +1774,10 @@ function declarations(c) {
         // A `def`'s cell is a state cell: a decorator or a later line may put a
         // list there, and its mutations are followed as any name's are.
         ...c.funcs.flatMap((f) => stateCell(HOST, f.name, fn(f.name))),
-        ...c.inspects.map((i) => `let ${fn(i.name)} = $state.raw(undefined);`),
+        ...c.inspects.flatMap((i) => [`let ${fn(i.name)} = $state.raw(undefined);`, `let ${heldOf(i.name)};`]),
         ...c.effects.flatMap((e) => [
             `let ${fn(e.name)} = $state.raw(undefined);`,
+            `let ${heldOf(e.name)};`,
             `let ${named(e.name)} = $state.raw(undefined);`,
             ...(e.root ? [`let ${destroyer(e.name)} = ${RUNTIME.laterRoot}();`] : [])
         ]),
@@ -1796,8 +1788,9 @@ function declarations(c) {
         // its derived (`authorBindings`).
         ...c.deriveds.flatMap((d) => [
             `let ${fn(d.name)} = $state.raw(undefined);`,
+            `let ${heldOf(d.name)};`,
             `let ${installed(d.name)} = false;`,
-            `let ${d.name} = $derived.by(() => __invoke(${fn(d.name)}));`
+            `let ${d.name} = $derived.by(() => __invoke(${orHeld(fn(d.name), heldOf(d.name))}));`
         ]),
         // Which containers this instance signed onto, so it can sign off when
         // it goes. A container reached through a store outlives the components
@@ -2022,7 +2015,8 @@ function authorBindings(c) {
         ]),
         ...c.funcs.map((f) => stateBinding(HOST, f.name, fn(f.name), { subs: c.store ? null : SUBS, held: fn(f.name) })),
         ...c.inspects.map(
-            (i) => `__bind(__proto, '${i.name}', () => ${fn(i.name)}, (${NEXT_VALUE}) => { ${birth(`${fn(i.name)} = ${NEXT_VALUE}`)}; });`
+            (i) =>
+                `__bind(__proto, '${i.name}', () => ${orHeld(fn(i.name), heldOf(i.name))}, (${NEXT_VALUE}) => { ${cellWrite(i.name, NEXT_VALUE)}; });`
         ),
         // A root's name reads as its destructor, once its `def` has run and
         // before the root is made (`laterRoot`); the setter takes the function
@@ -2031,7 +2025,7 @@ function authorBindings(c) {
         ...c.effects.map((e) =>
             e.root
                 ? `__bind(__proto, '${e.name}', () => (${named(e.name)} !== undefined ? ${named(e.name)}.value : ` +
-                  `${fn(e.name)} === undefined ? undefined : ${destroyer(e.name)}.stop), ` +
+                  `${orHeld(fn(e.name), heldOf(e.name))} === undefined ? undefined : ${destroyer(e.name)}.stop), ` +
                   `function (${NEXT_VALUE}) { ${effectWrite(e)} }, () => ${effectName(e.name)});`
                 : `__bind(__proto, '${e.name}', () => ${effectName(e.name)}, function (${NEXT_VALUE}) { ${effectWrite(e)} });`
         ),
@@ -2042,7 +2036,7 @@ function authorBindings(c) {
         // (`installed`): what a `:=` wrote before.
         ...c.deriveds.map(
             (d) =>
-                `__bind(__proto, '${d.name}', () => (${installed(d.name)} ? __follow(${d.name}) : __invoke(${fn(d.name)})), ` +
+                `__bind(__proto, '${d.name}', () => (${installed(d.name)} ? __follow(${d.name}) : __invoke(${orHeld(fn(d.name), heldOf(d.name))})), ` +
                 `function (${NEXT_VALUE}) { ${derivedWrite(d)} }, () => ${fn(d.name)}, true, true);`
         )
     ];
@@ -2129,7 +2123,7 @@ function initCall(c) {
         ``,
         `__init(${NS});`,
         ...unboundRefusals(HOST, c.unbound, c.listedAt),
-        `__initialising = false;`,
+        ...(c.bindables.length || c.props.length ? [`__initialising = false;`] : []),
         ``
     ];
 }
@@ -2150,11 +2144,11 @@ function instanceExports(c) {
         // call, and an `__expr_N` is this compiler's own and never moves.
         ...c.funcs.map((f) =>
             componentWrapper(f) === RUNTIME.pyExpression
-                ? `const ${wrapperName(f.name)} = ${RUNTIME.pyExpression}((a) => ${fn(f.name)}(...a), ` +
+                ? `const ${wrapperName(f.name)} = ${RUNTIME.pyExpression}((a) => ${orHeld(fn(f.name), `${bump(f.name)}.held`)}(...a), ` +
                   `${JSON.stringify(`${f.name}() — ${c.source}`)}, ${f.arity === Infinity ? '1 / 0' : f.arity}, ` +
                   `${KEPT_PYTHON.test(f.name) ? 'true' : HANDED.test(f.name) ? `'child'` : COMPARED.test(f.name) ? `'${f.name.match(COMPARED)[1]}'` : 'false'}` +
                   `${WRITES.test(f.name) ? ', true' : ''});`
-                : `const ${wrapperName(f.name)} = ${RUNTIME.pyComponent}(() => ${fn(f.name)}, ` +
+                : `const ${wrapperName(f.name)} = ${RUNTIME.pyComponent}(() => ${orHeld(fn(f.name), `${bump(f.name)}.held`)}, ` +
                   `${JSON.stringify(`${f.name}() — ${c.source}`)}${f.exported && !c.store ? ', true' : ''});`
         ),
         // What a parent holding `bind:this` can call. Svelte gathers whatever an
@@ -2446,16 +2440,7 @@ function storeOrModuleLoad(c) {
     return moduleLoad(HOST, {
         name: pythonModuleName(c.source),
         eager: c.eager,
-        // Each attempt's body is a birth of its names (`__born`), and only its
-        // body: what it calls later, a failed attempt's kept functions too,
-        // writes as any write does.
-        run: [
-            ...(c.store ? [`__initialising = true;`, `try { __init(${NS}); } finally { __initialising = false; }`] : [`__init(${NS});`]),
-            ...unboundRefusals(HOST, c.unbound, c.listedAt),
-            ...starredMembers(c),
-            ...liveExports(c),
-            ...(c.store ? effectLines(c) : [])
-        ],
+        run: [`__init(${NS});`, ...unboundRefusals(HOST, c.unbound, c.listedAt), ...starredMembers(c), ...liveExports(c), ...(c.store ? effectLines(c) : [])],
         renewed: c.effects.filter((e) => e.root).map((e) => `${destroyer(e.name)} = ${RUNTIME.laterRoot}();`)
     });
 }
@@ -2526,10 +2511,7 @@ function compile(
         resolves = null,
         // The module the script takes its body from (`init`), the name's
         // unless the caller tells the body apart.
-        body = virtualId(name),
-        // Whether the markup renders a component (`rendersComponent`), as the
-        // markup pass read it; with none, taken to.
-        renders = true
+        body = virtualId(name)
     } = {}
 ) {
     // A component has markup, so it has the dialect; a module is a module and
@@ -2738,7 +2720,6 @@ function compile(
         store,
         plain,
         eager,
-        renders,
         namespace,
         js,
         // Every name the module reads as a global (`globalReads`). What decides
