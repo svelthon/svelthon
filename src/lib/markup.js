@@ -3536,6 +3536,13 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
 
         if (CLASS_DIRECTIVE.test(name)) return `{${call(inner, '__truthy')}}`;
 
+        // `--rate={value}` on a component is no prop of the child's: Svelte
+        // writes it into the wrapper it makes around the child, a CSS custom
+        // property JavaScript reads. Crossed as for a JavaScript child, whatever
+        // the child is written in: kept Python for a Python child, a float was
+        // written `[object Object]` into the style.
+        if (name.startsWith('--') && (isComponent(tag) || heldChild() !== null)) return `{${call(inner, '__bound')}}`;
+
         // `class`, which Svelte hands to `clsx`, and the boolean attributes,
         // which the DOM reads for truth: both read Python's truth instead.
         const wrapper = wrapperFor(name, tag, custom(tag));
