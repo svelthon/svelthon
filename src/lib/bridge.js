@@ -2046,42 +2046,28 @@ export const pyComponent = (read, where, exported = false) => {
 
 // What a store hands JavaScript for one of its names: the value the name holds
 // when it is read, for what it is, whatever bound the name. A Python callable
-// crosses as the store's own functions do, through a wrapper made once per
-// callable, which calls that callable: a function JavaScript kept is the one it
-// read, as one kept from a JavaScript module is. Handed the name's own wrapper
-// when the name was a `def`, it called whatever the name held at the call, the
-// function the name was bound to next, and failed once the name was deleted;
-// two names holding one function handed two. Anything else crosses as
-// `plainScalar` hands it.
-const STORE_CALLS = new WeakMap();
-
-export function storeMember(value, where) {
-    if (declared(value) === null) return plainScalar(value);
-
-    let wrapped = STORE_CALLS.get(value);
-    if (wrapped === undefined) STORE_CALLS.set(value, (wrapped = pyComponent(() => value, where)));
-
-    return wrapped;
+// crosses as every Python callable does, as the one JavaScript function
+// published for it (`pyHandler`): a function JavaScript kept is the one it
+// read, as one kept from a JavaScript module is, and the one a registry was
+// handed when Python passed it, so the registry can remove it; and its answer
+// crosses as data, a list as the view that keeps it and tells Svelte of a
+// change. Each a wrapper of its own, the store's handed another function than
+// the one Python passed, and its answer as a framework's options, a list of
+// floats copied anew at each call. Anything else crosses as `plainScalar`
+// hands it.
+export function storeMember(value) {
+    return declared(value) === null ? plainScalar(value) : pyHandler(value);
 }
 
 // And what an instance's `@export` hands JavaScript, the value its name holds
-// as each binding of the name hands it over (`liveExport`): one wrapper per
-// callable, which calls that callable and hands its answer as data
-// (`published`). A function a parent kept is the one it read, as one kept from
-// a Svelte component is, where it called whatever the name held at the call,
-// the next function once the name was bound again, and failed once it was
-// deleted; a deleted name is `undefined`. A value no object, which a decorator
-// may make of a `def`, has no wrapper to keep and gets one at each binding.
-const EXPORT_CALLS = new WeakMap();
-
-export function exportedMember(value, where) {
+// as each binding of the name hands it over (`liveExport`): the one function
+// published for a callable, as a store's, and a JavaScript function as itself;
+// a deleted name is `undefined`, and a value a decorator made of the `def`
+// crosses as data.
+export function exportedMember(value) {
     if (value === undefined) return undefined;
-    if (value === null || (typeof value !== 'object' && typeof value !== 'function')) return pyComponent(() => value, where, true);
 
-    let wrapped = EXPORT_CALLS.get(value);
-    if (wrapped === undefined) EXPORT_CALLS.set(value, (wrapped = pyComponent(() => value, where, true)));
-
-    return wrapped;
+    return declared(value) === null && typeof value !== 'function' ? published(value) : pyHandler(value);
 }
 
 // And the other half of the same wrapper: a function the *markup* compiled, one

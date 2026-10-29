@@ -2108,7 +2108,7 @@ function injectedBindings(c) {
 // declared. Nothing that reads a Python name may come before it.
 // A store's name as JavaScript reads it, from `value`, the expression that reads
 // what it holds now.
-const storeRead = (c, name, value) => `${RUNTIME.storeMember}(${value}, ${JSON.stringify(`${name}() — ${c.source}`)})`;
+const storeRead = (value) => `${RUNTIME.storeMember}(${value})`;
 
 
 // And the names those star imports brought, on a store with no `__all__`: it
@@ -2121,7 +2121,7 @@ const starredMembers = (c) =>
               `for (const __name of ${NS}.$bryntimeStarred.names) {` +
                   ` if (__global.Object.hasOwn(${STORE_FACADE}, __name)) continue;` +
                   ` __global.Object.defineProperty(${STORE_FACADE}, __name, { enumerable: true,` +
-                  ` get: () => ${RUNTIME.storeMember}(${NS}[__name], __name + ${JSON.stringify(`() — ${c.source}`)}),` +
+                  ` get: () => ${storeRead(`${NS}[__name]`)},` +
                   ` set: (${NEXT_VALUE}) => { ${NS}[__name] = __pyArg(${NEXT_VALUE}); } }); }`
           ]
         : [];
@@ -2183,7 +2183,7 @@ function instanceExports(c) {
                       .flatMap((f) => [
                           `let ${api(f.name)};`,
                           `${RUNTIME.liveExport}(${NS}, ${JSON.stringify(f.name)}, (__value) => { ${api(f.name)} = ` +
-                              `${RUNTIME.exportedMember}(__value, ${JSON.stringify(`${f.name}() — ${c.source}`)}); });`
+                              `${RUNTIME.exportedMember}(__value); });`
                       ]),
                   `export { ${c.funcs
                       .filter((f) => f.exported)
@@ -2218,8 +2218,8 @@ function instanceExports(c) {
                   // Read off its cell, a deleted derived ran a body it no longer
                   // had, and a state read `undefined` in an early cleanup.
                   `const ${STORE_FACADE} = {`,
-                  ...c.state.filter(c.published).map((n) => `    get ${n}() { return ${storeRead(c, n, `${NS}.${n}`)}; },`),
-                  ...c.unsignalled.map((n) => `    get ${n}() { return ${storeRead(c, n, `${NS}.${n}`)}; },`),
+                  ...c.state.filter(c.published).map((n) => `    get ${n}() { return ${storeRead(`${NS}.${n}`)}; },`),
+                  ...c.unsignalled.map((n) => `    get ${n}() { return ${storeRead(`${NS}.${n}`)}; },`),
                   // The parameter and the name its body reads are one constant.
                   // `__pyArg`, because this setter is a **crossing**:
                   // `store.amount = 0.25` puts a Python float where Python
@@ -2241,10 +2241,10 @@ function instanceExports(c) {
                   ...c.unsignalled.map((n) => `    set ${n}(${NEXT_VALUE}) { ${NS}.${n} = __pyArg(${NEXT_VALUE}); },`),
                   ...c.deriveds
                       .filter((d) => c.published(d.name))
-                      .map((d) => `    get ${d.name}() { return ${storeRead(c, d.name, `${NS}.${d.name}`)}; },`),
+                      .map((d) => `    get ${d.name}() { return ${storeRead(`${NS}.${d.name}`)}; },`),
                   ...c.funcs
                       .filter((f) => c.published(f.name))
-                      .map((f) => `    get ${f.name}() { return ${storeRead(c, f.name, `${NS}.${f.name}`)}; },`),
+                      .map((f) => `    get ${f.name}() { return ${storeRead(`${NS}.${f.name}`)}; },`),
                   `};`,
                   `export { ${STORE_FACADE} as store };`,
                   // Its default export too, made by the module JavaScript
@@ -2451,7 +2451,7 @@ const liveExports = (c) =>
               .map(
                   (f) =>
                       `__liveExport(${NS}, ${JSON.stringify(f.name)}, (__value) => { __export_${f.name} = ` +
-                      `${storeRead(c, f.name, '__value')}; });`
+                      `${storeRead('__value')}; });`
               )
         : liveExportLines(HOST, c);
 
