@@ -5,7 +5,10 @@
 // parent's expression function as that `undefined`, `get(...) is not a
 // function`, and a function a Python component handed out read its global as
 // not bound, NameError. Each name is read off what its cell holds as itself
-// when the cell holds nothing (`orHeld`), whoever reads it.
+// when the cell holds nothing (`orHeld`), whoever reads it and by whichever
+// door: its value, the source `globals()` asks whether it is bound, which left
+// a function and a derived out, and a store's getter, which handed JavaScript
+// `undefined`.
 //
 // The ways tried before each left some reader out: a write of the body made
 // the name's birth, which cost every mount a root per name; reserved for a
@@ -19,6 +22,8 @@ import EarlyJsParent from './fixtures/EarlyJsParent.svelte';
 import EarlyPropParent from './fixtures/EarlyPropParent.svelte';
 import EarlySnippetHost from './fixtures/EarlySnippetHost.svelte';
 import EarlyCallbackHost from './fixtures/EarlyCallbackHost.svelte';
+import EarlyPresence from './fixtures/EarlyPresence.svelte';
+import { events } from './fixtures/early_store_log.js';
 
 const capturing = (Component) => {
     const seen = [];
@@ -42,4 +47,14 @@ test('and one the snippet a Python component renders with `{@ render}` mounts', 
 
 test('and a JavaScript cleanup calls a function its Python child handed it, which reads a global', () => {
     expect(capturing(EarlyCallbackHost)).toEqual(['publish:7', 'clean:7']);
+});
+
+test('and `globals()` still binds a function and a derived, whose body it does not run', () => {
+    expect(capturing(EarlyPresence)).toEqual(['run:true:true', 'clean:true:true:true']);
+});
+
+test('and a store hands JavaScript the value its body wrote, as Python reads it', async () => {
+    await import('./fixtures/early_store.svelte.py');
+
+    expect(events).toEqual(['namespace:7', 'facade:7']);
 });

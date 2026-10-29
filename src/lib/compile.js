@@ -614,7 +614,7 @@ const MODULE_INSTEAD = {
 // name of the plugin's option a module is also found on, `path`; how a name
 // becomes a state, Svelte's state with a revision beside it, which a change in
 // place moves while the value keeps its identity, and which a read reads with
-// the value, or with what it holds as itself (`orHeld`); Svelthon's own signs
+// the value, or with what it holds as itself (`stateRead`); Svelthon's own signs
 // made Python (`takeArrows`); and Svelte's
 // runes, whose names no binding of the component may take: Svelte reads
 // `$state` as a store once `state` is bound, so a JavaScript import of one is
@@ -637,7 +637,7 @@ const HOST = {
             `const ${bumped} = () => { ${rev(name)} += 1; };`
         ],
         value: (cell) => cell,
-        read: (name, cell) => `(${rev(name)}, ${orHeld(cell, `${bump(name)}.held`)})`,
+        read: (name, cell) => `(${rev(name)}, ${stateRead(name, cell)})`,
         write: (cell, value) => `${cell} = ${value}`
     },
     rewrite: (text, { source, lineOffset, component, bound }) => takeArrows(text, source, lineOffset, component, bound),
@@ -1563,10 +1563,18 @@ const declaration = (one) => `__pybridge.declaration(this, '${one.name}', ${one.
 // NameError, or called `undefined`. Read off the cell when it holds nothing
 // (`orHeld`): the two are written together, so only such a cleanup tells them
 // apart, and no write pays for it. A state's and a function's is what `track`
-// keeps on its `bump`; a rune's body is kept here (`heldOf`).
+// keeps on its `bump` (`stateRead`); a rune's body and what a write other than
+// its declaration's gave an effect's name are kept here. Every read a cleanup
+// may make goes through one of them: the name's value, the source `globals()`
+// asks whether the name is bound, the setter's question, a store's getter.
 const heldOf = (name) => `__held_${name}`;
+const namedHeld = (name) => `__namedheld_${name}`;
 const orHeld = (cell, held) => `(${cell} ?? ${held})`;
+const stateRead = (name, cell) => orHeld(cell, `${bump(name)}.held`);
+const cellRead = (name) => orHeld(fn(name), heldOf(name));
 const cellWrite = (name, value) => `${fn(name)} = ${heldOf(name)} = ${value}`;
+const namedRead = (name) => orHeld(named(name), namedHeld(name));
+const namedWrite = (name, value) => `${named(name)} = ${namedHeld(name)} = ${value}`;
 
 const derivedWrite = (d, plain = false) => {
     const write = (value) => (plain ? `${fn(d.name)} = ${value}` : cellWrite(d.name, value));
@@ -1576,7 +1584,7 @@ const derivedWrite = (d, plain = false) => {
     return (
         `if (${NEXT_VALUE} === undefined) ${write(NEXT_VALUE)};` +
         ` else { const __at = ${declaration(d)}; if (__at > 0) ${bound}` +
-        (plain ? ` else ${held}` : ` else if (__at < 0 || ${fn(d.name)} === undefined) ${held} else ${d.name} = ${NEXT_VALUE};`) +
+        (plain ? ` else ${held}` : ` else if (__at < 0 || ${cellRead(d.name)} === undefined) ${held} else ${d.name} = ${NEXT_VALUE};`) +
         ` }`
     );
 };
@@ -1584,10 +1592,10 @@ const derivedWrite = (d, plain = false) => {
 // An effect's is the name's alone (`named`), and the effect keeps its body: a
 // body replaced was called at the effect's next run.
 const effectWrite = (e) =>
-    `if (${NEXT_VALUE} !== undefined && ${declaration(e)} > 0) { ${cellWrite(e.name, NEXT_VALUE)}; ${named(e.name)} = undefined; }` +
-    ` else ${named(e.name)} = { value: ${NEXT_VALUE} };`;
+    `if (${NEXT_VALUE} !== undefined && ${declaration(e)} > 0) { ${cellWrite(e.name, NEXT_VALUE)}; ${namedWrite(e.name, 'undefined')}; }` +
+    ` else ${namedWrite(e.name, `{ value: ${NEXT_VALUE} }`)};`;
 
-const effectName = (name) => `(${named(name)} === undefined ? ${orHeld(fn(name), heldOf(name))} : ${named(name)}.value)`;
+const effectName = (name) => `(${namedRead(name)} === undefined ? ${cellRead(name)} : ${namedRead(name)}.value)`;
 
 // Whether the component's subscriptions have holders besides the component:
 // a root effect, which lives until its destructor is called.
@@ -1779,6 +1787,7 @@ function declarations(c) {
             `let ${fn(e.name)} = $state.raw(undefined);`,
             `let ${heldOf(e.name)};`,
             `let ${named(e.name)} = $state.raw(undefined);`,
+            `let ${namedHeld(e.name)};`,
             ...(e.root ? [`let ${destroyer(e.name)} = ${RUNTIME.laterRoot}();`] : [])
         ]),
         // A @derived name reads as its result, on both sides. The body runs
@@ -1790,7 +1799,7 @@ function declarations(c) {
             `let ${fn(d.name)} = $state.raw(undefined);`,
             `let ${heldOf(d.name)};`,
             `let ${installed(d.name)} = false;`,
-            `let ${d.name} = $derived.by(() => __invoke(${orHeld(fn(d.name), heldOf(d.name))}));`
+            `let ${d.name} = $derived.by(() => __invoke(${cellRead(d.name)}));`
         ]),
         // Which containers this instance signed onto, so it can sign off when
         // it goes. A container reached through a store outlives the components
@@ -2013,10 +2022,9 @@ function authorBindings(c) {
             ...(at === 0 ? ['const __classes = __global.Object.create(null);'] : []),
             `__bind(__proto, '${n}', () => __pybridge.declared(__classes[${JSON.stringify(n)}]), function (${NEXT_VALUE}) { __pybridge.declare(this, '${n}', ${NEXT_VALUE}, __classes); });`
         ]),
-        ...c.funcs.map((f) => stateBinding(HOST, f.name, fn(f.name), { subs: c.store ? null : SUBS, held: fn(f.name) })),
+        ...c.funcs.map((f) => stateBinding(HOST, f.name, fn(f.name), { subs: c.store ? null : SUBS, held: stateRead(f.name, fn(f.name)) })),
         ...c.inspects.map(
-            (i) =>
-                `__bind(__proto, '${i.name}', () => ${orHeld(fn(i.name), heldOf(i.name))}, (${NEXT_VALUE}) => { ${cellWrite(i.name, NEXT_VALUE)}; });`
+            (i) => `__bind(__proto, '${i.name}', () => ${cellRead(i.name)}, (${NEXT_VALUE}) => { ${cellWrite(i.name, NEXT_VALUE)}; });`
         ),
         // A root's name reads as its destructor, once its `def` has run and
         // before the root is made (`laterRoot`); the setter takes the function
@@ -2024,8 +2032,8 @@ function authorBindings(c) {
         // runs, and any other write is the name's (`effectWrite`).
         ...c.effects.map((e) =>
             e.root
-                ? `__bind(__proto, '${e.name}', () => (${named(e.name)} !== undefined ? ${named(e.name)}.value : ` +
-                  `${orHeld(fn(e.name), heldOf(e.name))} === undefined ? undefined : ${destroyer(e.name)}.stop), ` +
+                ? `__bind(__proto, '${e.name}', () => (${namedRead(e.name)} !== undefined ? ${namedRead(e.name)}.value : ` +
+                  `${cellRead(e.name)} === undefined ? undefined : ${destroyer(e.name)}.stop), ` +
                   `function (${NEXT_VALUE}) { ${effectWrite(e)} }, () => ${effectName(e.name)});`
                 : `__bind(__proto, '${e.name}', () => ${effectName(e.name)}, function (${NEXT_VALUE}) { ${effectWrite(e)} });`
         ),
@@ -2036,8 +2044,8 @@ function authorBindings(c) {
         // (`installed`): what a `:=` wrote before.
         ...c.deriveds.map(
             (d) =>
-                `__bind(__proto, '${d.name}', () => (${installed(d.name)} ? __follow(${d.name}) : __invoke(${orHeld(fn(d.name), heldOf(d.name))})), ` +
-                `function (${NEXT_VALUE}) { ${derivedWrite(d)} }, () => ${fn(d.name)}, true, true);`
+                `__bind(__proto, '${d.name}', () => (${installed(d.name)} ? __follow(${d.name}) : __invoke(${cellRead(d.name)})), ` +
+                `function (${NEXT_VALUE}) { ${derivedWrite(d)} }, () => ${cellRead(d.name)}, true, true);`
         )
     ];
 }
@@ -2144,11 +2152,11 @@ function instanceExports(c) {
         // call, and an `__expr_N` is this compiler's own and never moves.
         ...c.funcs.map((f) =>
             componentWrapper(f) === RUNTIME.pyExpression
-                ? `const ${wrapperName(f.name)} = ${RUNTIME.pyExpression}((a) => ${orHeld(fn(f.name), `${bump(f.name)}.held`)}(...a), ` +
+                ? `const ${wrapperName(f.name)} = ${RUNTIME.pyExpression}((a) => ${stateRead(f.name, fn(f.name))}(...a), ` +
                   `${JSON.stringify(`${f.name}() — ${c.source}`)}, ${f.arity === Infinity ? '1 / 0' : f.arity}, ` +
                   `${KEPT_PYTHON.test(f.name) ? 'true' : HANDED.test(f.name) ? `'child'` : COMPARED.test(f.name) ? `'${f.name.match(COMPARED)[1]}'` : 'false'}` +
                   `${WRITES.test(f.name) ? ', true' : ''});`
-                : `const ${wrapperName(f.name)} = ${RUNTIME.pyComponent}(() => ${orHeld(fn(f.name), `${bump(f.name)}.held`)}, ` +
+                : `const ${wrapperName(f.name)} = ${RUNTIME.pyComponent}(() => ${stateRead(f.name, fn(f.name))}, ` +
                   `${JSON.stringify(`${f.name}() — ${c.source}`)}${f.exported && !c.store ? ', true' : ''});`
         ),
         // What a parent holding `bind:this` can call. Svelte gathers whatever an
@@ -2190,7 +2198,7 @@ function instanceExports(c) {
                   `const ${STORE_FACADE} = {`,
                   ...c.state
                       .filter(c.published)
-                      .map((n) => `    get ${n}() { return (${rev(n)}, ${storeRead(c, n, n)}); },`),
+                      .map((n) => `    get ${n}() { return (${rev(n)}, ${storeRead(c, n, stateRead(n, n))}); },`),
                   ...c.unsignalled.map((n) => `    get ${n}() { return ${storeRead(c, n, `${NS}.${n}`)}; },`),
                   // The parameter and the name its body reads are one constant.
                   // `__pyArg`, because this setter is a **crossing**:
