@@ -636,7 +636,7 @@ const HOST = {
             `let ${rev(name)} = $state.raw(0);`,
             `const ${bumped} = () => { ${rev(name)} += 1; };`
         ],
-        value: (cell) => cell,
+        value: (cell, name) => stateRead(name, cell),
         read: (name, cell) => `(${rev(name)}, ${stateRead(name, cell)})`,
         write: (cell, value) => `${cell} = ${value}`
     },
@@ -2195,10 +2195,14 @@ function instanceExports(c) {
                   // Under a name of the compiler's, and exported as `store`:
                   // `store` may be a name of the module's own, whose cell or
                   // derived is declared under it in this same scope.
+                  //
+                  // Read through the namespace, as Python reads the name: its
+                  // accessor is the one door that knows a name `del` removed, a
+                  // cell a cleanup is handed as born, and the rows of a loop.
+                  // Read off its cell, a deleted derived ran a body it no longer
+                  // had, and a state read `undefined` in an early cleanup.
                   `const ${STORE_FACADE} = {`,
-                  ...c.state
-                      .filter(c.published)
-                      .map((n) => `    get ${n}() { return (${rev(n)}, ${storeRead(c, n, stateRead(n, n))}); },`),
+                  ...c.state.filter(c.published).map((n) => `    get ${n}() { return ${storeRead(c, n, `${NS}.${n}`)}; },`),
                   ...c.unsignalled.map((n) => `    get ${n}() { return ${storeRead(c, n, `${NS}.${n}`)}; },`),
                   // The parameter and the name its body reads are one constant.
                   // `__pyArg`, because this setter is a **crossing**:
@@ -2221,7 +2225,7 @@ function instanceExports(c) {
                   ...c.unsignalled.map((n) => `    set ${n}(${NEXT_VALUE}) { ${NS}.${n} = __pyArg(${NEXT_VALUE}); },`),
                   ...c.deriveds
                       .filter((d) => c.published(d.name))
-                      .map((d) => `    get ${d.name}() { return ${storeRead(c, d.name, `__follow(${d.name})`)}; },`),
+                      .map((d) => `    get ${d.name}() { return ${storeRead(c, d.name, `${NS}.${d.name}`)}; },`),
                   ...c.funcs
                       .filter((f) => c.published(f.name))
                       .map((f) => `    get ${f.name}() { return ${storeRead(c, f.name, `${NS}.${f.name}`, wrapperName(f.name))}; },`),

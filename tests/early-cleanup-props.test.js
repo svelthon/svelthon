@@ -24,6 +24,9 @@ import EarlySnippetHost from './fixtures/EarlySnippetHost.svelte';
 import EarlyCallbackHost from './fixtures/EarlyCallbackHost.svelte';
 import EarlyPresence from './fixtures/EarlyPresence.svelte';
 import { events } from './fixtures/early_store_log.js';
+import EarlyRows from './fixtures/EarlyRows.svelte';
+import { events as rowEvents } from './fixtures/early_rows_driver.svelte.js';
+import { flushSync } from 'svelte';
 
 const capturing = (Component) => {
     const seen = [];
@@ -57,4 +60,28 @@ test('and a store hands JavaScript the value its body wrote, as Python reads it'
     await import('./fixtures/early_store.svelte.py');
 
     expect(events).toEqual(['namespace:7', 'facade:7']);
+});
+
+// While the rows of a loop are computed the names are read off their cells by
+// another branch of their accessor, which read the cell as born: `None`, and a
+// function not callable.
+test('and a cleanup run while the rows of a loop are computed', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+    mount(EarlyRows, { target });
+    flushSync();
+
+    expect(rowEvents).toEqual(['run:7h', 'clean:7h']);
+});
+
+// A store's getter reads the name as Python does, through the namespace: read
+// off its derived, a deleted one ran a body it no longer had.
+test("a store's deleted derived reads as nothing, and bound again as its value", async () => {
+    const { store } = await import('./fixtures/deleted_derived_store.svelte.py');
+    const read = [store.value];
+    store.drop();
+    read.push(store.value);
+    store.rebind();
+    read.push(store.value);
+
+    expect(read).toEqual([14, undefined, 5]);
 });

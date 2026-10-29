@@ -64,14 +64,15 @@ describe('compiler', () => {
         // is the counter that makes an in-place mutation visible without a copy.
         // Except while the rows of an `{#each}` are computed, which follow the
         // value's own changes and what they read under it. The value is read
-        // off what the name holds as itself when the cell holds nothing, as a
-        // cleanup run before the first flush is handed the cell as born.
+        // off what the name holds as itself when the cell holds nothing, on
+        // either branch, as a cleanup run before the first flush is handed the
+        // cell as born.
         const { script } = compile('items = []\n', 'R', 'R.svelte');
 
         expect(script).toContain('let __rev_items = $state.raw(0)');
         expect(script).toContain('const __bump_items = () => { __rev_items += 1; }');
         expect(script).toContain(
-            "bind(__proto, 'items', () => (__SHAPING.on ? __followOwn(items) : (__rev_items, (items ?? __bump_items.held)))"
+            "bind(__proto, 'items', () => (__SHAPING.on ? __followOwn((items ?? __bump_items.held)) : (__rev_items, (items ?? __bump_items.held)))"
         );
         // The list is the third argument, and `__leave` is what empties it,
         // once, laid down by an effect run at once, before the script can
