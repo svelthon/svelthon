@@ -20,6 +20,8 @@ import HeldApi from './fixtures/HeldApi.svelte';
 import HeldStoreView from './fixtures/HeldStoreView.svelte';
 import heldStore from './fixtures/held_store.svelte.py';
 import { registry } from './fixtures/kept_registry.js';
+import nativeStore from './fixtures/native_store.svelte.py';
+import { fraction } from './fixtures/native_calls.js';
 
 test('a store function kept by JavaScript calls what it read, by the store and by its export', () => {
     const { store } = module;
@@ -65,6 +67,19 @@ test('an exported or store function is the one a registry was handed, and the on
         registry.delete(instance.action) && registry.delete(heldStore.action),
         registry.size
     ]).toEqual([true, true, true, true, 0]);
+});
+
+// A JavaScript function a store holds crosses as itself: asked whether Python
+// declared a signature, it crossed as the adapter Python calls it through,
+// whose answer is a Python object, a float where `toFixed` is asked and an
+// object where `undefined` was.
+test('a JavaScript function a store holds crosses as itself, by any name', () => {
+    expect([
+        nativeStore.fraction === fraction,
+        nativeStore.double === fraction,
+        nativeStore.fraction(0.25).toFixed(2),
+        nativeStore.absent()
+    ]).toEqual([true, true, '0.50', undefined]);
 });
 
 test("a store function's list of floats is the list it holds, and a write to it repaints", () => {

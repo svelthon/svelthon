@@ -2053,10 +2053,14 @@ export const pyComponent = (read, where, exported = false) => {
 // crosses as data, a list as the view that keeps it and tells Svelte of a
 // change. Each a wrapper of its own, the store's handed another function than
 // the one Python passed, and its answer as a framework's options, a list of
-// floats copied anew at each call. Anything else crosses as `plainScalar`
-// hands it.
+// floats copied anew at each call. A JavaScript function the store holds,
+// `importjs` brought, crosses as itself, which `pyHandler` hands back for the
+// adapter Python called it through: asked whether a Python signature was
+// declared, it crossed as that adapter, its answer a Python object. Anything
+// else crosses as `plainScalar` hands it. What is a call is `callable`'s
+// answer, the one every door asks.
 export function storeMember(value) {
-    return declared(value) === null ? plainScalar(value) : pyHandler(value);
+    return callable(value) ? pyHandler(value) : plainScalar(value);
 }
 
 // And what an instance's `@export` hands JavaScript, the value its name holds
@@ -2067,7 +2071,7 @@ export function storeMember(value) {
 export function exportedMember(value) {
     if (value === undefined) return undefined;
 
-    return declared(value) === null && typeof value !== 'function' ? published(value) : pyHandler(value);
+    return callable(value) ? pyHandler(value) : published(value);
 }
 
 // And the other half of the same wrapper: a function the *markup* compiled, one
