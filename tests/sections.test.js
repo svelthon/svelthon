@@ -73,12 +73,12 @@ describe('the order the sections are assembled in', () => {
         // three call boundaries are one file's business now, so a rule added to
         // one of them can reach this one.
         expect(script.indexOf('const bump = __pyComponent(')).toBeGreaterThan(init);
-        expect(script.indexOf('export { focus };')).toBeGreaterThan(init);
+        expect(script.indexOf('export { __api_focus as focus };')).toBeGreaterThan(init);
     });
 
     test('the effects come last, since an effect runs its body on creation', () => {
         const wrappers = Math.max(
-            ...positions(script, ['const bump = __pyComponent(', 'export { focus };'])
+            ...positions(script, ['const bump = __pyComponent(', 'export { __api_focus as focus };'])
         );
 
         expect(script.indexOf('$effect(() => {')).toBeGreaterThan(wrappers);

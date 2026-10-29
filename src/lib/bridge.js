@@ -2059,6 +2059,26 @@ export function storeMember(value, where) {
     return wrapped;
 }
 
+// And what an instance's `@export` hands JavaScript, the value its name holds
+// as each binding of the name hands it over (`liveExport`): one wrapper per
+// callable, which calls that callable and hands its answer as data
+// (`published`). A function a parent kept is the one it read, as one kept from
+// a Svelte component is, where it called whatever the name held at the call,
+// the next function once the name was bound again, and failed once it was
+// deleted; a deleted name is `undefined`. A value no object, which a decorator
+// may make of a `def`, has no wrapper to keep and gets one at each binding.
+const EXPORT_CALLS = new WeakMap();
+
+export function exportedMember(value, where) {
+    if (value === undefined) return undefined;
+    if (value === null || (typeof value !== 'object' && typeof value !== 'function')) return pyComponent(() => value, where, true);
+
+    let wrapped = EXPORT_CALLS.get(value);
+    if (wrapped === undefined) EXPORT_CALLS.set(value, (wrapped = pyComponent(() => value, where, true)));
+
+    return wrapped;
+}
+
 // And the other half of the same wrapper: a function the *markup* compiled, one
 // per expression it met.
 //

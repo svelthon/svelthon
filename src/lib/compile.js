@@ -574,6 +574,7 @@ const RUNTIME = {
     pyBind: '__pyBind',
     plainScalar: '__plainScalar',
     storeMember: '__storeMember',
+    exportedMember: '__exportedMember',
     directiveAction: '__directiveAction',
     directiveTransition: '__directiveTransition',
     directiveAnimate: '__directiveAnimate',
@@ -1541,6 +1542,8 @@ const named = (name) => `__named_${name}`;
 // reads what it holds through its cell, and not through Svelte's derived, which
 // on a server keeps the first value read from it.
 const installed = (name) => `__installed_${name}`;
+// What an instance's `@export` hands a parent, the function the name holds.
+const api = (name) => `__api_${name}`;
 
 // A write to a rune's name: the binding of its declaration installs its body,
 // and any other is the name's, a write before the binding included
@@ -1636,6 +1639,7 @@ function preamble(c) {
             'plainScalar', 'storeMember', 'invoke',
             ...(c.store ? ['pythonModule'] : SUBSCRIBING(c) ? ['unsubscribe'] : []),
             ...(c.store && c.funcs.some((f) => c.published(f.name)) ? ['liveExport'] : []),
+            ...(!c.store && c.funcs.some((f) => f.exported) ? ['liveExport', 'exportedMember'] : []),
             ...(c.bindables.length ? ['unproxied', 'handOver'] : []),
             // Only an effect and `on_mount` hand a value back to be called
             // later, so only a component with one needs the name.
@@ -2163,14 +2167,27 @@ function instanceExports(c) {
         // so a specifier list is enough: `export { focus }` becomes
         // `var $$exports = { focus }`.
         //
+        // Each under a variable of its own the name's every binding writes
+        // (`liveExport`), with the function it holds (`exportedMember`): a `let`,
+        // which Svelte hands back through a getter, so the parent reads what the
+        // name holds now and keeps what it read. The name's own wrapper called
+        // whatever the name held at the call.
+        //
         // A component with no `@export` exports nothing, which is theirs too: an
         // instance exposes only what it says it exposes.
         ...(!c.store && c.funcs.some((f) => f.exported)
             ? [
                   ``,
+                  ...c.funcs
+                      .filter((f) => f.exported)
+                      .flatMap((f) => [
+                          `let ${api(f.name)};`,
+                          `${RUNTIME.liveExport}(${NS}, ${JSON.stringify(f.name)}, (__value) => { ${api(f.name)} = ` +
+                              `${RUNTIME.exportedMember}(__value, ${JSON.stringify(`${f.name}() — ${c.source}`)}); });`
+                      ]),
                   `export { ${c.funcs
                       .filter((f) => f.exported)
-                      .map((f) => (wrapperName(f.name) === f.name ? f.name : `${wrapperName(f.name)} as ${f.name}`))
+                      .map((f) => `${api(f.name)} as ${f.name}`)
                       .join(', ')} };`
               ]
             : []),
@@ -2783,6 +2800,7 @@ function compile(
         .join('\n');
 
     refuseShadowedRunes(jsNames, script, source);
+    refuseBuilt(declared, script, source, lines, lineOffset);
 
     return {
         script,
@@ -2790,6 +2808,33 @@ function compile(
         map,
         imports: imported
     };
+}
+
+// A name the compiler builds out of one of the author's, `__rev_value__` out of
+// `value__`, ends with `__` where the author's does, the spelling the prefix
+// rule leaves to Python's own names (`refuseLocked`): an author's name spelled
+// so was declared twice in the script, and Svelte refused the component in the
+// compiler's own code, `Identifier '__rev_value__' has already been declared`.
+// Asked of the script itself, so only a name it does declare twice is refused,
+// and at the line the author took it on.
+const declaredTimes = (script, name) =>
+    script.match(new RegExp(`(?<![\\p{ID_Continue}$])(?:let|const|var|function|class)\\s+${name}(?![\\p{ID_Continue}$])`, 'gu'))?.length ?? 0;
+
+function refuseBuilt(declared, script, source, lines, lineOffset = 0) {
+    const taken = declared.find((name) => name.startsWith('__') && name.endsWith('__') && declaredTimes(script, name) > 1);
+    if (taken === undefined) return;
+
+    const out = declared.find((name) => name !== taken && taken.endsWith(`_${name}`));
+    const at = lines?.get(taken);
+    const line = at === undefined ? undefined : at + lineOffset;
+
+    throw refuse(
+        `svelthon — \`${taken}\` is a name the compiler builds itself` +
+            `${out === undefined ? '' : ` out of \`${out}\``}, in the same scope ` +
+            `(${line === undefined ? source : `${source}:${line}`}), and the two would collide: choose another.`,
+        source,
+        line
+    );
 }
 
 // A name the `<script module>` binds, `state` or `effect`, is one Svelte reads
