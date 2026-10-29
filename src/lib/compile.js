@@ -1670,13 +1670,15 @@ function preamble(c) {
         // born with its value, reads it. A server runs no cleanup.
         //
         // A root made by each write costs every mount, so only where a
-        // cleanup may run that early: in a store, which a component's may
-        // read as it loads with the page, in a component with a root or a pre
-        // effect, and in any other once a page has one (`__pybridge.early`),
-        // since a child reads its parent's names through its props.
-        `const __born = (write) => { if (${
-            c.store || c.effects.some((e) => e.root || e.pre) ? '__pybridge.browser' : '__pybridge.browser && __pybridge.early'
-        }) $effect.root(() => write)(); else write(); };`,
+        // cleanup may read the names that early: in a store, which a
+        // component's may read as it loads with the page; in a component with
+        // a root or a pre effect, its own; and in one whose markup renders a
+        // component (`renders`), whose cleanup, in Python or JavaScript, reads
+        // them through its props. A component that renders none, the row of a
+        // long list, pays nothing.
+        c.store || c.renders || c.effects.some((e) => e.root || e.pre)
+            ? `const __born = (write) => { if (__pybridge.browser) $effect.root(() => write)(); else write(); };`
+            : `const __born = (write) => write();`,
         ``
     ];
 }
@@ -2524,7 +2526,10 @@ function compile(
         resolves = null,
         // The module the script takes its body from (`init`), the name's
         // unless the caller tells the body apart.
-        body = virtualId(name)
+        body = virtualId(name),
+        // Whether the markup renders a component (`rendersComponent`), as the
+        // markup pass read it; with none, taken to.
+        renders = true
     } = {}
 ) {
     // A component has markup, so it has the dialect; a module is a module and
@@ -2733,6 +2738,7 @@ function compile(
         store,
         plain,
         eager,
+        renders,
         namespace,
         js,
         // Every name the module reads as a global (`globalReads`). What decides

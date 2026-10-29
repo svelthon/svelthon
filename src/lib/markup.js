@@ -4501,6 +4501,21 @@ export const markupOnly = (content) =>
             (found) => found.replace(QUOTED_TAG, blank)
         );
 
+// Whether a component's markup renders a component, by a tag Svelte takes for
+// one (`COMPONENT`), or a snippet, whose components are handed what its
+// arguments read: a cleanup of theirs may read this component's names through
+// its props before the first flush. Read off the text, the blocks' bodies and
+// the comments blanked: a tag a string spells counts one too many, and makes
+// the writes births, slower and never wrong.
+const OPENED = /<\s*(\p{ID_Start}[\p{ID_Continue}$‌‍:.-]*)/gu;
+const RENDERED = /\{\s*@render(?![\p{ID_Continue}$])/u;
+
+export const rendersComponent = (content) => {
+    const markup = blankBodies(withoutComments(content));
+
+    return RENDERED.test(markup) || [...markup.matchAll(OPENED)].some((found) => COMPONENT.test(found[1]));
+};
+
 // Found among the component's own blocks, as the Python block is: a `<script
 // module>` quoted in a stylesheet, an expression or a comment is not the module.
 const declaresModule = (text) => {
