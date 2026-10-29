@@ -5,4 +5,4 @@ other: object
 </script>
 
 <output data-k="direct">{source.value}</output>
-{#each [other] as {value=None}}<output data-k="each">{value}</output>{/each}
+{#each [other] as {value=99}}<output data-k="each">{value}</output>{/each}

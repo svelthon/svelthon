@@ -5,6 +5,7 @@ import EffectRoot from './fixtures/EffectRoot.svelte';
 import RootStore from './fixtures/RootStore.svelte';
 import RootOutlives, { held } from './fixtures/RootOutlives.svelte';
 import RootEarly from './fixtures/RootEarly.svelte';
+import RootStopsItself from './fixtures/RootStopsItself.svelte';
 import './fixtures/root_early.svelte.py';
 import { runs } from './fixtures/root_early_log.js';
 import { attempt, stop_first, bump, same, kept_name, stop_kept } from './fixtures/root_retry_driver.py';
@@ -107,6 +108,24 @@ test('a root can be stopped or kept while the body runs', () => {
     click('finish');
     click('bump');
     expect(events).toEqual(['kept', 'kept']);
+});
+
+// Stopped while it is made, by a pre effect that runs as the root is made, it
+// is destroyed once made, its cleanup run, as Svelte's root is. The request
+// was lost: the root ran on, past its component's unmount.
+test('a root stopped while it is made is destroyed once made', () => {
+    const seen = [];
+    const target = document.body.appendChild(document.createElement('div'));
+    const instance = mount(RootStopsItself, { target, props: { capture: (...row) => seen.push(row.join(':')) } });
+    flushSync();
+    expect(seen).toEqual(['run:0', 'clean:0']);
+
+    instance.bump();
+    flushSync();
+    unmount(instance);
+    instance.bump();
+    flushSync();
+    expect(seen).toEqual(['run:0', 'clean:0']);
 });
 
 test('and so in a module, by its name or another', () => {

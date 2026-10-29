@@ -1959,6 +1959,9 @@ export function pyAttach(value) {
 // has run, as Svelte's `$effect.root` hands it back at once: `stop()` in the
 // body, or `saved = stop`, before the root is made. Stopped before it is made,
 // it is never made, as Svelte's root stopped at once never runs its effect.
+// Stopped while it is made, by an `@effect.pre` its making runs, it is
+// destroyed once made, as Svelte's root is: the request was kept, and the
+// root ran on, past the component's own unmount.
 export function laterRoot() {
     let destroy;
     let stopped = false;
@@ -1969,7 +1972,10 @@ export function laterRoot() {
             else destroy();
         },
         start(make) {
-            if (!stopped) destroy = make();
+            if (stopped) return;
+
+            destroy = make();
+            if (stopped) destroy();
         }
     };
 }
@@ -2478,13 +2484,17 @@ export function readAttr(target, name, otherwise) {
     //
     // The export read once, what it is asked of the value read: a namespace a
     // proxy stands for answers each read anew, and the read that asked was
-    // lost, `14` shown where the export gave `7`. One that is `undefined` goes
-    // on as before, to its default or to the error a missing name raises.
+    // lost, `14` shown where the export gave `7`. An `undefined` read is
+    // answered too, where it went on to read again and showed `7` where the
+    // first read gave nothing: its default, as Svelte takes one for
+    // `undefined`, or None for a name the namespace has, as the engine reads
+    // it. A name it has not goes on, to the error a missing name raises.
     if (moduleNamespace(target)) {
         const member = target[name];
 
         if (typeof member === 'function') return jsMethod(target, member);
-        if (member !== undefined) return jsMemberValue(target, member);
+        if (member === undefined && otherwise !== undefined) return invoke(otherwise);
+        if (member !== undefined || name in target) return jsMemberValue(target, member);
     }
 
     // A key with a default, `{value=7}`, which Svelte takes for a member that is
