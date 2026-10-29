@@ -28,6 +28,23 @@ test('a function of a namespace reads the namespace called alone, and the elemen
     ]).toEqual(['actions', 'actions', 'actions', 'actions:3.5', 'BUTTON']);
 });
 
+// Read through a pattern with a default, `{clicked=None}`, as a record's
+// member: the handler was bound to the namespace, where `{clicked}` handed it
+// the element. A function is never missing, so the default is never taken.
+test('a handler of a namespace read through a default is handed the element', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+    mount(NamespaceReceiver, { target });
+    flushSync();
+
+    for (const key of ['each-default', 'snippet-default']) target.querySelector(`[data-k="${key}"] span`).click();
+    flushSync();
+
+    expect(['each-default', 'snippet-default'].map((key) => target.querySelector(`[data-k="${key}"]`).dataset.receiver)).toEqual([
+        'BUTTON',
+        'BUTTON'
+    ]);
+});
+
 // The namespace a bundler builds for a module it inlines: an ordinary object,
 // its exports as getters, the tag nothing can write. Read as any object's, its
 // function was bound to it, and a handler was called on the namespace.

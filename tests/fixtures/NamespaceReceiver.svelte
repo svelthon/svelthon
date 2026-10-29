@@ -14,3 +14,6 @@ def scripted():
 <output data-k="script">{scripted()}</output>
 <div data-k="action" use:actions.stamp={3.5}></div>
 <button data-k="handler" onclick={actions.clicked}>click</button>
+{#each [actions] as {clicked=None}}<button data-k="each-default" onclick={clicked}><span>click</span></button>{/each}
+{#snippet held({clicked=None})}<button data-k="snippet-default" onclick={clicked}><span>click</span></button>{/snippet}
+{@render held(actions)}
