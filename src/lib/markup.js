@@ -445,11 +445,27 @@ export function walrus(expression) {
             const parts = close === -1 ? [] : arguments_(expression.slice(index + 1, close));
 
             if (parts.some((one) => walrusTarget(one))) {
+                // **Or the parentheses are a generator's**, `(value := n for n
+                // in xs)`, the walrus its element and the `for` its own clause:
+                // the value ends where the clause begins, and the clause stays
+                // in the parentheses, after the assignment. Taken for the value,
+                // the clause went into the call, `__assign("value", n for n in
+                // xs)`, which Python refuses.
+                let generator = false;
+
                 const written = parts.map((one) => {
                     const found = walrusTarget(one);
                     if (!found) return walrus(one).trim();
 
-                    const value = walrus(one.slice(found.length));
+                    const rest = one.slice(found.length);
+                    const at =
+                        parts.length === 1
+                            ? atTopLevel(rest, (i) => /^(?:async\s+)?for\b/.test(rest.slice(i)) && !NAME_BEFORE.test(rest.slice(0, i)))
+                            : -1;
+                    const clause = at === -1 ? '' : ` ${walrus(rest.slice(at)).trim()}`;
+                    const value = walrus(at === -1 ? rest : rest.slice(0, at)).trim();
+
+                    generator = at !== -1;
 
                     // A name goes through the namespace, which is what makes the
                     // signal fire. An attribute or a key is written where it
@@ -457,16 +473,17 @@ export function walrus(expression) {
                     // The receiver and the key are expressions too, rewritten
                     // as the value is: `(rows[(chosen := 1)] := 7)` sets
                     // `chosen` as well.
-                    if (found.name) return `__assign("${pythonName(found.name)}", ${value})`;
+                    if (found.name) return `__assign("${pythonName(found.name)}", ${value})${clause}`;
 
                     const key = found.subscript ? walrus(found.key).trim() : found.key;
 
-                    return `${found.subscript ? '__setitem' : '__setattr'}(${walrus(found.object).trim()}, ${key}, ${value})`;
+                    return `${found.subscript ? '__setitem' : '__setattr'}(${walrus(found.object).trim()}, ${key}, ${value})${clause}`;
                 });
 
                 // One element was a grouping parenthesis and goes with it;
-                // several are a tuple, and Python keeps it one.
-                out += written.length > 1 ? `(${written.join(', ')})` : written[0];
+                // several are a tuple, and Python keeps it one, as a generator
+                // keeps its own.
+                out += written.length > 1 || generator ? `(${written.join(', ')})` : written[0];
                 index = close + 1;
                 continue;
             }

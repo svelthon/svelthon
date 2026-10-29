@@ -61,6 +61,12 @@ describe('what a walrus may aim at', () => {
         // parenthesised one is, the component's name with it.
         ['lambda: (items[i := 0] := 9)', 'lambda: __setitem(items, __assign("i", 0), 9)'],
 
+        // Parentheses that are a generator's, the walrus its element: the `for`
+        // and its `if` stay the generator's, around the assignment.
+        ['lambda: list((value := n for n in [1, 2]))', 'lambda: list((__assign("value", n) for n in [1, 2]))'],
+        ['lambda: list((value := n for n in [1, 2, 3] if n % 2))', 'lambda: list((__assign("value", n) for n in [1, 2, 3] if n % 2))'],
+        ['lambda: list((value := (n, n + 10) for n in [1, 2]))', 'lambda: list((__assign("value", (n, n + 10)) for n in [1, 2]))'],
+
         // ...but a colon inside a string is just a string.
         ['lambda: (d["a:b"] := 1)', 'lambda: __setitem(d, "a:b", 1)'],
 
