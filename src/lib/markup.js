@@ -1999,23 +1999,35 @@ const walked = (rows, iterable, key) =>
 // in their turn: a key of the index alone, `(at)`, took the row apart all the
 // same, and a generator it took apart was spent before its block read it,
 // `not enough values to unpack`.
+//
+// What those read is gathered until nothing more is: a function a default
+// makes reads a name an element *after* it binds, `[saved=lambda: later,
+// later=7] (keyfn(saved()))`, so one walk back from the key passed `later`
+// before `saved` named it, and the key's `saved()` read no `later`, or the
+// component's own. The entries are bound in the order they are written.
 const IDENTIFIER = /[\p{XID_Start}_$][\p{XID_Continue}$]*/gu;
 
 function eachKey(key, unpack, call) {
     const keyed = call(key, '__key', key, '', [], false);
     const needed = new Set(freeNames(key).map(pythonName));
-    const read = [];
+    const kept = new Set();
+    let grew = true;
 
-    for (const one of [...unpack.consts].reverse()) {
-        if (!(one.target.match(IDENTIFIER) ?? []).some((name) => needed.has(pythonName(name)))) continue;
+    while (grew) {
+        grew = false;
 
-        read.unshift(one);
-        for (const text of [one.read, one.js, one.missing, one.fallback]) {
-            for (const name of text?.match(IDENTIFIER) ?? []) needed.add(pythonName(name));
+        for (const one of unpack.consts) {
+            if (kept.has(one) || !(one.target.match(IDENTIFIER) ?? []).some((name) => needed.has(pythonName(name)))) continue;
+
+            kept.add(one);
+            grew = true;
+            for (const text of [one.read, one.js, one.missing, one.fallback]) {
+                for (const name of text?.match(IDENTIFIER) ?? []) needed.add(pythonName(name));
+            }
         }
     }
 
-    const held = read.filter((one) => !rereadable(one));
+    const held = unpack.consts.filter((one) => kept.has(one) && !rereadable(one));
 
     if (held.length === 0) return keyed;
 
