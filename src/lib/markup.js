@@ -1385,15 +1385,24 @@ function unpackPositional(parts, call, names, tuple, unpack) {
     });
 
     // What each default reaches ahead, the names it reads that an element after
-    // it binds: each held, a derived the default's late read can name once it
-    // is bound (`notYetBound`), and the default evaluated under a token of its
-    // own while it is taken.
+    // it binds, each with what reads it once it is bound (`notYetBound`): a
+    // bare element of this row is read off its slot, as every read of it is,
+    // so that it is read again where it is read; any other name is held, a
+    // derived its late read names. Held where it was read again, a reference
+    // a default made in passing froze every read of the field.
     for (const one of defaults) {
         const read = new Set(freeNames(one.fallback).map(pythonName));
 
-        one.reaches = one.ahead.filter((name) => read.has(pythonName(name)));
-        one.token = `${row}_${unpack.consts.indexOf(one)}`;
-        for (const held of unpack.consts) if (held !== null && one.reaches.includes(held.target)) held.once = true;
+        one.reaches = one.ahead
+            .filter((name) => read.has(pythonName(name)))
+            .map((name) => {
+                const own = unpack.consts.find((held) => held !== null && held.target === name);
+
+                if (own?.js !== undefined && own.fallback === undefined && own.once !== true) return { name, read: own.js };
+                if (own !== undefined) own.once = true;
+
+                return { name, read: name };
+            });
     }
 
     for (const one of names.slice(before)) unpack.bound.add(one);
@@ -1597,11 +1606,11 @@ const derivedTag = (target, expression) => `{const ${target} = $derived(${expres
 // Python, `undefined` and an explicit `None` arrive as the same `None`, where a
 // row holding `None` holds a value. An element of a row unpacked by position
 // is read in JavaScript, off the row taken apart (`unpackPositional`).
-const entryValue = ({ read, source, lazy, missing, fallback, js, reaches, token }, call, followed = true) =>
+const entryValue = ({ read, source, lazy, missing, fallback, js, reaches }, call, followed = true) =>
     js !== undefined
         ? fallback === undefined
             ? js
-            : orDefault(js, initializing(reaches, token, call(fallback, '', undefined, 'lazy', [], followed)))
+            : orDefault(js, initializing(reaches, call(fallback, '', undefined, 'lazy', [], followed)))
         : missing === undefined
           ? call(read, '', source, lazy ? 'lazy' : 'python', [], followed)
           : orDefault(missing, call(fallback, '', undefined, 'lazy', [], followed));
@@ -1616,16 +1625,18 @@ const orDefault = (read, fallback) => `((__given) => (__given === undefined ? ${
 // raising while the default is taken, the name not bound yet, `ahead` in
 // `[one=ahead, ahead]`; and reading the name once it is bound, a function the
 // default made called later, `[saved=lambda: later, later=7]` giving `7`. So
-// the default is taken under a token of its own (`initializing`), and the name
-// it reaches ahead is read through the token (`notYetBound`), its late read the
-// name itself, held as a derived (`unpackPositional`). As an entry of its own,
-// the default read the script's `ahead`; raising at every read, a function it
-// made raised for ever.
-const notYetBound = (name, token) =>
-    `__pybridge.ahead(${JSON.stringify(token)}, ${JSON.stringify(name)}, () => ${name})`;
+// each taking of the default makes a token of its own (`initializing`), and the
+// name it reaches ahead is read through that token (`notYetBound`), its late
+// read what reads the name once it is bound (`unpackPositional`). As an entry
+// of its own, the default read the script's `ahead`; raising at every read, a
+// function it made raised for ever; and under one token for every row, the
+// default of a second row raised in a function the first one made.
+const notYetBound = (name, read) => `__pybridge.ahead(__token, ${JSON.stringify(name)}, () => ${read})`;
 
-const initializing = (reaches = [], token, fallback) =>
-    reaches.length === 0 ? fallback : `__pybridge.initializing(${JSON.stringify(token)}, () => ${fallback})`;
+const initializing = (reaches = [], fallback) =>
+    reaches.length === 0
+        ? fallback
+        : `((__token) => __pybridge.initializing(__token, () => ${fallback}))(__pybridge.token())`;
 
 // **A field read by key with no default is read again at each read**, where
 // the block reads it, as Svelte reads a field it destructures in an `{#each}`
@@ -1644,14 +1655,20 @@ const unpacked = (unpack, call, again = null) =>
     unpack.consts
         .map((one) => {
             // A name an element after this default binds, and that the default
-            // reads, is read through the default's token (`notYetBound`); its
-            // own entry, held, binds it.
-            for (const name of one.reaches ?? []) if (!again?.has(name)) again?.set(name, notYetBound(name, one.token));
+            // reads, is read through the default's token while the default is
+            // compiled (`notYetBound`), and as it was once it is.
+            const reaches = again === null ? [] : (one.reaches ?? []);
+            const before = reaches.map(({ name }) => [name, again.get(name)]);
+
+            for (const { name, read } of reaches) again.set(name, notYetBound(name, read));
 
             if (again === null || !rereadable(one)) {
                 const tag = derivedTag(one.target, entryValue(one, call));
 
-                again?.delete(one.target);
+                for (const [name, was] of before) {
+                    if (was === undefined) again.delete(name);
+                    else again.set(name, was);
+                }
                 return tag;
             }
 

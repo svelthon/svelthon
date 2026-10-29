@@ -54,7 +54,10 @@ const MARKUP_LOCAL = new Set([
     '__debugged_',
     // A stand-in used by the first, throwaway walk that only collects snippet
     // names; nothing it returns is emitted.
-    '__probe'
+    '__probe',
+    // The token a positional pattern's default is taken under, the parameter
+    // of the function that takes it (`initializing`).
+    '__token'
 ]);
 
 // Python's own special methods, which the markup calls on a number it reads at a

@@ -1149,7 +1149,12 @@ export const __pybridge = {
     // A default of a positional pattern taken under its token, and a name an
     // element after it binds read through that token: JavaScript's error while
     // the default is taken, the name not bound yet, and the name once it is,
-    // as a function the default made reads it when it is called.
+    // as a function the default made reads it when it is called. A token for
+    // each taking, so that one row's taking leaves another row's functions be.
+    token() {
+        return {};
+    },
+
     initializing(token, run) {
         INITIALIZING.add(token);
 
