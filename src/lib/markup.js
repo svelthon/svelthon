@@ -276,6 +276,11 @@ const WALRUS_ARROW = /^\s*:=\s*/;
 const LAMBDA = /^lambda(?!\p{XID_Continue})/u;
 const NAME_BEFORE = /\p{XID_Continue}$/u;
 
+// A generator's clause, its `for` a whole word as Python reads one: told by an
+// ASCII word boundary, `forêt` and `força` began a clause, and the walrus they
+// were the value of came apart.
+const FOR_CLAUSE = /^(?:async\s+)?for(?!\p{XID_Continue})/u;
+
 function slices(inner) {
     const parts = arguments_(inner);
     const colons = (part) => {
@@ -460,7 +465,7 @@ export function walrus(expression) {
                     const rest = one.slice(found.length);
                     const at =
                         parts.length === 1
-                            ? atTopLevel(rest, (i) => /^(?:async\s+)?for\b/.test(rest.slice(i)) && !NAME_BEFORE.test(rest.slice(0, i)))
+                            ? atTopLevel(rest, (i) => FOR_CLAUSE.test(rest.slice(i)) && !NAME_BEFORE.test(rest.slice(0, i)))
                             : -1;
                     const clause = at === -1 ? '' : ` ${walrus(rest.slice(at)).trim()}`;
                     const value = walrus(at === -1 ? rest : rest.slice(0, at)).trim();

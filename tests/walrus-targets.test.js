@@ -67,6 +67,13 @@ describe('what a walrus may aim at', () => {
         ['lambda: list((value := n for n in [1, 2, 3] if n % 2))', 'lambda: list((__assign("value", n) for n in [1, 2, 3] if n % 2))'],
         ['lambda: list((value := (n, n + 10) for n in [1, 2]))', 'lambda: list((__assign("value", (n, n + 10)) for n in [1, 2]))'],
 
+        // ...and a name that only starts with `for` is a name, as Python reads
+        // a word, an accented letter included.
+        ['lambda: (selected := forêt)', 'lambda: __assign("selected", forêt)'],
+        ['lambda: (selected := força)', 'lambda: __assign("selected", força)'],
+        ['lambda: (selected := model.forêt)', 'lambda: __assign("selected", model.forêt)'],
+        ['lambda: (selected := forêt())', 'lambda: __assign("selected", forêt())'],
+
         // ...but a colon inside a string is just a string.
         ['lambda: (d["a:b"] := 1)', 'lambda: __setitem(d, "a:b", 1)'],
 
