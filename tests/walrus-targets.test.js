@@ -67,6 +67,13 @@ describe('what a walrus may aim at', () => {
         ['lambda: list((value := n for n in [1, 2, 3] if n % 2))', 'lambda: list((__assign("value", n) for n in [1, 2, 3] if n % 2))'],
         ['lambda: list((value := (n, n + 10) for n in [1, 2]))', 'lambda: list((__assign("value", (n, n + 10)) for n in [1, 2]))'],
 
+        // A list or a set, whose elements a walrus stands in bare: the bracket
+        // or the brace stays around them. A subscript is no list.
+        ['lambda: [value := n * 10 for n in xs]', 'lambda: [__assign("value", n * 10) for n in xs]'],
+        ['lambda: {other := n for n in xs}', 'lambda: {__assign("other", n) for n in xs}'],
+        ['lambda: [value := 5, other := 6]', 'lambda: [__assign("value", 5), __assign("other", 6)]'],
+        ['lambda: rows[0]', 'lambda: rows[0]'],
+
         // ...and a name that only starts with `for` is a name, as Python reads
         // a word, an accented letter included.
         ['lambda: (selected := forêt)', 'lambda: __assign("selected", forêt)'],

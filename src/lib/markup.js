@@ -456,7 +456,15 @@ export function walrus(expression) {
         const grouping =
             !NAME_END.test(before) || KEYWORD_BEFORE.test(before);
 
-        if (char === '(' && grouping) {
+        // And a list or a set, a display or a comprehension, whose elements
+        // Python's grammar lets a walrus stand in bare: `[value := n for n in
+        // xs]`, `{other := n for n in xs}`, `[value := 5, other := 6]`. Not a
+        // subscript, which follows a name, a closing bracket or a string. Left
+        // as written, the walrus was refused as one the page runs while it
+        // renders, in a handler's own lambda.
+        const display = (char === '[' || char === '{') && grouping && !before.endsWith('}');
+
+        if ((char === '(' && grouping) || display) {
             // Each element of the group, not only the first. `(a := 1, b := 2)`
             // is the one expression Python has that assigns twice, and it is
             // what a handler needs: JavaScript reaches for its comma operator
@@ -508,8 +516,12 @@ export function walrus(expression) {
 
                 // One element was a grouping parenthesis and goes with it;
                 // several are a tuple, and Python keeps it one, as a generator
-                // keeps its own.
-                out += written.length > 1 || generator ? `(${written.join(', ')})` : written[0];
+                // keeps its own, and a list or a set its bracket or its brace.
+                out += display
+                    ? `${char}${written.join(', ')}${expression[close]}`
+                    : written.length > 1 || generator
+                      ? `(${written.join(', ')})`
+                      : written[0];
                 index = close + 1;
                 continue;
             }
