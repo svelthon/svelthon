@@ -412,6 +412,15 @@ export const __pybridge = {
     // package's index, left to Node, reads a `window` instead.
     browser: BROWSER,
 
+    // Whether a component written in Python may run a cleanup before the
+    // first flush, an `@effect.root` stopped as it is made or an
+    // `@effect.pre` unmounted at once: set by the module of each that has one
+    // as it loads (`announced`), before any component is made. The writes of
+    // every body are then births (`__born`), a child's cleanup reading its
+    // parent's names through the props it is handed. A page with neither
+    // pays nothing.
+    early: false,
+
     // Called by the module of each component written in Python as it loads,
     // with a function that reads the component (`pythonComponent`).
     python(read) {

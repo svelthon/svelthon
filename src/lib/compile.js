@@ -1668,7 +1668,15 @@ function preamble(c) {
         // a cleanup run before the first flush read it as a name not bound: a
         // root stopped as it is made raised NameError, where Svelte's state,
         // born with its value, reads it. A server runs no cleanup.
-        `const __born = (write) => { if (__pybridge.browser) $effect.root(() => write)(); else write(); };`,
+        //
+        // A root made by each write costs every mount, so only where a
+        // cleanup may run that early: in a store, which a component's may
+        // read as it loads with the page, in a component with a root or a pre
+        // effect, and in any other once a page has one (`__pybridge.early`),
+        // since a child reads its parent's names through its props.
+        `const __born = (write) => { if (${
+            c.store || c.effects.some((e) => e.root || e.pre) ? '__pybridge.browser' : '__pybridge.browser && __pybridge.early'
+        }) $effect.root(() => write)(); else write(); };`,
         ``
     ];
 }

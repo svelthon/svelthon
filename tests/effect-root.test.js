@@ -8,6 +8,9 @@ import RootEarly from './fixtures/RootEarly.svelte';
 import RootStopsItself from './fixtures/RootStopsItself.svelte';
 import RootCleanupReads from './fixtures/RootCleanupReads.svelte';
 import PreCleanupGlobal from './fixtures/PreCleanupGlobal.svelte';
+import EarlyPropParent from './fixtures/EarlyPropParent.svelte';
+import { preprocess } from 'svelte/compiler';
+import { python } from '../src/lib/svelthon.js';
 import './fixtures/root_early.svelte.py';
 import { runs } from './fixtures/root_early_log.js';
 import { attempt, stop_first, bump, same, kept_name, stop_kept } from './fixtures/root_retry_driver.py';
@@ -153,6 +156,47 @@ test('a pre cleanup run before the first flush reads a global as the body left i
     unmount(mount(PreCleanupGlobal, { target, props: { capture: (...row) => seen.push(row.join(':')) } }));
 
     expect(seen).toEqual(['run:7', 'clean:7']);
+});
+
+// A birth makes a root, which every mount paid. Only where a cleanup may run
+// before the first flush: a component with a root or a pre effect, and any
+// other once a page has one, since a child's cleanup reads its parent's names
+// through its props. A parent with neither wrote no birth, and its child's
+// cleanup read the prop as nothing.
+test('a pre cleanup reads the prop a Python parent with no pre effect passes', () => {
+    const seen = [];
+    const target = document.body.appendChild(document.createElement('div'));
+    unmount(mount(EarlyPropParent, { target, props: { capture: (...row) => seen.push(row.join(':')) } }));
+
+    expect(seen).toEqual(['run:7', 'clean:7']);
+});
+
+test('a body writes births where a cleanup may run before the first flush, and elsewhere once a page has one', () => {
+    const born = (src) =>
+        compile(src, 'Probe', 'probe.svelte', {})
+            .script.split('\n')
+            .find((line) => line.startsWith('const __born'));
+
+    expect([
+        born('count = 0\n'),
+        born('count = 0\n\n@effect.pre\ndef watch():\n    js.String(count)\n')
+    ]).toEqual([
+        'const __born = (write) => { if (__pybridge.browser && __pybridge.early) $effect.root(() => write)(); else write(); };',
+        'const __born = (write) => { if (__pybridge.browser) $effect.root(() => write)(); else write(); };'
+    ]);
+});
+
+test('and a page has one once a module with a root or a pre effect loads', async () => {
+    const said = async (script) =>
+        (await preprocess(`<script lang="python">\n${script}</script>\n<p>{count}</p>\n`, python(), { filename: '/tmp/Early.svelte' })).code.includes(
+            '__svelthon_bridge.early = true;'
+        );
+
+    expect([
+        await said('count = 0\n'),
+        await said('count = 0\n\n@effect.root\ndef watch():\n    js.String(count)\n'),
+        await said('count = 0\n\n@effect . pre\ndef watch():\n    js.String(count)\n')
+    ]).toEqual([false, true, true]);
 });
 
 test('and so in a module, by its name or another', () => {

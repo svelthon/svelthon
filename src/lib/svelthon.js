@@ -493,13 +493,20 @@ function tagged(code, key) {
 // JavaScript child, which it handed JavaScript's values.
 const SELF = 'virtual:svelthon-self';
 
-const announced = (code, filename) => {
+// `effect.pre` and `effect.root`, spaced as Python lets a dotted name be.
+const EARLY_CLEANUP = /(?<![\p{XID_Continue}.])effect\s*\.\s*(?:pre|root)(?!\p{XID_Continue})/u;
+
+//
+// And whether it may run a cleanup before the first flush (`early`), which
+// makes the writes of every component's body births (`__pybridge.early`).
+const announced = (code, filename, early) => {
     if (!filename) return code;
 
     const statement =
         `import __svelthon_self from ${JSON.stringify(SELF)};` +
         `import { __pybridge as __svelthon_bridge } from 'svelthon/bridge';` +
-        `__svelthon_bridge.python(() => __svelthon_self);`;
+        `__svelthon_bridge.python(() => __svelthon_self);` +
+        (early ? `__svelthon_bridge.early = true;` : '');
     const at = moduleScriptStart(code);
 
     return at === -1 ? `${code}<script module>${statement}</script>` : code.slice(0, at) + statement + code.slice(at);
@@ -622,7 +629,15 @@ export function python(options = {}) {
                     })
             );
 
-            return { code: announced(tagged(elementOptions(code, python, moduleImports(content)), calls.open(file)), filename), dependencies: read };
+            // A root or a pre effect may clean up before the first flush. Read
+            // off the text, with no parse: a word in a string or a comment
+            // only makes the page's writes births, slower and never wrong.
+            const early = EARLY_CLEANUP.test(python);
+
+            return {
+                code: announced(tagged(elementOptions(code, python, moduleImports(content)), calls.open(file)), filename, early),
+                dependencies: read
+            };
         },
         script({ content, attributes, filename }) {
             // Read as `pythonScript` reads the tag, by names in any case: Svelte
