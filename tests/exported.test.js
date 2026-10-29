@@ -3,6 +3,7 @@ import { mount, flushSync } from './mounted.js';
 import Exposed from './fixtures/Exposed.svelte';
 import ExposedHost from './fixtures/ExposedHost.svelte';
 import DecoratedExport from './fixtures/DecoratedExport.svelte';
+import ForeignExport from './fixtures/ForeignExport.svelte';
 import { compile } from '../src/lib/compile.js';
 
 // The one thing a parent can reach on a child that is not a prop. Svelte gathers
@@ -151,5 +152,15 @@ describe('an export behind another decorator', () => {
         // And behind a decorator it is the resulting callable's, which takes
         // everything, not the `def`'s one parameter.
         expect(instance.decorated.length).toBe(0);
+    });
+
+    // A JavaScript function a decorator puts under the name reports its own
+    // `length`: read off a Python signature alone, it was 0 whatever it took.
+    test('and a JavaScript function’s own length, behind a decorator', () => {
+        const target = document.body.appendChild(document.createElement('div'));
+        const instance = mount(ForeignExport, { target });
+        flushSync();
+
+        expect([instance.action.length, instance.action(0.25, 0.5)]).toEqual([2, 0.75]);
     });
 });

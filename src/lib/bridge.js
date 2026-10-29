@@ -2024,8 +2024,13 @@ const returned = (value) => (callable(value) ? pyHandler(value) : pyNumbers(plai
 // reader follows and writes, rather than the Brython object with its internals.
 const published = (value) => pyNumbers(__pybridge.bound(value));
 
+// Its length is what the function it calls declares: a Python function's
+// signature, or a JavaScript function's own `length`, which a decorator may
+// have put under the name. Read off the signature alone, a JavaScript
+// function's was 0 whatever it took.
 export const pyComponent = (read, where, exported = false) => {
-    const first = declared(read());
+    const held = read();
+    const first = declared(held);
 
     return identified(
         (...args) => {
@@ -2035,7 +2040,7 @@ export const pyComponent = (read, where, exported = false) => {
             return running(() => calling(found, args), where, exported ? published : returned);
         },
         nameOf(where),
-        first === null ? 0 : arityNow(first.arity)
+        first !== null ? arityNow(first.arity) : typeof held === 'function' ? held.length : 0
     );
 };
 

@@ -31,9 +31,13 @@ test('a name the compiler builds out of another is refused at its line', () => {
     ]);
 });
 
+// Nor a name an import's address spells as a declaration: the text of a
+// string was counted as one, and refused a module that declared it once.
 test('and a name ending with `__` that collides with nothing compiles', () => {
-    expect([refusal('value__ = 7\n__all__ = ["value__"]\n'), refusal('class __rev_value__:\n    pass\n\n\nvalue__ = 7\n')]).toEqual([
-        null,
-        null
-    ]);
+    expect([
+        refusal('value__ = 7\n__all__ = ["value__"]\n'),
+        refusal('class __rev_value__:\n    pass\n\n\nvalue__ = 7\n'),
+        refusal('importjs imported from "data:text/javascript,export default function __doc__(){return 7}"\n__doc__ = "okay"\n'),
+        refusal('importjs read from "./let __rev_value__.js"\nvalue__ = 7\n')
+    ]).toEqual([null, null, null, null]);
 });

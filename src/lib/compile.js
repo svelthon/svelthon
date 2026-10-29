@@ -2816,21 +2816,25 @@ function compile(
 // so was declared twice in the script, and Svelte refused the component in the
 // compiler's own code, `Identifier '__rev_value__' has already been declared`.
 // Asked of the script itself, so only a name it does declare twice is refused,
-// and at the line the author took it on.
+// and at the line the author took it on. Only a name built out of another the
+// author took, `__word_` and that name, can be one; and only a declaration
+// counts, which the compiler writes at the start of its own line: the text of
+// a string, the address an import names, `"data:…function __doc__…"`, stands
+// inside one, and refused a module that declared the name once.
 const declaredTimes = (script, name) =>
-    script.match(new RegExp(`(?<![\\p{ID_Continue}$])(?:let|const|var|function|class)\\s+${name}(?![\\p{ID_Continue}$])`, 'gu'))?.length ?? 0;
+    script.match(new RegExp(`^(?:let|const|var|function|class)\\s+${name}(?![\\p{ID_Continue}$])`, 'gmu'))?.length ?? 0;
 
 function refuseBuilt(declared, script, source, lines, lineOffset = 0) {
-    const taken = declared.find((name) => name.startsWith('__') && name.endsWith('__') && declaredTimes(script, name) > 1);
+    const builtOutOf = (name) => declared.find((other) => other !== name && name.startsWith('__') && name.endsWith(`_${other}`));
+    const taken = declared.find((name) => name.endsWith('__') && builtOutOf(name) !== undefined && declaredTimes(script, name) > 1);
     if (taken === undefined) return;
 
-    const out = declared.find((name) => name !== taken && taken.endsWith(`_${name}`));
+    const out = builtOutOf(taken);
     const at = lines?.get(taken);
     const line = at === undefined ? undefined : at + lineOffset;
 
     throw refuse(
-        `svelthon — \`${taken}\` is a name the compiler builds itself` +
-            `${out === undefined ? '' : ` out of \`${out}\``}, in the same scope ` +
+        `svelthon — \`${taken}\` is a name the compiler builds itself out of \`${out}\`, in the same scope ` +
             `(${line === undefined ? source : `${source}:${line}`}), and the two would collide: choose another.`,
         source,
         line
