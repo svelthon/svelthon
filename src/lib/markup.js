@@ -402,6 +402,27 @@ function walrusTarget(text) {
 //
 // Only the parenthesised form, which is the one Python's own grammar forces in
 // a lambda. `f(x := 1)` keeps its meaning: a temporary the call consumes.
+// The text of a group with its comments and its line continuations made
+// blanks of the same length, its strings kept: what Python reads between
+// tokens, written out. Left in, a comment between a name and its `:=` hid the
+// walrus, which Python then refused, and one after the value took the
+// parenthesis the rewrite closed with, `__assign("count", 7 # note)`.
+function uncommented(text) {
+    let out = '';
+
+    for (let i = 0; i < text.length; i++) {
+        const skip = atomic(text, i);
+
+        if (skip > 0) {
+            out += text[i] === '#' ? ' '.repeat(skip) : text.slice(i, i + skip);
+            i += skip - 1;
+        } else if (text[i] === '\\' && /^\\\r?\n/.test(text.slice(i))) out += ' ';
+        else out += text[i];
+    }
+
+    return out;
+}
+
 export function walrus(expression) {
     let out = '';
     let index = 0;
@@ -447,7 +468,7 @@ export function walrus(expression) {
             // The parentheses are already required for a single assignment, so
             // the several-element form costs the author no new syntax.
             const close = closingPair(expression, index);
-            const parts = close === -1 ? [] : arguments_(expression.slice(index + 1, close));
+            const parts = close === -1 ? [] : arguments_(uncommented(expression.slice(index + 1, close)));
 
             if (parts.some((one) => walrusTarget(one))) {
                 // **Or the parentheses are a generator's**, `(value := n for n
