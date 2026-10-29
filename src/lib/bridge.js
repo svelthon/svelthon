@@ -129,6 +129,7 @@ const {
     standsFor,
     jsCall,
     jsMethod,
+    jsMemberValue,
     pyLeading,
     pyExport,
     STALE,
@@ -2474,7 +2475,17 @@ export function readAttr(target, name, otherwise) {
     // record's member, `{#each [callbacks] as {receive=None}}` bound the
     // handler to the namespace, where `{receive}` handed it the element. A
     // function is never missing, so a default is still taken as it was.
-    if (moduleNamespace(target) && typeof target[name] === 'function') return jsMethod(target, target[name]);
+    //
+    // The export read once, what it is asked of the value read: a namespace a
+    // proxy stands for answers each read anew, and the read that asked was
+    // lost, `14` shown where the export gave `7`. One that is `undefined` goes
+    // on as before, to its default or to the error a missing name raises.
+    if (moduleNamespace(target)) {
+        const member = target[name];
+
+        if (typeof member === 'function') return jsMethod(target, member);
+        if (member !== undefined) return jsMemberValue(target, member);
+    }
 
     // A key with a default, `{value=7}`, which Svelte takes for a member that is
     // missing or `undefined`, read off a JavaScript record, an object or a
