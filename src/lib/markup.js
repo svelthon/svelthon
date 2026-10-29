@@ -2837,16 +2837,16 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         const tree = targetTree(`(${text}\n)`);
         const $B = globalThis.__BRYTHON__;
         const found = [];
-        const targets = (node) => {
-            const names = [];
-            const visit = (one) => {
-                if (Array.isArray(one)) return one.forEach(visit);
-                if (one === null || typeof one !== 'object' || !Array.isArray(one.constructor?._fields)) return;
-                if (one instanceof $B.ast.Name) names.push(one.id);
-                else one.constructor._fields.forEach((field) => visit(one[field]));
-            };
-
-            visit(node);
+        // The names a target binds, `x`, `(k, v)`, `*rest`, and no other: a
+        // target that is a key or an attribute, `row["flag"]` or `row.flag`,
+        // binds nothing and reads `row`, which a generator reads where it
+        // resumes. Taken for a name it bound, `row` was handed as it was when
+        // the generator was made, and a row replaced since was read, or
+        // written, in its place.
+        const targets = (node, names = []) => {
+            if (node instanceof $B.ast.Name) names.push(node.id);
+            if (node instanceof $B.ast.Starred) targets(node.value, names);
+            for (const one of node.elts ?? []) targets(one, names);
             return names;
         };
         const visit = (node, later, own) => {
@@ -2876,6 +2876,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 visit(node.generators[0].iter, later, own);
                 visit([node.elt, node.key, node.value, node.generators.map((one) => one.ifs)], lazy, bound);
                 visit(node.generators.slice(1).map((one) => one.iter), lazy, bound);
+                visit(node.generators.map((one) => one.target), lazy, bound);
                 return;
             }
             node.constructor._fields.forEach((field) => visit(node[field], later, own));
