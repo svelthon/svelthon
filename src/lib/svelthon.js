@@ -17,6 +17,7 @@ import {
 import { parse } from 'svelte/compiler';
 import {
     compile,
+    MODULE_READERS,
     VIRTUAL_PREFIX,
     virtualId,
     pythonModuleName,
@@ -505,6 +506,20 @@ const announced = (code, filename) => {
     return at === -1 ? `${code}<script module>${statement}</script>` : code.slice(0, at) + statement + code.slice(at);
 };
 
+// The getters of the names the `<script module>` binds, in that script's own
+// scope, which Python reads them through (`MODULE_READERS`): the instance
+// script is a scope inside it, where the compiler declares names of its own,
+// and a bare read of the module's name found the instance's first. Said at the
+// script's start, on its first line, so nothing the author wrote moves.
+const moduleReaders = (code, names) => {
+    const at = names.length === 0 ? -1 : moduleScriptStart(code);
+    if (at === -1) return code;
+
+    const statement = `const ${MODULE_READERS} = { ${names.map((name) => `get ${JSON.stringify(name)}() { return ${name}; }`).join(', ')} };`;
+
+    return code.slice(0, at) + statement + code.slice(at);
+};
+
 export function python(options = {}) {
     const calls = perCall();
 
@@ -622,7 +637,10 @@ export function python(options = {}) {
                     })
             );
 
-            return { code: announced(tagged(elementOptions(code, python, moduleImports(content)), calls.open(file)), filename), dependencies: read };
+            return {
+                code: announced(tagged(moduleReaders(elementOptions(code, python, file.jsNames), file.jsNames), calls.open(file)), filename),
+                dependencies: read
+            };
         },
         script({ content, attributes, filename }) {
             // Read as `pythonScript` reads the tag, by names in any case: Svelte

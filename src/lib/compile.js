@@ -644,8 +644,19 @@ const HOST = {
     rewrite: (text, { source, lineOffset, component, bound }) => takeArrows(text, source, lineOffset, component, bound),
     // Each declaration's marker read as its own statement's (`runeMarkerWords`).
     translate: (text, tree, names) => translateMarkers(text, tree, names),
+    // A name of the `<script module>`, read off the getters the markup pass
+    // lays down in that script's own scope (`MODULE_READERS`).
+    moduleName: (name) => `${MODULE_READERS}[${JSON.stringify(name)}]`,
     runes: ['state', 'derived', 'effect', 'props', 'bindable', 'inspect', 'host']
 };
+
+// The getters of the names the `<script module>` binds, which the markup pass
+// lays down in that script (`moduleReaders` in svelthon.js): the instance
+// script is a scope inside it, where the compiler declares names of its own,
+// `__rev_value__` beside the author's `value__`, and a bare read of the
+// module's `__rev_value__` found the instance's. Getters, so a name is read as
+// it holds now.
+const MODULE_READERS = '__svelthon_module';
 
 // How many positional arguments a caller may hand a Python function, read off
 // its signature so the wrapper can drop the rest.
@@ -2974,6 +2985,7 @@ function elementProps(src, jsNames = []) {
 
 export {
     compile,
+    MODULE_READERS,
     VIRTUAL_PREFIX,
     virtualId,
     pythonModuleName,
