@@ -1,8 +1,0 @@
-4 mutants of 646 sites, 2026-09-21T13:59:27.089Z
-
-  killed   boot.js:37  && -> ||  (1 red file)
-  killed   compile.cjs:78  + -> -  (1 red file)
-  killed   globals.js:46  === -> !==  (never finished)
-  killed   helpers.js:49  ?? -> ||  (1 red file)
-
-4 killed, 0 survived, of 4
