@@ -1677,17 +1677,27 @@ function preamble(c) {
         // here, asked by a write of the value a state already holds, which
         // Svelte checks and which changes nothing (`host.refuses`), and what marks a
         // state of Svelte's own, which `$state` looks for in the probe it is
-        // handed (`stateOwned`).
-        `__pybridge.tracking(() => $effect.tracking());`,
-        `let __unchanged = $state.raw(0);`,
-        `__pybridge.refusing(() => { __unchanged = 0; });`,
+        // handed (`stateOwned`). And Svelte's own state of an object, which an
+        // object whose properties are a getter or a setter is made into as it
+        // enters a container (`proxying`): a box of its own at each call, so a
+        // write to it is allowed wherever the call is made.
+        //
+        // A component's are laid down in its `<script module>` by the markup
+        // pass (`HOOKS` in svelthon.js), once, in a scope that holds no
+        // instance's data: laid down here, at each mount, they were functions
+        // of the instance's scope, which the runtime keeps, and the last
+        // instance's props stayed alive once it was gone. A store is a module,
+        // and has no instance to keep.
+        ...(c.store
+            ? [
+                  `__pybridge.tracking(() => $effect.tracking());`,
+                  `let __unchanged = $state.raw(0);`,
+                  `__pybridge.refusing(() => { __unchanged = 0; });`,
+                  `class __StateBox { value = $state(); }`,
+                  `__pybridge.proxying((value) => { const box = new __StateBox(); box.value = value; return box.value; });`
+              ]
+            : []),
         `let __stateProbe = $state(__pybridge.stateProbe());`,
-        // And Svelte's own state of an object, which an object whose
-        // properties are a getter or a setter is made into as it enters a
-        // container (`proxying`): a box of its own at each call, so a write
-        // to it is allowed wherever the call is made.
-        `class __StateBox { value = $state(); }`,
-        `__pybridge.proxying((value) => { const box = new __StateBox(); box.value = value; return box.value; });`,
         ``
     ];
 }

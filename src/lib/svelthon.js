@@ -520,6 +520,29 @@ const moduleReaders = (code, names) => {
     return code.slice(0, at) + statement + code.slice(at);
 };
 
+// The three questions the runtime asks of Svelte, answered by runes: whether a
+// reaction is reading (`tracking`), whether a write would be refused here
+// (`refusing`, a write of the value a state already holds), and a state of
+// Svelte's own for an object with accessors (`proxying`). Laid down in the
+// `<script module>`, once, in a scope that holds no instance's data: laid down
+// by each instance, they were functions of its scope, which the runtime keeps,
+// and the last instance's props stayed alive once it was unmounted. Said on
+// the script's first line, so nothing the author wrote moves; a component
+// with no `<script module>` is given one.
+const HOOKS =
+    `import { __pybridge as __svelthon_hooks } from 'svelthon/bridge';` +
+    `__svelthon_hooks.tracking(() => $effect.tracking());` +
+    `let __svelthon_unchanged = $state.raw(0);` +
+    `__svelthon_hooks.refusing(() => { __svelthon_unchanged = 0; });` +
+    `class __SvelthonStateBox { value = $state(); }` +
+    `__svelthon_hooks.proxying((value) => { const box = new __SvelthonStateBox(); box.value = value; return box.value; });`;
+
+const hooksInstalled = (code) => {
+    const at = moduleScriptStart(code);
+
+    return at === -1 ? `${code}<script module>${HOOKS}</script>` : code.slice(0, at) + HOOKS + code.slice(at);
+};
+
 export function python(options = {}) {
     const calls = perCall();
 
@@ -638,7 +661,7 @@ export function python(options = {}) {
             );
 
             return {
-                code: announced(tagged(moduleReaders(elementOptions(code, python, file.jsNames), file.jsNames), calls.open(file)), filename),
+                code: announced(tagged(hooksInstalled(moduleReaders(elementOptions(code, python, file.jsNames), file.jsNames)), calls.open(file)), filename),
                 dependencies: read
             };
         },
