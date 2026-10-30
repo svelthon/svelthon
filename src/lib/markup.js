@@ -1021,10 +1021,11 @@ const LET_DIRECTIVE = /^let:/;
 // their own.
 const ATTRIBUTE_CHAR = '[^\\s=/>"\']';
 
-// The trailing `\s*` is load-bearing too: Svelte accepts `on:click= {foo}`, and
-// its own parser fixture `attribute-with-whitespace` is that line, so
-// `title= {x}` is the attribute `title` and not a shorthand to expand.
-const ATTRIBUTE_NAME = new RegExp(`(${ATTRIBUTE_CHAR}+)=\\s*$`);
+// The `\s*` on either side of the `=` is load-bearing too: Svelte accepts
+// `on:click= {foo}`, and its own parser fixture `attribute-with-whitespace` is
+// that line, and it reads `title = {x}` as well, whitespace allowed before the
+// `=` as after it. Both are the attribute `title`, not a shorthand to expand.
+const ATTRIBUTE_NAME = new RegExp(`(${ATTRIBUTE_CHAR}+)\\s*=\\s*$`);
 
 // And the name with no value after it, which is where the shorthand and the
 // `let:` refusal read it.
@@ -1033,7 +1034,7 @@ const BARE_ATTRIBUTE = new RegExp(`(${ATTRIBUTE_CHAR}+)$`);
 // A name, its `=`, and an unquoted value already begun: what sits before the
 // brace of `style:color=red{variable}`. Built from the same class as the three
 // above, since it is the same question asked at a fourth place.
-const UNQUOTED_VALUE = new RegExp(`(${ATTRIBUTE_CHAR}+)=${ATTRIBUTE_CHAR}+$`);
+const UNQUOTED_VALUE = new RegExp(`(${ATTRIBUTE_CHAR}+)\\s*=\\s*${ATTRIBUTE_CHAR}+$`);
 
 const directive = (name) =>
     DIRECTIVE.test(name) ||
@@ -1096,6 +1097,9 @@ const DIRECTIVE_HEAD = new RegExp(
 // Where an attribute can begin: after a space, or straight after the quote or
 // brace that closed the one before it, as Svelte reads `title="a"use:x`.
 const ATTRIBUTE_START = /[\s"'}]/;
+
+// The `=` a name is followed by, past the whitespace Svelte allows before it.
+const EQUALS_AHEAD = /\s*=/y;
 
 // The runtime function each kind is handed to, under the name the component
 // imports it by: the three differ in where Svelte puts the payload.
@@ -2678,6 +2682,10 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         DIRECTIVE_HEAD.lastIndex = at;
         return DIRECTIVE_HEAD.test(markup);
     };
+    const equalsAhead = (at) => {
+        EQUALS_AHEAD.lastIndex = at;
+        return EQUALS_AHEAD.test(markup);
+    };
     let inTag = false;
     // Inside a `<textarea>`, whose content is text and expressions and no
     // markup, as Svelte reads it and `componentParts` already does: `<Card />`
@@ -3899,15 +3907,18 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
             }
 
             // `bind:value` on its own ends here, at a space, a slash or the
-            // closing bracket, so this is where the name is complete and the
-            // absence of an `=` is certain. Outside a quoted value only: the
-            // words of `value="a bind:foo b"` are text.
+            // closing bracket, so this is where the name is complete; and the
+            // absence of an `=` is certain once no `=` follows the whitespace,
+            // which Svelte allows before it: `bind:value = {v}` is the long
+            // form. Outside a quoted value only: the words of
+            // `value="a bind:foo b"` are text.
             if (quote === null && /[\s/>]/.test(char)) {
                 const bare = (tagText().match(BARE_ATTRIBUTE) || [])[1];
 
                 if (bare !== undefined && LET_DIRECTIVE.test(bare)) refuseLet(bare);
 
-                const short = tagText().match(SHORTHAND);
+                const shorthand = tagText().match(SHORTHAND);
+                const short = shorthand && !equalsAhead(index) ? shorthand : null;
                 if (short && short[2] !== 'bind') {
                     out += `=${attributeValue(short[1], short[3])}`;
                 } else if (short) {
