@@ -3978,7 +3978,9 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
             // `start` is where the group action reads the tag's `value` from,
             // which is the only rule that looks at an attribute other than its
             // own, and may find it on either side of the binding.
-            tag = named ? { closing: named[1] === '/', name: named[2], start: index } : null;
+            // Inside a textarea the one tag is its closing tag, which Svelte
+            // reads in any case: `</TEXTAREA>` closes it, and so leaves the text.
+            tag = named ? { closing: named[1] === '/', name: inTextarea ? 'textarea' : named[2], start: index } : null;
 
             if (tag && !tag.closing && chain.closes(tag.name)) pop();
 

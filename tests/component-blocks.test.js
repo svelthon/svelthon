@@ -13,6 +13,7 @@ import { pythonScript } from '../src/lib/markup.js';
 import { closing_tag_omitted } from '../node_modules/svelte/src/html-tree-validation.js';
 import QuotedBlocks from './fixtures/QuotedBlocks.svelte';
 import TextareaMarkup from './fixtures/TextareaMarkup.svelte';
+import TextareaCasedClose from './fixtures/TextareaCasedClose.svelte';
 import BlocksInLoops from './fixtures/BlocksInLoops.svelte';
 import BlocksInLoopsNative from './fixtures/BlocksInLoopsNative.svelte';
 import ImplicitCloseDiv from './fixtures/warned/ImplicitCloseDiv.svelte';
@@ -61,6 +62,31 @@ test("a component's tag and an attribute's expression written in a textarea are 
         '<Card />',
         '<input disabled=Ada />',
         '<div hidden=Ada>text</div>'
+    ]);
+});
+
+// A textarea closed as `</TEXTAREA>`, which Svelte reads as its closing tag:
+// the walk stayed in the text, and read the attributes after it as text,
+// `disabled` and `checked` held true where `flag` is False.
+test('a textarea closed in another case ends where Svelte ends it', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+    const component = mount(TextareaCasedClose, { target });
+    const read = () => {
+        flushSync();
+
+        return [target.querySelector('button').disabled, target.querySelector('input').checked];
+    };
+    const seen = [read()];
+
+    component.toggle();
+    seen.push(read());
+    component.toggle();
+    seen.push(read());
+
+    expect(seen).toEqual([
+        [false, false],
+        [true, true],
+        [false, false]
     ]);
 });
 
