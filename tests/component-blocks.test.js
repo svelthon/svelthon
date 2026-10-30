@@ -12,6 +12,7 @@ import { mount, flushSync } from './mounted.js';
 import { pythonScript } from '../src/lib/markup.js';
 import { closing_tag_omitted } from '../node_modules/svelte/src/html-tree-validation.js';
 import QuotedBlocks from './fixtures/QuotedBlocks.svelte';
+import TextareaMarkup from './fixtures/TextareaMarkup.svelte';
 import BlocksInLoops from './fixtures/BlocksInLoops.svelte';
 import BlocksInLoopsNative from './fixtures/BlocksInLoopsNative.svelte';
 import ImplicitCloseDiv from './fixtures/warned/ImplicitCloseDiv.svelte';
@@ -48,6 +49,19 @@ test('a tag quoted in an attribute is text', () => {
 // A textarea's content is text and expressions, as Svelte's parser reads it.
 test('a tag written in a textarea is text', () => {
     expect(mounted(QuotedBlocks).querySelector('[data-k="textarea"]').value).toBe('<style>ADA</style>');
+});
+
+// And so a component's tag and an element's, which the markup pass read as
+// markup there: `<Card />` became an `{#each}`, which Svelte refuses inside a
+// textarea, and `disabled={name}` the boolean `true` where `Ada` is written.
+test("a component's tag and an attribute's expression written in a textarea are text", () => {
+    const target = mounted(TextareaMarkup);
+
+    expect(['card', 'input', 'div'].map((k) => target.querySelector(`[data-k="${k}"]`).value)).toEqual([
+        '<Card />',
+        '<input disabled=Ada />',
+        '<div hidden=Ada>text</div>'
+    ]);
 });
 
 // Held against the same markup with JavaScript expressions, which Svelte

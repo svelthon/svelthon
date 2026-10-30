@@ -2679,6 +2679,13 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         return DIRECTIVE_HEAD.test(markup);
     };
     let inTag = false;
+    // Inside a `<textarea>`, whose content is text and expressions and no
+    // markup, as Svelte reads it and `componentParts` already does: `<Card />`
+    // there is text, which this walk took for a component, wrapping it in an
+    // `{#each}` Svelte refuses inside a textarea, and `<input disabled={name}>`
+    // text whose expression it read as a boolean attribute, `true` shown for
+    // `Ada`.
+    let inTextarea = false;
     let quote = null;
     let quotedAttribute = null;
     // Whether the quoted value being read is one interpolation and nothing
@@ -3876,6 +3883,9 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 // its opening must have pushed.
                 const selfClosing = markup[index - 1] === '/';
 
+                // Svelte's own test, the exact name: `<Textarea>` is a component.
+                if (tag?.name === 'textarea' && (tag.closing || !selfClosing)) inTextarea = !tag.closing;
+
                 if (tag && tag.closing) closeElement(tag.name);
                 else if (tag && (isComponent(tag) || !VOID.has(tag.name.toLowerCase())) && !selfClosing) {
                     push([]);
@@ -3935,6 +3945,17 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
             ending = '';
             index++;
             continue;
+        }
+
+        // Text up to the textarea's own closing tag, which is a tag.
+        if (char === '<' && inTextarea) {
+            TEXTAREA_CLOSE.lastIndex = index;
+
+            if (!TEXTAREA_CLOSE.test(markup)) {
+                out += char;
+                index++;
+                continue;
+            }
         }
 
         if (char === '<') {
