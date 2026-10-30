@@ -79,6 +79,14 @@ for _ in $(seq 40); do
     sleep 0.25
 done
 
+# Still held, it is held by another program, whose server every page below would
+# be asked of once vite gives up in silence: empty pages, and a console as quiet
+# as a green run's.
+if ss -ltn 2>/dev/null | grep -q ":$PORT "; then
+    echo "✗ port $PORT is held by another program: run with PORT set to a free one"
+    exit 1
+fi
+
 (npx vite --port "$PORT" --strictPort >/dev/null 2>&1 &)
 
 for _ in $(seq 40); do

@@ -1016,10 +1016,13 @@ const LET_DIRECTIVE = /^let:/;
 // attributes. The class excludes the quote: a name read as `"y"onclick` would
 // match no rule, and a handler would go unwrapped, a binding without its
 // write-back, a `class:` without its truthiness and `let:` without its refusal.
+// So does a brace, for the same reason after a spread, an attachment or a
+// shorthand: `{**attrs}disabled={x}` is the attribute `disabled`, which read as
+// `{**attrs}disabled` lost its truth, a disabled button for an empty list.
 //
 // The three patterns below are built from the class rather than each carrying
 // their own.
-const ATTRIBUTE_CHAR = '[^\\s=/>"\']';
+const ATTRIBUTE_CHAR = '[^\\s{}=/>"\']';
 
 // The `\s*` on either side of the `=` is load-bearing too: Svelte accepts
 // `on:click= {foo}`, and its own parser fixture `attribute-with-whitespace` is
@@ -1033,8 +1036,9 @@ const BARE_ATTRIBUTE = new RegExp(`(${ATTRIBUTE_CHAR}+)$`);
 
 // A name, its `=`, and an unquoted value already begun: what sits before the
 // brace of `style:color=red{variable}`. Built from the same class as the three
-// above, since it is the same question asked at a fourth place.
-const UNQUOTED_VALUE = new RegExp(`(${ATTRIBUTE_CHAR}+)\\s*=\\s*${ATTRIBUTE_CHAR}+$`);
+// above, since it is the same question asked at a fourth place; the value holds
+// braces, those of the interpolations before this one, `style:color=r{a}e{b}`.
+const UNQUOTED_VALUE = new RegExp(`(${ATTRIBUTE_CHAR}+)\\s*=\\s*[^\\s=/>"']+$`);
 
 const directive = (name) =>
     DIRECTIVE.test(name) ||
@@ -2686,6 +2690,11 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         EQUALS_AHEAD.lastIndex = at;
         return EQUALS_AHEAD.test(markup);
     };
+    // What keeps the attribute written straight after one this walk rewrites
+    // into a braced value apart from it. Svelte reads `{label}title="t"` and
+    // `hidden="{x}"title="t"`, and refuses `label={x}title="t"` and
+    // `hidden={x}title="t"`, `Expected token >`.
+    const apart = (at) => (/[\s/>]/.test(markup[at] ?? '>') ? '' : ' ');
     let inTag = false;
     // Inside a `<textarea>`, whose content is text and expressions and no
     // markup, as Svelte reads it and `componentParts` already does: `<Card />`
@@ -3708,14 +3717,17 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 region = null;
                 // The head as a thunk: read by the adapter when the directive is
                 // installed, and so no dependency of the value Svelte watches.
+                // Braced now, where `use:act="{x}"` was not: see `apart`.
                 out += `${kind}:${DIRECTIVE_ADAPTER[kind]}${modifiers}={[${JSON.stringify(head)}, () => ${callee}${argument}]}`;
+                if (markup[next - 1] !== '}') out += apart(next);
                 index = next;
                 continue;
             } else if (index === unquoted) {
                 // The closing quote of a directive whose opening one was
                 // dropped: the value between them has already been written in
-                // its bare form.
+                // its bare form, and braced: see `apart`.
                 unquoted = -1;
+                out += apart(index + 1);
                 index += 1;
                 continue;
             } else if (char === '"' || char === "'") {
@@ -3864,8 +3876,9 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                         // therefore through the accessor; and it is expanded
                         // into exactly what the long spelling compiles to, so
                         // the two cannot route a handler, a callback prop or a
-                        // None differently.
-                        out += `${trimmed}=${attributeValue(trimmed, trimmed)}`;
+                        // None differently. Kept apart from an attribute glued
+                        // to it, as the brace kept it: see `apart`.
+                        out += `${trimmed}=${attributeValue(trimmed, trimmed)}${apart(end + 1)}`;
                     } else if (trimmed.startsWith('@')) {
                         throw refuse(unknownTag(trimmed, 'tag', ATTACHMENTS, said()));
                     } else {
