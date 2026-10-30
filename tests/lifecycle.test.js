@@ -6,6 +6,7 @@ import BranchedLifecycle from './fixtures/BranchedLifecycle.svelte';
 import UnboundLifecycle from './fixtures/UnboundLifecycle.svelte';
 import AssignedLifecycle from './fixtures/AssignedLifecycle.svelte';
 import StarHooks from './fixtures/StarHooks.svelte';
+import MountRebound from './fixtures/MountRebound.svelte';
 import { records, reset } from './fixtures/star_records.js';
 
 // on_mount / on_destroy by naming convention, backed by a single $effect: the
@@ -138,4 +139,19 @@ describe('a hook is the value its name holds', () => {
     test('a hook bound to None is called, and says so', () => {
         expect(() => mounted(UnboundLifecycle, { mode: 'none' })).toThrow(TypeError);
     });
+});
+
+// `on_mount` is the hook the name held as the component was made, which is
+// when Svelte's `onMount` registers its callback: read at the first flush, a
+// hook rebound in between ran in its place, and its cleanup after.
+test('on_mount calls the hook it held as the component was made, rebound before the first flush', async () => {
+    const seen = [];
+    const target = document.body.appendChild(document.createElement('div'));
+    const instance = mount(MountRebound, { target, props: { record: (value) => seen.push(value) } });
+
+    instance.replace();
+    flushSync();
+    await unmount(instance);
+
+    expect(seen).toEqual(['first', 'clean:first']);
 });

@@ -2368,11 +2368,18 @@ function effectLines(c) {
         // What `on_mount` hands back is its cleanup, as with Svelte's
         // `onMount`, and it runs before `on_destroy`: Svelte tears a
         // component's effects down in the order they were made.
+        //
+        // Captured as the component is made, which is when Svelte's `onMount`
+        // registers the callback it is handed, and called once it is mounted.
+        // Read from inside the effect, it was the hook the name held at the
+        // first flush: a hook rebound or removed between `mount()` and the
+        // flush ran the other, or none, and one added ran where none was
+        // registered.
         ...(c.lifecycle('on_mount')
             ? [
                   ``,
+                  `const __mounted = __untrack(() => ${c.hook('on_mount')});`,
                   `$effect(() => {`,
-                  `    const __mounted = __untrack(() => ${c.hook('on_mount')});`,
                   `    const __unmounted = __mounted === undefined ? undefined :` +
                       ` ${RUNTIME.pyTeardown}(__untrack(() => __pyComponent(() => __mounted, ${JSON.stringify(`on_mount() — ${c.source}`)})()),` +
                       ` ${JSON.stringify(`on_mount() — ${c.source}`)});`,
