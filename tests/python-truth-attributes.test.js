@@ -9,6 +9,20 @@ import PythonTruthBindings from './fixtures/PythonTruthBindings.svelte';
 import PythonTruthBindingsNative from './fixtures/PythonTruthBindingsNative.svelte';
 import DefaultCheckedTruth from './fixtures/DefaultCheckedTruth.svelte';
 import DefaultCheckedTruthNative from './fixtures/DefaultCheckedTruthNative.svelte';
+import QuotedThisElement from './fixtures/QuotedThisElement.svelte';
+
+// A `<svelte:element>` whose `this` is written `"{tag}"`, a lone interpolation
+// between quotes, read as the braced one is: the element it names, and an
+// empty list false on it.
+test('a svelte:element named by a quoted interpolation renders it, its attributes read for truth', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+    mount(QuotedThisElement, { target });
+    flushSync();
+
+    const node = target.querySelector('[data-k="quoted-this"]');
+
+    expect([node.tagName, node.hidden]).toEqual(['P', false]);
+});
 
 const at = () => {
     const target = document.body.appendChild(document.createElement('div'));
