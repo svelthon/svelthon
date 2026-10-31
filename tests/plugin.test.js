@@ -10,7 +10,7 @@ import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, symlinkSync, realp
 import { tmpdir } from 'node:os';
 import { preprocess, parse } from 'svelte/compiler';
 import { python, svelthon, withPrelude } from '../src/lib/svelthon.js';
-import { VIRTUAL_PREFIX } from '../src/lib/compile.js';
+import { VIRTUAL_PREFIX, elementProps } from '../src/lib/compile.js';
 
 const fixtures = resolve(import.meta.dirname, 'fixtures');
 
@@ -50,6 +50,16 @@ describe('the props a written-out customElement option is given', () => {
 
         expect(read(source)).toEqual({ keys, lines: source.split('\n').length });
     });
+});
+
+// The type of each prop is its annotation's at the top of the module, or in a
+// block there; not a field's of a class, nor a local's of a function, which
+// share the name and are not the prop. Read inside them, `count: int` of a
+// class made the element's `count: str` a Number.
+test('a custom element prop takes its type from its own annotation, not a class field of its name', () => {
+    expect(elementProps('count: str = "0"\n\nclass Row:\n    count: int = 0\n\ndef f():\n    count: float = 1.0\n')).toEqual([
+        { name: 'count', type: 'String' }
+    ]);
 });
 
 // The template language follows the script language, with no third mode: a
