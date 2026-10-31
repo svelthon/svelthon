@@ -104,7 +104,9 @@ describe('a rune written below the top level', () => {
         ['assigned', 'importjs {inspect} from "./foreign.js"\nanswer = inspect(41)\n'],
         ['alone', 'importjs {inspect} from "./foreign.js"\ninspect(41)\n'],
         ['with a logger', 'importjs {inspect_with} from "./foreign.js"\ninspect_with(print, 41)\n'],
-        ['through __js__', '__js__ = {"./foreign.js": ["inspect"]}\nanswer = inspect(41)\n']
+        ['through __js__', '__js__ = {"./foreign.js": ["inspect"]}\nanswer = inspect(41)\n'],
+        // Over several lines, which are read together and handed back whole.
+        ['over several lines', 'importjs {inspect} from "./foreign.js"\ninspect(\n    41,\n)\n']
     ])('and one named inspect is called %s', ([, body]) => {
         expect(script(body)().script).not.toMatch(/\$inspect|__inspect_/);
     });

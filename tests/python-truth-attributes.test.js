@@ -53,11 +53,13 @@ test('control: a true Python value turns it on', () => {
 });
 
 // `hidden` keeps its third state, `until-found`, written directly or spread,
-// and from a subclass of str; any other value is Python's truth.
+// from a subclass of str, and on a `<svelte:element>`, whose attribute is read
+// as it renders; any other value is Python's truth.
 test.for([
     ['until-found', 'until-found'],
     ['until-found-spread', 'until-found'],
     ['until-found-subclass', 'until-found'],
+    ['until-found-element', 'until-found'],
     ['hidden-true', ''],
     ['hidden-other-text', '']
 ])('hidden: %s', ([key, attribute]) => {

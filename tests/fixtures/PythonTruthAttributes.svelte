@@ -58,5 +58,6 @@ subclassed = Mode("until-found")
 <div data-k="until-found" hidden={mode}>x</div>
 <div data-k="until-found-spread" {**found_spread}>x</div>
 <div data-k="until-found-subclass" hidden={subclassed}>x</div>
+<svelte:element this={tag} data-k="until-found-element" hidden={mode}>x</svelte:element>
 <div data-k="hidden-true" hidden={True}>x</div>
 <div data-k="hidden-other-text" hidden={"yes"}>x</div>

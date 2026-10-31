@@ -128,6 +128,24 @@ test('a walrus onto a name of the component outside a handler is refused where i
     }
 });
 
+// Each expression at its own place: the second of two, a line below the first,
+// is not the first's; and a walrus inside one that binds a name of the
+// expression's own still writes the component's.
+test('a walrus is refused in its own expression, and inside a walrus of the expression’s', async () => {
+    for (const [markup, at] of [
+        ['<p>{x}</p>\n<p>{(x := 1)}</p>', '7:4'],
+        ['<p>{(y := (x := 1))}</p>', '6:4']
+    ]) {
+        const error = await preprocess(around(markup), [python()], { filename: FILE }).then(
+            () => null,
+            (thrown) => thrown
+        );
+
+        expect(error?.message).toContain('`x := …` in the markup writes the component');
+        expect(error.message).toContain(`(${FILE}:${at})`);
+    }
+});
+
 // A Python script Svelte reads as an element of the page, and not as the
 // component's, is refused at its line: the markup would stay JavaScript, and its
 // first expression only Python can run would fail at run time.

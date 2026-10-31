@@ -2249,7 +2249,7 @@ host.absent = (file, line) => {
 const directives = new WeakMap();
 
 const directiveCall = (where, fn, args) => {
-    if (declared(fn) !== null) return { python: true, result: directiveCallable(fn, where)(...args) };
+    if (declared(fn) !== null) return { python: true, result: directiveCallable(fn)(...args) };
 
     if (typeof fn !== 'function') {
         throw new TypeError(`svelthon — the directive \`${where}\` names ${String(fn)}, which is not callable`);
@@ -2406,7 +2406,7 @@ function directiveResult(value, where) {
     // property raises is relayed here, as under a view (`relayed`). What the
     // function Svelte calls has of its own is its own.
     return new Proxy(
-        called ? directiveCallable(value, `${where} result`) : Object.create(null),
+        called ? directiveCallable(value) : Object.create(null),
         relayed(
             {
                 get(target, key) {
@@ -2428,12 +2428,9 @@ function directiveResult(value, where) {
 // Callable in Python, which is the question every boundary that promises to
 // adapt a callback asks, and `typeof` cannot answer: `fade = Fades(0.3).run`,
 // an object configured once, its method named by the directive, is callable,
-// and so are a callable instance and a classmethod.
-function directiveCallable(member, path) {
-    const found = declared(member);
-
-    if (found === null && typeof member !== 'function') return member;
-
+// and so are a callable instance and a classmethod. Asked of a callable of
+// Python's alone, which both callers have checked (`declared`).
+function directiveCallable(member) {
     let wrapped = directives.get(member);
 
     if (wrapped === undefined) {
@@ -2442,11 +2439,9 @@ function directiveCallable(member, path) {
         // typewriter(node, params)` refuses the third.
         //
         // `declared` reads the receiver, the signature, and
-        // leaves `self` out of the arguments, for every shape. It answers null
-        // for a function JavaScript built, which keeps the reading it always
-        // had: no signature, so no trim.
-        const target = found ?? { fn: member, arity: Infinity };
-        const where = found === null ? `${path}()` : found.where;
+        // leaves `self` out of the arguments, for every shape.
+        const found = declared(member);
+        const { where } = found;
 
         // Converted on the way in, like every other call boundary: Svelte hands
         // an action or a transition its JavaScript values, and a fractional one
@@ -2455,9 +2450,9 @@ function directiveCallable(member, path) {
         // Run through `running`, the wrapper of a component's own functions: an
         // `async def` is started, and an error placed.
         wrapped = identified(
-            (...args) => running(() => calling(target, args), where, (value) => directiveResult(value, where)),
+            (...args) => running(() => calling(found, args), where, (value) => directiveResult(value, where)),
             nameOf(where),
-            arityNow(target.arity)
+            arityNow(found.arity)
         );
 
         directives.set(member, wrapped);

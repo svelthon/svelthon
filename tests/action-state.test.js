@@ -10,6 +10,9 @@ import { mount, flushSync } from './mounted.js';
 import ActionState from './fixtures/ActionState.svelte';
 import ActionStateNative from './fixtures/ActionStateNative.svelte';
 import ActionStateHost from './fixtures/ActionStateHost.svelte';
+import ActionClass from './fixtures/ActionClass.svelte';
+import ActionClassNative from './fixtures/ActionClassNative.svelte';
+import ActionClassHost from './fixtures/ActionClassHost.svelte';
 
 // An instance holds its field in its `__dict__`, in its slots, or, a subclass
 // with a `__dict__` of its own, in the slot it inherits; and inside a list, a
@@ -90,3 +93,30 @@ test.for(KINDS.flatMap((kind) => [...(SCALARS.includes(kind) ? [] : [['JavaScrip
         expect(of(native).at(-1)).toEqual(LAST[kind] ?? [kind, 'update', 3]);
     }
 );
+
+// And an instance of a class of JavaScript's inside the state, whose field is a
+// state of its own read by the getter of its class, `class Counter { n =
+// $state(1) }`: Svelte runs the getters of a prototype of no builtin's, and so
+// does the walk.
+test('an action handed a state holding a class instance is updated at each change of its field, as in Svelte', () => {
+    const run = (Child) => {
+        const target = document.body.appendChild(document.createElement('div'));
+        const log = [];
+        const host = mount(ActionClassHost, { target, props: { Child, report: (...args) => log.push(args) } });
+
+        flushSync();
+        host.bump();
+        flushSync();
+        host.bump();
+        flushSync();
+
+        return log;
+    };
+
+    expect(run(ActionClassNative)).toEqual([
+        ['install', 1],
+        ['update', 2],
+        ['update', 3]
+    ]);
+    expect(run(ActionClass)).toEqual(run(ActionClassNative));
+});

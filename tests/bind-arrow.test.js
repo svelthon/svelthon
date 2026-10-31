@@ -13,6 +13,15 @@ import BindArrowHost from './fixtures/BindArrowHost.svelte';
 //
 // Sugar over `bindable()`, which stays — a searchable name for whoever arrives
 // from Svelte's `$bindable`, exactly as `derived(lambda: …)` stays under `=>`.
+
+// A line of a string is the string's, however much it reads like a sign: the
+// documentation of a prop, in the module's docstring, is not that prop.
+test('a line of a string that reads like a bindable stays the string’s', () => {
+    const { module } = compile('"""\nvalue: str <=> 1\n"""\nshown = 1\n', 'Probe', 'src/Probe.svelte');
+
+    expect(module).toContain('value: str <=> 1');
+});
+
 describe('the bindable arrow', () => {
     const setup = () => {
         const target = document.body.appendChild(document.createElement('div'));

@@ -21,7 +21,10 @@ describe('a trailing comment', () => {
         ['an effect', 'count = 0\n=> print(count)      # an effect: it acts\n'],
         ['a bindable', 'value: str <=>       # bindable, no fallback\n'],
         ['a bindable with a fallback', 'value: str <=> "d"   # bindable, with one\n'],
-        ['and inspect', 'count = 0\ninspect(count)       # a console.log that reruns\n']
+        ['and inspect', 'count = 0\ninspect(count)       # a console.log that reruns\n'],
+        // One space between a string and the comment: the reading resumes on
+        // the string's last character, and two past it is the `#`.
+        ['a string one space away', 'label => "hi" # a comment\n']
     ])('is allowed after %s', ([, src]) => {
         expect(() => script(src)).not.toThrow();
     });

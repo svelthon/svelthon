@@ -47,6 +47,17 @@ describe('attachments', () => {
         expect(tipped()).toBe('TWO');
     });
 
+    // One written in JavaScript has no Python signature to call it by, and is
+    // attached as it is.
+    test('a JavaScript function attaches as it is', () => {
+        const target = document.body.appendChild(document.createElement('div'));
+
+        mount(Attach, { target });
+        flushSync();
+
+        expect(target.querySelector('p[data-k="marked"]').getAttribute('data-marked')).toBe('js');
+    });
+
     test('what it returns is the teardown', () => {
         document.body.removeAttribute('data-cleaned');
 

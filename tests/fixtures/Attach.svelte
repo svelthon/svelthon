@@ -1,4 +1,6 @@
 <script lang="python">
+importjs {mark} from "./attach_mark.js"
+
 label = "one"
 seen = []
 
@@ -26,4 +28,5 @@ def rename():
 
 <p data-k="target" {@attach stamp}>target</p>
 <p data-k="tipped" {@attach tooltip(label)}>hover</p>
+<p data-k="marked" {@attach mark}>marked</p>
 <button onclick={rename}>rename</button>

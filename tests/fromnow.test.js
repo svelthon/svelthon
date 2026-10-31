@@ -145,6 +145,20 @@ describe('fromnow', () => {
         expect(read()).toBe('in 60 minutes');
     });
 
+    // Two readers share the clock, and it wakes for the sooner of their changes:
+    // a date in days asked first, then one a minute old, whose text turns over
+    // in two seconds and not in hours.
+    test('two readers wake the clock at the sooner of their changes', () => {
+        vi.useFakeTimers();
+
+        const far = setup({ when: ago(3 * 86400), locale: 'en-GB' });
+        const near = setup({ when: ago(58), locale: 'en-GB' });
+
+        vi.advanceTimersByTime(4000);
+        flushSync();
+        expect([far(), near()]).toEqual(['3 days ago', '1 minute ago']);
+    });
+
     test('a value that is not a date says so', () => {
         expect(() => setup({ when: 'hier' })()).toThrow(/"hier" is not a date/);
     });
