@@ -4404,8 +4404,13 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                     if (debugRun === null) {
                         let last = next;
 
+                        // A tag left open ends the run, and the pass refuses it
+                        // where it reaches it.
                         while (NAMED_DEBUG.test(markup.slice(last, last + 64))) {
-                            SPACE_AT.lastIndex = markup.indexOf('}', last) + 1;
+                            const closed = closingBrace(markup, last);
+
+                            if (closed === -1) break;
+                            SPACE_AT.lastIndex = closed + 1;
                             last = SPACE_AT.lastIndex + SPACE_AT.exec(markup)[0].length;
                         }
 
