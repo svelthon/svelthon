@@ -943,6 +943,22 @@ const SPACE_AT = /\s*/y;
 // A `{@debug}` that names something, the one this pass rewrites.
 const NAMED_DEBUG = /^\{\s*@debug\s+[^\s}]/;
 
+// Whether nothing stands before what comes next in its fragment: what has been
+// written ends with an element's opening tag or a block's, whitespace aside. The
+// component's script and style, inert there (`overMarkup`), are no nodes of it.
+const opensFragment = (written) => {
+    const text = written.trimEnd();
+
+    if (text.endsWith(INERT_ONE)) return opensFragment(text.slice(0, -1));
+    if (text.endsWith(INERT)) return opensFragment(text.slice(0, text.lastIndexOf(INERT, text.length - 2)));
+    if (text.endsWith('}')) return /^\{[#:]/.test(text.slice(text.lastIndexOf('{')));
+    if (!text.endsWith('>')) return text === '';
+
+    const opening = text.slice(text.lastIndexOf('<'));
+
+    return !/^<\/|^<!|\/>$/.test(opening) && !VOID.has(opening.match(/^<([^\s/>]*)/)[1].toLowerCase());
+};
+
 // The plain parameter Svelte hands a snippet's argument by, one per position,
 // which the snippet takes apart itself (`snippetParameters`).
 const SNIPPET_ARGUMENT = '__argument_';
@@ -2722,8 +2738,10 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     const snippets = new Set([...seed.values()].flat());
     let snippetCount = 0;
     let debugCount = 0;
-    // The blocks of a run of `{@debug}` tags, held for the last one of it.
+    // The blocks of a run of `{@debug}` tags, held until whitespace has to stand
+    // between them, and what the whitespace of the run does.
     let debugHeld = '';
+    let debugRun = null;
 
     // The tag being read, so that its closing `>` knows what it closed, and
     // what is written after that `>`.
@@ -4347,6 +4365,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 if (!written.rest.trim() || !names.every((one) => DECLARED_NAME.test(one))) {
                     out += debugHeld + markup.slice(index, end + 1);
                     debugHeld = '';
+                    debugRun = null;
                 } else {
                     const held = named.map(() => `${DEBUGGED}${debugCount++}`);
                     const block =
@@ -4362,29 +4381,56 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                     // touches the next node, across the whitespace after the
                     // tag, or, at the end of what holds it, the one before,
                     // across the whitespace written: the whitespace is then
-                    // where Svelte would have trimmed or kept it. A run of
-                    // tags hands its blocks on to the last one, so no
-                    // whitespace stands between them.
+                    // where Svelte would have trimmed or kept it.
+                    //
+                    // In a run of tags Svelte reads the whitespace between them
+                    // as texts side by side, each losing what starts it when the
+                    // one before ends in whitespace, and that one is then left
+                    // empty: so every other one stands, and two tags in a line
+                    // of text leave two spaces. A block has to stand between two
+                    // that stand or they would be one text. At either end of
+                    // what holds the run none stands, and the blocks wait for
+                    // the last tag.
                     SPACE_AT.lastIndex = end + 1;
                     const space = SPACE_AT.exec(markup)[0];
                     const next = end + 1 + space.length;
-                    const closes =
-                        next >= markup.length || markup.startsWith('{/', next) || markup.startsWith('{:', next) || markup.startsWith('</', next);
+                    const closes = (at) =>
+                        at >= markup.length || markup.startsWith('{/', at) || markup.startsWith('{:', at) || markup.startsWith('</', at);
                     const blocks = debugHeld + block;
+                    const another = NAMED_DEBUG.test(markup.slice(next, next + 64));
 
                     debugHeld = '';
 
-                    if (NAMED_DEBUG.test(markup.slice(next, next + 64))) {
-                        out += space;
-                        debugHeld = blocks;
+                    if (debugRun === null) {
+                        let last = next;
+
+                        while (NAMED_DEBUG.test(markup.slice(last, last + 64))) {
+                            SPACE_AT.lastIndex = markup.indexOf('}', last) + 1;
+                            last = SPACE_AT.lastIndex + SPACE_AT.exec(markup)[0].length;
+                        }
+
+                        debugRun = { waits: closes(last) || opensFragment(out), spaced: /\s$/.test(out) };
+                    }
+
+                    const stands = !debugRun.waits && space !== '' && !debugRun.spaced;
+
+                    if (!debugRun.waits && space !== '') debugRun.spaced = !debugRun.spaced;
+
+                    if (another) {
+                        out += stands ? blocks + space : space;
+                        debugHeld = stands ? '' : blocks;
                         end = next - 1;
-                    } else if (closes) {
-                        let kept = 0;
-                        while (kept < out.length && /\s/.test(out[out.length - 1 - kept])) kept += 1;
-                        out = out.slice(0, out.length - kept) + blocks + out.slice(out.length - kept);
                     } else {
-                        out += space + blocks;
-                        end = next - 1;
+                        debugRun = null;
+
+                        if (closes(next)) {
+                            let kept = 0;
+                            while (kept < out.length && /\s/.test(out[out.length - 1 - kept])) kept += 1;
+                            out = out.slice(0, out.length - kept) + blocks + out.slice(out.length - kept);
+                        } else {
+                            out += stands ? blocks + space : space + blocks;
+                            end = next - 1;
+                        }
                     }
                 }
             } else if (/^@const\s/.test(trimmed) && DECLARATION_KEYWORD.test(trimmed.slice(1))) {

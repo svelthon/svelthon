@@ -12,6 +12,8 @@ import { test, expect } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import DebugTags from './fixtures/DebugTags.svelte';
 import DebugTagsNative from './fixtures/DebugTagsNative.svelte';
+import DebugTagRuns from './fixtures/DebugTagRuns.svelte';
+import DebugTagRunsNative from './fixtures/DebugTagRunsNative.svelte';
 
 const logged = (Component) => {
     const target = document.body.appendChild(document.createElement('div'));
@@ -45,4 +47,29 @@ test('{@debug} logs and leaves the page as in Svelte, a change in place and a na
     expect(native.logged).toContain('{"rows":[1]}');
     expect(native.logged).toContain('{"ﬁeld":2}');
     expect(native.logged).toContain('{"record":{"n":1},"total":1}');
+});
+
+// Svelte reads the whitespace between the tags of a run as texts side by side, and
+// keeps every other one: two tags in a line of text leave two spaces, which the
+// rewriting into blocks made one by holding them all for the last tag.
+test('a run of {@debug} leaves the whitespace Svelte leaves', () => {
+    const page = (Component) => {
+        const target = document.body.appendChild(document.createElement('div'));
+        const log = console.log;
+
+        console.log = () => {};
+        try {
+            mount(Component, { target });
+            flushSync();
+
+            return target.innerHTML.replace(/<!--[^>]*-->/g, '');
+        } finally {
+            console.log = log;
+            target.remove();
+        }
+    };
+    const native = page(DebugTagRunsNative);
+
+    expect(page(DebugTagRuns)).toBe(native);
+    expect(native).toContain('<p data-k="2">A  B</p>');
 });
