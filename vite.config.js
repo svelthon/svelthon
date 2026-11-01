@@ -70,8 +70,9 @@ export default defineConfig({
         environment: 'jsdom',
 
         // The engine, which Bryntime loads and starts before any test file, as
-        // every way into Svelthon reaches it first.
-        setupFiles: ['tests/engine-setup.js'],
+        // every way into Svelthon reaches it first; and the check of each
+        // table of `test.for`.
+        setupFiles: ['tests/engine-setup.js', 'tests/table-rows-setup.js'],
 
         // What sits in a folder of the scratch is kept, a copy of the tree among
         // it, and a copy is no test of this tree: it imports what is no longer

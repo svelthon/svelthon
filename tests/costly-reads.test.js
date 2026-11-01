@@ -33,7 +33,7 @@ test.for([
     expect([target.querySelector('output').textContent, [...seen]]).toEqual([shown, order]);
 });
 
-test.for(['if', 'and'])('a binding whose target skips a default writes what is typed: %s', ([kind]) => {
+test.for(['if', 'and'])('a binding whose target skips a default writes what is typed: %s', (kind) => {
     const target = document.body.appendChild(document.createElement('div'));
 
     mount(BoundBranch, { target, props: { kind } });

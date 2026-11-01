@@ -8,7 +8,7 @@ import { test, expect } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import ShadowedSnippetRoot from './fixtures/ShadowedSnippetRoot.svelte';
 
-test.for(['parameter', 'alias'])('a snippet handed under a %s spelled as one of the markup takes JavaScript values', ([kind]) => {
+test.for(['parameter', 'alias'])('a snippet handed under a %s spelled as one of the markup takes JavaScript values', (kind) => {
     const target = document.body.appendChild(document.createElement('div'));
 
     mount(ShadowedSnippetRoot, { target, props: { kind } });

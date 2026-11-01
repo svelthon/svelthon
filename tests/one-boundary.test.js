@@ -43,7 +43,7 @@ const INJECTED_AS_A_VALUE = new Set(['plainData', 'pyData']);
 describe('the compiler emits no boundary of its own', () => {
     test.for(CROSSING.filter((one) => !INJECTED_AS_A_VALUE.has(one)))(
         'no generated line calls `%s`',
-        ([name]) => {
+        (name) => {
             // A call, and not the mention in the alias map: `__schedule(` with
             // its parenthesis is what a wrapper written here would look like.
             expect(source).not.toContain(`__${name}(`);
