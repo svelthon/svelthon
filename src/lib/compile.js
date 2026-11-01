@@ -2313,17 +2313,18 @@ function effectLines(c) {
         // const first: hoisting reads the values once, outside the tracking
         // context, and the logger then fires on `init` and never again.
         //
-        // The `.with(…)` argument is the exception to that: it is an ordinary
-        // expression, evaluated once outside any tracking context, and reading
-        // the cell there is what `state_referenced_locally` reports, twice per
-        // `inspect_with`, on every build, at a line past the end of the author's
-        // file and about a name they cannot have. Reading it *inside* the
-        // handler answers the warning and is the same call: the handler an
-        // author hands over does not change for the component's life, so the
-        // value read late is the value read early.
+        // The `.with(…)` argument is the exception to that: Svelte moves it as it
+        // is written, into `(...args) => inspector(...args)` in a browser, read at
+        // each log, and into `inspector('init', ...values)` on a server, read
+        // before the values. So the logger is written as the expression it is,
+        // and in a function called there and then: reading the cell outside one
+        // is what `state_referenced_locally` reports, twice per `inspect_with`,
+        // on every build, about a name the author cannot have. Inside a function
+        // that takes the arguments, the server read the values first, and a
+        // logger's factory saw what was not yet there.
         ...c.inspects.map((i) =>
             i.logger
-                ? `$inspect(...__invoke(__invoke(${fn(i.name)})[0])).with((...a) => __event(__invoke(__invoke(${fn(i.name)})[1]))(...a));`
+                ? `$inspect(...__invoke(__invoke(${fn(i.name)})[0])).with((() => __event(__invoke(__invoke(${fn(i.name)})[1])))());`
                 : `$inspect(...__invoke(${fn(i.name)}));`
         ),
         // A root owns its own scope: it is not cleaned up when the component is,
