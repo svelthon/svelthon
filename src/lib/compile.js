@@ -122,30 +122,22 @@ function refuseTemplateWalrus(ast, table, source, ranges) {
 }
 
 
-// What the template's functions read as globals and nothing gives the module: no
-// statement binds it, and it is no builtin, no name Svelthon publishes, none of
-// the compiler's and none JavaScript forbids.
-function templateOnlyNames(ast, table, taken) {
+// What the module reads as globals and nothing gives it: no statement binds it,
+// and it is no builtin, no name Svelthon publishes, none of the compiler's and
+// none JavaScript forbids. Asked of the builtins' own names: `constructor` is on
+// their prototype, and no builtin.
+function unboundReads(table, taken) {
     const binds = moduleBinds(table);
-    const found = new Set();
 
-    for (const def of ast.body) {
-        if (!(def instanceof $B.ast.FunctionDef) || !def.name.startsWith(EXPR_PREFIX)) continue;
-
-        for (const name of globalReads({ top: table.blockOf(def) })) {
-            const given =
-                binds.has(name) ||
-                taken.has(name) ||
-                name in $B.builtins ||
-                INJECTED.some((one) => one.name === name) ||
-                COMPILER_PREFIX.test(name) ||
-                JS_RESERVED.has(name);
-
-            if (!given) found.add(name);
-        }
-    }
-
-    return [...found];
+    return [...globalReads(table)].filter(
+        (name) =>
+            !binds.has(name) &&
+            !taken.has(name) &&
+            !Object.hasOwn($B.builtins, name) &&
+            !INJECTED.some((one) => one.name === name) &&
+            !COMPILER_PREFIX.test(name) &&
+            !JS_RESERVED.has(name)
+    );
 }
 
 // `x => expr`, the derived, written the way the state beside it is written.
@@ -2647,11 +2639,12 @@ function compile(
     let { props, bindables, defaulted, state, funcs, classes, deriveds, effects, inspects, reserved, bound, lines, remarked, starred } =
         surface(root._ast.body, foreign);
 
-    // A name the template reads and no statement binds, which the module may
-    // still bind while it runs, `globals()["x"] = 1`: without a cell the page
-    // showed its first value and followed it no more, where a name `global`
-    // declares in a function is followed. Absent until written, as that one is.
-    if (component && !starred) state = [...state, ...templateOnlyNames(root._ast, table, new Set([...state, ...foreign]))];
+    // A name the module reads and no statement binds, which it may still bind
+    // while it runs, `globals()["x"] = 1`: without a cell the page showed its
+    // first value and followed it no more, where a name `global` declares in a
+    // function is followed. Absent until written, as that one is. A star import
+    // changes nothing: what it binds finds the cell, as a name imported does.
+    if (!plain) state = [...state, ...unboundReads(table, new Set([...state, ...foreign]))];
 
     // A custom element's props belong to its element, which reads each back,
     // as `element.middle` and as the attribute `reflect` writes. Svelte answers

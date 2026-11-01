@@ -1603,7 +1603,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 1 991 tests as written (vitest reports more, one per
+Validated by `npm test`, 1 998 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;
@@ -1613,7 +1613,7 @@ row of a `test.for`), none expected to fail:
   Every expected value was produced by running the component's Python through
   CPython 3.12 as-is, never written by hand. Brython matches CPython on **every
   point**;
-- production build: **225 KB gzip**, Brython runtime included.
+- production build: **227 KB gzip**, Brython runtime included.
 
 The grid doubles as an acceptance bench for optimising code generators: one that
 drops call frames breaks `Frames`, one that unboxes integers breaks `Integers`,
@@ -1683,7 +1683,7 @@ deep-proxies the objects inside a `$state` array; Svelthon's names are
 itself exactly where a real application spends its time.
 
 Loading is the real price: **1.2 s to interactive** for the production demo on
-this laptop, against 0.5 s for the same page without Brython: 225 KB gzip
+this laptop, against 0.5 s for the same page without Brython: 227 KB gzip
 instead of 13 KB. Paid once per session, not per page, since the app never
 reloads.
 

@@ -1623,7 +1623,7 @@ parsing, que seul le compilateur charge ; le README de Bryntime en donne le poid
 
 ## État
 
-Validé par `npm test`, 1 991 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 1 998 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
@@ -1633,7 +1633,7 @@ rangée d'un `test.for`), aucun échec attendu :
   contrôle et frames. Chaque valeur attendue a été produite par CPython 3.12 en
   exécutant le code du composant tel quel, jamais écrite à la main. Brython
   reproduit CPython sur **chaque point** ;
-- build de production : **225 Ko gzip**, runtime Brython compris.
+- build de production : **227 Ko gzip**, runtime Brython compris.
 
 La grille sert de banc d'acceptation aux codegens optimisés (wasthonf) : un
 codegen qui supprime les cadres d'appel casse `Frames`, qui déballe les entiers
@@ -1735,7 +1735,7 @@ proxifiées. Le choix de conception de la réactivité se rembourse précisémen
 où une vraie application passe son temps.
 
 Le vrai prix est au chargement : **1,2 s jusqu'à l'interactivité** pour la démo de
-production sur ce portable, contre 0,5 s pour la même page sans Brython : 225 Ko
+production sur ce portable, contre 0,5 s pour la même page sans Brython : 227 Ko
 gzip au lieu de 13. Payé une fois par session, pas par page, puisque
 l'application ne recharge jamais.
 
