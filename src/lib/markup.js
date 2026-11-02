@@ -1153,7 +1153,23 @@ const DIRECTIVE_HEAD = new RegExp(
 
 // Where an attribute can begin: after a space, or straight after the quote or
 // brace that closed the one before it, as Svelte reads `title="a"use:x`.
+//
+// And never in a value: `title = {checked}` is `title`'s value, which the
+// blanks Svelte allows around the `=` set apart from it, and no shorthand, and
+// `title = use:x` no directive. Taken for `{checked}`, a box whose group was
+// checked by the value was crossed, on a server, without its `checked`, and
+// `title = {value}` before `value="a"` bound the title's value to the group.
 const ATTRIBUTE_START = /[\s"'}]/;
+
+const attributeStarts = (markup, at) => {
+    if (!ATTRIBUTE_START.test(markup[at - 1])) return false;
+
+    let before = at - 1;
+
+    while (before >= 0 && /\s/.test(markup[before])) before -= 1;
+
+    return markup[before] !== '=';
+};
 
 // The `=` a name is followed by, past the whitespace Svelte allows before it.
 const EQUALS_AHEAD = /\s*=/y;
@@ -1206,7 +1222,7 @@ function tagValue(markup, from, name = 'value') {
         }
 
         // The shorthand, `{value}`, which is `value={value}`.
-        if (char === '{' && ATTRIBUTE_START.test(markup[at - 1]) && markup.slice(at + 1, end).trim() === name) {
+        if (char === '{' && attributeStarts(markup, at) && markup.slice(at + 1, end).trim() === name) {
             return { start: at + 1, end, braced: true, quote: '' };
         }
 
@@ -1263,7 +1279,7 @@ function tagNames(markup, from) {
 
         if (end === -1) break;
 
-        const shorthand = char === '{' && ATTRIBUTE_START.test(markup[at - 1]) ? markup.slice(at + 1, end).trim() : '';
+        const shorthand = char === '{' && attributeStarts(markup, at) ? markup.slice(at + 1, end).trim() : '';
 
         names += SHORTHAND_ATTRIBUTE.test(shorthand) ? ` ${shorthand} ` : ' ';
         at = end + 1;
@@ -1285,7 +1301,7 @@ function tagSpreads(markup, from) {
         const end = valueEnd(markup, at);
 
         if (end === -1) return false;
-        if (char === '{' && ATTRIBUTE_START.test(markup[at - 1]) && SPREAD(markup.slice(at + 1, end).trim())) return true;
+        if (char === '{' && attributeStarts(markup, at) && SPREAD(markup.slice(at + 1, end).trim())) return true;
 
         at = end + 1;
     }
@@ -3713,7 +3729,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 }
 
                 if (char === quote) quote = null;
-            } else if (ATTRIBUTE_START.test(markup[index - 1]) && headAt(index)) {
+            } else if (attributeStarts(markup, index) && headAt(index)) {
                 // A directive that names a function: `use:`, a transition or
                 // `animate:`. Its head is a Python expression like any other
                 // and so is its value, so both are compiled where they are

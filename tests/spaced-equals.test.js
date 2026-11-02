@@ -7,6 +7,8 @@
 import { test, expect } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import SpacedEquals from './fixtures/SpacedEquals.svelte';
+import SpacedValueNames from './fixtures/SpacedValueNames.svelte';
+import SpacedValueNamesNative from './fixtures/SpacedValueNamesNative.svelte';
 
 test('an attribute with whitespace before its `=` keeps every rule', () => {
     const target = document.body.appendChild(document.createElement('div'));
@@ -38,4 +40,31 @@ test('an attribute with whitespace before its `=` keeps every rule', () => {
     flushSync();
 
     expect([node('click').textContent, node('name').textContent]).toEqual(['1', 'Bob']);
+});
+
+// A value set apart from its `=` is the value, never the attribute it names:
+// read as the shorthand `{value}`, `title = {value}` bound the title's value to
+// the group, so the box was not checked and a click wrote `zz` into the list.
+test('a value set apart from its `=` names no attribute, as in Svelte', () => {
+    const seen = [SpacedValueNames, SpacedValueNamesNative].map((Component) => {
+        const target = document.body.appendChild(document.createElement('div'));
+        mount(Component, { target });
+        flushSync();
+
+        const at = (k, tag) => target.querySelector(`[data-k="${k}"] ${tag}`);
+        const read = () => ({
+            boxes: ['value before', 'type before', 'checked after'].map((k) => at(k, 'input').checked),
+            select: [at('select', 'select').multiple, at('select', 'select').value],
+            title: target.querySelector('[data-k="directive word"]').title,
+            picked: target.querySelector('[data-k="picked"]').textContent
+        });
+        const before = read();
+
+        at('value before', 'input').click();
+        flushSync();
+
+        return [before, read()];
+    });
+
+    expect(seen[0]).toEqual(seen[1]);
 });
