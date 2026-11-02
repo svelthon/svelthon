@@ -121,8 +121,22 @@ warm() {
 }
 warm /src/probe.js /src/markup-probe.js /demo/main.js
 
-REPORT=$(browse probe 8000 "$URL" |
-    grep -o '<pre id="report">[^<]*' | sed 's|<pre id="report">||')
+# What a page reports in its `<pre>`, asked again while it says nothing: on a
+# loaded machine a first render can overrun its budget, as the demo's can
+# (below), and the markup page, which compiles in the browser, came back empty
+# once in two audits. A report that is there and wrong fails at once.
+report() {
+    local profile=$1 url=$2 id=$3 found attempt
+
+    for attempt in 1 2 3; do
+        found=$(browse "$profile$attempt" 8000 "$url" | grep -o "<pre id=\"$id\">[^<]*" | sed "s|<pre id=\"$id\">||")
+        [ -n "$found" ] && break
+    done
+
+    printf '%s' "$found"
+}
+
+REPORT=$(report probe "$URL" report)
 
 status=0
 
@@ -135,8 +149,7 @@ else
     status=1
 fi
 
-MARKUP=$(browse markup 8000 "$MARKUP_URL" |
-    grep -o '<pre id="markup">[^<]*' | sed 's|<pre id="markup">||')
+MARKUP=$(report markup "$MARKUP_URL" markup)
 
 if [ "$MARKUP" = "$MARKUP_EXPECTED" ]; then
     echo "✓ markup pass in a browser — $MARKUP"
