@@ -969,7 +969,29 @@ const opensFragment = (written) => {
     }
     if (!text.endsWith('>')) return text === '';
 
-    const opening = text.slice(text.lastIndexOf('<'));
+    // The tag this `>` closes, back to its `<`, past what a quoted value holds:
+    // a `>` met first, or no `<` at all, and it is the text's, `Go ->`, which
+    // stands before what comes next. Read as a tag's, `<p>Go ->` opened the
+    // fragment, and `x ->` alone had no tag to name.
+    let at = text.length - 2;
+
+    for (let quote = null; at >= 0; at--) {
+        const char = text[at];
+
+        if (quote !== null) {
+            if (char === quote) quote = null;
+        } else if (char === '"' || char === "'") {
+            quote = char;
+        } else if (char === '>') {
+            return false;
+        } else if (char === '<') {
+            break;
+        }
+    }
+
+    const opening = text.slice(at);
+
+    if (at < 0 || !/^<[a-zA-Z/!]/.test(opening)) return false;
 
     return !/^<\/|^<!|\/>$/.test(opening) && !VOID.has(opening.match(/^<([^\s/>]*)/)[1].toLowerCase());
 };

@@ -895,6 +895,13 @@ describe('{@render}', () => {
     test('{@debug} alone crosses unchanged', () => {
         expect(rewrite('{@debug}').out).toBe('{@debug}');
     });
+
+    // A `>` of the text before a `{@debug}` is no end of a tag: with no `<`
+    // before it at all, `x -> {@debug x}` was taken for one, and the pass threw
+    // looking for its name. What it renders is `debug-tag.test.js`'s.
+    test.for([['x -> {@debug x} done'], ['x -> {@debug x} {@debug x} done']])('%s compiles', ([markup]) => {
+        expect(() => rewrite(markup)).not.toThrow();
+    });
 });
 
 // An attribute is not a text node: what goes in one may be a value rather than

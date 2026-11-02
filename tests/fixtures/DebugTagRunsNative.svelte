@@ -29,4 +29,10 @@
 <div data-k="after block">{#if count}x{/if}{@debug count} {@debug count} {@debug count} D</div>
 {#snippet opening()}{@debug count} {@debug count} S{/snippet}
 <p data-k="snippet">{@render opening()}</p>
+<p data-k="arrow">Go -> {@debug count} {@debug count} done</p>
+<p data-k="arrow glued">Go -> {@debug count}{@debug count} done</p>
+<div data-k="arrow before"><p>a -> b</p>{@debug count} {@debug count} done</div>
+<p data-k="quoted gt" title="a>b">A {@debug count} {@debug count} B</p>
+<div data-k="gt">a > b {@debug count} {@debug count} c</div>
+<div data-k="arrow in tag"><b>c -></b> {@debug count} {@debug count} d</div>
 E {@debug count}
