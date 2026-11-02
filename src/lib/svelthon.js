@@ -549,8 +549,10 @@ const pythonFile = (path) => pythonScript(readFileSync(path, 'utf8')) !== null;
 // What a component was last compiled from: its source, and the language of each
 // child whose file it read (`dependencies`). A child's edit asks its parents
 // again; one whose source and children's languages are as they were compiles to
-// the same code (`hotUpdate`).
-const COMPILED_FROM = new Map();
+// the same code (`hotUpdate`). On the global registry, as `generated` is: the
+// preprocessor records, the plugin asks, and they are not always one instance
+// of this module.
+const COMPILED_FROM = (globalThis[Symbol.for('svelthon.compiledFrom')] ??= new Map());
 
 const compiledAsBefore = (file) => {
     const before = COMPILED_FROM.get(file);

@@ -615,6 +615,19 @@ describe('hot update invalidates the generated module too', () => {
                 expect(asked('Parent.svelte')).toEqual([]);
             }));
 
+        // `python()` in `svelte.config.js` and `svelthon()` in `vite.config.js`
+        // are two instances of this module: one compiles, the other is asked.
+        test('and so when the preprocessor is another instance of the module', () =>
+            inRoom(async ({ at, asked }) => {
+                const another = await import('../src/lib/svelthon.js?another-instance');
+
+                expect(another.python).not.toBe(python);
+                await preprocess(parent, [another.python()], { filename: at('Parent.svelte') });
+                writeFileSync(at('Child.svelte'), pythonChild.replace('x = 1', 'x = 2'));
+
+                expect(asked('Parent.svelte')).toEqual([]);
+            }));
+
         test('and is updated when the child changed language, or its own source', () =>
             inRoom(async ({ at, compiled, asked }) => {
                 await compiled('Parent.svelte');
