@@ -1083,6 +1083,23 @@ export function svelthon(options = {}) {
     const searchPath = options.path?.map((one) => resolve(root, one));
     const key = (id) => generatedKey(root, id);
 
+    // Whether a change of a file leaves it as it was compiled from
+    // (`compiledAsBefore`), asked once per change, its `timestamp`, which Vite
+    // hands every environment alike (`hotUpdate`).
+    const answered = new Map();
+    const unchangedAt = (file, timestamp) => {
+        if (timestamp === undefined) return compiledAsBefore(file);
+
+        const known = answered.get(file);
+
+        if (known?.timestamp === timestamp) return known.unchanged;
+
+        const unchanged = compiledAsBefore(file);
+
+        answered.set(file, { timestamp, unchanged });
+        return unchanged;
+    };
+
     // Where an id with no importer is rooted, SvelteKit's route entries among
     // them, `/src/routes/+page.server.py`: Vite's own root once Vite has
     // resolved its configuration, and until then the project this plugin was
@@ -1193,7 +1210,7 @@ export function svelthon(options = {}) {
         // graph, and the numbers handed out again, so a save keeps its ids and
         // `generated` one body per variant in use. A `.py` keeps its one body
         // under its name.
-        hotUpdate({ file, modules }) {
+        hotUpdate({ file, modules, timestamp }) {
             const graph = this.environment.moduleGraph;
             const stale = [];
 
@@ -1220,7 +1237,14 @@ export function svelthon(options = {}) {
             // the parent's, took the old one's place before the child's own
             // update could find it, and the instance a registry held kept the
             // old code. Nothing changed, nothing to update.
-            if (compiledAsBefore(file)) return [];
+            //
+            // Asked once per change, of the first environment Vite hands it
+            // to, the client's, before anything compiles it again: the
+            // client's hook of vite-plugin-svelte transforms the component,
+            // and an edit then looked compiled as before to the server's, whose
+            // page kept rendering the previous body. The others take that
+            // answer, under the change's one `timestamp`.
+            if (unchangedAt(file, timestamp)) return [];
 
             for (const one of bodies) forget('\0' + one.slice(key('').length));
             slots.delete(own);

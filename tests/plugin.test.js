@@ -628,6 +628,26 @@ describe('hot update invalidates the generated module too', () => {
                 expect(asked('Parent.svelte')).toEqual([]);
             }));
 
+        // An edit reaches every environment of the dev server, though the
+        // client's, asked first, has the component compiled again before the
+        // server's is asked: under the change's one timestamp, the server's
+        // took the new source for the one compiled before, and its page kept
+        // rendering the previous body.
+        test('and an edit is updated in every environment, though the first one compiles it again', () =>
+            inRoom(async ({ at, compiled }) => {
+                const ask = () =>
+                    plugin.hotUpdate
+                        .call({ environment: graph() }, { file: at('Parent.svelte'), modules: [{ id: 'Parent.svelte' }], timestamp: 7 })
+                        .map((one) => one.id);
+
+                await compiled('Parent.svelte');
+                writeFileSync(at('Parent.svelte'), `${parent}<p>edited</p>\n`);
+                const client = ask();
+                await compiled('Parent.svelte');
+
+                expect([client, ask()].map((one) => one.includes('Parent.svelte'))).toEqual([true, true]);
+            }));
+
         test('and is updated when the child changed language, or its own source', () =>
             inRoom(async ({ at, compiled, asked }) => {
                 await compiled('Parent.svelte');
