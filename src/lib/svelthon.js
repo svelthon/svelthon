@@ -543,22 +543,33 @@ const hooksInstalled = (code) => {
 // Whether a component's own file is written in Python.
 const pythonFile = (path) => pythonScript(readFileSync(path, 'utf8')) !== null;
 
-// What a component was last compiled from: its source, and the language of each
-// child whose file it read (`dependencies`). A child's edit asks its parents
-// again; one whose source and children's languages are as they were compiles to
-// the same code (`hotUpdate`). On the global registry, as `generated` is: the
-// preprocessor records, the plugin asks, and they are not always one instance
-// of this module.
+// What a component was last compiled from: its source, the language of each
+// child whose file it read (`dependencies`), and what each module its script
+// imports was found as, the file the prelude evaluates and the refusal of one
+// that is missing. A child's edit asks its parents again; one whose source,
+// children's languages and modules are as they were compiles to the same code
+// (`hotUpdate`). On the global registry, as `generated` is: the preprocessor
+// records, the plugin asks, and they are not always one instance of this
+// module.
+//
+// The modules as stores have them (`compilePython`): a module moved from beside
+// the component to the path, or one of the path that a file beside it now
+// shadows, is found elsewhere, and the prelude of the code compiled before
+// named a file that is no longer the one Python imports.
 const COMPILED_FROM = (globalThis[Symbol.for('svelthon.compiledFrom')] ??= new Map());
+
+const foundAs = (names, directory, path) =>
+    names.map((mod) => `${moduleKind(mod, directory, path)} ${moduleFile(mod, directory, path) ?? ''}`).join('\n');
 
 const compiledAsBefore = (file) => {
     const before = COMPILED_FROM.get(file);
 
     try {
         return (
-            before !== undefined &&
+            before?.imports !== undefined &&
             readFileSync(file, 'utf8') === before.content &&
-            before.children.every(([path, python]) => existsSync(path) && pythonFile(path) === python)
+            before.children.every(([path, python]) => existsSync(path) && pythonFile(path) === python) &&
+            foundAs(before.imports.names, before.imports.directory, before.imports.searchPath) === before.imports.found
         );
     } catch {
         return false;
@@ -732,6 +743,13 @@ export function python(options = {}) {
             // project's for a component handed over without a file.
             const directory = filename ? dirname(filename) : root;
 
+            // Known as compiled once the script has compiled too, with what its
+            // imports were found as (`compiledAsBefore`).
+            const record = filename === undefined ? undefined : COMPILED_FROM.get(filename);
+            const asked = [];
+
+            if (record !== undefined) COMPILED_FROM.delete(filename);
+
             const name = nameFor(filename, root);
             const body = bodyId(root, name, content, about);
             const { script, module, map, imports } = compile(content, name, shownPath(filename, root), {
@@ -739,9 +757,18 @@ export function python(options = {}) {
                 // the markup pass was handed when one did (`about`).
                 sourceContent: content,
                 ...about,
-                resolves: (mod) => moduleKind(mod, directory, searchPath),
+                resolves: (mod) => {
+                    asked.push(mod);
+                    return moduleKind(mod, directory, searchPath);
+                },
                 body
             });
+
+            if (record !== undefined) {
+                const names = [...new Set([...asked, ...imports])];
+
+                COMPILED_FROM.set(filename, { ...record, imports: { names, directory, searchPath, found: foundAs(names, directory, searchPath) } });
+            }
 
             // `import counter_store` in a component resolves to a .py file, its
             // own directory first, then `path`. The module's code has to be

@@ -648,6 +648,37 @@ describe('hot update invalidates the generated module too', () => {
                 expect([client, ask()].map((one) => one.includes('Parent.svelte'))).toEqual([true, true]);
             }));
 
+        // The code depends on where each module the script imports is found:
+        // its prelude evaluates that file. A module moved from beside the
+        // component to the path, or one of the path a file beside it now
+        // shadows, is the component's update though its source is the same; it
+        // kept the old file, and the server refused a collision with a file no
+        // longer there.
+        test.for([
+            ['moved from beside it to the path', 'helper.py', 'lib/helper.py'],
+            ['of the path, shadowed by a file beside it', 'lib/helper.py', 'helper.py']
+        ])('and a module %s is updated', ([, from, to]) =>
+            inRoom(async ({ at, asked }) => {
+                const component = '<script lang="python">\nimport helper\nvalue = helper.value\n</script>\n<p>{value}</p>\n';
+
+                const shared = Symbol.for('svelthon.path');
+                const kept = globalThis[shared];
+
+                mkdirSync(at('lib'));
+                writeFileSync(at('Uses.svelte'), component);
+                writeFileSync(at(from), 'value = 1\n');
+                await preprocess(component, [python({ path: [at('lib')] })], { filename: at('Uses.svelte') });
+                // The path a preprocessor is made with is the plugin's fallback.
+                globalThis[shared] = kept;
+                expect(asked('Uses.svelte')).toEqual([]);
+
+                writeFileSync(at(to), 'value = 2\n');
+                if (from === 'helper.py') rmSync(at(from));
+
+                expect(asked('Uses.svelte')).toContain('Uses.svelte');
+            })
+        );
+
         test('and is updated when the child changed language, or its own source', () =>
             inRoom(async ({ at, compiled, asked }) => {
                 await compiled('Parent.svelte');
