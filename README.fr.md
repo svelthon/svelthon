@@ -469,7 +469,10 @@ devient `None` partout où il entre en Python : `{total}` ne rend rien,
 `{f"[{total}]"}` rend `[None]`, et `{total + 1}` lève la `TypeError` de Python à
 sa ligne. Le code Python le lit comme Python, `NameError` : une fonction du
 script, et un gestionnaire écrit dans le balisage, qui s'exécute au clic et non
-pendant le rendu.
+pendant le rendu. Un nom qu'aucune instruction du module ne lie n'est pas un
+nom : une faute de frappe, `{conut}` pour `count`, lève `NameError` à sa ligne,
+comme Python et Svelte ; et une fois que le module l'écrit par `globals()`, la
+page le suit.
 
 **Le morse affecte.** `onclick={() => (open = !open)}` est la ligne la plus
 courante d'un gabarit Svelte, et Python n'en a pas d'équivalent court : un
@@ -1623,7 +1626,7 @@ parsing, que seul le compilateur charge ; le README de Bryntime en donne le poid
 
 ## État
 
-Validé par `npm test`, 2 003 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 2 004 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
@@ -1633,7 +1636,9 @@ rangée d'un `test.for`), aucun échec attendu :
   contrôle et frames. Chaque valeur attendue a été produite par CPython 3.12 en
   exécutant le code du composant tel quel, jamais écrite à la main. Brython
   reproduit CPython sur **chaque point** ;
-- build de production : **227 Ko gzip**, runtime Brython compris.
+- build de production : **272 Ko gzip**, runtime Brython compris : ce que la
+  page de démo charge, son script, les modules qu'elle précharge et ses styles,
+  mesuré après chaque build par `scripts/build-size.mjs`.
 
 La grille sert de banc d'acceptation aux codegens optimisés (wasthonf) : un
 codegen qui supprime les cadres d'appel casse `Frames`, qui déballe les entiers
@@ -1735,7 +1740,7 @@ proxifiées. Le choix de conception de la réactivité se rembourse précisémen
 où une vraie application passe son temps.
 
 Le vrai prix est au chargement : **1,2 s jusqu'à l'interactivité** pour la démo de
-production sur ce portable, contre 0,5 s pour la même page sans Brython : 227 Ko
+production sur ce portable, contre 0,5 s pour la même page sans Brython : 272 Ko
 gzip au lieu de 13. Payé une fois par session, pas par page, puisque
 l'application ne recharge jamais.
 

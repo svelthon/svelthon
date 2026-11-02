@@ -2200,16 +2200,21 @@ export const pyExpression = (call, where, arity, kept = false, writes = false) =
 // What the template reads is None, what JavaScript's `undefined` becomes
 // wherever it enters Python: rendered empty, `None` in an f-string, and the
 // `TypeError` Python raises for `total + 1`, at its line.
+//
+// Save a name no statement of the module binds (`unbound`), which only the
+// running module can write, `globals()["x"] = 1`: until it does, the name is
+// no name, a typo `{conut}` among them, and its read raises `NameError` at its
+// line, as in Python and in Svelte.
 const TEMPLATE_LINES = new Map();
 
-export const templateFrom = (file, line) => {
-    TEMPLATE_LINES.set(file, line);
+export const templateFrom = (file, line, unbound = []) => {
+    TEMPLATE_LINES.set(file, { line, unbound: new Set(unbound) });
 };
 
-host.absent = (file, line) => {
+host.absent = (file, line, name) => {
     const from = TEMPLATE_LINES.get(file);
 
-    return rendering > 0 && from !== undefined && line >= from;
+    return rendering > 0 && from !== undefined && line >= from.line && !from.unbound.has(name);
 };
 
 // **A directive is a call whose callee is a Python expression.** The markup pass

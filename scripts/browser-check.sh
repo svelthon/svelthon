@@ -198,6 +198,8 @@ for _ in $(seq 40); do
 done
 
 if npx vite build >/dev/null 2>&1; then
+    node scripts/build-size.mjs dist || status=1
+
     (npx vite preview --port "$PORT" --strictPort >/dev/null 2>&1 &)
 
     for _ in $(seq 40); do

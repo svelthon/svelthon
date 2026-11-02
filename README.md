@@ -458,7 +458,10 @@ A module name assigned in a branch that did not run, or deleted, reads as
 enters Python: `{total}` renders nothing, `{f"[{total}]"}` renders `[None]`, and
 `{total + 1}` raises Python's `TypeError` at its line. Python code reads it as
 Python does, `NameError`: a function of the script, and a handler written in the
-markup, which runs on a click and not while the template renders.
+markup, which runs on a click and not while the template renders. A name no
+statement of the module binds is no such name: a typo, `{conut}` for `count`,
+raises `NameError` at its line, as Python and Svelte do; and once the module
+writes it through `globals()`, the page follows it.
 
 **The walrus assigns.** `onclick={() => (open = !open)}` is the commonest line in
 a Svelte template, and Python has no short twin: a `lambda` holds an expression,
@@ -1603,7 +1606,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 2 003 tests as written (vitest reports more, one per
+Validated by `npm test`, 2 004 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;
@@ -1613,7 +1616,9 @@ row of a `test.for`), none expected to fail:
   Every expected value was produced by running the component's Python through
   CPython 3.12 as-is, never written by hand. Brython matches CPython on **every
   point**;
-- production build: **227 KB gzip**, Brython runtime included.
+- production build: **272 KB gzip**, Brython runtime included: what the demo
+  page loads, its script, the modules it preloads and its styles, measured
+  after each build by `scripts/build-size.mjs`.
 
 The grid doubles as an acceptance bench for optimising code generators: one that
 drops call frames breaks `Frames`, one that unboxes integers breaks `Integers`,
@@ -1683,7 +1688,7 @@ deep-proxies the objects inside a `$state` array; Svelthon's names are
 itself exactly where a real application spends its time.
 
 Loading is the real price: **1.2 s to interactive** for the production demo on
-this laptop, against 0.5 s for the same page without Brython: 227 KB gzip
+this laptop, against 0.5 s for the same page without Brython: 272 KB gzip
 instead of 13 KB. Paid once per session, not per page, since the app never
 reloads.
 

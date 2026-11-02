@@ -1892,10 +1892,11 @@ function declarations(c) {
         // handler another component set, a function another file reached.
         ...(c.store ? [] : [`__fileLines(${JSON.stringify(c.source)}, ${JSON.stringify(c.lines)});`]),
         // Where the template's own code begins in the module's source, so that
-        // a read made there is the template's however deep it is written.
+        // a read made there is the template's however deep it is written, and
+        // the names no statement binds, which are no absence there.
         ...(c.templateLine === undefined
             ? []
-            : [`__templateFrom(${JSON.stringify(c.source)}, ${c.templateLine});`]),
+            : [`__templateFrom(${JSON.stringify(c.source)}, ${c.templateLine}, ${JSON.stringify(c.unwritten)});`]),
         ``
     ];
 }
@@ -2642,9 +2643,13 @@ function compile(
     // A name the module reads and no statement binds, which it may still bind
     // while it runs, `globals()["x"] = 1`: without a cell the page showed its
     // first value and followed it no more, where a name `global` declares in a
-    // function is followed. Absent until written, as that one is. A star import
-    // changes nothing: what it binds finds the cell, as a name imported does.
-    if (!plain) state = [...state, ...unboundReads(table, new Set([...state, ...foreign]))];
+    // function is followed. A star import changes nothing: what it binds finds
+    // the cell, as a name imported does. Until it is written it is no name, and
+    // the template's read raises `NameError` as Python's does (`templateFrom`):
+    // a typo is such a name too.
+    const unwritten = plain ? [] : unboundReads(table, new Set([...state, ...foreign]));
+
+    state = [...state, ...unwritten];
 
     // A custom element's props belong to its element, which reads each back,
     // as `element.middle` and as the attribute `reflect` writes. Svelte answers
@@ -2799,6 +2804,7 @@ function compile(
         // alone, or the offset with the template functions' ranges.
         lines: exprLines.length ? { offset: lineOffset, ranges: exprLines } : lineOffset,
         templateLine,
+        unwritten,
         store,
         plain,
         eager,
