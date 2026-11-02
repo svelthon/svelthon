@@ -14,6 +14,7 @@ import GroupSpellingsNative from './fixtures/GroupSpellingsNative.svelte';
 import ParenthesizedTargets from './fixtures/ParenthesizedTargets.svelte';
 import GroupNumericKeys from './fixtures/GroupNumericKeys.svelte';
 import GroupSignedKeys from './fixtures/GroupSignedKeys.svelte';
+import GroupDistinctKeys from './fixtures/GroupDistinctKeys.svelte';
 
 const mounted = async (Component) => {
     const target = document.body.appendChild(document.createElement('div'));
@@ -84,6 +85,21 @@ test('a signed number at a key is the number it makes', async () => {
 
     expect(models).toEqual(['a|', 'a,b|', 'a,b,c|', 'a,b,c|d', 'a,b,c|d,e']);
     expect([...target.querySelectorAll('input')].map((one) => one.checked)).toEqual([true, true, true, true, true]);
+});
+
+// And the keys a dict tells apart stay apart: `0.5` is no `0`, `not 1` is no `1`,
+// a complex key is one too, while a tuple's members are keys, `(1.0, 2)` the
+// entry `(1, 2)` is. Each box of the page clicked once, each list holds its own.
+test('the keys a dict tells apart are two groups, and the members of a tuple are keys', async () => {
+    const target = await mounted(GroupDistinctKeys);
+
+    for (const key of ['a', 'b', 'c', 'd', 'e', 'f', 'g']) {
+        target.querySelector(`[data-k="${key}"]`).click();
+        flushSync();
+    }
+
+    expect(target.querySelector('p').textContent).toBe("['a']|['b']|['c']|['d', 'e']|['f']|['g']");
+    expect([...target.querySelectorAll('input')].map((one) => one.checked)).toEqual([true, true, true, true, true, true, true]);
 });
 
 test('a parenthesized name is the name it holds, in the script and in the markup', async () => {

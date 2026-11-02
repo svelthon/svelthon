@@ -4,8 +4,8 @@ shown = True
 </script>
 
 <!-- Expressions written over several lines, in a text, an attribute, a block
-     and a handler, then an image Svelte warns about: the warning names the line
-     the image is written on. -->
+     and a handler, one whose brace closes on a line of its own, then an image
+     Svelte warns about: the warning names the line the image is written on. -->
 <p title={(x +
     1)}>{(x +
     2)}</p>
@@ -14,4 +14,6 @@ shown = True
     <button onclick={lambda: (shown :=
         not shown)}>toggle</button>
 {/if}
+<p>{x
+}</p>
 <img src="a.png">

@@ -321,6 +321,21 @@ describe('pythonRanges', () => {
         expect(component.slice(ranges[0].from, ranges[0].to)).toBe('name');
     });
 
+    // Past the brace and the blanks, a block's keyword and a handler's
+    // rewrite: the range is the text the author wrote, where it is written.
+    test('each range is the expression as written, wherever it stands in its braces', () => {
+        const spaced = component.replace(
+            '<p>{name}</p>',
+            '<p>{  name.upper()  }</p>{#if len(name) > 1}a{/if}<button onclick={lambda: print(name)}>b</button>'
+        );
+
+        expect(pythonRanges(spaced).map((r) => spaced.slice(r.from, r.to))).toEqual([
+            'name.upper()',
+            'len(name) > 1',
+            'lambda: print(name)'
+        ]);
+    });
+
     test('a dict literal in the script is not one of them', () => {
         const withDict = component.replace('name = "x"', 'sizes = {"a": 1}\nname = "x"');
 
@@ -466,6 +481,14 @@ describe('moduleImports', () => {
 describe('a declaration in a comment', () => {
     test('does not make a custom element', () => {
         expect(compileOptionsFor('<!-- <svelte:options customElement="my-tag" /> -->\n<p>x</p>')).toBeUndefined();
+        // After markup, and after another comment, in markup whose Python
+        // expressions Svelte does not parse, read by the scanner: each comment
+        // is blanked from its start to its end, wherever it stands.
+        expect(
+            compileOptionsFor(
+                `<p>${'a'.repeat(60)}</p>\n<!-- one -->\n<!-- <svelte:options customElement="my-tag" /> -->\n<p>{a if b else c}</p>`
+            )
+        ).toBeUndefined();
     });
 
     test('control: the declaration itself does', () => {
@@ -1161,6 +1184,14 @@ describe('an unknown construct is refused, never passed through', () => {
         expect(() => rewrite('<p>{"#1 of " + name}</p>')).not.toThrow();
     });
 
+    // The comment begins at its `#`, past a string written before it, and only
+    // a comment takes the brace: a `}` inside a string of a brace left open is
+    // no brace a comment took.
+    test('a comment straight after a string takes the brace, and a brace in a string is no comment', () => {
+        expect(() => rewrite('<p>{"a"#c}</p>')).toThrow(/takes the closing `\}` with it/);
+        expect(() => rewrite('<p>{name + "}"</p>')).not.toThrow(/takes the closing `\}` with it/);
+    });
+
     // Svelte 5 takes `{const a = n}` inside a block, its own spelling of
     // `{@const}`, and Svelthon's answer is the template rune `{a = n}`. The
     // keyword fell through to the generic interpolation, so the author read
@@ -1181,6 +1212,17 @@ describe('an unknown construct is refused, never passed through', () => {
         expect(() => rewrite(markup)).toThrow(/declares with a JavaScript keyword/);
         expect(() => rewrite(markup)).toThrow(spelling);
         expect(() => rewrite(markup)).toThrow(/would\s+cross as JavaScript/);
+    });
+
+    // Svelte's own `{@const}` is said as such, with the spelling that replaces
+    // it; `{@let}` and `{@var}` are no tag of Svelte's, and are not told they are.
+    test('Svelte’s {@const} is named, and only it', () => {
+        expect(() => rewrite('{#each rows as n}{@const a = n}{/each}')).toThrow("is Svelte's `{@const}`");
+        expect(() => rewrite('{#each rows as n}{@const a = n}{/each}')).toThrow('Svelthon writes it `{a = n}`');
+
+        for (const markup of ['{#each rows as n}{@let a = n}{/each}', '{#each rows as n}{@var a = n}{/each}']) {
+            expect(() => rewrite(markup)).toThrow(/is not a tag Svelthon knows/);
+        }
     });
 
     // A spread is an attribute of its own. Written as the *value* of a named one
@@ -1306,6 +1348,12 @@ describe('a closing tag with nothing open', () => {
 
     test('does not take the snippet names down with it', () => {
         expect(rewrite(STRAY)).toContain('__follow(row)');
+    });
+
+    // Nor does a clause with no block open, which would start a branch of the
+    // base scope, holding nothing.
+    test.for([['{:else}'], ['{:then v}']])('nor does %s', ([clause]) => {
+        expect(rewrite(STRAY.replace('{/if}', clause))).toContain('__follow(row)');
     });
 
     // The control: without the stray tag the same markup says the same thing,

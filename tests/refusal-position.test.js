@@ -44,7 +44,10 @@ describe('a markup refusal names a position', () => {
         ['a JavaScript spread', '<p {...x}></p>', 4],
         ['a spread inside a quoted value', '<p title="{**x}">a</p>', 11],
         ['a JavaScript declaration', '{#each rows as row}{const y = row}{/each}', 20],
-        ['a walrus onto a markup name', '{#each rows as row}<b onclick={(row := 2)}>x</b>{/each}', 31]
+        ['a walrus onto a markup name', '{#each rows as row}<b onclick={(row := 2)}>x</b>{/each}', 31],
+        ['a comment that takes the brace', '<p>{x  # a note}</p>', 4],
+        ['a comment that takes the brace in a tag', '<input value={x  # a note} />', 14],
+        ['a comment that takes the brace of a {@debug}', '<p>{@debug x  # a note}</p>', 4]
     ];
 
     test.for(CASES)('%s says the file, the line and the column', ([, markup, column]) => {

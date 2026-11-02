@@ -29,3 +29,4 @@
 <div data-k="after block">{#if count}x{/if}{@debug count} {@debug count} {@debug count} D</div>
 {#snippet opening()}{@debug count} {@debug count} S{/snippet}
 <p data-k="snippet">{@render opening()}</p>
+E {@debug count}

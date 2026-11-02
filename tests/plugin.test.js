@@ -360,6 +360,17 @@ describe('the plugin resolves what Vite cannot', () => {
         expect(plugin.resolveId('./shapes.py', importer)).toBe(resolve(fixtures, 'shapes.py'));
     });
 
+    // Python's import asks for a module under `?python`, and the module keeps
+    // it; a module of remote functions is served once, under its own path,
+    // whoever asks for it.
+    test('the module Python imports keeps its query, but for a remote one', () => {
+        const importer = resolve(fixtures, 'Anything.svelte');
+        const [shapes, remote] = ['shapes.py', 'remote.py'].map((one) => resolve(fixtures, one));
+
+        expect(plugin.resolveId(`${shapes}?python`, importer)).toBe(`${shapes}?python`);
+        expect(plugin.resolveId(`${remote}?python`, importer)).toBe(remote);
+    });
+
     // SvelteKit hands its route modules to Vite already resolved, with nobody to
     // resolve against, and its entries are relative to the *project root* —
     // a path no filesystem has.
@@ -543,7 +554,8 @@ describe('hot update invalidates the generated module too', () => {
     });
 
     // A store's `.py` is watched, not imported, so its own module has to go too
-    // — otherwise its load() never reruns and the previous body stands.
+    // — otherwise its load() never reruns and the previous body stands. Under
+    // both its ids: the one Python imports is the one with the query.
     test('editing a .py forgets the file as well as its module', () => {
         const file = resolve(fixtures, 'shapes.py');
         plugin.load.call({ addWatchFile() {} }, file);
@@ -552,6 +564,7 @@ describe('hot update invalidates the generated module too', () => {
         plugin.hotUpdate.call({ environment: env }, { file, modules: [] });
 
         expect(env.invalidated).toContain(file);
+        expect(env.invalidated).toContain(`${file}?python`);
     });
 
     test('a file with no generated module is left alone', () => {
