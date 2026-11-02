@@ -350,6 +350,30 @@ describe('the plugin resolves what Vite cannot', () => {
         }
     });
 
+    // But a link named otherwise than its target is the module Python imports
+    // by the link's name: taken for its target, `config.py` leading to
+    // `settings_dev.py` was compiled as `settings_dev`, and `import config`
+    // found no module; and a store leading to a plain file was no store.
+    test('a link named otherwise than its target is the link, its name and its kind', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'svelthon-links-'));
+
+        writeFileSync(join(dir, 'settings_dev.py'), 'where = "settings"\n');
+        writeFileSync(join(dir, 'cart_impl.py'), 'count = 3\n');
+        symlinkSync('settings_dev.py', join(dir, 'config.py'));
+        symlinkSync('cart_impl.py', join(dir, 'cart.svelte.py'));
+
+        try {
+            const importer = join(dir, 'Main.svelte');
+
+            expect(['./config.py', './cart.svelte.py'].map((one) => svelthon().resolveId(one, importer))).toEqual([
+                join(dir, 'config.py'),
+                join(dir, 'cart.svelte.py')
+            ]);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
     test('a virtual id is claimed with a null byte', () => {
         expect(plugin.resolveId(`${VIRTUAL_PREFIX}Counter`)).toBe(`\0${VIRTUAL_PREFIX}Counter`);
     });

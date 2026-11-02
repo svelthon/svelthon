@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { relative, resolve, dirname } from 'node:path';
+import { relative, resolve, dirname, basename } from 'node:path';
 import { readFileSync, existsSync, statSync, realpathSync } from 'node:fs';
 
 import {
@@ -1129,8 +1129,20 @@ export function svelthon(options = {}) {
     // keep links (`resolve.preserveSymlinks`): a link and its target are one
     // module, which, taken by their two paths, were two files of one Python
     // name, and the second import was refused as a clash.
+    //
+    // When they share their name. A module is the one Python imports by the
+    // name of the file it finds, the link's: `config.py` leading to
+    // `settings_dev.py` is `config`, and a store `cart.svelte.py` leading to
+    // `cart_impl.py` is a store. Taken for its target, the module was compiled
+    // as `settings_dev`, and `import config` found no module of its name.
     let preserveSymlinks = false;
-    const fileOf = (path) => (preserveSymlinks ? path : realpathSync(path));
+    const fileOf = (path) => {
+        if (preserveSymlinks) return path;
+
+        const real = realpathSync(path);
+
+        return basename(real) === basename(path) ? real : path;
+    };
 
     const pyFile = (id, importer) => {
         const direct = importer ? resolve(dirname(importer), id) : resolve(routes, id);
