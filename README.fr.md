@@ -1051,6 +1051,13 @@ def watch():
 `__call__` marche pareil. C'est la forme que prennent la plupart des nettoyages
 réels.
 
+**Un nettoyage lit un nom comme Svelte le lui rend, et un conteneur tel qu'il
+est maintenant.** Svelte rend à un nettoyage la valeur qu'un nom avait avant le
+changement qui relance l'effet ; un dict, une liste ou une instance modifiés sur
+place sont une seule valeur, déjà modifiée : un conteneur Python ne garde pas de
+copie ancienne de ses membres. Un nettoyage qui a besoin de ce que son effet a vu
+le garde dans l'effet : `n = box["n"]`, puis `return lambda: release(count, n)`.
+
 | Svelte | Svelthon |
 |---|---|
 | `$effect(() => expr)` | `=> expr` |
@@ -1626,7 +1633,7 @@ parsing, que seul le compilateur charge ; le README de Bryntime en donne le poid
 
 ## État
 
-Validé par `npm test`, 2 019 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 2 020 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;

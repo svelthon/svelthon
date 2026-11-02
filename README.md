@@ -1007,6 +1007,13 @@ def watch():
 reads a bound method off an object, and an instance with `__call__` works the
 same way. That is the shape most real teardowns take.
 
+**A teardown reads a name as Svelte hands it, and a container as it is now.**
+Svelte hands a teardown the value a name had before the change that runs the
+effect again; a dict, a list or an instance changed in place is one value,
+already changed, since a Python container keeps no old copy of its members. A
+teardown that needs what its run saw keeps it in the run: `n = box["n"]`, then
+`return lambda: release(count, n)`.
+
 | Svelte | Svelthon |
 |---|---|
 | `$effect(() => expr)` | `=> expr` |
@@ -1606,7 +1613,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 2 019 tests as written (vitest reports more, one per
+Validated by `npm test`, 2 020 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;
