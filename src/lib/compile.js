@@ -2203,7 +2203,11 @@ function instanceExports(c) {
         // are given because they differ in what the name means: an author's
         // `def` may sit under a decorator, so its value has to be read at the
         // call, and an `__expr_N` is this compiler's own and never moves.
-        ...c.funcs.map((f) =>
+        //
+        // What a template reads: a store has none, and hands its functions on
+        // through the namespace (`__store`, `__export_*`), so a wrapper of its
+        // was made and never read.
+        ...(c.store ? [] : c.funcs).map((f) =>
             componentWrapper(f) === RUNTIME.pyExpression
                 ? `const ${wrapperName(f.name)} = ${RUNTIME.pyExpression}((a) => ${stateRead(f.name, fn(f.name))}(...a), ` +
                   `${JSON.stringify(`${f.name}() — ${c.source}`)}, ${f.arity === Infinity ? '1 / 0' : f.arity}, ` +
