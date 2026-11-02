@@ -14,6 +14,7 @@ import './fixtures/ReflectElementNative.svelte';
 import './fixtures/EntityNamedElement.svelte';
 import './fixtures/FlagElement.svelte';
 import './fixtures/FlagElementNative.svelte';
+import './fixtures/PrototypeTypedElement.svelte';
 
 // **An entry of `customElement.props` that writes no type keeps the type the
 // annotation names**, as Svelte infers one from a default of `$props()`:
@@ -50,6 +51,28 @@ test('a flag whose entry configures something else than its type is a flag, as S
         'on|on|on|on|off'
     ]);
     expect(await read('flag-element')).toEqual(native);
+});
+
+// **An annotation names a type of the table only by the table's own names**:
+// one spelled like a property of `Object.prototype`, `constructor` or
+// `toString`, read what the prototype holds there and wrote `type: undefined`
+// into the element's options, which Svelte refuses. The import above is that
+// element compiled; its attributes are strings, as an unknown type leaves them.
+test('a prop annotated with a class spelled like a property of Object.prototype keeps no type', async () => {
+    const element = document.createElement('prototype-typed');
+
+    element.setAttribute('first', 'a');
+    element.setAttribute('second', 'b');
+    document.body.appendChild(element);
+    flushSync();
+    await Promise.resolve();
+    flushSync();
+
+    try {
+        expect(element.shadowRoot.querySelector('p').textContent).toBe('a|b');
+    } finally {
+        element.remove();
+    }
 });
 
 // A prop declared `reflect` is written back to its attribute, as Svelte writes

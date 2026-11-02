@@ -92,10 +92,18 @@ test.for([
 test.for([
     ['class Box:\n    pass\n\nstate = Box().__reduce_ex__(2)', /`__reduce_ex__\(\)` builds its answer with `copyreg`.*\(src\/C\.svelte:4\)/],
     ['def save(box):\n    return box.__reduce__()', /`__reduce__\(\)` builds its answer with `copyreg`.*\(src\/C\.svelte:2\)/],
-    ['help("str.join")', /`help\("str\.join"\)` looks the name up with `pydoc`.*`help\(obj\)` prints.*\(src\/C\.svelte:1\)/]
+    ['help("str.join")', /`help\("str\.join"\)` looks the name up with `pydoc`.*`help\(obj\)` prints.*\(src\/C\.svelte:1\)/],
+    ['help("toString")', /`help\("toString"\)` looks the name up with `pydoc`/]
 ])('`%s` is refused on its line', ([written, message]) => {
     expect(() => compile(`${written}\n`, 'C', 'src/C.svelte')).toThrow(message);
     expect(() => compile(`${written}\n`, 'C', 'src/C.svelte', { plain: true })).toThrow(message);
+});
+
+// A method of a JavaScript object spelled like a property of `Object.prototype`
+// was taken for one that builds its answer with a module, the function the
+// prototype holds under that name, and refused: `document.toString()`.
+test.for(['document.toString()', 'window.hasOwnProperty("name")', 'window.constructor()'])('`%s` compiles', (call) => {
+    expect(() => compile(`from browser import document, window\nx = ${call}\n`, 'C', 'src/C.svelte')).not.toThrow();
 });
 
 // The builtins that need a parser, a module fetched at run time or a file

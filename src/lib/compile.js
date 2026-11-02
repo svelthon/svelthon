@@ -3008,7 +3008,10 @@ function elementProps(src, jsNames = []) {
         for (const node of statements) {
             if (node instanceof $B.ast.AnnAssign && node.target instanceof $B.ast.Name) {
                 const annotation = node.annotation instanceof $B.ast.Subscript ? node.annotation.value : node.annotation;
-                if (annotation instanceof $B.ast.Name) types.set(node.target.id, ELEMENT_TYPES[annotation.id]);
+                // The table's own names: `constructor` is on its prototype.
+                if (annotation instanceof $B.ast.Name) {
+                    types.set(node.target.id, Object.hasOwn(ELEMENT_TYPES, annotation.id) ? ELEMENT_TYPES[annotation.id] : undefined);
+                }
             }
 
             if (node instanceof $B.ast.FunctionDef || node instanceof $B.ast.AsyncFunctionDef || node instanceof $B.ast.ClassDef) {
