@@ -1053,10 +1053,13 @@ réels.
 
 **Un nettoyage lit un nom comme Svelte le lui rend, et un conteneur tel qu'il
 est maintenant.** Svelte rend à un nettoyage la valeur qu'un nom avait avant le
-changement qui relance l'effet ; un dict, une liste ou une instance modifiés sur
-place sont une seule valeur, déjà modifiée : un conteneur Python ne garde pas de
-copie ancienne de ses membres. Un nettoyage qui a besoin de ce que son effet a vu
-le garde dans l'effet : `n = box["n"]`, puis `return lambda: release(count, n)`.
+changement qui relance l'effet. Un nom est un `$state.raw` et une valeur Python
+n'est jamais un proxy : un dict, une liste ou une instance modifiés sur place
+sont une seule valeur, déjà modifiée, comme un objet `$state.raw` que Svelte
+modifie sur place. Un nettoyage qui a besoin de ce que son effet a vu le garde
+dans l'effet, `n = box["n"]` puis `return lambda: release(count, n)` ; ou bien le
+conteneur est réaffecté au lieu d'être modifié, `box = {**box, "n": 1}`, et le
+nettoyage lit l'ancien, l'idiome de `$state.raw` chez Svelte.
 
 | Svelte | Svelthon |
 |---|---|

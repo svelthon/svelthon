@@ -1009,10 +1009,12 @@ same way. That is the shape most real teardowns take.
 
 **A teardown reads a name as Svelte hands it, and a container as it is now.**
 Svelte hands a teardown the value a name had before the change that runs the
-effect again; a dict, a list or an instance changed in place is one value,
-already changed, since a Python container keeps no old copy of its members. A
-teardown that needs what its run saw keeps it in the run: `n = box["n"]`, then
-`return lambda: release(count, n)`.
+effect again. A name is a `$state.raw` and a Python value is never proxied, so a
+dict, a list or an instance changed in place is one value, already changed, as
+a `$state.raw` object Svelte changes in place. A teardown that needs what its
+run saw keeps it in the run, `n = box["n"]` then `return lambda: release(count,
+n)`; or the container is bound again rather than changed, `box = {**box, "n":
+1}`, and the teardown reads the old one, the `$state.raw` idiom of Svelte.
 
 | Svelte | Svelthon |
 |---|---|

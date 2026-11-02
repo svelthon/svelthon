@@ -1,11 +1,12 @@
 <script lang="python">
 # What a teardown reads after a change that runs its effect again: a name as
-# Svelte hands it, the value before; a dict changed in place as it is now; and
-# what the run kept for it, what the run saw. Recorded into a JavaScript array
-# the test hands over, which no effect follows.
+# Svelte hands it, the value before; a dict changed in place as it is now; what
+# the run kept for it, what the run saw; and a dict bound again, the old one.
+# Recorded into a JavaScript array the test hands over, which no effect follows.
 events: object
 count = 0
 box = {"n": 0}
+other = {"n": 0}
 
 
 @effect
@@ -21,11 +22,18 @@ def kept():
     return lambda: events.push(["kept", was, n])
 
 
+@effect
+def rebound():
+    seen = other["n"]
+    return lambda: events.push(["rebound", seen, other["n"]])
+
+
 @export
 def change():
-    global count
+    global count, other
     count = 1
     box["n"] = 1
+    other = {**other, "n": 1}
 </script>
 
 <p>{count}</p>
