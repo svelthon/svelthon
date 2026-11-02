@@ -4,7 +4,31 @@ import Exposed from './fixtures/Exposed.svelte';
 import ExposedHost from './fixtures/ExposedHost.svelte';
 import DecoratedExport from './fixtures/DecoratedExport.svelte';
 import ForeignExport from './fixtures/ForeignExport.svelte';
+import ExportReboundHost from './fixtures/ExportReboundHost.svelte';
 import { compile } from '../src/lib/compile.js';
+
+// An exported name bound again is read again by the parent's page, as an
+// export of a Svelte child's state is: the instance answered the new value to
+// a call, and the page showed the old one until something else moved it.
+test('a parent’s page follows an exported name its child binds again', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+    const host = mount(ExportReboundHost, { target });
+    const shown = () => [target.querySelector('[data-k="shown"]').textContent, target.querySelector('[data-k="own"]').textContent];
+
+    flushSync();
+    const first = shown();
+    host.handle().change();
+    flushSync();
+    const changed = shown();
+    host.handle().restore();
+    flushSync();
+
+    expect([first, changed, shown()]).toEqual([
+        ['first', 'first'],
+        ['second', 'second'],
+        ['first', 'first']
+    ]);
+});
 
 // The one thing a parent can reach on a child that is not a prop. Svelte gathers
 // whatever an instance script exports into `$$exports` and hands that object

@@ -1686,7 +1686,7 @@ function preamble(c) {
         // author's names live in the same scope, and an `importjs { untrack }`
         // or a `def getContext()` of theirs is theirs.
         `import { ${['getContext as __getContext', 'setContext as __setContext', 'getAllContexts as __getAllContexts']
-            .concat(c.lifecycle('on_mount') || c.lifecycle('on_destroy') || c.bindables.length ? ['untrack as __untrack'] : [])
+            .concat(c.lifecycle('on_mount') || c.lifecycle('on_destroy') || c.bindables.length || exportsApi(c) ? ['untrack as __untrack'] : [])
             .concat(c.lifecycle('on_destroy') || releases(c) ? ['onDestroy as __onDestroy'] : [])
             .join(', ')} } from 'svelte';`,
         // The three questions the runtime asks of Svelte, answered by runes: a
@@ -2179,6 +2179,9 @@ function initCall(c) {
     ];
 }
 
+// Whether a component hands a parent an instance API (`@export`).
+const exportsApi = (c) => !c.store && c.funcs.some((f) => f.exported);
+
 function instanceExports(c) {
     return [
         // Event handlers are called with a DOM event Python never asked for.
@@ -2208,22 +2211,28 @@ function instanceExports(c) {
         // `var $$exports = { focus }`.
         //
         // Each under a variable of its own the name's every binding writes
-        // (`liveExport`), with the function it holds (`exportedMember`): a `let`,
-        // which Svelte hands back through a getter, so the parent reads what the
-        // name holds now and keeps what it read. The name's own wrapper called
-        // whatever the name held at the call.
+        // (`liveExport`), with the function it holds (`exportedMember`): a
+        // `$state.raw`, which Svelte hands back through a getter, so the parent
+        // reads what the name holds now, keeps what it read, and its page
+        // follows the name, as it follows an export of a Svelte child's state. A
+        // plain `let` answered a call and left the page on what it showed. The
+        // name's own wrapper called whatever the name held at the call.
+        //
+        // Written untracked: a bytearray the export watches is taken again when
+        // Python hands JavaScript the hand, a template's call of a Python
+        // function among them, inside a derived, where Svelte refuses a write.
         //
         // A component with no `@export` exports nothing, which is theirs too: an
         // instance exposes only what it says it exposes.
-        ...(!c.store && c.funcs.some((f) => f.exported)
+        ...(exportsApi(c)
             ? [
                   ``,
                   ...c.funcs
                       .filter((f) => f.exported)
                       .flatMap((f) => [
-                          `let ${api(f.name)};`,
-                          `${RUNTIME.liveExport}(${NS}, ${JSON.stringify(f.name)}, (__value) => { ${api(f.name)} = ` +
-                              `${RUNTIME.exportedMember}(__value); });`
+                          `let ${api(f.name)} = $state.raw();`,
+                          `${RUNTIME.liveExport}(${NS}, ${JSON.stringify(f.name)}, (__value) => { const __member = ` +
+                              `${RUNTIME.exportedMember}(__value); __untrack(() => { ${api(f.name)} = __member; }); });`
                       ]),
                   `export { ${c.funcs
                       .filter((f) => f.exported)
