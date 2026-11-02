@@ -253,9 +253,14 @@ const declaredBy = (pattern) => {
     }
 };
 
+// A TypeScript `import type`, `export type` or `declare`, which names a type or
+// an ambient value: no code at run time holds it, at the top of the module or
+// in a namespace.
+const erased = (node) => node.declare || node.importKind === 'type' || node.exportKind === 'type';
+
 // Whether a TypeScript namespace holds a value, which the transform then binds
-// to its name: one that declares only types, an interface, a type alias or a
-// namespace of the same kind, is erased with them.
+// to its name: one that declares only types, an interface, a type alias, what
+// is erased or a namespace of the same kind, is erased with them.
 const TYPES_ONLY = new Set(['TSInterfaceDeclaration', 'TSTypeAliasDeclaration']);
 
 const instantiated = (node) => {
@@ -264,6 +269,7 @@ const instantiated = (node) => {
     return body.some((one) => {
         const declared = one.type === 'ExportNamedDeclaration' && one.declaration ? one.declaration : one;
 
+        if (erased(one) || erased(declared)) return false;
         if (declared.type === 'TSModuleDeclaration') return instantiated(declared);
         return !TYPES_ONLY.has(declared.type);
     });
@@ -274,13 +280,12 @@ const instantiated = (node) => {
 const valueSpecifiers = (node) =>
     node.importKind === 'type' ? [] : node.specifiers.filter((one) => one.importKind !== 'type');
 
-// The names a statement at the top of the module binds there, at run time. A
-// TypeScript `import type`, `export type` or `declare` names a type or an
-// ambient value, which no code at run time holds, so it binds nothing. An
-// `enum`, a namespace that holds a value and an `import X = A.B` are values
-// the transform binds; a namespace's `var` stays in the function it becomes.
+// The names a statement at the top of the module binds there, at run time. What
+// is erased binds nothing. An `enum`, a namespace that holds a value and an
+// `import X = A.B` are values the transform binds; a namespace's `var` stays in
+// the function it becomes.
 const declares = (node) => {
-    if (node.declare || node.importKind === 'type' || node.exportKind === 'type') return [];
+    if (erased(node)) return [];
 
     switch (node.type) {
         case 'ImportDeclaration':

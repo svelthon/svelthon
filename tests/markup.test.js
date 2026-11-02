@@ -437,6 +437,13 @@ describe('moduleImports', () => {
         ['namespace Colour { export type Red = 7; export interface Blue {} }', []],
         ['namespace Colour { namespace Inner { export type Red = 7 } }', []],
         ['declare namespace Colour { const Red: 7 }', []],
+        // What a namespace declares ambient is erased in it as at the top: a
+        // `len` of the kind took the builtin's place.
+        ['namespace len { export declare const version: number }', []],
+        ['namespace len { export declare function size(): number }', []],
+        ['namespace len { export declare class Size {} }', []],
+        ['namespace len { namespace Inner { export declare const version: number } }', []],
+        ['namespace Colour { export declare const version: number; export const Red = 7 }', ['Colour']],
         ['namespace Colour { export const Red = 7 }\nimport Red = Colour.Red', ['Colour', 'Red']]
     ])('in TypeScript, %s', ([source, names]) => {
         const typed = `<script module lang="ts">\n${source}\n</script>\n<p>x</p>`;
