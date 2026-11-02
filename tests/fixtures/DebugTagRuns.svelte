@@ -27,3 +27,5 @@ count = 1
     {@debug count} {@debug count} C
 {/if}
 <div data-k="after block">{#if count}x{/if}{@debug count} {@debug count} {@debug count} D</div>
+{#snippet opening()}{@debug count} {@debug count} S{/snippet}
+<p data-k="snippet">{@render opening()}</p>

@@ -951,7 +951,22 @@ const opensFragment = (written) => {
 
     if (text.endsWith(INERT_ONE)) return opensFragment(text.slice(0, -1));
     if (text.endsWith(INERT)) return opensFragment(text.slice(0, text.lastIndexOf(INERT, text.length - 2)));
-    if (text.endsWith('}')) return /^\{[#:]/.test(text.slice(text.lastIndexOf('{')));
+    if (text.endsWith('}')) {
+        // A declaration is no node either, nor what this pass writes as one, the
+        // frame of a snippet among them: what stands before it decides.
+        let at = text.length - 1;
+
+        for (let depth = 0; at >= 0; at--) {
+            if (text[at] === '}') depth++;
+            else if (text[at] === '{' && --depth === 0) break;
+        }
+
+        const tag = text.slice(at);
+
+        if (/^\{@?(?:let|const)\s/.test(tag)) return opensFragment(text.slice(0, at));
+
+        return /^\{[#:]/.test(tag);
+    }
     if (!text.endsWith('>')) return text === '';
 
     const opening = text.slice(text.lastIndexOf('<'));
