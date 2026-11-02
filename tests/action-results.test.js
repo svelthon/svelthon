@@ -6,30 +6,46 @@ import ActionTypes from './fixtures/ActionTypes.svelte';
 import ActionPayload from './fixtures/ActionPayload.svelte';
 import ActionPayloadNative from './fixtures/ActionPayloadNative.svelte';
 import ActionPayloadHost from './fixtures/ActionPayloadHost.svelte';
+import ActionReadsHost from './fixtures/ActionReadsHost.svelte';
+
+// The events a JavaScript parent's action records, handed to a child, along
+// the steps the parent is taken through.
+const recorded = (Host, Child, steps) => {
+    const events = [];
+    const target = document.body.appendChild(document.createElement('div'));
+    const host = mount(Host, { target, props: { Child, events } });
+
+    for (const [step, ...args] of steps) {
+        flushSync();
+        host[step](...args);
+    }
+    flushSync();
+    unmount(host);
+
+    return events;
+};
 
 // A JavaScript action's result is read where Svelte reads it, in the effect
 // that installs the action: an `update` a state turns on installs the action
 // again and is then called, and `destroy` is read as often. Read as the action
 // returned, untracked, the `update` turned on was never heard of.
 test('the getters of an action’s result are read as Svelte reads them', () => {
-    const run = (Child) => {
-        const events = [];
-        const target = document.body.appendChild(document.createElement('div'));
-        const host = mount(ActionPayloadHost, { target, props: { Child, events } });
+    const steps = [['enable'], ['bump'], ['disable'], ['bump']];
+    const native = recorded(ActionPayloadHost, ActionPayloadNative, steps);
 
-        for (const step of ['enable', 'bump', 'disable', 'bump']) {
-            flushSync();
-            host[step]();
-        }
-        flushSync();
-        unmount(host);
-
-        return events;
-    };
-    const native = run(ActionPayloadNative);
-
-    expect(run(ActionPayload)).toEqual(native);
+    expect(recorded(ActionPayloadHost, ActionPayload, steps)).toEqual(native);
     expect(native.filter(([kind]) => kind === 'update')).toEqual([['update', 2, 1.5]]);
+});
+
+// And its `update` runs as Svelte runs it, in that effect: a state it reads
+// beside the value updates it again when it changes alone, where untracked the
+// page kept what the action had written.
+test('a state a JavaScript action’s update reads updates it again, as in Svelte', () => {
+    const steps = [['rename', 'B'], ['bump'], ['rename', 'C'], ['bump'], ['rename', 'D']];
+    const native = recorded(ActionReadsHost, ActionPayloadNative, steps);
+
+    expect(recorded(ActionReadsHost, ActionPayload, steps)).toEqual(native);
+    expect(native).toContainEqual(['update', '1.5:C']);
 });
 
 // Svelte reads an action's `update` and `destroy` off whatever it answers, a

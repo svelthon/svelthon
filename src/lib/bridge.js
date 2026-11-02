@@ -2316,10 +2316,12 @@ const changed = (before, after, python) => {
 // reading `this` finds it. A function is a result like an object, since Svelte
 // reads the two methods off whatever it is handed.
 //
-// `update` answers the value, and nothing else it reads: run in Svelte's
-// effect, a log it appends to would subscribe that effect to the log, and
-// each append would update the action again, a value that is an object always
-// counting as changed.
+// A Python `update` answers the value, and nothing else it reads: run in
+// Svelte's effect, a log it appends to would subscribe that effect to the log,
+// and each append would update the action again, a value that is an object
+// always counting as changed. A JavaScript one runs as Svelte runs it, in that
+// effect: a state it reads is a dependency, whose change updates the action
+// again with an object, where untracked the page kept what it had written.
 //
 // The two are read where Svelte reads them, in the effect that installs the
 // action, and not as the action returns, which Svelte untracks: a getter of
@@ -2336,7 +2338,8 @@ const actionPayload = (python, result, given) => {
         if (!changed(held, next[0], python)) return;
 
         held = next[0];
-        untrack(() => result.update(python ? held : forJavaScript([held])[0]));
+        if (python) untrack(() => result.update(held));
+        else result.update(forJavaScript([held])[0]);
     };
 
     return {
