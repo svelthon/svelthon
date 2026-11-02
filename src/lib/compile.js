@@ -1750,12 +1750,18 @@ function declarations(c) {
                   // `$bindable()` and `$bindable(undefined)` have none.
                   ...(defaulted.length ? [`class __Declared { value = $state.raw(); py = undefined; }`] : []),
                   ...defaulted.map((b) => `const ${bindableDefault(b)} = new __Declared();`),
+                  // A custom element's plain prop is destructured plain
+                  // (`elementProps`).
                   `let { ${c.bindables
                       .map((b) => [b, b === bindableVariable(b) ? b : `${b}: ${bindableVariable(b)}`])
                       .map(([b, bound]) =>
-                          defaulted.includes(b)
-                              ? `${bound} = $bindable(${bindableDefault(b)}.value)${c.element ? '' : `, ${b}: ${passed(b)}`}`
-                              : `${bound} = $bindable()`
+                          c.elementProps.includes(b)
+                              ? defaulted.includes(b)
+                                  ? `${bound} = ${bindableDefault(b)}.value`
+                                  : bound
+                              : defaulted.includes(b)
+                                ? `${bound} = $bindable(${bindableDefault(b)}.value)${c.element ? '' : `, ${b}: ${passed(b)}`}`
+                                : `${bound} = $bindable()`
                       )
                       .join(', ')}, ...__props } =` + ` $props();`,
                   ...c.bindables.flatMap((b) => [
@@ -2673,6 +2679,15 @@ function compile(
     // both from an accessor it publishes for a destructured prop, the one a
     // `bindable` is, so every prop takes that path; a scalar the component
     // writes reaches the element as JavaScript's own (`handOver`).
+    //
+    // Destructured as Svelte destructures a plain one, `let { amount = 1.5 } =
+    // $props()`, and not as `$bindable(1.5)`, which the author did not write:
+    // Svelte refuses a bindable's default for a prop the page set `undefined`
+    // (`props_invalid_value`), and an element whose page wrote
+    // `element.amount = undefined` before it was connected, or again before it
+    // was reconnected, never mounted.
+    const elementProps = element && !store && !plain ? props : [];
+
     if (element && !store && !plain) {
         bindables = [...props, ...bindables];
         props = [];
@@ -2847,6 +2862,7 @@ function compile(
         // A custom element publishes an accessor per name the props
         // destructure, so it reads no parent's value by a second one.
         element: element && !store && !plain,
+        elementProps,
         state,
         funcs,
         classes,

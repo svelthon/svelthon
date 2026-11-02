@@ -15,6 +15,8 @@ import './fixtures/EntityNamedElement.svelte';
 import './fixtures/FlagElement.svelte';
 import './fixtures/FlagElementNative.svelte';
 import './fixtures/PrototypeTypedElement.svelte';
+import './fixtures/UndefinedPropElement.svelte';
+import './fixtures/UndefinedPropElementNative.svelte';
 
 // **An entry of `customElement.props` that writes no type keeps the type the
 // annotation names**, as Svelte infers one from a default of `$props()`:
@@ -117,6 +119,51 @@ test('a reflected prop follows its value onto the attribute, as Svelte does', as
 
     expect(await read('reflect-element')).toEqual(await read('reflect-element-native'));
     expect(await read('reflect-element-native')).toEqual(['1', '7', '9', '9.5', '9.5']);
+});
+
+// A plain prop the page sets `undefined` reads its default, before the element
+// is connected and before it is connected again: destructured as a bindable,
+// which the author never wrote, it was refused by Svelte's rule for a bound
+// `undefined` (`props_invalid_value`), and the element stayed empty.
+test('a plain prop the page sets undefined reads its default, as Svelte’s does', async () => {
+    const settle = async () => {
+        flushSync();
+        await Promise.resolve();
+        flushSync();
+    };
+
+    const text = (element) => element.shadowRoot?.querySelector('p')?.textContent ?? null;
+
+    const read = async (tag) => {
+        const seen = [];
+        const fresh = document.createElement(tag);
+
+        fresh.amount = undefined;
+        document.body.appendChild(fresh);
+        await settle();
+        seen.push(text(fresh));
+        fresh.remove();
+
+        const again = document.createElement(tag);
+
+        document.body.appendChild(again);
+        await settle();
+        again.amount = 3;
+        await settle();
+        seen.push(text(again));
+        again.amount = undefined;
+        again.remove();
+        await settle();
+        document.body.appendChild(again);
+        await settle();
+        seen.push(text(again));
+        again.remove();
+
+        return seen;
+    };
+
+    expect(await read('undefined-prop-element')).toEqual(await read('undefined-prop-element-native'));
+    expect(await read('undefined-prop-element-native')).toEqual(['1.5', '3', '1.5']);
 });
 
 // An entry written in `customElement.props` configures its prop, and every
