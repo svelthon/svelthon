@@ -676,6 +676,24 @@ const HOST = {
 // it holds now.
 const MODULE_READERS = '__svelthon_module';
 
+// The three questions the runtime asks of Svelte, answered by runes, handed to
+// the bridge the module imports as `bridge`: a store's, in its own module, and a
+// component's, in its `<script module>` (`hooksInstalled` in svelthon.js).
+//
+// Whether a reaction is reading (`host.reacting` in Bryntime), whether a write
+// would be refused here, asked by a write of the value a state already holds,
+// which Svelte checks and which changes nothing (`host.refuses`), and Svelte's
+// own state of an object, which an object whose properties are a getter or a
+// setter is made into as it enters a container (`proxying`): a box of its own
+// at each call, so a write to it is allowed wherever the call is made.
+const bridgeHooks = (bridge) => [
+    `${bridge}.tracking(() => $effect.tracking());`,
+    `let __svelthon_unchanged = $state.raw(0);`,
+    `${bridge}.refusing(() => { __svelthon_unchanged = 0; });`,
+    `class __SvelthonStateBox { value = $state(); }`,
+    `${bridge}.proxying((value) => { const box = new __SvelthonStateBox(); box.value = value; return box.value; });`
+];
+
 // How many positional arguments a caller may hand a Python function, read off
 // its signature so the wrapper can drop the rest.
 //
@@ -1115,6 +1133,11 @@ const markerBindings = (c) =>
         (_, at) => `__bind(__proto, '${markerName(at + 1)}', () => __pybridge.rune(${at + 1}), undefined, undefined, false);`
     );
 
+// The names JavaScript gives the module, an `importjs` and its `<script
+// module>` alike, under the names Python reads them by, their NFKC form: the
+// author's, never a marker of Svelthon's nor a name a helper of it may take.
+const foreignNames = (names) => new Set(names.map(pythonName));
+
 // The text the JavaScript is compiled from (Bryc's `host.translate`): the
 // author's, each marker word of a declaration spelled for its statement.
 //
@@ -1127,7 +1150,7 @@ const markerBindings = (c) =>
 // characters, the shortest of `effect`'s. Compared with the AST's name by its
 // own text, the marker of `eﬀect` was refused as not where its line said.
 function translateMarkers(text, tree, names) {
-    const foreign = new Set(names.map(pythonName));
+    const foreign = foreignNames(names);
     const found = runeMarkerWords(tree.body, (one) => foreign.has(one));
 
     if (found.length === 0) return text;
@@ -1689,32 +1712,16 @@ function preamble(c) {
             .concat(c.lifecycle('on_mount') || c.lifecycle('on_destroy') || c.bindables.length || exportsApi(c) ? ['untrack as __untrack'] : [])
             .concat(c.lifecycle('on_destroy') || releases(c) ? ['onDestroy as __onDestroy'] : [])
             .join(', ')} } from 'svelte';`,
-        // The three questions the runtime asks of Svelte, answered by runes: a
-        // plain module has none. Whether a reaction is reading
-        // (`host.reacting` in Bryntime), whether a write would be refused
-        // here, asked by a write of the value a state already holds, which
-        // Svelte checks and which changes nothing (`host.refuses`), and what marks a
-        // state of Svelte's own, which `$state` looks for in the probe it is
-        // handed (`stateOwned`). And Svelte's own state of an object, which an
-        // object whose properties are a getter or a setter is made into as it
-        // enters a container (`proxying`): a box of its own at each call, so a
-        // write to it is allowed wherever the call is made.
-        //
-        // A component's are laid down in its `<script module>` by the markup
-        // pass (`HOOKS` in svelthon.js), once, in a scope that holds no
-        // instance's data: laid down here, at each mount, they were functions
-        // of the instance's scope, which the runtime keeps, and the last
-        // instance's props stayed alive once it was gone. A store is a module,
-        // and has no instance to keep.
-        ...(c.store
-            ? [
-                  `__pybridge.tracking(() => $effect.tracking());`,
-                  `let __unchanged = $state.raw(0);`,
-                  `__pybridge.refusing(() => { __unchanged = 0; });`,
-                  `class __StateBox { value = $state(); }`,
-                  `__pybridge.proxying((value) => { const box = new __StateBox(); box.value = value; return box.value; });`
-              ]
-            : []),
+        // The questions the runtime asks of Svelte (`bridgeHooks`): a plain
+        // module has none. A component's are laid down in its `<script
+        // module>` by the markup pass (`hooksInstalled` in svelthon.js), once,
+        // in a scope that holds no instance's data: laid down here, at each
+        // mount, they were functions of the instance's scope, which the
+        // runtime keeps, and the last instance's props stayed alive once it
+        // was gone. A store is a module, and has no instance to keep.
+        ...(c.store ? bridgeHooks('__pybridge') : []),
+        // What marks a state of Svelte's own, which `$state` looks for in the
+        // probe it is handed (`stateOwned`).
         `let __stateProbe = $state(__pybridge.stateProbe());`,
         ``
     ];
@@ -2641,10 +2648,7 @@ function compile(
 
     if (component) refuseTemplateWalrus(root._ast, table, source, exprLines);
 
-    // The names JavaScript gives the module, an `importjs` and its `<script
-    // module>` alike, under the names Python reads: the author's, never a
-    // marker of Svelthon's nor a name a helper of it may take.
-    const foreign = new Set([...jsImported, ...jsNames.map(pythonName)]);
+    const foreign = foreignNames([...jsImported, ...jsNames]);
 
     let { props, bindables, defaulted, state, funcs, classes, deriveds, effects, inspects, reserved, bound, lines, remarked, starred } =
         surface(root._ast.body, foreign);
@@ -2730,8 +2734,7 @@ function compile(
     const holdsHook = (hook) =>
         state.includes(hook) ||
         [...props, ...bindables].some((one) => (one.name ?? one) === hook) ||
-        jsImported.includes(hook) ||
-        jsNames.some((one) => pythonName(one) === hook);
+        foreign.has(hook);
     const lifecycle = (hook) => !store && (defined(hook) || holdsHook(hook) || starred);
     const hook = (name) => (defined(name) ? fn(name) : holdsHook(name) ? name : `${NS}.${name}`);
 
@@ -2976,7 +2979,7 @@ function importedNames(src, where) {
 function readScript(src, where, jsNames = []) {
     try {
         const lifted = takeImportJs(HOST, $B.unindent(src), where, 0, true);
-        const theirs = new Set([...lifted.imports.flatMap((one) => one.entries.map((e) => e.local)), ...jsNames.map(pythonName)]);
+        const theirs = foreignNames([...lifted.imports.flatMap((one) => one.entries.map((e) => e.local)), ...jsNames]);
         const body = takeArrows(lifted.source, where, 0, true, theirs);
         const tree = $B._PyPegen.run_parser(new $B.Parser(body, where, 'file'));
 
@@ -3047,6 +3050,7 @@ function elementProps(src, jsNames = []) {
 export {
     compile,
     MODULE_READERS,
+    bridgeHooks,
     VIRTUAL_PREFIX,
     virtualId,
     pythonModuleName,

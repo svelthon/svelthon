@@ -18,6 +18,7 @@ import { parse } from 'svelte/compiler';
 import {
     compile,
     MODULE_READERS,
+    bridgeHooks,
     VIRTUAL_PREFIX,
     virtualId,
     pythonModuleName,
@@ -525,22 +526,13 @@ const moduleReaders = (code, names) => {
     return code.slice(0, at) + statement + code.slice(at);
 };
 
-// The three questions the runtime asks of Svelte, answered by runes: whether a
-// reaction is reading (`tracking`), whether a write would be refused here
-// (`refusing`, a write of the value a state already holds), and a state of
-// Svelte's own for an object with accessors (`proxying`). Laid down in the
+// The questions the runtime asks of Svelte (`bridgeHooks`), laid down in the
 // `<script module>`, once, in a scope that holds no instance's data: laid down
 // by each instance, they were functions of its scope, which the runtime keeps,
 // and the last instance's props stayed alive once it was unmounted. Said on
 // the script's first line, so nothing the author wrote moves; a component
 // with no `<script module>` is given one.
-const HOOKS =
-    `import { __pybridge as __svelthon_hooks } from 'svelthon/bridge';` +
-    `__svelthon_hooks.tracking(() => $effect.tracking());` +
-    `let __svelthon_unchanged = $state.raw(0);` +
-    `__svelthon_hooks.refusing(() => { __svelthon_unchanged = 0; });` +
-    `class __SvelthonStateBox { value = $state(); }` +
-    `__svelthon_hooks.proxying((value) => { const box = new __SvelthonStateBox(); box.value = value; return box.value; });`;
+const HOOKS = `import { __pybridge as __svelthon_hooks } from 'svelthon/bridge';` + bridgeHooks('__svelthon_hooks').join('');
 
 const hooksInstalled = (code) => {
     const at = moduleScriptStart(code);
