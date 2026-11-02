@@ -3,6 +3,34 @@ import { mount, unmount, flushSync } from './mounted.js';
 import ActionResults from './fixtures/ActionResults.svelte';
 import ActionUpdates from './fixtures/ActionUpdates.svelte';
 import ActionTypes from './fixtures/ActionTypes.svelte';
+import ActionPayload from './fixtures/ActionPayload.svelte';
+import ActionPayloadNative from './fixtures/ActionPayloadNative.svelte';
+import ActionPayloadHost from './fixtures/ActionPayloadHost.svelte';
+
+// A JavaScript action's result is read where Svelte reads it, in the effect
+// that installs the action: an `update` a state turns on installs the action
+// again and is then called, and `destroy` is read as often. Read as the action
+// returned, untracked, the `update` turned on was never heard of.
+test('the getters of an action’s result are read as Svelte reads them', () => {
+    const run = (Child) => {
+        const events = [];
+        const target = document.body.appendChild(document.createElement('div'));
+        const host = mount(ActionPayloadHost, { target, props: { Child, events } });
+
+        for (const step of ['enable', 'bump', 'disable', 'bump']) {
+            flushSync();
+            host[step]();
+        }
+        flushSync();
+        unmount(host);
+
+        return events;
+    };
+    const native = run(ActionPayloadNative);
+
+    expect(run(ActionPayload)).toEqual(native);
+    expect(native.filter(([kind]) => kind === 'update')).toEqual([['update', 2, 1.5]]);
+});
 
 // Svelte reads an action's `update` and `destroy` off whatever it answers, a
 // callable included. A Python callable was adapted as a deferred transition's

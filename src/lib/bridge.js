@@ -2320,22 +2320,36 @@ const changed = (before, after, python) => {
 // effect, a log it appends to would subscribe that effect to the log, and
 // each append would update the action again, a value that is an object always
 // counting as changed.
+//
+// The two are read where Svelte reads them, in the effect that installs the
+// action, and not as the action returns, which Svelte untracks: a getter of
+// either that reads a state is then a dependency of that effect, which
+// installs the action again when it changes, as Svelte's own does. Read early,
+// an `update` turned on was never heard of. `update` is asked once, and the
+// wrapper is what Svelte calls after.
 const actionPayload = (python, result, given) => {
     if (result === null || (typeof result !== 'object' && typeof result !== 'function')) return result;
 
     let held = given[0];
+    let updates;
+    const update = ([, , ...next]) => {
+        if (!changed(held, next[0], python)) return;
+
+        held = next[0];
+        untrack(() => result.update(python ? held : forJavaScript([held])[0]));
+    };
 
     return {
-        update:
-            given.length && typeof result.update === 'function'
-                ? ([, , ...next]) => {
-                      if (!changed(held, next[0], python)) return;
+        get update() {
+            updates ??= given.length > 0 && typeof result.update === 'function';
 
-                      held = next[0];
-                      untrack(() => result.update(python ? held : forJavaScript([held])[0]));
-                  }
-                : undefined,
-        destroy: typeof result.destroy === 'function' ? () => result.destroy() : undefined
+            return updates ? update : undefined;
+        },
+        get destroy() {
+            const destroy = result.destroy;
+
+            return typeof destroy === 'function' ? () => destroy.call(result) : undefined;
+        }
     };
 };
 
