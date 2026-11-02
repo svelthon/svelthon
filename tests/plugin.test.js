@@ -503,10 +503,14 @@ describe('hot update invalidates the generated module too', () => {
         };
     };
 
+    // An edit: what was compiled is not what the file holds now.
+    const beforeTheEdit = (filename) =>
+        preprocess(`${readFileSync(filename, 'utf8')}<!-- before the edit -->\n`, [python()], { filename });
+
     test('editing a component forgets its generated body', async () => {
         const filename = resolve(fixtures, 'BlockScope.svelte');
 
-        const { code } = await preprocessed(filename);
+        const { code } = await beforeTheEdit(filename);
 
         const env = graph();
         const out = plugin.hotUpdate.call({ environment: env }, { file: filename, modules: [] });
@@ -524,6 +528,7 @@ describe('hot update invalidates the generated module too', () => {
         const source = readFileSync(filename, 'utf8');
         const ids = [];
 
+        await beforeTheEdit(filename);
         for (const save of [0, 1, 2]) {
             plugin.hotUpdate.call({ environment: graph() }, { file: filename, modules: [] });
             ids.push(bodyOf((await preprocess(`${source}<!-- save ${save} -->\n`, [python()], { filename })).code));
@@ -574,6 +579,64 @@ describe('hot update invalidates the generated module too', () => {
             plugin.hotUpdate.call({ environment: env }, { file: '/nowhere/Unknown.svelte', modules: [] })
         ).toBeUndefined();
         expect(env.invalidated).toEqual([]);
+    });
+
+    // A parent reads the language of each child it imports, a dependency of
+    // its own, and is asked again when the child changes. Its source and its
+    // children's languages as they were, it compiles to the same code: updated,
+    // it was mounted anew, its state lost, and ran ahead of the child, whose
+    // instance a registry held then kept the old code.
+    describe('a parent asked again for a child it imports', () => {
+        const parent = '<script lang="python">\nimportjs Child from "./Child.svelte"\n</script>\n<Child />\n';
+        const pythonChild = '<script lang="python">\nx = 1\n</script>\n<p>{x}</p>\n';
+        const javascriptChild = '<script>let x = 1;</script>\n<p>{x}</p>\n';
+
+        const inRoom = async (body) => {
+            const dir = mkdtempSync(join(tmpdir(), 'svelthon-parent-'));
+            const at = (name) => join(dir, name);
+            const compiled = (name) => preprocess(readFileSync(at(name), 'utf8'), [python()], { filename: at(name) });
+            const asked = (name) =>
+                plugin.hotUpdate.call({ environment: graph() }, { file: at(name), modules: [{ id: name }] }).map((one) => one.id);
+
+            try {
+                writeFileSync(at('Parent.svelte'), parent);
+                writeFileSync(at('Child.svelte'), pythonChild);
+                await body({ at, compiled, asked });
+            } finally {
+                rmSync(dir, { recursive: true, force: true });
+            }
+        };
+
+        test('has nothing to update when the child kept its language', () =>
+            inRoom(async ({ at, compiled, asked }) => {
+                await compiled('Parent.svelte');
+                writeFileSync(at('Child.svelte'), pythonChild.replace('x = 1', 'x = 2'));
+
+                expect(asked('Parent.svelte')).toEqual([]);
+            }));
+
+        test('and is updated when the child changed language, or its own source', () =>
+            inRoom(async ({ at, compiled, asked }) => {
+                await compiled('Parent.svelte');
+                writeFileSync(at('Child.svelte'), javascriptChild);
+                expect(asked('Parent.svelte')).toContain('Parent.svelte');
+
+                await compiled('Parent.svelte');
+                writeFileSync(at('Parent.svelte'), `${parent}<p>more</p>\n`);
+                expect(asked('Parent.svelte')).toContain('Parent.svelte');
+            }));
+
+        // Compiled as JavaScript since, it is no longer known as it was: its
+        // Python source written back is an edit, the child's own update.
+        test('and a component compiled as JavaScript since is updated when written back', () =>
+            inRoom(async ({ at, compiled, asked }) => {
+                await compiled('Child.svelte');
+                writeFileSync(at('Child.svelte'), javascriptChild);
+                await compiled('Child.svelte');
+                writeFileSync(at('Child.svelte'), pythonChild);
+
+                expect(asked('Child.svelte')).toContain('Child.svelte');
+            }));
     });
 });
 

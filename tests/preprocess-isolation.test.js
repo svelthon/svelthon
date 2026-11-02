@@ -279,6 +279,7 @@ describe('an edit reaches its module, whatever the process is in', () => {
             const { code } = await preprocess(first.source, [python()], { filename: first.filename });
             const id = code.match(/virtual:svelthon\/[^"']+/)[0];
 
+            writeFileSync(first.filename, first.source.replace('<p>', '<p>edited '));
             if (moved) process.chdir(second.root);
             const environment = graph();
             plugin.hotUpdate.call({ environment }, { file: first.filename, modules: [] });

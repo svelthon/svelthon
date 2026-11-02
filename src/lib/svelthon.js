@@ -543,6 +543,29 @@ const hooksInstalled = (code) => {
     return at === -1 ? `${code}<script module>${HOOKS}</script>` : code.slice(0, at) + HOOKS + code.slice(at);
 };
 
+// Whether a component's own file is written in Python.
+const pythonFile = (path) => pythonScript(readFileSync(path, 'utf8')) !== null;
+
+// What a component was last compiled from: its source, and the language of each
+// child whose file it read (`dependencies`). A child's edit asks its parents
+// again; one whose source and children's languages are as they were compiles to
+// the same code (`hotUpdate`).
+const COMPILED_FROM = new Map();
+
+const compiledAsBefore = (file) => {
+    const before = COMPILED_FROM.get(file);
+
+    try {
+        return (
+            before !== undefined &&
+            readFileSync(file, 'utf8') === before.content &&
+            before.children.every(([path, python]) => existsSync(path) && pythonFile(path) === python)
+        );
+    } catch {
+        return false;
+    }
+};
+
 export function python(options = {}) {
     const calls = perCall();
 
@@ -578,6 +601,10 @@ export function python(options = {}) {
             // Python, never injected behind an author's back.
             const declaring = pythonScript(content);
 
+            // Known as compiled once this pass has compiled it, and as nothing
+            // when it is JavaScript, or refused.
+            COMPILED_FROM.delete(filename);
+
             if (declaring === null) return refuseStrayPython(content, filename, root);
 
             refuseSpacedClose(declaring.closing, filename, root);
@@ -612,8 +639,9 @@ export function python(options = {}) {
             // Any other child, one a package, a module that re-exports it or a
             // namespace gives, or one the script assigned, is told apart when it
             // is mounted. Each file read is a dependency of this one, so a child
-            // that changes language recompiles its parent.
-            const read = [];
+            // that changes language recompiles its parent, and one that keeps
+            // it leaves the parent as it was (`compiledAsBefore`).
+            const languages = [];
             const pythonChildren = new Set();
             const javascriptChildren = new Set();
 
@@ -624,8 +652,10 @@ export function python(options = {}) {
 
                 if (!existsSync(path)) continue;
 
-                read.push(path);
-                (pythonScript(readFileSync(path, 'utf8')) !== null ? pythonChildren : javascriptChildren).add(local);
+                const written = pythonFile(path);
+
+                languages.push([path, written]);
+                (written ? pythonChildren : javascriptChildren).add(local);
             }
 
             const imported = new Set([...importedNames(python, filename ?? 'component'), ...moduleImports(content)]);
@@ -660,9 +690,11 @@ export function python(options = {}) {
                     })
             );
 
+            if (filename) COMPILED_FROM.set(filename, { content, children: languages });
+
             return {
                 code: announced(tagged(hooksInstalled(moduleReaders(elementOptions(code, python, file.jsNames), file.jsNames)), calls.open(file)), filename),
-                dependencies: read
+                dependencies: languages.map(([path]) => path)
             };
         },
         script({ content, attributes, filename }) {
@@ -1173,6 +1205,15 @@ export function svelthon(options = {}) {
             const bodies = [...generated.keys()].filter((one) => one === own || one.startsWith(`${own}?`));
 
             if (bodies.length === 0) return;
+
+            // A parent asked again for a child it imports, its own source and
+            // each child's language as it was compiled from: it compiles to the
+            // same code. Updated, it was mounted anew, its state lost, and it
+            // could run ahead of the child: the child's new module, imported by
+            // the parent's, took the old one's place before the child's own
+            // update could find it, and the instance a registry held kept the
+            // old code. Nothing changed, nothing to update.
+            if (compiledAsBefore(file)) return [];
 
             for (const one of bodies) forget('\0' + one.slice(key('').length));
             slots.delete(own);
