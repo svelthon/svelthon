@@ -100,16 +100,13 @@ describe('and a locked word is refused, however it was written', () => {
 // Which of them is state. A name the module binds to a value is, however the
 // binding is written: a `for` target, a `with … as`, a `match` capture and an
 // import bind as `=` does, and a list bound by one and appended to by a handler
-// left the page showing its old length. A class is declared, and an `except …
-// as` is unbound when the handler ends: neither is state.
+// left the page showing its old length. So does an `except … as`, unbound when
+// its handler ends as `del` unbinds one. A class is declared: it is not state.
 describe('and the ones that bind a value become a signal', () => {
     const signals = (src) => [...script(src).matchAll(/let (\w+) = \$state\.raw/g)].map((m) => m[1]);
 
-    test.for([
-        ['a class', 'class thing:\n    pass'],
-        ['an except clause', 'try:\n    pass\nexcept Exception as thing:\n    pass']
-    ])('%s gets no signal', ([, form]) => {
-        expect(signals(`${form}\n`)).not.toContain('thing');
+    test('a class gets no signal', () => {
+        expect(signals('class thing:\n    pass\n')).not.toContain('thing');
     });
 
     // `*` names nothing, so it must not become a binding of its own: the script
@@ -141,6 +138,7 @@ describe('and the ones that bind a value become a signal', () => {
         ['a for target', 'for thing in [1]:\n    pass'],
         ['a for target unpacked', 'for other, thing in [(1, 2)]:\n    pass'],
         ['a with clause', 'with manager() as thing:\n    pass'],
+        ['an except clause', 'try:\n    pass\nexcept Exception as thing:\n    pass'],
         ['a match capture', 'match 1:\n    case thing:\n        pass'],
         ['a match capture in a sequence', 'match [1]:\n    case [*thing]:\n        pass'],
         ['a match capture in a mapping', 'match {}:\n    case {**thing}:\n        pass']

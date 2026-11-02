@@ -1466,12 +1466,12 @@ function surface(body, theirs = new Set()) {
                 // descended into. An `except` handler and a `match` case arrive
                 // here as statements of their own and recurse the same way.
                 //
-                // `for x in …`, `x += 1` and `with a() as x, b() as y:` assign
-                // a value to a name of the module, so it is state. An `except
-                // … as x` is unbound when the handler ends, and an import
-                // declares: those two are taken, not state.
+                // `for x in …`, `x += 1`, `with a() as x, b() as y:` and
+                // `except … as x` assign a value to a name of the module, so it
+                // is state. The handler's ends as a `del` ends one, and reads
+                // in the markup as a deleted name does.
                 unpacked(node.target);
-                bind(node.name);
+                claim(node.name);
 
                 for (const item of node.items || []) unpacked(item.optional_vars);
 
