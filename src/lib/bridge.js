@@ -837,9 +837,12 @@ export const __pybridge = {
     // effect that hands it to `update` (`readState`), and handed back as it
     // is. It reaches Svelte inside the directive's array, which Svelte does
     // not read into, so a change inside a state handed to the action never
-    // called `update`.
+    // called `update`. In that effect alone: Svelte hands the action its
+    // first value untracked, and an action without `update` gets no effect,
+    // where a read through ran the value's getters ahead of the action, or
+    // with no action at all.
     watched(value) {
-        readState(value);
+        if (host.reacting()) readState(value);
         return value;
     },
 
