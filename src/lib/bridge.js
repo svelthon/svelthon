@@ -2653,7 +2653,12 @@ const GROUPS = new WeakMap();
 // one object per tuple of mentioned values answered the same row with the same
 // object on every render, and kept the string or the number of every row a
 // long-lived form had ever shown, since nothing told it a row was gone.
-const targetOf = (token, where) => ({ token, where });
+//
+// Each value is held as its key (`key`), as a keyed `{#each}` holds a row's: a
+// float is an object rebuilt at each read, so `row(0.5)` read once per input
+// was two targets and each click took the other choice away; a list or an
+// instance is still itself, so two equal rows are still two targets.
+const targetOf = (token, where) => ({ token, where: where.map(key) });
 
 // Two inputs write one target when they are of one token and their bindings
 // mention the same values, compared the way a Map compares its keys: by
