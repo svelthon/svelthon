@@ -1692,8 +1692,9 @@ function preamble(c) {
             'directiveAction', 'directiveTransition', 'directiveAnimate',
             'plainScalar', 'storeMember', 'invoke',
             ...(c.store ? ['pythonModule'] : SUBSCRIBING(c) ? ['unsubscribe'] : []),
-            ...(c.store && c.funcs.some((f) => c.published(f.name)) ? ['liveExport'] : []),
-            ...(!c.store && c.funcs.some((f) => f.exported) ? ['liveExport', 'exportedMember'] : []),
+            // Each by the rule that decides the code it is imported for.
+            ...(c.store && storeExports(c).length ? ['liveExport'] : []),
+            ...(exportsApi(c) ? ['liveExport', 'exportedMember'] : []),
             ...(c.bindables.length ? ['unproxied', 'handOver'] : []),
             // Only an effect and `on_mount` hand a value back to be called
             // later, so only a component with one needs the name.

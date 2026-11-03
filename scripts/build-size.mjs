@@ -2,6 +2,11 @@
 // the demo page loads, its script, the modules it preloads and its styles,
 // gzipped, in KB of 1024 bytes as Bryntime counts its own. Run by
 // `browser-check.sh` after it builds.
+//
+// `README.md` alone, because it is the one the others are held against:
+// `tests/documented-figures.test.js` fails when `README.fr.md` or the demo
+// states another figure. Two reviews read this file alone and took the other
+// two for unchecked.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
