@@ -402,6 +402,10 @@ const BOUND = new WeakMap();
 // The tokens of the defaults being taken (`__pybridge.initializing`).
 const INITIALIZING = new Set();
 
+// How a derived of Svelte's is made, handed over by the first module that
+// loads (`__pybridge.deriving`).
+let derive;
+
 export const __pybridge = {
     // Whether the components run in a browser or render on a server, as Svelte
     // tells them apart: by what the code was resolved for (`esm-env`), and not
@@ -831,6 +835,32 @@ export const __pybridge = {
     // `host.adopt`.
     proxying(make) {
         host.adopt = make;
+    },
+
+    // And how to make a derived of Svelte's, which a binding's read crosses.
+    deriving(make) {
+        derive = make;
+    },
+
+    // What an element's binding reads, through a derived of its own: a value
+    // that has not changed runs none of the effects that hand it to the
+    // element. A container's member is followed with the container, so a
+    // write of one member ran the effect of every other bound to it, which
+    // handed the element the member's value before the element's own event
+    // had brought it back: an `<audio>` whose volume, rate and mute were set
+    // together kept the volume and lost the rest, set back to what they were.
+    // Svelte follows each member of its own state apart, and loses none.
+    //
+    // In a reaction alone, which is what the derived spares: Svelte reads the
+    // binding again outside one, after an `input` event and a tick, and the
+    // block may be gone by then, its derived with it, which Svelte warns about
+    // reading (`derived_inert`).
+    boundRead(read) {
+        if (derive === undefined) return read;
+
+        const derived = derive(read);
+
+        return () => (host.reacting() ? derived() : read());
     },
 
     // The value of a `use:`, read as Svelte reads an action's value in the

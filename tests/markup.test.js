@@ -756,7 +756,7 @@ describe('the blocks that declare names', () => {
     // followed as what the declaration put there is (`__pybridge.state`).
     test('a bind: on a markup name is written by Svelte and read through Python', () => {
         expect(rewrite('{draft = name}<input bind:value={draft} />').out).toMatch(
-            /bind:value=\{\(\) => __expr_scalar_\d+\(__follow\(draft\)\), \(__value\) => draft = __pybridge\.state\(__pyBind\(__value\)\)\}/
+            /bind:value=\{__pybridge\.boundRead\(\(\) => __expr_scalar_\d+\(__follow\(draft\)\)\), \(__value\) => draft = __pybridge\.state\(__pyBind\(__value\)\)\}/
         );
         expect(rewrite('{value = ""}<input bind:value />').out).toContain(
             '(__value) => value = __pybridge.state(__pyBind(__value))'
@@ -940,8 +940,8 @@ describe('the attribute pass', () => {
     // and matched no rule at all.
     test.for([
         ['a handler', '<b title="y"onclick={go}>x</b>', /onclick=\{__event\(/],
-        ['a binding', '<input title="y"bind:value={x}>', /bind:value=\{\(\) =>/],
-        ['the shorthand', "<input title='y'bind:value>", /bind:value=\{\(\) =>/],
+        ['a binding', '<input title="y"bind:value={x}>', /bind:value=\{__pybridge\.boundRead\(\(\) =>/],
+        ['the shorthand', "<input title='y'bind:value>", /bind:value=\{__pybridge\.boundRead\(\(\) =>/],
         ['a class', '<b title="y"class:on={x}>x</b>', /class:on=\{__expr_\d+\(\)\}/]
     ])('%s keeps its rule with no space before it', ([, markup, shape]) => {
         expect(rewrite(markup).out).toMatch(shape);
@@ -960,7 +960,7 @@ describe('the attribute pass', () => {
     test.for([
         ['a handler', '<b onclick= {go}>x</b>', /onclick= \{__event\(/],
         ['the colon spelling', '<b on:click= {go}>x</b>', /on:click= \{__event\(/],
-        ['a binding', '<input bind:value= {x}>', /bind:value= \{\(\) =>/],
+        ['a binding', '<input bind:value= {x}>', /bind:value= \{__pybridge\.boundRead\(\(\) =>/],
         ['a class', '<b class:on= {x}>x</b>', /class:on= \{__expr_\d+\(\)\}/],
         ['a plain attribute', '<b title= {x}>x</b>', /title= \{__expr_\d+\(\)\}/]
     ])('%s keeps its rule across a space after the =', ([, markup, shape]) => {

@@ -14,6 +14,12 @@ EXPECTED='preloaded=OK True | doc=OK DOMNode | create=OK INPUT | tagName=OK INPU
 MARKUP_URL="http://localhost:$PORT/markup.html"
 MARKUP_EXPECTED='markup=OK {__expr_0()} {__expr_1()} | 2 functions'
 
+# And a player's settings bound to members of one Python object, set together:
+# Chromium hands each change back by an event of its own, later, which jsdom
+# does not, so only here did the first event's write set the others back.
+MEDIA_URL="http://localhost:$PORT/media.html"
+MEDIA_EXPECTED='media=OK dict 0.125 1.125 true, instance 0.125 1.125 true | 0.125 1.125 muted 0.125 1.125 muted'
+
 # One profile per launch: two Chromiums back to back fight over the default
 # profile's lock, and the second renders an incomplete page — at random.
 PROFILES=$(mktemp -d)
@@ -119,7 +125,7 @@ warm() {
         done
     done
 }
-warm /src/probe.js /src/markup-probe.js /demo/main.js
+warm /src/probe.js /src/markup-probe.js /src/media-probe.js /demo/main.js
 
 # What a page reports in its `<pre>`, asked again while it says nothing: on a
 # loaded machine a first render can overrun its budget, as the demo's can
@@ -160,6 +166,17 @@ else
     status=1
 fi
 
+MEDIA=$(report media "$MEDIA_URL" media)
+
+if [ "$MEDIA" = "$MEDIA_EXPECTED" ]; then
+    echo "✓ player settings in a browser — $MEDIA"
+else
+    echo "✗ player settings in a browser"
+    echo "  expected: $MEDIA_EXPECTED"
+    echo "  got     : ${MEDIA:-<empty>}"
+    status=1
+fi
+
 # The whole demo, rendered for real. On a modest machine a first render can miss
 # a piece — the dev server is still compiling. So the page is asked for again as
 # long as something is missing, within a bounded limit: what matters is that the
@@ -193,7 +210,7 @@ for one in "${expected[@]}"; do
 done
 
 # Both dev pages, and what they said while the assertions above read the DOM.
-console_check dev "$URL" "$MARKUP_URL" "http://localhost:$PORT/demo/"
+console_check dev "$URL" "$MARKUP_URL" "$MEDIA_URL" "http://localhost:$PORT/demo/"
 
 # The same page, from a production build. Everything above runs against the dev
 # server, which serves modules one by one; a build bundles them, minifies them

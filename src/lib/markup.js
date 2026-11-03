@@ -3209,13 +3209,17 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         // its truth taken as an attribute of that name takes it, on this side
         // of the expression, where an absence is still `undefined`. A
         // component's prop of that name is the author's value, read below.
+        //
+        // An element's read crosses a derived of its own (`boundRead`): a
+        // value that has not changed hands the element nothing.
         if (onElement(tag) && truthBinding(directive.slice('bind:'.length))) {
-            return `() => __pybridge.boundTruth(${call(expr, '', undefined, 'python')}), (${BOUND_VALUE}) => ${write}`;
+            return `__pybridge.boundRead(() => __pybridge.boundTruth(${call(expr, '', undefined, 'python')})), (${BOUND_VALUE}) => ${write}`;
         }
 
         const read = multiple ? 'selection' : toPythonChild() ? 'child' : 'scalar';
+        const reader = `() => ${call(expr, '__bound', undefined, read)}`;
 
-        return `() => ${call(expr, '__bound', undefined, read)}, (${BOUND_VALUE}) => ${write}`;
+        return `${onElement(tag) ? `__pybridge.boundRead(${reader})` : reader}, (${BOUND_VALUE}) => ${write}`;
     };
 
     // Whether the tag being read is a child written in Python, which is handed

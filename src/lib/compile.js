@@ -676,8 +676,8 @@ const HOST = {
 // it holds now.
 const MODULE_READERS = '__svelthon_module';
 
-// The three questions the runtime asks of Svelte, answered by runes, handed to
-// the bridge the module imports as `bridge`: a store's, in its own module, and a
+// The questions the runtime asks of Svelte, answered by runes, handed to the
+// bridge the module imports as `bridge`: a store's, in its own module, and a
 // component's, in its `<script module>` (`hooksInstalled` in svelthon.js).
 //
 // Whether a reaction is reading (`host.reacting` in Bryntime), whether a write
@@ -685,13 +685,15 @@ const MODULE_READERS = '__svelthon_module';
 // which Svelte checks and which changes nothing (`host.refuses`), and Svelte's
 // own state of an object, which an object whose properties are a getter or a
 // setter is made into as it enters a container (`proxying`): a box of its own
-// at each call, so a write to it is allowed wherever the call is made.
+// at each call, so a write to it is allowed wherever the call is made. And a
+// derived of Svelte's, which a binding's read crosses through (`boundRead`).
 const bridgeHooks = (bridge) => [
     `${bridge}.tracking(() => $effect.tracking());`,
     `let __svelthon_unchanged = $state.raw(0);`,
     `${bridge}.refusing(() => { __svelthon_unchanged = 0; });`,
     `class __SvelthonStateBox { value = $state(); }`,
-    `${bridge}.proxying((value) => { const box = new __SvelthonStateBox(); box.value = value; return box.value; });`
+    `${bridge}.proxying((value) => { const box = new __SvelthonStateBox(); box.value = value; return box.value; });`,
+    `${bridge}.deriving((read) => { const value = $derived.by(read); return () => value; });`
 ];
 
 // How many positional arguments a caller may hand a Python function, read off
