@@ -17,6 +17,8 @@ import { pythonExpressions, collector } from '../src/lib/markup.js';
 import '../src/lib/compile.js';
 import StarredRows from './fixtures/StarredRows.svelte';
 import StarredShort from './fixtures/StarredShort.svelte';
+import StarredDefaults from './fixtures/StarredDefaults.svelte';
+import StarredDefaultsNative from './fixtures/StarredDefaultsNative.svelte';
 
 const CPYTHON = {
     head: '1|[2, 3, 4]|list',
@@ -44,6 +46,33 @@ test('a starred name takes the rest by position, and a double star the rest by k
 
     expect(found).toEqual(CPYTHON);
     target.remove();
+});
+
+// A default beside a star is taken for an element of a JavaScript row that is
+// absent, `undefined` or a hole, as it is without the star: the row went
+// through Python's unpacking first, which read the absence as `None`, a value.
+test('a default beside a starred name is taken for an absent element, as in Svelte', async () => {
+    const seen = [];
+
+    for (const Component of [StarredDefaults, StarredDefaultsNative]) {
+        const target = document.body.appendChild(document.createElement('div'));
+        mount(Component, { target });
+        flushSync();
+        await Promise.resolve();
+        await Promise.resolve();
+        flushSync();
+        seen.push([...target.querySelectorAll('p')].map((one) => `${one.dataset.k} ${one.textContent}`));
+        target.remove();
+    }
+
+    expect(seen[0]).toEqual(seen[1]);
+    expect(seen[1].slice(0, 5)).toEqual([
+        'each ["fallback",["tail"]]',
+        'each ["fallback",["tail"]]',
+        'each [null,["tail"]]',
+        'each [null,["tail"]]',
+        'each ["value",["tail"]]'
+    ]);
 });
 
 // `python3`: `first, *others, last = [1]` and `= 3`.

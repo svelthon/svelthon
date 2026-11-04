@@ -1573,7 +1573,8 @@ const misplaced = (text) =>
 // nowhere, and an array. So the brackets become one name, the row, and the
 // targets one `{@const}` reading `__unpack(row, before, after)`: the engine's
 // own unpacking of a starred target, the starred name a list, and its errors
-// for a row too short or not iterable.
+// for a row too short or not iterable. An array of JavaScript's long enough
+// is taken apart in JavaScript, as a row without a star is.
 function unpackStarred(parts, call, names, tuple, unpack) {
     const alias = unpack.alias();
     const before = names.length;
@@ -1601,11 +1602,15 @@ function unpackStarred(parts, call, names, tuple, unpack) {
 
     const targets = elements.map((one, i) => parameterPattern(i === at ? rest : one, call, names, tuple, unpack).trim());
 
+    // An array of JavaScript's is taken apart in JavaScript, its elements kept as
+    // they are and the rest a list, so that an absent one takes its default as
+    // without the star; any other row by Python (`__pybridge.starred`).
+    const after = elements.length - at - 1;
+
     unpack.consts[slot] = {
         target: `[${targets.join(', ')}]`,
-        read: `__unpack(${alias}, ${at}, ${elements.length - at - 1})`,
-        source: '',
-        lazy: false
+        js: `__pybridge.starred(${alias}, ${at}, ${after}, () => ${call(`__unpack(${alias}, ${at}, ${after})`, '', '', 'python')})`,
+        once: true
     };
 
     for (const one of names.slice(before)) unpack.bound.add(one);

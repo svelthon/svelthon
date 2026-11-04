@@ -1229,6 +1229,23 @@ export const __pybridge = {
         return row;
     },
 
+    // The row a pattern around a starred name takes apart, `before` elements
+    // ahead of the star and `after` behind it: an array of JavaScript's as it
+    // is, the rest made Python's list, so that an element absent, `undefined` or
+    // a hole, still takes its default, as it does without the star (`positional`).
+    // Taken apart by Python first, the absence was `None`, a value, and the
+    // default was never taken. Any other row, a value of Python's or one too
+    // short, is Python's to take apart, with Python's errors (`unpack`).
+    starred(value, before, after, unpack) {
+        if (!Array.isArray(value) || pyLeading(value, 0) !== null || value.length < before + after) return unpack();
+
+        return [
+            ...value.slice(0, before),
+            pyList(value.slice(before, value.length - after).map(pyBind)),
+            ...(after === 0 ? [] : value.slice(value.length - after))
+        ];
+    },
+
     // `set_context` and `get_context`. A scalar is set as JavaScript's own, for
     // a JavaScript reader, and its original kept in the context too, for a
     // Python one: `Price(0.5)` reads back a `Price` and `1.0` a float, where the
