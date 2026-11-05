@@ -20,6 +20,8 @@ import StyleDir from './fixtures/SvStyleDir.svelte';
 import ClassArray from './fixtures/SvClassArray.svelte';
 import UseParams from './fixtures/SvUseParams.svelte';
 import BindThis from './fixtures/SvBindThis.svelte';
+import BindThisInEach from './fixtures/BindThisInEach.svelte';
+import BindThisInEachNative from './fixtures/BindThisInEachNative.svelte';
 
 const render = (Component) => {
     const target = document.body.appendChild(document.createElement('div'));
@@ -97,6 +99,22 @@ describe('the directives that are not bind: or on:', () => {
 
     test('bind:this gives Python the element itself', () =>
         expect(render(BindThis).at('this').textContent).toBe('section'));
+
+    // In an `{#each}`, its target read off the row: Svelte hands the getter
+    // the row itself, as it rewrites the getter, which a wrapper of Svelthon's
+    // around it kept from doing, and the component raised as it mounted.
+    test('bind:this on an element of an each block reaches its row, as in Svelte', () => {
+        const bound = (Component) => {
+            const target = document.body.appendChild(document.createElement('div'));
+            const instance = mount(Component, { target });
+            flushSync();
+
+            return instance.bound();
+        };
+
+        expect(bound(BindThisInEach)).toEqual(bound(BindThisInEachNative));
+        expect(bound(BindThisInEachNative)).toEqual(['a', 'b', 'c', 'd']);
+    });
 
     // `{onclick}` takes the shorthand path rather than the handler path, so the
     // Python function is handed to Svelte unwrapped. A Brython function is

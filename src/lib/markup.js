@@ -3224,7 +3224,14 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         const read = multiple ? 'selection' : toPythonChild() ? 'child' : 'scalar';
         const reader = `() => ${call(expr, '__bound', undefined, read)}`;
 
-        return `${onElement(tag) ? `__pybridge.boundRead(${reader})` : reader}, (${BOUND_VALUE}) => ${write}`;
+        // But `bind:this`, whose getter Svelte hands nothing to the element
+        // and rewrites itself, its parameters the values of the blocks around
+        // it, `(row) => …`: wrapped, the getter kept reading `row` as the
+        // block's own signal, and a `bind:this={row.ref}` in an `{#each}`
+        // raised as the component mounted.
+        const derived = onElement(tag) && directive !== 'bind:this';
+
+        return `${derived ? `__pybridge.boundRead(${reader})` : reader}, (${BOUND_VALUE}) => ${write}`;
     };
 
     // Whether the tag being read is a child written in Python, which is handed
