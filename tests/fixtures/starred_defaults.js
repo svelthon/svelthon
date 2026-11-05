@@ -12,3 +12,6 @@ export function makeRow(kind) {
 }
 
 export const later = (kind) => Promise.resolve(makeRow(kind));
+
+// Rows shorter than the positions ahead of the star, and one longer.
+export const shortRows = () => [[], [1], [1, 2, 3]];

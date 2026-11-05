@@ -1573,8 +1573,8 @@ const misplaced = (text) =>
 // nowhere, and an array. So the brackets become one name, the row, and the
 // targets one `{@const}` reading `__unpack(row, before, after)`: the engine's
 // own unpacking of a starred target, the starred name a list, and its errors
-// for a row too short or not iterable. An array of JavaScript's long enough
-// is taken apart in JavaScript, as a row without a star is.
+// for a row too short or not iterable. An array of JavaScript's is taken apart
+// in JavaScript, as a row without a star is, absent where it ends.
 function unpackStarred(parts, call, names, tuple, unpack) {
     const alias = unpack.alias();
     const before = names.length;

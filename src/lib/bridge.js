@@ -1234,15 +1234,21 @@ export const __pybridge = {
     // is, the rest made Python's list, so that an element absent, `undefined` or
     // a hole, still takes its default, as it does without the star (`positional`).
     // Taken apart by Python first, the absence was `None`, a value, and the
-    // default was never taken. Any other row, a value of Python's or one too
-    // short, is Python's to take apart, with Python's errors (`unpack`).
+    // default was never taken. A row too short is absent where it ends, as
+    // JavaScript reads one without the star: `[a="d", b="e", *rest]` on `[]`
+    // takes both defaults and an empty rest, where it raised Python's
+    // `ValueError`. Any other row, a value of Python's, is Python's to take
+    // apart, with Python's errors (`unpack`).
     starred(value, before, after, unpack) {
-        if (!Array.isArray(value) || pyLeading(value, 0) !== null || value.length < before + after) return unpack();
+        if (!Array.isArray(value) || pyLeading(value, 0) !== null) return unpack();
+
+        const remaining = value.slice(before);
+        const middle = Math.max(0, remaining.length - after);
 
         return [
-            ...value.slice(0, before),
-            pyList(value.slice(before, value.length - after).map(pyBind)),
-            ...(after === 0 ? [] : value.slice(value.length - after))
+            ...Array.from({ length: before }, (_, at) => value[at]),
+            pyList(remaining.slice(0, middle).map(pyBind)),
+            ...Array.from({ length: after }, (_, at) => remaining[middle + at])
         ];
     },
 

@@ -1,13 +1,17 @@
 <script lang="python">
 # A positional pattern with a default and a star, handed rows of JavaScript's:
 # an element absent, `undefined` or a hole, takes the default, as it does
-# without the star; `null`, and Python's `None`, are values. The witness is
+# without the star; `null`, and Python's `None`, are values. And a row too
+# short is absent where it ends, as without the star. The witness is
 # `StarredDefaultsNative.svelte`.
-importjs { makeRow, later } from './starred_defaults.js'
+importjs { makeRow, later, shortRows } from './starred_defaults.js'
 
 rows = [makeRow("undefined"), makeRow("hole"), makeRow("null"), [None, "tail"], makeRow("value")]
 pending = later("undefined")
+short = shortRows()
 </script>
+
+{#each short as [a="d", b="e", *rest]}<p data-k="short">{tojson([a, b, rest])}</p>{/each}
 
 {#each rows as [value="fallback", *rest]}<p data-k="each">{tojson([value, rest])}</p>{/each}
 {#snippet shown([value="fallback", *rest])}<p data-k="snippet">{tojson([value, rest])}</p>{/snippet}

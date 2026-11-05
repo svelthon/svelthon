@@ -51,6 +51,8 @@ test('a starred name takes the rest by position, and a double star the rest by k
 // A default beside a star is taken for an element of a JavaScript row that is
 // absent, `undefined` or a hole, as it is without the star: the row went
 // through Python's unpacking first, which read the absence as `None`, a value.
+// And so for one beyond the end of a row too short, which raised Python's
+// `ValueError` where Svelte takes the defaults.
 test('a default beside a starred name is taken for an absent element, as in Svelte', async () => {
     const seen = [];
 
@@ -66,7 +68,10 @@ test('a default beside a starred name is taken for an absent element, as in Svel
     }
 
     expect(seen[0]).toEqual(seen[1]);
-    expect(seen[1].slice(0, 5)).toEqual([
+    expect(seen[1].filter((one) => !one.startsWith('snippet') && !one.startsWith('then'))).toEqual([
+        'short ["d","e",[]]',
+        'short [1,"e",[]]',
+        'short [1,2,[3]]',
         'each ["fallback",["tail"]]',
         'each ["fallback",["tail"]]',
         'each [null,["tail"]]',
