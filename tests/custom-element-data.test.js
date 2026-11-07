@@ -123,7 +123,7 @@ test("a `<svelte:element>`'s name told by its text, or read as it renders", () =
     const quoted = compiled('<svelte:element this="{tag}" open={data}></svelte:element>');
 
     expect(quoted.out).toBe(
-        '{#each [__expr_0()] as SvelthonElement0}<svelte:element this={SvelthonElement0}  ' +
-            'open={__pybridge.element(SvelthonElement0, "__truthy", __expr_py_1())}></svelte:element>{/each}'
+        '<svelte:boundary>{@const SvelthonElement0 = __expr_0()}<svelte:element this={SvelthonElement0}  ' +
+            'open={__pybridge.element(SvelthonElement0, "__truthy", __expr_py_1())}></svelte:element></svelte:boundary>'
     );
 });

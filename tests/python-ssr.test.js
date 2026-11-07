@@ -39,6 +39,15 @@ import HeldNone from './fixtures/HeldNone.svelte';
 import HeldNoneNative from './fixtures/HeldNoneNative.svelte';
 import HeldSpelled from './fixtures/HeldSpelled.svelte';
 import HeldSpelledNative from './fixtures/HeldSpelledNative.svelte';
+import HeldTransitions from './fixtures/HeldTransitions.svelte';
+import HeldTransitionsNative from './fixtures/HeldTransitionsNative.svelte';
+import HeldNamespaces from './fixtures/HeldNamespaces.svelte';
+import HeldNamespacesNative from './fixtures/HeldNamespacesNative.svelte';
+import HeldScriptNames from './fixtures/HeldScriptNames.svelte';
+import HeldScriptNamesNative from './fixtures/HeldScriptNamesNative.svelte';
+import HeldWhere from './fixtures/HeldWhere.svelte';
+import HeldWhereNative from './fixtures/HeldWhereNative.svelte';
+import { reads } from './fixtures/held_reads.js';
 import StarSnippet from './fixtures/StarSnippet.svelte';
 import StarSnippetNative from './fixtures/StarSnippetNative.svelte';
 import StarHooks from './fixtures/StarHooks.svelte';
@@ -78,6 +87,30 @@ test('the server renders a child held by a name as Python reads the name, None a
     expect(shown(HeldNone)).toBe(shown(HeldNoneNative));
     expect(shown(HeldSpelled)).toBe(shown(HeldSpelledNative));
     expect(shown(HeldSpelled).match(/<output>child<\/output>/g)).toHaveLength(4);
+});
+
+// And a held tag stands where it is written, `animate:` alone in its keyed
+// block.
+test('the server renders a held tag in every place it stands, as Svelte does', () => {
+    expect(shown(HeldTransitions)).toContain('<li data-k="quoted1">1</li>');
+    expect(shown(HeldTransitions)).toBe(shown(HeldTransitionsNative));
+});
+
+// Inside an `<svg>` and beside the script's names too.
+test('the server renders a held tag inside an svg and beside the names of the script, as Svelte does', () => {
+    expect(shown(HeldNamespaces)).toContain('<rect data-k="direct" width="20"></rect>');
+    expect(shown(HeldNamespaces)).toBe(shown(HeldNamespacesNative));
+    expect(shown(HeldScriptNames)).toBe(shown(HeldScriptNamesNative));
+});
+
+// And it is read where it stands: not at all under a parent that renders
+// nothing.
+test('the server reads a held tag where it stands, as Svelte does', () => {
+    reads.length = 0;
+    const body = shown(HeldWhere);
+
+    expect(reads).toEqual(['function', 'function']);
+    expect(body).toBe(shown(HeldWhereNative));
 });
 
 // A snippet brought by `*` renders under its bare name on the server too

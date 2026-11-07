@@ -1,8 +1,8 @@
 // What the server renders for these Python components. `python-ssr.test.js`
 // asserts it and `python-hydration.test.js` hydrates on it, so the two cannot
 // drift apart in silence. A `<svelte:element>` whose name is read as it
-// renders and that holds an attribute of the boolean table stands in a block
-// of one row (`<!--[-->`), which reads the name once.
+// renders and that holds an attribute of the boolean table stands in a
+// `<svelte:boundary>` (`<!--[-->`), whose `{@const}` reads the name once.
 export const PythonTruthAttributes =
     "<!--[--><div data-k=\"hidden\">x</div> <button data-k=\"disabled\">x</button> <input data-k=\"checked\" type=\"checkbox\"/> <input data-k=\"required\"/> <details data-k=\"open\"><summary>x</summary></details> <input data-k=\"indeterminate\" type=\"checkbox\"/> <input data-k=\"indeterminate-spread\" type=\"checkbox\"/> <input data-k=\"indeterminate-cleared\" type=\"checkbox\" indeterminate=\"\"/> <button data-k=\"witness\" disabled=\"\">x</button> <div data-k=\"dict\" class=\"shown\"></div> <div data-k=\"list\" class=\"base\"></div> <div data-k=\"text\" class=\"plain words\"></div> <div data-k=\"shorthand\">x</div> <div data-k=\"quoted\">x</div> <div data-k=\"quoted-class\" class=\"a\"></div> <!--[--><!----><div data-k=\"element\" class=\"a\">x<!----></div><!----><!--]--> <div data-k=\"spread\" class=\"a\">x</div> <div data-k=\"until-found\" hidden=\"until-found\">x</div> <div data-k=\"until-found-spread\" hidden=\"until-found\">x</div> <div data-k=\"until-found-subclass\" hidden=\"until-found\">x</div> <!--[--><!----><div data-k=\"until-found-element\" hidden=\"until-found\">x<!----></div><!----><!--]--> <div data-k=\"hidden-true\" hidden=\"\">x</div> <div data-k=\"hidden-other-text\" hidden=\"\">x</div><!--]-->";
 

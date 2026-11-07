@@ -2740,6 +2740,21 @@ function scopeChain(seed, indexed, refuseCompilerName) {
         // Whether a tag of this name closes the element of the innermost scope.
         closes: (name) => closedBy(owners.at(-1), name),
 
+        // Whether Svelte takes a `{@const}` in the innermost scope
+        // (`const_tag_invalid_placement`): a block's, a component's children,
+        // `<svelte:self>`'s aside, a boundary's.
+        takesConst: () => {
+            const owner = owners.at(-1);
+
+            return (
+                scopes.length > 1 &&
+                (owner === null ||
+                    owner === 'svelte:boundary' ||
+                    owner === 'svelte:fragment' ||
+                    (COMPONENT.test(owner) && owner !== 'svelte:self'))
+            );
+        },
+
         // The id of the scope the element a closing tag of this name closes
         // opened, undefined when no open element has the name.
         openedBy: (name) => ids[closedAt(owners, name, null)],
@@ -3310,15 +3325,16 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         if (where?.imported === undefined) return null;
 
         // A child named by its own file is known; an import read again is
-        // the same binding, with nothing run, so it needs no block.
+        // the same binding, with nothing run, so it needs no capture.
         if (rest.length === 0 && (where.pythonChildren.has(head) || where.javascriptChildren.has(head))) return null;
         if (where.imported.has(head)) return { read: one.name, wrap: false };
 
         return { read: call(one.name, '__bound'), wrap: true };
     };
-    // Every name of the markup as Python reads it, as a snippet's is declared:
-    // `𝓢velthonElement0` is `SvelthonElement0` to Python.
-    const taken = new Set(identifiers(markup).map(pythonName));
+    // Every name of the component as Python reads it, as a snippet's is
+    // declared: `𝓢velthonElement0` is `SvelthonElement0` to Python. Its
+    // script's too, in whose scope a name of the root is declared.
+    const taken = new Set(identifiers(where?.content ?? markup).map(pythonName));
     let heldCount = 0;
     const heldTag = (prefix = 'SvelthonChild') => {
         let name;
@@ -3326,8 +3342,28 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         while (taken.has(name));
         return name;
     };
-    // The open elements that bound their child, by scope.
-    const heldOwners = new Map();
+    // The open tags that read once what they render (`capture`), by scope:
+    // the tag that closes one ends what it opened.
+    const captures = new Map();
+
+    // What a tag reads once is bound to its own name where the tag stands,
+    // under the same condition and in the same scope, with nothing between the
+    // tag and what encloses it that Svelte reads through: an `{#each}` of one
+    // row hid the keyed block `animate:` asks for and the block a local
+    // transition plays with, a snippet set back the namespace an element
+    // gives a `<svelte:element>`, and a `{@const}` moved before the elements
+    // around the tag was read where its parent rendered nothing, out of reach
+    // of a snippet declared inside. A `{@const}` where Svelte takes one, and
+    // elsewhere one in a `<svelte:boundary>` around the tag, which passes on
+    // errors and pending work it has no snippet for, and which local
+    // transitions and namespaces see through.
+    const capture = (name, read) => {
+        const bound = `{@const ${name} = ${read}}`;
+
+        if (chain.takesConst()) return { opening: bound, ending: '' };
+
+        return { opening: `<svelte:boundary>${bound}`, ending: '</svelte:boundary>' };
+    };
 
     // The selects a spread may make multiple, numbered in markup order.
     let selects = 0;
@@ -3364,11 +3400,11 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
 
     // The read of a `<svelte:element>`'s `this` when it is not text alone,
     // braced, a lone interpolation between quotes, or text around one, which
-    // Svelte concatenates. Read once, in a block of one iteration, as the
-    // child of a `<svelte:component>` is (`heldSource`), and named by that
-    // iteration's item, which each attribute of the boolean table asks as it
-    // renders whether it names a custom element. The attribute is skipped
-    // whole where the walk meets it (`thisFrom`, `thisTo`).
+    // Svelte concatenates. Read once under a name of its own (`capture`), as
+    // the child of a `<svelte:component>` is (`heldSource`), which each
+    // attribute of the boolean table asks as it renders whether it names a
+    // custom element. The attribute is skipped whole where the walk meets it
+    // (`thisFrom`, `thisTo`).
     const elementSource = (one) => {
         if (one.name !== 'svelte:element' || staticElement(one) !== undefined || !asksCustom(one)) return null;
 
@@ -3402,8 +3438,6 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         one.thisTo = value.end;
         return read;
     };
-    // The open `<svelte:element>`s whose `this` is read so, by scope.
-    const elementOwners = new Map();
 
     // Whether a tag holds what asks whether it is a custom element: an
     // attribute of the boolean table, by name or as a shorthand, or a spread,
@@ -4000,11 +4034,10 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 else if (tag && (isComponent(tag) || !VOID.has(tag.name.toLowerCase())) && !selfClosing) {
                     push([]);
                     chain.own(tag.name);
-                    if (tag.wrapped) heldOwners.set(chain.id(), tag.held);
-                    if (tag.element !== undefined) elementOwners.set(chain.id(), tag.element);
+                    if (tag.ending !== undefined) captures.set(chain.id(), tag);
                 }
 
-                if ((tag?.wrapped || tag?.element !== undefined) && (tag.closing || selfClosing)) ending = '{/each}';
+                if (tag?.ending !== undefined && (tag.closing || selfClosing)) ending = tag.ending;
                 ended = true;
             }
 
@@ -4100,29 +4133,27 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
             inTag = true;
             tagIn = index;
 
-            // A tag that holds its child is read once, in a block of one
-            // iteration, and named by that iteration's item, closing tag
-            // included.
+            // A tag that holds its child is read once, under a name of its own
+            // (`capture`), closing tag included.
             if (tag?.closing) {
-                const held = heldOwners.get(chain.openedBy(tag.name));
+                const opener = captures.get(chain.openedBy(tag.name));
 
-                if (held !== undefined) {
-                    tag.held = held;
-                    tag.wrapped = true;
-                    out += `</${held}`;
+                tag.ending = opener?.ending;
+                if (opener?.held !== undefined) {
+                    tag.held = opener.held;
+                    out += `</${opener.held}`;
                     index += named[0].length;
                     continue;
                 }
-
-                tag.element = elementOwners.get(chain.openedBy(tag.name));
             } else if (tag) {
                 const source = heldSource(tag);
 
                 if (source !== null && !source.wrap) tag.held = source.read;
                 else if (source !== null) {
                     tag.held = heldTag();
-                    tag.wrapped = true;
-                    out += `{#each [${source.read}] as ${tag.held}}<${tag.held}`;
+                    const { opening, ending } = capture(tag.held, source.read);
+                    tag.ending = ending;
+                    out += `${opening}<${tag.held}`;
                     index += named[0].length;
                     continue;
                 }
@@ -4133,7 +4164,9 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
 
                 if (element !== null) {
                     tag.element = heldTag('SvelthonElement');
-                    out += `{#each [${element}] as ${tag.element}}<svelte:element this={${tag.element}}`;
+                    const { opening, ending } = capture(tag.element, element);
+                    tag.ending = ending;
+                    out += `${opening}<svelte:element this={${tag.element}}`;
                     index += named[0].length;
                     continue;
                 }
