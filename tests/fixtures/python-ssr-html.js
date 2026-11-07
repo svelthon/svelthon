@@ -21,3 +21,13 @@ export const ScalarProps =
 // Two groups, both empty: what the reader picks before hydrating is theirs.
 export const GroupHydrate =
     "<!--[--><input data-k=\"box\" type=\"checkbox\" value=\"yes\"/> <input data-k=\"radio\" type=\"radio\" value=\"yes\"/> <p data-k=\"model\">|</p><!--]-->";
+
+// Two groups whose values the markup evaluates, `a` picked in each; Svelte's
+// witness renders the same page.
+export const GroupHydrateValues =
+    "<!--[--><input data-k=\"box-a\" type=\"checkbox\" value=\"a\" checked=\"\"/> <input data-k=\"box-b\" type=\"checkbox\" value=\"b\"/> <!--[--><input data-k=\"radio-a\" type=\"radio\" name=\"choice\" value=\"a\" checked=\"\"/><input data-k=\"radio-b\" type=\"radio\" name=\"choice\" value=\"b\"/><!--]--> <p data-k=\"model\">a|a</p><!--]-->";
+
+// A radio and a checkbox whose values answer anew at each call: the numbers
+// are the server's, which the client's need not repeat.
+export const GroupHydrateMoving =
+    "<!--[--><input data-k=\"radio\" type=\"radio\" value=\"v-1\"/> <input data-k=\"box\" type=\"checkbox\" value=\"3\"/> <p data-k=\"model\">|</p><!--]-->";

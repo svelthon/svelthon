@@ -2838,12 +2838,28 @@ export function group(node, [current, write, chosen, fielded, binding, scope, wh
     // browser's, no choice of the author's.
     const applied = (written) => CHOSEN.get(written) ?? pyBind(written);
 
+    // The value the field was last handed, read in that cache and kept, from
+    // the install on: a `null` there is no value, which `set_value` never
+    // writes, keeping a field's `null` as `undefined`, but `set_attribute`'s,
+    // which hydration calls to take the default away
+    // (`remove_input_defaults`), and the field still holds the value before.
+    // Compiled again for the group, `"v-{next_id()}"` answered anew. Whether
+    // what was written is a value is what `keep` answers.
+    let field = null;
+    const keep = (written) => {
+        if (written === null) return false;
+
+        field = { value: written };
+        return true;
+    };
+    const cache = fielded ? attributesOf(node) : undefined;
+
+    if (cache !== undefined && 'value' in cache) keep(cache.value);
+
     const value = () => {
         if ('__value' in node) return applied(node.__value);
-
-        const written = fielded ? attributesOf(node) : undefined;
-
-        if (written !== undefined && 'value' in written) return applied(written.value);
+        if (cache !== undefined && 'value' in cache) keep(cache.value);
+        if (field !== null) return applied(field.value);
         if (picked !== undefined) return pyBind(picked);
 
         return node.hasAttribute('value') ? node.value : NONE;
@@ -2926,9 +2942,11 @@ export function group(node, [current, write, chosen, fielded, binding, scope, wh
     // updates, and after it: the control follows each write, as Svelte's own
     // group follows its control's value. Read at the update, the field still
     // held the value before, and the control kept a state its value no longer
-    // had.
+    // had. A write that is no value (`keep`) is no new value to show: shown,
+    // hydration's `null` put the server's model back over what the reader
+    // picked before the script ran.
     const followed = [];
-    const follow = (owner, key) => {
+    const follow = (owner, key, fresh = () => true) => {
         if (owner === undefined || !Object.hasOwn(owner, key)) return;
 
         let held = owner[key];
@@ -2939,14 +2957,14 @@ export function group(node, [current, write, chosen, fielded, binding, scope, wh
             get: () => held,
             set(next) {
                 held = next;
-                show(model);
+                if (fresh(next)) show(model);
             }
         });
         followed.push([owner, key]);
     };
 
     follow(node, '__value');
-    if (fielded) follow(attributesOf(node), 'value');
+    follow(cache, 'value', keep);
 
     const changed = () => {
         if (!boxes) return write(value());

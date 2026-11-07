@@ -8,6 +8,10 @@ import KeyIdentity from './fixtures/KeyIdentity.svelte';
 import SvelteConstructs from './fixtures/SvelteConstructs.svelte';
 import ScalarProps from './fixtures/ScalarProps.svelte';
 import GroupHydrate from './fixtures/GroupHydrate.svelte';
+import GroupHydrateValues from './fixtures/GroupHydrateValues.svelte';
+import GroupHydrateValuesNative from './fixtures/GroupHydrateValuesNative.svelte';
+import GroupHydrateMoving from './fixtures/GroupHydrateMoving.svelte';
+import GroupHydrateMovingNative from './fixtures/GroupHydrateMovingNative.svelte';
 import GroupCheckedWritten from './fixtures/GroupCheckedWritten.svelte';
 import GroupCheckedWrittenNative from './fixtures/GroupCheckedWrittenNative.svelte';
 import * as html from './fixtures/python-ssr-html.js';
@@ -90,6 +94,85 @@ test('a group the reader changed before hydrating keeps the change', async () =>
         true
     ]);
     expect(target.querySelector('[data-k="model"]').textContent).toBe('yes|yes');
+});
+
+// A group whose values the markup evaluates keeps what the server checked once
+// hydrated, and a click adds to its model. Hydration takes the default `value`
+// attribute away with `set_attribute(input, 'value', null)`, which writes the
+// `null` into the cache the group read the field's value from: the boxes were
+// all unticked, and a click gave `[None]`.
+test.for([
+    ['Python', GroupHydrateValues],
+    ['Svelte', GroupHydrateValuesNative]
+])('%s: a hydrated group of evaluated values keeps its choice', async ([, Component]) => {
+    const target = document.body.appendChild(document.createElement('div'));
+    const q = (k) => target.querySelector(`[data-k="${k}"]`);
+    const ticked = () => ['box-a', 'box-b', 'radio-a', 'radio-b'].map((k) => q(k).checked);
+
+    target.innerHTML = html.GroupHydrateValues;
+    hydrated.push(hydrate(Component, { target }));
+    flushSync();
+    await Promise.resolve();
+    flushSync();
+
+    expect(ticked()).toEqual([true, false, true, false]);
+
+    q('box-b').click();
+    flushSync();
+    q('radio-b').click();
+    flushSync();
+
+    expect(ticked()).toEqual([true, true, false, true]);
+    expect(q('model').textContent).toBe('a,b|b');
+});
+
+// And what the reader picked before the script ran is theirs there too: that
+// `null` is no new value of the field, and shown as one, it put the server's
+// model back over the reader's boxes before the group read them.
+test.for([
+    ['Python', GroupHydrateValues],
+    ['Svelte', GroupHydrateValuesNative]
+])('%s: a group of evaluated values keeps what the reader picked before hydrating', async ([, Component]) => {
+    const target = document.body.appendChild(document.createElement('div'));
+    const q = (k) => target.querySelector(`[data-k="${k}"]`);
+
+    target.innerHTML = html.GroupHydrateValues;
+    q('box-b').click();
+    q('box-a').click();
+    q('radio-b').click();
+    hydrated.push(hydrate(Component, { target }));
+    flushSync();
+    await Promise.resolve();
+    flushSync();
+
+    expect(['box-a', 'box-b', 'radio-a', 'radio-b'].map((k) => q(k).checked)).toEqual([false, true, false, true]);
+    expect(q('model').textContent).toBe('b|b');
+});
+
+// And the value it keeps is the one its field holds, evaluated once: past that
+// `null`, the group read the value compiled again for it, which an expression
+// answering anew at each call gave otherwise, and a click wrote `v-2` for a
+// field holding `v-1`.
+test.for([
+    ['Python', GroupHydrateMoving],
+    ['Svelte', GroupHydrateMovingNative]
+])('%s: a hydrated group writes the value its field holds', async ([, Component]) => {
+    const target = document.body.appendChild(document.createElement('div'));
+    const q = (k) => target.querySelector(`[data-k="${k}"]`);
+
+    target.innerHTML = html.GroupHydrateMoving;
+    hydrated.push(hydrate(Component, { target }));
+    flushSync();
+    await Promise.resolve();
+    flushSync();
+
+    q('radio').click();
+    flushSync();
+    q('box').click();
+    flushSync();
+
+    expect([q('radio').checked, q('box').checked]).toEqual([true, true]);
+    expect(q('model').textContent).toBe(`${q('radio').value}|${q('box').value}`);
 });
 
 // And a `checked` the markup writes is no click: Svelte sets the property and

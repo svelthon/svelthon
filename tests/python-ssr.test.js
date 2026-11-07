@@ -13,6 +13,10 @@ import KeyIdentity from './fixtures/KeyIdentity.svelte';
 import SvelteConstructs from './fixtures/SvelteConstructs.svelte';
 import ScalarProps from './fixtures/ScalarProps.svelte';
 import GroupHydrate from './fixtures/GroupHydrate.svelte';
+import GroupHydrateValues from './fixtures/GroupHydrateValues.svelte';
+import GroupHydrateValuesNative from './fixtures/GroupHydrateValuesNative.svelte';
+import GroupHydrateMoving from './fixtures/GroupHydrateMoving.svelte';
+import GroupHydrateMovingNative from './fixtures/GroupHydrateMovingNative.svelte';
 import GroupServer from './fixtures/GroupServer.svelte';
 import GroupServerNative from './fixtures/GroupServerNative.svelte';
 import GroupValueShapes from './fixtures/GroupValueShapes.svelte';
@@ -125,9 +129,21 @@ test.for([
     ['keys by identity and by repr', KeyIdentity, {}, 'KeyIdentity'],
     ['the everyday constructs of Svelte 5', SvelteConstructs, {}, 'SvelteConstructs'],
     ['props given as JavaScript floats', ScalarProps, { amount: 0.42, two_way: 0.42 }, 'ScalarProps'],
-    ['two empty groups', GroupHydrate, {}, 'GroupHydrate']
+    ['two empty groups', GroupHydrate, {}, 'GroupHydrate'],
+    ['two groups of evaluated values', GroupHydrateValues, {}, 'GroupHydrateValues'],
+    ["Svelte's witness of these", GroupHydrateValuesNative, {}, 'GroupHydrateValues']
 ])('the server renders %s', ([, Component, props, name]) => {
     expect(render(Component, { props }).body).toBe(html[name]);
+});
+
+// Values answering anew at each call, the numbers aside.
+test.for([
+    ['Python', GroupHydrateMoving],
+    ['Svelte', GroupHydrateMovingNative]
+])('%s: the server renders a group of moving values', ([, Component]) => {
+    const numbered = (page) => page.replace(/\d+/g, 'N');
+
+    expect(numbered(render(Component).body)).toBe(numbered(html.GroupHydrateMoving));
 });
 
 // A group whose model holds a selection is checked by the server, as Svelte's
