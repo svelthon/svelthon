@@ -703,6 +703,89 @@ describe('hot update invalidates the generated module too', () => {
             })
         );
 
+        // And nothing asked for it: the watcher saw the module arrive and the
+        // old file leave, and the page asked for the file no longer there
+        // until the component was edited. Each component whose import is
+        // found elsewhere now is changed, as an edit of its own would be; a
+        // module of another name, or one found where it was, changes none.
+        test.for([
+            ['moved from the path to beside it', 'lib/helper.py', 'helper.py'],
+            ['moved from beside it to the path', 'helper.py', 'lib/helper.py']
+        ])('and the watcher changes it when a module it imports is %s', ([, from, to]) =>
+            inRoom(async ({ at }) => {
+                const component = '<script lang="python">\nimport helper\nvalue = helper.value\n</script>\n<p>{value}</p>\n';
+                const handlers = {};
+                const changed = [];
+                const server = {
+                    watcher: {
+                        on: (event, handler) => (handlers[event] = handler),
+                        emit: (event, file) => changed.push([event, file])
+                    }
+                };
+
+                const shared = Symbol.for('svelthon.path');
+                const kept = globalThis[shared];
+
+                mkdirSync(at('lib'));
+                writeFileSync(at('Uses.svelte'), component);
+                writeFileSync(at(from), 'value = 1\n');
+                await preprocess(component, [python({ path: [at('lib')] })], { filename: at('Uses.svelte') });
+                globalThis[shared] = kept;
+                svelthon().configureServer(server);
+
+                writeFileSync(at('other.py'), 'value = 3\n');
+                handlers.add(at('other.py'));
+                writeFileSync(at('lib/helper.svelte.py'), 'value = 4\n');
+                if (from === 'helper.py') handlers.add(at('lib/helper.svelte.py'));
+                rmSync(at('lib/helper.svelte.py'));
+                expect(changed).toEqual([]);
+
+                writeFileSync(at(to), 'value = 2\n');
+                rmSync(at(from));
+                handlers.add(at(to));
+                handlers.unlink(at(from));
+
+                expect(changed).toContainEqual(['change', at('Uses.svelte')]);
+            })
+        );
+
+        // And a module of Python between them, the component importing
+        // `relay`, which imports `helper`: its prelude named the file no
+        // longer there, and only an edit of `relay` brought the page back.
+        test.for([
+            ['relay.py', 'lib/helper.py', 'helper.py'],
+            ['relay.svelte.py', 'helper.py', 'lib/helper.py']
+        ])('and the watcher changes %s when a module it imports moves', ([relay, from, to]) =>
+            inRoom(async ({ at }) => {
+                const handlers = {};
+                const changed = [];
+                const server = {
+                    watcher: {
+                        on: (event, handler) => (handlers[event] = handler),
+                        emit: (event, file) => changed.push([event, file])
+                    }
+                };
+                const plugin = svelthon({ path: [at('lib')] });
+
+                mkdirSync(at('lib'));
+                writeFileSync(at(relay), 'import helper\n\n\ndef read():\n    return helper.value\n');
+                writeFileSync(at(from), 'value = 1\n');
+                plugin.load.call({ addWatchFile() {} }, at(relay));
+                plugin.configureServer(server);
+
+                writeFileSync(at('other.py'), 'value = 3\n');
+                handlers.add(at('other.py'));
+                expect(changed).toEqual([]);
+
+                writeFileSync(at(to), 'value = 2\n');
+                rmSync(at(from));
+                handlers.add(at(to));
+                handlers.unlink(at(from));
+
+                expect(changed).toContainEqual(['change', at(relay)]);
+            })
+        );
+
         test('and is updated when the child changed language, or its own source', () =>
             inRoom(async ({ at, compiled, asked }) => {
                 await compiled('Parent.svelte');

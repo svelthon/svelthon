@@ -923,6 +923,9 @@ function sameLines(code, content) {
 // build in the same process as to a save Vite reports.
 const compiledStores = new Map();
 
+// The files the imports of the module `file` resolve to, along `path`.
+const storeFound = (file, imports, path) => imports.map((mod) => moduleFile(mod, dirname(file), path) ?? '').join('\n');
+
 // A shared store is a plain .py file. It compiles to module-scope signals,
 // created once for the whole application rather than per component instance,
 // and is served under a `.svelte.js` identity, which is what makes
@@ -940,12 +943,11 @@ function compilePython(file, path, root) {
     const source = readFileSync(file, 'utf8');
     const shown = relative(root, file);
     const cached = compiledStores.get(file);
-    const found = (imports) => imports.map((mod) => moduleFile(mod, dirname(file), path) ?? '').join('\n');
     if (
         cached &&
         cached.source === source &&
         cached.shown === shown &&
-        cached.found === found(cached.result.imports)
+        cached.found === storeFound(file, cached.result.imports, path)
     ) {
         return cached.result;
     }
@@ -957,7 +959,7 @@ function compilePython(file, path, root) {
         resolves: (mod) => moduleKind(mod, dirname(file), path)
     });
 
-    compiledStores.set(file, { source, shown, result, found: found(result.imports) });
+    compiledStores.set(file, { source, shown, result, found: storeFound(file, result.imports, path) });
     return result;
 }
 
@@ -1161,6 +1163,39 @@ export function svelthon(options = {}) {
 
     return {
         name: 'svelthon:modules',
+        // A module that appears or leaves may change where an import of its
+        // name is found: moved from the path to beside its importer, or back.
+        // The importer's prelude names the file it was compiled against, and
+        // nothing else asks it again, so each one whose imports are found
+        // elsewhere now is changed, as an edit of its own would be: a
+        // component (`compiledAsBefore`), and a module of Python, `relay.py`
+        // importing `helper` for the component that imports `relay`
+        // (`storeFound`). Left alone, the page asked for the file no longer
+        // there until the importer itself was edited.
+        configureServer(server) {
+            const moved = (file) => {
+                const name = /^(.+?)(?:\.svelte)?\.py$/.exec(basename(file))?.[1];
+
+                if (name === undefined) return;
+
+                for (const [source, before] of COMPILED_FROM) {
+                    if (before.imports?.names.includes(name) && existsSync(source) && !compiledAsBefore(source)) {
+                        server.watcher.emit('change', source);
+                    }
+                }
+
+                for (const [module, compiled] of compiledStores) {
+                    const { imports } = compiled.result;
+
+                    if (imports.includes(name) && existsSync(module) && compiled.found !== storeFound(module, imports, searchPath)) {
+                        server.watcher.emit('change', module);
+                    }
+                }
+            };
+
+            server.watcher.on('add', moved);
+            server.watcher.on('unlink', moved);
+        },
         // 'pre', or Vite's own resolver claims `./store.py` as a plain file and
         // hands its Python straight to the JS parser.
         enforce: 'pre',
