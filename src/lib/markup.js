@@ -4407,7 +4407,9 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
             const holds = (name) => written !== null && written.name === name && written.rest !== '';
 
             if (holds('html')) {
-                out += `{@html ${call(written.rest, '__text')}}`;
+                // Python's text, but for the `TrustedHTML` a policy made
+                // (`__pybridge.html`).
+                out += `{@html ${call(written.rest, '__html')}}`;
             } else if (holds('render')) {
                 // The snippet itself is a JavaScript function and stays one.
                 // Its call is the last group of the expression (`renderedCall`),

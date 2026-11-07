@@ -643,6 +643,14 @@ export const __pybridge = {
         }
     },
 
+    // `{@html}`: Python's text, but for a `TrustedHTML` an application's
+    // policy made, handed as it is, which Svelte assigns to `innerHTML`
+    // uncoerced. Made text, it was refused where the browser requires the
+    // policy (`require-trusted-types-for`).
+    html(value) {
+        return globalThis.trustedTypes?.isHTML?.(value) ? value : __pybridge.str(value);
+    },
+
     // A JavaScript array handed back to Python. A list *is* an array in Brython,
     // but not every array is a list: one built here, by `.slice()` say, reads
     // as a `JavascriptArray`, which prints `[A, B]` where Python prints

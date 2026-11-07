@@ -2134,6 +2134,7 @@ function injectedBindings(c) {
                   `__bind(__proto, '__truthy', () => __pybridge.truthy);`,
                   `__bind(__proto, '__hidden', () => __pybridge.hidden);`,
                   `__bind(__proto, '__text', () => __pybridge.str);`,
+                  `__bind(__proto, '__html', () => __pybridge.html);`,
                   `__bind(__proto, '__seq', () => __pybridge.seq);`,
                   `__bind(__proto, '__key', () => __pybridge.key);`,
                   `__bind(__proto, '__class', () => __pybridge.klass);`,

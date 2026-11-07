@@ -1153,11 +1153,11 @@ describe('the attribute pass', () => {
         expect(defs.some((one) => one.startsWith('def __expr_set_'))).toBe(true);
     });
 
-    test('{@html} renders through Python’s str', () => {
+    test('{@html} renders through Python’s str, a TrustedHTML aside', () => {
         const { out, defs } = rewrite('{@html markup_text}');
 
         expect(out).toMatch(/\{@html __expr_\d+\(\)\}/);
-        expect(defs[0]).toContain('__text(markup_text)');
+        expect(defs[0]).toContain('__html(markup_text)');
     });
 
     test('a comment is not scanned for expressions', () => {
