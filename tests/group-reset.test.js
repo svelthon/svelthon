@@ -5,6 +5,8 @@ import GroupShared from './fixtures/GroupShared.svelte';
 import GroupInstances from './fixtures/GroupInstances.svelte';
 import GroupResetDuplicate from './fixtures/GroupResetDuplicate.svelte';
 import GroupResetDuplicateNative from './fixtures/GroupResetDuplicateNative.svelte';
+import GroupResetNone from './fixtures/GroupResetNone.svelte';
+import GroupResetNoneNative from './fixtures/GroupResetNoneNative.svelte';
 
 // A form reset moves the controls without firing `change` on any of them. The
 // group action listened for `change` alone, so after a reset the boxes on screen
@@ -14,8 +16,11 @@ import GroupResetDuplicateNative from './fixtures/GroupResetDuplicateNative.svel
 // Svelte's own binding listens for `reset` on the document, in the capture
 // phase, and does its work one microtask later, because the controls have not
 // been put back yet when the event fires. This does the same, and answers as
-// Svelte answers: the selection is emptied, `[]` or None, and the controls
-// follow it, a default `checked` included.
+// Svelte answers: the selection is emptied, `[]` or Svelte's `null`, and the
+// controls follow it, a default `checked` included. `null` is
+// `javascript.NULL`, for every group of radios, as at every door where None is
+// `undefined`; and no radio stands for it: the reset wrote None, and a
+// radio offering None as its choice was checked again.
 describe('a group after a form reset', () => {
     const setup = async () => {
         const target = document.body.appendChild(document.createElement('div'));
@@ -154,4 +159,39 @@ describe('a reset of controls checked by default', () => {
             checked: ''
         });
     });
+});
+
+// The radios checked and the model shown, with what the instance holds, after
+// `b` is picked, after a reset, and after None is picked.
+const resetBesideNone = async (Component) => {
+    const target = document.body.appendChild(document.createElement('div'));
+    const instance = mount(Component, { target });
+    const at = (k) => target.querySelector(`[data-k="${k}"]`);
+    const seen = () => `${at('none').checked}/${at('b').checked} [${at('choice').textContent}]`;
+
+    flushSync();
+    at('b').click();
+    flushSync();
+    const picked = seen();
+    target.querySelector('form').reset();
+    await Promise.resolve();
+    flushSync();
+    const reset = seen();
+    const held = instance.seen();
+    at('none').click();
+    flushSync();
+    const none = seen();
+
+    target.remove();
+    return { picked, reset, held, none };
+};
+
+test('a reset empties a radio group that offers None, as Svelte does', async () => {
+    const python = await resetBesideNone(GroupResetNone);
+    const native = await resetBesideNone(GroupResetNoneNative);
+
+    expect(python.reset).toBe('false/false []');
+    expect(python.held).toBe('<Javascript null>');
+    expect(native.held).toBe('null');
+    expect([python.picked, python.reset, python.none]).toEqual([native.picked, native.reset, native.none]);
 });

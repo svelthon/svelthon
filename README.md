@@ -426,6 +426,10 @@ Svelte's own version manages here.
 A checkbox group's list is **the checked inputs in document order**, which is
 what Svelte's own binding collects, not the order they were clicked in.
 
+A form reset empties a group as Svelte's own binding does: a checkbox group's
+list becomes `[]`, and a radio group's target Svelte's `null`, which Python reads
+as `javascript.NULL`, not None, a value a radio may offer.
+
 ### The two things to know
 
 A template reads as Python and means what Python means, with two deliberate
@@ -1615,7 +1619,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 2 035 tests as written (vitest reports more, one per
+Validated by `npm test`, 2 036 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;

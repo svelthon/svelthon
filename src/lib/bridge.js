@@ -2995,8 +2995,11 @@ export function group(node, [current, write, chosen, fielded, binding, scope, wh
         );
     };
 
-    // What a reset writes: the empty selection, as Svelte's `bind:group` does.
-    const restored = () => write(boxes ? __pybridge.list([]) : NONE);
+    // What a reset writes: the empty selection, as Svelte's `bind:group` does,
+    // `[]` for checkboxes and, for every group of radios, its `null`, which is
+    // `javascript.NULL` in Python as at every door, None being `undefined`. A
+    // reset that wrote None also checked again a radio offering None.
+    const restored = () => write(boxes ? __pybridge.list([]) : null);
 
     node.addEventListener('change', changed);
     RESETS.set(node, restored);

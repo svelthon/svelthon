@@ -435,6 +435,11 @@ cas.
 La liste d'un groupe de cases est **les cases cochées dans l'ordre du document**,
 ce que la liaison de Svelte collecte elle-même, et non l'ordre des clics.
 
+La remise à zéro d'un formulaire vide un groupe comme la liaison de Svelte : la
+liste d'un groupe de cases devient `[]`, et la cible d'un groupe de boutons radio
+le `null` de Svelte, que Python lit `javascript.NULL`, et non None, une valeur
+qu'un bouton radio peut proposer.
+
 ### Les deux choses à savoir
 
 Un gabarit se lit comme du Python et veut dire ce que Python veut dire, à deux
@@ -1636,7 +1641,7 @@ parsing, que seul le compilateur charge ; le README de Bryntime en donne le poid
 
 ## État
 
-Validé par `npm test`, 2 035 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 2 036 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
