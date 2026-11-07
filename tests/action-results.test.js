@@ -7,6 +7,42 @@ import ActionPayload from './fixtures/ActionPayload.svelte';
 import ActionPayloadNative from './fixtures/ActionPayloadNative.svelte';
 import ActionPayloadHost from './fixtures/ActionPayloadHost.svelte';
 import ActionReadsHost from './fixtures/ActionReadsHost.svelte';
+import ActionDictLive from './fixtures/ActionDictLive.svelte';
+import ActionDictLiveNative from './fixtures/ActionDictLiveNative.svelte';
+import { held } from './fixtures/action_resources.js';
+
+// The resources an action holds after each step: mounted, updated twice,
+// unmounted.
+const holding = (Component) => {
+    held.clear();
+    const target = document.body.appendChild(document.createElement('div'));
+    const instance = mount(Component, { target });
+    const steps = [];
+
+    flushSync();
+    steps.push([...held]);
+    for (let i = 0; i < 2; i++) {
+        instance.bump();
+        flushSync();
+        steps.push([...held]);
+    }
+    unmount(instance);
+    target.remove();
+    steps.push([...held]);
+
+    return steps;
+};
+
+// A dict an action returns is read as Svelte reads its own result, each member
+// when it is called: an `update` that puts a new `destroy` in it is heard at
+// teardown. Copied as the action returned it, the first `destroy` was called,
+// and the resource taken since stayed held.
+test('the dict an action returns is read when Svelte calls it', () => {
+    const steps = holding(ActionDictLive);
+
+    expect(steps).toEqual([['resource 0'], ['resource 1'], ['resource 2'], []]);
+    expect(steps).toEqual(holding(ActionDictLiveNative));
+});
 
 // The events a JavaScript parent's action records, handed to a child, along
 // the steps the parent is taken through.

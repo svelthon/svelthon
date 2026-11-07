@@ -2449,12 +2449,15 @@ export function directiveAnimate(node, rects, [where, head, ...value]) {
 }
 
 // What a directive hands back, read by Svelte: an action's `update` and
-// `destroy`, a transition's `duration` and `tick`. A dict holds them as entries
-// and `pyNumbers` adapts those. An **instance** holds them as methods of its
-// class, which no walk of its own properties finds: `return Lease(node,
-// value)` would mount and never update nor clean up. Its view reads each
-// name through the attribute protocol when Svelte asks, and answers `undefined`
-// for one it does not have, which is how Svelte asks whether there is one.
+// `destroy`, a transition's `duration` and `tick`. A dict holds them as
+// entries, an **instance** as methods of its class, which no walk of its own
+// properties finds: `return Lease(node, value)` would mount and never update
+// nor clean up. Both are read through a view, each name when Svelte asks, as
+// Svelte reads its own: an `update` that puts a new `destroy` in the dict it
+// returned is heard at teardown, where a copy made at the return called the
+// first one and left the resource it had taken since. The view answers
+// `undefined` for a name there is none of, which is how Svelte asks whether
+// there is one.
 //
 // A **Python callable** handed back is a deferred transition: Svelte calls it
 // later for the config. It is wrapped like the directive's own callee, so its
@@ -2478,7 +2481,7 @@ function directiveResult(value, where) {
         !isDict(value) &&
         (authoredClass(ownType(value)) || (!Array.isArray(value) && pyScalar(value) === undefined));
 
-    if (!called && !instance) return pyNumbers(value);
+    if (!called && !instance && !isDict(value)) return pyNumbers(value);
 
     // Read when Svelte asks, after the directive has returned, so what a
     // property raises is relayed here, as under a view (`relayed`). What the
