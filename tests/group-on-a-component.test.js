@@ -69,7 +69,13 @@ test('a component named past ASCII binds the prop too, in both spellings', () =>
 // And on an element, an `<input>` alone, as Svelte has it (`bind_invalid_target`):
 // the action the binding becomes is taken by any element, so a `<select>` or a
 // `<div>` bound by `bind:group` compiled, bound to nothing. A `<svelte:element>`
-// may render an input, and keeps the binding.
+// is refused too, as Svelte refuses it: its `type` was read once, and its
+// server rendering knew no checkbox.
+//
+// And beside a `type` that is not text, as Svelte refuses it beside its own
+// binding (`attribute_invalid_type`): the server took `type={kind}` for a radio
+// and wrote no box checked, and the action, the shape its first type gave, so a
+// checkbox become a radio wrote a list.
 describe('bind:group on an element', () => {
     const rewrite = (markup) => overMarkup(markup, (source, at) => pythonExpressions(source, collector([]), undefined, at));
 
@@ -78,7 +84,8 @@ describe('bind:group on an element', () => {
         ['<textarea bind:group={picked}></textarea>'],
         ['<div bind:group={picked}></div>'],
         ['<button bind:group={picked}></button>'],
-        ['<svg bind:group={picked}></svg>']
+        ['<svg bind:group={picked}></svg>'],
+        ['<svelte:element this={tag} bind:group={picked} />']
     ])('%s is refused, as Svelte refuses it', ([markup]) => {
         expect(() => rewrite(markup)).toThrow(/`bind:group` can only be used with `<input>`/);
         expect(() => compileSvelte(`<script>let picked = $state([]);</script>${markup}`, { name: 'Probe' })).toThrow(
@@ -87,9 +94,27 @@ describe('bind:group on an element', () => {
     });
 
     test.for([
+        ['<input type={kind} value="a" bind:group={picked} />'],
+        ['<input type="{kind}" value="a" bind:group={picked} />'],
+        ['<input {type} value="a" bind:group={picked} />'],
+        ['<input type value="a" bind:group={picked} />'],
+        ['<input type="check{kind}" value="a" bind:group={picked} />']
+    ])('%s is refused, as Svelte refuses it', ([markup]) => {
+        const refusal = /'type' attribute must be a static text value if input uses two-way binding/;
+
+        expect(() => rewrite(markup)).toThrow(refusal);
+        expect(() =>
+            compileSvelte(`<script>let picked = $state([]); let kind = $state('checkbox'); let type = $state('radio');</script>${markup}`, {
+                name: 'Probe'
+            })
+        ).toThrow(refusal);
+    });
+
+    test.for([
         ['<input type="checkbox" value="a" bind:group={picked} />'],
         ['<input type="radio" value="a" bind:group={picked} />'],
-        ['<svelte:element this={tag} bind:group={picked} />']
+        ['<input type=checkbox value="a" bind:group={picked} />'],
+        ['<input {**attrs} value="a" bind:group={picked} />']
     ])('%s keeps the binding', ([markup]) => {
         expect(rewrite(markup)).toContain('use:__group');
     });

@@ -3449,10 +3449,10 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
 
     const groupAction = (expr) => {
         // On an `<input>` alone, which Svelte refuses anywhere else,
-        // `bind_invalid_target`, where the action this becomes would be taken
-        // by any element: a `<select>` or a `<div>` would compile, bound to
-        // nothing. A `<svelte:element>` may render an input.
-        if (tag !== null && tag.name !== 'input' && tag.name !== 'svelte:element') {
+        // `bind_invalid_target`, a `<svelte:element>` included, where the
+        // action this becomes would be taken by any element: a `<select>` or a
+        // `<div>` would compile, bound to nothing.
+        if (tag !== null && tag.name !== 'input') {
             throw refuse(new SyntaxError(`svelthon — \`bind:group\` can only be used with \`<input>\`${said()}`));
         }
 
@@ -3522,13 +3522,28 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         // (`attributeText`): `type="check&#98;ox"` is a checkbox, which, its
         // notation compared, the server took for a radio, and wrote unchecked.
         const kind = tag === null ? null : tagValue(markup, tag.start, 'type');
+        const names = tag === null ? null : tagNames(markup, tag.start);
+
+        // A `type` that is not text Svelte refuses beside its own binding
+        // (`attribute_invalid_type`), which this pass takes away from it: the
+        // server tells a checkbox's list from a radio's value by the text, and
+        // the action, as Svelte's group, by the type the node had first.
+        if (
+            tag !== null &&
+            (kind === null ? names.has('type') : kind.braced || markup.slice(kind.start, kind.end).includes('{'))
+        ) {
+            if (kind !== null) region = { start: kind.start, end: kind.end };
+            throw refuse(
+                new SyntaxError(`svelthon — 'type' attribute must be a static text value if input uses two-way binding${said()}`)
+            );
+        }
+
         const boxes =
             kind !== null && !kind.braced && attributeText(markup.slice(kind.start, kind.end), kind.quote) === 'checkbox';
         const served =
             found !== null && value === 'undefined'
                 ? JSON.stringify(attributeText(markup.slice(found.start, found.end), found.quote))
                 : value;
-        const names = tag === null ? null : tagNames(markup, tag.start);
         const checked =
             names !== null && (names.has('checked') || names.has('bind:checked'))
                 ? ''
