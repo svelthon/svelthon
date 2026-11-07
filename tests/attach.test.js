@@ -1,6 +1,33 @@
 import { test, expect, describe } from 'vitest';
 import { mount, unmount, flushSync } from './mounted.js';
 import Attach from './fixtures/Attach.svelte';
+import AttachSpread from './fixtures/AttachSpread.svelte';
+import AttachSpreadNative from './fixtures/AttachSpreadNative.svelte';
+import AttachSpreadHost from './fixtures/AttachSpreadHost.svelte';
+import { caught } from './fixtures/attach_spread.js';
+
+// An attachment handed by a spread, under Svelte's attachment key, crosses as
+// one written `{@attach …}` does, onto an element as to a JavaScript child that
+// spreads it onto its own: adapted as a handler, what it raised reached the
+// boundary as the Brython exception, no `Error`, `[object Object]` to read.
+test.for([
+    ['onto an element', false],
+    ['to a JavaScript child', true]
+])('an attachment spread %s raises an Error, as Svelte’s does', ([, passed]) => {
+    const raised = (Component) => {
+        caught.length = 0;
+        const target = document.body.appendChild(document.createElement('div'));
+        const host = mount(AttachSpreadHost, { target, props: { Component, passed } });
+
+        flushSync();
+        unmount(host);
+        target.remove();
+        return [...caught];
+    };
+
+    expect(raised(AttachSpread)).toEqual([true]);
+    expect(raised(AttachSpread)).toEqual(raised(AttachSpreadNative));
+});
 
 // `{@attach fn}` is Svelte's replacement for `use:`, and it sits inside the tag
 // rather than around it — which is why it used to cross the markup pass

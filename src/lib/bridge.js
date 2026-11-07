@@ -257,9 +257,16 @@ const attribute = (value) => {
         : viewOf(value);
 };
 
+// A key Svelte takes for an attachment (`createAttachmentKey`), told as Svelte
+// tells one: a symbol described `@attach`.
+const attaching = (key) => typeof key === 'symbol' && key.description === '@attach';
+
 // A spread to a JavaScript child: each value crosses as a prop written by name
-// does, `attribute` and then the floats of a config made numbers (`pyNumbers`).
-const spread = (value) => spreadOf(value, (one) => pyNumbers(attribute(one)));
+// does, `attribute` and then the floats of a config made numbers (`pyNumbers`),
+// and an attachment as one written `{@attach …}` does (`pyAttach`): adapted as
+// a handler, a raise reached the boundary as the Brython exception, where an
+// `Error` is handed it.
+const spread = (value) => spreadOf(value, (one, key) => (attaching(key) ? pyAttach(one) : pyNumbers(attribute(one))));
 
 // A spread to a Python child: each value the Python value itself, as a prop
 // written by name is, None the absence that reads the child's default.
@@ -1443,13 +1450,13 @@ function spreadOf(value, convert) {
 
     if (javaScriptRow(value)) {
         for (const key of Reflect.ownKeys(value)) {
-            if (Object.prototype.propertyIsEnumerable.call(value, key)) define(out, key, convert(value[key]));
+            if (Object.prototype.propertyIsEnumerable.call(value, key)) define(out, key, convert(value[key], key));
         }
 
         return out;
     }
 
-    for (const [key, one] of starredEntries(value)) define(out, propertyName(key, out), convert(one));
+    for (const [key, one] of starredEntries(value)) define(out, propertyName(key, out), convert(one, key));
 
     return out;
 }
