@@ -1505,11 +1505,17 @@ function unpackPositional(parts, call, names, tuple, unpack) {
 
         // The default compiled where its entry is, once the names before it
         // are bound (`entryValue`), as a default that waits for its row is. A
-        // pattern's alias is held, a derived its own rows are read off by name;
-        // its own fields are read again in their turn.
+        // positional pattern's alias is held, as Svelte holds the `to_array` of
+        // one, a derived its own rows are read off by name. A pattern by key is
+        // read off its slot again, as Svelte reads `[{first}]`'s `first` off
+        // the row's current element: held, it kept the object a library had
+        // since replaced in the array; its own fields are read again in their
+        // turn.
+        const keyed = left.startsWith('{');
+
         unpack.consts[slot] =
             equals === -1
-                ? { target, js: read, ...(bare ? {} : { once: true }) }
+                ? { target, js: read, ...(bare || keyed ? {} : { once: true }) }
                 : { target, js: read, fallback: text.slice(equals + 1), once: true };
 
         for (const one of defaults) one.ahead.push(...names.slice(from));
@@ -1607,10 +1613,17 @@ function unpackStarred(parts, call, names, tuple, unpack) {
     // without the star; any other row by Python (`__pybridge.starred`).
     const after = elements.length - at - 1;
 
+    // Each name before or after the star is read again where it is read
+    // (`starredRead`, `unpacked`), the rest being a list of its own.
     unpack.consts[slot] = {
         target: `[${targets.join(', ')}]`,
         js: `__pybridge.starred(${alias}, ${at}, ${after}, () => ${call(`__unpack(${alias}, ${at}, ${after})`, '', '', 'python')})`,
-        once: true
+        once: true,
+        live: targets.flatMap((name, i) =>
+            i !== at && DECLARED_NAME.test(name)
+                ? [{ name, read: `__pybridge.starredRead(${alias}, ${at}, ${after}, ${i}, () => ${name})` }]
+                : []
+        )
     };
 
     for (const one of names.slice(before)) unpack.bound.add(one);
@@ -1797,6 +1810,8 @@ const unpacked = (unpack, call, again = null) =>
             const reaches = again === null ? [] : (one.reaches ?? []);
             const before = reaches.map(({ name }) => [name, again.get(name)]);
 
+            if (again !== null) for (const { name, read } of one.live ?? []) again.set(name, read);
+
             for (const { name, read } of reaches) again.set(name, notYetBound(name, read));
 
             if (again === null || !rereadable(one)) {
@@ -1971,7 +1986,17 @@ function snippetParameters(trimmed, declare, call, refuse, frame, identity = nul
         // its snippet's branch did not read it.
         const row = `__pybridge.param(${argument}, ${frame}, ${at}${fallback})`;
 
-        reads.push(derivedTag(target, row) + unpacked({ consts: unpack.consts.slice(from) }, call, rereads));
+        // But a row taken apart by key with no default of its own is read
+        // again at each read of a field, as Svelte reads its parameter: held,
+        // the fields read the object the argument held first, and a row whose
+        // object was replaced in place showed the old one's.
+        const keyed = equals === -1 && part.trim().startsWith('{');
+
+        if (keyed) rereads.set(target, row);
+
+        const consts = unpacked({ consts: unpack.consts.slice(from) }, call, rereads);
+
+        reads.push(keyed ? consts : derivedTag(target, row) + consts);
     });
 
     return (
@@ -3664,6 +3689,24 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         }
     };
 
+    // The text an expression renders. One that calls nothing (`callsAnything`)
+    // and reads a name the markup reads again where it is read (`reread`), a
+    // snippet's parameter or a field its pattern takes, is read through a
+    // getter, which Svelte takes for no call, as `{@render}` hands its
+    // arguments: Svelte reads such a name in the effect that renders it, each
+    // time the effect runs, and holds a call in a derived of its own until what
+    // the call read changes. Every Python expression being a call, the text
+    // kept the field of a JavaScript object changed in place when the row
+    // rendered again for another reason; and one the author wrote a call in,
+    // read through the getter, was called again at every render.
+    const rendered = (inner) => {
+        const read = call(inner, '__text');
+
+        return !callsAnything(inner) && mentioned(inner.trim()).some((one) => chain.reread(one) !== null)
+            ? `({ get value() { return ${read}; } }).value`
+            : read;
+    };
+
     // What an attribute's value compiles to, by its name and the tag it is on.
     // One place, for both spellings: `onclick={onclick}` and `{onclick}` are
     // one attribute, and the shorthand had a decision of its own that knew only
@@ -3788,7 +3831,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
 
                         const inner = markup.slice(index + 1, end);
 
-                        out += quotedLone ? attributeValue(named, inner) : `{${call(inner, '__text')}}`;
+                        out += quotedLone ? attributeValue(named, inner) : `{${rendered(inner)}}`;
                         region = null;
                         index = end + 1;
                         continue;
@@ -3955,7 +3998,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                         // `redvariable={…}`.
                         out += directive(glued[1])
                             ? markup.slice(index, end + 1)
-                            : `{${call(inner, '__text')}}`;
+                            : `{${rendered(inner)}}`;
                     } else if (trimmed.startsWith('**')) {
                         // `{**attrs}` spreads a Python dict, whose keys become
                         // attributes. Python's own spelling, because Python has
@@ -4609,7 +4652,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                     declare([], [`${CELL}${declared.name}`]);
                 }
             } else {
-                out += `{${call(inner, '__text')}}`;
+                out += `{${rendered(inner)}}`;
             }
         }
 

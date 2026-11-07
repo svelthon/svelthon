@@ -5,11 +5,64 @@
 // showed `1 → 2 → 3` where Svelte shows `1 → 3 → 5`. A positional pattern's
 // row is taken apart once, as Svelte's `to_array` takes it, and its elements
 // read where they are read.
+//
+// And so is the rest of what a snippet's parameter reads: the text that reads
+// the parameter itself, which Svelte held in a derived since every Python
+// expression is a call; the object a pattern takes apart by key, which was held
+// too, and so was the object `[{first}]` takes at its position, which a library
+// replaced in the array; and the names around a `*rest`, which were copied out
+// of the array. But
+// a call the author wrote is held until what it reads changes, as Svelte holds
+// one: read again with the text, `read(value)` ran at every render.
 import { test, expect } from 'vitest';
 import { compile } from 'svelte/compiler';
 import { mount, flushSync } from './mounted.js';
 import { pythonExpressions } from '../src/lib/markup.js';
 import DestructuredPlainFields from './fixtures/DestructuredPlainFields.svelte';
+import SnippetRereads from './fixtures/SnippetRereads.svelte';
+import SnippetRereadsNative from './fixtures/SnippetRereadsNative.svelte';
+import { calls } from './fixtures/reread_calls.js';
+
+// What each `[data-k]` shows once a JavaScript row was changed in place and the
+// component rendered again for another reason, and how often `read` ran.
+const reread = (Component) => {
+    calls.length = 0;
+    const rows = [{ id: 'a', value: 10, data: { first: 20 }, list: [30, 1, 2], items: [{ first: 40 }] }];
+    const target = document.body.appendChild(document.createElement('div'));
+    const instance = mount(Component, { target, props: { rows } });
+    const shown = () => Object.fromEntries([...target.querySelectorAll('[data-k]')].map((one) => [one.dataset.k, one.textContent]));
+
+    flushSync();
+    rows[0].value = 11;
+    rows[0].data = { first: 21 };
+    rows[0].list[0] = 31;
+    rows[0].items[0] = { first: 41 };
+    instance.bump();
+    flushSync();
+    instance.bump();
+    flushSync();
+
+    const seen = { ...shown(), read: calls.length };
+
+    target.remove();
+    return seen;
+};
+
+test('a snippet’s parameter, a field by key and a name around a star are read again, as Svelte reads them', () => {
+    const seen = reread(SnippetRereads);
+
+    expect(seen).toEqual({
+        'plain-a': '2:11',
+        'keyed-a': '23',
+        'starred-a': '33',
+        'counted-a': '2:reada',
+        'nested-a': '43',
+        'each-a': '33',
+        'each-nested-a': '43',
+        read: 1
+    });
+    expect(seen).toEqual(reread(SnippetRereadsNative));
+});
 
 const KEYS = ['snippet-key', 'snippet-nested', 'snippet-index', 'each-key'];
 

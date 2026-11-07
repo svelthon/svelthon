@@ -1267,6 +1267,18 @@ export const __pybridge = {
         ];
     },
 
+    // A name of that pattern before or after the star (`slot`), read again at
+    // each read from the array `starred` took apart in JavaScript, as Svelte
+    // reads `[first, ...rest]`: copied out, `first` kept the element the array
+    // held first. A row of Python's keeps what it was taken apart to
+    // (`taken`).
+    starredRead(value, before, after, slot, taken) {
+        if (!Array.isArray(value) || pyLeading(value, 0) !== null) return taken();
+        if (slot < before) return value[slot];
+
+        return value[before + Math.max(0, value.length - before - after) + slot - before - 1];
+    },
+
     // `set_context` and `get_context`. A scalar is set as JavaScript's own, for
     // a JavaScript reader, and its original kept in the context too, for a
     // Python one: `Price(0.5)` reads back a `Price` and `1.0` a float, where the
