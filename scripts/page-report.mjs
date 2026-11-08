@@ -13,6 +13,14 @@
 const PORT = process.env.CDP_PORT || '9334';
 const [url, id] = process.argv.slice(2);
 
+// A page whose thread never yields, or whose renderer died, answers nothing,
+// and the command sent to it waits for ever: past the budget of the loop below,
+// the page said nothing, and the check asks again or fails.
+setTimeout(() => {
+    console.error(`page-report: ${url} answered nothing in 40 s`);
+    process.exit(1);
+}, 40_000).unref();
+
 const targets = await (await fetch(`http://127.0.0.1:${PORT}/json`)).json();
 const page = targets.find((one) => one.type === 'page');
 

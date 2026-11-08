@@ -54,51 +54,45 @@ browse() {
 # that reads it cannot tell an error from a log. See `scripts/console-check.mjs`.
 CDP_PORT=${CDP_PORT:-9334}
 
-console_check() {
-    local profile=$1
+# A command run beside a Chromium it drives over the protocol, which is gone
+# once the command is done; its status is the command's.
+with_cdp() {
+    local profile=$1 pid code
     shift
 
     mkdir -p "$PROFILES"
-    chromium --headless --no-sandbox --disable-gpu --user-data-dir="$PROFILES/cdp-$profile" \
+    chromium --headless --no-sandbox --disable-gpu --user-data-dir="$PROFILES/$profile" \
         --remote-debugging-port=$CDP_PORT about:blank >/dev/null 2>&1 &
-    local pid=$!
+    pid=$!
 
     for _ in $(seq 40); do
         curl -sf -o /dev/null "http://127.0.0.1:$CDP_PORT/json" && break
         sleep 0.25
     done
 
-    CDP_PORT=$CDP_PORT node scripts/console-check.mjs "$@" || status=1
+    CDP_PORT=$CDP_PORT "$@"
+    code=$?
 
     kill "$pid" 2>/dev/null
     wait "$pid" 2>/dev/null
+    return $code
+}
+
+console_check() {
+    local profile=$1
+    shift
+
+    with_cdp "cdp-$profile" node scripts/console-check.mjs "$@" || status=1
 }
 
 # What a page reports, read in real time over the same protocol
-# (`scripts/page-report.mjs`), asked again while it says nothing.
-page_report() {
-    local profile=$1 url=$2 id=$3 found attempt pid
+# (`scripts/page-report.mjs`).
+live() {
+    local attempt=$1 profile=$2 url=$3 id=$4
 
-    for attempt in 1 2 3; do
-        mkdir -p "$PROFILES"
-        chromium --headless --no-sandbox --disable-gpu --user-data-dir="$PROFILES/report-$profile$attempt" \
-            --remote-debugging-port=$CDP_PORT about:blank >/dev/null 2>&1 &
-        pid=$!
-
-        for _ in $(seq 40); do
-            curl -sf -o /dev/null "http://127.0.0.1:$CDP_PORT/json" && break
-            sleep 0.25
-        done
-
-        found=$(CDP_PORT=$CDP_PORT node scripts/page-report.mjs "$url" "$id")
-
-        kill "$pid" 2>/dev/null
-        wait "$pid" 2>/dev/null
-        [ -n "$found" ] && break
-    done
-
-    printf '%s' "$found"
+    with_cdp "report-$profile$attempt" node scripts/page-report.mjs "$url" "$id"
 }
+
 cleanup() {
     # Two servers use this port in turn, `vite` then `vite preview`, and the
     # second does not match the first's pattern.
@@ -163,19 +157,28 @@ warm /src/probe.js /src/markup-probe.js /src/media-probe.js /src/scroll-probe.js
 # What a page reports in its `<pre>`, asked again while it says nothing: on a
 # loaded machine a first render can overrun its budget, as the demo's can
 # (below), and the markup page, which compiles in the browser, came back empty
-# once in two audits. A report that is there and wrong fails at once.
+# once in two audits. A report that is there and wrong fails at once. Read from
+# the DOM Chromium dumps (`dumped`), or as the page runs (`live`), each attempt
+# with a profile of its own.
 report() {
-    local profile=$1 url=$2 id=$3 found attempt
+    local reader=$1 found attempt
+    shift
 
     for attempt in 1 2 3; do
-        found=$(browse "$profile$attempt" 8000 "$url" | grep -o "<pre id=\"$id\">[^<]*" | sed "s|<pre id=\"$id\">||")
+        found=$("$reader" "$attempt" "$@")
         [ -n "$found" ] && break
     done
 
     printf '%s' "$found"
 }
 
-REPORT=$(report probe "$URL" report)
+dumped() {
+    local attempt=$1 profile=$2 url=$3 id=$4
+
+    browse "$profile$attempt" 8000 "$url" | grep -o "<pre id=\"$id\">[^<]*" | sed "s|<pre id=\"$id\">||"
+}
+
+REPORT=$(report dumped probe "$URL" report)
 
 status=0
 
@@ -188,7 +191,7 @@ else
     status=1
 fi
 
-MARKUP=$(report markup "$MARKUP_URL" markup)
+MARKUP=$(report dumped markup "$MARKUP_URL" markup)
 
 if [ "$MARKUP" = "$MARKUP_EXPECTED" ]; then
     echo "✓ markup pass in a browser — $MARKUP"
@@ -199,7 +202,7 @@ else
     status=1
 fi
 
-MEDIA=$(report media "$MEDIA_URL" media)
+MEDIA=$(report dumped media "$MEDIA_URL" media)
 
 if [ "$MEDIA" = "$MEDIA_EXPECTED" ]; then
     echo "✓ player settings in a browser — $MEDIA"
@@ -210,7 +213,7 @@ else
     status=1
 fi
 
-SCROLL=$(page_report scroll "$SCROLL_URL" scroll)
+SCROLL=$(report live scroll "$SCROLL_URL" scroll)
 
 if [ "$SCROLL" = "$SCROLL_EXPECTED" ]; then
     echo "✓ window scroll in a browser — $SCROLL"
