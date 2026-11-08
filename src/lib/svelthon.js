@@ -540,19 +540,32 @@ const hooksInstalled = (code) => inModuleScript(code, HOOKS);
 const pythonFile = (path) => pythonScript(readFileSync(path, 'utf8')) !== null;
 
 // What a component was last compiled from: its source, the language of each
-// child whose file it read (`dependencies`), and what each module its script
-// imports was found as, the file the prelude evaluates and the refusal of one
-// that is missing. A child's edit asks its parents again; one whose source,
-// children's languages and modules are as they were compiles to the same code
-// (`hotUpdate`). On the global registry, as `generated` is: the preprocessor
-// records, the plugin asks, and they are not always one instance of this
-// module.
+// child whose file it read, and what each module its script imports was found
+// as, the file the prelude evaluates and the refusal of one that is missing.
+// The dev server changes a component whose child changed language, or whose
+// modules are found elsewhere (`configureServer`). On the global registry, as
+// `generated` is: the preprocessor records, the plugin asks, and they are not
+// always one instance of this module.
 //
 // The modules as stores have them (`compilePython`): a module moved from beside
 // the component to the path, or one of the path that a file beside it now
 // shadows, is found elsewhere, and the prelude of the code compiled before
 // named a file that is no longer the one Python imports.
 const COMPILED_FROM = (globalThis[Symbol.for('svelthon.compiledFrom')] ??= new Map());
+
+// The watchers of the dev servers that watch the children a component reads for
+// their language (`configureServer`), while they watch: a server closed, a
+// build that watches, each child is a dependency of its parent, which a change
+// of it compiles again. On the global registry, as `COMPILED_FROM` is.
+const WATCHED_CHILDREN = (globalThis[Symbol.for('svelthon.watchedChildren')] ??= new Set());
+
+const childrenWatched = () => {
+    for (const watcher of WATCHED_CHILDREN) {
+        if (watcher.closed !== false) WATCHED_CHILDREN.delete(watcher);
+    }
+
+    return WATCHED_CHILDREN.size > 0;
+};
 
 const foundAs = (names, directory, path) =>
     names.map((mod) => `${moduleKind(mod, directory, path)} ${moduleFile(mod, directory, path) ?? ''}`).join('\n');
@@ -644,9 +657,9 @@ export function python(options = {}) {
             // the `<script module>`, the way the README writes a composition.
             // Any other child, one a package, a module that re-exports it or a
             // namespace gives, or one the script assigned, is told apart when it
-            // is mounted. Each file read is a dependency of this one, so a child
-            // that changes language recompiles its parent, and one that keeps
-            // it leaves the parent as it was (`compiledAsBefore`).
+            // is mounted. A child that changes language compiles this one again:
+            // the dev server asks it when it does (`WATCHED_CHILDREN`), and a
+            // build that watches takes each file read for a dependency.
             const languages = [];
             const pythonChildren = new Set();
             const javascriptChildren = new Set();
@@ -700,7 +713,7 @@ export function python(options = {}) {
 
             return {
                 code: announced(tagged(hooksInstalled(moduleReaders(elementOptions(code, python, file.jsNames), file.jsNames)), calls.open(file)), filename),
-                dependencies: languages.map(([path]) => path)
+                dependencies: childrenWatched() ? [] : languages.map(([path]) => path)
             };
         },
         script({ content, attributes, filename }) {
@@ -923,9 +936,6 @@ function sameLines(code, content) {
 // build in the same process as to a save Vite reports.
 const compiledStores = new Map();
 
-// The files the imports of the module `file` resolve to, along `path`.
-const storeFound = (file, imports, path) => imports.map((mod) => moduleFile(mod, dirname(file), path) ?? '').join('\n');
-
 // A shared store is a plain .py file. It compiles to module-scope signals,
 // created once for the whole application rather than per component instance,
 // and is served under a `.svelte.js` identity, which is what makes
@@ -947,7 +957,7 @@ function compilePython(file, path, root) {
         cached &&
         cached.source === source &&
         cached.shown === shown &&
-        cached.found === storeFound(file, cached.result.imports, path)
+        cached.found === foundAs(cached.result.imports, dirname(file), path)
     ) {
         return cached.result;
     }
@@ -959,7 +969,7 @@ function compilePython(file, path, root) {
         resolves: (mod) => moduleKind(mod, dirname(file), path)
     });
 
-    compiledStores.set(file, { source, shown, result, found: storeFound(file, result.imports, path) });
+    compiledStores.set(file, { source, shown, result, found: foundAs(result.imports, dirname(file), path) });
     return result;
 }
 
@@ -1170,9 +1180,20 @@ export function svelthon(options = {}) {
         // elsewhere now is changed, as an edit of its own would be: a
         // component (`compiledAsBefore`), and a module of Python, `relay.py`
         // importing `helper` for the component that imports `relay`
-        // (`storeFound`). Left alone, the page asked for the file no longer
+        // (`foundAs`). Left alone, the page asked for the file no longer
         // there until the importer itself was edited.
+        //
+        // And a child that changes language changes each parent compiled for
+        // the other one, which the props it hands that child were converted
+        // for; a child edited in its own language changes none. The children
+        // are no dependencies of their parent then (`WATCHED_CHILDREN`): each
+        // edit of one asked its parents again, and a parent that had nothing
+        // to update was mounted anew, its state lost, unless it was taken for
+        // compiled as before, which also swallowed the change of a stylesheet
+        // the parent's own style imports.
         configureServer(server) {
+            WATCHED_CHILDREN.add(server.watcher);
+
             const moved = (file) => {
                 const name = /^(.+?)(?:\.svelte)?\.py$/.exec(basename(file))?.[1];
 
@@ -1187,14 +1208,44 @@ export function svelthon(options = {}) {
                 for (const [module, compiled] of compiledStores) {
                     const { imports } = compiled.result;
 
-                    if (imports.includes(name) && existsSync(module) && compiled.found !== storeFound(module, imports, searchPath)) {
+                    if (imports.includes(name) && existsSync(module) && compiled.found !== foundAs(imports, dirname(module), searchPath)) {
                         server.watcher.emit('change', module);
                     }
                 }
             };
 
+            // The watcher hands what this emits back to it at once: a component
+            // importing itself, or two importing each other, would be changed
+            // without end. One whose change is being handed reaches its
+            // listeners already.
+            const relanguaging = new Set();
+
+            const relanguaged = (file) => {
+                if (!file.endsWith('.svelte')) return;
+
+                let python;
+
+                try {
+                    python = pythonFile(file);
+                } catch {
+                    return;
+                }
+
+                relanguaging.add(file);
+                try {
+                    for (const [source, before] of COMPILED_FROM) {
+                        if (!relanguaging.has(source) && existsSync(source) && before.children.some(([path, was]) => path === file && was !== python)) {
+                            server.watcher.emit('change', source);
+                        }
+                    }
+                } finally {
+                    relanguaging.delete(file);
+                }
+            };
+
             server.watcher.on('add', moved);
             server.watcher.on('unlink', moved);
+            server.watcher.on('change', relanguaged);
         },
         // 'pre', or Vite's own resolver claims `./store.py` as a plain file and
         // hands its Python straight to the JS parser.
@@ -1292,13 +1343,13 @@ export function svelthon(options = {}) {
 
             if (bodies.length === 0) return;
 
-            // A parent asked again for a child it imports, its own source and
-            // each child's language as it was compiled from: it compiles to the
-            // same code. Updated, it was mounted anew, its state lost, and it
-            // could run ahead of the child: the child's new module, imported by
-            // the parent's, took the old one's place before the child's own
-            // update could find it, and the instance a registry held kept the
-            // old code. Nothing changed, nothing to update.
+            // A component asked again as it was compiled, its source, each
+            // child's language and its modules as they were: its generated code
+            // is as it was, and what changed is another input of its compile, a
+            // stylesheet its `<style lang="scss">` imports, which Svelte's
+            // plugin updates as it updates any component, its style alone. Its
+            // bodies forgotten, it was mounted anew, its state lost; and with
+            // nothing handed on, it kept the old style.
             //
             // Asked once per change, of the first environment Vite hands it
             // to, the client's, before anything compiles it again: the
@@ -1306,7 +1357,7 @@ export function svelthon(options = {}) {
             // and an edit then looked compiled as before to the server's, whose
             // page kept rendering the previous body. The others take that
             // answer, under the change's one `timestamp`.
-            if (unchangedAt(file, timestamp)) return [];
+            if (unchangedAt(file, timestamp)) return;
 
             for (const one of bodies) forget('\0' + one.slice(key('').length));
             slots.delete(own);

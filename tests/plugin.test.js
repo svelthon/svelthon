@@ -4,10 +4,11 @@
 // through them, but from inside Vite's own process, where coverage cannot see
 // them — 16 % measured on a module that runs for every file in the project.
 // These call the hooks the way Svelte and Vite do.
-import { test, expect, describe } from 'vitest';
+import { test, expect, describe, afterEach } from 'vitest';
 import { resolve, relative, join } from 'node:path';
 import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, symlinkSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { EventEmitter } from 'node:events';
 import { preprocess, parse } from 'svelte/compiler';
 import { python, svelthon, withPrelude } from '../src/lib/svelthon.js';
 import { VIRTUAL_PREFIX, elementProps } from '../src/lib/compile.js';
@@ -605,12 +606,14 @@ describe('hot update invalidates the generated module too', () => {
         expect(env.invalidated).toEqual([]);
     });
 
-    // A parent reads the language of each child it imports, a dependency of
-    // its own, and is asked again when the child changes. Its source and its
-    // children's languages as they were, it compiles to the same code: updated,
-    // it was mounted anew, its state lost, and ran ahead of the child, whose
-    // instance a registry held then kept the old code.
-    describe('a parent asked again for a child it imports', () => {
+    // A parent reads the language of each child it imports. On the dev server a
+    // child that changes language changes the parent, which the server watches
+    // the child for, and a child edited in its own language changes none: the
+    // children are no dependencies of their parent there. Each edit of one
+    // asked the parent again, which, compiled as before, was mounted anew, its
+    // state lost, and ran ahead of the child; or, taken for compiled as before,
+    // was updated never, though a stylesheet its own style imports had changed.
+    describe('a parent and the children it imports', () => {
         const parent = '<script lang="python">\nimportjs Child from "./Child.svelte"\n</script>\n<Child />\n';
         const pythonChild = '<script lang="python">\nx = 1\n</script>\n<p>{x}</p>\n';
         const javascriptChild = '<script>let x = 1;</script>\n<p>{x}</p>\n';
@@ -631,32 +634,138 @@ describe('hot update invalidates the generated module too', () => {
             }
         };
 
-        test('has nothing to update when the child kept its language', () =>
-            inRoom(async ({ at, compiled, asked }) => {
-                await compiled('Parent.svelte');
-                writeFileSync(at('Child.svelte'), pythonChild.replace('x = 1', 'x = 2'));
+        // The changes the watcher of a dev server emits, once a child changed.
+        // Open, as chokidar's says, until the test is done.
+        const opened = [];
+        const watching = () => {
+            const handlers = {};
+            const changed = [];
+            const watcher = {
+                closed: false,
+                on: (event, handler) => (handlers[event] = handler),
+                emit: (event, file) => changed.push([event, file])
+            };
 
-                expect(asked('Parent.svelte')).toEqual([]);
+            opened.push(watcher);
+            svelthon().configureServer({ watcher });
+            return { handlers, changed, watcher };
+        };
+
+        afterEach(() => {
+            for (const watcher of opened.splice(0)) watcher.closed = true;
+        });
+
+        test('the watcher changes the parent when a child changes language, and none when it keeps it', () =>
+            inRoom(async ({ at, compiled }) => {
+                const { handlers, changed } = watching();
+                const done = await compiled('Parent.svelte');
+
+                expect(done.dependencies).toEqual([]);
+
+                writeFileSync(at('Child.svelte'), pythonChild.replace('x = 1', 'x = 2'));
+                handlers.change(at('Child.svelte'));
+                expect(changed).toEqual([]);
+
+                writeFileSync(at('Child.svelte'), javascriptChild);
+                handlers.change(at('Child.svelte'));
+                expect(changed).toEqual([['change', at('Parent.svelte')]]);
+            }));
+
+        // A dev server closed hands no change on: whatever compiles the parent
+        // in the same process then, a build that watches or `preprocess()`,
+        // takes each child for a dependency again.
+        test('and a dev server closed leaves each child a dependency again', () =>
+            inRoom(async ({ at, compiled }) => {
+                const { watcher } = watching();
+
+                expect((await compiled('Parent.svelte')).dependencies).toEqual([]);
+                watcher.closed = true;
+                expect((await compiled('Parent.svelte')).dependencies).toEqual([at('Child.svelte')]);
             }));
 
         // `python()` in `svelte.config.js` and `svelthon()` in `vite.config.js`
-        // are two instances of this module: one compiles, the other is asked.
+        // are two instances of this module: one compiles, the other watches.
         test('and so when the preprocessor is another instance of the module', () =>
-            inRoom(async ({ at, asked }) => {
+            inRoom(async ({ at }) => {
                 const another = await import('../src/lib/svelthon.js?another-instance');
+                const { handlers, changed } = watching();
 
                 expect(another.python).not.toBe(python);
                 await preprocess(parent, [another.python()], { filename: at('Parent.svelte') });
-                writeFileSync(at('Child.svelte'), pythonChild.replace('x = 1', 'x = 2'));
+                writeFileSync(at('Child.svelte'), javascriptChild);
+                handlers.change(at('Child.svelte'));
 
-                expect(asked('Parent.svelte')).toEqual([]);
+                expect(changed).toEqual([['change', at('Parent.svelte')]]);
+            }));
+
+        // The watcher hands a change to its listeners at once, as chokidar's
+        // does, this one included. A component importing itself, or two
+        // importing each other while one was compiled for the other's old
+        // language, handed theirs on until the stack overflowed and took the
+        // dev server down.
+        test.for([
+            ['a component importing itself', ['Tree.svelte'], [['Tree.svelte', 'Tree.svelte']]],
+            ['two importing each other', ['First.svelte', 'Second.svelte'], [['First.svelte', 'Second.svelte'], ['Second.svelte', 'First.svelte']]]
+        ])('and hands on a change once, through %s', ([, names, imports]) =>
+            inRoom(async ({ at }) => {
+                const watcher = Object.assign(new EventEmitter(), { closed: false });
+                const changed = [];
+                const written = (python, child) =>
+                    python
+                        ? `<script lang="python">\nimportjs Child from "./${child}"\n</script>\n<p>python</p>\n`
+                        : `<script>\nimport Child from './${child}';\n</script>\n<p>javascript</p>\n`;
+
+                for (const [name, child] of imports) {
+                    writeFileSync(at(name), written(true, child));
+                }
+                for (const [name, child] of imports) {
+                    await preprocess(written(true, child), [python()], { filename: at(name) });
+                }
+                opened.push(watcher);
+                watcher.on('change', (file) => changed.push(file));
+                svelthon().configureServer({ watcher });
+
+                for (const [name, child] of imports) {
+                    writeFileSync(at(name), written(false, child));
+                }
+                watcher.emit('change', at(names[0]));
+
+                expect(changed).toEqual(names.map(at));
+            }));
+
+        // Gone after the event, or no file at all, a component is read by no
+        // one: the read that fails is not the dev server's to throw.
+        test('and a component it cannot read changes none', () =>
+            inRoom(async ({ at, compiled }) => {
+                const { handlers, changed } = watching();
+
+                await compiled('Parent.svelte');
+                rmSync(at('Child.svelte'));
+                mkdirSync(at('Child.svelte'));
+
+                expect(() => handlers.change(at('Child.svelte'))).not.toThrow();
+                expect(changed).toEqual([]);
+            }));
+
+        // Asked again as it was compiled, its source, its children and its
+        // modules as they were, a component is left to Svelte's plugin, its
+        // generated code kept: what changed is another dependency of its
+        // compile, a stylesheet its `<style lang="scss">` imports, which only
+        // the preprocessor that read it knows of. Handed nothing, `[]`, the
+        // update was lost; its code forgotten, it was mounted anew.
+        test('a component asked again as it was compiled is left to Svelte’s plugin', () =>
+            inRoom(async ({ at, compiled }) => {
+                const env = graph();
+
+                await compiled('Parent.svelte');
+
+                expect(plugin.hotUpdate.call({ environment: env }, { file: at('Parent.svelte'), modules: [{ id: 'Parent.svelte' }] })).toBeUndefined();
+                expect(env.invalidated).toEqual([]);
             }));
 
         // An edit reaches every environment of the dev server, though the
         // client's, asked first, has the component compiled again before the
-        // server's is asked: under the change's one timestamp, the server's
-        // took the new source for the one compiled before, and its page kept
-        // rendering the previous body.
+        // server's is asked.
         test('and an edit is updated in every environment, though the first one compiles it again', () =>
             inRoom(async ({ at, compiled }) => {
                 const ask = () =>
@@ -673,39 +782,9 @@ describe('hot update invalidates the generated module too', () => {
             }));
 
         // The code depends on where each module the script imports is found:
-        // its prelude evaluates that file. A module moved from beside the
-        // component to the path, or one of the path a file beside it now
-        // shadows, is the component's update though its source is the same; it
-        // kept the old file, and the server refused a collision with a file no
-        // longer there.
-        test.for([
-            ['moved from beside it to the path', 'helper.py', 'lib/helper.py'],
-            ['of the path, shadowed by a file beside it', 'lib/helper.py', 'helper.py']
-        ])('and a module %s is updated', ([, from, to]) =>
-            inRoom(async ({ at, asked }) => {
-                const component = '<script lang="python">\nimport helper\nvalue = helper.value\n</script>\n<p>{value}</p>\n';
-
-                const shared = Symbol.for('svelthon.path');
-                const kept = globalThis[shared];
-
-                mkdirSync(at('lib'));
-                writeFileSync(at('Uses.svelte'), component);
-                writeFileSync(at(from), 'value = 1\n');
-                await preprocess(component, [python({ path: [at('lib')] })], { filename: at('Uses.svelte') });
-                // The path a preprocessor is made with is the plugin's fallback.
-                globalThis[shared] = kept;
-                expect(asked('Uses.svelte')).toEqual([]);
-
-                writeFileSync(at(to), 'value = 2\n');
-                if (from === 'helper.py') rmSync(at(from));
-
-                expect(asked('Uses.svelte')).toContain('Uses.svelte');
-            })
-        );
-
-        // And nothing asked for it: the watcher saw the module arrive and the
-        // old file leave, and the page asked for the file no longer there
-        // until the component was edited. Each component whose import is
+        // its prelude evaluates that file. The watcher saw the module arrive
+        // and the old file leave, and the page asked for the file no longer
+        // there until the component was edited. Each component whose import is
         // found elsewhere now is changed, as an edit of its own would be; a
         // module of another name, or one found where it was, changes none.
         test.for([
