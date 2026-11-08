@@ -500,41 +500,35 @@ function tagged(code, key) {
 // JavaScript child, which it handed JavaScript's values.
 const SELF = 'virtual:svelthon-self';
 
-// What this pass says in the `<script module>`: at the script's start, on its
-// first line, so nothing the author wrote moves, and in one of its own after
-// the file's last line when the component has none.
+// What this pass says in the `<script module>`, in one insertion, so the script
+// is looked for once: at its start, on its first line, so nothing the author
+// wrote moves, and in one of its own after the file's last line when the
+// component has none.
 const inModuleScript = (code, statement) => {
     const at = moduleScriptStart(code);
 
     return at === -1 ? `${code}<script module>${statement}</script>` : code.slice(0, at) + statement + code.slice(at);
 };
 
-const announced = (code, filename) =>
+const announcement = (filename) =>
     filename
-        ? inModuleScript(
-              code,
-              `import __svelthon_self from ${JSON.stringify(SELF)};` +
-                  `import { __pybridge as __svelthon_bridge } from 'svelthon/bridge';` +
-                  `__svelthon_bridge.python(() => __svelthon_self);`
-          )
-        : code;
+        ? `import __svelthon_self from ${JSON.stringify(SELF)};` +
+          `import { __pybridge as __svelthon_bridge } from 'svelthon/bridge';` +
+          `__svelthon_bridge.python(() => __svelthon_self);`
+        : '';
 
 // The getters of the names the `<script module>` binds, in that script's own
 // scope, which Python reads them through (`MODULE_READERS`): the instance
 // script is a scope inside it, where the compiler declares names of its own,
 // and a bare read of the module's name found the instance's first.
-const moduleReaders = (code, names) =>
-    names.length === 0
-        ? code
-        : inModuleScript(code, `const ${MODULE_READERS} = { ${names.map((name) => `get ${JSON.stringify(name)}() { return ${name}; }`).join(', ')} };`);
+const moduleReaders = (names) =>
+    names.length === 0 ? '' : `const ${MODULE_READERS} = { ${names.map((name) => `get ${JSON.stringify(name)}() { return ${name}; }`).join(', ')} };`;
 
 // The questions the runtime asks of Svelte (`bridgeHooks`), laid down in the
 // `<script module>`, once, in a scope that holds no instance's data: laid down
 // by each instance, they were functions of its scope, which the runtime keeps,
 // and the last instance's props stayed alive once it was unmounted.
 const HOOKS = `import { __pybridge as __svelthon_hooks } from 'svelthon/bridge';` + bridgeHooks('__svelthon_hooks').join('');
-
-const hooksInstalled = (code) => inModuleScript(code, HOOKS);
 
 // Whether a component's own file is written in Python.
 const pythonFile = (path) => pythonScript(readFileSync(path, 'utf8')) !== null;
@@ -712,7 +706,10 @@ export function python(options = {}) {
             if (filename) COMPILED_FROM.set(filename, { content, children: languages });
 
             return {
-                code: announced(tagged(hooksInstalled(moduleReaders(elementOptions(code, python, file.jsNames), file.jsNames)), calls.open(file)), filename),
+                code: inModuleScript(
+                    tagged(elementOptions(code, python, file.jsNames), calls.open(file)),
+                    announcement(filename) + HOOKS + moduleReaders(file.jsNames)
+                ),
                 dependencies: childrenWatched() ? [] : languages.map(([path]) => path)
             };
         },

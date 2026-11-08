@@ -1,6 +1,12 @@
 // Build-time half of Svelthon, `svelthon/compile`: run Brython's compiler under
 // Node and split the result in two: a plain ES module holding the generated
 // code, and a Svelte component script that wires it to runes.
+//
+// A component's script is one part of what the preprocessor (`python()` in
+// svelthon.js) makes of its file: that one also rewrites the markup, and lays
+// in the `<script module>` what the script relies on, the questions the runtime
+// asks of Svelte and the getters of that script's names. A page that compiles
+// its own components does all three.
 
 // The engine first, which Bryntime loads started: static imports run in the
 // order written, so everything below finds it started.
