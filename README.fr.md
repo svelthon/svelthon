@@ -204,16 +204,16 @@ raisons différentes.
 
 | Svelte | pourquoi non |
 |---|---|
-| `$state.raw` | Rien à refuser côté Python : un nom n'est jamais un proxy, tout nom de module est donc déjà brut ici, et un portage serait une fonction vide portant un nom. Une valeur qui traverse vers JavaScript est sa vue, un proxy comme un `$state` l'est, et `to_js(value)` est là le moyen d'en sortir. |
+| `$state.raw` | Elle sort d'un proxy profond, et un nom n'en est jamais un ici : ce qu'un nom tient est suivi par un marqueur posé sur l'objet, aussi profondément qu'un `$state` le suit, et écrit pendant que la page se rend, il est refusé, comme un `$state` l'est. Ce que la page ne doit pas suivre, un cache rempli pendant le rendu, vit là où aucun nom du composant ne le tient : un module ordinaire, une fermeture, un argument par défaut. Une valeur qui traverse vers JavaScript est sa vue, un proxy comme un `$state` l'est, et `to_js(value)` est là le moyen d'en sortir. |
 | `$state.snapshot` | `to_js(value)`, une copie de ce que JavaScript lit sinon à travers la vue : pour une API qui clone, une bibliothèque qui pose ses propres champs sur le tableau reçu, ou un gros jeu de données relu sans cesse. |
 | `$state.eager` | Au service des expressions `await`, que Svelte garde lui-même derrière `experimental.async` et qualifie d'expérimental. Rien à refléter tant que ce n'est pas stabilisé. |
 | `$effect.pending` | idem |
 | `$effect.tracking` | Indique à l'auteur d'une *bibliothèque* si le code s'exécute dans un contexte suivi. Différée : aucun des 88 exemples de svelte.dev n'utilise une variante de `$effect`, et quatre utilisent `$effect` tout court. |
 | `$inspect.trace` | Nomme ce qui a provoqué la réexécution d'un effet. Différée avec `$effect.tracking`, et pour la même raison. |
 
-Deux des six ne feraient rien, deux attendent une fonctionnalité que Svelte n'a
-pas stabilisée, et deux sont des outils de développement. Aucune n'est un oubli,
-et chacune est mesurée plutôt que supposée.
+Deux des six ont déjà leur réponse ici, deux attendent une fonctionnalité que
+Svelte n'a pas stabilisée, et deux sont des outils de développement. Aucune n'est
+un oubli, et chacune est mesurée plutôt que supposée.
 
 ## Chaîne de compilation
 
@@ -260,7 +260,9 @@ parent passe une nouvelle valeur : c'est la règle de Svelte pour les props non
 
 Un parent Python donne à un enfant Python la valeur elle-même, une sous-classe
 de `float` avec sa classe, et à un enfant JavaScript le nombre ou la chaîne de
-JavaScript. `None` est l'absence pour l'un comme pour l'autre, le `undefined`
+JavaScript, et pour un itérable fait au fil de l'eau, un `range`, une vue de
+dict, un générateur, `map` ou `zip`, la liste qu'en fait `list()`, que le
+`{#each}` de l'enfant parcourt. `None` est l'absence pour l'un comme pour l'autre, le `undefined`
 que passe un parent Svelte, et l'enfant lit donc son défaut ; `javascript.NULL`
 est une valeur, comme `null`. Le compilateur les distingue en lisant le fichier de l'enfant quand
 l'import en nomme un. Tout autre enfant, venu d'un paquet, d'un alias de
@@ -844,7 +846,10 @@ Rien ici n'est de notre invention. Un `.ts` ne devient réactif que nommé
 `panier.svelte.py` s'importe depuis Python par `import panier`.
 
 **Un module ordinaire** est du Python compilé en JavaScript, et rien d'autre.
-Pas de rune, pas de signal, aucun coût pour une réactivité dont il ne fait rien.
+Pas de rune, pas de signal, aucun coût pour une réactivité dont il ne fait rien,
+et un composant qui l'importe, `import helper`, ne suit rien de ce qu'il garde,
+comme un composant ne suit rien d'un module JavaScript : un cache que ses
+fonctions remplissent pendant le rendu est le sien.
 Ses fonctions sont ses exports ; `__all__` dit autre chose quand on le souhaite :
 
 ```python
@@ -1591,6 +1596,14 @@ les renseigner, en nommant la fonction et le fichier :
 ValueError: cassé au fond (boom() — src/Counter.svelte:6)
 ```
 
+Là où seul Svelte appelle Python, un handler, une expression du gabarit, un effet
+et son nettoyage, la moitié écriture d'une liaison, un dérivé que Svelte
+recalcule, ce qui est levé sort en `Error` ordinaire qui ne tient rien de l'objet
+Python : un lanceur de tests qui clone une erreur non rattrapée ne parcourt aucun
+moteur. Python rattrape toujours sa propre exception : un `except` autour d'une
+lecture du dérivé, et une `<svelte:boundary>` dont `failed` ou `onerror` est écrit
+en Python, qui lit la classe et le texte qu'un `except` lirait.
+
 La ligne vient de la traceback Python, recalée sur la numérotation du fichier :
 un `<script module>` placé avant le Python ne la fausse pas.
 
@@ -1641,7 +1654,7 @@ parsing, que seul le compilateur charge ; le README de Bryntime en donne le poid
 
 ## État
 
-Validé par `npm test`, 2 042 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 2 050 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
@@ -1651,7 +1664,7 @@ rangée d'un `test.for`), aucun échec attendu :
   contrôle et frames. Chaque valeur attendue a été produite par CPython 3.12 en
   exécutant le code du composant tel quel, jamais écrite à la main. Brython
   reproduit CPython sur **chaque point** ;
-- build de production : **273 Ko gzip**, runtime Brython compris : ce que la
+- build de production : **274 Ko gzip**, runtime Brython compris : ce que la
   page de démo charge, son script, les modules qu'elle précharge et ses styles,
   mesuré après chaque build par `scripts/build-size.mjs`.
 
@@ -1755,7 +1768,7 @@ proxifiées. Le choix de conception de la réactivité se rembourse précisémen
 où une vraie application passe son temps.
 
 Le vrai prix est au chargement : **1,2 s jusqu'à l'interactivité** pour la démo de
-production sur ce portable, contre 0,5 s pour la même page sans Brython : 273 Ko
+production sur ce portable, contre 0,5 s pour la même page sans Brython : 274 Ko
 gzip au lieu de 13. Payé une fois par session, pas par page, puisque
 l'application ne recharge jamais.
 

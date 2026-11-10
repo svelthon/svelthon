@@ -55,10 +55,11 @@ describe('a tag written the short way', () => {
 });
 
 describe('what the walker refuses to touch', () => {
-    // An unclosed brace is not an expression: it is left exactly as typed, and
-    // Svelte reports it in its own words.
-    test('an unclosed brace crosses unchanged', () => {
-        expect(rewrite('<p>{oops</p>').out).toBe('<p>{oops</p>');
+    // An unclosed brace is not an expression. Left as typed, it was Svelte's to
+    // report, and Svelte read the rest as JavaScript: `Unterminated regular
+    // expression`, which says nothing of the brace.
+    test('an unclosed brace is refused as one', () => {
+        expect(() => rewrite('<p>{oops</p>')).toThrow(/this `\{` opens an expression that no `\}` closes/);
     });
 
     // An apostrophe inside an HTML comment used to open a string that never

@@ -1,0 +1,21 @@
+// An iterable a builtin makes as it goes, a `range`, a dict's view, a generator,
+// `map`, `zip`, `enumerate`, `filter`, `reversed`, holds none of its items where
+// JavaScript looks: handed to a JavaScript child as the Brython object it is,
+// `<Chart labels={data.keys()} />`, the child's `{#each}` rendered nothing and
+// nothing said so, where the Python template walks every one of them. It goes
+// out as the list `list()` makes of it.
+import { test, expect } from 'vitest';
+import { mount, flushSync } from './mounted.js';
+import ListedLazy from './fixtures/ListedLazy.svelte';
+
+test('a JavaScript child reads a lazy iterable as the list list() makes of it', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+
+    mount(ListedLazy, { target });
+    flushSync();
+
+    const shown = (k) => [...target.querySelectorAll(`[data-k="${k}"] p`)].map((one) => one.textContent);
+
+    expect(shown('lazy')).toEqual(shown('listed'));
+    expect(shown('lazy')[0]).toBe('true 0;1;2;');
+});

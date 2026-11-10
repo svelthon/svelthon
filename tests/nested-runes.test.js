@@ -81,6 +81,9 @@ describe('a rune written below the top level', () => {
         ['assigned inspect', 'count = 0\nwatch = inspect(count)\n', /`inspect\(…\)` is a statement of its own.*:2\)/],
         ['inspect sharing its line', 'count = 0\ninspect(count); count = 1\n', /`inspect\(…\)` is read as a statement on lines of its own.*:2\)/],
         ['inspect sharing its line with a call', 'count = 0\ninspect(count); print(count)\n', /`inspect\(…\)` is read as a statement on lines of its own.*:2\)/],
+        // Brython said `invalid syntax` of these, and no more.
+        ['a derived sharing its line', 'count = 0\ntwice => count * 2; other = 3\n', /a derived written with `=>` is a statement on a line of its own; sharing one, the `;`.*:2\)/],
+        ['an effect sharing its line', 'count = 0\n=> print(count); other = 3\n', /an? effect written with `=>` is a statement on a line of its own.*:2\)/],
         ['annotated and assigned inspect', 'count = 0\nwatch: object = inspect(count)\n', /`inspect\(…\)` is a statement of its own.*:2\)/],
         ['an annotated derived handed a value', 'count = 0\ntwice: int = derived(count * 2)\n', /`derived\(…\)` takes a function.*:2\)/],
         ['a derived handed a value', 'count = 0\ntwice = derived(count * 2)\n', /`derived\(…\)` takes a function.*`name => expression`.*:2\)/],

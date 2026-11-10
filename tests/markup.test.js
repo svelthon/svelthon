@@ -1206,6 +1206,35 @@ describe('an unknown construct is refused, never passed through', () => {
         expect(() => rewrite('<p>{name + "}"</p>')).not.toThrow(/takes the closing `\}` with it/);
     });
 
+    // A brace no brace closes is an error for Svelte too, which read the rest
+    // as JavaScript and said `Unterminated regular expression` of `{a</p>`.
+    test('a brace nothing closes is refused as one', () => {
+        expect(() => rewrite('<p>{a</p>')).toThrow(/this `\{` opens an expression that no `\}` closes/);
+        expect(() => rewrite('<p>{name + "}"</p>')).toThrow(/this `\{` opens an expression that no `\}` closes/);
+    });
+
+    // A name the template declares is bound in the code it becomes, which binds
+    // no word JavaScript reserves: Svelte refused it in its own words, at a
+    // column of the code the markup pass wrote.
+    test.for([
+        ['an item', '<ul>{#each xs as eval}<li>{eval}</li>{/each}</ul>', 'eval'],
+        ['an index', '<ul>{#each xs as x, let}<li>{x}</li>{/each}</ul>', 'let'],
+        ["a snippet's parameter", '{#snippet row(arguments)}<p>{arguments}</p>{/snippet}', 'arguments']
+    ])('%s named by a word JavaScript reserves is refused, with the rename', ([, markup, name]) => {
+        expect(() => rewrite(markup)).toThrow(new RegExp(`\`${name}\` is a reserved word in JavaScript.*\`${name}_\``, 's'));
+    });
+
+    // Svelte binds an identifier or a member, and Brython refused the setter
+    // written for the rest, `(c.upper()) = __value`, in code nobody wrote.
+    test.for([['a call', 'c.upper()'], ['a literal', '"text"'], ['an operation', 'a + b']])(
+        'a binding to %s is refused in the words the author wrote',
+        ([, target]) => {
+            expect(() => rewrite(`<input bind:value={${target}} />`)).toThrow(
+                `\`bind:value\` writes back to what it binds, and \`${target}\` takes no write`
+            );
+        }
+    );
+
     // Svelte 5 takes `{const a = n}` inside a block, its own spelling of
     // `{@const}`, and Svelthon's answer is the template rune `{a = n}`. The
     // keyword fell through to the generic interpolation, so the author read

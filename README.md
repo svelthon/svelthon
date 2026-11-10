@@ -202,16 +202,16 @@ than a rune of its own. Six are absent on purpose, and the reasons differ.
 
 | Svelte | why not |
 |---|---|
-| `$state.raw` | Nothing to opt out of in Python: a name is never a proxy, so every module-level name here is already raw, and a port would be a no-op wearing a name. A value crossing to JavaScript is its view, a proxy as a `$state` is, and `to_js(value)` is the opt-out there. |
+| `$state.raw` | It opts out of a deep proxy, and a name is never one here: what a name holds is followed by a marker on the object, as deep as a `$state` follows it, and written while the page renders it is refused, as a `$state` is. What the page must not follow, a cache filled while it renders, lives where no name of the component holds it: an ordinary module, a closure, a default argument. A value crossing to JavaScript is its view, a proxy as a `$state` is, and `to_js(value)` is the opt-out there. |
 | `$state.snapshot` | `to_js(value)`, a copy of what JavaScript otherwise reads through the view: for an API that clones, a library that sets fields of its own on the array it is given, or a large set of data read over and over. |
 | `$state.eager` | Serves `await` expressions, which Svelte itself gates behind `experimental.async` and calls experimental. Nothing to mirror until that lands. |
 | `$effect.pending` | as above |
 | `$effect.tracking` | Tells a *library* author whether the code sits in a tracking context. Deferred: none of the 88 examples on svelte.dev uses any `$effect` variant, and four use `$effect` plain. |
 | `$inspect.trace` | Names what caused an effect to re-run. Deferred with `$effect.tracking`, and for the same reason. |
 
-Two of the six would do nothing, two wait on a feature Svelte has not settled,
-and two are development tools. None is an oversight, and each is measured rather
-than assumed.
+Two of the six have their answer here already, two wait on a feature Svelte has
+not settled, and two are development tools. None is an oversight, and each is
+measured rather than assumed.
 
 ## Compilation pipeline
 
@@ -256,7 +256,9 @@ Python, and a required prop that was not passed reads as `None`, not
 a new value, which is Svelte's own rule for non-`$bindable` props.
 
 A Python parent hands a Python child the value itself, a `float` subclass with
-its class, and a JavaScript child JavaScript's number or string. None is the
+its class, and a JavaScript child JavaScript's number or string, and for an
+iterable made as it goes, a `range`, a dict's view, a generator, `map` or `zip`,
+the list `list()` makes of it, which the child's `{#each}` walks. None is the
 absence to both, the `undefined` a Svelte parent passes, so the child reads its
 default; `javascript.NULL` is a value, as `null` is. The compiler
 tells the two apart by reading the child's file when the import names one. Any
@@ -805,8 +807,11 @@ Nothing here is our invention. A `.ts` becomes reactive only when it is named
 is imported from Python as `import panier`.
 
 **An ordinary module** is Python compiled to JavaScript, and nothing else. No
-runes, no signals, no cost for reactivity it does not use. Its functions are its
-exports; `__all__` says otherwise when you want it to:
+runes, no signals, no cost for reactivity it does not use, and a component that
+imports it, `import helper`, follows nothing it keeps, as a component follows
+nothing of a JavaScript module: a cache its functions fill while the page
+renders is its own. Its functions are its exports; `__all__` says otherwise when
+you want it to:
 
 ```python
 # peps.py
@@ -1532,6 +1537,14 @@ them in, naming the function and the file:
 ValueError: broke deep down (boom() — src/Counter.svelte:6)
 ```
 
+Where only Svelte calls Python, a handler, a template expression, an effect and
+its cleanup, the write half of a binding, a derived Svelte recomputes, what it
+raises leaves as an ordinary `Error` that holds nothing of the Python object, so
+a test runner cloning an uncaught error walks no engine. Python still catches
+its own exception: an `except` around a read of the derived, and a
+`<svelte:boundary>` whose `failed` or `onerror` is written in Python, which reads
+the class and the text an `except` would.
+
 The line comes from the Python traceback, offset back to the file's own
 numbering: a `<script module>` placed before the Python does not skew it. A
 Python **syntax error** at build time is reported the same way, rather than as an
@@ -1619,7 +1632,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 2 042 tests as written (vitest reports more, one per
+Validated by `npm test`, 2 050 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;
@@ -1629,7 +1642,7 @@ row of a `test.for`), none expected to fail:
   Every expected value was produced by running the component's Python through
   CPython 3.12 as-is, never written by hand. Brython matches CPython on **every
   point**;
-- production build: **273 KB gzip**, Brython runtime included: what the demo
+- production build: **274 KB gzip**, Brython runtime included: what the demo
   page loads, its script, the modules it preloads and its styles, measured
   after each build by `scripts/build-size.mjs`.
 
@@ -1701,7 +1714,7 @@ deep-proxies the objects inside a `$state` array; Svelthon's names are
 itself exactly where a real application spends its time.
 
 Loading is the real price: **1.2 s to interactive** for the production demo on
-this laptop, against 0.5 s for the same page without Brython: 273 KB gzip
+this laptop, against 0.5 s for the same page without Brython: 274 KB gzip
 instead of 13 KB. Paid once per session, not per page, since the app never
 reloads.
 

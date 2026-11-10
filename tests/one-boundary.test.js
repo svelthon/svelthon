@@ -53,10 +53,11 @@ describe('the compiler emits no boundary of its own', () => {
     // And the shape itself, which is what the two copies had in common: a `try`
     // around a Python call with a `catch` that labels it. The two that remain
     // wrap a call with no arguments and no result — an effect and the module
-    // body — and label the error, which is not a crossing. `on_destroy` goes
-    // through `pyComponent`, which starts an `async def`.
+    // body — and label the error, which is not a crossing: the effect's leaves
+    // Python as an `Error` (`pyThrown`). `on_destroy` goes through
+    // `pyComponent`, which starts an `async def`.
     test('and the wrappers it still writes take no argument and convert nothing', () => {
-        const written = [...source.matchAll(/catch \(err\) \{ throw (?:__pyError|\$\{host\.runtime\.pyError\})/g)];
+        const written = [...source.matchAll(/catch \(err\) \{ throw (?:__pyError|\$\{RUNTIME\.pyThrown\}|\$\{host\.runtime\.pyError\})/g)];
 
         expect(written.length).toBe(2);
         expect(source).not.toContain('.map(__pyArg)');

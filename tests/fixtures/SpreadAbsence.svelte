@@ -20,6 +20,8 @@ kept = {"title": "", "data-n": 0, "aria-hidden": False, "onclick": press}
 
 <input data-k="spread" {**attrs} />
 <input data-k="direct" title={attrs["title"]} disabled={attrs["disabled"]} />
+<a data-k="link" {**attrs}>link</a>
+<svelte:element this={"a"} data-k="element" disabled={attrs["disabled"]}>element</svelte:element>
 <button data-k="kept" {**kept}>keep</button>
 <button data-k="erase" onclick={erase}>erase</button>
 <p data-k="presses">{presses}</p>

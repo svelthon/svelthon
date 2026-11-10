@@ -17,7 +17,8 @@ import {
     callsAnything,
     handedLate,
     computing as computingIn,
-    costly as costlyIn
+    costly as costlyIn,
+    JS_RESERVED
 } from 'bryc';
 
 // The scanners below look for a closing character and have to know which
@@ -2863,7 +2864,24 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     // each of the four constructs that can declare one. Asked of the name as
     // Python reads it, which is the name declared: `_＿x`, with a fullwidth
     // low line, takes the prefix too.
+    //
+    // And a word JavaScript reserves, `eval`, `let`, `arguments`, which the
+    // generated code cannot bind: Svelte refused it in its own words, at a
+    // column of the code the markup pass wrote.
     const refuseCompilerName = (names) => {
+        const reserved = [names].flat().map(pythonName).find((one) => JS_RESERVED.has(one));
+
+        if (reserved !== undefined) {
+            throw refuse(
+                new SyntaxError(
+                    `svelthon — \`${reserved}\` is a reserved word in JavaScript${said()}, and a name ` +
+                        `the template declares is bound in the code it becomes, which cannot bind ` +
+                        `one. Rename it: Python's own convention for a name that collides with a ` +
+                        `keyword is a trailing underscore, \`${reserved}_\`.`
+                )
+            );
+        }
+
         const taken = [names].flat().map(pythonName).find((one) => COMPILER_PREFIX.test(one));
 
         if (taken === undefined) return names;
@@ -3218,6 +3236,25 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     // sharing a binding, the rows of an `{#each}` and the renders of a snippet
     // each keep theirs. The write, which Svelte hands no element, is told by the
     // options of the selects at that place (`selectWrite`).
+    // A binding writes back to what it binds, and a call, a literal or an
+    // operation takes no write: Brython refused the setter written for it,
+    // `(c.upper()) = __value`, in the words of code the author never wrote.
+    // Svelte's own rule, said in Python's: a name, an attribute or an item.
+    const WRITABLE = ['Name', 'Attribute', 'Subscript', 'Tuple', 'List', 'Starred'];
+
+    const refuseUnwritable = (directive, expr) => {
+        const node = targetTree(`(${expr}\n)`);
+
+        if (node === null || WRITABLE.some((one) => node instanceof globalThis.__BRYTHON__.ast[one])) return;
+
+        throw refuse(
+            new SyntaxError(
+                `svelthon — \`${directive}\` writes back to what it binds, and \`${expr.trim()}\` takes no write${said()}: ` +
+                    `bind a name, an attribute or an item.`
+            )
+        );
+    };
+
     const spreadSelect = (directive, expr) => {
         if (directive !== 'bind:value' || tag?.name !== 'select' || tagNames(markup, tag.start).has('multiple')) return null;
         if (!tagSpreads(markup, tag.start)) return null;
@@ -3230,6 +3267,8 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     };
 
     const boundPair = (directive, expr) => {
+        refuseUnwritable(directive, expr);
+
         const shaped = spreadSelect(directive, expr);
 
         if (shaped !== null) {
@@ -3756,7 +3795,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         // goes as it is to a custom element and as its truth to any other,
         // asked of that name (`__pybridge.element`).
         if (tag?.element !== undefined && TRUTH_WRAPPERS.has(wrapper)) {
-            return `{__pybridge.element(${tag.element}, ${JSON.stringify(wrapper)}, ${call(inner, '', undefined, 'python')})}`;
+            return `{__pybridge.element(${tag.element}, ${JSON.stringify(wrapper)}, ${call(inner, '', undefined, 'python')}, ${JSON.stringify(name)})}`;
         }
 
         if (wrapper) return `{${call(inner, wrapper)}}`;
@@ -4242,16 +4281,13 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         }
 
         // Moved past what a `{@debug}` takes with it, the whitespace after it.
+        // A `{` no `}` closes is an error for Svelte as well, which read the
+        // rest as JavaScript and said `Unterminated regular expression` of
+        // `{a</p>`.
         let end = closingBrace(markup, index);
         if (end === -1) {
-            if (swallowed(markup, index)) {
-                region = { start: index + 1, end: index + 1 };
-                throw refuse(swallowedBrace(said()));
-            }
-
-            out += char;
-            index++;
-            continue;
+            region = { start: index + 1, end: index + 1 };
+            throw refuse(swallowed(markup, index) ? swallowedBrace(said()) : unclosedBrace(said()));
         }
 
         const inner = markup.slice(index + 1, end);
@@ -4840,12 +4876,11 @@ export function collector(defs, lines, columns) {
             const named = bareName(expression);
             const bare = named !== null && !args.some((one) => pythonName(one) === named);
 
+            // On the line after the `def`, as every expression is, which is
+            // where its line in the markup is read from (`fileLines`).
             defs.push(
-                [
-                    `def ${name}(${[BOUND_VALUE, ...args].join(', ')}):`,
-                    ...(bare ? [`    global ${named}`] : []),
-                    `    (${expression}) = ${BOUND_VALUE}`
-                ].join('\n')
+                `def ${name}(${[BOUND_VALUE, ...args].join(', ')}):\n` +
+                    `    ${bare ? `global ${named}; ` : ''}(${expression}) = ${BOUND_VALUE}`
             );
         } else {
             // A comma at the top level gets its own parentheses inside the
@@ -4884,6 +4919,9 @@ const swallowedBrace = (at) =>
         `svelthon — a Python comment runs to the end of its line, and this one takes ` +
             `the closing \`}\` with it${at}; put the \`}\` on the next line.`
     );
+
+const unclosedBrace = (at) =>
+    new SyntaxError(`svelthon — this \`{\` opens an expression that no \`}\` closes${at}.`);
 
 // The text without its Python comments, strings left whole.
 function uncomment(text) {

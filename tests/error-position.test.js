@@ -111,6 +111,12 @@ describe('an error raised by a template expression', () => {
         expect(raise('again')).toMatch(/^ZeroDivisionError: .*ExpressionRaise\.svelte:16\)$/);
     });
 
+    // Brython numbers a frame by its statement, and a lambda's body is one:
+    // written on the third line of its expression, it raised at the first.
+    test('and a lambda on a later line of its expression, that line', () => {
+        expect(raise('lines')).toMatch(/^ZeroDivisionError: .*ExpressionRaise\.svelte:19\)$/);
+    });
+
     test('and a function of the script it calls names its own line', () => {
         expect(raise('called')).toMatch(/^ZeroDivisionError: .*ExpressionRaise\.svelte:7\)$/);
     });

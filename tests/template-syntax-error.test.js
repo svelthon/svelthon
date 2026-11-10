@@ -36,6 +36,14 @@ test('and so does the third expression of a file, at its own column', async () =
     expect(error.start).toEqual({ line: 8, column: 3 });
 });
 
+// An expression over several lines is wrong on one of them, which is the line
+// said: the brace's was, whatever line was at fault.
+test('and an expression over three lines, the line at fault', async () => {
+    const error = await refused(`<p>{(\n    count +\n    ok ? "yes" : "no")}</p>\n`);
+
+    expect(error.message).toMatch(/\(Component:8\)/);
+});
+
 // A conversion is not a negation: `!r` belongs in an f-string field.
 test('a conversion outside an f-string is not called a negation', async () => {
     const error = await refused('{count!r}\n');

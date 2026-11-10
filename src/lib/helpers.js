@@ -416,7 +416,12 @@ export function tojson(value, indent) {
         level === undefined ? undefined : '\u0001'
     );
 
-    return level === undefined || text === undefined ? text : text.replaceAll('\u0001', level);
+    // As Jinja's `tojson`, which writes these four as escapes so the text holds
+    // in a `<script>` or an attribute: a `</script>` in a value closed the
+    // element `{@html}` wrote it in. Outside a string, JSON holds none of them.
+    const safe = text?.replace(/[<>&']/g, (one) => `\\u00${one.charCodeAt(0).toString(16)}`);
+
+    return level === undefined || safe === undefined ? safe : safe.replaceAll('\u0001', level);
 }
 
 // And the way back, through Brython's route rather than the JavaScript one,
@@ -487,6 +492,8 @@ export function batch(xs, size, fill) {
 const DAY_ALONE = new RegExp(`^${DAY.source}$`);
 const DAY_ONLY = (value) => typeof value === 'string' && DAY_ALONE.test(value);
 
+const STYLES = ['full', 'long', 'medium', 'short'];
+
 export function date(value, dateStyle, timeStyle, locale) {
     const at = instant(value);
 
@@ -504,6 +511,17 @@ export function date(value, dateStyle, timeStyle, locale) {
     const options = {};
     const style = written(dateStyle);
     const clock = written(timeStyle);
+
+    // A format of letters, Django's `"Y-m-d"`, is no style, and `Intl` said so
+    // in its own words, naming an option of its own.
+    for (const given of [style, clock]) {
+        if (typeof given === 'string' && !STYLES.includes(given)) {
+            throw refuse(
+                `date(): ${shown(given)} is not a style: date() takes "full", "long", "medium" or "short", ` +
+                    `which it writes in the reader's language, and no format letters`
+            );
+        }
+    }
 
     if (typeof style === 'string') options.dateStyle = style;
     if (typeof clock === 'string') options.timeStyle = clock;
@@ -530,11 +548,22 @@ export function date(value, dateStyle, timeStyle, locale) {
     if (DAY_ONLY(written(value))) options.timeZone = 'UTC';
 
     const language = written(locale);
+    let format;
 
-    return new Intl.DateTimeFormat(
-        typeof language === 'string' ? language : undefined,
-        options
-    ).format(at);
+    // Python's locale, `fr_FR`, is no language tag, and `Intl` refused it as
+    // `Incorrect locale information provided`.
+    try {
+        format = new Intl.DateTimeFormat(typeof language === 'string' ? language : undefined, options);
+    } catch (error) {
+        if (!(error instanceof RangeError)) throw error;
+
+        throw refuse(
+            `date(): ${shown(language)} is not a language tag: write it as the web does, ` +
+                `${shown(String(language).replaceAll('_', '-'))}`
+        );
+    }
+
+    return format.format(at);
 }
 
 const UNITS = [

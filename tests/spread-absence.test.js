@@ -49,6 +49,11 @@ const after = (Component, clicks) => {
     return {
         spread: shown('spread'),
         direct: shown('direct'),
+        // An element with no `disabled` property, where Svelte writes the
+        // attribute as a word: None was False there, `disabled="false"`, which
+        // `a[disabled]` matches and the server never wrote.
+        link: shown('link'),
+        element: shown('element'),
         kept: shown('kept'),
         presses: target.querySelector('[data-k="presses"]').textContent
     };

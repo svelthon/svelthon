@@ -110,12 +110,14 @@ const {
     // The errors', the calls' and the views'.
     pyError,
     thrown,
+    raisedAgain,
     relayed,
     raised,
     schedule,
     scheduleAsync,
     pyArg,
     pyNumbers,
+    listed,
     pyCall,
     pyHandler,
     declared,
@@ -260,6 +262,11 @@ const attribute = (value) => {
 // A key Svelte takes for an attachment (`createAttachmentKey`), told as Svelte
 // tells one: a symbol described `@attach`.
 const attaching = (key) => typeof key === 'symbol' && key.description === '@attach';
+
+// The boolean properties no attribute reflects, which removing the attribute
+// leaves as they were: `indeterminate` has no attribute at all, and `muted`'s
+// is the default.
+const unreflected = (name) => typeof name === 'string' && /^(?:indeterminate|muted)$/i.test(name);
 
 // A spread to a JavaScript child: each value crosses as a prop written by name
 // does, `attribute` and then the floats of a config made numbers (`pyNumbers`),
@@ -1385,12 +1392,19 @@ export const __pybridge = {
         const read = spreadOf(value, (one) => one);
         const out = spread(read);
 
+        // None stays the absence `spread` made of it under a key of the
+        // boolean table too, which removing the attribute an element reflects
+        // turns off: made False, it was the word "false" on an element with no
+        // such property, `<a disabled="false">`, which no server wrote. Save a
+        // property no attribute reflects, which an absence leaves as it was: a
+        // box stayed `indeterminate`.
         for (const key of Object.keys(out)) {
             const wrapper = attributeWrapper(key);
+            const present = read[key] !== NONE || unreflected(key);
             if (key[0] + key[1] === 'on') out[key] = event(read[key]);
             else if (wrapper === '__class') out[key] = __pybridge.klass(read[key]);
-            else if (wrapper === '__truthy' && !custom) out[key] = __pybridge.truthy(read[key]);
-            else if (wrapper === '__hidden' && !custom) out[key] = __pybridge.hidden(read[key]);
+            else if (wrapper === '__truthy' && !custom && present) out[key] = __pybridge.truthy(read[key]);
+            else if (wrapper === '__hidden' && !custom && present) out[key] = __pybridge.hidden(read[key]);
             else if (key === 'value') out[key] = (grouped ? COMPARED.choice : COMPARED.scalar)(__pybridge.bound(read[key]));
         }
 
@@ -1402,8 +1416,8 @@ export const __pybridge = {
     // by its name (`element.nodeName.includes('-')`), a property's, set to the
     // value as it is, and on any other element its Python truth, `hidden` with
     // its third state (`wrapper`). `value` is the Python value.
-    element(tag, wrapper, value) {
-        if (customTag(tag)) return __pybridge.bound(value);
+    element(tag, wrapper, value, name) {
+        if (customTag(tag) || (value === NONE && !unreflected(name))) return __pybridge.bound(value);
 
         return wrapper === '__hidden' ? __pybridge.hidden(value) : __pybridge.truthy(value);
     },
@@ -1559,7 +1573,9 @@ const inFile = (line, lines) => {
 
     const range = lines.ranges.find(([from, to]) => line >= from && line <= to);
 
-    return range === undefined ? line + lines.offset : range[2];
+    // Its expression starts on the line after the `def`, and runs over the
+    // lines of markup it was written on.
+    return range === undefined ? line + lines.offset : range[2] + Math.max(0, line - range[0] - 1);
 };
 
 // That offset, per file, as each component registers its own when its module
@@ -2070,7 +2086,16 @@ export function pyTeardown(value, where) {
     }
 
     const cleanup = pyHandler(value);
-    return typeof cleanup === 'function' ? cleanup : undefined;
+
+    if (typeof cleanup !== 'function') return undefined;
+
+    return () => {
+        try {
+            return cleanup();
+        } catch (error) {
+            throw pyThrown(error, where);
+        }
+    };
 }
 
 
@@ -2180,7 +2205,7 @@ export function exportedMember(value) {
 const scalarOnly = (value) => {
     if (value === null || typeof value !== 'object') return value;
     const alone = pyScalar(value);
-    return alone === undefined ? value : alone;
+    return alone === undefined ? listed(value) : alone;
 };
 
 // The `value` of a control a `bind:group` binds is read by the group alone,
@@ -2242,26 +2267,55 @@ const handedPython = (value) => (value === NONE ? undefined : value);
 // binding, `writes`, which an input event calls.
 let rendering = 0;
 
+//
+// Svelte alone calls one, so what it raises leaves Python there (`thrown`).
 export const pyExpression = (call, where, arity, kept = false, writes = false) =>
     identified(
-        (...args) =>
-            running(
-                () => {
-                    const counted = writes ? 0 : 1;
+        (...args) => {
+            try {
+                return running(
+                    () => {
+                        const counted = writes ? 0 : 1;
 
-                    rendering += counted;
-                    try {
-                        return call(args.slice(0, arity).map(pyBind));
-                    } finally {
-                        rendering -= counted;
-                    }
-                },
-                where,
-                kept === true ? keptPython : kept === 'child' ? handedPython : (COMPARED[kept] ?? pyNumbers)
-            ),
+                        rendering += counted;
+                        try {
+                            return call(args.slice(0, arity).map(pyBind));
+                        } finally {
+                            rendering -= counted;
+                        }
+                    },
+                    where,
+                    kept === true ? keptPython : kept === 'child' ? handedPython : (COMPARED[kept] ?? pyNumbers)
+                );
+            } catch (error) {
+                throw thrown(error);
+            }
+        },
         nameOf(where),
         arity
     );
+
+// What an effect, a derived Svelte recomputes or a cleanup raises leaves
+// Python there, as a template expression's does: an ordinary `Error`, the
+// exception kept behind it for a Python reader (`thrown`). A derived Python
+// reads raises again what its body raised (`pyRead`), which an `except` takes.
+export const pyThrown = (error, where) => thrown(pyError(error, where));
+
+export const pyDerive = (body, where) => () => {
+    try {
+        return body();
+    } catch (error) {
+        throw pyThrown(error, where);
+    }
+};
+
+export const pyRead = (read) => {
+    try {
+        return read();
+    } catch (error) {
+        throw raisedAgain(error);
+    }
+};
 
 // **A name of the module that nothing has bound yet**, assigned in a branch
 // that did not run, or deleted, is read by Python code as CPython reads it,

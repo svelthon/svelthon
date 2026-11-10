@@ -62,6 +62,16 @@ describe('tojson', () => {
         expect(tojson(__pybridge.list([1, 2]))).toBe('[1,2]');
     });
 
+    // Jinja's `tojson` writes `<`, `>`, `&` and `'` as escapes, so its text holds
+    // in a `<script>` or an attribute: a `</script>` in a value closed the
+    // element `{@html}` wrote it in, the way JSON-LD is written in Svelte.
+    test("writes <, >, & and ' as Jinja's does, which the parse reads back", () => {
+        const text = tojson(pyData({ s: "</script><b>&'" }));
+
+        expect(text).toBe('{"s":"\\u003c/script\\u003e\\u003cb\\u003e\\u0026\\u0027"}');
+        expect(JSON.parse(text)).toEqual({ s: "</script><b>&'" });
+    });
+
     test('a numeric indent is honoured', () => {
         expect(tojson(__pybridge.list([1])).length).toBeLessThan(tojson(__pybridge.list([1]), 2).length);
         expect(tojson(__pybridge.list([1]), 2)).toBe('[\n  1\n]');
@@ -938,6 +948,18 @@ describe('date', () => {
     // would have read "date(): undefined is not a date" only by accident.
     test('and so is nothing at all', () => {
         expect(() => date(undefined)).toThrow(/date\(\): undefined is not a date/);
+    });
+
+    // Django's reflex, a format of letters, and Python's, a locale with an
+    // underscore: `Intl` refused both in its own words, `Value Y-m-d out of
+    // range for Intl.DateTimeFormat options property dateStyle`, and said
+    // nothing of what to write.
+    test.for([
+        ['a format of letters', () => date('2024-03-05', 'Y-m-d'), /svelthon — date\(\): "Y-m-d" is not a style: .*"full", "long", "medium" or "short"/],
+        ['a time style', () => date('2024-03-05', NONE, 'H:i'), /svelthon — date\(\): "H:i" is not a style/],
+        ['a locale with an underscore', () => date('2024-03-05', 'long', NONE, 'fr_FR'), /svelthon — date\(\): "fr_FR" is not a language tag: .*"fr-FR"/]
+    ])('%s is refused, and says what to write', ([, call, message]) => {
+        expect(call).toThrow(message);
     });
 
     // A Python int above 2^53 is a BigInt, and `new Date` refuses one before the

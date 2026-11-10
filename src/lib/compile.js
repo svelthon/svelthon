@@ -337,6 +337,15 @@ function walrusIn(expr) {
     return find(tree);
 }
 
+// How many statements a text is, or 0 for one that does not parse.
+function statements(text) {
+    try {
+        return $B._PyPegen.run_parser(new $B.Parser(`${text}\n`, '<arrow>', 'file')).body.length;
+    } catch {
+        return 0;
+    }
+}
+
 const ARROW_INDENTED = /^[ \t]+(?:[\p{XID_Start}_]\p{XID_Continue}*\s*)?=>\s/u;
 
 // `theirs` names what the author imported with `importjs`.
@@ -409,6 +418,18 @@ function takeArrows(src, where, lineOffset, allowed, theirs = new Set()) {
                 `svelthon — \`${walrus} :=\` inside \`=>\` would bind \`${walrus}\` in the ` +
                     `lambda the ${kind(named)} becomes, not in the module; assign it on a ` +
                     `line of its own (${at})`,
+                where,
+                lineno
+            );
+        }
+
+        // `b => a * 2; c = 3`: past the `;` is another statement, which the
+        // lambda the arrow becomes cannot hold, and Brython said `invalid
+        // syntax` and no more, as `inspect(n); z = 3` is told why.
+        if (found && statements(expression) > 1) {
+            throw refuse(
+                `svelthon — a ${kind(named)} written with \`=>\` is a statement on a line of its own; ` +
+                    `sharing one, the \`;\` starts another, which goes on a line of its own (${at})`,
                 where,
                 lineno
             );
@@ -577,6 +598,9 @@ const RUNTIME = {
     followOwn: '__followOwn',
     SHAPING: '__SHAPING',
     pyError: '__pyError',
+    pyThrown: '__pyThrown',
+    pyDerive: '__pyDerive',
+    pyRead: '__pyRead',
     pyEvent: '__pyEvent',
     pyAttach: '__pyAttach',
     plainData: '__plainData',
@@ -1691,8 +1715,8 @@ function preamble(c) {
         // name no one would type: only generated code touches it, and `py` is a
         // name an author may want.
         `import { ${runtimeAliases(HOST, [
-            'bind', '__pybridge', 'jsGlobal', 'track', 'changesNothing', 'follow', 'followOwn', 'SHAPING', 'pyError',
-            'pyEvent', 'pyAttach', 'plainData', 'pyArg', 'pyData', 'pyComponent', 'pyExpression',
+            'bind', '__pybridge', 'jsGlobal', 'track', 'changesNothing', 'follow', 'followOwn', 'SHAPING', 'pyThrown',
+            'pyDerive', 'pyRead', 'pyEvent', 'pyAttach', 'plainData', 'pyArg', 'pyData', 'pyComponent', 'pyExpression',
             'jsCall',
             'ticking', 'pyBind', 'NONE', 'helpers',
             'directiveAction', 'directiveTransition', 'directiveAnimate',
@@ -1864,7 +1888,7 @@ function declarations(c) {
             `let ${fn(d.name)} = $state.raw(undefined);`,
             `let ${heldOf(d.name)};`,
             `let ${installed(d.name)} = false;`,
-            `let ${d.name} = $derived.by(() => __invoke(${cellRead(d.name)}));`
+            `let ${d.name} = $derived.by(${RUNTIME.pyDerive}(() => __invoke(${cellRead(d.name)}), ${JSON.stringify(`${d.name}() — ${c.source}`)}));`
         ]),
         // Which containers this instance signed onto, so it can sign off when
         // it goes. A container reached through a store outlives the components
@@ -2110,7 +2134,7 @@ function authorBindings(c) {
         // (`installed`): what a `:=` wrote before.
         ...c.deriveds.map(
             (d) =>
-                `__bind(__proto, '${d.name}', () => (${installed(d.name)} ? __follow(${d.name}) : __invoke(${cellRead(d.name)})), ` +
+                `__bind(__proto, '${d.name}', () => ${RUNTIME.pyRead}(() => (${installed(d.name)} ? __follow(${d.name}) : __invoke(${cellRead(d.name)}))), ` +
                 `function (${NEXT_VALUE}) { ${derivedWrite(d)} }, () => ${cellRead(d.name)}, true, true);`
         )
     ];
@@ -2395,7 +2419,7 @@ function effectLines(c) {
                 : `$effect${e.pre ? '.pre' : ''}(() => {`,
             `    let teardown;`,
             `    try { teardown = __invoke(${fn(e.name)}); }` +
-                ` catch (err) { throw __pyError(err,${JSON.stringify(`${e.name}() — ${c.source}`)}); }`,
+                ` catch (err) { throw ${RUNTIME.pyThrown}(err,${JSON.stringify(`${e.name}() — ${c.source}`)}); }`,
             // What an effect hands back is a *Python* value, so the question is
             // whether Python can call it, not whether JavaScript can. A bound
             // method, `resource.close`, the plainest teardown there is, is a

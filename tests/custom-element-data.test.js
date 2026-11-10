@@ -124,6 +124,6 @@ test("a `<svelte:element>`'s name told by its text, or read as it renders", () =
 
     expect(quoted.out).toBe(
         '<svelte:boundary>{@const SvelthonElement0 = __expr_0()}<svelte:element this={SvelthonElement0}  ' +
-            'open={__pybridge.element(SvelthonElement0, "__truthy", __expr_py_1())}></svelte:element></svelte:boundary>'
+            'open={__pybridge.element(SvelthonElement0, "__truthy", __expr_py_1(), "open")}></svelte:element></svelte:boundary>'
     );
 });
