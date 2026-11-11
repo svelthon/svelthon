@@ -15,7 +15,8 @@ def increment():
     count += 1
 </script>
 
-<button onclick={increment}>compté {count} fois</button>
+<button onclick={increment}>increment()</button>
+<output>{count}</output>
 ```
 
 Pas de rune côté Python, pas d'API de réactivité à apprendre : du Python nu.
@@ -43,9 +44,7 @@ npm install svelthon
 
 Deux noms, dans un projet qui a déjà Svelte 5 ou SvelteKit : un plugin Vite, et
 un préprocesseur pour `svelte.config.js`. Node `^20.19.0 || >=22.12.0`, la plage
-de Vite 7 : le plugin fait `require` d'un module ESM, ce que Node ne fait sans
-option qu'à partir de ces versions, et Node 21 ou 22.0 à 22.11 lèveraient
-`ERR_REQUIRE_ESM`.
+de Vite 7.
 
 ```js
 // vite.config.js
@@ -1648,7 +1647,10 @@ aussi, puisque rien ne distingue ses champs de ceux d'une `Map`. Il parcourt
 une structure de **2 500 niveaux** environ au plus, là où `json.dumps` en écrit
 20 000 : au-delà, la pile du moteur déborde. `striptags`
 montre le document visible, donc le texte d'un `<script>` ou d'un `<style>`
-n'atteint jamais la page.
+n'atteint jamais la page. C'est l'analyseur du navigateur qui le lit, et un
+serveur n'en a pas : rendu là, `striptags` donne une chaîne vide, donc une page
+prérendue ou servie avec `csr = false` montre ses extraits vides, et une page
+hydratée les remplit une fois dans le navigateur.
 
 `date` lit **une date sans heure comme un jour du calendrier**, rendu tel quel
 où qu'on le lise. `"2026-08-24"` est le 24 août pour tout le monde, ce que
@@ -1663,7 +1665,7 @@ parsing, que seul le compilateur charge ; le README de Bryntime en donne le poid
 
 ## État
 
-Validé par `npm test`, 2 066 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 2 075 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
@@ -1673,7 +1675,7 @@ rangée d'un `test.for`), aucun échec attendu :
   contrôle et frames. Chaque valeur attendue a été produite par CPython 3.12 en
   exécutant le code du composant tel quel, jamais écrite à la main. Brython
   reproduit CPython sur **chaque point** ;
-- build de production : **274 Ko gzip**, runtime Brython compris : ce que la
+- build de production : **275 Ko gzip**, runtime Brython compris : ce que la
   page de démo charge, son script, les modules qu'elle précharge et ses styles,
   mesuré après chaque build par `scripts/build-size.mjs`.
 
@@ -1779,7 +1781,7 @@ proxifiées. Le choix de conception de la réactivité se rembourse précisémen
 où une vraie application passe son temps.
 
 Le vrai prix est au chargement : **1,2 s jusqu'à l'interactivité** pour la démo de
-production sur ce portable, contre 0,5 s pour la même page sans Brython : 274 Ko
+production sur ce portable, contre 0,5 s pour la même page sans Brython : 275 Ko
 gzip au lieu de 13. Payé une fois par session, pas par page, puisque
 l'application ne recharge jamais.
 

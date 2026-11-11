@@ -516,6 +516,12 @@ parser, not a regular expression:
 The case is content nobody here wrote: a feed, an API answer, an imported
 document. For your own pages you already hold the plain text.
 
+A server has no such parser: rendered there, `striptags` gives an empty
+string. A page prerendered, or served with `csr = false`, shows that excerpt
+empty; a hydrated one fills it in once in the browser. Strip the tags where
+the text is made, on the server, when the page must show it without
+JavaScript.
+
 **The regex both Django and Jinja ship is not merely imprecise, it is wrong on
 ordinary input** — measured:
 

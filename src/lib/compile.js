@@ -575,6 +575,20 @@ function componentImports(src, where) {
     }
 }
 
+// What Vite's dependency scanner is handed for a component's Python, which it
+// would read as JavaScript: the modules its `importjs` lines import, the
+// packages among them being what it pre-bundles. Nothing for a script the
+// compiler would refuse, which it then does itself.
+export function scannedScript(src) {
+    try {
+        return takeImportJs(HOST, $B.unindent(src), 'scan', 0, true)
+            .imports.map((one) => `import ${JSON.stringify(one.from)};`)
+            .join('\n');
+    } catch {
+        return '';
+    }
+}
+
 // `src/counter_store.svelte.py` → `counter_store`, the name Python imports it by.
 // The `.svelte` marker says the module is reactive; it is not part of its name,
 // any more than it is for a `.svelte.ts`.
@@ -616,6 +630,7 @@ const RUNTIME = {
     pyExpression: '__pyExpression',
     invoke: '__invoke',
     pyExport: '__pyExport',
+    routeLoad: '__routeLoad',
     liveExport: '__liveExport',
     readOnlyImport: '__readOnlyImport',
     templateFrom: '__templateFrom',
@@ -1067,13 +1082,33 @@ const markerCalled = (node) => {
 // a name the function the call is in binds is the author's too (`authorsName`).
 function refuseMisplacedMarkers(body, source, lineOffset, theirs, component, table = null) {
     walkScoped(body, (node, scope, line, parent) => {
-        const marker = markerCalled(node);
-        if (marker === null || authorsName(theirs, scope === null ? null : table?.blockOf(scope))(marker)) return;
-
+        const mine = authorsName(theirs, scope === null ? null : table?.blockOf(scope));
         const at = line + lineOffset;
         const fail = (sentence) => {
             throw refuse(`svelthon — ${sentence} (${source}:${at})`, source, at);
         };
+
+        // `bindable(…)` declares a two-way prop, read only as the whole value of
+        // an annotated name at the top level of a component's script, as Svelte
+        // reads `$bindable()` only in `$props()` (`bindable_invalid_location`).
+        // Anywhere else it was the identity, and the parent's value never
+        // reached the name.
+        if (
+            node instanceof $B.ast.Call &&
+            node.func instanceof $B.ast.Name &&
+            node.func.id === 'bindable' &&
+            !mine('bindable') &&
+            !(component && parent instanceof $B.ast.AnnAssign && parent.value === node && parent.target instanceof $B.ast.Name && body.includes(parent))
+        ) {
+            fail(
+                `\`bindable(…)\` declares a two-way prop, and is read only as the whole value of an annotated name ` +
+                    `at the top level of a component's script, \`value: str = bindable()\`, as Svelte reads ` +
+                    `\`$bindable()\` only in \`$props()\``
+            );
+        }
+
+        const marker = markerCalled(node);
+        if (marker === null || mine(marker)) return;
         // An annotated assignment is an assignment, `total: int = derived(…)`
         // read as `total = derived(…)` is, and answers to the same checks.
         const assigned =
@@ -1218,6 +1253,7 @@ function surface(body, theirs = new Set()) {
     const props = [];
     const bindables = [];
     const defaulted = [];
+    const annotatedAt = {};
     const state = [];
     const funcs = [];
     const classes = [];
@@ -1469,6 +1505,10 @@ function surface(body, theirs = new Set()) {
                     if (value != null && !(value instanceof $B.ast.Constant && value.value === $B.builtins.None)) {
                         defaulted.push(node.target.id);
                     }
+
+                    // The line whose write declares the default: any other
+                    // write of the body overrides the prop, as Svelte's does.
+                    if (node.value != null) annotatedAt[node.target.id] = node.lineno;
                 }
             } else if (
                 // `async def` is a different AST node, and an async handler is a
@@ -1584,7 +1624,7 @@ function surface(body, theirs = new Set()) {
     globals(body);
     walruses(body);
 
-    return { props, bindables, defaulted, state, funcs, classes, deriveds, effects, inspects, reserved, bound, lines, remarked, starred };
+    return { props, bindables, defaulted, annotatedAt, state, funcs, classes, deriveds, effects, inspects, reserved, bound, lines, remarked, starred };
 }
 
 // The names the emitted script gives to what it generates. Pure functions of the
@@ -1808,13 +1848,12 @@ function declarations(c) {
                   ]),
                   // The module body applies the annotation's default by writing
                   // to the name, and that write is the default, which travels
-                  // up to no parent. Only writes made after init() are real
-                  // ones.
-                  `let __initialising = true;`,
+                  // up to no parent (`declaring`).
+                  undeclared(c),
                   ``
               ]
             : c.props.length
-              ? [`const __props = $props();`, `let __initialising = true;`, ``]
+              ? [`const __props = $props();`, undeclared(c), ``]
               : []),
         // A prop's value comes from the parent when it was passed, and from the
         // annotation's default otherwise, the default being whatever the Python
@@ -2015,6 +2054,19 @@ const declaredClasses = (c) => {
     return c.classes.filter((name) => !taken.has(name));
 };
 
+// Whether a prop's write is the one init() makes on its annotation's own line,
+// the default it declares (`annotatedAt`), asked of the line the module runs.
+// The first write there, and only it: `text: str = " d "; text = text.strip()`
+// writes the prop twice on that line, the second time as the child.
+const declaring = (c, n) =>
+    c.annotatedAt?.[n] === undefined
+        ? 'false'
+        : `__undeclared.has('${n}') && __pybridge.declaring(this, ${c.annotatedAt[n]}) && __undeclared.delete('${n}')`;
+
+// The props whose default init() has yet to write, emptied when it returns.
+const undeclared = (c) =>
+    `const __undeclared = new __global.Set(${JSON.stringify([...c.props, ...c.bindables].filter((n) => c.annotatedAt?.[n] !== undefined))});`;
+
 function authorBindings(c) {
     return [
         // The namespace inherits its bindings' accessors and nothing else: a
@@ -2049,11 +2101,16 @@ function authorBindings(c) {
         // told by what the derived held when it was last read, and not by a
         // read of it, which would take a parent's write in: then the prop is
         // left as it was, as Svelte leaves a state written the value it holds.
+        //
+        // The default is the write init() makes on the annotation's own line
+        // (`declaring`). Any other write of the body is the child's, as in
+        // Svelte: `value = value.strip()` under `value: str` was taken for the
+        // default, and the page kept what the parent passed.
         ...c.props.map(
             (n) =>
                 `__bind(__proto, '${n}', () => (__SHAPING.on ? (${local(n)}, __followOwn(__pyBind(${pick(n)}()))) : (${rev(n)}, __follow(__pyBind(${pick(n)}())))),` +
-                ` (${NEXT_VALUE}) => { const __held = ${bump(n)}.held; const __written = __track(${NEXT_VALUE}, ${bump(n)}, ${SUBS});` +
-                ` if (__initialising) { ${fallback(n)}.declared = __written; ${fallback(n)}.value = __written; ${local(n)} = __written; return; }` +
+                ` function (${NEXT_VALUE}) { const __held = ${bump(n)}.held; const __written = __track(${NEXT_VALUE}, ${bump(n)}, ${SUBS});` +
+                ` if (${declaring(c, n)}) { ${fallback(n)}.declared = __written; ${fallback(n)}.value = __written; ${local(n)} = __written; return; }` +
                 ` if (__changesNothing(__written, __pyBind(${fallback(n)}.overridden ? __held : ${fallback(n)}.absent ? ${fallback(n)}.value : ${fallback(n)}.current))) return;` +
                 ` const __plain = __plainScalar(__written);` +
                 ` if (__plainScalar(${fallback(n)}.current) !== __plain) ${fallback(n)}.current = __plain;` +
@@ -2092,13 +2149,13 @@ function authorBindings(c) {
                 ` ${crossed(b)} = __handOver(__written, (__crossing) => { ${bound} = __crossing; });` +
                 ` if (!__changesNothing(__pyBind(__untrack(() => ${held})), __pyBind(__was))) ${bump(b)}();`;
             const set = declared
-                ? `${written} if (__initialising) { ${box}.py = __written;` +
+                ? `${written} if (${declaring(c, b)}) { ${box}.py = __written;` +
                   ` __handOver(__written, (__crossing) => { ${box}.value = __crossing; });` +
                   ` if (${bound} !== undefined) return; } ${handed}`
-                : `if (!__initialising || ${bound} === undefined) { ${written} ${handed} }`;
+                : `if (!(${declaring(c, b)}) || ${bound} === undefined) { ${written} ${handed} }`;
             return (
                 `__bind(__proto, '${b}', () => (__SHAPING.on ? __followOwn(__pyBind(${held})) : (${rev(b)}, __follow(__pyBind(${held})))),` +
-                ` (${NEXT_VALUE}) => { ${set} }, () => ${bound});`
+                ` function (${NEXT_VALUE}) { ${set} }, () => ${bound});`
             );
         }),
         // Bryc's accessor (`stateBinding`): the rows of an `{#each}` follow
@@ -2225,7 +2282,7 @@ function initCall(c) {
         ``,
         `__init(${NS});`,
         ...unboundRefusals(HOST, c.unbound, c.listedAt),
-        ...(c.bindables.length || c.props.length ? [`__initialising = false;`] : []),
+        ...(c.bindables.length || c.props.length ? [`__undeclared.clear();`] : []),
         ``
     ];
 }
@@ -2498,7 +2555,7 @@ function plainPreamble(c) {
         `import { init as __init } from ${JSON.stringify(c.body)};`,
         `import { ${runtimeAliases(HOST, [
             'bind', '__pybridge', 'jsGlobal', 'pyCall', 'pyError', 'plainData', 'pyArg',
-            'pyData', 'pyExport', 'jsCall', 'ticking', 'pyBind', 'NONE', 'helpers',
+            'pyData', 'pyExport', 'routeLoad', 'jsCall', 'ticking', 'pyBind', 'NONE', 'helpers',
             'pythonModule', 'group', 'invoke', 'liveExport', 'readOnlyImport'
         ])} } from 'svelthon/bridge';`,
         ...c.jsImports.map((one) => jsImportLine(HOST, one)),
@@ -2556,7 +2613,10 @@ const storeExports = (c) => c.funcs.filter((f) => c.published(f.name) && f.name 
 
 // What a module exports by name, filled as its body binds it: a `.py` hands
 // JavaScript every name through the boundary, a `.svelte.py` its functions,
-// the rest through `store`.
+// the rest through `store`. The `load` SvelteKit reads off a route answers it
+// a plain object (`routeLoad`).
+const ROUTE_LOAD = { ...HOST, runtime: { ...RUNTIME, pyExport: RUNTIME.routeLoad } };
+
 const liveExports = (c) =>
     c.store
         ? storeExports(c)
@@ -2565,7 +2625,10 @@ const liveExports = (c) =>
                       `__liveExport(${NS}, ${JSON.stringify(f.name)}, (__value) => { __export_${f.name} = ` +
                       `${storeRead('__value')}; });`
               )
-        : liveExportLines(HOST, c);
+        : [
+              ...liveExportLines(HOST, { ...c, exported: c.exported.filter((n) => !(c.loaded && n === 'load')) }),
+              ...liveExportLines(ROUTE_LOAD, { ...c, exported: c.exported.filter((n) => c.loaded && n === 'load') })
+          ];
 
 // The function that runs a module's body (Bryc's `moduleLoad`): the body, the
 // refusals that read what it bound, the exports it filled, and a store's
@@ -2644,6 +2707,9 @@ function compile(
         // Whether a module's body runs as the module is evaluated, with no
         // function behind a default export: the one half of a `.remote.py`.
         eager = false,
+        // The names a framework reads off the module by name: a route's
+        // `load`, which answers SvelteKit a plain object (`liveExports`).
+        read = [],
         // Whether an imported name is one of the project's own `.py` files,
         // `'file'`, or names a directory of the project, `'package'`, asked by
         // whoever can read the file system. Without it the imports are not
@@ -2698,7 +2764,7 @@ function compile(
 
     const foreign = foreignNames([...jsImported, ...jsNames]);
 
-    let { props, bindables, defaulted, state, funcs, classes, deriveds, effects, inspects, reserved, bound, lines, remarked, starred } =
+    let { props, bindables, defaulted, annotatedAt, state, funcs, classes, deriveds, effects, inspects, reserved, bound, lines, remarked, starred } =
         surface(root._ast.body, foreign);
 
     // A name the module reads and no statement binds, which it may still bind
@@ -2897,6 +2963,7 @@ function compile(
         props,
         bindables,
         defaulted,
+        annotatedAt,
         // A custom element publishes an accessor per name the props
         // destructure, so it reads no parent's value by a second one.
         element: element && !store && !plain,
@@ -2920,6 +2987,7 @@ function compile(
         jsNames,
         foreign: [...foreign],
         exported,
+        loaded: read.includes('load'),
         isFunction,
         lifecycle,
         hook

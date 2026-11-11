@@ -45,9 +45,7 @@ npm install svelthon
 
 Two names, in a project that already has Svelte 5 or SvelteKit: a Vite plugin,
 and a preprocessor for `svelte.config.js`. Node `^20.19.0 || >=22.12.0`, Vite
-7's range: the plugin `require`s an ES module, which Node does without a flag
-from those versions only, and Node 21 or 22.0 to 22.11 would raise
-`ERR_REQUIRE_ESM`.
+7's range.
 
 ```js
 // vite.config.js
@@ -1598,7 +1596,10 @@ class says how it serialises by carrying
 `toJSON`, and one that does not is refused too, since nothing can tell its fields
 from a `Map`'s. It walks a structure about **2 500 levels deep** at most, where
 `json.dumps` writes 20 000: deeper, the engine's stack overflows. `striptags` shows the visible document, so the text of a
-`<script>` or a `<style>` never reaches the page.
+`<script>` or a `<style>` never reaches the page. It is the browser's parser
+that reads it, and a server has none: rendered there, `striptags` gives an
+empty string, so a page prerendered or served with `csr = false` shows its
+excerpts empty, and a hydrated page fills them in once in the browser.
 
 `date` reads **a date with no time as a calendar day**, rendered as that day
 wherever it is read. `"2026-08-24"` is 24 August for everyone, which is what
@@ -1641,7 +1642,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 2 066 tests as written (vitest reports more, one per
+Validated by `npm test`, 2 075 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;
@@ -1651,7 +1652,7 @@ row of a `test.for`), none expected to fail:
   Every expected value was produced by running the component's Python through
   CPython 3.12 as-is, never written by hand. Brython matches CPython on **every
   point**;
-- production build: **274 KB gzip**, Brython runtime included: what the demo
+- production build: **275 KB gzip**, Brython runtime included: what the demo
   page loads, its script, the modules it preloads and its styles, measured
   after each build by `scripts/build-size.mjs`.
 
@@ -1723,7 +1724,7 @@ deep-proxies the objects inside a `$state` array; Svelthon's names are
 itself exactly where a real application spends its time.
 
 Loading is the real price: **1.2 s to interactive** for the production demo on
-this laptop, against 0.5 s for the same page without Brython: 274 KB gzip
+this laptop, against 0.5 s for the same page without Brython: 275 KB gzip
 instead of 13 KB. Paid once per session, not per page, since the app never
 reloads.
 

@@ -87,7 +87,12 @@ describe('a rune written below the top level', () => {
         ['annotated and assigned inspect', 'count = 0\nwatch: object = inspect(count)\n', /`inspect\(…\)` is a statement of its own.*:2\)/],
         ['an annotated derived handed a value', 'count = 0\ntwice: int = derived(count * 2)\n', /`derived\(…\)` takes a function.*:2\)/],
         ['a derived handed a value', 'count = 0\ntwice = derived(count * 2)\n', /`derived\(…\)` takes a function.*`name => expression`.*:2\)/],
-        ['an effect handed a value', 'count = 0\nrun = effect(count + 1)\n', /`effect\(…\)` takes a function.*`=> expression`/]
+        ['an effect handed a value', 'count = 0\nrun = effect(count + 1)\n', /`effect\(…\)` takes a function.*`=> expression`/],
+        // Svelte reads `$bindable()` only in `$props()`; here it was the
+        // identity, and the parent's value never reached the name.
+        ['a bindable not annotated', 'value = bindable("d")\n', /`bindable\(…\)` declares a two-way prop.*`value: str = bindable\(\)`.*:1\)/],
+        ['a bindable in a def', 'def f():\n    return bindable(1)\n', /`bindable\(…\)` declares a two-way prop.*:2\)/],
+        ['a bindable in a list', 'items: list = [bindable(1)]\n', /`bindable\(…\)` declares a two-way prop.*:1\)/]
     ])('and a marker is refused %s', ([, body, message]) => {
         expect(script(body)).toThrow(message);
     });

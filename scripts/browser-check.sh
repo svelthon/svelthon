@@ -93,26 +93,22 @@ live() {
     with_cdp "report-$profile$attempt" node scripts/page-report.mjs "$url" "$id"
 }
 
+# The server this script started, `vite` then `vite preview` in turn, stopped by
+# its pid: a pattern matched any process of the machine started the same way,
+# another session's included. Waited for, so the port is free once it returns.
+SERVER=
+stop_server() {
+    [ -n "$SERVER" ] && kill "$SERVER" 2>/dev/null && wait "$SERVER" 2>/dev/null
+    SERVER=
+}
+
 cleanup() {
-    # Two servers use this port in turn, `vite` then `vite preview`, and the
-    # second does not match the first's pattern.
-    pkill -f "vite --port $PORT" 2>/dev/null
-    pkill -f "vite preview --port $PORT" 2>/dev/null
+    stop_server
     rm -rf "$PROFILES"
 }
 trap cleanup EXIT
 
-cleanup
-
-# pkill returns before the port is released. Without this wait, the next vite
-# fails silently (--strictPort) and the script queries the old server on its way
-# out — hence failures that change every time.
-for _ in $(seq 40); do
-    ss -ltn 2>/dev/null | grep -q ":$PORT " || break
-    sleep 0.25
-done
-
-# Still held, it is held by another program, whose server every page below would
+# Held, the port is held by another program, whose server every page below would
 # be asked of once vite gives up in silence: empty pages, and a console as quiet
 # as a green run's.
 if ss -ltn 2>/dev/null | grep -q ":$PORT "; then
@@ -120,7 +116,8 @@ if ss -ltn 2>/dev/null | grep -q ":$PORT "; then
     exit 1
 fi
 
-(npx vite --port "$PORT" --strictPort >/dev/null 2>&1 &)
+node_modules/.bin/vite --port "$PORT" --strictPort >/dev/null 2>&1 &
+SERVER=$!
 
 for _ in $(seq 40); do
     sleep 0.5
@@ -268,16 +265,13 @@ console_check dev "$URL" "$MARKUP_URL" "$MEDIA_URL" "$SCROLL_URL" "http://localh
 # the engine's import back to a neighbouring file leaves every marker below
 # green. `scripts/kit-check.sh` builds a SvelteKit app and sees it answer 500,
 # and `tests/boot-order.test.js` holds it as text in the suite.
-pkill -f "vite --port $PORT" 2>/dev/null
-for _ in $(seq 40); do
-    ss -ltn 2>/dev/null | grep -q ":$PORT " || break
-    sleep 0.25
-done
+stop_server
 
 if npx vite build >/dev/null 2>&1; then
     node scripts/build-size.mjs dist || status=1
 
-    (npx vite preview --port "$PORT" --strictPort >/dev/null 2>&1 &)
+    node_modules/.bin/vite preview --port "$PORT" --strictPort >/dev/null 2>&1 &
+    SERVER=$!
 
     for _ in $(seq 40); do
         sleep 0.5

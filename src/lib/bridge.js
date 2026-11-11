@@ -25,6 +25,7 @@ const {
     pyContainer,
     pyEntries,
     pyDict,
+    readNoted,
     pyBytes,
     mutableBytes,
     bytesOut,
@@ -506,6 +507,13 @@ export const __pybridge = {
 
         bound.add(name);
         return 1;
+    },
+
+    // Whether the module's own code is running the statement on `line`: a
+    // prop's default is the write its annotation makes, and any other write
+    // of the body is the child's own.
+    declaring(namespace, line) {
+        return core.runningLine(namespace) === line;
     },
 
     // A class the script declares, read: a reaction follows the special
@@ -1917,13 +1925,47 @@ const routeEvent = (value) => {
 // What an object JavaScript hands Python as an argument is to Python
 // (`lent.argument`): SvelteKit's request event, as a snapshot of real dicts;
 // anything else, as itself.
+//
+// Taken under the event's own `untrack`, each part read again as Python reads
+// its key (`readNoted`): SvelteKit runs a `load()` again when what it read
+// changes, and a snapshot reading every part at once ran a layout's `load()`
+// at every navigation, where the same `load()` in JavaScript, reading a
+// cookie, ran once. A handler's event, which tracks nothing, has no `untrack`.
+//
+// The params read are those the route declares as well as those it holds: an
+// optional one absent, `[[slug]]`, was read by no one, and the navigation that
+// gave it ran no `load()`, its page left on the data of the absence.
+const ROUTE_PARAM = /\[{1,2}(?:\.\.\.)?([^\]=]+)(?:=[^\]]*)?\]{1,2}/g;
+
 const routeArgument = (value) => {
     if (!routeEvent(value)) return value;
 
-    // Reading the framework's own searchParams is what registers the dependency,
-    // so it is tried first, but it throws while prerendering, where a query
-    // string cannot exist. Parsing the URL again is the fallback, and it touches
-    // nothing SvelteKit guards.
+    const untracked = typeof value.untrack === 'function' ? (read) => value.untrack(read) : (read) => read();
+    const declared = untracked(() => [...String(value.route?.id ?? '').matchAll(ROUTE_PARAM)].map((one) => one[1]));
+
+    return readNoted(
+        untracked(() => routeSnapshot(value)),
+        {
+            params: () => {
+                for (const key of new Set([...Object.keys(value.params), ...declared])) Reflect.get(value.params, key);
+            },
+            query: () => {
+                try {
+                    [...value.url.searchParams];
+                } catch {
+                    // A prerendered page has no query string to depend on.
+                }
+            },
+            url: () => value.url.href,
+            route: () => value.route?.id
+        }
+    );
+};
+
+const routeSnapshot = (value) => {
+    // The framework's own searchParams is tried first, but it throws while
+    // prerendering, where a query string cannot exist. Parsing the URL again is
+    // the fallback, and it touches nothing SvelteKit guards.
     //
     // `href` rather than `String(url)`, here and below. The URL is a **proxy**
     // while prerendering, and `String()` calls `toString` with the proxy as the
@@ -2311,6 +2353,52 @@ export const pyExpression = (call, where, arity, kept = false, writes = false) =
         nameOf(where),
         arity
     );
+
+// What a route's `load()` answers, as SvelteKit reads it: a plain object at the
+// top level, its values what they are. A dict crosses as its view, whose
+// prototype keeps Svelte's proxy off it (Bryntime's `PLAIN_VIEW`), and the dev
+// server's own check, by identity, answered 500 to every `load()` returning
+// one. A dict's view alone is made one: anything else a `load()` answers is
+// SvelteKit's to judge. What it answers later, a promise, another realm's or
+// JavaScript's own thenable among them, is awaited first and its answer made
+// one: a copy made before answered `{}`, and a thenable a JavaScript helper made
+// of what a Python callback answered was the view, which SvelteKit refused.
+const plainTop = (data) => (VIEWED.has(data) && isDict(pyBind(data)) ? { ...data } : data);
+
+// A route module's `load` as each binding of the name hands it over
+// (`liveExport`), which SvelteKit reads off the module at each request, as a
+// JavaScript module's `export let load`: a module that binds the name again,
+// `global load; load = second`, has its new one called, and one that binds it
+// to None has none until it binds a function. One per function, as `pyExport`
+// keeps one: the same function bound again, or bound back, is the same object
+// to JavaScript. Another object than the one
+// the same function is exported as elsewhere, by the module that defines it or
+// under another name, since what it answers SvelteKit is a plain object and
+// theirs a dict's view, which Svelte must not proxy.
+const ROUTE_LOADS = new WeakMap();
+
+export const routeLoad = (value, where) => {
+    const load = pyExport(value, where);
+
+    if (typeof load !== 'function') return load;
+
+    let relay = ROUTE_LOADS.get(load);
+
+    if (relay === undefined) {
+        relay = identified(
+            (...args) => {
+                const data = load(...args);
+
+                return thenable(data) ? Promise.resolve(data).then(plainTop) : plainTop(data);
+            },
+            load.name,
+            load.length
+        );
+        ROUTE_LOADS.set(load, relay);
+    }
+
+    return relay;
+};
 
 // What a derived Svelte recomputes raises leaves Python there, as a template
 // expression's does: an ordinary `Error` (`pyError`). A derived Python reads,

@@ -10,19 +10,23 @@ PORT=${PORT:-5197}
 V="http://localhost:$PORT"
 BACKUPS=$(mktemp -d)
 
+# The server this script started, stopped by its pid: a pattern matched any
+# process of the machine started the same way, another session's included.
+SERVER=
+
 cleanup() {
     cp "$BACKUPS/Counter.svelte" demo/Counter.svelte 2>/dev/null
     cp "$BACKUPS/counter_store.svelte.py" demo/counter_store.svelte.py 2>/dev/null
     rm -rf "$BACKUPS"
-    pkill -f "vite --port $PORT" 2>/dev/null
+    [ -n "$SERVER" ] && kill "$SERVER" 2>/dev/null
 }
 trap cleanup EXIT
 
 cp demo/Counter.svelte "$BACKUPS/Counter.svelte"
 cp demo/counter_store.svelte.py "$BACKUPS/counter_store.svelte.py"
 
-pkill -f "vite --port $PORT" 2>/dev/null
-(npx vite --port "$PORT" --strictPort >/dev/null 2>&1 &)
+node_modules/.bin/vite --port "$PORT" --strictPort >/dev/null 2>&1 &
+SERVER=$!
 
 for _ in $(seq 30); do
     sleep 0.5

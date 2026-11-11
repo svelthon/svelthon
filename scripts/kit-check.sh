@@ -20,6 +20,7 @@ status=0
 cleanup() {
     pkill -f "node build/index.js" -P $$ 2>/dev/null
     [ -n "${SERVER:-}" ] && kill "$SERVER" 2>/dev/null
+    [ -n "${DEV:-}" ] && kill "$DEV" 2>/dev/null
     rm -f "$LOG"
 }
 trap cleanup EXIT
@@ -64,6 +65,23 @@ route() {
     fi
 }
 
+# A route whose Python `load()` throws SvelteKit's `error()` or `redirect()`:
+# the status the framework answers, and a redirect's location. Each reached it
+# as another `Error`, and the page was a 500.
+answered() {
+    local path=$1 wanted=$2 location=${3:-} head code
+
+    head=$(curl -s -o /dev/null -D - "$ORIGIN$path")
+    code=$(printf %s "$head" | head -1 | cut -d' ' -f2)
+
+    if [ "$code" = "$wanted" ] && { [ -z "$location" ] || printf %s "$head" | grep -qi "^location: $location"; }; then
+        echo "✓ kit $path — $wanted${location:+ to $location}"
+    else
+        echo "✗ kit $path — $code, not $wanted${location:+ to $location}"
+        status=1
+    fi
+}
+
 # A remote function, as the browser asks it: `GET /_app/remote/<id>`, its id
 # the one SvelteKit wrote into the client.
 remote() {
@@ -82,14 +100,41 @@ remote() {
 
 route / 'kit + python = -4'
 route /load '42 from [0, 1, 4, 9]'
+route /universal '42 at the universal route'
 route /remote 'asking the server'
 # A module named `remote.py`, which SvelteKit takes for one by its name.
 route /named 'asking remote.py'
 # The compiler in the bundle, as a playground has it, and the engine started
 # first all the same.
 route /compiler 'compiled True'
+answered /missing 404
+answered /moved 303 /load
 
 remote greeting 'hello from Python'
 remote shout 'shouted from python'
+
+# The same routes from the dev server, the one an application is written on,
+# which checks what production does not: a `load()` whose answer is no plain
+# object was a 500 there, every dict a Python `load()` returns among them.
+ORIGIN="http://localhost:$((PORT + 1))"
+(cd "$APP" && exec node ../../node_modules/vite/bin/vite.js dev --port "$((PORT + 1))" --strictPort) >"$LOG" 2>&1 &
+DEV=$!
+
+for _ in $(seq 120); do
+    curl -s -o /dev/null "$ORIGIN/" && break
+    kill -0 "$DEV" 2>/dev/null || break
+    sleep 0.25
+done
+
+if kill -0 "$DEV" 2>/dev/null; then
+    route / 'kit + python = -4'
+    route /load '42 from [0, 1, 4, 9]'
+    route /universal '42 at the universal route'
+    answered /missing 404
+    answered /moved 303 /load
+else
+    echo "✗ kit dev server — $(grep -m1 -E 'Error' "$LOG" || tail -1 "$LOG")"
+    status=1
+fi
 
 exit $status

@@ -838,6 +838,14 @@ describe('{@render}', () => {
         expect(() => rewrite('{@render row(1, b == 2, f(c=3))}')).not.toThrow();
     });
 
+    // Nor a spread, which Svelte refuses (`render_tag_invalid_spread_argument`):
+    // `(*args)` was refused in the words of a text nobody wrote.
+    test.for(['*args', '**kw'])('an argument %s is refused as a spread', (spread) => {
+        expect(() => rewrite(`{@render row(${spread})}`)).toThrow(
+            `\`${spread}\` unpacks its arguments: Svelte hands a snippet its arguments by position`
+        );
+    });
+
     // A snippet the markup declares is Python and is handed Python values,
     // called by its name.
     test('a snippet the markup declares keeps its arguments Python', () => {
@@ -1244,6 +1252,20 @@ describe('an unknown construct is refused, never passed through', () => {
         }
     );
 
+    // `bind:group` writes the group's list, and Svelte refuses a pair of
+    // functions there (`bind_group_invalid_expression`). It compiled, and the
+    // click unpacked the list into the pair, `ValueError`; a call or a literal
+    // was refused in the words of `(f()) = __value`.
+    test.for([
+        ['get, put', 'is a pair of functions, which Svelte refuses there'],
+        ['f()', 'takes no write'],
+        ['[1, 2]', 'takes no write']
+    ])('bind:group={%s} is refused', ([target, why]) => {
+        expect(() => rewrite(`<input type="checkbox" bind:group={${target}} value="a" />`)).toThrow(
+            `\`bind:group\` writes back to what it binds, and \`${target}\` ${why}: bind a name, an attribute or an item.`
+        );
+    });
+
     // Svelte 5 takes `{const a = n}` inside a block, its own spelling of
     // `{@const}`, and Svelthon's answer is the template rune `{a = n}`. The
     // keyword fell through to the generic interpolation, so the author read
@@ -1251,9 +1273,10 @@ describe('an unknown construct is refused, never passed through', () => {
     // wrote. The `@`-prefixed form, Svelte's `{@const}`, names it too.
     // An assignment that is no declaration was compiled as an expression and
     // refused in the words of a text nobody wrote, `(a, b = 1, 2)`. A lambda's
-    // default and a keyword argument are no assignment.
-    test.for(['{a, b = 1, 2}', '{a: int = 1}', '{a = b = 1}', '{a += 1}'])('%s is refused as an assignment the template does not take', (tag) => {
-        expect(() => rewrite(`{#if x}${tag}{/if}`)).toThrow(`\`${tag}\` is an assignment the template does not take`);
+    // default and a keyword argument are no assignment. Blanks inside the
+    // braces change nothing: `{ a += 1 }` had the old words.
+    test.for(['{a, b = 1, 2}', '{a: int = 1}', '{a = b = 1}', '{a += 1}', '{ a += 1 }', '{ a, b = 1, 2 }'])('%s is refused as an assignment the template does not take', (tag) => {
+        expect(() => rewrite(`{#if x}${tag}{/if}`)).toThrow(`\`{${tag.slice(1, -1).trim()}}\` is an assignment the template does not take`);
     });
 
     test('while a lambda default and a keyword argument are expressions', () => {

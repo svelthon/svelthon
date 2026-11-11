@@ -62,6 +62,18 @@ describe('an {#each} the walker still has to place', () => {
         );
     });
 
+    // What follows the first comma is the index, a name, as Svelte's parser
+    // reads it: `{#each xs, 1}` walked the tuple `(xs, 1)` in silence, where
+    // Svelte refuses it.
+    test('and an index that is no name refused', () => {
+        for (const [body, after] of [['xs, 1', '1'], ['a, b, i', 'b, i']]) {
+            expect(() => rewrite(`{#each ${body}}<li>x</li>{/each}`)).toThrow(
+                `\`{#each ${body}}\` reads \`${after}\` as the block's index, which is a name, as Svelte's parser ` +
+                    `has it (\`expected_identifier\`); a tuple to walk is written between parentheses, \`{#each (${body})}\``
+            );
+        }
+    });
+
     // Python's order tested membership, walked a boolean and raised `NameError`
     // for the row at mount.
     test('and Python s order refused, with Svelte s', () => {

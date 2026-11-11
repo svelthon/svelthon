@@ -7,11 +7,14 @@ set -uo pipefail
 PORT=${PORT:-5184}
 URL="http://localhost:$PORT/bench.html"
 
-cleanup() { pkill -f "vite --port $PORT" 2>/dev/null; }
+# The server this script started, stopped by its pid: a pattern matched any
+# process of the machine started the same way, another session's included.
+SERVER=
+cleanup() { [ -n "$SERVER" ] && kill "$SERVER" 2>/dev/null; }
 trap cleanup EXIT
 
-cleanup
-(npx vite --port "$PORT" --strictPort >/dev/null 2>&1 &)
+node_modules/.bin/vite --port "$PORT" --strictPort >/dev/null 2>&1 &
+SERVER=$!
 
 for _ in $(seq 40); do
     sleep 0.5

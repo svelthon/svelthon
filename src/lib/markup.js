@@ -2091,15 +2091,17 @@ function eachBlock(trimmed, declare, call, refuse, loop) {
     const body = head[1];
     const at = atTopLevel(body, (i) => /^\s+as\s+/.test(body.slice(i)));
 
-    // No `as`: no row is named, and there is no key to find either. Compiled
-    // before the scope opens, like the iterable below. Svelte's index may
-    // still follow, `{#each items, i}`, a name after the last comma at the
-    // top level: read as a tuple to walk, it raised `NameError` at mount.
+    // No `as`: no row is named. Compiled before the scope opens, like the
+    // iterable below. Svelte's index may still follow, `{#each items, i}`,
+    // read as Svelte's parser reads it: what follows the first comma at the
+    // top level is the index, a name. Read as a tuple to walk, it raised
+    // `NameError` at mount, and `{#each xs, 1}`, which Svelte refuses, walked
+    // `(xs, 1)` in silence.
     if (at === -1) {
         let comma = -1;
 
         atTopLevel(body, (i) => {
-            if (body[i] === ',') comma = i;
+            if (body[i] === ',' && comma === -1) comma = i;
         });
 
         // The index may carry a key, `{#each items, i (i)}`, which Svelte
@@ -2109,9 +2111,17 @@ function eachBlock(trimmed, declare, call, refuse, loop) {
         const after = comma === -1 ? '' : body.slice(comma + 1).trim();
         const keyed = trailingKey(after);
         const index = keyed ? keyed[0].trim() : after;
-        const indexed = DECLARED_NAME.test(index) && body.slice(0, comma).trim() !== '';
+        const indexed = comma !== -1 && body.slice(0, comma).trim() !== '';
         const walkedText = indexed ? body.slice(0, comma) : body;
         const $B = globalThis.__BRYTHON__;
+
+        if (indexed && !DECLARED_NAME.test(index)) {
+            refuse(
+                `\`{#each ${body.trim()}}\` reads \`${after}\` as the block's index, which is a name, ` +
+                    `as Svelte's parser has it (\`expected_identifier\`); a tuple to walk is written between ` +
+                    `parentheses, \`{#each (${body.trim()})}\``
+            );
+        }
 
         if (indexed && keyed) {
             const key = targetTree(`(${keyed[1]}\n)`);
@@ -2444,13 +2454,15 @@ const KEYWORD_ARGUMENT = new RegExp(`^\\s*${NAME}\\s*=(?!=)`, 'u');
 // An assignment that is no declaration of the template, `{a, b = 1, 2}`,
 // `{a: int = 1}`, `{a = b = 1}`, `{a += 1}`: Python's statement, compiled as an
 // expression, was refused in the words of a text nobody wrote, `(a, b = 1, 2)`.
-// A declaration is one name and one expression.
+// A declaration is one name and one expression. Read without the blanks
+// around it, which Python takes for an indentation it refuses before it sees
+// the assignment: `{ a += 1 }` had the old words.
 function misdeclared(inner) {
     const $B = globalThis.__BRYTHON__;
     let one;
 
     try {
-        const { body } = $B._PyPegen.run_parser(new $B.Parser(`${inner}\n`, '<template>', 'file'));
+        const { body } = $B._PyPegen.run_parser(new $B.Parser(`${inner.trim()}\n`, '<template>', 'file'));
 
         one = body.length === 1 ? body[0] : null;
     } catch {
@@ -3328,15 +3340,21 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     // into two names, two characters in silence and any other length raising.
     const WRITABLE = ['Name', 'Attribute', 'Subscript'];
 
+    // `bind:group` takes no pair of functions, as Svelte's does not
+    // (`bind_group_invalid_expression`): its write is the group's own list.
     const refuseUnwritable = (directive, expr) => {
         const node = targetTree(`(${expr}\n)`);
 
         if (node === null || WRITABLE.some((one) => node instanceof globalThis.__BRYTHON__.ast[one])) return;
 
+        const group = directive === 'bind:group';
+        const pair = group && functionPair(expr) !== null;
+
         throw refuse(
             new SyntaxError(
-                `svelthon — \`${directive}\` writes back to what it binds, and \`${expr.trim()}\` takes no write${said()}: ` +
-                    `bind a name, an attribute or an item, or a getter and a setter, \`${directive}={get, put}\`.`
+                `svelthon — \`${directive}\` writes back to what it binds, and \`${expr.trim()}\` ` +
+                    `${pair ? 'is a pair of functions, which Svelte refuses there' : 'takes no write'}${said()}: ` +
+                    `bind a name, an attribute or an item${group ? '' : `, or a getter and a setter, \`${directive}={get, put}\``}.`
             )
         );
     };
@@ -3650,6 +3668,8 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         if (tag !== null && tag.name !== 'input') {
             throw refuse(new SyntaxError(`svelthon — \`bind:group\` can only be used with \`<input>\`${said()}`));
         }
+
+        refuseUnwritable('bind:group', expr);
 
         // The Python list itself: the group compares with Python's `==`, and
         // its inputs know each other by the list they share.
@@ -4671,14 +4691,18 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
 
                 // Svelte hands a snippet its arguments by position, and
                 // `row(1, b=2)`, the call a `def row(a, b=1)` takes, was
-                // compiled as the expression `(b=2)`, a syntax error.
-                const keyword = found === null ? undefined : arguments_(found.args).find((one) => KEYWORD_ARGUMENT.test(one));
+                // compiled as the expression `(b=2)`, a syntax error. And it
+                // refuses a spread (`render_tag_invalid_spread_argument`),
+                // which `(*args)` was refused for in the same words.
+                const listed = found === null ? [] : arguments_(found.args);
+                const keyword = listed.find((one) => KEYWORD_ARGUMENT.test(one));
+                const spread = listed.find((one) => one.trim().startsWith('*'));
 
-                if (keyword !== undefined) {
+                if (keyword !== undefined || spread !== undefined) {
                     throw refuse(
                         new SyntaxError(
-                            `svelthon — \`${keyword.trim()}\` names its argument${said()}: Svelte hands a snippet ` +
-                                `its arguments by position, so each goes in its parameter's place.`
+                            `svelthon — \`${(keyword ?? spread).trim()}\` ${keyword === undefined ? 'unpacks its arguments' : 'names its argument'}` +
+                                `${said()}: Svelte hands a snippet its arguments by position, so each goes in its parameter's place.`
                         )
                     );
                 }
