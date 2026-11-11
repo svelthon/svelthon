@@ -3,8 +3,10 @@
 # it holds above upstream master, and the "Depends on" lines of its text, read
 # from GitHub and git, not from anyone's account of them.
 #
-#   bash scripts/check-prs.sh 3167 3072 3066 3085 3133 3042 3134
-cd ~/DEV/BRYTHON || exit 1
+#   BRYTHON=path/to/brython bash scripts/check-prs.sh 3167 3072 3066
+#
+# `BRYTHON` is a Brython checkout whose `upstream` remote is brython-dev's.
+cd "${BRYTHON:?set BRYTHON to a Brython checkout}" || exit 1
 git fetch -q upstream master
 for number in "$@"; do
     git fetch -q upstream "refs/pull/$number/head" || { echo "#$number: no such PR"; continue; }

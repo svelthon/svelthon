@@ -365,6 +365,7 @@ function takeArrows(src, where, lineOffset, allowed, theirs = new Set()) {
         const lineno = n + 1 + lineOffset;
         const at = `${where}:${lineno}`;
         const kind = (named) => (named ? 'derived' : 'effect');
+        const aKind = (named) => (named ? 'a derived' : 'an effect');
         const code = !continued[n];
 
         if (code && ARROW_INDENTED.test(line)) {
@@ -392,7 +393,9 @@ function takeArrows(src, where, lineOffset, allowed, theirs = new Set()) {
         // A named match carries the name in group 1 and the expression in 2; an
         // anonymous one has the expression in 1, and its name is generated.
         const named = found && found.length > 2;
-        const expression = found && (named ? found[2] : found[1]);
+        // A `;` that ends the line ends the statement, as Python reads `b = a
+        // * 2;`, and is no part of the lambda the arrow becomes.
+        const expression = found && (named ? found[2] : found[1]).replace(/;\s*$/, '');
 
         // The expression has to finish on its line. A `{` or a `(` left open
         // would swallow the lines under it into a lambda, and Brython would
@@ -401,7 +404,7 @@ function takeArrows(src, where, lineOffset, allowed, theirs = new Set()) {
         // the line as well.
         if (found && (!balanced(expression) || joined)) {
             throw refuse(
-                `svelthon — a ${kind(named)} written with \`=>\` must fit on one line; ` +
+                `svelthon — ${aKind(named)} written with \`=>\` must fit on one line; ` +
                     `use @${kind(named)} on a def for anything longer (${at})`,
                 where,
                 lineno
@@ -428,7 +431,7 @@ function takeArrows(src, where, lineOffset, allowed, theirs = new Set()) {
         // syntax` and no more, as `inspect(n); z = 3` is told why.
         if (found && statements(expression) > 1) {
             throw refuse(
-                `svelthon — a ${kind(named)} written with \`=>\` is a statement on a line of its own; ` +
+                `svelthon — ${aKind(named)} written with \`=>\` is a statement on a line of its own; ` +
                     `sharing one, the \`;\` starts another, which goes on a line of its own (${at})`,
                 where,
                 lineno
@@ -437,8 +440,8 @@ function takeArrows(src, where, lineOffset, allowed, theirs = new Set()) {
 
         if (found && !allowed) {
             throw refuse(
-                `svelthon — \`=>\` belongs to a component; a .py module writes a ` +
-                    `${kind(named)} with the @${kind(named)} decorator (${at})`,
+                `svelthon — \`=>\` belongs to a component; a .py module writes ` +
+                    `${aKind(named)} with the @${kind(named)} decorator (${at})`,
                 where,
                 lineno
             );
@@ -598,7 +601,6 @@ const RUNTIME = {
     followOwn: '__followOwn',
     SHAPING: '__SHAPING',
     pyError: '__pyError',
-    pyThrown: '__pyThrown',
     pyDerive: '__pyDerive',
     pyRead: '__pyRead',
     pyEvent: '__pyEvent',
@@ -610,6 +612,7 @@ const RUNTIME = {
     pyTeardown: '__pyTeardown',
     laterRoot: '__laterRoot',
     pyComponent: '__pyComponent',
+    pyHook: '__pyHook',
     pyExpression: '__pyExpression',
     invoke: '__invoke',
     pyExport: '__pyExport',
@@ -1715,7 +1718,7 @@ function preamble(c) {
         // name no one would type: only generated code touches it, and `py` is a
         // name an author may want.
         `import { ${runtimeAliases(HOST, [
-            'bind', '__pybridge', 'jsGlobal', 'track', 'changesNothing', 'follow', 'followOwn', 'SHAPING', 'pyThrown',
+            'bind', '__pybridge', 'jsGlobal', 'track', 'changesNothing', 'follow', 'followOwn', 'SHAPING', 'pyError',
             'pyDerive', 'pyRead', 'pyEvent', 'pyAttach', 'plainData', 'pyArg', 'pyData', 'pyComponent', 'pyExpression',
             'jsCall',
             'ticking', 'pyBind', 'NONE', 'helpers',
@@ -1729,6 +1732,7 @@ function preamble(c) {
             // Only an effect and `on_mount` hand a value back to be called
             // later, so only a component with one needs the name.
             ...(c.effects.length || c.lifecycle('on_mount') ? ['pyTeardown'] : []),
+            ...(c.lifecycle('on_mount') || c.lifecycle('on_destroy') ? ['pyHook'] : []),
             ...(c.effects.some((e) => e.root) ? ['laterRoot'] : []),
             // Three that keep the spelling the markup pass emits, and the read
             // half of the dot, which `templateDots` writes.
@@ -2419,7 +2423,7 @@ function effectLines(c) {
                 : `$effect${e.pre ? '.pre' : ''}(() => {`,
             `    let teardown;`,
             `    try { teardown = __invoke(${fn(e.name)}); }` +
-                ` catch (err) { throw ${RUNTIME.pyThrown}(err,${JSON.stringify(`${e.name}() — ${c.source}`)}); }`,
+                ` catch (err) { throw ${RUNTIME.pyError}(err,${JSON.stringify(`${e.name}() — ${c.source}`)}); }`,
             // What an effect hands back is a *Python* value, so the question is
             // whether Python can call it, not whether JavaScript can. A bound
             // method, `resource.close`, the plainest teardown there is, is a
@@ -2461,7 +2465,7 @@ function effectLines(c) {
                   `const __mounted = __untrack(() => ${c.hook('on_mount')});`,
                   `$effect(() => {`,
                   `    const __unmounted = __mounted === undefined ? undefined :` +
-                      ` ${RUNTIME.pyTeardown}(__untrack(() => __pyComponent(() => __mounted, ${JSON.stringify(`on_mount() — ${c.source}`)})()),` +
+                      ` ${RUNTIME.pyTeardown}(__untrack(() => ${RUNTIME.pyHook}(() => __mounted, ${JSON.stringify(`on_mount() — ${c.source}`)})()),` +
                       ` ${JSON.stringify(`on_mount() — ${c.source}`)});`,
                   `    if (__unmounted) return () => { __unmounted(); };`,
                   `});`
@@ -2475,7 +2479,7 @@ function effectLines(c) {
             ? [
                   ``,
                   `const __teardown = __untrack(() => { const held = ${c.hook('on_destroy')};` +
-                      ` return held === undefined ? undefined : __pyComponent(() => held, ${JSON.stringify(`on_destroy() — ${c.source}`)}); });`,
+                      ` return held === undefined ? undefined : ${RUNTIME.pyHook}(() => held, ${JSON.stringify(`on_destroy() — ${c.source}`)}); });`,
                   `if (__teardown !== undefined) __onDestroy(__teardown);`
               ]
             : [])

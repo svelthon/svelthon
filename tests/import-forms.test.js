@@ -83,12 +83,12 @@ describe('a declaration the compiler cannot read', () => {
         expect(out).toContain('export { __export_load as load };');
     });
 
-    test('and one holding something other than strings keeps the strings', () => {
-        const out = compile('__all__ = ["load", 3]\n\n\ndef load():\n    pass\n', 'M', 'm.py', {
-            plain: true
-        }).script;
-
-        expect(out).toContain('export { __export_load as load };');
+    // Left out, the entry exported nothing and said nothing, where CPython's
+    // `from m import *` raises `TypeError: Item in __all__ must be str`.
+    test('and one holding something other than strings is refused, with its line', () => {
+        expect(() => compile('__all__ = ["load", 3]\n\n\ndef load():\n    pass\n', 'M', 'm.py', { plain: true })).toThrow(
+            '`__all__` lists `3`, an `int`, and an entry of `__all__` is a name, a string, as Python\'s `from m import *` requires (m.py:1)'
+        );
     });
 
     // `__js__` is a declaration to the compiler, never data, so a value it cannot

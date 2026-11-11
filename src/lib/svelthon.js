@@ -1168,6 +1168,58 @@ export function svelthon(options = {}) {
         return direct;
     };
 
+    // The bodies generated from `file` that its change leaves stale in one
+    // environment's graph, forgotten there; none when the file is not ours.
+    const forgotten = (file, graph, timestamp) => {
+        const stale = [];
+
+        const forget = (id) => {
+            const mod = graph.getModuleById(id);
+            if (mod) {
+                graph.invalidateModule(mod);
+                stale.push(mod);
+            }
+        };
+
+        // `mangle` and not `nameFor`: this sees every changed file in the
+        // project and is only asking whether one of them is ours.
+        const name = mangle(file, root);
+        const own = key(virtualId(name));
+        const bodies = [...generated.keys()].filter((one) => one === own || one.startsWith(`${own}?`));
+
+        if (bodies.length === 0) return;
+
+        // A component asked again as it was compiled, its source, each
+        // child's language and its modules as they were: its generated code
+        // is as it was, and what changed is another input of its compile, a
+        // stylesheet its `<style lang="scss">` imports, which Svelte's
+        // plugin updates as it updates any component, its style alone. Its
+        // bodies forgotten, it was mounted anew, its state lost; and with
+        // nothing handed on, it kept the old style.
+        //
+        // Asked once per change, of the first environment Vite hands it
+        // to, the client's, before anything compiles it again: the
+        // client's hook of vite-plugin-svelte transforms the component,
+        // and an edit then looked compiled as before to the server's, whose
+        // page kept rendering the previous body. The others take that
+        // answer, under the change's one `timestamp`.
+        if (unchangedAt(file, timestamp)) return;
+
+        for (const one of bodies) forget('\0' + one.slice(key('').length));
+        slots.delete(own);
+
+        // A store's .py is watched, not imported, so its own module has to
+        // be invalidated too, otherwise its load() never reruns and
+        // `generated` keeps the previous body, exactly the staleness this
+        // exists to prevent.
+        if (file.endsWith('.py')) {
+            forget(file);
+            forget(file + PYTHON_QUERY);
+        }
+
+        return stale;
+    };
+
     return {
         name: 'svelthon:modules',
         // A module that appears or leaves may change where an import of its
@@ -1243,6 +1295,18 @@ export function svelthon(options = {}) {
             server.watcher.on('add', moved);
             server.watcher.on('unlink', moved);
             server.watcher.on('change', relanguaged);
+
+            // Without HMR, vitest's server among them, Vite asks no
+            // `hotUpdate`, and a `.py` kept the body it was first compiled to,
+            // which nothing ties to its file: a test rerun after an edit ran
+            // the old Python. Each change forgets it as that hook does.
+            if (server.config?.server?.hmr === false) {
+                const changed = (file) => {
+                    for (const environment of Object.values(server.environments)) forgotten(file, environment.moduleGraph);
+                };
+
+                for (const event of ['add', 'change', 'unlink']) server.watcher.on(event, changed);
+            }
         },
         // 'pre', or Vite's own resolver claims `./store.py` as a plain file and
         // hands its Python straight to the JS parser.
@@ -1321,54 +1385,9 @@ export function svelthon(options = {}) {
         // `generated` one body per variant in use. A `.py` keeps its one body
         // under its name.
         hotUpdate({ file, modules, timestamp }) {
-            const graph = this.environment.moduleGraph;
-            const stale = [];
+            const stale = forgotten(file, this.environment.moduleGraph, timestamp);
 
-            const forget = (id) => {
-                const mod = graph.getModuleById(id);
-                if (mod) {
-                    graph.invalidateModule(mod);
-                    stale.push(mod);
-                }
-            };
-
-            // `mangle` and not `nameFor`: this hook sees every changed file in
-            // the project and is only asking whether one of them is ours.
-            const name = mangle(file, root);
-            const own = key(virtualId(name));
-            const bodies = [...generated.keys()].filter((one) => one === own || one.startsWith(`${own}?`));
-
-            if (bodies.length === 0) return;
-
-            // A component asked again as it was compiled, its source, each
-            // child's language and its modules as they were: its generated code
-            // is as it was, and what changed is another input of its compile, a
-            // stylesheet its `<style lang="scss">` imports, which Svelte's
-            // plugin updates as it updates any component, its style alone. Its
-            // bodies forgotten, it was mounted anew, its state lost; and with
-            // nothing handed on, it kept the old style.
-            //
-            // Asked once per change, of the first environment Vite hands it
-            // to, the client's, before anything compiles it again: the
-            // client's hook of vite-plugin-svelte transforms the component,
-            // and an edit then looked compiled as before to the server's, whose
-            // page kept rendering the previous body. The others take that
-            // answer, under the change's one `timestamp`.
-            if (unchangedAt(file, timestamp)) return;
-
-            for (const one of bodies) forget('\0' + one.slice(key('').length));
-            slots.delete(own);
-
-            // A store's .py is watched, not imported, so its own module has to
-            // be invalidated too, otherwise its load() never reruns and
-            // `generated` keeps the previous body, exactly the staleness this
-            // hook exists to prevent.
-            if (file.endsWith('.py')) {
-                forget(file);
-                forget(file + PYTHON_QUERY);
-            }
-
-            return [...modules, ...stale];
+            return stale && [...modules, ...stale];
         }
     };
 }

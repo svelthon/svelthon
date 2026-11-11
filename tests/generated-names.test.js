@@ -30,6 +30,10 @@ const read = (name) =>
 const MARKUP_LOCAL = new Set([
     // The setter's parameter in the `bind:` pair, consumed by Svelte.
     '__value',
+    // The functions the halves of a function binding gave where the binding
+    // is made, handed to its read and its write.
+    '__get',
+    '__put',
     // The loop variable of a compiled `{#each}` over a range.
     '__range_',
     // The token declared beside a markup cell a `bind:group` writes.

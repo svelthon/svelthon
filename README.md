@@ -258,7 +258,8 @@ a new value, which is Svelte's own rule for non-`$bindable` props.
 A Python parent hands a Python child the value itself, a `float` subclass with
 its class, and a JavaScript child JavaScript's number or string, and for an
 iterable made as it goes, a `range`, a dict's view, a generator, `map` or `zip`,
-the list `list()` makes of it, which the child's `{#each}` walks. None is the
+the list `list()` makes of it, which the child's `{#each}` walks, alone or held in
+a dict or a list, `data={{"labels": d.keys()}}`. None is the
 absence to both, the `undefined` a Svelte parent passes, so the child reads its
 default; `javascript.NULL` is a value, as `null` is. The compiler
 tells the two apart by reading the child's file when the import names one. Any
@@ -672,7 +673,9 @@ other does.
 compiled twice, once as an expression and once as an assignment target, into the
 pair Svelte takes for exactly this (`bind:value={() => v, (n) => v = n}`). That
 is what makes `bind:value={row.label}` work on a dict: the dot finds the key on
-the way in and writes to it on the way out.
+the way in and writes to it on the way out. The pair can also be written, as in
+Svelte: `bind:value={get, put}` shows what `get()` answers and hands what is
+typed to `put(value)`.
 
 `bindable()` on an annotation declares a two-way prop: the child may write to
 it and the parent's own variable follows:
@@ -957,7 +960,9 @@ def bump():
 
 `import counter_store` looks for `counter_store.svelte.py`, then `counter_store.py`,
 in the importing file's own directory and then along `python({ path: [...] })`,
-which plays the part of PYTHONPATH. The importer's virtual module imports its code
+which plays the part of PYTHONPATH. A relative entry is read from the directory
+the process starts in, not from a `root` given to Vite: with one, write it
+absolute. The importer's virtual module imports its code
 first, so it is at hand, and its body runs at the `import` statement, as in
 CPython: an import under an `if` not taken or in a function never called runs
 nothing, and the module's exception is raised where an `except` can catch it. The
@@ -1119,8 +1124,10 @@ def bump():
 
 Its props are its annotated names, observed as attributes and exposed as
 properties, and each attribute arrives as the type its annotation names:
-`start: int` reads `start="5"` as `5`, `tags: list` reads a JSON array. A
-`bool` follows HTML, as in Svelte: an attribute that is present is true,
+`start: int` reads `start="5"` as `5`, `tags: list` reads a JSON array. The
+number then crosses as every number from JavaScript does, a whole one as an
+`int`: `ratio: float` reads `ratio="2"` as `2`, which `float(ratio)` makes
+`2.0`. A `bool` follows HTML, as in Svelte: an attribute that is present is true,
 whatever its value. A property the page sets back to `undefined` reads its
 default again, as a Svelte element's does, `15.0` as Python wrote it.
 
@@ -1425,7 +1432,8 @@ def load(event):
 ```
 
 `event` carries `params`, `query`, `url`, `method`, `route`, and `js`, the raw
-event. That last one is the escape hatch, and it is enough on its own:
+event; a universal `load()`'s, in `+page.py`, has no `method`, as its event has
+no request. That last one is the escape hatch, and it is enough on its own:
 
 `query` is a dict, so a key written twice keeps the **first** value, which is
 what `url.searchParams.get()` answers about the same URL. Every value of a
@@ -1626,13 +1634,14 @@ attribute, as in `class="tag {statut.lower()}"`.
 
 Two Python spellings are accepted where Svelte has its own: `{#each d.items() as
 (k, v)}` destructures a tuple, and `{#each xs as x, i}` keeps Svelte's meaning of
-item and index. What a component imports or declares in its `<script module>` is
+item and index, as `{#each xs, i}` keeps its index without an item. Python's
+order, `{#each x in xs}`, is refused with Svelte's. What a component imports or declares in its `<script module>` is
 readable from Python too, which is how a Python component reaches a JavaScript
 library at all.
 
 ## Status
 
-Validated by `npm test`, 2 050 tests as written (vitest reports more, one per
+Validated by `npm test`, 2 066 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;
@@ -1776,11 +1785,11 @@ imports, so the scan is skipped and the one package worth pre-bundling is named.
 Svelthon carries no copy of Brython. It depends on **Bryntime**, the Brython
 runtime for JavaScript frameworks, which holds the crossing between Python and
 JavaScript, and which Svelthon reaches through its one entry, `bryntime`. The
-engine is **Bryve**, Brython with its fixes, started where it is imported, on
-which Bryntime runs and from which Bryc, the compiler, loads the parsing chain,
-`bryve/compiler`. Until they are published, both are installed from checkouts
-beside this one, `../bryntime` and `../bryve`. Which engine ships, built from
-what and with which repairs, is Bryve's to say.
+engine is **Bryvend**, Brython with its fixes, started where it is imported, on
+which Bryntime runs and from which **Brycomp**, the compiler, loads the parsing
+chain, `bryvend/compiler`. Until they are published, the three are installed
+from checkouts beside this one, `../bryntime`, `../bryve` and `../bryc`. Which
+engine ships, built from what and with which repairs, is Bryvend's to say.
 
 **And it is the only Python that ships.** No stdlib module travels with
 Svelthon, `sys` included: a stdlib exists so that an author can `import`

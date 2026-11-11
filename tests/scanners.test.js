@@ -95,6 +95,13 @@ describe('walrusTarget reads through a string', () => {
     test('a slice is written as the key Python spells it', () => {
         expect([walrus('(d[1:] := 1)'), walrus('(d[1:2:3:4] := 1)')]).toEqual(['__setitem(d, __slice(1, None), 1)', '(d[1:2:3:4] := 1)']);
     });
+
+    // A call is a step of the object, as a name is: `(make(1).x := 1)` was left
+    // to Python, which refused an attribute where `(box.n := 1)` beside it
+    // wrote one. A call as the target itself is still Python's to refuse.
+    test('an object reached through a call is written into, and a call is no target', () => {
+        expect([walrus('(make(1).x := 1)'), walrus('(make(1) := 1)')]).toEqual(['__setattr(make(1), "x", 1)', '(make(1) := 1)']);
+    });
 });
 
 // The key that trails an `{#each}` target, found by balance rather than by

@@ -35,6 +35,38 @@ describe('an {#each} the walker still has to place', () => {
 
         expect(out).toContain('as x, i');
     });
+
+    // Svelte 5's index without a name for the row, `{#each items, i}`: read as
+    // a tuple to walk, it raised `NameError` for `i` at mount. A tuple between
+    // parentheses is still one.
+    test('and Svelte s index without a name for the row', () => {
+        const { out, defs } = rewrite('{#each items, i}<li>{i}</li>{/each}');
+
+        expect(out).toContain('{#each __rows_1(), i}');
+        expect([defs[0].includes('__seq(items)'), defs[1].includes('(i)')]).toEqual([true, true]);
+        expect(rewrite('{#each (a, b)}<li>x</li>{/each}').defs[0]).toContain('__seq((a, b))');
+    });
+
+    // A key that is the index, `(i)`, is Svelte's indexed block, as without
+    // one: read as part of the index, `items, i (i)` was a tuple to walk and
+    // `i (i)` a call. Any other key needs a row, and Svelte refuses it.
+    test('and a key that is its index', () => {
+        const plain = rewrite('{#each items, i}<li>{i}</li>{/each}');
+
+        for (const key of ['(i)', '((i))', ' ( i ) ']) {
+            expect(rewrite(`{#each items, i ${key}}<li>{i}</li>{/each}`)).toEqual(plain);
+        }
+        expect(() => rewrite('{#each items, i (i + 1)}<li>{i}</li>{/each}')).toThrow(
+            '`{#each items, i (i + 1)}` keys a block that names no row, which Svelte refuses (`each_key_without_as`); ' +
+                'name the row, `{#each items as row, i (i + 1)}`'
+        );
+    });
+
+    // Python's order tested membership, walked a boolean and raised `NameError`
+    // for the row at mount.
+    test('and Python s order refused, with Svelte s', () => {
+        expect(() => rewrite('{#each x in xs}<li>{x}</li>{/each}')).toThrow("`{#each x in xs}` is Python's `for` order; Svelte's block is written `{#each xs as x}`");
+    });
 });
 
 describe('a tag written the short way', () => {

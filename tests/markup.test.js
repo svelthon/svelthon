@@ -831,6 +831,13 @@ describe('{@render}', () => {
         expect(defs.some((one) => one.includes('f(a, b)'))).toBe(true);
     });
 
+    // Svelte hands a snippet its arguments by position: `b=2` was compiled as
+    // the expression `(b=2)`, a syntax error. A comparison is an expression.
+    test('an argument a call names is refused, and a comparison is none', () => {
+        expect(() => rewrite('{@render row(1, b=2)}')).toThrow('`b=2` names its argument');
+        expect(() => rewrite('{@render row(1, b == 2, f(c=3))}')).not.toThrow();
+    });
+
     // A snippet the markup declares is Python and is handed Python values,
     // called by its name.
     test('a snippet the markup declares keeps its arguments Python', () => {
@@ -1226,7 +1233,9 @@ describe('an unknown construct is refused, never passed through', () => {
 
     // Svelte binds an identifier or a member, and Brython refused the setter
     // written for the rest, `(c.upper()) = __value`, in code nobody wrote.
-    test.for([['a call', 'c.upper()'], ['a literal', '"text"'], ['an operation', 'a + b']])(
+    // And a tuple to unpack the value into, which Svelte refuses too: `(a, b) =
+    // __value` took two typed characters in silence.
+    test.for([['a call', 'c.upper()'], ['a literal', '"text"'], ['an operation', 'a + b'], ['a tuple', 'a, b, c'], ['a list', '[a, b]']])(
         'a binding to %s is refused in the words the author wrote',
         ([, target]) => {
             expect(() => rewrite(`<input bind:value={${target}} />`)).toThrow(
@@ -1240,6 +1249,17 @@ describe('an unknown construct is refused, never passed through', () => {
     // keyword fell through to the generic interpolation, so the author read
     // Brython's `invalid syntax` about `__text(const a = n)`, on a line nobody
     // wrote. The `@`-prefixed form, Svelte's `{@const}`, names it too.
+    // An assignment that is no declaration was compiled as an expression and
+    // refused in the words of a text nobody wrote, `(a, b = 1, 2)`. A lambda's
+    // default and a keyword argument are no assignment.
+    test.for(['{a, b = 1, 2}', '{a: int = 1}', '{a = b = 1}', '{a += 1}'])('%s is refused as an assignment the template does not take', (tag) => {
+        expect(() => rewrite(`{#if x}${tag}{/if}`)).toThrow(`\`${tag}\` is an assignment the template does not take`);
+    });
+
+    test('while a lambda default and a keyword argument are expressions', () => {
+        expect(() => rewrite('<p>{(lambda x=1: x)()} {dict(x=1)}</p>')).not.toThrow();
+    });
+
     test('{@const} is refused and names the Svelthon spelling', () => {
         const markup = '{#each rows as n}{@const a = n * 2}{/each}';
 

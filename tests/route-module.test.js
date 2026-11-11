@@ -23,7 +23,7 @@ import {
     given_second,
     both_views
 } from './fixtures/route.py';
-import { requestEvent as event, prerenderingEvent, foreignRealmEvent, loadEvent } from './request-event.js';
+import { requestEvent as event, prerenderingEvent, foreignRealmEvent, loadEvent, universalEvent } from './request-event.js';
 
 // A RequestEvent as SvelteKit builds one, from the one place that says what
 // that is. The conversion is recognised by what the event's members *are* — a
@@ -209,6 +209,16 @@ describe('what crosses as a request event', () => {
             kind: 'dict',
             keys: ['js', 'method', 'params', 'query', 'route', 'url']
         });
+    });
+
+    // A universal `load()`'s event has no request, so it has no method; it
+    // reached Python as a `JSObject`, and `event["query"]` raised `KeyError`.
+    test("and a universal load()'s, with no method, as its event has no request", () => {
+        expect(given(universalEvent())).toEqual({
+            kind: 'dict',
+            keys: ['js', 'params', 'query', 'route', 'url']
+        });
+        expect(given({ ...universalEvent(), ...business, parent: 1 })).toEqual({ kind: 'JSObject', payload: 42 });
     });
 
     test.for([

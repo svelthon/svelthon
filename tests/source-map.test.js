@@ -145,6 +145,27 @@ describe('a component whose Python starts far down the file', () => {
     });
 });
 
+// The template's functions follow the script in the Python compiled, and the
+// map moved them by the script's offset alone: an expression of line 13 was
+// sent to line 14, one of lines 18 and 19 past the end of the file. Each maps
+// to the markup it is written on, as an error raised in it is placed.
+describe("a template's expressions", () => {
+    test.for([
+        [12, 'a one-line expression'],
+        [40, 'an expression further down']
+    ])('map to the markup line they are written on, %s', ([line]) => {
+        const { map, module } = compile('x0 = 0\n', 'P', 'src/P.svelte', {
+            lineOffset: 1,
+            defs: ['def __expr_0():\n    return ("MARKED")'],
+            defLines: [line],
+            defColumns: [4]
+        });
+        const at = module.split('\n').findIndex((one) => one.includes('MARKED'));
+
+        expect(decode(map.mappings).find((one) => one.generated === at).source).toBe(line - 1);
+    });
+});
+
 // A module that imports Python gets a prelude prepended, one `import` line per
 // module, evaluated before init() so its import statements find them. The source map has to
 // move down by as many, or a debugger opens the file that many lines off.

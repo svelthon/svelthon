@@ -8,6 +8,7 @@ import { test, expect } from 'vitest';
 import { mount, unmount, flushSync } from './mounted.js';
 import ClassMap from './fixtures/ClassMap.svelte';
 import ClassMapNative from './fixtures/ClassMapNative.svelte';
+import ClassLazy from './fixtures/ClassLazy.svelte';
 import { __pybridge } from '../src/lib/bridge.js';
 
 // Telling a JavaScript object from one of the engine's reads `ob_type` without
@@ -48,4 +49,19 @@ test.for([
 
     expect(native[0]).toContain('active');
     expect(await classesOf(ClassMap, made())).toEqual(native);
+});
+
+// A lazy iterable was the one value at a door that was neither listed nor
+// refused: `class="<generator object <genexpr>>"`, `class="dict_keys([...])"`.
+test('a lazy iterable gives the classes the list list() makes of it gives', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+
+    mount(ClassLazy, { target });
+    flushSync();
+
+    expect(['list', 'generator', 'keys'].map((k) => target.querySelector(`[data-k="${k}"]`).getAttribute('class'))).toEqual([
+        'on wide',
+        'on wide',
+        'on wide'
+    ]);
 });

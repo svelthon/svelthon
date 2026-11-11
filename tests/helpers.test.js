@@ -677,7 +677,9 @@ describe('tojson', () => {
         ['bytes', () => _b_.bytes.$factory(_b_.list.$factory([104, 105])), /is bytes/, /decode\(\)/],
         ['a bytearray', () => _b_.bytearray.$factory(_b_.list.$factory([104, 105])), /is bytes/, /decode\(\)/],
         ['a memoryview', () => shapes('memoryview'), /is a memoryview/, null],
-        ['a range', () => shapes('range'), /is a range/, null],
+        // And a range, which a function JavaScript calls returns as the list
+        // `list()` makes of it: Python's own call of the function hands it over.
+        ['a range', () => globalThis.__BRYTHON__.PYOBJ_MAP.get(shapes)('range'), /is a range/, null],
         ['a complex', () => shapes('complex'), /is a complex/, null],
         ['a symbol', () => Symbol('marker'), /is a symbol/, null],
         // Derived from a builtin, which is the row identity missed: the class is
@@ -957,7 +959,9 @@ describe('date', () => {
     test.for([
         ['a format of letters', () => date('2024-03-05', 'Y-m-d'), /svelthon — date\(\): "Y-m-d" is not a style: .*"full", "long", "medium" or "short"/],
         ['a time style', () => date('2024-03-05', NONE, 'H:i'), /svelthon — date\(\): "H:i" is not a style/],
-        ['a locale with an underscore', () => date('2024-03-05', 'long', NONE, 'fr_FR'), /svelthon — date\(\): "fr_FR" is not a language tag: .*"fr-FR"/]
+        ['a locale with an underscore', () => date('2024-03-05', 'long', NONE, 'fr_FR'), /svelthon — date\(\): "fr_FR" is not a language tag: .*"fr-FR"/],
+        // And by `fromnow()` beside it, which raised `Intl`'s own sentence.
+        ['a locale with an underscore, to fromnow()', () => fromnow('2024-03-05', 'fr_FR'), /svelthon — fromnow\(\): "fr_FR" is not a language tag: .*"fr-FR"/]
     ])('%s is refused, and says what to write', ([, call, message]) => {
         expect(call).toThrow(message);
     });

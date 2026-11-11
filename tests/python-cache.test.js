@@ -9,6 +9,7 @@ import { test, expect } from 'vitest';
 import { mkdtempSync, writeFileSync, utimesSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import { svelthon } from '../src/lib/svelthon.js';
 
 // The compiled module a file is served as: the wrapper, the module as Python
@@ -49,6 +50,44 @@ test.for([['a .py', '.py'], ['a .svelte.py', '.svelte.py']])(
         }
     }
 );
+
+// Without HMR, as vitest serves a test's modules, Vite asks no `hotUpdate`: the
+// body of a `.py` was the one first compiled, and a rerun ran the old Python.
+test.for([['a .py', '.py'], ['a .svelte.py', '.svelte.py']])('%s edited is served as it now is by a server without HMR', async ([, extension]) => {
+    const { createServer } = await import('vite');
+    const room = mkdtempSync(join(tmpdir(), 'svelthon-cache-'));
+    const file = join(room, `${room.split('/').pop().replace(/\W/g, '_')}${extension}`);
+    const plugin = svelthon();
+    const server = await createServer({
+        configFile: false,
+        root: room,
+        plugins: [plugin],
+        logLevel: 'silent',
+        resolve: { alias: { 'svelthon/bridge': fileURLToPath(new URL('../src/lib/bridge.js', import.meta.url)) } },
+        server: { middlewareMode: true, hmr: false },
+        optimizeDeps: { noDiscovery: true, include: [] }
+    });
+    // The module as Python reaches it is loaded again, its file changed, and
+    // names the body the graph then serves.
+    const body = async () => {
+        const wrapper = plugin.load.call({ addWatchFile() {} }, `${file}?python`);
+
+        return (await server.environments.client.transformRequest(`\0${wrapper.match(/from "([^"]*virtual[^"]*)"/)[1]}`)).code;
+    };
+
+    try {
+        writeFileSync(file, 'old_message = 1\n');
+        expect(await body()).toContain('old_message');
+
+        writeFileSync(file, 'new_message = 1\n');
+        server.watcher.emit('change', file);
+
+        expect(await body()).toContain('new_message');
+    } finally {
+        await server.close();
+        rmSync(room, { recursive: true, force: true });
+    }
+});
 
 test.for([['a .py', '.py'], ['a .svelte.py', '.svelte.py']])(
     '%s rewritten under the same date is compiled again by a second build of the process',

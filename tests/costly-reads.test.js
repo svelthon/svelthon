@@ -89,8 +89,10 @@ test.for([
     ["in a comprehension's body", '{[x for _ in rows]}', [true]],
     ["past a set's first item", '{ {1, x} }', [true]],
     ["in a bound item's branch", '<input bind:value={bag[0 if c else x]}>', [true, true]],
-    // Written, the value is unpacked before it is read; read, it comes first.
-    ['in a target that unpacks', '<input bind:value={(x["a"], y)}>', [true, false]]
+    // A pair is Svelte's function binding, no target to unpack: its halves are
+    // evaluated once, the getter's first, and the read and the write call
+    // what they gave.
+    ['in the getter of a function binding', '<input bind:value={(x["a"], y)}>', [false, false, false, false]]
 ])('a snippet parameter is read ahead only where Python reads it first: %s', ([, body, late]) => {
     expect(handedLate(body)).toEqual(late);
 });

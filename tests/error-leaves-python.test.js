@@ -8,8 +8,9 @@
 // does, and Python still catches its own exception: an `except` around a read
 // of the derived, and a boundary written in Python.
 import { test, expect, describe } from 'vitest';
-import { mount, flushSync } from './mounted.js';
+import { mount, unmount, flushSync } from './mounted.js';
 import RaiseOnUpdate from './fixtures/RaiseOnUpdate.svelte';
+import RaiseAtExits from './fixtures/RaiseAtExits.svelte';
 
 const setup = (where) => {
     const target = document.body.appendChild(document.createElement('div'));
@@ -54,5 +55,61 @@ describe('what Python raises on an update', () => {
         click('zero');
 
         expect([read('failed'), read('failure')]).toEqual(['ZeroDivisionError', 'ZeroDivisionError']);
+    });
+});
+
+// And where Svelte calls a lifecycle hook or an action, or JavaScript calls
+// what Python published: it left as the Brython object, which a SvelteKit
+// `handleError` read as ten kilobytes of engine and `JSON.stringify` refused.
+describe('what Python raises where it is called from outside', () => {
+    const plain = (error) => [error instanceof Error, Object.getOwnPropertyNames(error).sort(), String(error.message).split(' (')[0]];
+
+    test.for([
+        ['on_mount', 'ValueError: on_mount'],
+        ['action', 'ValueError: action']
+    ])('leaves %s as an Error holding nothing of Python', ([where, message]) => {
+        let error;
+
+        try {
+            mount(RaiseAtExits, { target: document.body.appendChild(document.createElement('div')), props: { where } });
+            flushSync();
+        } catch (caught) {
+            error = caught;
+        }
+
+        expect(plain(error)).toEqual([true, ['message', 'stack'], message]);
+    });
+
+    test('leaves on_destroy as one', async () => {
+        const instance = mount(RaiseAtExits, { target: document.body.appendChild(document.createElement('div')), props: { where: 'on_destroy' } });
+        let error;
+
+        flushSync();
+        try {
+            await unmount(instance);
+        } catch (caught) {
+            error = caught;
+        }
+
+        expect(plain(error)).toEqual([true, ['message', 'stack'], 'ValueError: on_destroy']);
+    });
+
+    test('leaves an export JavaScript calls as one, which Python catches as its own again', () => {
+        const target = document.body.appendChild(document.createElement('div'));
+        const instance = mount(RaiseAtExits, { target });
+        let error;
+
+        globalThis.globalThrough = (callback) => callback();
+        flushSync();
+        try {
+            instance.boom();
+        } catch (caught) {
+            error = caught;
+        }
+        target.querySelector('[data-k="guarded"]').click();
+        flushSync();
+
+        expect(plain(error)).toEqual([true, ['message', 'stack'], 'ValueError: export']);
+        expect(target.querySelector('[data-k="seen"]').textContent).toBe('ValueError ValueError');
     });
 });

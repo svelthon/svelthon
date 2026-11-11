@@ -262,7 +262,8 @@ Un parent Python donne à un enfant Python la valeur elle-même, une sous-classe
 de `float` avec sa classe, et à un enfant JavaScript le nombre ou la chaîne de
 JavaScript, et pour un itérable fait au fil de l'eau, un `range`, une vue de
 dict, un générateur, `map` ou `zip`, la liste qu'en fait `list()`, que le
-`{#each}` de l'enfant parcourt. `None` est l'absence pour l'un comme pour l'autre, le `undefined`
+`{#each}` de l'enfant parcourt, seul ou tenu dans un dict ou une liste,
+`data={{"labels": d.keys()}}`. `None` est l'absence pour l'un comme pour l'autre, le `undefined`
 que passe un parent Svelte, et l'enfant lit donc son défaut ; `javascript.NULL`
 est une valeur, comme `null`. Le compilateur les distingue en lisant le fichier de l'enfant quand
 l'import en nomme un. Tout autre enfant, venu d'un paquet, d'un alias de
@@ -689,7 +690,9 @@ est donc compilée deux fois, en expression puis en cible d'affectation, pour
 former la paire que Svelte accepte précisément pour ça
 (`bind:value={() => v, (n) => v = n}`). C'est ce qui fait marcher
 `bind:value={row.label}` sur un dictionnaire : le point trouve la clé à l'aller
-et y écrit au retour.
+et y écrit au retour. La paire peut aussi s'écrire, comme en Svelte :
+`bind:value={get, put}` montre ce que répond `get()` et passe la saisie à
+`put(valeur)`.
 
 `bindable()` sur une annotation déclare un prop bidirectionnel : l'enfant peut y
 écrire et la variable du parent suit :
@@ -999,8 +1002,10 @@ def bump():
 
 `import counter_store` cherche `counter_store.svelte.py`, puis `counter_store.py`,
 dans le répertoire du fichier importateur puis le long de
-`python({ path: [...] })`, qui joue le rôle de PYTHONPATH. Le module virtuel de
-l'importateur importe son code en premier, si bien qu'il est à portée de main, et
+`python({ path: [...] })`, qui joue le rôle de PYTHONPATH. Une entrée relative se
+lit depuis le répertoire où le processus démarre, non depuis un `root` donné à
+Vite : avec un, écrivez-la absolue. Le module virtuel de l'importateur importe
+son code en premier, si bien qu'il est à portée de main, et
 son corps s'exécute à l'instruction `import`, comme en CPython : un import sous un
 `if` non pris ou dans une fonction jamais appelée n'exécute rien, et l'exception
 du module est levée là où un `except` peut la prendre. Le namespace est alors
@@ -1167,7 +1172,9 @@ def bump():
 
 Ses props sont ses noms annotés, observés comme attributs et exposés comme
 propriétés, et chaque attribut arrive dans le type que nomme son annotation :
-`start: int` lit `start="5"` comme `5`, `tags: list` lit un tableau JSON. Un
+`start: int` lit `start="5"` comme `5`, `tags: list` lit un tableau JSON. Le
+nombre passe ensuite comme tout nombre venu de JavaScript, un entier en `int` :
+`ratio: float` lit `ratio="2"` comme `2`, dont `float(ratio)` fait `2.0`. Un
 `bool` suit HTML, comme en Svelte : un attribut présent est vrai, quelle que
 soit sa valeur. Une propriété que la page remet à `undefined` relit son défaut,
 comme celle d'un élément Svelte, `15.0` tel que Python l'a écrit.
@@ -1482,7 +1489,9 @@ def load(event):
 ```
 
 `event` porte `params`, `query`, `url`, `method`, `route` et `js` : l'événement
-brut. Ce dernier est l'échappatoire, et il se suffit à lui-même :
+brut ; celui d'un `load()` universel, dans `+page.py`, n'a pas de `method`, son
+événement n'ayant pas de requête. Ce dernier est l'échappatoire, et il se suffit
+à lui-même :
 
 `query` est un dict, donc une clé écrite deux fois garde la **première** valeur,
 celle que `url.searchParams.get()` répond de la même URL. Toutes les valeurs
@@ -1654,7 +1663,7 @@ parsing, que seul le compilateur charge ; le README de Bryntime en donne le poid
 
 ## État
 
-Validé par `npm test`, 2 050 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 2 066 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
@@ -1703,7 +1712,9 @@ dans un attribut entre guillemets, comme `class="tag {statut.lower()}"`.
 
 Deux graphies de Python sont acceptées là où Svelte a la sienne :
 `{#each d.items() as (k, v)}` déstructure un tuple, et `{#each xs as x, i}` garde
-le sens de Svelte : élément et index. Ce qu'un composant importe ou déclare dans
+le sens de Svelte : élément et index, comme `{#each xs, i}` garde son index sans
+élément. L'ordre de Python, `{#each x in xs}`, est refusé avec celui de Svelte.
+Ce qu'un composant importe ou déclare dans
 son `<script module>` se lit aussi depuis Python, et c'est ainsi qu'un composant
 Python atteint une bibliothèque JavaScript.
 
@@ -1831,12 +1842,12 @@ nomme le seul paquet qui mérite d'être pré-bundlé.
 Svelthon ne porte aucune copie de Brython. Il dépend de **Bryntime**, le
 runtime Brython pour les frameworks JavaScript, qui tient la traversée entre
 Python et JavaScript, que Svelthon atteint par sa seule entrée, `bryntime`. Le
-moteur est **Bryve**, Brython et ses réparations, démarré là où il est
-importé, sur lequel Bryntime tourne et dont Bryc, le compilateur, charge la
-chaîne d'analyse, `bryve/compiler`. Tant qu'ils ne sont pas publiés, les deux
-s'installent depuis des dépôts posés à côté de celui-ci, `../bryntime` et
-`../bryve`. Quel moteur est livré, construit depuis quoi et avec quelles
-réparations, c'est à Bryve de le dire.
+moteur est **Bryvend**, Brython et ses réparations, démarré là où il est
+importé, sur lequel Bryntime tourne et dont **Brycomp**, le compilateur, charge
+la chaîne d'analyse, `bryvend/compiler`. Tant qu'ils ne sont pas publiés, les
+trois s'installent depuis des dépôts posés à côté de celui-ci, `../bryntime`,
+`../bryve` et `../bryc`. Quel moteur est livré, construit depuis quoi et avec
+quelles réparations, c'est à Bryvend de le dire.
 
 **Et c'est le seul Python livré.** Aucun module de la stdlib ne voyage avec
 Svelthon, `sys` compris : une stdlib existe pour qu'un auteur puisse `import`

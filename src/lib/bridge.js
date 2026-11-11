@@ -109,7 +109,6 @@ const {
     heldEntries,
     // The errors', the calls' and the views'.
     pyError,
-    thrown,
     raisedAgain,
     relayed,
     raised,
@@ -225,9 +224,9 @@ host.name = 'svelthon';
 // the first component or store that loads, whose script Svelte compiles
 // (`__pybridge.tracking`, `__pybridge.refusing`), and the runtime asks nothing
 // of Svelte's internals. Until one has, every read is taken for a reaction's,
-// which costs a walk and subscribes nothing outside one, so a page of
-// JavaScript components reading a `.py` module's objects is followed all the
-// same; and nothing is refused.
+// which costs a walk and subscribes nothing outside one, and nothing is
+// refused. What a plain module holds is watched by nobody: a JavaScript
+// component reading a `.py`'s list repaints on no `append`, as the README says.
 host.subscriber = createSubscriber;
 host.untrack = untrack;
 
@@ -590,6 +589,13 @@ export const __pybridge = {
         // Svelte reads as a set of conditional classes, and is handed to it as
         // it is, read the way it reads it.
         if (!pyClass(ownType(value)) && !VIEWED.has(value) && plainObject(value)) return value;
+
+        // A lazy iterable, `(n for n in names if n)` or `d.keys()`, as the list
+        // `list()` makes of it, as at every other door: written as its `str()`,
+        // it was `<generator object <genexpr>>`.
+        const made = listed(value);
+
+        if (made !== value) return __pybridge.klass(made);
 
         // The names the list yields, which for a subclass with its own
         // `__iter__` are not the ones it stores: the loop beside it reads the
@@ -1880,22 +1886,28 @@ const member = (value, name, answered = false) => {
     }
     return answered ? value[name] : NO_FIELD;
 };
+//
+// A universal `load()`, in `+page.py`, is handed an event with no request, and
+// with the two functions every `load()`'s event carries, `parent` and
+// `depends`: taken for none, it reached Python as a `JSObject`, where
+// `event["query"]` raised `KeyError`.
 const routeEvent = (value) => {
     try {
         const [fetch, url, request, params] = ['fetch', 'url', 'request', 'params'].map((name) => member(value, name));
+
+        if (typeof fetch !== 'function' || !urlish(url) || params === null || typeof params !== 'object') return false;
+        if (request === NO_FIELD || request === undefined) {
+            return ['parent', 'depends'].every((name) => typeof member(value, name) === 'function');
+        }
         if (request === null || typeof request !== 'object') return false;
 
         const headers = member(request, 'headers');
 
         return (
-            typeof fetch === 'function' &&
-            urlish(url) &&
             typeof member(request, 'method') === 'string' &&
             headers !== null &&
             typeof headers === 'object' &&
-            typeof member(headers, 'get') === 'function' &&
-            params !== null &&
-            typeof params === 'object'
+            typeof member(headers, 'get') === 'function'
         );
     } catch {
         return false;
@@ -1947,12 +1959,13 @@ const routeArgument = (value) => {
     query = query.filter(([key]) => !seen.has(key) && seen.add(key));
 
     // Real dicts, not JavaScript objects: Python reaches for `.get()` and
-    // `.items()`, and a JSObj has neither.
+    // `.items()`, and a JSObj has neither. A universal `load()`'s event has no
+    // method, as its JavaScript event has no request.
     return pyDict([
         ['params', pyDict(Object.entries({ ...value.params }))],
         ['query', pyDict(query)],
         ['url', value.url.href],
-        ['method', value.request.method],
+        ...(value.request === undefined ? [] : [['method', value.request.method]]),
         ['route', value.route && value.route.id],
         // The event itself, for whatever the snapshot does not cover: cookies,
         // fetch, setHeaders. It is a JavaScript object and stays one.
@@ -1999,7 +2012,7 @@ export function pyEvent(value) {
         try {
             return schedule(calling(found, args), where);
         } catch (error) {
-            throw thrown(pyError(error, where));
+            throw pyError(error, where);
         } finally {
             flushExports();
         }
@@ -2040,7 +2053,7 @@ export function pyAttach(value) {
             try {
                 return pyTeardown(calling(found, args), where);
             } catch (error) {
-                throw thrown(pyError(error, where));
+                throw pyError(error, where);
             } finally {
                 flushExports();
             }
@@ -2079,23 +2092,22 @@ export function laterRoot() {
     };
 }
 
+// A callback whose answer Svelte does not read, a cleanup, an action's `update`
+// and `destroy`, a transition's `tick`: a Python one is called as a handler is,
+// its coroutine started and its answer left as it is. Converted for a reader,
+// a generator it answered was walked and its body run. A JavaScript one is
+// itself (`pyHandler`).
+const unreadCall = (value) => (declared(value) === null ? pyHandler(value) : pyEvent(value));
+
 export function pyTeardown(value, where) {
     if (pyAwaitable(value)) {
         schedule(value, where);
         return undefined;
     }
 
-    const cleanup = pyHandler(value);
+    const cleanup = callable(value) ? unreadCall(value) : undefined;
 
-    if (typeof cleanup !== 'function') return undefined;
-
-    return () => {
-        try {
-            return cleanup();
-        } catch (error) {
-            throw pyThrown(error, where);
-        }
-    };
+    return typeof cleanup === 'function' ? () => cleanup() : undefined;
 }
 
 
@@ -2136,7 +2148,7 @@ const published = (value) => pyNumbers(__pybridge.bound(value));
 // signature, or a JavaScript function's own `length`, which a decorator may
 // have put under the name. Read off the signature alone, a JavaScript
 // function's was 0 whatever it took.
-export const pyComponent = (read, where, exported = false) => {
+const component = (read, where, convert) => {
     const held = read();
     const first = declared(held);
 
@@ -2145,12 +2157,20 @@ export const pyComponent = (read, where, exported = false) => {
             const value = read();
             const found = declared(value) ?? { fn: value, arity: Infinity };
 
-            return running(() => calling(found, args), where, exported ? published : returned);
+            return running(() => calling(found, args), where, convert);
         },
         nameOf(where),
         first !== null ? arityNow(first.arity) : typeof held === 'function' ? held.length : 0
     );
 };
+
+export const pyComponent = (read, where, exported = false) => component(read, where, exported ? published : returned);
+
+// A lifecycle hook, called as a component's function is, its answer handed
+// back as Python's: Svelte reads nothing of what `on_destroy` answers, and of
+// `on_mount`'s only the cleanup `pyTeardown` finds there. Converted for a
+// reader, a generator either answered was walked and its body run.
+export const pyHook = (read, where) => component(read, where, null);
 
 // What a store hands JavaScript for one of its names: the value the name holds
 // when it is read, for what it is, whatever bound the name. A Python callable
@@ -2259,6 +2279,10 @@ const COMPARED = {
 // prop reads its default for.
 const keptPython = (value) => (value === undefined ? NONE : value);
 const handedPython = (value) => (value === NONE ? undefined : value);
+// What the write half of a binding answers is nobody's, a coroutine's result
+// too: Svelte calls the setter and reads nothing back. Converted for a reader,
+// a generator it answered was walked and its body run.
+const unread = () => undefined;
 
 //
 // `rendering` counts the template expressions running: whatever Python runs
@@ -2267,45 +2291,36 @@ const handedPython = (value) => (value === NONE ? undefined : value);
 // binding, `writes`, which an input event calls.
 let rendering = 0;
 
-//
-// Svelte alone calls one, so what it raises leaves Python there (`thrown`).
 export const pyExpression = (call, where, arity, kept = false, writes = false) =>
     identified(
-        (...args) => {
-            try {
-                return running(
-                    () => {
-                        const counted = writes ? 0 : 1;
+        (...args) =>
+            running(
+                () => {
+                    const counted = writes ? 0 : 1;
 
-                        rendering += counted;
-                        try {
-                            return call(args.slice(0, arity).map(pyBind));
-                        } finally {
-                            rendering -= counted;
-                        }
-                    },
-                    where,
-                    kept === true ? keptPython : kept === 'child' ? handedPython : (COMPARED[kept] ?? pyNumbers)
-                );
-            } catch (error) {
-                throw thrown(error);
-            }
-        },
+                    rendering += counted;
+                    try {
+                        return call(args.slice(0, arity).map(pyBind));
+                    } finally {
+                        rendering -= counted;
+                    }
+                },
+                where,
+                writes ? unread : kept === true ? keptPython : kept === 'child' ? handedPython : (COMPARED[kept] ?? pyNumbers)
+            ),
         nameOf(where),
         arity
     );
 
-// What an effect, a derived Svelte recomputes or a cleanup raises leaves
-// Python there, as a template expression's does: an ordinary `Error`, the
-// exception kept behind it for a Python reader (`thrown`). A derived Python
-// reads raises again what its body raised (`pyRead`), which an `except` takes.
-export const pyThrown = (error, where) => thrown(pyError(error, where));
-
+// What a derived Svelte recomputes raises leaves Python there, as a template
+// expression's does: an ordinary `Error` (`pyError`). A derived Python reads,
+// an accessor the engine calls, raises again what its body raised (`pyRead`),
+// which an `except` takes.
 export const pyDerive = (body, where) => () => {
     try {
         return body();
     } catch (error) {
-        throw pyThrown(error, where);
+        throw pyError(error, where);
     }
 };
 
@@ -2553,6 +2568,11 @@ export function directiveAnimate(node, rects, [where, head, ...value]) {
 // A class of the author's is an instance whatever it derives from: `class
 // Lease(list)` keeps its `update` and `destroy`, where it was taken for a list
 // and copied without them. A dict of any class stays its entries.
+//
+// Of the functions it holds, those whose answer Svelte does not read are
+// called as a cleanup is (`unreadCall`); `css` and `easing` answer Svelte.
+const UNREAD_MEMBERS = new Set(['update', 'destroy', 'tick']);
+
 function directiveResult(value, where) {
     const called = declared(value) !== null;
     const instance =
@@ -2579,7 +2599,9 @@ function directiveResult(value, where) {
 
                     if (found === MISSING || found === NONE) return undefined;
 
-                    return callable(found) ? pyHandler(found) : pyNumbers(found);
+                    if (!callable(found)) return pyNumbers(found);
+
+                    return UNREAD_MEMBERS.has(key) ? unreadCall(found) : pyHandler(found);
                 }
             },
             `${where} result`

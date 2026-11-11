@@ -91,6 +91,15 @@ export const loadEvent = ({ reads = [], ...options } = {}) => {
     return { ...one, url: tracked };
 };
 
+// The event of a **universal** `load()`, a `+page.py`'s, on the server and in
+// the browser alike: no request, and what every `load()`'s event carries
+// beside `fetch`, `parent`, `depends` and `untrack`.
+export const universalEvent = (options) => {
+    const { request, ...one } = requestEvent(options);
+
+    return { ...one, parent: async () => ({}), depends: () => {}, untrack: (read) => read(), data: null };
+};
+
 // The same event with a URL **from another JavaScript context**: an adapter, a
 // worker, a `vm` context or an iframe builds it with that context's own `URL`
 // constructor, so it answers everything a URL answers and `instanceof URL`

@@ -547,24 +547,26 @@ export function date(value, dateStyle, timeStyle, locale) {
     // belongs in the reader's zone.
     if (DAY_ONLY(written(value))) options.timeZone = 'UTC';
 
-    const language = written(locale);
-    let format;
+    return formatter('date', locale, (language) => new Intl.DateTimeFormat(language, options)).format(at);
+}
 
-    // Python's locale, `fr_FR`, is no language tag, and `Intl` refused it as
-    // `Incorrect locale information provided`.
+// The formatter `make` builds for the language `locale` writes. Python's locale,
+// `fr_FR`, is no language tag, and `Intl` refused it as `Incorrect locale
+// information provided`, said in the words of `Intl` and of no helper.
+const formatter = (helper, locale, make) => {
+    const language = written(locale);
+
     try {
-        format = new Intl.DateTimeFormat(typeof language === 'string' ? language : undefined, options);
+        return make(typeof language === 'string' ? language : undefined);
     } catch (error) {
         if (!(error instanceof RangeError)) throw error;
 
         throw refuse(
-            `date(): ${shown(language)} is not a language tag: write it as the web does, ` +
+            `${helper}(): ${shown(language)} is not a language tag: write it as the web does, ` +
                 `${shown(String(language).replaceAll('_', '-'))}`
         );
     }
-
-    return format.format(at);
-}
+};
 
 const UNITS = [
     ['year', 31536000], ['month', 2592000], ['week', 604800],
@@ -612,11 +614,7 @@ export function fromnow(value, locale) {
 
     ticking(Math.max(1, Math.min(rounding, leaving) * 1000));
 
-    const language = written(locale);
-
-    return new Intl.RelativeTimeFormat(typeof language === 'string' ? language : undefined, {
-        numeric: 'auto'
-    }).format(count, unit);
+    return formatter('fromnow', locale, (language) => new Intl.RelativeTimeFormat(language, { numeric: 'auto' })).format(count, unit);
 }
 
 // Django's `|slugify`. One rule, no option: normalise, lowercase, keep every

@@ -334,6 +334,9 @@ function walrusTarget(text) {
     let object = null;
     let key = null;
     let subscript = false;
+    // A call is a step of the object, `make(1).x := 1` as `box.n := 1`, and no
+    // target of its own: Python refuses `f() := 1` in its words.
+    let called = false;
 
     // The *last* step is the one being assigned; everything before it is the
     // object to assign into. `a.b.c := 1` writes `c` on `a.b`. Python lets
@@ -376,11 +379,22 @@ function walrusTarget(text) {
             key = comma || inner.startsWith('*') ? `(${sliced}${comma ? '' : ','})` : named ? `(${sliced})` : sliced;
             subscript = true;
             index = close + 1;
+            called = false;
+            continue;
+        } else if (text[index] === '(') {
+            const close = closingPair(text, index);
+            if (close === -1) return null;
+
+            index = close + 1;
+            called = true;
+            continue;
         } else break;
+
+        called = false;
     }
 
     const arrow = text.slice(index).match(WALRUS_ARROW);
-    if (!arrow) return null;
+    if (!arrow || called) return null;
 
     return {
         name: object === null ? found[1] : null,
@@ -2077,13 +2091,58 @@ function eachBlock(trimmed, declare, call, refuse, loop) {
     const body = head[1];
     const at = atTopLevel(body, (i) => /^\s+as\s+/.test(body.slice(i)));
 
-    // No `as`: nothing is declared, and there is no key to find either.
-    // Compiled before the scope opens, like the iterable below.
+    // No `as`: no row is named, and there is no key to find either. Compiled
+    // before the scope opens, like the iterable below. Svelte's index may
+    // still follow, `{#each items, i}`, a name after the last comma at the
+    // top level: read as a tuple to walk, it raised `NameError` at mount.
     if (at === -1) {
-        const iterable = call(body, '__seq', undefined, 'python');
+        let comma = -1;
 
-        declare([]);
-        return `${walked(loop.rows(), iterable, null)}{#each ${loop.rows()}()}`;
+        atTopLevel(body, (i) => {
+            if (body[i] === ',') comma = i;
+        });
+
+        // The index may carry a key, `{#each items, i (i)}`, which Svelte
+        // takes when it is the index itself, the block indexed as without one,
+        // and refuses otherwise: a key needs a row. Read as part of the index,
+        // it made the whole a tuple to walk, `i (i)` a call.
+        const after = comma === -1 ? '' : body.slice(comma + 1).trim();
+        const keyed = trailingKey(after);
+        const index = keyed ? keyed[0].trim() : after;
+        const indexed = DECLARED_NAME.test(index) && body.slice(0, comma).trim() !== '';
+        const walkedText = indexed ? body.slice(0, comma) : body;
+        const $B = globalThis.__BRYTHON__;
+
+        if (indexed && keyed) {
+            const key = targetTree(`(${keyed[1]}\n)`);
+
+            if (!(key instanceof $B.ast.Name && key.id === pythonName(index))) {
+                refuse(
+                    `\`{#each ${walkedText.trim()}, ${index} (${keyed[1].trim()})}\` keys a block that names no row, ` +
+                        `which Svelte refuses (\`each_key_without_as\`); name the row, ` +
+                        `\`{#each ${walkedText.trim()} as row, ${index} (${keyed[1].trim()})}\``
+                );
+            }
+        }
+
+        // Python's order, `{#each x in xs}`, tested membership and walked a
+        // boolean, which raised `NameError` for `x` at mount.
+        const test = targetTree(`(${walkedText}\n)`);
+
+        if (test instanceof $B.ast.Compare && test.ops.length === 1 && test.ops[0] instanceof $B.ast.In) {
+            const at = atTopLevel(walkedText, (i) => /^\s+in\s+/.test(walkedText.slice(i)));
+
+            if (at !== -1) {
+                const [row, rows] = [walkedText.slice(0, at).trim(), walkedText.slice(at).replace(/^\s+in\s+/, '').trim()];
+
+                refuse(`\`{#each ${row} in ${rows}}\` is Python's \`for\` order; Svelte's block is written \`{#each ${rows} as ${row}}\``);
+            }
+        }
+
+        const iterable = call(walkedText, '__seq', undefined, 'python');
+
+        declare(indexed ? [index] : []);
+        return `${walked(loop.rows(), iterable, null)}{#each ${loop.rows()}()${indexed ? `, ${index}` : ''}}`;
     }
 
     const named = body.slice(at).replace(/^\s+as\s+/, '');
@@ -2377,6 +2436,30 @@ function declaration(inner) {
     }
 
     return null;
+}
+
+// An argument a call names, `b=2`, and not a comparison, `b == 2`.
+const KEYWORD_ARGUMENT = new RegExp(`^\\s*${NAME}\\s*=(?!=)`, 'u');
+
+// An assignment that is no declaration of the template, `{a, b = 1, 2}`,
+// `{a: int = 1}`, `{a = b = 1}`, `{a += 1}`: Python's statement, compiled as an
+// expression, was refused in the words of a text nobody wrote, `(a, b = 1, 2)`.
+// A declaration is one name and one expression.
+function misdeclared(inner) {
+    const $B = globalThis.__BRYTHON__;
+    let one;
+
+    try {
+        const { body } = $B._PyPegen.run_parser(new $B.Parser(`${inner}\n`, '<template>', 'file'));
+
+        one = body.length === 1 ? body[0] : null;
+    } catch {
+        return false;
+    }
+
+    if (one instanceof $B.ast.Assign) return one.targets.length !== 1 || !(one.targets[0] instanceof $B.ast.Name);
+
+    return one instanceof $B.ast.AnnAssign || one instanceof $B.ast.AugAssign;
 }
 
 // JavaScript's declaration keywords, which Svelte 5 takes inside a block:
@@ -3239,8 +3322,11 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     // A binding writes back to what it binds, and a call, a literal or an
     // operation takes no write: Brython refused the setter written for it,
     // `(c.upper()) = __value`, in the words of code the author never wrote.
-    // Svelte's own rule, said in Python's: a name, an attribute or an item.
-    const WRITABLE = ['Name', 'Attribute', 'Subscript', 'Tuple', 'List', 'Starred'];
+    // Svelte's own rule, said in Python's: a name, an attribute or an item, or
+    // the pair of functions Svelte takes (`functionPair`). A tuple to unpack
+    // the value into is none of them: `(a, b) = __value` unpacked typed text
+    // into two names, two characters in silence and any other length raising.
+    const WRITABLE = ['Name', 'Attribute', 'Subscript'];
 
     const refuseUnwritable = (directive, expr) => {
         const node = targetTree(`(${expr}\n)`);
@@ -3250,9 +3336,24 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         throw refuse(
             new SyntaxError(
                 `svelthon — \`${directive}\` writes back to what it binds, and \`${expr.trim()}\` takes no write${said()}: ` +
-                    `bind a name, an attribute or an item.`
+                    `bind a name, an attribute or an item, or a getter and a setter, \`${directive}={get, put}\`.`
             )
         );
+    };
+
+    // Svelte's function binding, `bind:value={get, put}`, between parentheses
+    // or not: a pair, the read calling the first and the write the second,
+    // with the value. Each half as written, cut where the tree places it.
+    const functionPair = (expr) => {
+        const source = `(${expr}\n)`;
+        const node = targetTree(source);
+
+        if (!(node instanceof globalThis.__BRYTHON__.ast.Tuple) || node.elts.length !== 2) return null;
+
+        const lines = source.split('\n');
+        const offset = (line, column) => lines.slice(0, line - 1).reduce((sum, one) => sum + one.length + 1, 0) + column;
+
+        return node.elts.map((one) => source.slice(offset(one.lineno, one.col_offset), offset(one.end_lineno, one.end_col_offset)));
     };
 
     const spreadSelect = (directive, expr) => {
@@ -3266,27 +3367,57 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         return { action: `use:__pybridge.selectShape={[${key}]}`, key, read: `__select_${tag.select}` };
     };
 
+    // The two halves of a function binding are evaluated once, where the
+    // binding is made, as Svelte evaluates them, and the read and the write
+    // call the functions they gave, handed in as they are (`__get`, `__put`):
+    // `make_put()` evaluated by every write made a new setter per keystroke,
+    // and a count its closure kept started over.
+    const heldRead = (wrapper, kind) => {
+        const at = position();
+
+        return `${collect('__get()', wrapper, ['__get'], false, at?.line, kind, at?.column)}(__get)`;
+    };
+
+    const heldWrite = (crossing) => {
+        const at = position();
+
+        return `${collect('__put', '', ['__put'], 'call', at?.line, '', at?.column)}(${crossing}(${BOUND_VALUE}), __put)`;
+    };
+
     const boundPair = (directive, expr) => {
-        refuseUnwritable(directive, expr);
+        const pair = functionPair(expr);
+
+        if (pair === null) refuseUnwritable(directive, expr);
+
+        // What the binding reads, and how it writes what crosses back.
+        const reading = (wrapper, kind) => (pair === null ? call(expr, wrapper, undefined, kind) : heldRead(wrapper, kind));
+        const written = (crossing) =>
+            pair !== null ? heldWrite(crossing) : declaredHere(expr) ? declaredWrite(expr, crossing) : assign(expr, crossing);
+        const getter = (text) => (pair === null ? text : `((__get) => ${text})(${call(pair[0], '', undefined, 'python')})`);
+        const setter = (write) => {
+            const text = `(${BOUND_VALUE}) => ${write}`;
+
+            return pair === null ? text : `((__put) => ${text})(${call(pair[1], '', undefined, 'python')})`;
+        };
 
         const shaped = spreadSelect(directive, expr);
 
         if (shaped !== null) {
             const crossing = `__pybridge.selectWrite(${shaped.key})`;
-            const write = declaredHere(expr) ? declaredWrite(expr, crossing) : assign(expr, crossing);
-            const value = call(expr, '__bound', undefined, 'python');
+            const write = written(crossing);
+            const value = reading('__bound', 'python');
 
             return (
-                `function ${shaped.read}() { return __pybridge.selectRead(${value}, ${shaped.key}, ${shaped.read}); }, ` +
-                `(${BOUND_VALUE}) => ${write}`
+                `${getter(`function ${shaped.read}() { return __pybridge.selectRead(${value}, ${shaped.key}, ${shaped.read}); }`)}, ` +
+                setter(write)
             );
         }
 
         const multiple = directive === 'bind:value' && tag?.name === 'select' && tagNames(markup, tag.start).has('multiple');
         const crossing = multiple ? SELECTED_VALUE : BIND_VALUE;
-        const write = declaredHere(expr) ? declaredWrite(expr, crossing) : assign(expr, crossing);
+        const write = written(crossing);
         if (heldChild() !== null) {
-            return `() => ${forChild(call(expr, '__bound', undefined, 'child'), 'scalar')}, (${BOUND_VALUE}) => ${write}`;
+            return `${getter(`() => ${forChild(reading('__bound', 'child'), 'scalar')}`)}, ${setter(write)}`;
         }
 
         // A binding Svelte reads for truth, on an element: the Python value,
@@ -3297,11 +3428,11 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         // An element's read crosses a derived of its own (`boundRead`): a
         // value that has not changed hands the element nothing.
         if (onElement(tag) && truthBinding(directive.slice('bind:'.length))) {
-            return `__pybridge.boundRead(() => __pybridge.boundTruth(${call(expr, '', undefined, 'python')})), (${BOUND_VALUE}) => ${write}`;
+            return `${getter(`__pybridge.boundRead(() => __pybridge.boundTruth(${reading('', 'python')}))`)}, ${setter(write)}`;
         }
 
         const read = multiple ? 'selection' : toPythonChild() ? 'child' : 'scalar';
-        const reader = `() => ${call(expr, '__bound', undefined, read)}`;
+        const reader = `() => ${reading('__bound', read)}`;
 
         // And so does what `<svelte:window>` and `<svelte:document>` bind: a
         // window scrolled on one axis had its other axis set back to the value
@@ -3312,7 +3443,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         // `bind:this={row.ref}` in an `{#each}` raised as the component mounted.
         const derived = tag !== null && !isComponent(tag) && directive !== 'bind:this';
 
-        return `${derived ? `__pybridge.boundRead(${reader})` : reader}, (${BOUND_VALUE}) => ${write}`;
+        return `${getter(derived ? `__pybridge.boundRead(${reader})` : reader)}, ${setter(write)}`;
     };
 
     // Whether the tag being read is a child written in Python, which is handed
@@ -4538,6 +4669,20 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                     return callsAnything(one) ? read : `({ get value() { return ${read}; } }).value`;
                 };
 
+                // Svelte hands a snippet its arguments by position, and
+                // `row(1, b=2)`, the call a `def row(a, b=1)` takes, was
+                // compiled as the expression `(b=2)`, a syntax error.
+                const keyword = found === null ? undefined : arguments_(found.args).find((one) => KEYWORD_ARGUMENT.test(one));
+
+                if (keyword !== undefined) {
+                    throw refuse(
+                        new SyntaxError(
+                            `svelthon — \`${keyword.trim()}\` names its argument${said()}: Svelte hands a snippet ` +
+                                `its arguments by position, so each goes in its parameter's place.`
+                        )
+                    );
+                }
+
                 out += found === null
                     ? markup.slice(index, end + 1)
                     : `{@render ${rendered}(${arguments_(found.args).map(given).join(', ')})}`;
@@ -4658,6 +4803,16 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
             if (DECLARATION_KEYWORD.test(trimmed)) throw refuse(declarationKeyword(trimmed, said()));
 
             const declared = declaration(inner);
+
+            if (misdeclared(inner)) {
+                throw refuse(
+                    new SyntaxError(
+                        `svelthon — \`{${trimmed}}\` is an assignment the template does not take${said()}: ` +
+                            `a declaration binds one name to one expression, \`{name = expression}\`, ` +
+                            `one per name, and a change to a name is a handler's.`
+                    )
+                );
+            }
 
             if (declared) {
                 // Compiled before the name it declares enters scope: a
@@ -4868,7 +5023,13 @@ export function collector(defs, lines, columns) {
         lines?.push(line);
         columns?.push(column);
 
-        if (assign) {
+        if (assign === 'call') {
+            // The write half of a function binding, `bind:value={get, put}`:
+            // the value handed to the function, as Svelte hands it, and what
+            // it answers handed back, where a coroutine is started as a
+            // handler's is: an `async def put` was called and never ran.
+            defs.push(`def ${name}(${[BOUND_VALUE, ...args].join(', ')}):\n    return (${expression})(${BOUND_VALUE})`);
+        } else if (assign) {
             // A module name assigned inside a function is local unless declared
             // by Python's rule, and the binding would otherwise write into a
             // frame nobody reads. A block's own name is already a parameter.

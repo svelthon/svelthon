@@ -83,13 +83,19 @@ describe('a rune written below the top level', () => {
         ['inspect sharing its line with a call', 'count = 0\ninspect(count); print(count)\n', /`inspect\(…\)` is read as a statement on lines of its own.*:2\)/],
         // Brython said `invalid syntax` of these, and no more.
         ['a derived sharing its line', 'count = 0\ntwice => count * 2; other = 3\n', /a derived written with `=>` is a statement on a line of its own; sharing one, the `;`.*:2\)/],
-        ['an effect sharing its line', 'count = 0\n=> print(count); other = 3\n', /an? effect written with `=>` is a statement on a line of its own.*:2\)/],
+        ['an effect sharing its line', 'count = 0\n=> print(count); other = 3\n', /an effect written with `=>` is a statement on a line of its own.*:2\)/],
         ['annotated and assigned inspect', 'count = 0\nwatch: object = inspect(count)\n', /`inspect\(…\)` is a statement of its own.*:2\)/],
         ['an annotated derived handed a value', 'count = 0\ntwice: int = derived(count * 2)\n', /`derived\(…\)` takes a function.*:2\)/],
         ['a derived handed a value', 'count = 0\ntwice = derived(count * 2)\n', /`derived\(…\)` takes a function.*`name => expression`.*:2\)/],
         ['an effect handed a value', 'count = 0\nrun = effect(count + 1)\n', /`effect\(…\)` takes a function.*`=> expression`/]
     ])('and a marker is refused %s', ([, body, message]) => {
         expect(script(body)).toThrow(message);
+    });
+
+    // A `;` that ends the line ends the statement, as Python reads `b = a * 2;`:
+    // Brython said `invalid syntax` of the lambda that held it, and no more.
+    test.for([['a derived', 'twice => count * 2'], ['an effect', '=> print(count)']])('while %s ending in a `;` is the same', ([, line]) => {
+        expect(script(`count = 0\n${line};\n`)).not.toThrow();
     });
 
     // A JavaScript function imported under a rune's name is the author's, in
