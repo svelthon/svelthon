@@ -500,9 +500,9 @@ when it imports a `.py` store: its `{value}` is Svelte's `{value}`, and a Python
 list renders as JavaScript renders it. Nothing is injected behind an author's
 back, exactly as TypeScript does not leak into a `.js` file.
 
-It costs **1.3× to 1.7× on rendering** against a JavaScript component (`npm run
-bench`, the spread being what a modest laptop measures from one day to the next):
-one Python call per expression per render. That is the price of the template
+It costs **2.5× to 3× on rendering** against a JavaScript component (`npm run
+bench`, see [What it costs at runtime](#what-it-costs-at-runtime)): one Python
+call per expression per render. That is the price of the template
 being Python.
 
 ### The whole dialect, in one table
@@ -1695,38 +1695,37 @@ The exact server output, hydration markers included, is asserted in
 
 ## What it costs at runtime
 
-Measured with `npm run bench`: the same component written twice, once in Python
-and once in JavaScript, driven through real clicks in a headless Chromium. Click
-dispatch costs the same on both sides, so the gap between the columns belongs to
-the handler. Seven alternating rounds, the minimum kept: the least polluted
-measurement, not the average of the machine's interruptions.
+Measured with `npm run bench` on a 32-core desktop: the same component written
+twice, once in Python and once in JavaScript, driven through real clicks in a
+headless Chromium. Click dispatch costs the same on both sides, so the gap
+between the columns belongs to the handler. Seven alternating rounds, the
+minimum kept: the least polluted measurement, not the average of the machine's
+interruptions.
 
 | | Python | JS | gap |
 |---|---:|---:|---:|
-| warm mount | 0.3 ms | 0.2 ms | ~1.5× |
-| 2000 handler calls | 28 ms | 18 ms | **~1.5×** |
-| 1500 × sum of 500 squares | 1128 ms | 15 ms | **50–100×** |
-| rendering a 500-row keyed list | 5.0 ms | 8.0 ms | **0.6×** |
+| warm mount | 0.3 ms | 0.1 ms | ~3× |
+| 2000 handler calls | 4.5 ms | 3.9 ms | **~1.2×** |
+| 1500 × sum of 500 squares | 410 ms | 2.9 ms | **135–145×** |
+| rendering a 500-row list | 3.8 ms | 1.4 ms | **2.5–3×** |
 
 Three things to take from it.
 
-**Calling into Python is cheap**, about 1.5× a JS handler. Frames and
+**Calling into Python is cheap**, about 1.2× a JS handler. Frames and
 `augm_assign` cost something, but nothing that a click will ever notice.
 
-**Python computation is one to two orders of magnitude slower.** The ratio swings
-between 50× and 100× across runs, which is the honest range on a modest laptop.
-Keep hot loops out of a component, or reach for the C extensions
+**Python computation is two orders of magnitude slower**, 135× to 145× across
+runs. Keep hot loops out of a component, or reach for the C extensions
 [Wasthon](https://github.com/fgallaire/wasthon) compiles to WebAssembly.
 
-**Rendering is not slower, it is faster.** Consistently, across every run. Svelte
-deep-proxies the objects inside a `$state` array; Svelthon's names are
-`$state.raw`, so Python values are never proxied. The reactivity design pays for
-itself exactly where a real application spends its time.
+**Rendering costs 2.5× to 3×**: one Python call per expression per row, where
+Svelte reads a JavaScript value. Under 4 ms for 500 rows, which a page does
+not feel.
 
-Loading is the real price: **1.2 s to interactive** for the production demo on
-this laptop, against 0.5 s for the same page without Brython: 275 KB gzip
-instead of 13 KB. Paid once per session, not per page, since the app never
-reloads.
+Loading is the other price: 275 KB gzip, the Brython runtime included, and
+**0.12 s to the demo's content** in production with a cold cache, 0.33 s with
+the processor slowed four times, as a modest laptop's is. Paid once per
+session, not per page, since the app never reloads.
 
 ## Not done yet
 

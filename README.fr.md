@@ -514,9 +514,9 @@ s'il importe un store `.py` : son `{valeur}` est le `{valeur}` de Svelte, et une
 liste Python s'y rend comme JavaScript la rend. Rien n'est injecté dans le dos de
 l'auteur, exactement comme TypeScript ne fuit pas dans un fichier `.js`.
 
-Ça coûte **1,3× à 1,7× sur le rendu** face à un composant JavaScript
-(`npm run bench` ; l'écart entre les deux est ce qu'un portable modeste mesure
-d'un jour à l'autre) : un appel Python par expression et par rendu. C'est le prix
+Ça coûte **2,5× à 3× sur le rendu** face à un composant JavaScript
+(`npm run bench`, voir [Ce que ça coûte à l'exécution](#ce-que-ça-coûte-à-lexécution)) :
+un appel Python par expression et par rendu. C'est le prix
 du gabarit en Python.
 
 ### Tout le dialecte, en un tableau
@@ -1750,40 +1750,37 @@ pour que les deux fichiers ne puissent pas diverger.
 
 ## Ce que ça coûte à l'exécution
 
-Mesuré par `npm run bench` : le même composant écrit deux fois, en Python et en
-JavaScript, actionné par de vrais clics dans un Chromium headless. Le dispatch
-d'un clic coûtant pareil des deux côtés, l'écart entre les colonnes revient au
-handler. Sept tours alternés, minimum retenu : la mesure la moins polluée, pas la
-moyenne des interruptions de la machine.
+Mesuré par `npm run bench` sur un poste de 32 cœurs : le même composant écrit
+deux fois, en Python et en JavaScript, actionné par de vrais clics dans un
+Chromium headless. Le dispatch d'un clic coûtant pareil des deux côtés, l'écart
+entre les colonnes revient au handler. Sept tours alternés, minimum retenu : la
+mesure la moins polluée, pas la moyenne des interruptions de la machine.
 
 | | Python | JS | écart |
 |---|---:|---:|---:|
-| montage à chaud | 0,3 ms | 0,2 ms | ~1,5× |
-| 2000 appels de handler | 28 ms | 18 ms | **~1,5×** |
-| 1500 × somme de 500 carrés | 1128 ms | 15 ms | **50 à 100×** |
-| rendu d'une liste à clé de 500 lignes | 5,0 ms | 8,0 ms | **0,6×** |
+| montage à chaud | 0,3 ms | 0,1 ms | ~3× |
+| 2000 appels de handler | 4,5 ms | 3,9 ms | **~1,2×** |
+| 1500 × somme de 500 carrés | 410 ms | 2,9 ms | **135 à 145×** |
+| rendu d'une liste de 500 lignes | 3,8 ms | 1,4 ms | **2,5 à 3×** |
 
 Trois enseignements.
 
-**Entrer dans Python coûte peu**, environ 1,5× un handler JS. Les frames et
+**Entrer dans Python coûte peu**, environ 1,2× un handler JS. Les frames et
 `augm_assign` se paient, mais rien qu'un clic puisse percevoir.
 
-**Le calcul Python est un à deux ordres de grandeur plus lent.** Le rapport
-oscille entre 50× et 100× selon les exécutions : c'est la fourchette honnête sur
-une machine modeste. Garder les boucles chaudes hors des composants, ou passer
-par les extensions C que [Wasthon](https://github.com/fgallaire/wasthon) compile
-en WebAssembly.
+**Le calcul Python est deux ordres de grandeur plus lent**, 135× à 145× selon
+les exécutions. Garder les boucles chaudes hors des composants, ou passer par
+les extensions C que [Wasthon](https://github.com/fgallaire/wasthon) compile en
+WebAssembly.
 
-**Le rendu n'est pas plus lent, il est plus rapide.** De façon constante, à
-chaque exécution. Svelte proxifie en profondeur les objets d'un tableau `$state` ;
-les noms de Svelthon sont des `$state.raw`, donc les valeurs Python ne sont jamais
-proxifiées. Le choix de conception de la réactivité se rembourse précisément là
-où une vraie application passe son temps.
+**Le rendu coûte 2,5× à 3×** : un appel Python par expression et par ligne, là
+où Svelte lit une valeur JavaScript. Moins de 4 ms pour 500 lignes, ce qu'une
+page ne ressent pas.
 
-Le vrai prix est au chargement : **1,2 s jusqu'à l'interactivité** pour la démo de
-production sur ce portable, contre 0,5 s pour la même page sans Brython : 275 Ko
-gzip au lieu de 13. Payé une fois par session, pas par page, puisque
-l'application ne recharge jamais.
+L'autre prix est au chargement : 275 Ko gzip, runtime Brython compris, et
+**0,12 s jusqu'au contenu de la démo** en production, cache vide ; 0,33 s avec
+le processeur ralenti quatre fois, comme celui d'un portable modeste. Payé une
+fois par session, pas par page, puisque l'application ne recharge jamais.
 
 ## Reste à faire
 
