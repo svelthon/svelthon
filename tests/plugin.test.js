@@ -671,6 +671,46 @@ describe('hot update invalidates the generated module too', () => {
                 expect(changed).toEqual([['change', at('Parent.svelte')]]);
             }));
 
+        // A child a parent holds rather than imports, `<Child …/>` of a prop, is
+        // told Python's or JavaScript's as the page runs, and Svelte's HMR keeps
+        // the component across an edit: a JavaScript child edited into Python
+        // was handed JavaScript's numbers until the page reloaded (SOL370). So
+        // a file that changes language reloads the page where such a parent is
+        // compiled, and one edited in its own language updates as before: one
+        // the page never loaded (SOL372), and one refused then repaired
+        // (FABLE6 L4).
+        test('a child changing language reloads the page where a parent holds one', () =>
+            inRoom(async ({ at, compiled }) => {
+                const sent = [];
+                const edited = (name, modules = [{ id: name }]) =>
+                    plugin.hotUpdate.call(
+                        { environment: { ...graph(), name: 'client', hot: { send: (message) => sent.push(message) } } },
+                        { file: at(name), modules }
+                    );
+
+                writeFileSync(at('Holder.svelte'), '<script lang="python">\nChild: object\n</script>\n<Child amount={1.5} />\n');
+                await compiled('Holder.svelte');
+                await compiled('Child.svelte');
+
+                writeFileSync(at('Child.svelte'), pythonChild.replace('x = 1', 'x = 2'));
+                expect(edited('Child.svelte')).toContainEqual({ id: 'Child.svelte' });
+                expect(sent).toEqual([]);
+
+                writeFileSync(at('Unused.svelte'), pythonChild.replace('x = 1', 'x = 2'));
+                edited('Unused.svelte', []);
+                expect(sent).toEqual([]);
+
+                writeFileSync(at('Child.svelte'), pythonChild.replace('x = 1', 'x = (1'));
+                await expect(compiled('Child.svelte')).rejects.toThrow();
+                writeFileSync(at('Child.svelte'), pythonChild.replace('x = 1', 'x = 3'));
+                expect(edited('Child.svelte')).toContainEqual({ id: 'Child.svelte' });
+                expect(sent).toEqual([]);
+
+                writeFileSync(at('Child.svelte'), javascriptChild);
+                expect(edited('Child.svelte')).toEqual([]);
+                expect(sent).toEqual([{ type: 'full-reload' }]);
+            }));
+
         // A dev server closed hands no change on: whatever compiles the parent
         // in the same process then, a build that watches or `preprocess()`,
         // takes each child for a dependency again.

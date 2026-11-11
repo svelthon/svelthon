@@ -1642,7 +1642,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 2 076 tests as written (vitest reports more, one per
+Validated by `npm test`, 2 077 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;

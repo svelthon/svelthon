@@ -534,6 +534,24 @@ const HOOKS = `import { __pybridge as __svelthon_hooks } from 'svelthon/bridge';
 // Whether a component's own file is written in Python.
 const pythonFile = (path) => pythonScript(readFileSync(path, 'utf8')) !== null;
 
+// Whether each component was last compiled as Python or as JavaScript, by a
+// pass that compiled it: what the page runs. A refused pass leaves the language
+// before it. On the global registry, as `COMPILED_FROM` is.
+const LAST_LANGUAGE = (globalThis[Symbol.for('svelthon.lastLanguage')] ??= new Map());
+
+// Whether an edit changed the language of a component the page runs. One never
+// compiled, as one the page never loaded, changed none (SOL372), and one
+// refused then repaired is in the language it was (FABLE6 L4).
+const relanguages = (file) => {
+    if (!LAST_LANGUAGE.has(file)) return false;
+
+    try {
+        return pythonFile(file) !== LAST_LANGUAGE.get(file);
+    } catch {
+        return false;
+    }
+};
+
 // What a component was last compiled from: its source, the language of each
 // child whose file it read, and what each module its script imports was found
 // as, the file the prelude evaluates and the refusal of one that is missing.
@@ -619,7 +637,11 @@ export function python(options = {}) {
             // when it is JavaScript, or refused.
             COMPILED_FROM.delete(filename);
 
-            if (declaring === null) return refuseStrayPython(content, filename, root);
+            if (declaring === null) {
+                refuseStrayPython(content, filename, root);
+                if (filename) LAST_LANGUAGE.set(filename, false);
+                return;
+            }
 
             refuseSpacedClose(declaring.closing, filename, root);
 
@@ -704,7 +726,9 @@ export function python(options = {}) {
                     })
             );
 
-            if (filename) COMPILED_FROM.set(filename, { content, children: languages });
+            // And whether it holds a child it does not import, which the page
+            // tells Python's or JavaScript's as it runs (`relanguaged`).
+            if (filename) COMPILED_FROM.set(filename, { content, children: languages, holding: code.includes('__pybridge.child(') });
 
             return {
                 code: inModuleScript(
@@ -775,6 +799,7 @@ export function python(options = {}) {
                 const names = [...new Set([...asked, ...imports])];
 
                 COMPILED_FROM.set(filename, { ...record, imports: { names, directory, searchPath, found: foundAs(names, directory, searchPath) } });
+                LAST_LANGUAGE.set(filename, true);
             }
 
             // `import counter_store` in a component resolves to a .py file, its
@@ -1452,8 +1477,21 @@ export function svelthon(options = {}) {
         // graph, and the numbers handed out again, so a save keeps its ids and
         // `generated` one body per variant in use. A `.py` keeps its one body
         // under its name.
+        //
+        // A child a Python parent holds rather than imports, `<Child …/>` of a
+        // prop, is told Python's or JavaScript's as the page runs, by the
+        // component it is (`__pybridge.child`), and Svelte's HMR keeps that
+        // component across an edit while running what the file now is. So a
+        // file that changes language reloads the page where such a parent is
+        // compiled, as one imported recompiles its parents (`relanguaged`): a
+        // JavaScript child edited into Python was handed JavaScript's numbers.
         hotUpdate({ file, modules, timestamp }) {
             const stale = forgotten(file, this.environment.moduleGraph, timestamp);
+
+            if (this.environment.name === 'client' && relanguages(file) && [...COMPILED_FROM].some(([source, one]) => one.holding && existsSync(source))) {
+                this.environment.hot.send({ type: 'full-reload' });
+                return [];
+            }
 
             return stale && [...modules, ...stale];
         }
