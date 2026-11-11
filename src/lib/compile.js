@@ -2852,17 +2852,19 @@ function compile(
     //
     // A hook is whatever the name holds once the script has run, however the
     // name was bound: a `def`, a value bound by `=`, `on_mount = lambda: …`, a
-    // prop, a name imported from JavaScript by the script or by the `<script
-    // module>`, where only the first two were asked and the others were never
-    // called. Read off the `def`'s own binding, or off the name's, or, for a
-    // name only a `from m import *` may bind, off the namespace, where it is
-    // undefined when the star brought none.
+    // derived, `on_destroy => cleanup`, a prop, a name imported from JavaScript
+    // by the script or by the `<script module>`, where only the first two were
+    // asked and the others were never called; and any other binding, a root
+    // under `@effect.root`, whose name holds its destructor, among them
+    // (`bound`). Read off the `def`'s own binding, or off the name's, or, for a
+    // name no JavaScript binding holds, off the namespace, where it is
+    // undefined when nothing bound it.
     const defined = (hook) => funcs.some((f) => f.name === hook);
     const holdsHook = (hook) =>
         state.includes(hook) ||
-        [...props, ...bindables].some((one) => (one.name ?? one) === hook) ||
+        [...props, ...bindables, ...deriveds].some((one) => (one.name ?? one) === hook) ||
         foreign.has(hook);
-    const lifecycle = (hook) => !store && (defined(hook) || holdsHook(hook) || starred);
+    const lifecycle = (hook) => !store && (defined(hook) || holdsHook(hook) || bound.includes(hook) || starred);
     const hook = (name) => (defined(name) ? fn(name) : holdsHook(name) ? name : `${NS}.${name}`);
 
     // A component free to define its own `publish` or `derived` keeps it.

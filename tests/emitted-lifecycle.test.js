@@ -5,6 +5,8 @@ import { mount, unmount, flushSync, settled } from './mounted.js';
 import AsyncLifecycle from './fixtures/AsyncLifecycle.svelte';
 import HooksImported from './fixtures/HooksImported.svelte';
 import HooksMixed from './fixtures/HooksMixed.svelte';
+import HooksDerived from './fixtures/HooksDerived.svelte';
+import HooksRoot from './fixtures/HooksRoot.svelte';
 import HooksProps from './fixtures/HooksProps.svelte';
 import HooksModule from './fixtures/HooksModule.svelte';
 import HooksNative from './fixtures/HooksNative.svelte';
@@ -39,7 +41,10 @@ test.for([
     ['imported', HooksImported, {}],
     ['one bound by =, one imported', HooksMixed, {}],
     ['handed as props', HooksProps, { on_mount, on_destroy }],
-    ['imported by the module script', HooksModule, {}]
+    ['imported by the module script', HooksModule, {}],
+    // A derived too, `on_mount => …` and `@derived`: the compiler did not ask
+    // it, and neither hook ran, the cleanup included (SOL368).
+    ['held by a derived', HooksDerived, {}]
 ])('a hook %s runs as Svelte’s does', ([, Component, props]) => {
     const run = (Component, props) => {
         events.length = 0;
@@ -57,6 +62,23 @@ test.for([
 
     expect(run(HooksNative, {})).toEqual([['mount'], ['mount', 'cleanup', 'destroy']]);
     expect(run(Component, props)).toEqual(run(HooksNative, {}));
+});
+
+// Any binding of the name, a root among them: `@effect.root` binds its name to
+// the destructor, which the component's end calls, as Svelte's
+// `onDestroy($effect.root(…))` does. The root outlived the component (SOL369).
+test('a root named on_destroy is stopped when the component goes', () => {
+    events.length = 0;
+
+    const target = document.body.appendChild(document.createElement('div'));
+    const instance = mount(HooksRoot, { target });
+    flushSync();
+
+    expect(events).toEqual(['start']);
+
+    unmount(instance);
+
+    expect(events).toEqual(['start', 'stop']);
 });
 
 // And a prop a parent does not pass is no hook: nothing runs, and nothing fails.

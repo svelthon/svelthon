@@ -7,6 +7,7 @@ import { test, expect } from 'vitest';
 import { render } from 'svelte/server';
 import HooksImported from './fixtures/HooksImported.svelte';
 import HooksMixed from './fixtures/HooksMixed.svelte';
+import HooksDerived from './fixtures/HooksDerived.svelte';
 import HooksProps from './fixtures/HooksProps.svelte';
 import HooksModule from './fixtures/HooksModule.svelte';
 import HooksNative from './fixtures/HooksNative.svelte';
@@ -24,7 +25,8 @@ test.for([
     ['imported', HooksImported, {}],
     ['one bound by =, one imported', HooksMixed, {}],
     ['handed as props', HooksProps, { on_mount, on_destroy }],
-    ['imported by the module script', HooksModule, {}]
+    ['imported by the module script', HooksModule, {}],
+    ['held by a derived', HooksDerived, {}]
 ])('a hook %s runs on a server as Svelte’s does', ([, Component, props]) => {
     expect(run(HooksNative, {})).toEqual(['destroy']);
     expect(run(Component, props)).toEqual(run(HooksNative, {}));
