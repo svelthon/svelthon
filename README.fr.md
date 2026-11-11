@@ -514,7 +514,7 @@ s'il importe un store `.py` : son `{valeur}` est le `{valeur}` de Svelte, et une
 liste Python s'y rend comme JavaScript la rend. Rien n'est injecté dans le dos de
 l'auteur, exactement comme TypeScript ne fuit pas dans un fichier `.js`.
 
-Ça coûte **2,5× à 3× sur le rendu** face à un composant JavaScript
+Ça coûte **2,1× à 2,3× sur le rendu** face à un composant JavaScript
 (`npm run bench`, voir [Ce que ça coûte à l'exécution](#ce-que-ça-coûte-à-lexécution)) :
 un appel Python par expression et par rendu. C'est le prix
 du gabarit en Python.
@@ -1675,7 +1675,7 @@ rangée d'un `test.for`), aucun échec attendu :
   contrôle et frames. Chaque valeur attendue a été produite par CPython 3.12 en
   exécutant le code du composant tel quel, jamais écrite à la main. Brython
   reproduit CPython sur **chaque point** ;
-- build de production : **275 Ko gzip**, runtime Brython compris : ce que la
+- build de production : **274 Ko gzip**, runtime Brython compris : ce que la
   page de démo charge, son script, les modules qu'elle précharge et ses styles,
   mesuré après chaque build par `scripts/build-size.mjs`.
 
@@ -1761,7 +1761,7 @@ mesure la moins polluée, pas la moyenne des interruptions de la machine.
 | montage à chaud | 0,3 ms | 0,1 ms | ~3× |
 | 2000 appels de handler | 4,5 ms | 3,9 ms | **~1,2×** |
 | 1500 × somme de 500 carrés | 410 ms | 2,9 ms | **135 à 145×** |
-| rendu d'une liste de 500 lignes | 3,8 ms | 1,4 ms | **2,5 à 3×** |
+| rendu d'une liste de 500 lignes | 3,1 ms | 1,4 ms | **2,1 à 2,3×** |
 
 Trois enseignements.
 
@@ -1773,11 +1773,11 @@ les exécutions. Garder les boucles chaudes hors des composants, ou passer par
 les extensions C que [Wasthon](https://github.com/fgallaire/wasthon) compile en
 WebAssembly.
 
-**Le rendu coûte 2,5× à 3×** : un appel Python par expression et par ligne, là
+**Le rendu coûte 2,1× à 2,3×** : un appel Python par expression et par ligne, là
 où Svelte lit une valeur JavaScript. Moins de 4 ms pour 500 lignes, ce qu'une
 page ne ressent pas.
 
-L'autre prix est au chargement : 275 Ko gzip, runtime Brython compris, et
+L'autre prix est au chargement : 274 Ko gzip, runtime Brython compris, et
 **0,12 s jusqu'au contenu de la démo** en production, cache vide ; 0,33 s avec
 le processeur ralenti quatre fois, comme celui d'un portable modeste. Payé une
 fois par session, pas par page, puisque l'application ne recharge jamais.

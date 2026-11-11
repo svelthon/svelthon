@@ -500,7 +500,7 @@ when it imports a `.py` store: its `{value}` is Svelte's `{value}`, and a Python
 list renders as JavaScript renders it. Nothing is injected behind an author's
 back, exactly as TypeScript does not leak into a `.js` file.
 
-It costs **2.5× to 3× on rendering** against a JavaScript component (`npm run
+It costs **2.1× to 2.3× on rendering** against a JavaScript component (`npm run
 bench`, see [What it costs at runtime](#what-it-costs-at-runtime)): one Python
 call per expression per render. That is the price of the template
 being Python.
@@ -1652,7 +1652,7 @@ row of a `test.for`), none expected to fail:
   Every expected value was produced by running the component's Python through
   CPython 3.12 as-is, never written by hand. Brython matches CPython on **every
   point**;
-- production build: **275 KB gzip**, Brython runtime included: what the demo
+- production build: **274 KB gzip**, Brython runtime included: what the demo
   page loads, its script, the modules it preloads and its styles, measured
   after each build by `scripts/build-size.mjs`.
 
@@ -1707,7 +1707,7 @@ interruptions.
 | warm mount | 0.3 ms | 0.1 ms | ~3× |
 | 2000 handler calls | 4.5 ms | 3.9 ms | **~1.2×** |
 | 1500 × sum of 500 squares | 410 ms | 2.9 ms | **135–145×** |
-| rendering a 500-row list | 3.8 ms | 1.4 ms | **2.5–3×** |
+| rendering a 500-row list | 3.1 ms | 1.4 ms | **2.1–2.3×** |
 
 Three things to take from it.
 
@@ -1718,11 +1718,11 @@ Three things to take from it.
 runs. Keep hot loops out of a component, or reach for the C extensions
 [Wasthon](https://github.com/fgallaire/wasthon) compiles to WebAssembly.
 
-**Rendering costs 2.5× to 3×**: one Python call per expression per row, where
+**Rendering costs 2.1× to 2.3×**: one Python call per expression per row, where
 Svelte reads a JavaScript value. Under 4 ms for 500 rows, which a page does
 not feel.
 
-Loading is the other price: 275 KB gzip, the Brython runtime included, and
+Loading is the other price: 274 KB gzip, the Brython runtime included, and
 **0.12 s to the demo's content** in production with a cold cache, 0.33 s with
 the processor slowed four times, as a modest laptop's is. Paid once per
 session, not per page, since the app never reloads.

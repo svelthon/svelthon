@@ -102,11 +102,14 @@ test('and a name the compiler stopped emitting turns this red', () => {
 const published = (compiler) => {
     const at = compiler.indexOf('function templateBridge(');
     const bridge = compiler.slice(at, compiler.indexOf('\n}', at));
+    const from = compiler.indexOf('const ADAPTERS = {');
+    const adapters = compiler.slice(from, compiler.indexOf('\n};', from));
 
     return [
         ...new Set([
-            // `bind(__proto, '__truthy', …)` and its seven neighbours.
-            ...[...compiler.matchAll(/bind\(__proto, '(__\w+)'/g)].map((one) => one[1]),
+            // `__truthy: '__pybridge.truthy'` and its neighbours, each bound
+            // in the namespace under its key.
+            ...[...adapters.matchAll(/^ {4}(__\w+): /gm)].map((one) => one[1]),
             // `const __event = …`, `const __group = group;`, which a directive
             // and a handler are given by name rather than through the namespace.
             ...[...bridge.matchAll(/const (__\w+) =/g)].map((one) => one[1])

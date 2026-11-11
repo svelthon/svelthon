@@ -57,6 +57,11 @@ They are bound onto the namespace prototype like the injected names, but
 **unguarded**: an author who shadowed one would silently take over every
 interpolation in their own markup.
 
+And a function reads one off the namespace, as it reads a name the script binds:
+Brycomp is told their names (`host.adapters`). A name nothing in the module binds
+is searched for at each read, through the function's own locals first, whose class
+Brython asks on the way: a fifth of the time of rendering 500 rows went there.
+
 ## The two that are not adapters
 
 `inTemplate` swaps `$B.$getattr_pep657` and `$B.$setattr1` for the length of one

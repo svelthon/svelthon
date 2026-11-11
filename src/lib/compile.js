@@ -672,6 +672,36 @@ const MODULE_INSTEAD = {
     time: '`js.Date.now()` reads the clock'
 };
 
+// What a component's namespace holds for the functions of its template to
+// call, each with the JavaScript that answers it. Not Python's own bool() and
+// str(): a template may hold a foreign JavaScript value, a DOM node from
+// bind:this, on which Brython's classifier trips. These fall back.
+const ADAPTERS = {
+    __truthy: '__pybridge.truthy',
+    __hidden: '__pybridge.hidden',
+    __text: '__pybridge.str',
+    __html: '__pybridge.html',
+    __seq: '__pybridge.seq',
+    __key: '__pybridge.key',
+    __class: '__pybridge.klass',
+    // A handler in a spread is adapted as one written by name.
+    __spreadElement: '(value) => __pybridge.spreadElement(value, __event)',
+    // And on a control a `bind:group` binds, its `value` as the group reads it.
+    __spreadChoice: '(value) => __pybridge.spreadElement(value, __event, true)',
+    // And on a custom element, whose properties take the values as they are.
+    __spreadCustom: '(value) => __pybridge.spreadElement(value, __event, false, true)',
+    __spread: '__pybridge.spread',
+    __spreadPython: '__pybridge.spreadPython',
+    __bound: '__pybridge.bound',
+    __assign: '__assign',
+    __getattr: '__getattr',
+    __rest: '__rest',
+    __unpack: '__unpack',
+    __setattr: '__setattr',
+    __setitem: '__setitem',
+    __slice: '__slice'
+};
+
 // What Bryc is told of the framework it compiles for, by the interface its
 // door writes out: the name its refusals are said under, the tool the author
 // ran; the module the generated code imports its runtime from; the names it
@@ -686,7 +716,8 @@ const MODULE_INSTEAD = {
 // runes, whose names no binding of the component may take: Svelte reads
 // `$state` as a store once `state` is bound, so a JavaScript import of one is
 // held under another variable (Bryc's), and a `def`'s wrapper too
-// (`wrapperName`).
+// (`wrapperName`); and the adapters of the template, which its functions then
+// read off the namespace, where a search at each call found them.
 const HOST = {
     name: 'svelthon',
     bridge: 'svelthon/bridge',
@@ -713,7 +744,8 @@ const HOST = {
     // A name of the `<script module>`, read off the getters the markup pass
     // lays down in that script's own scope (`MODULE_READERS`).
     moduleName: (name) => `${MODULE_READERS}[${JSON.stringify(name)}]`,
-    runes: ['state', 'derived', 'effect', 'props', 'bindable', 'inspect', 'host']
+    runes: ['state', 'derived', 'effect', 'props', 'bindable', 'inspect', 'host'],
+    adapters: Object.keys(ADAPTERS)
 };
 
 // The getters of the names the `<script module>` binds, which the markup pass
@@ -2216,36 +2248,8 @@ function injectedBindings(c) {
         ...injections(c, true),
         ...markerBindings(c),
 
-        // Wrappers for compiled template expressions. Not Python's own bool()
-        // and str(): a template may hold a foreign JavaScript value, a DOM node
-        // from bind:this, on which Brython's classifier trips. These fall back.
-        ...(c.store
-            ? []
-            : [
-                  `__bind(__proto, '__truthy', () => __pybridge.truthy);`,
-                  `__bind(__proto, '__hidden', () => __pybridge.hidden);`,
-                  `__bind(__proto, '__text', () => __pybridge.str);`,
-                  `__bind(__proto, '__html', () => __pybridge.html);`,
-                  `__bind(__proto, '__seq', () => __pybridge.seq);`,
-                  `__bind(__proto, '__key', () => __pybridge.key);`,
-                  `__bind(__proto, '__class', () => __pybridge.klass);`,
-                  // A handler in a spread is adapted as one written by name.
-                  `__bind(__proto, '__spreadElement', () => (value) => __pybridge.spreadElement(value, __event));`,
-                  // And on a control a `bind:group` binds, its `value` as the group reads it.
-                  `__bind(__proto, '__spreadChoice', () => (value) => __pybridge.spreadElement(value, __event, true));`,
-                  // And on a custom element, whose properties take the values as they are.
-                  `__bind(__proto, '__spreadCustom', () => (value) => __pybridge.spreadElement(value, __event, false, true));`,
-                  `__bind(__proto, '__spread', () => __pybridge.spread);`,
-                  `__bind(__proto, '__spreadPython', () => __pybridge.spreadPython);`,
-                  `__bind(__proto, '__bound', () => __pybridge.bound);`,
-                  `__bind(__proto, '__assign', () => __assign);`,
-                  `__bind(__proto, '__getattr', () => __getattr);`,
-                  `__bind(__proto, '__rest', () => __rest);`,
-                  `__bind(__proto, '__unpack', () => __unpack);`,
-                  `__bind(__proto, '__setattr', () => __setattr);`,
-                  `__bind(__proto, '__setitem', () => __setitem);`,
-                  `__bind(__proto, '__slice', () => __slice);`
-              ]),
+        // The adapters compiled template expressions call (`ADAPTERS`).
+        ...(c.store ? [] : Object.entries(ADAPTERS).map(([name, answer]) => `__bind(__proto, '${name}', () => ${answer});`)),
         // The second argument is what the component imported in its
         // `<script module>`, published so Python can read it.
         ...jsNameBindings(HOST, c, c.jsNames)
