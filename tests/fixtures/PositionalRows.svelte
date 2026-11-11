@@ -32,3 +32,5 @@ async def later(value):
 {#await later(Pair())}{:then (((first, second)))}<output data-k="clause-grouped">{first}:{second}</output>{/await}
 {#each [counted()] as ((first, second))}<output data-k="each-grouped">{first}:{second}</output>{/each}
 {#each [counted()] as ((first), (second))}<output data-k="each-names-grouped">{first}:{second}</output>{/each}
+{#each ["ab"] as (first, second)}<output data-k="each-string">{first}:{second}</output>{/each}
+{#each [{"x": 1, "y": 2}] as (first, second)}<output data-k="each-dict">{first}:{second}</output>{/each}

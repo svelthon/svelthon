@@ -21,6 +21,8 @@ test('the server takes a row Python iterates apart by position', () => {
         'starred-1': '30:40',
         nested: '10:20',
         'each-grouped': '10:20',
-        'each-names-grouped': '10:20'
+        'each-names-grouped': '10:20',
+        'each-string': 'a:b',
+        'each-dict': 'x:y'
     });
 });

@@ -344,7 +344,7 @@ describe('the plugin resolves what Vite cannot', () => {
                 ['./real/shared.py', './alias/shared.py', './folder/shared.py'].map((one) => linked.resolveId(one, importer))
             ).toEqual([real, real, real]);
 
-            linked.configResolved({ root: dir, resolve: { preserveSymlinks: true } });
+            linked.configResolved({ root: dir, resolve: { preserveSymlinks: true }, plugins: [] });
             expect(linked.resolveId('./alias/shared.py', importer)).toBe(join(dir, 'alias', 'shared.py'));
         } finally {
             rmSync(dir, { recursive: true, force: true });
@@ -440,6 +440,25 @@ describe('the plugin resolves what Vite cannot', () => {
 // A prelude is prepended to a generated module, and a source map is a list of
 // segments per generated line. Text added at the top shifts every one of them,
 // so the prelude has to pay for its own lines — one `;` each.
+// SvelteKit's guard against a server module in the browser sees what reaches
+// its resolution and load first. Listed after Svelthon, which resolves and loads
+// what Python imports, it saw none of it, and a module of `src/lib/server/`
+// imported by a Python page was built into the client (AUDIT_FABLE5 K1).
+describe("the plugin comes after SvelteKit's guard", () => {
+    const resolved = (...names) => ({ root: '/', resolve: {}, plugins: names.map((name) => ({ name })) });
+
+    test('and refuses to come before it', () => {
+        expect(() => svelthon().configResolved(resolved('svelthon:modules', 'vite-plugin-sveltekit-guard'))).toThrow(
+            /list `sveltekit\(\)` before `svelthon\(\)`/
+        );
+    });
+
+    test('and takes its place after it, or where SvelteKit is not', () => {
+        expect(() => svelthon().configResolved(resolved('vite-plugin-sveltekit-guard', 'svelthon:modules'))).not.toThrow();
+        expect(() => svelthon().configResolved(resolved('svelthon:modules', 'vite-plugin-svelte'))).not.toThrow();
+    });
+});
+
 describe('withPrelude keeps the source map honest', () => {
     const map = { mappings: 'AAAA;AACA;AAEA' };
 
@@ -506,6 +525,29 @@ describe('the plugin loads a .py itself', () => {
 
     test('anything that is not a .py is left to Vite', () => {
         expect(plugin.load.call(context, resolve(fixtures, 'Groups.svelte'))).toBeUndefined();
+    });
+
+    // A route's `load()` is handed back as a plain object, by the module that
+    // binds it, and only where the module exports one: a route of actions
+    // alone warned at each build that `load` would always be undefined
+    // (AUDIT_FABLE5 K5).
+    test("a route module's load is wrapped where the module has one", () => {
+        const dir = mkdtempSync(join(tmpdir(), 'svelthon-route-'));
+        const route = (name, source) => {
+            mkdirSync(join(dir, name));
+            writeFileSync(join(dir, name, '+page.server.py'), source);
+            plugin.load.call(context, join(dir, name, '+page.server.py'));
+            return plugin.load.call(context, join(dir, name, '+page.server.py') + '?python');
+        };
+
+        try {
+            expect(route('loads', 'def load(event):\n    return {"n": 1}\n')).toContain('__export_load = __routeLoad(__value');
+            expect(route('acts', 'def submit(event):\n    return None\n\nactions = {"default": submit}\n__all__ = ["actions"]\n')).not.toContain(
+                '__export_load'
+            );
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
     });
 });
 

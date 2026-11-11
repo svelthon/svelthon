@@ -18,10 +18,9 @@ LOG=$(mktemp)
 status=0
 
 cleanup() {
-    pkill -f "node build/index.js" -P $$ 2>/dev/null
     [ -n "${SERVER:-}" ] && kill "$SERVER" 2>/dev/null
     [ -n "${DEV:-}" ] && kill "$DEV" 2>/dev/null
-    rm -f "$LOG"
+    rm -rf "$LOG" "$APP/src/routes/leak"
 }
 trap cleanup EXIT
 
@@ -134,6 +133,25 @@ if kill -0 "$DEV" 2>/dev/null; then
     answered /moved 303 /load
 else
     echo "✗ kit dev server — $(grep -m1 -E 'Error' "$LOG" || tail -1 "$LOG")"
+    status=1
+fi
+
+# A page whose Python imports a module of `src/lib/server/`: SvelteKit refuses
+# to build it, as it refuses a JavaScript one, when its guard comes before
+# Svelthon and sees what Python imports. After Svelthon it saw none of it, and
+# the secret was in the client's bundle.
+kill "$SERVER" "$DEV" 2>/dev/null
+SERVER= DEV=
+mkdir -p "$APP/src/routes/leak"
+cp "$APP/leak/+page.svelte" "$APP/src/routes/leak/+page.svelte"
+
+if (cd "$APP" && npx vite build --logLevel error) >"$LOG" 2>&1; then
+    echo "✗ kit leak — a page importing a server module was built"
+    status=1
+elif grep -q "Cannot import" "$LOG"; then
+    echo "✓ kit leak — a page importing a server module is refused"
+else
+    echo "✗ kit leak — refused for another reason: $(grep -m1 -E 'Error' "$LOG" || tail -1 "$LOG")"
     status=1
 fi
 

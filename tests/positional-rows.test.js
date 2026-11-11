@@ -36,6 +36,10 @@ test('a row Python iterates is taken apart by position, in an each, a keyed each
         // `(((a, b)))` is `(a, b)`, and `(a)` is `a` (SOL367).
         'clause-grouped': '10:20',
         'each-grouped': '10:20',
-        'each-names-grouped': '10:20'
+        'each-names-grouped': '10:20',
+        // A string by its characters and a dict by its keys, as Python
+        // unpacks them (AUDIT_FABLE5 K6).
+        'each-string': 'a:b',
+        'each-dict': 'x:y'
     });
 });

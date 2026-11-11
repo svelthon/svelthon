@@ -136,8 +136,10 @@ describe('a hook is the value its name holds', () => {
         expect(records).toEqual(['mount', 'cleanup', 'destroy']);
     });
 
+    // In Python's words and with the hook's name, where JavaScript said `fn is
+    // not a function` and named nothing (AUDIT_FABLE5 K6).
     test('a hook bound to None is called, and says so', () => {
-        expect(() => mounted(UnboundLifecycle, { mode: 'none' })).toThrow(TypeError);
+        expect(() => mounted(UnboundLifecycle, { mode: 'none' })).toThrow(/'NoneType' object is not callable \(on_mount\(\)/);
     });
 });
 

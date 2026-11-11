@@ -54,7 +54,6 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
     plugins: [
-        svelthon(),
         sveltekit({
             preprocess: [python({ path: ['src/lib'] })],
 
@@ -63,7 +62,8 @@ export default defineConfig({
 
             // et un module réactif se compile comme un `.svelte.ts`
             experimental: { compileModule: { extensions: ['.js', '.ts', '.py'] } }
-        })
+        }),
+        svelthon()
     ]
 });
 ```
@@ -587,7 +587,8 @@ Par position, un nom étoilé est celui de Python : `[first, *others]` fait
 d'`others` une liste, où que soit l'étoile, comme `first, *others = row`, et une
 ligne trop courte pour lui lève ce que lève Python. Sans étoile, les crochets
 gardent la lecture de Svelte, où une valeur peut manquer ou être de trop : c'est
-à cela que sert un défaut, `[first, second=0]`. `...` est l'Ellipsis de Python,
+à cela que sert un défaut, `[first, second=0]`. Les parenthèses, `(first,
+second)`, se lisent comme les crochets. `...` est l'Ellipsis de Python,
 à laquelle rien ne s'affecte : `...rest` est refusé.
 
 ## Composition
@@ -1330,7 +1331,6 @@ réglage est nécessaire, et c'est un réglage que SvelteKit prévoit pour ça :
 // vite.config.js : en SvelteKit 3, tout se configure d'ici
 export default defineConfig({
     plugins: [
-        svelthon(),
         sveltekit({
             preprocess: [python({ path: ['src/lib'] })],
 
@@ -1339,10 +1339,16 @@ export default defineConfig({
 
             // et un module réactif est compilé comme un `.svelte.ts`
             experimental: { compileModule: { extensions: ['.js', '.ts', '.py'] } }
-        })
+        }),
+        svelthon()
     ]
 });
 ```
+
+`svelthon()` vient **après** `sveltekit()` : la garde de SvelteKit, qui refuse
+un module de `src/lib/server/` ou un fichier `*.server.*` dans le code qui
+tourne au navigateur, ne voit que ce qui l'atteint en premier. Placé avant,
+Svelthon est refusé avec cette phrase.
 
 Le routeur voit alors les modules de route en `.py`. Ce qui marche, mesuré sur un
 build de production avec `adapter-node`, contre **SvelteKit 3** :
@@ -1464,9 +1470,14 @@ convertit un conteneur Python en quelque chose qu'une API Web acceptera :
 
 ```python
 def GET(event):
-    corps = js.JSON.stringify(to_js(chercher(event["query"].get("q", ""))))
+    corps = tojson(chercher(event["query"].get("q", "")))
     return js.Response.new(corps, to_js({"headers": {"content-type": "application/json"}}))
 ```
+
+Le corps est celui de `tojson()`, qui écrit `None` en `null`. `to_js()` fait de
+`None` l'`undefined` de JavaScript, comme toute traversée, et `JSON.stringify`
+omet une clé qui vaut `undefined`, comme le `json()` de SvelteKit :
+`{"email": None}` répondrait `{}`.
 
 ### La frontière convertit, dans les deux sens
 
@@ -1665,7 +1676,7 @@ parsing, que seul le compilateur charge ; le README de Bryntime en donne le poid
 
 ## État
 
-Validé par `npm test`, 2 077 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 2 080 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
@@ -1675,7 +1686,7 @@ rangée d'un `test.for`), aucun échec attendu :
   contrôle et frames. Chaque valeur attendue a été produite par CPython 3.12 en
   exécutant le code du composant tel quel, jamais écrite à la main. Brython
   reproduit CPython sur **chaque point** ;
-- build de production : **275 Ko gzip**, runtime Brython compris : ce que la
+- build de production : **261 Ko gzip**, runtime Brython compris : ce que la
   page de démo charge, son script, les modules qu'elle précharge et ses styles,
   mesuré après chaque build par `scripts/build-size.mjs`.
 
@@ -1777,7 +1788,7 @@ WebAssembly.
 où Svelte lit une valeur JavaScript. Moins de 4 ms pour 500 lignes, ce qu'une
 page ne ressent pas.
 
-L'autre prix est au chargement : 275 Ko gzip, runtime Brython compris, et
+L'autre prix est au chargement : 261 Ko gzip, runtime Brython compris, et
 **0,12 s jusqu'au contenu de la démo** en production, cache vide ; 0,33 s avec
 le processeur ralenti quatre fois, comme celui d'un portable modeste. Payé une
 fois par session, pas par page, puisque l'application ne recharge jamais.

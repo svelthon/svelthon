@@ -55,7 +55,6 @@ import { defineConfig } from 'vite';
 
 export default defineConfig({
     plugins: [
-        svelthon(),
         sveltekit({
             preprocess: [python({ path: ['src/lib'] })],
 
@@ -64,7 +63,8 @@ export default defineConfig({
 
             // and a reactive module is compiled like a `.svelte.ts`
             experimental: { compileModule: { extensions: ['.js', '.ts', '.py'] } }
-        })
+        }),
+        svelthon()
     ]
 });
 ```
@@ -570,7 +570,8 @@ By position, a starred name is Python's: `[first, *others]` makes `others` a
 list, wherever the star stands, as `first, *others = row` does, and a row too
 short for it raises what Python raises. Without a star, the brackets keep
 Svelte's reading, where a value may be missing or left over: that is what a
-default, `[first, second=0]`, is for. `...` is Python's Ellipsis, which nothing
+default, `[first, second=0]`, is for. Parentheses, `(first, second)`, read as
+the brackets do. `...` is Python's Ellipsis, which nothing
 is assigned to, so `...rest` is refused.
 
 ## Composition
@@ -1277,7 +1278,6 @@ is needed, and it is one SvelteKit already provides for exactly this:
 // vite.config.js, where SvelteKit 3 configures everything
 export default defineConfig({
     plugins: [
-        svelthon(),
         sveltekit({
             preprocess: [python({ path: ['src/lib'] })],
 
@@ -1286,10 +1286,16 @@ export default defineConfig({
 
             // and a reactive module is compiled like a `.svelte.ts`
             experimental: { compileModule: { extensions: ['.js', '.ts', '.py'] } }
-        })
+        }),
+        svelthon()
     ]
 });
 ```
+
+`svelthon()` comes **after** `sveltekit()`: SvelteKit's guard, which refuses a
+module of `src/lib/server/` or a `*.server.*` file in code that runs in the
+browser, only sees what reaches it first. Listed before, Svelthon is refused
+with that sentence.
 
 That makes the router see `.py` route modules. What then works, measured on a
 production build with `adapter-node`, against **SvelteKit 3**:
@@ -1406,9 +1412,14 @@ Python container into something a Web API will accept:
 
 ```python
 def GET(event):
-    corps = js.JSON.stringify(to_js(chercher(event["query"].get("q", ""))))
+    corps = tojson(chercher(event["query"].get("q", "")))
     return js.Response.new(corps, to_js({"headers": {"content-type": "application/json"}}))
 ```
+
+The body is `tojson()`'s, which writes `None` as `null`. `to_js()` makes `None`
+JavaScript's `undefined`, as every crossing does, and `JSON.stringify` drops
+a key whose value is `undefined`, as SvelteKit's `json()` does: `{"email":
+None}` would answer `{}`.
 
 ### The boundary converts, both ways
 
@@ -1642,7 +1653,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 2 077 tests as written (vitest reports more, one per
+Validated by `npm test`, 2 080 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;
@@ -1652,7 +1663,7 @@ row of a `test.for`), none expected to fail:
   Every expected value was produced by running the component's Python through
   CPython 3.12 as-is, never written by hand. Brython matches CPython on **every
   point**;
-- production build: **275 KB gzip**, Brython runtime included: what the demo
+- production build: **261 KB gzip**, Brython runtime included: what the demo
   page loads, its script, the modules it preloads and its styles, measured
   after each build by `scripts/build-size.mjs`.
 
@@ -1722,7 +1733,7 @@ runs. Keep hot loops out of a component, or reach for the C extensions
 Svelte reads a JavaScript value. Under 4 ms for 500 rows, which a page does
 not feel.
 
-Loading is the other price: 275 KB gzip, the Brython runtime included, and
+Loading is the other price: 261 KB gzip, the Brython runtime included, and
 **0.12 s to the demo's content** in production with a cold cache, 0.33 s with
 the processor slowed four times, as a modest laptop's is. Paid once per
 session, not per page, since the app never reloads.

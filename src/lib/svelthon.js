@@ -1411,9 +1411,26 @@ export function svelthon(options = {}) {
 
             return { ssr: { noExternal: ['svelthon'] }, optimizeDeps: scan };
         },
+        // SvelteKit refuses to build code that runs in the browser and imports a
+        // module of a `server/` directory, a `*.server.*` file or `$app/server`.
+        // Its guard sees what reaches its own resolution and load first: listed
+        // after this plugin, which resolves and loads what Python imports, it
+        // saw none of it, and a secret of `src/lib/server/` was built into the
+        // client's bundle without a word.
         configResolved(config) {
             routes = config.root;
             preserveSymlinks = config.resolve?.preserveSymlinks === true;
+
+            const names = config.plugins.map((one) => one.name);
+
+            if (names.indexOf('vite-plugin-sveltekit-guard') > names.indexOf('svelthon:modules')) {
+                throw new Error(
+                    'svelthon — list `sveltekit()` before `svelthon()` in `plugins`: SvelteKit\'s guard ' +
+                        'against a server module in the browser sees only what reaches it first, so ' +
+                        'after Svelthon it misses every module Python imports, a `src/lib/server/` one ' +
+                        'built into the client among them'
+                );
+            }
         },
         resolveId(specifier, importer) {
             // A component's import of itself is the module that imports it, as

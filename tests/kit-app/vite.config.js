@@ -12,7 +12,6 @@ const at = (path) => fileURLToPath(new URL(path, import.meta.url));
 
 export default defineConfig({
     plugins: [
-        svelthon(),
         sveltekit({
             preprocess: [python({ path: [at('./src/lib')] })],
             // What makes the router see `+page.server.py` and `.remote.py`.
@@ -25,7 +24,10 @@ export default defineConfig({
                 remoteFunctions: true
             },
             adapter: adapter()
-        })
+        }),
+        // After SvelteKit, whose guard against a server module in the browser
+        // sees only what reaches its own resolution and load first.
+        svelthon()
     ],
     resolve: {
         alias: {
