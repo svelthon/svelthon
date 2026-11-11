@@ -2,6 +2,7 @@ import { test, expect } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import GroupMarkupCell from './fixtures/GroupMarkupCell.svelte';
 import GroupMarkupCellNative from './fixtures/GroupMarkupCellNative.svelte';
+import GroupMarkupCellSpelled from './fixtures/GroupMarkupCellSpelled.svelte';
 
 // A `bind:group` whose target the markup declares, `{picked = []}`, writes that
 // cell, as Svelte's does, and each row of an `{#each}` is a cell of its own:
@@ -45,6 +46,28 @@ const steps = async (Component) => {
 
 test('a group bound to a cell the markup declares reads as Svelte reads it', async () => {
     expect(await steps(GroupMarkupCell)).toEqual(await steps(GroupMarkupCellNative));
+});
+
+// The cell is known by the name the binding writes, as Python reads it:
+// `(picked)`, `chosen # kept` and `field` for a declared `ﬁeld` each found no
+// cell, and the two blocks' groups, holding one list, were taken for one
+// (SOL366). Svelte's two `{let picked = $state.raw(shared)}` read `A / B`.
+test.for([0, 1, 2])('a group target spelled otherwise still writes its own cell (pair %i)', (pair) => {
+    const target = document.body.appendChild(document.createElement('div'));
+    mount(GroupMarkupCellSpelled, { target });
+    flushSync();
+
+    const blocks = [...target.querySelectorAll(`[data-pair="${pair}"]`)];
+    const read = () => blocks.map((block) => block.querySelector('p').textContent).join(' / ');
+    const seen = [read()];
+
+    for (const block of blocks) {
+        block.querySelector('input').click();
+        flushSync();
+        seen.push(read());
+    }
+
+    expect(seen).toEqual(['B / B', 'A / B', 'A / ']);
 });
 
 // The witness: each row writes its own cell, the row that started from the

@@ -917,9 +917,17 @@ const EACH_ROWS = '__rows_';
 
 // The names a `bind:group` writes as a whole, `bind:group={picked}` or the
 // shorthand `bind:group`, read off the markup before the walk: a declaration
-// comes before the binding that writes it, and has to know.
+// comes before the binding that writes it, and has to know. Read as Python
+// reads them, as the binding reads its target (`bareName`): `(picked)` and
+// `picked # chosen` write `picked`.
 const GROUPED = /\bbind:group(?:\s*=\s*["']?\{([^{}]*)\})?/gu;
-const groupedNames = (markup) => new Set([...markup.matchAll(GROUPED)].map(([, expr]) => (expr ?? 'group').trim()));
+const groupedNames = (markup) =>
+    new Set(
+        [...markup.matchAll(GROUPED)]
+            .map(([, expr]) => bareName(expr ?? 'group'))
+            .filter((name) => name !== null)
+            .map(pythonName)
+    );
 
 // The module namespace the compiler binds beside the template. Named here and
 // emitted there, like `GROUP_ACTION`: the two have to agree.
@@ -4862,7 +4870,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 // is read as it is held.
                 if (declared.rune !== 'state') computing([declared.name]);
 
-                if (declared.rune === 'state' && grouped.has(declared.name)) {
+                if (declared.rune === 'state' && grouped.has(pythonName(declared.name))) {
                     out += `{const ${CELL}${declared.name} = {}}`;
                     declare([], [`${CELL}${declared.name}`]);
                 }
