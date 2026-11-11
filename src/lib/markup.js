@@ -1456,6 +1456,13 @@ function parameterPattern(part, call, names, tuple, unpack) {
 
     if (close === trimmed.length - 1) {
         const parts = arguments_(trimmed.slice(1, close));
+
+        // Parentheses with no comma inside group, as Python reads them, and
+        // make no tuple: `((a, b))` is `(a, b)` and `(a)` is `a`.
+        if (tuple && trimmed[0] === '(' && parts.length === 1 && parts[0].trim() !== '') {
+            return `${lead}${parameterPattern(parts[0], call, names, tuple, unpack)}${tail}`;
+        }
+
         const positional = trimmed[0] === '[' || (tuple && trimmed[0] === '(');
 
         if (positional && parts.some((one) => one.trim().startsWith('*'))) {
@@ -4524,7 +4531,8 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 // the value is Python's own, as the block's names are read by
                 // Python: a coroutine is still handed over as a promise, and
                 // what it returns, a `Price` or the list itself, is not made
-                // JavaScript's on the way.
+                // JavaScript's on the way. A group in parentheses is a tuple,
+                // `then (n, s)`, as it is in an `{#each}` target.
                 const promise = call(awaited, '', undefined, 'python');
 
                 if (tail === null || !tail[2]?.trim()) {
@@ -4535,7 +4543,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                         push(names, generated);
                         computing(costly);
                     };
-                    const { pattern, consts } = destructured(tail[2], opening, call, false, refusePattern);
+                    const { pattern, consts } = destructured(tail[2], opening, call, true, refusePattern);
 
                     out += `{#await ${promise} ${tail[1]} ${pattern}}${consts}`;
                 }
@@ -4631,7 +4639,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
             if (elseIf) {
                 out += `{:else if ${condition}}`;
             } else if (clause !== null && ['then', 'catch'].includes(clause.name) && clause.rest.trim()) {
-                const { pattern, consts } = destructured(clause.rest, rebind, call, false, refusePattern);
+                const { pattern, consts } = destructured(clause.rest, rebind, call, true, refusePattern);
 
                 out += `{:${clause.name} ${pattern}}${consts}`;
             } else if (clause !== null && CLAUSES.includes(clause.name)) {

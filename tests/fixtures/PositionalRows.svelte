@@ -27,3 +27,8 @@ async def later(value):
 {#each [counted(), counted(30)] as [first, *rest], at (at)}<output data-k="starred-{at}">{first}:{rest[0]}</output>{/each}
 {#each [{"item": range(10, 21, 10)}] as {item: [first, second]}}<output data-k="nested">{first}:{second}</output>{/each}
 {#await later(Pair()) then [first, second]}<output data-k="then">{first}:{second}</output>{/await}
+{#await later(Pair()) then (first, second)}<output data-k="then-tuple">{first}:{second}</output>{/await}
+{#await later(Pair())}{:then (first, second)}<output data-k="clause-tuple">{first}:{second}</output>{/await}
+{#await later(Pair())}{:then (((first, second)))}<output data-k="clause-grouped">{first}:{second}</output>{/await}
+{#each [counted()] as ((first, second))}<output data-k="each-grouped">{first}:{second}</output>{/each}
+{#each [counted()] as ((first), (second))}<output data-k="each-names-grouped">{first}:{second}</output>{/each}

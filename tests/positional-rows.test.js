@@ -15,7 +15,7 @@ test('a row Python iterates is taken apart by position, in an each, a keyed each
 
     const read = () => Object.fromEntries([...target.querySelectorAll('output')].map((one) => [one.dataset.k, one.textContent]));
 
-    await settled(() => expect(read()).toHaveProperty('then'));
+    await settled(() => expect(read()).toHaveProperty('clause-grouped'));
 
     expect(read()).toEqual({
         'each-range': '10:20',
@@ -27,6 +27,15 @@ test('a row Python iterates is taken apart by position, in an each, a keyed each
         'starred-0': '10:20',
         'starred-1': '30:40',
         nested: '10:20',
-        then: '10:20'
+        then: '10:20',
+        // In parentheses too, as an `{#each}` takes them: Python's tuple,
+        // where Svelte refused the pattern in its own words.
+        'then-tuple': '10:20',
+        'clause-tuple': '10:20',
+        // And parentheses with no comma inside group, as Python reads them:
+        // `(((a, b)))` is `(a, b)`, and `(a)` is `a` (SOL367).
+        'clause-grouped': '10:20',
+        'each-grouped': '10:20',
+        'each-names-grouped': '10:20'
     });
 });
