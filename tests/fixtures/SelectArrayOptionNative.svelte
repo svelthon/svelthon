@@ -1,15 +1,16 @@
 <script>
     // The same selects in Svelte, None its `undefined`: the witness for
     // SelectArrayOption.
+    import { untrack } from 'svelte';
     import ArrayOptions from './ArrayOptions.svelte';
 
-    let { original, spread = true, child = false } = $props();
+    let { original, form = 'spread', child = false, held = 'none' } = $props();
 
-    let picked = $state.raw(undefined);
+    let picked = $state.raw(untrack(() => (held === 'array' ? original : undefined)));
     const attrs = { multiple: false };
 
     export function model() {
-        return [Array.isArray(picked) ? 'JavascriptArray' : typeof picked, picked === original];
+        return [Array.isArray(picked) ? 'JavascriptArray' : typeof picked, picked === original, picked === undefined];
     }
 </script>
 
@@ -22,8 +23,10 @@
     {/if}
 {/snippet}
 
-{#if spread}
+{#if form === 'spread'}
     <select {...attrs} bind:value={picked}>{@render options()}</select>
+{:else if form === 'after multiple'}
+    <select multiple {...attrs} bind:value={picked}>{@render options()}</select>
 {:else}
     <select bind:value={picked}>{@render options()}</select>
 {/if}

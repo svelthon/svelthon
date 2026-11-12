@@ -1280,20 +1280,23 @@ function valueEnd(markup, at) {
     return end < markup.length ? end : -1;
 }
 
-// The names of a tag's attributes, read from its start to its `>`, each value
-// skipped whole, so a name written inside one is not counted; and the
-// shorthand's, `{checked}`, which is `checked={checked}`, as the walk expands
-// it. Skipped with the values, `{checked}` beside `bind:group` was given a
-// second `checked`, which Svelte refused, and `{MULTIPLE}` made a select whose
-// choices came back no list.
-function tagNames(markup, from) {
-    let names = '';
+// The words of a tag's attributes in the order written, read from its start to
+// its `>`, each value skipped whole, so a name written inside one is not
+// counted: the names, the shorthand's, `{checked}`, which is
+// `checked={checked}`, as the walk expands it, and each spread, `{**attrs}`,
+// which may give it any attribute, as `SPREAD_WORD`. Skipped with the values,
+// `{checked}` beside `bind:group` was given a second `checked`, which Svelte
+// refused, and `{MULTIPLE}` made a select whose choices came back no list.
+const SPREAD_WORD = '{**}';
+
+function tagWords(markup, from) {
+    let words = '';
 
     for (let at = from; at < markup.length && markup[at] !== '>'; ) {
         const char = markup[at];
 
         if (char !== '"' && char !== "'" && char !== '{') {
-            names += char;
+            words += char;
             at += 1;
             continue;
         }
@@ -1302,34 +1305,35 @@ function tagNames(markup, from) {
 
         if (end === -1) break;
 
-        const shorthand = char === '{' && attributeStarts(markup, at) ? markup.slice(at + 1, end).trim() : '';
+        const inner = char === '{' && attributeStarts(markup, at) ? markup.slice(at + 1, end).trim() : '';
 
-        names += SHORTHAND_ATTRIBUTE.test(shorthand) ? ` ${shorthand} ` : ' ';
+        words += SHORTHAND_ATTRIBUTE.test(inner) ? ` ${inner} ` : SPREAD(inner) ? ` ${SPREAD_WORD} ` : ' ';
         at = end + 1;
     }
 
-    return new Set(names.match(new RegExp(`${ATTRIBUTE_CHAR}+`, 'g'))?.map((name) => name.toLowerCase()));
+    return words.match(new RegExp(`${ATTRIBUTE_CHAR}+|\\{\\*\\*\\}`, 'g'))?.map((word) => word.toLowerCase()) ?? [];
 }
 
-// Whether a tag holds a spread, `{**attrs}`, which may give it any attribute.
+function tagNames(markup, from) {
+    return new Set(tagWords(markup, from).filter((word) => word !== SPREAD_WORD));
+}
+
 function tagSpreads(markup, from) {
-    for (let at = from; at < markup.length && markup[at] !== '>'; ) {
-        const char = markup[at];
+    return tagWords(markup, from).includes(SPREAD_WORD);
+}
 
-        if (char !== '"' && char !== "'" && char !== '{') {
-            at += 1;
-            continue;
-        }
+// What makes a `<select>` multiple, as Svelte merges a tag's attributes, the
+// last written winning: its own `multiple` written after every spread
+// (`'multiple'`), a spread after it or without it, whose object may say either
+// and leaves it to the element (`'element'`), or neither (`'single'`). Taken
+// from the name alone, `multiple {**attrs}` was read as multiple while
+// `attrs` turned it off, and an option holding a list lost its selection.
+function selectMode(markup, from) {
+    const words = tagWords(markup, from);
+    const multiple = words.lastIndexOf('multiple');
+    const spread = words.lastIndexOf(SPREAD_WORD);
 
-        const end = valueEnd(markup, at);
-
-        if (end === -1) return false;
-        if (char === '{' && attributeStarts(markup, at) && SPREAD(markup.slice(at + 1, end).trim())) return true;
-
-        at = end + 1;
-    }
-
-    return false;
+    return multiple > spread ? 'multiple' : spread > multiple ? 'element' : 'single';
 }
 
 // The elements HTML closes by itself, which therefore open no body and no
@@ -3330,7 +3334,8 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     // scalar is made JavaScript's and a container kept as the object it is
     // (`scalar`), and the value of a `<select multiple>`, a list each of whose
     // items meets an option's `value`, is made so item by item (`selection`).
-    // `multiple` is read off the whole tag, Svelte requiring it static there.
+    // `multiple` is read off the whole tag, Svelte requiring it static there,
+    // as the last word on it (`selectMode`).
     //
     // What comes back is crossed the same way: the selection Svelte writes is
     // an array, a list in Python (`__pybridge.selected`).
@@ -3338,14 +3343,18 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     // A name the markup declared is read the same way, its cell holding the
     // Python value, and written by the setter itself, see `declaredHere`.
     //
-    // A `<select>` whose `multiple` a spread may give is read and written as
-    // Svelte reads it, by what the element is. The read asks `select.multiple`
-    // of the select an action registers, written before it (`spreadSelect`),
-    // under its place in the markup; the read is a function of its own per
-    // element, which claims its element the first time it runs, so two selects
-    // sharing a binding, the rows of an `{#each}` and the renders of a snippet
-    // each keep theirs. The write, which Svelte hands no element, is told by the
-    // options of the selects at that place (`selectWrite`).
+    // A `<select>` whose `multiple` a spread may give or take is read and
+    // written as Svelte reads it, by what the element is. The value is read as
+    // a value handed over is, None the `undefined` an option's None is, and
+    // made what the comparison wants once the element has said which. Read as
+    // Python's, None stayed None, and no option's matched it. The read asks
+    // `select.multiple` of the select an action registers, written before it
+    // (`spreadSelect`), under its place in the markup; the read is a function
+    // of its own per element, which claims its element the first time it runs,
+    // so two selects sharing a binding, the rows of an `{#each}` and the
+    // renders of a snippet each keep theirs. The write, which Svelte hands no
+    // element, is told by the options of the selects at that place
+    // (`selectWrite`).
     // A binding writes back to what it binds, and a call, a literal or an
     // operation takes no write: Brython refused the setter written for it,
     // `(c.upper()) = __value`, in the words of code the author never wrote.
@@ -3390,8 +3399,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     };
 
     const spreadSelect = (directive, expr) => {
-        if (directive !== 'bind:value' || tag?.name !== 'select' || tagNames(markup, tag.start).has('multiple')) return null;
-        if (!tagSpreads(markup, tag.start)) return null;
+        if (directive !== 'bind:value' || tag?.name !== 'select' || selectMode(markup, tag.start) !== 'element') return null;
 
         tag.select ??= selects++;
 
@@ -3438,7 +3446,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         if (shaped !== null) {
             const crossing = `__pybridge.selectWrite(${shaped.key})`;
             const write = written(crossing);
-            const value = reading('__bound', 'python');
+            const value = reading('__bound', 'child');
 
             return (
                 `${getter(`function ${shaped.read}() { return __pybridge.selectRead(${value}, ${shaped.key}, ${shaped.read}); }`)}, ` +
@@ -3446,7 +3454,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
             );
         }
 
-        const multiple = directive === 'bind:value' && tag?.name === 'select' && tagNames(markup, tag.start).has('multiple');
+        const multiple = directive === 'bind:value' && tag?.name === 'select' && selectMode(markup, tag.start) === 'multiple';
         const crossing = multiple ? SELECTED_VALUE : BIND_VALUE;
         const write = written(crossing);
         if (heldChild() !== null) {
