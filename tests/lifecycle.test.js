@@ -137,7 +137,7 @@ describe('a hook is the value its name holds', () => {
     });
 
     // In Python's words and with the hook's name, where JavaScript said `fn is
-    // not a function` and named nothing (AUDIT_FABLE5 K6).
+    // not a function` and named nothing.
     test('a hook bound to None is called, and says so', () => {
         expect(() => mounted(UnboundLifecycle, { mode: 'none' })).toThrow(/'NoneType' object is not callable \(on_mount\(\)/);
     });

@@ -21,7 +21,7 @@ test('a write of the body overrides the prop, and the annotation declares its de
 });
 
 // On the annotation's own line too: `text: str = " d "; text = text.strip()`
-// shares its line with the default, and was taken for it (SOL365).
+// shares its line with the default, and was taken for it.
 test('a write after a semicolon on the annotation line is the child own', () => {
     const target = document.body.appendChild(document.createElement('div'));
     let up = 'given';

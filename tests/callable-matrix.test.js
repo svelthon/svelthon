@@ -1,6 +1,6 @@
 // Shapes against positions, and the same contract asserted in every cell.
 //
-// *Recognising a callable* produced eight findings in fifteen audit passes, each
+// *Recognising a callable* produced eight defects found one after another, each
 // one a site that asked `typeof value === 'function'` where Python's answer is
 // wider: a bound method is an object, and so is an instance whose class defines
 // `__call__`. Each was repaired where it was found, and the next pass found the

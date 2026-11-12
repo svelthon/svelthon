@@ -1,7 +1,7 @@
 // A JavaScript value thrown through a Python frame comes out as it was thrown,
 // SvelteKit's `error()` and `redirect()` among them: through a `with` or an
 // `await` it kept the engine's `__traceback__`, six hundred kilobytes of engine
-// for whoever walks it, and gained a `message` (AUDIT_FABLE5 K2).
+// for whoever walks it, and gained a `message`.
 import { test, expect } from 'vitest';
 import { withed, awaited } from './fixtures/foreign_through.py';
 

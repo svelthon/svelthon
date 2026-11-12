@@ -3,7 +3,7 @@
 // transition. Svelte hands the same method the button, or nothing, which
 // breaks `onclick={field.focus}`, `onclick={history.back}` and a class's
 // `this.count += 1`; a handler that wants the element reads
-// `event.currentTarget`. Decided against SOL188 F1, which asked for Svelte's.
+// `event.currentTarget`.
 import { test, expect } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import JsMethodReceiver from './fixtures/JsMethodReceiver.svelte';

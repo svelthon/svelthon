@@ -1,7 +1,7 @@
 // @vitest-environment node
 //
 // The server half of `prop-body-writes.test.js`: a write after a semicolon on
-// a prop's annotation line is the child's own on a server as well (SOL365).
+// a prop's annotation line is the child's own on a server as well.
 import { test, expect } from 'vitest';
 import { render } from 'svelte/server';
 import PropSameLine from './fixtures/PropSameLine.svelte';

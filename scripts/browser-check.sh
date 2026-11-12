@@ -154,7 +154,7 @@ warm /src/probe.js /src/markup-probe.js /src/media-probe.js /src/scroll-probe.js
 # What a page reports in its `<pre>`, asked again while it says nothing: on a
 # loaded machine a first render can overrun its budget, as the demo's can
 # (below), and the markup page, which compiles in the browser, came back empty
-# once in two audits. A report that is there and wrong fails at once. Read from
+# once in two runs. A report that is there and wrong fails at once. Read from
 # the DOM Chromium dumps (`dumped`), or as the page runs (`live`), each attempt
 # with a profile of its own.
 report() {

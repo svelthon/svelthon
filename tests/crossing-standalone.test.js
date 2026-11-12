@@ -33,7 +33,9 @@ test('no file of Svelthon names a file of Bryntime', () => {
         ...readdirSync('scripts')
             .filter((file) => file.endsWith('.sh'))
             .map((file) => `scripts/${file}`),
-        ...readdirSync('.').filter((file) => file.endsWith('.md') && !file.startsWith('AUDIT'))
+        'README.md',
+        'README.fr.md',
+        ...JSON.parse(readFileSync('package.json', 'utf8')).files.filter((file) => file.endsWith('.md'))
     ];
     const named = files.flatMap((file) =>
         readFileSync(file, 'utf8')

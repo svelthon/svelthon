@@ -7,8 +7,8 @@
 // its body again on every click.
 //
 // The comment claiming `started` was the only place that starts a coroutine was
-// written with this site still open: two sites were active, and the audit read
-// the sentence before the code agreed with it.
+// written with this site still open: two sites were active, and the sentence
+// was believed before the code agreed with it.
 import { test, expect, describe } from 'vitest';
 import { mount, flushSync, settled } from './mounted.js';
 import SharedHandler from './fixtures/SharedHandler.svelte';

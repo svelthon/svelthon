@@ -32,7 +32,7 @@ x = 1
 const FILE = 'demo/App.svelte';
 
 // The prelude does not go into the code the hook returns: it goes into the
-// component's virtual module, which is where the audit read it. That map is on
+// component's virtual module, which is where it is read here. That map is on
 // the global on purpose, since the two halves may be two module instances.
 const generated = globalThis[Symbol.for('svelthon.generated')];
 
@@ -49,12 +49,12 @@ describe('a second configuration leaves the first alone', () => {
         expect(await compile(a)).toContain('shapes.py');
     });
 
-    // The reproduction, in the order the audit found it: A compiles, B is built
-    // and compiles nothing, A compiles the same content again.
+    // The order that failed: A compiles, B is built and compiles nothing, A
+    // compiles the same content again.
     // Not a byte comparison of the two passes: the virtual-module map is global
     // and accumulates across a file, so the comparison would measure the map
-    // rather than the resolution. What the audit demonstrated is the import
-    // disappearing, and that is what this asks.
+    // rather than the resolution. What failed is the import disappearing, and
+    // that is what this asks.
     test('and keeps resolving it after a second one is built', async () => {
         const a = python({ path: ['tests/fixtures'] });
 
@@ -65,8 +65,8 @@ describe('a second configuration leaves the first alone', () => {
         expect(await compile(a)).toContain('shapes.py');
     });
 
-    // The other order, which the audit asked for and which the old code passed
-    // by luck: B first, then A, then B again. B's path finds no `shapes`, so B
+    // The other order, which the old code passed by luck: B first, then A, then
+    // B again. B's path finds no `shapes`, so B
     // refuses the import.
     test('in either order', async () => {
         const b = python({ path: [] });

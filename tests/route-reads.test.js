@@ -70,7 +70,7 @@ test('a load() reading an optional param the route does not hold is told of it',
 // load(), awaited or not; anything else is SvelteKit's to judge. A copy made of
 // a thenable, or of another realm's promise, answered `{}`; and one awaited by
 // SvelteKit alone answered a dict's view it refused, a JavaScript helper's
-// thenable of what a Python callback made (SOL371).
+// thenable of what a Python callback made.
 class Thenable {
     then(resolve) {
         resolve({ answer: 42 });

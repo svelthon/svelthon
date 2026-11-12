@@ -14,9 +14,8 @@
 //
 // Asked of the MRO now, which begins at the class itself, so the exact type and
 // the subclass take one road. The same hole was measured the same day on `int`
-// and `str` subclasses, and they are here for that reason rather than because an
-// audit asked: a question answered for one builtin is answered for its
-// neighbours or it will be asked again.
+// and `str` subclasses, and they are here for that reason: a question answered
+// for one builtin is answered for its neighbours or it will be asked again.
 import { test, expect, describe } from 'vitest';
 import {
     price,

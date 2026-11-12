@@ -540,8 +540,8 @@ const pythonFile = (path) => pythonScript(readFileSync(path, 'utf8')) !== null;
 const LAST_LANGUAGE = (globalThis[Symbol.for('svelthon.lastLanguage')] ??= new Map());
 
 // Whether an edit changed the language of a component the page runs. One never
-// compiled, as one the page never loaded, changed none (SOL372), and one
-// refused then repaired is in the language it was (FABLE6 L4).
+// compiled, as one the page never loaded, changed none, and one refused then
+// repaired is in the language it was.
 const relanguages = (file) => {
     if (!LAST_LANGUAGE.has(file)) return false;
 

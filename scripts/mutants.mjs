@@ -12,7 +12,7 @@
 //
 // **It mutates a copy, never the tree it is run from.** It used to edit
 // `src/lib` in place and restore it after each mutant, and that tree is the one
-// other work happens in while a sweep runs for hours: an audit copying it, a
+// other work happens in while a sweep runs for hours: a probe copying it, a
 // commit staging it, a server serving it, each could take a mutant for the
 // source. And a sweep killed outright, which no handler survives, left its
 // mutant there for the next sweep to read as the original, restore after every

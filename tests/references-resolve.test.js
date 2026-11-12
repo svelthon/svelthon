@@ -49,9 +49,11 @@ const shipped = [
         .filter((one) => one.isFile())
         .map((one) => join('src/lib', relative(at('src/lib'), one.parentPath), one.name)),
     ...readdirSync(at('tests')).filter((one) => one.endsWith('.js')).map((one) => `tests/${one}`),
-    // The audits are working documents of a reading in progress, and they cite
-    // what they measured at the time on purpose.
-    ...readdirSync(at('.')).filter((one) => one.endsWith('.md') && !one.startsWith('AUDIT'))
+    // The documents a reader is handed: the README, in both languages, and
+    // those the package ships.
+    'README.md',
+    'README.fr.md',
+    ...JSON.parse(readFileSync(at('package.json'), 'utf8')).files.filter((one) => one.endsWith('.md'))
 ];
 
 const cited = shipped.flatMap((file) =>

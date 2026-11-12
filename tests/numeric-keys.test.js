@@ -36,7 +36,7 @@ describe('a dict indexed by number', () => {
         expect(read('numeric')).toBe('{1: [3]}');
     });
 
-    // The control the audit used: the same operation on a string key was
+    // The control: the same operation on a string key was
     // already right, which is what made the defect look like nothing at all.
     test('as a dict indexed by text already did', () => {
         const { read, click } = setup();

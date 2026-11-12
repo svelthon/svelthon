@@ -6,9 +6,9 @@
 // block.
 //
 // Each place asked the question its own way, by comparing spellings as written
-// at some and through Python's normalization at others, and two audits found a
-// place that read a declared name as absent. They are asked in one place now
-// (`scopeChain`), and these eight are the forms an audit found answered right.
+// at some and through Python's normalization at others, and twice a place read
+// a declared name as absent. They are asked in one place now (`scopeChain`), and
+// these eight are the forms it must answer right.
 //
 // The witness is CPython: `ﬁle = 3` then `file` is 3, `ｉ = 1` then `i` is 1.
 import { test, expect } from 'vitest';

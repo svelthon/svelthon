@@ -8,9 +8,8 @@ import QuotedDirective from './fixtures/QuotedDirective.svelte';
 // quoted one ran the text branch, which knows `__text` and nothing about
 // directives.
 //
-// Found by the sixteenth pass of the external audit, which is the fourth time it
-// has reported the same shape: a rule wired into one spelling of a construct and
-// not the other.
+// The fourth time of the same shape: a rule wired into one spelling of a
+// construct and not the other.
 describe('a quoted directive is the bare one', () => {
     const setup = () => {
         const target = document.body.appendChild(document.createElement('div'));

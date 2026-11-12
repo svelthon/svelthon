@@ -45,8 +45,8 @@ export default defineConfig({
         include: ['svelte', 'svelte/compiler', 'esm-env/browser', 'bryntime > bryvend', 'bryc > bryvend', 'bryc > bryvend/compiler']
     },
 
-    // The dev server watches the tree for the edits it reloads, and an audit
-    // archives thousands of files under `tests/scratch`, which no page serves:
+    // The dev server watches the tree for the edits it reloads, and probes
+    // archive thousands of files under `tests/scratch`, which no page serves:
     // watched, they ran the system out of file watchers (`ENOSPC`) and the
     // server died before the first edit.
     //

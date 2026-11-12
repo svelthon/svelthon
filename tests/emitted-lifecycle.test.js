@@ -43,7 +43,7 @@ test.for([
     ['handed as props', HooksProps, { on_mount, on_destroy }],
     ['imported by the module script', HooksModule, {}],
     // A derived too, `on_mount => …` and `@derived`: the compiler did not ask
-    // it, and neither hook ran, the cleanup included (SOL368).
+    // it, and neither hook ran, the cleanup included.
     ['held by a derived', HooksDerived, {}]
 ])('a hook %s runs as Svelte’s does', ([, Component, props]) => {
     const run = (Component, props) => {
@@ -66,7 +66,7 @@ test.for([
 
 // Any binding of the name, a root among them: `@effect.root` binds its name to
 // the destructor, which the component's end calls, as Svelte's
-// `onDestroy($effect.root(…))` does. The root outlived the component (SOL369).
+// `onDestroy($effect.root(…))` does. The root outlived the component.
 test('a root named on_destroy is stopped when the component goes', () => {
     events.length = 0;
 

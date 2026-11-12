@@ -33,12 +33,12 @@ test('a row Python iterates is taken apart by position, in an each, a keyed each
         'then-tuple': '10:20',
         'clause-tuple': '10:20',
         // And parentheses with no comma inside group, as Python reads them:
-        // `(((a, b)))` is `(a, b)`, and `(a)` is `a` (SOL367).
+        // `(((a, b)))` is `(a, b)`, and `(a)` is `a`.
         'clause-grouped': '10:20',
         'each-grouped': '10:20',
         'each-names-grouped': '10:20',
         // A string by its characters and a dict by its keys, as Python
-        // unpacks them (AUDIT_FABLE5 K6).
+        // unpacks them.
         'each-string': 'a:b',
         'each-dict': 'x:y'
     });

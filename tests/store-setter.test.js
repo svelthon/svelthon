@@ -6,8 +6,8 @@
 //
 // The parameter was still named `v` while the body had moved to `__next`, so
 // every published setter of every store answered `ReferenceError: __next is not
-// defined` and the assignment did nothing. Found from the outside, by an audit
-// that wrote to the store instead of calling it.
+// defined` and the assignment did nothing. Found from the outside, by writing
+// to the store instead of calling it.
 import { test, expect, describe } from 'vitest';
 
 describe('a store written from JavaScript', () => {

@@ -2,8 +2,7 @@
 // other test files each defend a feature; this one asks the flat question the
 // project's goal implies — what of Svelte is there, and what is not.
 //
-// Compiling is not rendering, so each of these is mounted. The two that are only
-// compiled here are named in AUDIT4.md with the reason.
+// Compiling is not rendering, so each of these is mounted, two of them excepted.
 import { test, expect, describe, vi } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import Shorthand from './fixtures/SvShorthand.svelte';

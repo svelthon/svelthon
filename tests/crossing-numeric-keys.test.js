@@ -64,7 +64,7 @@ describe('a dict whose keys are not strings', () => {
         expect(out[name]).toBe('x');
     });
 
-    // The control the audit used: a string key was never lost, which is what
+    // The control: a string key was never lost, which is what
     // made the rest look like nothing at all.
     test('while a string key is untouched', () => {
         expect(plainData(dict([['a', 1], ['b', 2]]))).toEqual({ a: 1, b: 2 });

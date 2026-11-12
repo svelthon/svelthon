@@ -51,7 +51,7 @@ describe('a Python callback handed to JavaScript', () => {
     // `pyHandler` built a fresh wrapper per crossing, so `off(handler)` passed a
     // function the registry had never seen and the listener stayed. The next
     // `listen()` then added a second, and one event ran the body twice: the
-    // audit's counter read 1, 2, 4 where it should read 1, 1, 2.
+    // counter read 1, 2, 4 where it should read 1, 1, 2.
     // Read as a change and not as a value, because `events` is module state and
     // this file appends to it several times over. `toBe(1)` was true only while
     // this test ran first: shuffled, it is the count of whatever ran before.

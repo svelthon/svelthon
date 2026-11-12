@@ -50,8 +50,8 @@ test('a group bound to a cell the markup declares reads as Svelte reads it', asy
 
 // The cell is known by the name the binding writes, as Python reads it:
 // `(picked)`, `chosen # kept` and `field` for a declared `ﬁeld` each found no
-// cell, and the two blocks' groups, holding one list, were taken for one
-// (SOL366). Svelte's two `{let picked = $state.raw(shared)}` read `A / B`.
+// cell, and the two blocks' groups, holding one list, were taken for one.
+// Svelte's two `{let picked = $state.raw(shared)}` read `A / B`.
 test.for([0, 1, 2])('a group target spelled otherwise still writes its own cell (pair %i)', (pair) => {
     const target = document.body.appendChild(document.createElement('div'));
     mount(GroupMarkupCellSpelled, { target });

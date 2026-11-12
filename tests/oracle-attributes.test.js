@@ -5,8 +5,8 @@ import OracleAttributes from './fixtures/OracleAttributes.svelte';
 // The differential oracle: the fixture's own Python, run by CPython case by
 // case (`tests/oracle.py`), against the same script mounted. A case is a holder,
 // a read and a write, so a rule closed for one of them is checked on all: the
-// read through `super()` and the one through a metaclass were each found by an
-// audit after the read through an instance had been made to repaint.
+// read through `super()` and the one through a metaclass were each found broken
+// after the read through an instance had been made to repaint.
 //
 // Two questions per case, kept apart because they are two defects: the model
 // against CPython, which is Python's semantics, and the page against the model,

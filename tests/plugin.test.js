@@ -443,7 +443,7 @@ describe('the plugin resolves what Vite cannot', () => {
 // SvelteKit's guard against a server module in the browser sees what reaches
 // its resolution and load first. Listed after Svelthon, which resolves and loads
 // what Python imports, it saw none of it, and a module of `src/lib/server/`
-// imported by a Python page was built into the client (AUDIT_FABLE5 K1).
+// imported by a Python page was built into the client.
 describe("the plugin comes after SvelteKit's guard", () => {
     const resolved = (...names) => ({ root: '/', resolve: {}, plugins: names.map((name) => ({ name })) });
 
@@ -529,8 +529,7 @@ describe('the plugin loads a .py itself', () => {
 
     // A route's `load()` is handed back as a plain object, by the module that
     // binds it, and only where the module exports one: a route of actions
-    // alone warned at each build that `load` would always be undefined
-    // (AUDIT_FABLE5 K5).
+    // alone warned at each build that `load` would always be undefined.
     test("a route module's load is wrapped where the module has one", () => {
         const dir = mkdtempSync(join(tmpdir(), 'svelthon-route-'));
         const route = (name, source) => {
@@ -716,11 +715,10 @@ describe('hot update invalidates the generated module too', () => {
         // A child a parent holds rather than imports, `<Child …/>` of a prop, is
         // told Python's or JavaScript's as the page runs, and Svelte's HMR keeps
         // the component across an edit: a JavaScript child edited into Python
-        // was handed JavaScript's numbers until the page reloaded (SOL370). So
-        // a file that changes language reloads the page where such a parent is
+        // was handed JavaScript's numbers until the page reloaded. So a file
+        // that changes language reloads the page where such a parent is
         // compiled, and one edited in its own language updates as before: one
-        // the page never loaded (SOL372), and one refused then repaired
-        // (FABLE6 L4).
+        // the page never loaded, and one refused then repaired.
         test('a child changing language reloads the page where a parent holds one', () =>
             inRoom(async ({ at, compiled }) => {
                 const sent = [];

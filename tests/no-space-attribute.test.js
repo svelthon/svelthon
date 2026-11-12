@@ -11,9 +11,8 @@ import GluedAttributes from './fixtures/GluedAttributes.svelte';
 // which matches no rule. Every rule at once was lost, and lost in silence: no
 // error, no warning, a button that never fires and a page that looks right.
 //
-// Found by the eighteenth pass of the external audit, which called it the worst
-// finding of the series for exactly that reason: every other one refused,
-// crashed, or printed something a reader could see.
+// The worst kind of defect for exactly that reason: every other kind refuses,
+// crashes, or prints something a reader can see.
 describe('an attribute with no space before it keeps every rule', () => {
     const setup = () => {
         const target = document.body.appendChild(document.createElement('div'));

@@ -3,8 +3,9 @@
 //
 // The contract: once deleted, a read raises NameError and the name is not in
 // `globals()`, another module finds no such attribute of the module, and
-// deleting evaluates nothing; a write brings it back, whoever makes it. It was repaired one kind at a time over four audits, each finding
-// the next kind: an accessor left present, a store setter that did not restore,
+// deleting evaluates nothing; a write brings it back, whoever makes it. It was
+// repaired one kind at a time, each repair leaving the next kind: an accessor
+// left present, a store setter that did not restore,
 // a prop whose getter converts and so never reads the same twice, a derived
 // whose getter runs the body just removed. What the deletion watches is the
 // name's stored value, which `bind` is handed as its source, never what the
