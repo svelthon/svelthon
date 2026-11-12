@@ -410,6 +410,13 @@ export function moduleImports(content) {
 // declare: the parse reads every expression of the component, each from a
 // count of the lines before it, and was the larger half of a markup pass grown
 // with the square of its expressions.
+//
+// `customElement={null}` declares nothing: Svelte's parser skips it, as an
+// option Svelte 3 asked for, and compiled as an element, a component no global
+// option makes one was one.
+const NULL_ELEMENT = /\bcustomElement\s*=\s*\{\s*null\s*\}/;
+const isNull = (value) => value?.expression?.type === 'Literal' && value.expression.value === null;
+
 export const compileOptionsFor = (code) => {
     let declared;
 
@@ -417,10 +424,15 @@ export const compileOptionsFor = (code) => {
 
     try {
         declared = parse(blankBodies(withoutComments(code)), { modern: true }).options?.attributes.some(
-            (one) => one.name === 'customElement'
+            (one) => one.name === 'customElement' && !isNull(one.value)
         );
     } catch {
-        declared = /<svelte:options[^>]*\bcustomElement\b/.test(markupOnly(code));
+        // The tag found where its expressions are blanked, and its value read
+        // at the same offsets where they are not.
+        const tag = /<svelte:options[^>]*\bcustomElement\b[^>]*>/.exec(markupOnly(code));
+        const written = tag && blankBodies(withoutComments(code)).slice(tag.index, tag.index + tag[0].length);
+
+        declared = tag !== null && !NULL_ELEMENT.test(written);
     }
 
     return declared ? { customElement: true } : undefined;
@@ -831,33 +843,21 @@ export function python(options = {}) {
 // every other prop is added beside it, as Svelte adds the props of a
 // destructured `$props()`: configuring one prop stopped the element observing
 // all the others.
-const ELEMENT_OPTION = /<svelte:options\b[^>]*?\bcustomElement\s*=\s*(["'])([^"']*)\1/;
+//
+// The attribute as Svelte's own parser reads it, whatever its spelling: a tag
+// quoted or not, `customElement=my-tag`, its character references decoded,
+// `sol-&#97;` being `sol-a`; the written-out object, whose keys are its
+// top-level properties, not a `props:` spelled inside a string or in the body of
+// `extend`, and with no tag an element registered by hand from
+// `Component.element`; but `{null}`, which declares nothing (`compileOptionsFor`),
+// is left to Svelte. Matched by its spelling, an unquoted tag was given no
+// props, and an attribute arrived as a string. The scripts and
+// styles are blanked first, lines and offsets kept, since the Python one is not
+// JavaScript and a style may not be CSS yet.
+const ELEMENT_OPTION = /<svelte:options\b[^>]*?\bcustomElement\b/;
 
-// The written-out form, `customElement={{ tag: "x", shadow: "none" }}`, which is
-// the only way to set `shadow`: the props go into it when it names none. Any
-// expression is a candidate, however it is laid out; Svelte's parser says
-// whether it is an object.
-const ELEMENT_OBJECT = /<svelte:options\b[^>]*?\bcustomElement\s*=\s*\{/;
-
-// The written-out object itself, as Svelte's own parser reads it: its keys are
-// its top-level properties, not a `props:` spelled inside a string or in the
-// body of `extend`. The scripts and styles are blanked first, lines and
-// offsets kept, since the Python one is not JavaScript and a style may not be
-// CSS yet.
-function elementObject(code) {
-    const expression = parse(blankBodies(code), { modern: true })
-        .options?.attributes.find((one) => one.name === 'customElement')?.value?.expression;
-
-    return expression?.type === 'ObjectExpression' ? expression : null;
-}
-
-// The tag `customElement="…"` names, as Svelte reads it: the attribute's text
-// with its character references decoded, `sol-&#97;` being `sol-a`.
-function elementTag(code) {
-    const value = parse(blankBodies(code), { modern: true })
-        .options?.attributes.find((one) => one.name === 'customElement')?.value;
-
-    return Array.isArray(value) ? value.map((one) => one.data ?? '').join('') : null;
+function elementAttribute(code) {
+    return parse(blankBodies(code), { modern: true }).options?.attributes.find((one) => one.name === 'customElement');
 }
 
 // The props are read off the script with the names the `<script module>` gives
@@ -871,12 +871,23 @@ function elementOptions(code, python, jsNames = []) {
     // comes through here.
     const props = () => elementProps(python, jsNames).map(entry).join(', ');
 
-    const text = markupOnly(code);
+    if (!ELEMENT_OPTION.test(markupOnly(code))) return code;
 
-    if (ELEMENT_OBJECT.test(text)) {
-        const object = elementObject(code);
-        if (object === null) return code;
+    const attribute = elementAttribute(code);
+    const value = attribute?.value;
 
+    if (isNull(value)) return code;
+
+    // A tag: the whole attribute written out with the props.
+    if (Array.isArray(value)) {
+        const tag = JSON.stringify(value.map((one) => one.data ?? '').join(''));
+
+        return `${code.slice(0, attribute.start)}customElement={{ tag: ${tag}, props: { ${props()} } }}${code.slice(attribute.end)}`;
+    }
+
+    const object = value?.expression;
+
+    if (object?.type === 'ObjectExpression') {
         const named = object.properties.find((one) => key(one) === 'props');
 
         if (named === undefined) {
@@ -925,16 +936,7 @@ function elementOptions(code, python, jsNames = []) {
             .reduce((text, { at, text: added }) => `${text.slice(0, at)}${added}${text.slice(at)}`, code);
     }
 
-    const found = ELEMENT_OPTION.exec(text);
-    if (found === null) return code;
-    const attribute = found[0].slice(found[0].search(/\bcustomElement\s*=/));
-    const at = found.index + found[0].length - attribute.length;
-
-    return (
-        code.slice(0, at) +
-        `customElement={{ tag: ${JSON.stringify(elementTag(code) ?? found[2])}, props: { ${props()} } }}` +
-        code.slice(at + attribute.length)
-    );
+    return code;
 }
 
 // The generated script on as many lines as the Python it replaces. Svelte

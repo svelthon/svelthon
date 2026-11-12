@@ -504,6 +504,12 @@ describe('a declaration in a comment', () => {
         });
     });
 
+    // Nor does `{null}`, which Svelte's parser skips, in markup it parses or
+    // in Python's: compiled as one, a component nothing made an element was.
+    test.for([['<p>x</p>'], ['<p>{a if b else c}</p>']])('nor does customElement={null}, before %s', ([markup]) => {
+        expect(compileOptionsFor(`<svelte:options customElement={null} />\n${markup}`)).toBeUndefined();
+    });
+
     test('and names no directive module', () => {
         expect(directiveHeads('<!-- <p in:old.fade>a</p> -->\n<p in:fx.fade>a</p>')).toEqual(['fx']);
     });

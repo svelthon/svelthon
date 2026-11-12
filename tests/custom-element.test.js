@@ -17,6 +17,8 @@ import './fixtures/FlagElementNative.svelte';
 import './fixtures/PrototypeTypedElement.svelte';
 import './fixtures/UndefinedPropElement.svelte';
 import './fixtures/UndefinedPropElementNative.svelte';
+import './fixtures/UnquotedTagElement.svelte';
+import AnonymousElement from './fixtures/AnonymousElement.svelte';
 
 // **An entry of `customElement.props` that writes no type keeps the type the
 // annotation names**, as Svelte infers one from a default of `$props()`:
@@ -244,6 +246,40 @@ test('an element declared by the object form observes its props too', async () =
         flushSync();
 
         expect(element.querySelector('.object-form').textContent).toBe('10');
+    } finally {
+        element.remove();
+    }
+});
+
+// And so do an element whose tag is written without quotes and one with no tag,
+// registered by hand: matched by the quoted spelling only, they were given no
+// props, and every attribute arrived a string.
+test.for([
+    ['an unquoted tag', 'unquoted-tag-element'],
+    ['no tag', 'anonymous-registered-element']
+])('an element declared with %s observes its props as the types they declare', async ([, tag]) => {
+    if (customElements.get('anonymous-registered-element') === undefined) {
+        customElements.define('anonymous-registered-element', AnonymousElement.element);
+    }
+
+    const element = document.createElement(tag);
+    element.setAttribute('count', '7');
+    element.setAttribute('enabled', '');
+    element.setAttribute('items', '[1,2]');
+    document.body.appendChild(element);
+    await Promise.resolve();
+    flushSync();
+
+    try {
+        const seen = [element.shadowRoot.querySelector('p').textContent];
+
+        element.setAttribute('count', '11');
+        element.removeAttribute('enabled');
+        element.setAttribute('items', '["x"]');
+        flushSync();
+        seen.push(element.shadowRoot.querySelector('p').textContent);
+
+        expect(seen).toEqual(['7|on|2', '11|off|1']);
     } finally {
         element.remove();
     }

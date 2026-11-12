@@ -51,6 +51,14 @@ describe('the props a written-out customElement option is given', () => {
 
         expect(read(source)).toEqual({ keys, lines: source.split('\n').length });
     });
+
+    // And `{null}`, which declares nothing, is left to Svelte, which skips it:
+    // written out as props, it made an element where Svelte makes none.
+    test('customElement={null} is left as it is written', () => {
+        const source = '<svelte:options customElement={null} />\n\n<script lang="python">\nfirst: str = "a"\n</script>\n\n<p>{first}</p>\n';
+
+        expect(python().markup({ content: source, filename: 'X.svelte' }).code).toContain('<svelte:options customElement={null} />');
+    });
 });
 
 // The type of each prop is its annotation's at the top of the module, or in a
