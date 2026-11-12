@@ -271,6 +271,12 @@ script affecte, `Picked = Child if wide else Native`, un prop, un nom du
 gabarit ou `<svelte:component this={…}>`, est départagé au chargement de son
 module : un enfant écrit en Python le dit lui-même.
 
+Un générateur asynchrone, qu'aucune liste ne peut tenir, arrive à JavaScript
+comme un itérateur asynchrone sur lui, que `for await` parcourt et que
+`Array.fromAsync` rassemble, et revient à Python tel qu'il était ; et
+`async for` parcourt ce que `for await` parcourt, un générateur asynchrone
+JavaScript ou un `ReadableStream`, `async for chunk in response.body`.
+
 ### Un prop qui remonte
 
 Les props vont dans un sens, du parent vers l'enfant, et c'est ce qui garde un
@@ -1557,7 +1563,14 @@ Une méthode lue sur un objet JavaScript reste liée à lui, comme Python lie to
 méthode qu'il lit, où que Svelte l'appelle : un gestionnaire, un `{@attach}`,
 une transition. `onclick={field.focus}` donne le focus au champ et
 `onclick={history.back}` revient en arrière, là où Svelte passerait le bouton à
-la méthode. Un gestionnaire qui veut l'élément lit `event.currentTarget`.
+la méthode. Un gestionnaire qui veut l'élément lit `event.currentTarget`. Il en
+va de même d'une fonction lue sur une fonction ou une classe importée,
+`dayjs.extend(...)` ou un `Kind.of(3)` statique.
+
+Un membre dont le nom est un mot-clé de Python, `Array.from`,
+`promise.finally` ou le `field.as` d'un formulaire SvelteKit, ne s'écrit pas
+après un point : l'analyseur de Python s'arrête au mot-clé. `getattr` le lit :
+`getattr(js.Array, "from")("ab")`.
 
 ### Le seul endroit où SvelteKit code en dur
 

@@ -266,6 +266,12 @@ namespace, under a name the script assigned, `Picked = Child if wide else
 Native`, a prop, a template name or `<svelte:component this={…}>`, is told
 apart when its module loads: a child written in Python says so itself.
 
+An asynchronous generator, which no list can hold, reaches JavaScript as an
+asynchronous iterator over it, which `for await` walks and `Array.fromAsync`
+gathers, and comes back to Python as itself; and `async for` walks what `for
+await` walks, a JavaScript asynchronous generator or a `ReadableStream`,
+`async for chunk in response.body`.
+
 ### A prop that travels back up
 
 Props go one way, from parent to child, and that is what keeps a data flow
@@ -1496,7 +1502,13 @@ A method read off a JavaScript object stays bound to it, as Python binds any
 method it reads, wherever Svelte calls it: a handler, an `{@attach}`, a
 transition. `onclick={field.focus}` focuses the field and
 `onclick={history.back}` goes back, where Svelte hands the method the button. A
-handler that wants the element reads `event.currentTarget`.
+handler that wants the element reads `event.currentTarget`. The same holds for
+a function read off an imported function or class, `dayjs.extend(...)` or a
+static `Kind.of(3)`.
+
+A member whose name is a Python keyword, `Array.from`, `promise.finally` or
+`field.as` of a SvelteKit form, cannot be written after a dot: Python's parser
+stops at the keyword. `getattr` reads it: `getattr(js.Array, "from")("ab")`.
 
 ### The one place SvelteKit is hard-coded
 
