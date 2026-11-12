@@ -27,6 +27,8 @@
     <select {...attrs} bind:value={picked}>{@render options()}</select>
 {:else if form === 'after multiple'}
     <select multiple {...attrs} bind:value={picked}>{@render options()}</select>
+{:else if form === 'class word'}
+    <select class=multiple bind:value={picked}>{@render options()}</select>
 {:else}
     <select bind:value={picked}>{@render options()}</select>
 {/if}

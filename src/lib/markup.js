@@ -1286,7 +1286,10 @@ function valueEnd(markup, at) {
 // `checked={checked}`, as the walk expands it, and each spread, `{**attrs}`,
 // which may give it any attribute, as `SPREAD_WORD`. Skipped with the values,
 // `{checked}` beside `bind:group` was given a second `checked`, which Svelte
-// refused, and `{MULTIPLE}` made a select whose choices came back no list.
+// refused, and `{MULTIPLE}` made a select whose choices came back no list. An
+// unquoted value too, read as Svelte reads it (`unquotedEnd`): `class=multiple`
+// made a select multiple, `title=checked` a box checked, `title=is` a custom
+// element.
 const SPREAD_WORD = '{**}';
 
 function tagWords(markup, from) {
@@ -1294,6 +1297,16 @@ function tagWords(markup, from) {
 
     for (let at = from; at < markup.length && markup[at] !== '>'; ) {
         const char = markup[at];
+
+        if (char === '=') {
+            let start = at + 1;
+
+            while (start < markup.length && /\s/.test(markup[start])) start += 1;
+
+            words += ' ';
+            at = ['"', "'", '{'].includes(markup[start]) ? start : unquotedEnd(markup, start);
+            continue;
+        }
 
         if (char !== '"' && char !== "'" && char !== '{') {
             words += char;
@@ -4317,14 +4330,19 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
             // absence of an `=` is certain once no `=` follows the whitespace,
             // which Svelte allows before it: `bind:value = {v}` is the long
             // form. Outside a quoted value only: the words of
-            // `value="a bind:foo b"` are text.
+            // `value="a bind:foo b"` are text. And where an attribute begins
+            // (`attributeStarts`): `title=bind:checked` is a value, which a
+            // binding was written into, and `title=let:item` no slot.
             if (quote === null && /[\s/>]/.test(char)) {
-                const bare = (tagText().match(BARE_ATTRIBUTE) || [])[1];
+                const text = tagText();
+                const begins = (match) => match !== null && attributeStarts(markup, tagIn + match.index);
+                const word = text.match(BARE_ATTRIBUTE);
+                const bare = begins(word) ? word[1] : undefined;
 
                 if (bare !== undefined && LET_DIRECTIVE.test(bare)) refuseLet(bare);
 
-                const shorthand = tagText().match(SHORTHAND);
-                const short = shorthand && !equalsAhead(index) ? shorthand : null;
+                const shorthand = text.match(SHORTHAND);
+                const short = begins(shorthand) && !equalsAhead(index) ? shorthand : null;
                 if (short && short[2] !== 'bind') {
                     out += `=${attributeValue(short[1], short[3])}`;
                 } else if (short) {

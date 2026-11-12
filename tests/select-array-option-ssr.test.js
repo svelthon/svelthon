@@ -10,7 +10,7 @@ import SelectArrayOptionNative from './fixtures/SelectArrayOptionNative.svelte';
 
 test.for(
     ['Python', 'Svelte'].flatMap((language) =>
-        ['spread', 'after multiple', 'plain'].flatMap((form) => ['none', 'array'].map((held) => [language, form, held]))
+        ['spread', 'after multiple', 'class word', 'plain'].flatMap((form) => ['none', 'array'].map((held) => [language, form, held]))
     )
 )('%s: a single select, %s, model %s, renders its option selected on a server', ([language, form, held]) => {
     const Component = language === 'Python' ? SelectArrayOption : SelectArrayOptionNative;

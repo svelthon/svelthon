@@ -1,8 +1,8 @@
 <script lang="python">
 # A single select whose first option's value is a JavaScript array, written
 # here or put there by a Svelte child, with a spread that may make the select
-# multiple, written alone or after its own `multiple`, and without; its model
-# None or that array to begin with.
+# multiple, written alone or after its own `multiple`, and without, a class
+# spelled `multiple` included; its model None or that array to begin with.
 importjs ArrayOptions from "./ArrayOptions.svelte"
 
 original: object = None
@@ -32,6 +32,8 @@ def model():
     <select {**attrs} bind:value={picked}>{@render options()}</select>
 {:else if form == "after multiple"}
     <select multiple {**attrs} bind:value={picked}>{@render options()}</select>
+{:else if form == "class word"}
+    <select class=multiple bind:value={picked}>{@render options()}</select>
 {:else}
     <select bind:value={picked}>{@render options()}</select>
 {/if}

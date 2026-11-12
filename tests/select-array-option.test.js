@@ -10,7 +10,8 @@
 // start and after each choice. A spread written after `multiple`, which turns
 // it off, left the select read and written as multiple, the array's option
 // never selected and the array copied; and a spread alone read the model as
-// Python's, its None no option's `undefined`.
+// Python's, its None no option's `undefined`. A value spelled `multiple`,
+// `class=multiple`, was taken for the attribute and did the same.
 import { test, expect } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import SelectArrayOption from './fixtures/SelectArrayOption.svelte';
@@ -18,7 +19,7 @@ import SelectArrayOptionNative from './fixtures/SelectArrayOptionNative.svelte';
 
 test.for(
     ['Python', 'Svelte'].flatMap((language) =>
-        ['spread', 'after multiple', 'plain'].flatMap((form) =>
+        ['spread', 'after multiple', 'class word', 'plain'].flatMap((form) =>
             [false, true].flatMap((child) => ['none', 'array'].map((held) => [language, form, child, held]))
         )
     )
