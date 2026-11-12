@@ -115,6 +115,9 @@ answered /moved 303 /load
 
 remote greeting 'hello from Python'
 remote shout 'shouted from python'
+# Prerendered at build: SvelteKit rewrites the declaration of its name, and a
+# variable of ours of that name stopped the build.
+remote facts 'prerendered from Python'
 
 # The same routes from the dev server, the one an application is written on,
 # which checks what production does not: a `load()` whose answer is no plain

@@ -1665,6 +1665,12 @@ function surface(body, theirs = new Set()) {
 const fn = (name) => `__fn_${name}`;
 const local = (name) => `__local_${name}`;
 
+// The variable a plain module holds a name's value in. Under the name itself,
+// it was what SvelteKit took for the export of that name in a remote module,
+// which it rewrites into a constant when the function is prerendered, and the
+// body's write to it stopped the build (`ILLEGAL_REASSIGNMENT`).
+const held = (name) => `__var_${name}`;
+
 // The JavaScript name of a `def`'s wrapper in a rune script: its own, unless it
 // is a rune's. Svelte reads `$state` as a subscription to a store once the script
 // binds `state` to an ordinary value, so a wrapper named `state` would turn
@@ -2569,7 +2575,7 @@ function plainPreamble(c) {
 
 function plainDeclarations(c) {
     return [
-        ...c.state.map((n) => `let ${n};`),
+        ...c.state.map((n) => `let ${held(n)};`),
         ...[...c.funcs, ...c.plainDeriveds].map((f) => `let ${fn(f.name)};`),
         ``
     ];
@@ -2581,7 +2587,7 @@ function plainBindings(c) {
         // `__assign`, `__group`, `__truthy` and the rest) is emitted. Nothing
         // of `Object.prototype` is a name, as in `authorBindings`.
         `const __proto = __global.Object.create(null);`,
-        ...c.state.map((n) => `__bind(__proto, '${n}', () => ${n}, (${NEXT_VALUE}) => { ${n} = ${NEXT_VALUE}; });`),
+        ...c.state.map((n) => `__bind(__proto, '${n}', () => ${held(n)}, (${NEXT_VALUE}) => { ${held(n)} = ${NEXT_VALUE}; });`),
         ...c.funcs.map(
             (f) =>
                 `__bind(__proto, '${f.name}', () => ${fn(f.name)}, (${NEXT_VALUE}) => { ${fn(f.name)} = ${NEXT_VALUE}; }, () => ${fn(f.name)});`

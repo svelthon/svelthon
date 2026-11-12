@@ -21,23 +21,24 @@ test('a name the compiler builds out of another is refused at its line', () => {
     expect([
         refusal('value__ = 7\n__rev_value__ = 8\n'),
         refusal('value__ = 7\n__bump_value__ = 8\n'),
-        refusal('def work__():\n    return 7\n\n\n__fn_work__ = 8\n'),
-        refusal('def work__():\n    return 7\n\n\n__fn_work__ = 8\n', { plain: true })
+        refusal('def work__():\n    return 7\n\n\n__fn_work__ = 8\n')
     ]).toEqual([
         expect.stringContaining('`__rev_value__` is a name the compiler builds itself out of `value__`, in the same scope (src/Probe.svelte:2)'),
         expect.stringContaining('`__bump_value__` is a name the compiler builds itself out of `value__`'),
-        expect.stringContaining('`__fn_work__` is a name the compiler builds itself out of `work__`'),
         expect.stringContaining('`__fn_work__` is a name the compiler builds itself out of `work__`')
     ]);
 });
 
 // Nor a name an import's address spells as a declaration: the text of a
-// string was counted as one, and refused a module that declared it once.
+// string was counted as one, and refused a module that declared it once. Nor,
+// in a plain module, which holds a name's value under a prefix of its own, a
+// name spelled as a function's.
 test('and a name ending with `__` that collides with nothing compiles', () => {
     expect([
         refusal('value__ = 7\n__all__ = ["value__"]\n'),
         refusal('class __rev_value__:\n    pass\n\n\nvalue__ = 7\n'),
         refusal('importjs imported from "data:text/javascript,export default function __doc__(){return 7}"\n__doc__ = "okay"\n'),
-        refusal('importjs read from "./let __rev_value__.js"\nvalue__ = 7\n')
-    ]).toEqual([null, null, null, null]);
+        refusal('importjs read from "./let __rev_value__.js"\nvalue__ = 7\n'),
+        refusal('def work__():\n    return 7\n\n\n__fn_work__ = 8\n', { plain: true })
+    ]).toEqual([null, null, null, null, null]);
 });
