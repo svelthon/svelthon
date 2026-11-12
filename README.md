@@ -812,8 +812,12 @@ is imported from Python as `import panier`.
 runes, no signals, no cost for reactivity it does not use, and a component that
 imports it, `import helper`, follows nothing it keeps, as a component follows
 nothing of a JavaScript module: a cache its functions fill while the page
-renders is its own. Its functions are its exports; `__all__` says otherwise when
-you want it to:
+renders is its own. Its functions are its exports, and in a module of
+SvelteKit's routes or hooks so are the names SvelteKit reads off it, `load`,
+`actions`, the page options, an endpoint's `GET` and a hook, whatever binds
+them: `load = make_loader("pep")`, `from loaders import load`, `from loaders
+import *`, `ssr = False`, `handle = sequence(first, second)`. `__all__` says
+otherwise when you want it to:
 
 ```python
 # peps.py
@@ -1306,7 +1310,7 @@ production build with `adapter-node`, against **SvelteKit 3**:
 | `+page.server.py`, `+layout.server.py` | `load()` in Python, its data merged as usual |
 | `async def load()` | awaited by the framework |
 | streaming | a coroutine in the returned data becomes a promise SvelteKit streams |
-| page options | `prerender`, `ssr`, `csr`, exported through `__all__` |
+| page options | `prerender = True`, `ssr = False`, `csr`, exported as they are bound |
 | cookies, `setHeaders` | through `event["js"]`, no bridge of ours involved |
 | `handle`, `handleError` | in Python, behind a two-line JavaScript shim |
 | `reroute`, client `handleError` | likewise, universal and client hooks |
@@ -1337,8 +1341,6 @@ one re-runs in the browser instead, which is SvelteKit's rule, not ours.
 Page options work as they do anywhere, which has one consequence worth naming:
 
 ```python
-__all__ = ["load", "csr"]
-
 csr = False
 
 ...
@@ -1653,7 +1655,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 2 080 tests as written (vitest reports more, one per
+Validated by `npm test`, 2 083 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;

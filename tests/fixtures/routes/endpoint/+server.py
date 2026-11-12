@@ -1,0 +1,1 @@
+GET = lambda event: "got"

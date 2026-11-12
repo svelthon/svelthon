@@ -985,7 +985,7 @@ function compilePython(file, path, root) {
         return cached.result;
     }
 
-    const mode = isReactive(file) ? { store: true } : { plain: true, eager: isRemote(file), read: isRoute(file) ? ['load'] : [] };
+    const mode = isReactive(file) ? { store: true } : { plain: true, eager: isRemote(file), read: routeNames(file) };
     const result = compile(source, nameFor(file, root), shown, {
         ...mode,
         sourceContent: source,
@@ -1107,8 +1107,24 @@ const pythonScanEsbuild = () => ({
     }
 });
 
-// A module of SvelteKit's routes that may export a `load()`, by its name.
-const isRoute = (file) => /[/\\]\+(?:page|layout)(?:\.server)?\.py$/.test(file);
+// What SvelteKit reads by name off a module of its routes or of its hooks,
+// exported whatever binds it there (`read`), a star import among them: one list
+// per kind of module, SvelteKit's own (`valid_*_exports` for a route, which it
+// refuses any other name of; `get_hooks` and the client's manifest for hooks).
+// A hook bound by a call, `handle = sequence(first, second)`, was no export:
+// the development server answered without it, in silence.
+const LAYOUT_NAMES = ['load', 'prerender', 'csr', 'ssr', 'trailingSlash', 'config'];
+const ROUTE_NAMES = [
+    [/[/\\]\+layout(?:\.server)?\.py$/, LAYOUT_NAMES],
+    [/[/\\]\+page\.py$/, [...LAYOUT_NAMES, 'entries']],
+    [/[/\\]\+page\.server\.py$/, [...LAYOUT_NAMES, 'actions', 'entries']],
+    [/[/\\]\+server\.py$/, ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS', 'HEAD', 'fallback', 'prerender', 'trailingSlash', 'config', 'entries']],
+    [/[/\\]hooks\.server\.py$/, ['handle', 'handleFetch', 'handleError', 'init']],
+    [/[/\\]hooks\.client\.py$/, ['handleError', 'init']],
+    [/[/\\]hooks\.py$/, ['reroute', 'transport']]
+];
+
+const routeNames = (file) => ROUTE_NAMES.find(([kind]) => kind.test(file))?.[1] ?? [];
 
 // What `compile()` asks through `resolves`: `'file'` when the name stands for
 // one, `'package'` when its first segment is a directory where a file would

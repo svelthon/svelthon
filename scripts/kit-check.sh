@@ -100,6 +100,10 @@ remote() {
 route / 'kit + python = -4'
 route /load '42 from [0, 1, 4, 9]'
 route /universal '42 at the universal route'
+# A `load` bound by a call, which the page took for none.
+route /bound 'load bound by a call'
+# A layout and a page whose `load` comes by a star import.
+route /starred 'starred layout and starred page'
 route /remote 'asking the server'
 # A module named `remote.py`, which SvelteKit takes for one by its name.
 route /named 'asking remote.py'
@@ -129,6 +133,8 @@ if kill -0 "$DEV" 2>/dev/null; then
     route / 'kit + python = -4'
     route /load '42 from [0, 1, 4, 9]'
     route /universal '42 at the universal route'
+    route /bound 'load bound by a call'
+    route /starred 'starred layout and starred page'
     answered /missing 404
     answered /moved 303 /load
 else

@@ -853,7 +853,12 @@ Pas de rune, pas de signal, aucun coût pour une réactivité dont il ne fait ri
 et un composant qui l'importe, `import helper`, ne suit rien de ce qu'il garde,
 comme un composant ne suit rien d'un module JavaScript : un cache que ses
 fonctions remplissent pendant le rendu est le sien.
-Ses fonctions sont ses exports ; `__all__` dit autre chose quand on le souhaite :
+Ses fonctions sont ses exports, et dans un module des routes ou des hooks de
+SvelteKit aussi les noms que SvelteKit y lit, `load`, `actions`, les options de
+page, le `GET` d'un endpoint et un hook, quoi qui les lie : `load =
+make_loader("pep")`, `from loaders import load`, `from loaders import *`, `ssr =
+False`, `handle = sequence(first, second)`. `__all__` dit autre chose quand on
+le souhaite :
 
 ```python
 # peps.py
@@ -1359,7 +1364,7 @@ build de production avec `adapter-node`, contre **SvelteKit 3** :
 | `+page.server.py`, `+layout.server.py` | `load()` en Python, ses données fusionnées comme d'habitude |
 | `async def load()` | attendu par le framework |
 | streaming | une coroutine dans les données rendues devient une promesse que SvelteKit diffuse |
-| options de page | `prerender`, `ssr`, `csr`, exportées par `__all__` |
+| options de page | `prerender = True`, `ssr = False`, `csr`, exportées telles qu'elles sont liées |
 | cookies, `setHeaders` | par `event["js"]`, sans aucun pont de notre part |
 | `handle`, `handleError` | en Python, derrière une amorce JavaScript de deux lignes |
 | `reroute`, `handleError` client | de même, hooks universels et client |
@@ -1392,8 +1397,6 @@ Les options de page marchent comme partout ailleurs, ce qui a une conséquence
 qui mérite d'être nommée :
 
 ```python
-__all__ = ["load", "csr"]
-
 csr = False
 
 ...
@@ -1676,7 +1679,7 @@ parsing, que seul le compilateur charge ; le README de Bryntime en donne le poid
 
 ## État
 
-Validé par `npm test`, 2 080 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 2 083 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;

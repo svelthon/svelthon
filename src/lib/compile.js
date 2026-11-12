@@ -2711,8 +2711,9 @@ function compile(
         // Whether a module's body runs as the module is evaluated, with no
         // function behind a default export: the one half of a `.remote.py`.
         eager = false,
-        // The names a framework reads off the module by name: a route's
-        // `load`, which answers SvelteKit a plain object (`liveExports`).
+        // The names a framework reads off the module by name, exported
+        // whatever binds them: a route's `load`, `actions` and options.
+        // Its `load` answers SvelteKit a plain object (`liveExports`).
         read = [],
         // Whether an imported name is one of the project's own `.py` files,
         // `'file'`, or names a directory of the project, `'package'`, asked by
@@ -2896,14 +2897,19 @@ function compile(
     // to export values says so with `__all__`, exactly as it would to a Python
     // caller. SvelteKit is strict about it: a `+page.server.py` exporting
     // anything but load/actions/prerender/… is refused, and rightly so.
+    //
+    // And what the framework reads off it by name (`read`), whatever binds it:
+    // `load = make_loader("…")`, `from loaders import load` or `ssr = False`
+    // was a page answered with no data, and no word said. A star import may
+    // bind any of them, as JavaScript's `export *` hands them on.
     const declaration = declaredExports(HOST, root._ast, table, source, lineOffset, src);
     const listed = declaration === null ? null : declaration.names;
-    const exported = listed ?? funcs.map((f) => f.name);
+    const binds = moduleBinds(table);
+    const exported = listed ?? [...new Set([...funcs.map((f) => f.name), ...read.filter((n) => starred || binds.has(n))])];
 
     // What the list names that the module cannot export (Bryc's
     // `exportChecks`); with a `from m import *`, a name not yet bound waits
     // until the module has run.
-    const binds = moduleBinds(table);
     const { unbound, line, listedAt } = exportChecks(HOST, { declaration, declared, binds, jsImported, starred, source });
 
     // A `@derived` of a plain module is a call made at every read, and an export
