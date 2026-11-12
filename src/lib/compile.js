@@ -3037,12 +3037,29 @@ function compile(
 // counts, which the compiler writes at the start of its own line: the text of
 // a string, the address an import names, `"data:…function __doc__…"`, stands
 // inside one, and refused a module that declared the name once.
+//
+// An import binds a name too, the one after `as` or the one written: imported
+// from JavaScript as `__var_value__` beside a `value__`, it was declared twice
+// and no check saw it.
+const IMPORT_CLAUSE = /^import\s+([^'"]+?)\s+from\s+["']/gmu;
+
+const importBindings = (script) =>
+    [...script.matchAll(IMPORT_CLAUSE)].flatMap(([, clause]) =>
+        clause
+            .split(/[{},]/)
+            .map((one) => one.trim().split(/\s+as\s+/).at(-1))
+            .filter((one) => one !== '' && one !== '*')
+    );
+
 const declaredTimes = (script, name) =>
-    script.match(new RegExp(`^(?:let|const|var|function|class)\\s+${name}(?![\\p{ID_Continue}$])`, 'gmu'))?.length ?? 0;
+    (script.match(new RegExp(`^(?:let|const|var|function|class)\\s+${name}(?![\\p{ID_Continue}$])`, 'gmu'))?.length ?? 0) +
+    importBindings(script).filter((one) => one === name).length;
 
 function refuseBuilt(declared, script, source, lines, lineOffset = 0) {
     const builtOutOf = (name) => declared.find((other) => other !== name && name.startsWith('__') && name.endsWith(`_${other}`));
-    const taken = declared.find((name) => name.endsWith('__') && builtOutOf(name) !== undefined && declaredTimes(script, name) > 1);
+    const taken = [...declared, ...importBindings(script)].find(
+        (name) => name.endsWith('__') && builtOutOf(name) !== undefined && declaredTimes(script, name) > 1
+    );
     if (taken === undefined) return;
 
     const out = builtOutOf(taken);

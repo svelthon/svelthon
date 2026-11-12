@@ -1692,7 +1692,7 @@ parsing, que seul le compilateur charge ; le README de Bryntime en donne le poid
 
 ## État
 
-Validé par `npm test`, 2 083 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 2 084 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;

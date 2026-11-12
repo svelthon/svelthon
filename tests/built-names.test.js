@@ -29,6 +29,26 @@ test('a name the compiler builds out of another is refused at its line', () => {
     ]);
 });
 
+// So is a name an import from JavaScript binds, which no check counted: the
+// script declared it twice, the import and the compiler's own binding.
+test('a name an import binds, spelled as one the compiler builds, is refused', () => {
+    const js = 'data:text/javascript,export const __var_value__ = 8, __rev_value__ = 8, __fn_work__ = 8';
+
+    expect([
+        refusal(`__js__ = {"${js}": ["__var_value__"]}\nvalue__ = 7\n`, { plain: true }),
+        refusal(`__js__ = {"${js}": ["__fn_work__"]}\ndef work__():\n    return 7\n`, { plain: true }),
+        refusal(`importjs {__rev_value__} from "${js}"\nvalue__ = 7\n`),
+        refusal(`importjs * as __fn_work__ from "${js}"\ndef work__():\n    return 7\n`),
+        refusal(`__js__ = {"${js}": ["other__"]}\nvalue__ = 7\n`, { plain: true })
+    ]).toEqual([
+        expect.stringContaining('`__var_value__` is a name the compiler builds itself out of `value__`'),
+        expect.stringContaining('`__fn_work__` is a name the compiler builds itself out of `work__`'),
+        expect.stringContaining('`__rev_value__` is a name the compiler builds itself out of `value__`'),
+        expect.stringContaining('`__fn_work__` is a name the compiler builds itself out of `work__`'),
+        null
+    ]);
+});
+
 // Nor a name an import's address spells as a declaration: the text of a
 // string was counted as one, and refused a module that declared it once. Nor,
 // in a plain module, which holds a name's value under a prefix of its own, a
