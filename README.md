@@ -1241,6 +1241,14 @@ async def load():
 what it reads **before its first `await`** is what it follows, and nothing it
 returns is taken for a cleanup.
 
+A coroutine is not a promise already running: its body starts when it is first
+awaited. `p = load()` shown by `{#await p}` runs at the first render, where
+JavaScript's `load()` would be running since the call; a body that writes state
+before its first `await` writes it during that render, which Svelte refuses
+(`state_unsafe_mutation`), so write it after the first `await`. And once the
+template has awaited it, `await p` in a handler raises `RuntimeError`, as in
+CPython: keep the result instead.
+
 ## Context
 
 `set_context` and `get_context` are injected into every component, like
@@ -1677,7 +1685,7 @@ row of a `test.for`), none expected to fail:
   Every expected value was produced by running the component's Python through
   CPython 3.12 as-is, never written by hand. Brython matches CPython on **every
   point**;
-- production build: **261 KB gzip**, Brython runtime included: what the demo
+- production build: **262 KB gzip**, Brython runtime included: what the demo
   page loads, its script, the modules it preloads and its styles, measured
   after each build by `scripts/build-size.mjs`.
 
@@ -1747,7 +1755,7 @@ runs. Keep hot loops out of a component, or reach for the C extensions
 Svelte reads a JavaScript value. Under 4 ms for 500 rows, which a page does
 not feel.
 
-Loading is the other price: 261 KB gzip, the Brython runtime included, and
+Loading is the other price: 262 KB gzip, the Brython runtime included, and
 **0.12 s to the demo's content** in production with a cold cache, 0.33 s with
 the processor slowed four times, as a modest laptop's is. Paid once per
 session, not per page, since the app never reloads.

@@ -1294,6 +1294,14 @@ async def load():
 `$effect(async () => …)` : ce qu'il lit **avant son premier `await`** est ce qu'il
 suit, et rien de ce qu'il rend n'est pris pour un nettoyage.
 
+Une coroutine n'est pas une promesse déjà partie : son corps démarre au premier
+`await` qui l'attend. `p = load()` affiché par `{#await p}` tourne au premier
+rendu, là où le `load()` de JavaScript tournerait depuis l'appel ; un corps qui
+écrit un état avant son premier `await` l'écrit pendant ce rendu, ce que Svelte
+refuse (`state_unsafe_mutation`) : l'écrire après le premier `await`. Et une fois
+attendue par le gabarit, `await p` dans un gestionnaire lève `RuntimeError`,
+comme en CPython : garder plutôt le résultat.
+
 ## Contexte
 
 `set_context` et `get_context` sont injectés dans chaque composant, comme
@@ -1702,7 +1710,7 @@ rangée d'un `test.for`), aucun échec attendu :
   contrôle et frames. Chaque valeur attendue a été produite par CPython 3.12 en
   exécutant le code du composant tel quel, jamais écrite à la main. Brython
   reproduit CPython sur **chaque point** ;
-- build de production : **261 Ko gzip**, runtime Brython compris : ce que la
+- build de production : **262 Ko gzip**, runtime Brython compris : ce que la
   page de démo charge, son script, les modules qu'elle précharge et ses styles,
   mesuré après chaque build par `scripts/build-size.mjs`.
 
@@ -1804,7 +1812,7 @@ WebAssembly.
 où Svelte lit une valeur JavaScript. Moins de 4 ms pour 500 lignes, ce qu'une
 page ne ressent pas.
 
-L'autre prix est au chargement : 261 Ko gzip, runtime Brython compris, et
+L'autre prix est au chargement : 262 Ko gzip, runtime Brython compris, et
 **0,12 s jusqu'au contenu de la démo** en production, cache vide ; 0,33 s avec
 le processeur ralenti quatre fois, comme celui d'un portable modeste. Payé une
 fois par session, pas par page, puisque l'application ne recharge jamais.
