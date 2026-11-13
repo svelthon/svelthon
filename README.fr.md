@@ -1575,9 +1575,12 @@ la méthode. Un gestionnaire qui veut l'élément lit `event.currentTarget`. Il 
 va de même d'une fonction lue sur une fonction ou une classe importée,
 `dayjs.extend(...)` ou un `Kind.of(3)` statique. Remise à JavaScript,
 `js.setTimeout(counter.bump, 0)`, la méthode est liée là où la lier change ce
-qu'elle fait, une fonction qui lit `this` ; toute autre, un constructeur compris,
-est la fonction elle-même, que JavaScript compare : `removeEventListener`
-retrouve l'écouteur que JavaScript a posé.
+qu'elle fait, une fonction qui lit `this` ; toute autre, une flèche, une fonction
+faite par `bind` ou un constructeur compris, est la fonction elle-même, que
+JavaScript compare : `removeEventListener` retrouve l'écouteur que JavaScript a
+posé. Une fonction Python que JavaScript appelle sur un objet lit cet objet par
+`javascript.this()`, comme l'attend une bibliothèque qui passe son contexte par
+`this` : `javascript.this().skip()` dans un visiteur d'estree-walker.
 
 Un membre dont le nom est un mot-clé de Python, `Array.from`,
 `promise.finally` ou le `field.as` d'un formulaire SvelteKit, ne s'écrit pas
