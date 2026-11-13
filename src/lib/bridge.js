@@ -35,6 +35,7 @@ const {
     isTuple,
     isExactScalar,
     authoredClass,
+    authoredInstance,
     pyTruth,
     pyStr,
     pyList,
@@ -2227,10 +2228,16 @@ export const pyHook = (read, where) => component(read, where, null);
 // `importjs` brought, crosses as itself, which `pyHandler` hands back for the
 // adapter Python called it through: asked whether a Python signature was
 // declared, it crossed as that adapter, its answer a Python object. Anything
-// else crosses as `plainScalar` hands it. What is a call is `callable`'s
-// answer, the one every door asks.
+// else crosses as `plainScalar` hands it, a container as itself, which keeps
+// no link a view would make; but an instance of a Python class crosses as its
+// view (`viewOf`), as a prop or a function of the store hands it over, so it
+// reads as its attributes, calls its methods and prints by its `__str__`,
+// where the object itself had nothing JavaScript could read. What is a call is
+// `callable`'s answer, the one every door asks.
 export function storeMember(value) {
-    return callable(value) ? pyHandler(value) : plainScalar(value);
+    if (callable(value)) return pyHandler(value);
+
+    return authoredInstance(value) ? viewOf(value) : plainScalar(value);
 }
 
 // And what an instance's `@export` hands JavaScript, the value its name holds
