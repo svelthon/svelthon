@@ -114,8 +114,8 @@ describe('a name a sequence does not hold', () => {
     });
 
     // And a list's `__getitem__` borrowed by a class that is no list, which
-    // refuses its receiver: the default hid the error.
+    // refuses the name it is asked: the default hid the error.
     test.for(['borrowed', 'borrowed by a tuple'])('as is a list’s __getitem__ %s', (kind) => {
-        expect(() => shown(kind)).toThrow(/list/);
+        expect(() => shown(kind)).toThrow(/indices must be integers or slices, not str/);
     });
 });

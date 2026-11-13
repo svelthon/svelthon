@@ -617,8 +617,10 @@ export function fromnow(value, locale) {
     return formatter('fromnow', locale, (language) => new Intl.RelativeTimeFormat(language, { numeric: 'auto' })).format(count, unit);
 }
 
-// Django's `|slugify`. One rule, no option: normalise, lowercase, keep every
-// letter, digit and mark, turn the rest into a dash.
+// A URL segment made of a title, as Django's `|slugify` makes one, but not by
+// its rule, which drops accents and punctuation. One rule, no option:
+// normalise, lowercase, keep every letter, digit and mark, turn the rest into
+// a dash.
 //
 // NFC, not NFD: `é` written as one code point and as `e` plus a combining acute
 // look the same and must give the same URL. And NFC again once lowercased,

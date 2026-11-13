@@ -67,8 +67,9 @@ const PY_KINDS = [
 ];
 
 // A Python value written out by Python: its type and its repr, a `String`
-// object when it leaves the BMP, read as the text it holds.
-const describePy = (value) => String($B.$call(kinds.describe, value));
+// object when it leaves the BMP, read as the text it holds. Without the
+// identity a default repr names, `at 0x…`, which differs from run to run.
+const describePy = (value) => String($B.$call(kinds.describe, value)).replace(/ at 0x[0-9a-f]+/, '');
 
 const cell = (cross, describe) => {
     try {
