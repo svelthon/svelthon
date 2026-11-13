@@ -24,6 +24,17 @@ test('a module imported in a function runs when the function does, once', () => 
     expect(recorded()).toBe('before first after fails caught later');
 });
 
+// A query of the author's is the same file under another id, as Vite takes a
+// `.ts` with one: the module compiled, its body not run again, its names its
+// own. Vite's own queries are Vite's: the file's text under `?raw`.
+test('a module imported under a query is the same module, its body run once', async () => {
+    const before = recorded();
+    const queried = await import('./fixtures/timing_imports.py?variant=one');
+
+    expect([queried.later, recorded()]).toEqual([later, before]);
+    expect((await import('./fixtures/timing_imports.py?raw')).default).toContain('def later():');
+});
+
 test('a module whose body raised runs again at the next import', () => {
     again();
     expect(recorded()).toBe('before first after fails caught later fails caught again');

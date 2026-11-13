@@ -393,15 +393,29 @@ describe('the plugin resolves what Vite cannot', () => {
         expect(plugin.resolveId('./shapes.py', importer)).toBe(resolve(fixtures, 'shapes.py'));
     });
 
-    // Python's import asks for a module under `?python`, and the module keeps
-    // it; a module of remote functions is served once, under its own path,
-    // whoever asks for it.
-    test('the module Python imports keeps its query, but for a remote one', () => {
+    // Python's import asks for a module under `?python`, an author under a query
+    // of their own, and the module keeps it; a module of remote functions is
+    // served once, under its own path, whoever asks for it. Vite's own queries
+    // are Vite's.
+    test('a module keeps its query, Python’s or the author’s, but for a remote one', () => {
         const importer = resolve(fixtures, 'Anything.svelte');
         const [shapes, remote] = ['shapes.py', 'remote.py'].map((one) => resolve(fixtures, one));
 
         expect(plugin.resolveId(`${shapes}?python`, importer)).toBe(`${shapes}?python`);
         expect(plugin.resolveId(`${remote}?python`, importer)).toBe(remote);
+        expect(plugin.resolveId('./shapes.py?v=2', importer)).toBe(`${shapes}?v=2`);
+        expect(plugin.resolveId('./shapes.py#v2', importer)).toBe(`${shapes}#v2`);
+        expect(plugin.resolveId('./remote.py?v=2', importer)).toBe(remote);
+        expect(plugin.resolveId('./shapes.py?raw', importer)).toBeUndefined();
+    });
+
+    // A `#` before the last `/` is a folder's, `has#hash/`, and no fragment.
+    test('a module in a folder whose name holds a # keeps its whole path', () => {
+        const importer = resolve(fixtures, 'Anything.svelte');
+        const inside = resolve(fixtures, 'has#hash', 'shapes.py');
+
+        expect(plugin.resolveId('./has#hash/shapes.py', importer)).toBe(inside);
+        expect(plugin.resolveId('./has#hash/shapes.py#v2', importer)).toBe(`${inside}#v2`);
     });
 
     // SvelteKit hands its route modules to Vite already resolved, with nobody to
@@ -519,6 +533,15 @@ describe('the plugin loads a .py itself', () => {
         expect(code).toContain(`import load from ${JSON.stringify(`${file}?python`)};\nload();`);
         expect(code).toContain(`export * from ${JSON.stringify(`${file}?python`)};`);
         expect(code).not.toContain('default');
+    });
+
+    // Under a query or a fragment of the author's, the same, cut where Vite
+    // cuts an id: a build handed `shapes.py#v2` the Python itself.
+    test('and so does its path under a query or a fragment of the author’s, but not under Vite’s own', () => {
+        const own = plugin.load.call(context, file);
+
+        expect([`${file}?v=2`, `${file}#v2`].map((one) => plugin.load.call(context, one))).toEqual([own, own]);
+        expect(plugin.load.call(context, `${file}?raw`)).toBeUndefined();
     });
 
     test('and its generated body is then served on demand', () => {

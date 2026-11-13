@@ -1042,6 +1042,19 @@ function pythonImports(names, fromDirectory, path) {
 // A `.remote.py` is served once, under its own path, whatever asks for it.
 const PYTHON_QUERY = '?python';
 
+// An author's own query or fragment, `./counter.py?v=2` or `#v2`, is the same
+// file under another id, as Vite and Svelte's plugin take a `.ts` or a `.svelte`
+// with one, and Vite's own queries, its text, its URL or a worker of it
+// (`SPECIAL_QUERY_RE`), are answered by Vite. A `#` is a fragment after the
+// last `/` only: cut at the first one, as Vite cuts an id, a project in a
+// `has#hash/` folder lost its path and handed Rolldown its Python.
+const VITE_QUERY = /[?&](?:worker|sharedworker|raw|url)\b/;
+const splitQuery = (id) => {
+    const at = id.search(/\?|#[^/]*$/);
+
+    return at === -1 ? [id, ''] : [id.slice(0, at), id.slice(at)];
+};
+
 function eagerModule(file) {
     const body = JSON.stringify(file + PYTHON_QUERY);
 
@@ -1456,18 +1469,18 @@ export function svelthon(options = {}) {
             if (specifier === SELF && importer !== undefined) return importer;
             if (isVirtual(specifier)) return '\0' + specifier;
 
-            // The module as Python reaches it is resolved as its file is, and
-            // keeps its query, but for a `.remote.py`, which has one half.
-            const asked = specifier.endsWith(`.py${PYTHON_QUERY}`) ? PYTHON_QUERY : '';
-            const id = specifier.slice(0, specifier.length - asked.length);
-            const query = isRemote(id) ? '' : asked;
+            // The module as Python reaches it, or as an author asks for it with
+            // a query, is resolved as its file is and keeps its query, but for
+            // a `.remote.py`, which has one half.
+            const [id, query] = splitQuery(specifier);
+            if (!id.endsWith('.py') || VITE_QUERY.test(query)) return;
 
             // Without an importer either: SvelteKit hands its route modules to
             // Vite as already-resolved entries, with nobody to resolve against.
             // Only a path we can resolve ourselves. A bare or aliased specifier
             // such as `#lib/peps.py` belongs to whoever defined the alias, and
             // reaches load() as an absolute path once they have.
-            if (id.endsWith('.py') && (id.startsWith('.') || id.startsWith('/'))) return pyFile(id, importer) + query;
+            if (id.startsWith('.') || id.startsWith('/')) return pyFile(id, importer) + (isRemote(id) ? '' : query);
         },
         load(id) {
             if (id.startsWith('\0')) {
@@ -1475,12 +1488,12 @@ export function svelthon(options = {}) {
                 return entry && (entry.map ? { code: entry.code, map: entry.map } : entry.code);
             }
 
-            const deferred = id.endsWith(`.py${PYTHON_QUERY}`);
-            if (!deferred && !id.endsWith('.py')) return;
+            const [file, query] = splitQuery(id);
+            if (!file.endsWith('.py') || VITE_QUERY.test(query)) return;
 
             // Compiled under either id, so a refusal is reported against the
             // file JavaScript imported, the first one asked.
-            const file = deferred ? id.slice(0, -PYTHON_QUERY.length) : id;
+            const deferred = query === PYTHON_QUERY;
             const name = nameFor(file, root);
             const { script, module, map, imports } = compilePython(file, searchPath, root);
 
