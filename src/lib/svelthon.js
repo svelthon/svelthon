@@ -610,6 +610,27 @@ const compiledAsBefore = (file) => {
     }
 };
 
+// The one option of the preprocessor and of the plugin, `path: ['src/lib']`,
+// the folders Python's imports are searched in, resolved against `root`. Any
+// other name, a misspelt `paths` among them, and a `path` that is no list of
+// strings are refused, as Svelte refuses an option it does not know, where the
+// first was ignored in silence and the second raised a JavaScript error.
+const searchPathOf = (options, root) => {
+    for (const name of Object.keys(options)) {
+        if (name !== 'path') {
+            throw new Error(`svelthon — unknown option \`${name}\`: the one option is \`path\`, as \`path: ['src/lib']\``);
+        }
+    }
+
+    if (options.path === undefined) return undefined;
+
+    if (!Array.isArray(options.path) || options.path.some((one) => typeof one !== 'string')) {
+        throw new Error("svelthon — `path` takes a list of folders, as `path: ['src/lib']`");
+    }
+
+    return options.path.map((one) => resolve(root, one));
+};
+
 export function python(options = {}) {
     const calls = perCall();
 
@@ -621,7 +642,7 @@ export function python(options = {}) {
     // The project's too, `path: ['src/lib']` as the README writes it: resolved
     // now, so a component of this project imports this project's modules
     // whatever directory the process has moved to since.
-    const searchPath = (options.path || []).map((one) => resolve(root, one));
+    const searchPath = searchPathOf(options, root) ?? [];
 
     // Shared with the plugin, which compiles the `.py` files themselves and has
     // to resolve their imports the same way. The two halves may not be the same
@@ -1218,7 +1239,7 @@ export function svelthon(options = {}) {
     // later asks for a module may be another project. Its path is resolved
     // against it now, as the preprocessor resolves its own.
     const root = process.cwd();
-    const searchPath = options.path?.map((one) => resolve(root, one));
+    const searchPath = searchPathOf(options, root);
     const key = (id) => generatedKey(root, id);
 
     // Whether a change of a file leaves it as it was compiled from
