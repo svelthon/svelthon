@@ -1573,7 +1573,11 @@ une transition. `onclick={field.focus}` donne le focus au champ et
 `onclick={history.back}` revient en arrière, là où Svelte passerait le bouton à
 la méthode. Un gestionnaire qui veut l'élément lit `event.currentTarget`. Il en
 va de même d'une fonction lue sur une fonction ou une classe importée,
-`dayjs.extend(...)` ou un `Kind.of(3)` statique.
+`dayjs.extend(...)` ou un `Kind.of(3)` statique. Remise à JavaScript,
+`js.setTimeout(counter.bump, 0)`, la méthode est liée là où la lier change ce
+qu'elle fait, une fonction qui lit `this` ; toute autre, un constructeur compris,
+est la fonction elle-même, que JavaScript compare : `removeEventListener`
+retrouve l'écouteur que JavaScript a posé.
 
 Un membre dont le nom est un mot-clé de Python, `Array.from`,
 `promise.finally` ou le `field.as` d'un formulaire SvelteKit, ne s'écrit pas
@@ -1710,7 +1714,7 @@ rangée d'un `test.for`), aucun échec attendu :
   contrôle et frames. Chaque valeur attendue a été produite par CPython 3.12 en
   exécutant le code du composant tel quel, jamais écrite à la main. Brython
   reproduit CPython sur **chaque point** ;
-- build de production : **262 Ko gzip**, runtime Brython compris : ce que la
+- build de production : **263 Ko gzip**, runtime Brython compris : ce que la
   page de démo charge, son script, les modules qu'elle précharge et ses styles,
   mesuré après chaque build par `scripts/build-size.mjs`.
 
@@ -1812,7 +1816,7 @@ WebAssembly.
 où Svelte lit une valeur JavaScript. Moins de 4 ms pour 500 lignes, ce qu'une
 page ne ressent pas.
 
-L'autre prix est au chargement : 262 Ko gzip, runtime Brython compris, et
+L'autre prix est au chargement : 263 Ko gzip, runtime Brython compris, et
 **0,12 s jusqu'au contenu de la démo** en production, cache vide ; 0,33 s avec
 le processeur ralenti quatre fois, comme celui d'un portable modeste. Payé une
 fois par session, pas par page, puisque l'application ne recharge jamais.

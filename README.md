@@ -1512,7 +1512,10 @@ transition. `onclick={field.focus}` focuses the field and
 `onclick={history.back}` goes back, where Svelte hands the method the button. A
 handler that wants the element reads `event.currentTarget`. The same holds for
 a function read off an imported function or class, `dayjs.extend(...)` or a
-static `Kind.of(3)`.
+static `Kind.of(3)`. Handed to JavaScript, `js.setTimeout(counter.bump, 0)`, the
+method is bound where binding changes what it does, a function that reads
+`this`; any other, a constructor among them, is the function itself, which
+JavaScript compares: `removeEventListener` finds the listener JavaScript added.
 
 A member whose name is a Python keyword, `Array.from`, `promise.finally` or
 `field.as` of a SvelteKit form, cannot be written after a dot: Python's parser
@@ -1685,7 +1688,7 @@ row of a `test.for`), none expected to fail:
   Every expected value was produced by running the component's Python through
   CPython 3.12 as-is, never written by hand. Brython matches CPython on **every
   point**;
-- production build: **262 KB gzip**, Brython runtime included: what the demo
+- production build: **263 KB gzip**, Brython runtime included: what the demo
   page loads, its script, the modules it preloads and its styles, measured
   after each build by `scripts/build-size.mjs`.
 
@@ -1755,7 +1758,7 @@ runs. Keep hot loops out of a component, or reach for the C extensions
 Svelte reads a JavaScript value. Under 4 ms for 500 rows, which a page does
 not feel.
 
-Loading is the other price: 262 KB gzip, the Brython runtime included, and
+Loading is the other price: 263 KB gzip, the Brython runtime included, and
 **0.12 s to the demo's content** in production with a cold cache, 0.33 s with
 the processor slowed four times, as a modest laptop's is. Paid once per
 session, not per page, since the app never reloads.
