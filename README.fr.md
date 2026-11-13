@@ -1587,6 +1587,14 @@ Un membre dont le nom est un mot-clé de Python, `Array.from`,
 après un point : l'analyseur de Python s'arrête au mot-clé. `getattr` le lit :
 `getattr(js.Array, "from")("ab")`.
 
+Une classe JavaScript appelée construit, comme l'appel d'une classe en Python :
+`js.URL("http://x/y")`, `js.Map()` ou `Kind(3)` importé d'un module valent
+`.new(...)`, sous Node comme dans un navigateur, et `isinstance` répond comme
+`instanceof`. Une native que JavaScript laisse appeler, `js.Date(0)` ou
+`js.String(3)`, est appelée, comme en JavaScript. Deux objets JavaScript ne sont
+égaux que s'ils sont le même objet, comme le dit `===` : `obj.to_dict()` compare
+ce qu'ils contiennent.
+
 ### Le seul endroit où SvelteKit code en dur
 
 Les hooks sont trouvés par `resolve_entry`, qui filtre sur `/\.(js|ts)$/` et
@@ -1717,7 +1725,7 @@ rangée d'un `test.for`), aucun échec attendu :
   contrôle et frames. Chaque valeur attendue a été produite par CPython 3.12 en
   exécutant le code du composant tel quel, jamais écrite à la main. Brython
   reproduit CPython sur **chaque point** ;
-- build de production : **263 Ko gzip**, runtime Brython compris : ce que la
+- build de production : **264 Ko gzip**, runtime Brython compris : ce que la
   page de démo charge, son script, les modules qu'elle précharge et ses styles,
   mesuré après chaque build par `scripts/build-size.mjs`.
 
@@ -1819,7 +1827,7 @@ WebAssembly.
 où Svelte lit une valeur JavaScript. Moins de 4 ms pour 500 lignes, ce qu'une
 page ne ressent pas.
 
-L'autre prix est au chargement : 263 Ko gzip, runtime Brython compris, et
+L'autre prix est au chargement : 264 Ko gzip, runtime Brython compris, et
 **0,12 s jusqu'au contenu de la démo** en production, cache vide ; 0,33 s avec
 le processeur ralenti quatre fois, comme celui d'un portable modeste. Payé une
 fois par session, pas par page, puisque l'application ne recharge jamais.
