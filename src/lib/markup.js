@@ -3925,7 +3925,17 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     // kept the field of a JavaScript object changed in place when the row
     // rendered again for another reason; and one the author wrote a call in,
     // read through the getter, was called again at every render.
+    // `{}` holds no expression, which Svelte refuses: in the text or as the
+    // value of an attribute it rendered nothing
+    const refuseEmpty = (inner) => {
+        if (uncomment(inner).trim() === '') {
+            throw refuse(new SyntaxError(`svelthon — \`{}\` holds no expression to read${said()}`));
+        }
+    };
+
     const rendered = (inner) => {
+        refuseEmpty(inner);
+
         const read = call(inner, '__text');
 
         return !callsAnything(inner) && mentioned(inner.trim()).some((one) => chain.reread(one) !== null)
@@ -3939,6 +3949,8 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     // the truth-read wrappers, so a handler, a callback prop and a None crossed
     // raw when written the short way.
     const attributeValue = (name, inner) => {
+        refuseEmpty(inner);
+
         if (HANDLER.test(name)) {
             // A handler is the one place a template expression is allowed to
             // write: it runs on an event, not during a render, where Svelte
@@ -5112,8 +5124,13 @@ export function collector(defs, lines, columns) {
         } else {
             // A comma at the top level gets its own parentheses inside the
             // wrapper's: `{a, b}` is the tuple Python reads, one argument and
-            // not two.
-            const held = wrapper && atTopLevel(expression, (i) => expression[i] === ',') !== -1;
+            // not two. So does a name followed by `=`, which the wrapper's call
+            // would read as a keyword argument: `{#if a = 5}` is refused by
+            // Python, as `if a = 5:` is, where it ran and failed at mounting.
+            const held =
+                wrapper &&
+                (atTopLevel(expression, (i) => expression[i] === ',') !== -1 ||
+                    /^[\p{L}\p{Nl}_][\p{L}\p{N}_]*\s*=(?!=)/u.test(expression));
 
             defs.push(
                 `def ${name}(${args.join(', ')}):\n    return ${wrapper || ''}(${held ? `(${expression})` : expression})`

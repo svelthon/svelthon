@@ -150,6 +150,49 @@ test('a walrus is refused in its own expression, and inside a walrus of the expr
     }
 });
 
+// A `=` written for `==`: the call that wraps a condition or a value read
+// `x = 5` as one of its keyword arguments, so `{#if x = 5}` was built and
+// failed while the page rendered, and an attribute wrote `[object Object]`.
+// Python refuses it, as it refuses `if x = 5:`, at its brace.
+test('a = written for == is refused where it was written, as Python refuses it', async () => {
+    const compiled = (markup) => preprocess(around(markup), [python()], { filename: FILE });
+
+    for (const [markup, column] of [
+        ['{#if x = 5}a{/if}', 1],
+        ['<p title={x = 5}>a</p>', 10],
+        ['<p title="{x = 5}">a</p>', 11],
+        ['{#each rows = [1] as row}{row}{/each}', 1]
+    ]) {
+        const error = await compiled(markup).then(
+            () => null,
+            (thrown) => thrown
+        );
+
+        expect(error?.message).toContain("Maybe you meant '==' or ':=' instead of '='?");
+        expect(error.message).toContain(`(${FILE}:6:${column})`);
+    }
+
+    await expect(compiled('{#if x == 5}a{/if}<p title={x == 5}>{x}</p>')).resolves.toBeDefined();
+});
+
+// `{}` holds no expression: Svelte refuses it, and it rendered nothing here, in
+// the text as in an attribute.
+test('an empty {} is refused where it was written', async () => {
+    for (const [markup, column] of [
+        ['<p>{}</p>', 4],
+        ['<p>{ }</p>', 4],
+        ['<p title={}>a</p>', 10]
+    ]) {
+        const error = await preprocess(around(markup), [python()], { filename: FILE }).then(
+            () => null,
+            (thrown) => thrown
+        );
+
+        expect(error?.message).toContain('`{}` holds no expression to read');
+        expect(error.message).toContain(`(${FILE}:6:${column})`);
+    }
+});
+
 // A Python script Svelte reads as an element of the page, and not as the
 // component's, is refused at its line: the markup would stay JavaScript, and its
 // first expression only Python can run would fail at run time.
