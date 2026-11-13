@@ -29,9 +29,9 @@ describe('a scalar entering Python', () => {
         expect((await mod()).formatted(0.5)).toBe('0.50');
     });
 
-    // The conversion is Brython's, and it carries its own three rules: past 2^53
-    // a whole number is an int, not a float.
-    test('and a large whole number stays an int', async () => {
-        expect((await mod()).as_big()).toBe('int');
+    // The conversion is Brython's, and it carries its own rules: past 2^53 a
+    // number is the double it is, a float, as CPython reads that double.
+    test('and a number past 2^53 is a float', async () => {
+        expect((await mod()).as_big()).toBe('float');
     });
 });
