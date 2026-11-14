@@ -2240,6 +2240,13 @@ export function storeMember(value) {
     return authoredInstance(value) ? viewOf(value) : plainScalar(value);
 }
 
+// And what a store's setter keeps: the instance a view stands for, as a call
+// of a Python function finds it again, since the setter assigns with no call
+// in between; anything else as an argument crosses.
+export function storeValue(value) {
+    return VIEWED.has(value) ? pyBind(value) : pyArg(value);
+}
+
 // And what an instance's `@export` hands JavaScript, the value its name holds
 // as each binding of the name hands it over (`liveExport`): the one function
 // published for a callable, as a store's, and a JavaScript function as itself;

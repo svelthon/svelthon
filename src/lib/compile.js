@@ -640,6 +640,7 @@ const RUNTIME = {
     pyBind: '__pyBind',
     plainScalar: '__plainScalar',
     storeMember: '__storeMember',
+    storeValue: '__storeValue',
     exportedMember: '__exportedMember',
     directiveAction: '__directiveAction',
     directiveTransition: '__directiveTransition',
@@ -1801,7 +1802,7 @@ function preamble(c) {
             'jsCall',
             'ticking', 'pyBind', 'NONE', 'helpers',
             'directiveAction', 'directiveTransition', 'directiveAnimate',
-            'plainScalar', 'storeMember', 'invoke',
+            'plainScalar', 'storeMember', 'storeValue', 'invoke',
             ...(c.store ? ['pythonModule'] : SUBSCRIBING(c) ? ['unsubscribe'] : []),
             // Each by the rule that decides the code it is imported for.
             ...(c.store && storeExports(c).length ? ['liveExport'] : []),
@@ -2267,6 +2268,8 @@ function injectedBindings(c) {
 // A store's name as JavaScript reads it, from `value`, the expression that reads
 // what it holds now.
 const storeRead = (value) => `${RUNTIME.storeMember}(${value})`;
+// And what its setter keeps of `value`, what JavaScript assigned.
+const storeWrite = (value) => `${RUNTIME.storeValue}(${value})`;
 
 
 // And the names those star imports brought, on a store with no `__all__`: it
@@ -2280,7 +2283,7 @@ const starredMembers = (c) =>
                   ` if (__global.Object.hasOwn(${STORE_FACADE}, __name)) continue;` +
                   ` __global.Object.defineProperty(${STORE_FACADE}, __name, { enumerable: true,` +
                   ` get: () => ${storeRead(`${NS}[__name]`)},` +
-                  ` set: (${NEXT_VALUE}) => { ${NS}[__name] = __pyArg(${NEXT_VALUE}); } }); }`
+                  ` set: (${NEXT_VALUE}) => { ${NS}[__name] = ${storeWrite(NEXT_VALUE)}; } }); }`
           ]
         : [];
 
@@ -2408,8 +2411,8 @@ function instanceExports(c) {
                   // back a name `del` removed.
                   ...c.state
                       .filter(c.published)
-                      .map((n) => `    set ${n}(${NEXT_VALUE}) { ${NS}.${n} = __pyArg(${NEXT_VALUE}); },`),
-                  ...c.unsignalled.map((n) => `    set ${n}(${NEXT_VALUE}) { ${NS}.${n} = __pyArg(${NEXT_VALUE}); },`),
+                      .map((n) => `    set ${n}(${NEXT_VALUE}) { ${NS}.${n} = ${storeWrite(NEXT_VALUE)}; },`),
+                  ...c.unsignalled.map((n) => `    set ${n}(${NEXT_VALUE}) { ${NS}.${n} = ${storeWrite(NEXT_VALUE)}; },`),
                   ...c.deriveds
                       .filter((d) => c.published(d.name))
                       .map((d) => `    get ${d.name}() { return ${storeRead(`${NS}.${d.name}`)}; },`),

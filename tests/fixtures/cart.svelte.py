@@ -20,3 +20,7 @@ class Cart:
 
 
 cart = Cart()
+
+
+def kept(expected):
+    return type(cart) is Cart and cart is expected

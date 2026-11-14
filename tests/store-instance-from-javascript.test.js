@@ -1,6 +1,7 @@
 import { test, expect } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import CartReader from './fixtures/CartReader.svelte';
+import { store, kept } from './fixtures/cart.svelte.py';
 
 // An instance a store holds reached JavaScript as the object the engine keeps,
 // whose only key is its type: `store.cart.size` was undefined, `String()` gave
@@ -20,4 +21,14 @@ test('an instance a store holds reads, calls and is followed from JavaScript', (
     flushSync();
 
     expect(target.querySelector('p').textContent).toBe('cart 1 1 Cart of 1');
+});
+
+// Written back as JavaScript read it, a `<select>` bound to the store choosing
+// it again, the instance was replaced by its view: Python then held a
+// `JSObject`, no longer its `Cart`.
+test('an instance a store hands JavaScript is itself again when written back', () => {
+    const before = store.cart;
+    store.cart = store.cart;
+
+    expect(kept(before)).toBe(true);
 });
