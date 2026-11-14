@@ -1385,9 +1385,7 @@ can use and a name Python can read.
 **Calling one converts in both directions.** A Python callable handed to a
 JavaScript function crosses as a JavaScript one, and what comes back crosses the
 other way: `cubicOut(0.5)` is a Python `float` you can round and format, not a
-foreign number, and a number past 2^53, `1e21` or a large identifier, is the
-`float` it is, which goes back a number. The conversion is deliberately
-conservative, since a plain object,
+foreign number. The conversion is deliberately conservative, since a plain object,
 an array and a promise are returned untouched, so a value you hand straight back to
 JavaScript is not mangled on the way through, and an awaited promise still
 awaits. A list, a dict, a set or an instance handed to it is Python's own, as a

@@ -1441,9 +1441,7 @@ balisage emploie et un nom que Python lit.
 **L'appel convertit dans les deux sens.** Un appelable Python passé à une
 fonction JavaScript traverse en fonction JavaScript, et ce qui revient traverse
 en sens inverse : `cubicOut(0.5)` est un `float` Python qu'on arrondit et qu'on
-formate, pas un nombre étranger, et un nombre au-delà de 2^53, `1e21` ou un grand
-identifiant, est le `float` qu'il est, qui revient un nombre. La conversion est
-délibérément conservatrice :
+formate, pas un nombre étranger. La conversion est délibérément conservatrice :
 un objet ordinaire, un tableau et une promesse ressortent intacts, de sorte
 qu'une valeur qu'on repasse ensuite à JavaScript n'est pas abîmée au passage, et
 qu'une promesse attendue s'attend toujours. Une liste, un dict, un set ou une
