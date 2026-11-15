@@ -1623,7 +1623,10 @@ invalidated too, or its `load()` never re-runs and the cache keeps the old body.
 ## What a component can import
 
 `browser` (with `browser.html` and `browser.aio`), `javascript`, and any `.py`
-sitting beside the component or on the configured `path`. Python's standard
+sitting beside the component or on the configured `path`. On the server,
+`browser` holds no `window` or `document`: `from browser import window` there
+is the `ImportError` Python raises, and a component the server renders reads
+`browser.window` in an `@effect`, which runs in the browser only. Python's standard
 library does not ship: `import json`, `import math` or `from browser import
 timer` is refused on its line when the component compiles, with what stands in
 for it where there is something. So is what would reach for it at run time, a
@@ -1689,7 +1692,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 2 094 tests as written (vitest reports more, one per
+Validated by `npm test`, 2 095 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;

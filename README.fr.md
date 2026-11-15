@@ -1672,8 +1672,11 @@ qu'à ce qui remonte jusqu'à JavaScript.
 ## Ce qu'un composant peut importer
 
 `browser` (avec `browser.html` et `browser.aio`), `javascript`, et n'importe
-quel `.py` posé à côté du composant ou sur le `path` configuré. La
-bibliothèque standard de Python n'est pas livrée : `import json`, `import math`
+quel `.py` posé à côté du composant ou sur le `path` configuré. Sur le
+serveur, `browser` ne tient ni `window` ni `document` : `from browser import
+window` y est l'`ImportError` que lève Python, et un composant que le serveur
+rend lit `browser.window` dans un `@effect`, qui ne tourne que dans le
+navigateur. La bibliothèque standard de Python n'est pas livrée : `import json`, `import math`
 ou `from browser import timer` est refusé sur sa ligne à la compilation, avec
 ce qui le remplace quand il existe. De même pour ce qui irait la chercher à
 l'exécution, un alias `type` ou un `def f[T]` générique, `__reduce__()` et
@@ -1715,7 +1718,7 @@ parsing, que seul le compilateur charge ; le README de Bryntime en donne le poid
 
 ## État
 
-Validé par `npm test`, 2 094 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 2 095 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
