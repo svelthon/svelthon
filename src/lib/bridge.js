@@ -35,7 +35,6 @@ const {
     isTuple,
     isExactScalar,
     authoredClass,
-    authoredInstance,
     pyTruth,
     pyStr,
     pyList,
@@ -1576,7 +1575,8 @@ const seenUnder = (row) => {
 // reach; naming the door here is what keeps that measurement possible, and the
 // rule the project already follows for an internal it depends on: when the code
 // reads a name, a test names it too.
-export const marks = (value) => MARKS.get(value);
+// A view is asked for its container's, which a store hands JavaScript as one.
+export const marks = (value) => MARKS.get(VIEWED.has(value) ? pyBind(value) : value);
 
 // A Python line as a line of the file. `lines` is a number, the count of lines
 // before the `<script>` body, or that number with the ranges of Python lines
@@ -2228,16 +2228,16 @@ export const pyHook = (read, where) => component(read, where, null);
 // `importjs` brought, crosses as itself, which `pyHandler` hands back for the
 // adapter Python called it through: asked whether a Python signature was
 // declared, it crossed as that adapter, its answer a Python object. Anything
-// else crosses as `plainScalar` hands it, a container as itself, which keeps
-// no link a view would make; but an instance of a Python class crosses as its
-// view (`viewOf`), as a prop or a function of the store hands it over, so it
-// reads as its attributes, calls its methods and prints by its `__str__`,
-// where the object itself had nothing JavaScript could read. What is a call is
+// else crosses as a `.py` module hands it over (`pyExport`): a list, a dict or
+// an instance as its view, the container the page follows and an instance in
+// it read by its attributes, its methods and its `__str__`, and a set, bytes
+// or a range as JavaScript's. Handed as itself, a container held instances
+// JavaScript could not read and a set had no size. What is a call is
 // `callable`'s answer, the one every door asks.
 export function storeMember(value) {
     if (callable(value)) return pyHandler(value);
 
-    return authoredInstance(value) ? viewOf(value) : plainScalar(value);
+    return pyExport(value);
 }
 
 // And what a store's setter keeps: the instance a view stands for, as a call

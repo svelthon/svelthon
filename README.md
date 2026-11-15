@@ -933,8 +933,11 @@ def increment():
 ```
 
 Read from JavaScript, a scalar is JavaScript's own, so a price of `0.25` is the
-number `0.25`, a container is the Python object itself, whose mutations the
-page follows, and a Python function is called as the store's own are, whether
+number `0.25`, a list, a dict or an instance crosses as its view, as a `.py`
+module hands it over: the Python object itself, whose mutations the page
+follows, and the instances it holds read by their attributes, their methods and
+their `__str__`, `store.todos[0].title`; a set, bytes or a range is
+JavaScript's `Set`, `Uint8Array` or array. And a Python function is called as the store's own are, whether
 it was defined there or imported.
 
 Its runes are compiled by vite-plugin-svelte, whose module filter the project
@@ -1692,7 +1695,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 2 095 tests as written (vitest reports more, one per
+Validated by `npm test`, 2 097 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;

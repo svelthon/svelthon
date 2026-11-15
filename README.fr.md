@@ -977,8 +977,12 @@ def increment():
 ```
 
 Lu depuis JavaScript, un scalaire est celui de JavaScript, donc un prix de
-`0.25` est le nombre `0.25`, un conteneur est l'objet Python lui-même, dont
-la page suit les mutations, et une fonction Python s'appelle comme celles du
+`0.25` est le nombre `0.25`, une liste, un dict ou une instance passe en sa
+vue, comme un module `.py` la livre : l'objet Python lui-même, dont la page
+suit les mutations, et les instances qu'il tient se lisent par leurs attributs,
+leurs méthodes et leur `__str__`, `store.todos[0].title` ; un set, des bytes
+ou un range sont le `Set`, le `Uint8Array` ou le tableau de JavaScript. Et une
+fonction Python s'appelle comme celles du
 store, qu'elle y soit définie ou importée.
 
 Ses runes sont compilées par vite-plugin-svelte, dont on élargit le filtre de
@@ -1718,7 +1722,7 @@ parsing, que seul le compilateur charge ; le README de Bryntime en donne le poid
 
 ## État
 
-Validé par `npm test`, 2 095 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 2 097 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
