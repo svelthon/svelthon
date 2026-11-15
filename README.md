@@ -1627,8 +1627,9 @@ invalidated too, or its `load()` never re-runs and the cache keeps the old body.
 
 `browser` (with `browser.html` and `browser.aio`), `javascript`, and any `.py`
 sitting beside the component or on the configured `path`. On the server,
-`browser` holds no `window` or `document`: `from browser import window` there
-is the `ImportError` Python raises, and a component the server renders reads
+`browser` holds no `window`, `document` or `html`: `from browser import window`
+there is the `ImportError` Python raises, `import browser.html` the
+`ModuleNotFoundError`, and a component the server renders reads
 `browser.window` in an `@effect`, which runs in the browser only. Python's standard
 library does not ship: `import json`, `import math` or `from browser import
 timer` is refused on its line when the component compiles, with what stands in
@@ -1705,7 +1706,7 @@ row of a `test.for`), none expected to fail:
   Every expected value was produced by running the component's Python through
   CPython 3.12 as-is, never written by hand. Brython matches CPython on **every
   point**;
-- production build: **275 KB gzip**, Brython runtime included: what the demo
+- production build: **276 KB gzip**, Brython runtime included: what the demo
   page loads, its script, the modules it preloads and its styles, measured
   after each build by `scripts/build-size.mjs`.
 
@@ -1775,7 +1776,7 @@ runs. Keep hot loops out of a component, or reach for the C extensions
 Svelte reads a JavaScript value. Under 4 ms for 500 rows, which a page does
 not feel.
 
-Loading is the other price: 275 KB gzip, the Brython runtime included, and
+Loading is the other price: 276 KB gzip, the Brython runtime included, and
 **0.12 s to the demo's content** in production with a cold cache, 0.33 s with
 the processor slowed four times, as a modest laptop's is. Paid once per
 session, not per page, since the app never reloads.
