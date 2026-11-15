@@ -1534,7 +1534,9 @@ function unpackPositional(parts, call, names, tuple, unpack) {
 
         if (text === '') return;
 
-        const read = `${row}[${at}]`;
+        // Followed, as a block's names are: a row changed in place changes the
+        // element read off it.
+        const read = `${FOLLOW}(${row})[${at}]`;
         const equals = atTopLevel(text, (i) => text[i] === '=');
         const left = (equals === -1 ? text : text.slice(0, equals)).trim();
 
