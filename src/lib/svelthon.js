@@ -841,7 +841,11 @@ export function python(options = {}) {
             // its body runs at that statement (`pythonImports`).
             const prelude = pythonImports(imports, directory, searchPath);
 
-            generated.set(generatedKey(root, body), withPrelude(module, map, prelude));
+            // With the numbering its number is of, which a change of the file
+            // hands out again (`forgotten`, `load`).
+            const own = generatedKey(root, virtualId(name));
+
+            generated.set(generatedKey(root, body), { ...withPrelude(module, map, prelude), own, numbering: slots.get(own) });
 
             // The content is JavaScript now, so the tag must stop claiming
             // otherwise. Leaving `lang="python"` in place is invisible to the
@@ -1303,6 +1307,34 @@ export function svelthon(options = {}) {
         return direct;
     };
 
+    // A `.py` compiled: its script, and its body filed under its name, with the
+    // file, the text and the prelude it was compiled to. A `.py` may import
+    // another one, a route module reaching for its data layer: same prelude a
+    // component gets.
+    const compileModule = (file) => {
+        const content = readFileSync(file, 'utf8');
+        const name = nameFor(file, root);
+        const { script, module, map, imports } = compilePython(file, searchPath, root);
+        const prelude = pythonImports(imports, dirname(file), searchPath);
+
+        generated.set(key(virtualId(name)), { ...withPrelude(module, map, prelude), file, content, imports, prelude });
+
+        return script;
+    };
+
+    // Whether a body is the file's as it is now: its text, and its imports
+    // found where they were; a file gone keeps the body it had.
+    const compiledFrom = (entry) => {
+        try {
+            return (
+                readFileSync(entry.file, 'utf8') === entry.content &&
+                pythonImports(entry.imports, dirname(entry.file), searchPath) === entry.prelude
+            );
+        } catch {
+            return true;
+        }
+    };
+
     // The bodies generated from `file` that its change leaves stale in one
     // environment's graph, forgotten there; none when the file is not ours.
     const forgotten = (file, graph, timestamp) => {
@@ -1505,7 +1537,30 @@ export function svelthon(options = {}) {
         },
         load(id) {
             if (id.startsWith('\0')) {
-                const entry = generated.get(key(id.slice(1)));
+                let entry = generated.get(key(id.slice(1)));
+
+                // A `.py`'s body is the file as it is now, whichever is asked
+                // first: a page whose update was under way when a second save
+                // came asked for the body before the file, and was served the
+                // body of the save before, which stayed its body for every
+                // later save, until the server restarted.
+                if (entry?.file !== undefined && !compiledFrom(entry)) {
+                    compileModule(entry.file);
+                    entry = generated.get(key(id.slice(1)));
+                }
+
+                // A component's body asked under a number a change of its file
+                // took back, by such a page: the body of the component
+                // compiled before, the one that page runs, served and not kept,
+                // or the component compiled next, which asks the same number,
+                // was served it too, until the next save.
+                if (entry?.numbering !== undefined && slots.get(entry.own) !== entry.numbering) {
+                    const graph = this.environment?.moduleGraph;
+                    const mod = graph?.getModuleById(id);
+
+                    if (mod) graph.invalidateModule(mod);
+                }
+
                 return entry && (entry.map ? { code: entry.code, map: entry.map } : entry.code);
             }
 
@@ -1515,14 +1570,7 @@ export function svelthon(options = {}) {
             // Compiled under either id, so a refusal is reported against the
             // file JavaScript imported, the first one asked.
             const deferred = query === PYTHON_QUERY;
-            const name = nameFor(file, root);
-            const { script, module, map, imports } = compilePython(file, searchPath, root);
-
-            // A `.py` may import another one, a route module reaching for its
-            // data layer. Same prelude a component gets.
-            const prelude = pythonImports(imports, dirname(file), searchPath);
-
-            generated.set(key(virtualId(name)), withPrelude(module, map, prelude));
+            const script = compileModule(file);
 
             this.addWatchFile(file);
 
