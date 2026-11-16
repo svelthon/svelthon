@@ -127,15 +127,18 @@ describe('a declaration the compiler cannot read', () => {
     ])('a __js__ changed by %s is refused, with its line', ([, change]) => {
         expect(() =>
             compile(`__js__ = {"a": ["one"]}\n${change}\n`, 'M', 'm.py', { plain: true })
-        ).toThrow(/`__js__` is set by assigning it a dict at the top of the module, and read or changed by nothing else \(m\.py:2\)/);
+        ).toThrow(/`__js__` is set by assigning it a dict at the top of the module, and nothing else changes it or hands it or a list of it on; .* \(m\.py:2\)/);
     });
 
-    // A read that keeps the dict where the compiler sees it is no change; one
-    // that hands a list of it on, `x = __js__["a"]`, is refused as `__all__`'s
-    // is, since `x.append(…)` would change it out of sight.
+    // A read that keeps the dict where the compiler sees it is no change, nor is
+    // one that hands on its strings or a copy of a list; one that hands a list
+    // of it on, `x = __js__["a"]`, is refused as `__all__`'s is, since
+    // `x.append(…)` would change it out of sight.
     test('control: reading __js__ is not a change, handing a list of it on is', () => {
         expect(() =>
-            compile('__js__ = {"a": ["one"]}\nn = len(__js__["a"])\nprint(__js__)\n', 'M', 'm.py', { plain: true })
+            compile('__js__ = {"a": ["one"]}\nn = len(__js__["a"])\nprint(__js__)\nx = __js__["a"][:]\nfirst, = __js__["a"]\n', 'M', 'm.py', {
+                plain: true
+            })
         ).not.toThrow();
         expect(() =>
             compile('__js__ = {"a": ["one"]}\nx = __js__["a"]\n', 'M', 'm.py', { plain: true })
@@ -161,7 +164,7 @@ describe('a declaration the compiler cannot read', () => {
             compile('__js__ = {"a": ["one"]}\ndef add():\n    global __js__\n    __js__["b"] = ["two"]\n', 'M', 'm.py', {
                 plain: true
             })
-        ).toThrow(/`__js__` is set by assigning it a dict at the top of the module, and read or changed by nothing else \(m\.py:4\)/);
+        ).toThrow(/`__js__` is set by assigning it a dict at the top of the module, and nothing else changes it or hands it or a list of it on; .* \(m\.py:4\)/);
     });
 
     test('and one whose values are empty imports nothing', () => {
