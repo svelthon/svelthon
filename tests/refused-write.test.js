@@ -21,9 +21,16 @@
 // was put back, and its bases' lists of subclasses, which no copy of the class
 // put back.
 //
+// And the name written stays on what it held. A prop the component had written
+// went on following the value refused: the list it kept no longer told its
+// readers when it changed, and the same write, made later where it is allowed,
+// was taken for one that changes nothing and lost, `3` on the page where
+// Svelte's own prop reads `4`. So was a scalar the parent passed and the
+// component never wrote, `1` where Svelte reads `5`.
+//
 // The witness is the same template over Svelte's `$state`.
 import { test, expect } from 'vitest';
-import { mount, flushSync } from './mounted.js';
+import { mount, unmount, flushSync } from './mounted.js';
 import { held } from './fixtures/kept.js';
 import { stop } from './fixtures/enumerated.js';
 import { after } from './fixtures/refused_rows.js';
@@ -37,6 +44,12 @@ import RefusedPutBack from './fixtures/RefusedPutBack.svelte';
 import RefusedPutBackNative from './fixtures/RefusedPutBackNative.svelte';
 import RefusedRows from './fixtures/RefusedRows.svelte';
 import RefusedRowsNative from './fixtures/RefusedRowsNative.svelte';
+import RefusedWriteState from './fixtures/RefusedWriteState.svelte';
+import RefusedWriteProp from './fixtures/RefusedWriteProp.svelte';
+import RefusedWriteBindable from './fixtures/RefusedWriteBindable.svelte';
+import RefusedWritePropNative from './fixtures/RefusedWritePropNative.svelte';
+import RefusedWriteScalar from './fixtures/RefusedWriteScalar.svelte';
+import RefusedWriteScalarNative from './fixtures/RefusedWriteScalarNative.svelte';
 
 // What the page showed, or whether it was refused, and what the model holds
 // after.
@@ -163,4 +176,47 @@ test.for([
 
     expect(mine).toEqual(rows(RefusedRowsNative, kind));
     expect(mine).toEqual({ shown: ['2', 'refused'], after: { reads: 0, first, second: 43, length: 2 } });
+});
+
+// What the page showed after each step: the name written its own list, a write
+// refused while rendering, a change to that list, the refused write again.
+test.for([
+    ['a state', RefusedWriteState],
+    ['a prop', RefusedWriteProp],
+    ['a bindable prop', RefusedWriteBindable],
+    ["Svelte's prop", RefusedWritePropNative]
+])('%s written while rendering, refused, follows what it held', async ([, Component]) => {
+    const target = document.body.appendChild(document.createElement('div'));
+    const instance = mount(Component, { target, props: { items: [0] } });
+    const seen = [];
+
+    for (const step of ['override', 'step', 'grow', 'retry']) {
+        instance[step]();
+        flushSync();
+        seen.push(`${target.querySelector('i').textContent} ${target.querySelector('p').textContent}`);
+    }
+    await unmount(instance);
+    target.remove();
+
+    expect(seen).toEqual(['idle 2', 'refused 2', 'refused 3', 'refused 4']);
+});
+
+// The same on a scalar the parent passed, which the component never wrote.
+test.for([
+    ['a scalar prop', RefusedWriteScalar],
+    ["Svelte's scalar prop", RefusedWriteScalarNative]
+])('%s written while rendering, refused, takes the same write once allowed', async ([, Component]) => {
+    const target = document.body.appendChild(document.createElement('div'));
+    const instance = mount(Component, { target, props: { count: 1 } });
+    const seen = [];
+
+    for (const step of ['step', 'retry']) {
+        instance[step]();
+        flushSync();
+        seen.push(`${target.querySelector('i').textContent} ${target.querySelector('p').textContent}`);
+    }
+    await unmount(instance);
+    target.remove();
+
+    expect(seen).toEqual(['refused 1', 'refused 5']);
 });

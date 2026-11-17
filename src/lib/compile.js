@@ -2150,19 +2150,25 @@ function authorBindings(c) {
         // Svelte: `value = value.strip()` under `value: str` was taken for the
         // default, and the page kept what the parent passed.
         //
+        // A write Svelte refuses, made while the page renders, leaves the prop
+        // following what it held, as Bryc's accessor leaves a state, and what
+        // the derived holds (`current`) as it was.
+        //
         // A route's `data` is SvelteKit's merge of its nodes' plain objects,
         // read back as the dict of what the `load()`s returned (`routeData`).
         ...c.props.map(
             (n, _, __, read = n === 'data' && routeComponent(c.source) ? '__routeData' : '__pyBind') =>
                 `__bind(__proto, '${n}', () => (__SHAPING.on ? (${local(n)}, __followOwn(${read}(${pick(n)}()))) : (${rev(n)}, __follow(${read}(${pick(n)}())))),` +
-                ` function (${NEXT_VALUE}) { const __held = ${bump(n)}.held; const __written = __track(${NEXT_VALUE}, ${bump(n)}, ${SUBS});` +
+                ` function (${NEXT_VALUE}) { const __held = ${bump(n)}.held; const __current = ${fallback(n)}.current;` +
+                ` try { const __written = __track(${NEXT_VALUE}, ${bump(n)}, ${SUBS});` +
                 ` if (${declaring(c, n)}) { ${fallback(n)}.declared = __written; ${fallback(n)}.value = __written; ${local(n)} = __written; return; }` +
                 ` if (__changesNothing(__written, __pyBind(${fallback(n)}.overridden ? __held : ${fallback(n)}.absent ? ${fallback(n)}.value : ${fallback(n)}.current))) return;` +
                 ` const __plain = __plainScalar(__written);` +
                 ` if (__plainScalar(${fallback(n)}.current) !== __plain) ${fallback(n)}.current = __plain;` +
                 ` ${given(n)} = ${fallback(n)}.current; ${fallback(n)}.overridden = true;` +
                 ` if (${fallback(n)}.value !== undefined) ${fallback(n)}.value = __written;` +
-                ` ${local(n)} = __written; ${bump(n)}(); },` +
+                ` ${local(n)} = __written; ${bump(n)}(); }` +
+                ` catch (__refused) { ${fallback(n)}.current = __current; __track(__held, ${bump(n)}, ${SUBS}); throw __refused; } },` +
                 ` () => ${pick(n)}());`
         ),
         // What Python writes goes up as JavaScript's own, a scalar its number
