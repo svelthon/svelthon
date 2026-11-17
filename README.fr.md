@@ -42,8 +42,8 @@ lieu.
 npm install svelthon
 ```
 
-Deux noms, dans un projet qui a déjà Svelte 5 ou SvelteKit : un plugin Vite, et
-un préprocesseur pour `svelte.config.js`. Node `^20.19.0 || >=22.12.0`, la plage
+Deux noms, dans un projet qui a déjà Svelte 5.57.1 ou plus, ou SvelteKit 3 : un
+plugin Vite, et un préprocesseur pour `svelte.config.js`. Node `^20.19.0 || >=22.12.0`, la plage
 de Vite 7.
 
 ```js
@@ -1384,8 +1384,8 @@ build de production avec `adapter-node`, contre **SvelteKit 3** :
 | streaming | une coroutine dans les données rendues devient une promesse que SvelteKit diffuse |
 | options de page | `prerender = True`, `ssr = False`, `csr`, exportées telles qu'elles sont liées |
 | cookies, `setHeaders` | par `event["js"]`, sans aucun pont de notre part |
-| `handle`, `handleError` | en Python, derrière une amorce JavaScript de deux lignes |
-| `reroute`, `handleError` client | de même, hooks universels et client |
+| `handle`, `handleError` | en Python, `src/hooks.server.py` |
+| `reroute`, `handleError` client | en Python aussi, `src/hooks.py` et `src/hooks.client.py` |
 | layouts imbriqués | un `+layout.server.py` par niveau, données fusionnées |
 | `+page.py` | un `load()` universel : serveur, puis navigateur lors d'une navigation client |
 | `+server.py` | un endpoint entièrement Python, qui construit sa `Response` |
@@ -1599,28 +1599,25 @@ Une classe JavaScript appelée construit, comme l'appel d'une classe en Python :
 égaux que s'ils sont le même objet, comme le dit `===` : `obj.to_dict()` compare
 ce qu'ils contiennent.
 
-### Le seul endroit où SvelteKit code en dur
+### Les hooks, et le seul endroit où SvelteKit code en dur
 
-Les hooks sont trouvés par `resolve_entry`, qui filtre sur `/\.(js|ts)$/` et
-ignore `moduleExtensions`, si bien qu'un `src/hooks.server.py` n'est jamais vu. Une
-amorce de deux lignes fait le pont, et tout le reste reste du Python :
-
-```js
-// src/hooks.server.js
-export { handle, handleError } from './hooks.server.py';
-```
+Depuis SvelteKit 3, les hooks sont trouvés par les extensions que nomme
+`moduleExtensions`, comme les modules de route : `src/hooks.server.py`,
+`src/hooks.py` et `src/hooks.client.py` sont lus tels quels, sans JavaScript à
+côté.
 
 ```python
-async def handle(entree):
-    reponse = await entree.resolve(entree.event)
-    reponse.headers.set("x-python-handle", "1")
-    return reponse
+# src/hooks.server.py
+async def handle(given):
+    response = await given.resolve(given.event)
+    response.headers.set("x-python-handle", "1")
+    return response
 ```
 
-Les matchers de paramètres font exception : SvelteKit importe `src/params` avec
-le chargeur de Node plutôt qu'à travers Vite, donc une amorce qui réexporte d'un
-`.py` échoue en `ERR_UNKNOWN_FILE_EXTENSION`. Ils restent en JavaScript : un
-fichier, quelques lignes.
+Les matchers de paramètres font exception : un build importe `src/params` avec
+le chargeur de Node plutôt qu'à travers Vite, donc un `.py` échoue en
+`ERR_UNKNOWN_FILE_EXTENSION`. Ils restent en JavaScript : un fichier, quelques
+lignes.
 
 ## Rendu côté serveur
 

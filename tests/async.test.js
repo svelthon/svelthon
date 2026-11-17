@@ -92,8 +92,18 @@ describe('error inside a coroutine', () => {
             globalThis.setTimeout = original;
         }
 
-        expect(pending).toHaveLength(1);
-        expect(pending[0]).toThrow(message);
+        // Svelte schedules a timer of its own after a click it delegated, to
+        // let the event it propagated go: ours is the one that throws.
+        const thrown = pending.flatMap((fn) => {
+            try {
+                fn();
+                return [];
+            } catch (error) {
+                return [error.message];
+            }
+        });
+
+        expect(thrown).toEqual([expect.stringMatching(message)]);
     });
 
     test('a coroutine that completes triggers nothing', async () => {

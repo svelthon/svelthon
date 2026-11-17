@@ -81,6 +81,20 @@ answered() {
     fi
 }
 
+# A header the server's `handle` in Python wrote on the answer. Hooks are found
+# by the extensions `moduleExtensions` names, as a route module is, since
+# SvelteKit 3: a `.py` of them needed a JavaScript file re-exporting it.
+header() {
+    local path=$1 wanted=$2
+
+    if curl -s -o /dev/null -D - "$ORIGIN$path" | grep -qi "^$wanted"; then
+        echo "✓ kit $path — $wanted"
+    else
+        echo "✗ kit $path — no $wanted"
+        status=1
+    fi
+}
+
 # A remote function, as the browser asks it: `GET /_app/remote/<id>`, its id
 # the one SvelteKit wrote into the client.
 remote() {
@@ -112,6 +126,17 @@ route /named 'asking remote.py'
 route /compiler 'compiled True'
 answered /missing 404
 answered /moved 303 /load
+# The hooks in Python: the server's, the universal `reroute`, and the client's,
+# built into the browser's bundle.
+header / 'x-python-hook: handle'
+route /rerouted '42 from [0, 1, 4, 9]'
+
+if grep -rqF 'client hook from Python' "$APP/build/client"; then
+    echo "✓ kit client hooks — built from Python"
+else
+    echo "✗ kit client hooks — not in the client's bundle"
+    status=1
+fi
 
 remote greeting 'hello from Python'
 remote shout 'shouted from python'
@@ -140,6 +165,8 @@ if kill -0 "$DEV" 2>/dev/null; then
     route /starred 'starred layout and starred page'
     answered /missing 404
     answered /moved 303 /load
+    header / 'x-python-hook: handle'
+    route /rerouted '42 from [0, 1, 4, 9]'
 else
     echo "✗ kit dev server — $(grep -m1 -E 'Error' "$LOG" || tail -1 "$LOG")"
     status=1

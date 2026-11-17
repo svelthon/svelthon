@@ -43,8 +43,8 @@ already happened.
 npm install svelthon
 ```
 
-Two names, in a project that already has Svelte 5 or SvelteKit: a Vite plugin,
-and a preprocessor for `svelte.config.js`. Node `^20.19.0 || >=22.12.0`, Vite
+Two names, in a project that already has Svelte 5.57.1 or later, or SvelteKit 3:
+a Vite plugin, and a preprocessor for `svelte.config.js`. Node `^20.19.0 || >=22.12.0`, Vite
 7's range.
 
 ```js
@@ -1329,8 +1329,8 @@ production build with `adapter-node`, against **SvelteKit 3**:
 | streaming | a coroutine in the returned data becomes a promise SvelteKit streams |
 | page options | `prerender = True`, `ssr = False`, `csr`, exported as they are bound |
 | cookies, `setHeaders` | through `event["js"]`, no bridge of ours involved |
-| `handle`, `handleError` | in Python, behind a two-line JavaScript shim |
-| `reroute`, client `handleError` | likewise, universal and client hooks |
+| `handle`, `handleError` | in Python, `src/hooks.server.py` |
+| `reroute`, client `handleError` | in Python too, `src/hooks.py` and `src/hooks.client.py` |
 | nested layouts | `+layout.server.py` at each level, data merged |
 | `+page.py` | a universal `load()`: on the server, then in the browser on a client navigation |
 | `+server.py` | a pure-Python endpoint, building its own `Response` |
@@ -1535,26 +1535,22 @@ A JavaScript class called constructs, as calling a class does in Python:
 only if they are the same object, as `===` tells: `obj.to_dict()` compares what
 they hold.
 
-### The one place SvelteKit is hard-coded
+### Hooks, and the one place SvelteKit is hard-coded
 
-Hooks are found by `resolve_entry`, which matches `/\.(js|ts)$/` and ignores
-`moduleExtensions`, so `src/hooks.server.py` is never seen. A two-line shim
-bridges it, and everything else stays Python:
-
-```js
-// src/hooks.server.js
-export { handle, handleError } from './hooks.server.py';
-```
+Hooks are found by the extensions `moduleExtensions` names, as route modules
+are, since SvelteKit 3: `src/hooks.server.py`, `src/hooks.py` and
+`src/hooks.client.py` are read as they are, with no JavaScript beside them.
 
 ```python
-async def handle(entree):
-    reponse = await entree.resolve(entree.event)
-    reponse.headers.set("x-python-handle", "1")
-    return reponse
+# src/hooks.server.py
+async def handle(given):
+    response = await given.resolve(given.event)
+    response.headers.set("x-python-handle", "1")
+    return response
 ```
 
-Param matchers are the exception: SvelteKit imports `src/params` with Node's own
-loader rather than through Vite, so a shim re-exporting from a `.py` fails with
+Param matchers are the exception: a build imports `src/params` with Node's own
+loader rather than through Vite, so a `.py` fails with
 `ERR_UNKNOWN_FILE_EXTENSION`. They stay JavaScript: one file, a few lines.
 
 ## Server-side rendering

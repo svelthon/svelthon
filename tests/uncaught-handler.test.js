@@ -66,20 +66,29 @@ describe('an uncaught exception in a handler', () => {
         globalThis.setTimeout = (fn, ...rest) =>
             typeof fn === 'function' && rest.length === 0 ? pending.push(fn) : original(fn, ...rest);
 
+        // Svelte schedules a timer of its own after a click it delegated, to
+        // let the event it propagated go: ours is the one that throws.
+        const thrown = [];
+
         try {
             target.querySelector('button[data-k="later"]').click();
-            await vi.waitFor(() => expect(pending).toHaveLength(1));
+            await vi.waitFor(() => {
+                for (const fn of pending.splice(0)) {
+                    try {
+                        fn();
+                    } catch (caught) {
+                        thrown.push(caught);
+                    }
+                }
+                expect(thrown).not.toHaveLength(0);
+            });
         } finally {
             globalThis.setTimeout = original;
         }
 
-        let error;
-        try {
-            pending[0]();
-        } catch (caught) {
-            error = caught;
-        }
+        const [error] = thrown;
 
+        expect(thrown).toHaveLength(1);
         expect(error).toBeInstanceOf(Error);
         expect(error.message).toMatch(/ValueError: LATER/);
         expect(error.ob_type).toBeUndefined();

@@ -39,7 +39,13 @@
     "node": "^20.19.0 || >=22.12.0"
   },
   "peerDependencies": {
-    "svelte": "^5.56.0"
+    "@sveltejs/kit": "^3.0.0",
+    "svelte": "^5.57.1"
+  },
+  "peerDependenciesMeta": {
+    "@sveltejs/kit": {
+      "optional": true
+    }
   },
   "scripts": {
     "test": "vitest run && bash scripts/browser-check.sh",
@@ -55,12 +61,12 @@
     "bench": "bash scripts/bench.sh"
   },
   "devDependencies": {
-    "@sveltejs/adapter-node": "6.0.0-next.10",
-    "@sveltejs/kit": "3.0.0-next.23",
+    "@sveltejs/adapter-node": "6.0.0",
+    "@sveltejs/kit": "3.0.0",
     "@sveltejs/vite-plugin-svelte": "^7.3.0",
     "@vitest/coverage-v8": "^4.1.11",
     "jsdom": "^29.1.1",
-    "svelte": "^5.56.9",
+    "svelte": "5.57.1",
     "vite": "^8.2.1",
     "vitest": "^4.1.10"
   },
