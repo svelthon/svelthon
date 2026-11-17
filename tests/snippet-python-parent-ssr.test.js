@@ -10,6 +10,7 @@ import SnippetPythonParent from './fixtures/SnippetPythonParent.svelte';
 import SnippetPythonChildHost from './fixtures/SnippetPythonChildHost.svelte';
 import SnippetPythonParentShapes from './fixtures/SnippetPythonParentShapes.svelte';
 import SnippetPythonChildShapesHost from './fixtures/SnippetPythonChildShapesHost.svelte';
+import LazyDoorsParent from './fixtures/LazyDoorsParent.svelte';
 
 test.for(['bare', 'alias', 'dict', 'box', 'getter', 'nested', 'held'])('a Python parent snippet rendered %s on a server keeps its values', (kind) => {
     expect(render(SnippetPythonParent, { props: { kind } }).body).toContain('float:1.0|Price|Label');
@@ -23,4 +24,14 @@ test('a Python parent snippet taking its arguments apart on a server keeps their
     expect(render(SnippetPythonParentShapes, { props: { shape: 'default' } }).body).toContain('float|Price|Label');
     expect(render(SnippetPythonChildShapesHost, { props: { shape: 'pattern' } }).body).toContain('number:1|number|string');
     expect(render(SnippetPythonChildShapesHost, { props: { shape: 'default' } }).body).toContain('number|number|string');
+});
+
+// An iterable made as it goes, a generator, an iterator, a range, crosses to a
+// Python reader whole, as a snippet's argument, a prop, a spread or a
+// context's value: the server crossed it before the call, and the list made at
+// the door left an iterator used up and a generator another object.
+test.for(['snippet', 'prop', 'spread', 'context'])('an iterable made as it goes reaches a Python reader whole on a server, as a %s', (route) => {
+    const seen = ['generator', 'iterator', 'range'].map((kind) => render(LazyDoorsParent, { props: { route, kind } }).body.match(/<output>(.*?)<\/output>/)?.[1]);
+
+    expect(seen).toEqual(['generator same=True [1, 2, 3]', 'list_iterator same=True [1, 2, 3]', 'range same=True [1, 2, 3]']);
 });

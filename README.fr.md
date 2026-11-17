@@ -258,9 +258,10 @@ parent passe une nouvelle valeur : c'est la règle de Svelte pour les props non
 `$bindable`.
 
 Un parent Python donne à un enfant Python la valeur elle-même, une sous-classe
-de `float` avec sa classe, et à un enfant JavaScript le nombre ou la chaîne de
-JavaScript, et pour un itérable fait au fil de l'eau, un `range`, une vue de
-dict, un générateur, `map` ou `zip`, la liste qu'en fait `list()`, que le
+de `float` avec sa classe, un générateur intact, et à un enfant JavaScript le
+nombre ou la chaîne de JavaScript, et pour un itérable fait au fil de l'eau, un
+`range`, une vue de dict, un générateur, `map` ou `zip`, la liste qu'en fait
+`list()` quand l'enfant le lit pour la première fois, que le
 `{#each}` de l'enfant parcourt, seul ou tenu dans un dict ou une liste,
 `data={{"labels": d.keys()}}`. `None` est l'absence pour l'un comme pour l'autre, le `undefined`
 que passe un parent Svelte, et l'enfant lit donc son défaut ; `javascript.NULL`
@@ -275,7 +276,10 @@ Un générateur asynchrone, qu'aucune liste ne peut tenir, arrive à JavaScript
 comme un itérateur asynchrone sur lui, que `for await` parcourt et que
 `Array.fromAsync` rassemble, et revient à Python tel qu'il était ; et
 `async for` parcourt ce que `for await` parcourt, un générateur asynchrone
-JavaScript ou un `ReadableStream`, `async for chunk in response.body`.
+JavaScript ou un `ReadableStream`, `async for chunk in response.body`. Une
+boucle quittée avant la fin ne relâche rien, comme en CPython, là où
+`for await` relâche le flux : `await response.body.aclose()` dans un `finally`
+le fait, et exécute le `finally` d'un générateur JavaScript.
 
 ### Un prop qui remonte
 
@@ -930,7 +934,8 @@ boucle ou dans une fonction. Un attribut d'un builtin, `str.mro()`, ou écrit
 avec `_`, `().__class__`, l'est aussi : il mène d'un littéral aux classes qui
 sont derrière, dans le processus qui construit. La liste passée ailleurs aussi,
 `noms = __all__` ou `list.clear(__all__)`, puisque ce qu'on en fait ensuite
-échappe à la lecture ; `list(__all__)` en donne une copie à manipuler.
+échappe à la lecture ; `list(__all__)` en donne une copie à manipuler, sauf si
+la liste tient une liste, que la copie partagerait.
 
 **Une fonction rendue par un appel `importjs` est la fonction elle-même**, et
 c'est ce qui fait marcher les fonctions distantes de SvelteKit depuis Python :
@@ -1454,9 +1459,10 @@ vous le dit sinon. Une classe de `src/lib/server/`, d'un `*.server.py` ou du
 `+page.server.py` d'une route, que SvelteKit ne laisse jamais importer au
 navigateur, est refusée sur le serveur, le module nommé. Ce que pickle refuse
 est refusé avec ses mots : un générateur, une vue de dict, une lambda ou une
-fonction locale. Au premier niveau d'un `load()`, la fusion de SvelteKit lit
-chaque valeur par sa vue, qui fait une liste d'un itérateur ou d'un
-générateur : la page lit cette liste, sur le serveur comme dans le navigateur.
+fonction locale. Au premier niveau d'un `load()`, un itérateur ou un générateur
+devient une liste quand le `load()` rend ses données, une seule fois pour ses
+deux lecteurs, la page du serveur et ce qui part au navigateur : la page lit
+cette liste, sur le serveur comme dans le navigateur.
 
 **Dans un seul sens.** Reconstruire une classe ou appeler une fonction que les
 données nomment exécute du code, donc le serveur ne le fait jamais avec ce que le
@@ -1798,7 +1804,7 @@ parsing, que seul le compilateur charge ; le README de Bryntime en donne le poid
 
 ## État
 
-Validé par `npm test`, 2 130 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 2 132 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
@@ -1808,7 +1814,7 @@ rangée d'un `test.for`), aucun échec attendu :
   contrôle et frames. Chaque valeur attendue a été produite par CPython 3.12 en
   exécutant le code du composant tel quel, jamais écrite à la main. Brython
   reproduit CPython sur **chaque point** ;
-- build de production : **284 Ko gzip**, runtime Brython compris : ce que la
+- build de production : **285 Ko gzip**, runtime Brython compris : ce que la
   page de démo charge, son script, les modules qu'elle précharge et ses styles,
   mesuré après chaque build par `scripts/build-size.mjs`.
 
@@ -1910,7 +1916,7 @@ WebAssembly.
 où Svelte lit une valeur JavaScript. Moins de 4 ms pour 500 lignes, ce qu'une
 page ne ressent pas.
 
-L'autre prix est au chargement : 284 Ko gzip, runtime Brython compris, et
+L'autre prix est au chargement : 285 Ko gzip, runtime Brython compris, et
 **0,12 s jusqu'au contenu de la démo** en production, cache vide ; 0,33 s avec
 le processeur ralenti quatre fois, comme celui d'un portable modeste. Payé une
 fois par session, pas par page, puisque l'application ne recharge jamais.

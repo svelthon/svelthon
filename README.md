@@ -254,10 +254,11 @@ Python, and a required prop that was not passed reads as `None`, not
 a new value, which is Svelte's own rule for non-`$bindable` props.
 
 A Python parent hands a Python child the value itself, a `float` subclass with
-its class, and a JavaScript child JavaScript's number or string, and for an
-iterable made as it goes, a `range`, a dict's view, a generator, `map` or `zip`,
-the list `list()` makes of it, which the child's `{#each}` walks, alone or held in
-a dict or a list, `data={{"labels": d.keys()}}`. None is the
+its class, a generator untouched, and a JavaScript child JavaScript's number or
+string, and for an iterable made as it goes, a `range`, a dict's view, a
+generator, `map` or `zip`, the list `list()` makes of it when the child first
+reads it, which the child's `{#each}` walks, alone or held in a dict or a list,
+`data={{"labels": d.keys()}}`. None is the
 absence to both, the `undefined` a Svelte parent passes, so the child reads its
 default; `javascript.NULL` is a value, as `null` is. The compiler
 tells the two apart by reading the child's file when the import names one. Any
@@ -270,7 +271,9 @@ An asynchronous generator, which no list can hold, reaches JavaScript as an
 asynchronous iterator over it, which `for await` walks and `Array.fromAsync`
 gathers, and comes back to Python as itself; and `async for` walks what `for
 await` walks, a JavaScript asynchronous generator or a `ReadableStream`,
-`async for chunk in response.body`.
+`async for chunk in response.body`. A loop left early lets nothing go, as in
+CPython, where `for await` releases the stream: `await response.body.aclose()`
+in a `finally` does, and runs the `finally` of a JavaScript generator.
 
 ### A prop that travels back up
 
@@ -887,7 +890,8 @@ change under an `if`, in a loop or in a function. So is an attribute of a
 builtin, `str.mro()`, or one spelled with `_`, `().__class__`: it leads from a
 literal to the classes behind it, in the process that builds. So is the list handed on,
 `names = __all__` or `list.clear(__all__)`, since what is done to it next is out
-of sight; `list(__all__)` is a copy to work on.
+of sight; `list(__all__)` is a copy to work on, unless the list holds a list,
+which the copy would share.
 
 **A function an `importjs` call hands back is the function itself**, which is
 what makes SvelteKit's remote functions work from Python: `accepted = query(…)`
@@ -1393,9 +1397,9 @@ said so otherwise. One of `src/lib/server/`, a `*.server.py` or a route's
 `+page.server.py`, which SvelteKit never lets the browser import, is refused on
 the server, naming the module. What pickle refuses is refused with its words: a
 generator, a dict's view, a lambda or a local function. At the top level of a
-`load()`, SvelteKit's merge reads each value through its view, which makes a
-list of an iterator or a generator: the page reads that list, on the server and
-in the browser alike.
+`load()`, an iterator or a generator becomes a list as the `load()` returns its
+data, once for both of its readers, the server's page and what goes to the
+browser: the page reads that list, on the server and in the browser alike.
 
 **One way only.** Rebuilding a class or calling a function the data names runs
 code, so the server never does it with what the browser sends, a remote
@@ -1762,7 +1766,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 2 130 tests as written (vitest reports more, one per
+Validated by `npm test`, 2 132 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;
@@ -1772,7 +1776,7 @@ row of a `test.for`), none expected to fail:
   Every expected value was produced by running the component's Python through
   CPython 3.12 as-is, never written by hand. Brython matches CPython on **every
   point**;
-- production build: **284 KB gzip**, Brython runtime included: what the demo
+- production build: **285 KB gzip**, Brython runtime included: what the demo
   page loads, its script, the modules it preloads and its styles, measured
   after each build by `scripts/build-size.mjs`.
 
@@ -1842,7 +1846,7 @@ runs. Keep hot loops out of a component, or reach for the C extensions
 Svelte reads a JavaScript value. Under 4 ms for 500 rows, which a page does
 not feel.
 
-Loading is the other price: 284 KB gzip, the Brython runtime included, and
+Loading is the other price: 285 KB gzip, the Brython runtime included, and
 **0.12 s to the demo's content** in production with a cold cache, 0.33 s with
 the processor slowed four times, as a modest laptop's is. Paid once per
 session, not per page, since the app never reloads.

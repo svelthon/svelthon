@@ -18,6 +18,7 @@ import SnippetPythonParent from './fixtures/SnippetPythonParent.svelte';
 import SnippetPythonChildHost from './fixtures/SnippetPythonChildHost.svelte';
 import SnippetPythonParentShapes from './fixtures/SnippetPythonParentShapes.svelte';
 import SnippetPythonChildShapesHost from './fixtures/SnippetPythonChildShapesHost.svelte';
+import LazyDoorsParent from './fixtures/LazyDoorsParent.svelte';
 
 const shown = async (Component, props) => {
     const target = document.body.appendChild(document.createElement('div'));
@@ -147,6 +148,24 @@ test('a JavaScript parent snippet taking its arguments apart is handed JavaScrip
 // values: a float, None and a callable.
 test('a snippet a Python parent gives a Python child reads Python values', async () => {
     expect(await shown(SnippetArgsPythonHost)).toBe('python=float:0.5|True|7 ready=ready');
+});
+
+// And an iterable made as it goes reaches a Python reader whole, by each door,
+// in the browser as on a server.
+test.for(['snippet', 'prop', 'spread', 'context'])('an iterable made as it goes reaches a Python reader whole in the browser, as a %s', async (route) => {
+    const seen = [];
+
+    for (const kind of ['generator', 'iterator', 'range']) {
+        const target = document.body.appendChild(document.createElement('div'));
+        const instance = mount(LazyDoorsParent, { target, props: { route, kind } });
+
+        flushSync();
+        seen.push(target.querySelector('output')?.textContent);
+        await unmount(instance);
+        target.remove();
+    }
+
+    expect(seen).toEqual(['generator same=True [1, 2, 3]', 'list_iterator same=True [1, 2, 3]', 'range same=True [1, 2, 3]']);
 });
 
 // `{@render footer?.()}` renders nothing when the prop is absent, however it is

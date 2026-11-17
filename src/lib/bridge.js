@@ -165,6 +165,7 @@ const {
     isPlainDict,
     crossesBack,
     readBack,
+    listedNow,
     readsAsPython,
     standsForPython
 } = core;
@@ -2617,12 +2618,15 @@ const object = (one) => one !== null && typeof one === 'object';
 // no door's, and stays JavaScript's; and a container of JavaScript's own is
 // none either, unless one was made to stand for a value (`ADOPTED`), asked of
 // no one: walking a JavaScript `load()`'s ten thousand rows, asking each one
-// cost it 60 % more.
+// cost it 60 % more. The serialiser reads what a view holds, and the view of an
+// iterable made as it goes stands for its list from then on (`listedNow`).
 const ADOPTED = new WeakSet();
 
 const pythonOf = (thing) => {
     if (!object(thing) && !VIEWED.has(thing)) return undefined;
     if (containerOf(thing) && !ADOPTED.has(thing)) return undefined;
+
+    listedNow(thing);
 
     const python = pyBind(thing);
 
