@@ -631,6 +631,9 @@ const RUNTIME = {
     invoke: '__invoke',
     pyExport: '__pyExport',
     routeLoad: '__routeLoad',
+    routeServerLoad: '__routeServerLoad',
+    routeActions: '__routeActions',
+    routeData: '__routeData',
     liveExport: '__liveExport',
     readOnlyImport: '__readOnlyImport',
     templateFrom: '__templateFrom',
@@ -1801,6 +1804,7 @@ function preamble(c) {
             'pyDerive', 'pyRead', 'pyEvent', 'pyAttach', 'plainData', 'pyArg', 'pyData', 'pyComponent', 'pyExpression',
             'jsCall',
             'ticking', 'pyBind', 'NONE', 'helpers',
+            ...(c.props.includes('data') && routeComponent(c.source) ? ['routeData'] : []),
             'directiveAction', 'directiveTransition', 'directiveAnimate',
             'plainScalar', 'storeMember', 'storeValue', 'invoke',
             ...(c.store ? ['pythonModule'] : SUBSCRIBING(c) ? ['unsubscribe'] : []),
@@ -2145,9 +2149,12 @@ function authorBindings(c) {
         // (`declaring`). Any other write of the body is the child's, as in
         // Svelte: `value = value.strip()` under `value: str` was taken for the
         // default, and the page kept what the parent passed.
+        //
+        // A route's `data` is SvelteKit's merge of its nodes' plain objects,
+        // read back as the dict of what the `load()`s returned (`routeData`).
         ...c.props.map(
-            (n) =>
-                `__bind(__proto, '${n}', () => (__SHAPING.on ? (${local(n)}, __followOwn(__pyBind(${pick(n)}()))) : (${rev(n)}, __follow(__pyBind(${pick(n)}())))),` +
+            (n, _, __, read = n === 'data' && routeComponent(c.source) ? '__routeData' : '__pyBind') =>
+                `__bind(__proto, '${n}', () => (__SHAPING.on ? (${local(n)}, __followOwn(${read}(${pick(n)}()))) : (${rev(n)}, __follow(${read}(${pick(n)}())))),` +
                 ` function (${NEXT_VALUE}) { const __held = ${bump(n)}.held; const __written = __track(${NEXT_VALUE}, ${bump(n)}, ${SUBS});` +
                 ` if (${declaring(c, n)}) { ${fallback(n)}.declared = __written; ${fallback(n)}.value = __written; ${local(n)} = __written; return; }` +
                 ` if (__changesNothing(__written, __pyBind(${fallback(n)}.overridden ? __held : ${fallback(n)}.absent ? ${fallback(n)}.value : ${fallback(n)}.current))) return;` +
@@ -2568,7 +2575,7 @@ function plainPreamble(c) {
         `import { init as __init } from ${JSON.stringify(c.body)};`,
         `import { ${runtimeAliases(HOST, [
             'bind', '__pybridge', 'jsGlobal', 'pyCall', 'pyError', 'plainData', 'pyArg',
-            'pyData', 'pyExport', 'routeLoad', 'jsCall', 'ticking', 'pyBind', 'NONE', 'helpers',
+            'pyData', 'pyExport', 'routeLoad', 'routeServerLoad', 'routeActions', 'jsCall', 'ticking', 'pyBind', 'NONE', 'helpers',
             'pythonModule', 'group', 'invoke', 'liveExport', 'readOnlyImport'
         ])} } from 'svelthon/bridge';`,
         ...c.jsImports.map((one) => jsImportLine(HOST, one)),
@@ -2627,8 +2634,12 @@ const storeExports = (c) => c.funcs.filter((f) => c.published(f.name) && f.name 
 // What a module exports by name, filled as its body binds it: a `.py` hands
 // JavaScript every name through the boundary, a `.svelte.py` its functions,
 // the rest through `store`. The `load` SvelteKit reads off a route answers it
-// a plain object (`routeLoad`).
+// a plain object (`routeLoad`), a server module's what crosses to the browser
+// (`routeServerLoad`), and its `actions` answer what they return pickled as
+// they return it (`routeActions`).
 const ROUTE_LOAD = { ...HOST, runtime: { ...RUNTIME, pyExport: RUNTIME.routeLoad } };
+const ROUTE_SERVER_LOAD = { ...HOST, runtime: { ...RUNTIME, pyExport: RUNTIME.routeServerLoad } };
+const ROUTE_ACTIONS = { ...HOST, runtime: { ...RUNTIME, pyExport: RUNTIME.routeActions } };
 
 const liveExports = (c) =>
     c.store
@@ -2639,8 +2650,9 @@ const liveExports = (c) =>
                       `${storeRead('__value')}; });`
               )
         : [
-              ...liveExportLines(HOST, { ...c, exported: c.exported.filter((n) => !(c.loaded && n === 'load')) }),
-              ...liveExportLines(ROUTE_LOAD, { ...c, exported: c.exported.filter((n) => c.loaded && n === 'load') })
+              ...liveExportLines(HOST, { ...c, exported: c.exported.filter((n) => !(c.loaded && n === 'load') && !(c.acted && n === 'actions')) }),
+              ...liveExportLines(c.serverRoute ? ROUTE_SERVER_LOAD : ROUTE_LOAD, { ...c, exported: c.exported.filter((n) => c.loaded && n === 'load') }),
+              ...liveExportLines(ROUTE_ACTIONS, { ...c, exported: c.exported.filter((n) => c.acted && n === 'actions') })
           ];
 
 // The function that runs a module's body (Bryc's `moduleLoad`): the body, the
@@ -2653,13 +2665,37 @@ const liveExports = (c) =>
 function storeOrModuleLoad(c) {
     if (!c.store && !c.plain) return [];
 
+    const name = pythonModuleName(c.source);
+
     return moduleLoad(HOST, {
-        name: pythonModuleName(c.source),
+        name,
         eager: c.eager,
-        run: [`__init(${NS});`, ...unboundRefusals(HOST, c.unbound, c.listedAt), ...starredMembers(c), ...liveExports(c), ...(c.store ? effectLines(c) : [])],
+        run: [
+            // A module SvelteKit keeps out of the browser says so first: what it
+            // defines cannot cross there by its name (`serverModule`).
+            ...(serverOnly(c.source) ? [`__pybridge.serverModule(${JSON.stringify(name)});`] : []),
+            `__init(${NS});`,
+            ...unboundRefusals(HOST, c.unbound, c.listedAt),
+            ...starredMembers(c),
+            ...liveExports(c),
+            ...(c.store ? effectLines(c) : [])
+        ],
         renewed: c.effects.filter((e) => e.root).map((e) => `${destroyer(e.name)} = ${RUNTIME.laterRoot}();`)
     });
 }
+
+// A component SvelteKit renders for a route, which it hands its merged `data`:
+// a page, a layout, an error page, a layout reset among them (`+page@.svelte`).
+const routeComponent = (source) => /(^|[/\\])\+(page|layout|error)(@[^/\\]*)?\.svelte$/.test(source);
+
+// SvelteKit's own rule for a module the browser must never import (its
+// `guard` plugin): a file named `server.*` or `*.server.*`, or one in a
+// `server/` directory outside the routes. The path is the project's.
+const serverOnly = (source) => {
+    const path = '/' + source.replaceAll('\\', '/');
+
+    return /[/.]server\.[^/]+$/.test(path) || (/\/server\//.test(path) && !path.startsWith('/src/routes/'));
+};
 
 // SvelteKit reads a route module's names off it, and refuses a default export
 // there: a `.py` exports by name only (Bryc's `moduleExports`), filled by the
@@ -2724,6 +2760,8 @@ function compile(
         // whatever binds them: a route's `load`, `actions` and options.
         // Its `load` answers SvelteKit a plain object (`liveExports`).
         read = [],
+        // Whether that route module is the server's, whose `load` crosses.
+        serverRoute = false,
         // Whether an imported name is one of the project's own `.py` files,
         // `'file'`, or names a directory of the project, `'package'`, asked by
         // whoever can read the file system. Without it the imports are not
@@ -3009,6 +3047,8 @@ function compile(
         foreign: [...foreign],
         exported,
         loaded: read.includes('load'),
+        acted: read.includes('actions'),
+        serverRoute,
         isFunction,
         lifecycle,
         hook

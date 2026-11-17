@@ -17,12 +17,43 @@ APP=tests/kit-app
 LOG=$(mktemp)
 status=0
 
+PROFILE=$(mktemp -d)
+READS=$(mktemp)
+CDP_PORT=${CDP_PORT:-9335}
+
 cleanup() {
     [ -n "${SERVER:-}" ] && kill "$SERVER" 2>/dev/null
     [ -n "${DEV:-}" ] && kill "$DEV" 2>/dev/null
-    rm -rf "$LOG" "$APP/src/routes/leak"
+    [ -n "${BROWSER:-}" ] && kill "$BROWSER" 2>/dev/null
+    rm -rf "$LOG" "$READS" "$PROFILE" "$APP/src/routes/leak"
 }
 trap cleanup EXIT
+
+# What Python hands the browser, read there as on the server, in a headless
+# Chromium (`kit-data.mjs`): Svelte warns of no text a hydration changes.
+data_check() {
+    chromium --headless --no-sandbox --disable-gpu --user-data-dir="$PROFILE" \
+        --remote-debugging-port="$CDP_PORT" about:blank >/dev/null 2>&1 &
+    BROWSER=$!
+
+    for _ in $(seq 40); do
+        curl -sf -o /dev/null "http://127.0.0.1:$CDP_PORT/json" && break
+        sleep 0.25
+    done
+
+    # Its own log: the dev server writes into `$LOG` as it runs.
+    if CDP_PORT=$CDP_PORT node scripts/kit-data.mjs "$ORIGIN" >"$READS" 2>&1; then
+        echo "✓ kit data — $(grep -c '^✓' "$READS") reads in the browser as on the server"
+    else
+        echo "✗ kit data — read otherwise in the browser:"
+        grep -v '^✓' "$READS" | head -20
+        status=1
+    fi
+
+    kill "$BROWSER" 2>/dev/null
+    wait "$BROWSER" 2>/dev/null
+    BROWSER=
+}
 
 # Built from nothing: a `.svelte-kit` left by an earlier build is part of the
 # next one.
@@ -118,6 +149,26 @@ route /universal '42 at the universal route'
 route /bound 'load bound by a call'
 # A layout and a page whose `load` comes by a star import.
 route /starred 'starred layout and starred page'
+# A JavaScript page re-exporting two modules that each have a `load`, two
+# bindings of one function, which JavaScript leaves out: it was run.
+route /ambiguous 'load: absent'
+# A route re-exporting a module of page options, and the ambiguous one: no
+# `load`, so none in the client's manifest, where a navigation asks the server
+# for data (`~`); the relay posed for none had one asked at each navigation.
+route /options 'options shared'
+for one in /options /ambiguous; do
+    if grep -qE "\"$one\": \[[0-9]" "$APP/.svelte-kit/generated/build/client-optimized/app.js"; then
+        echo "✓ kit $one — no server load in the client's manifest"
+    else
+        echo "✗ kit $one — $(grep -oE "\"$one\": \[[^]]*" "$APP/.svelte-kit/generated/build/client-optimized/app.js" || echo 'not in the manifest')"
+        status=1
+    fi
+done
+# A `load` none at first and bound by a later request, read at each request:
+# it stayed none.
+route /late 'late: absent'
+curl -s -o /dev/null "$ORIGIN/late/enable"
+route /late 'late: enabled'
 route /remote 'asking the server'
 # A module named `remote.py`, which SvelteKit takes for one by its name.
 route /named 'asking remote.py'
@@ -144,6 +195,11 @@ remote shout 'shouted from python'
 # variable of ours of that name stopped the build.
 remote facts 'prerendered from Python'
 
+# An instance of a class of `src/lib/server/`, refused on the server: the
+# browser could not import it.
+answered /vault 500
+data_check
+
 # The same routes from the dev server, the one an application is written on,
 # which checks what production does not: a `load()` whose answer is no plain
 # object was a 500 there, every dict a Python `load()` returns among them.
@@ -163,10 +219,18 @@ if kill -0 "$DEV" 2>/dev/null; then
     route /universal '42 at the universal route'
     route /bound 'load bound by a call'
     route /starred 'starred layout and starred page'
+    # Vite's server copies the first module's names (its `exportAll`), as it
+    # does with no plugin: the route runs the first one's `load`.
+    route /ambiguous 'load: shared'
+    route /late 'late: absent'
+    curl -s -o /dev/null "$ORIGIN/late/enable"
+    route /late 'late: enabled'
     answered /missing 404
     answered /moved 303 /load
     header / 'x-python-hook: handle'
     route /rerouted '42 from [0, 1, 4, 9]'
+    answered /vault 500
+    data_check
 else
     echo "✗ kit dev server — $(grep -m1 -E 'Error' "$LOG" || tail -1 "$LOG")"
     status=1

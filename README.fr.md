@@ -906,7 +906,9 @@ bytes se lisent comme un `Uint8Array`, ce que prennent un `Blob`, un corps de `f
 `TextDecoder`. Celui-là est une copie, puisqu'une API web ne prend aucun objet
 vivant pour des octets : d'un `bytearray`, les octets qu'il contient quand il
 traverse, repris quand Python le modifie ; un octet que JavaScript écrit dans la
-copie n'est à Python qu'une fois la copie rendue. Une instance se lit par ses
+copie n'est à Python qu'une fois la copie rendue. Un complexe, pour lequel
+JavaScript n'a pas de nombre, se lit par ses deux parties, `{real, imag}`, et
+refuse une écriture comme un tuple. Une instance se lit par ses
 attributs, appelle ses méthodes et s'affiche par son `__str__`, comme une classe
 JavaScript s'affiche par son `toString`, depuis un import, depuis un enfant
 JavaScript qui la reçoit en prop et depuis un objet JavaScript où Python l'a
@@ -1380,6 +1382,7 @@ build de production avec `adapter-node`, contre **SvelteKit 3** :
 |---|---|
 | `+page.svelte`, `+layout.svelte`, `+error.svelte` | en Python, rendus côté serveur puis hydratés |
 | `+page.server.py`, `+layout.server.py` | `load()` en Python, ses données fusionnées comme d'habitude |
+| ce qu'un `load()`, une action ou une fonction distante rend à la page | lu dans le navigateur comme sur le serveur, porté comme pickle le porte (ci-dessous) |
 | `async def load()` | attendu par le framework |
 | streaming | une coroutine dans les données rendues devient une promesse que SvelteKit diffuse |
 | options de page | `prerender = True`, `ssr = False`, `csr`, exportées telles qu'elles sont liées |
@@ -1410,6 +1413,81 @@ Python y attend une promesse JavaScript, ce qui marche parce que c'est la boucle
 d'événements de Brython qui exécute la coroutine. Seul un `load()` **serveur**
 diffuse ; un load universel se rejoue dans le navigateur, ce qui est la règle de
 SvelteKit, pas la nôtre.
+
+### Ce qui traverse vers le navigateur
+
+Ce qu'un `load()` serveur, une action ou une fonction distante rend arrive à la
+page dans le navigateur comme **pickle** porte une valeur d'un processus à un
+autre, par le `transport` de SvelteKit lui-même, que Svelthon installe sans
+fichier de votre part. La page lit dans le navigateur ce qu'elle lisait sur le
+serveur : un tuple est un tuple, une clé `int` un `int`, `1.0` un float à toute
+profondeur, `data` lui-même un dict, un set dans son ordre, un objet atteint
+deux fois un seul objet, un cycle un cycle, et une instance de votre classe une
+instance de cette classe, reconstruite par son `__reduce__`, son `__getstate__`
+et son `__setstate__`, ses `__slots__`, comme pickle la reconstruit. Les données
+d'un layout et celles de sa page se fusionnent comme `{**layout, **page}`. La
+réponse d'une fonction distante est ce que la fonction a rendu :
+`answer["text"]` d'un dict.
+
+Sur le serveur aussi, la page lit cette valeur reconstruite, à partir de la
+structure même dont le navigateur la reconstruit : ce que le `__reduce__` ou le
+`__getstate__` d'une classe écarte manque des deux côtés, et l'itérateur d'un
+dict est l'itérateur de liste que CPython en refait. De même pour une page dont
+le `load()` est écrit en JavaScript et rend des valeurs Python, dans des
+conteneurs JavaScript qui traversent comme SvelteKit les écrit : celui que
+votre propre `transport` écrit est refait par son `decode`, un objet sans
+prototype n'en a pas. Là où aucune
+copie ne peut différer de la valeur, rien n'est reconstruit, et la page du
+serveur lit la valeur elle-même, comme SvelteKit passe à une page les données
+d'un `load()` JavaScript : des dicts, des listes, des instances dont la classe
+laisse leur reconstruction aux règles par défaut de pickle. Seules sont
+reconstruites les données qui tiennent une instance dont la classe se
+reconstruit par son propre code (un `__reduce__`, `__getstate__`,
+`__setstate__` ou `__new__`…), une exception ou un itérateur. Un `load()`
+universel, dont les données ne traversent jamais, se lit tel qu'il les a
+rendues ; ce que pickle refuse dans les données d'un `load()` serveur est
+refusé à ce `load()`, avec les mots de pickle.
+
+La classe traverse **par son nom**, donc le navigateur doit la connaître : le
+module qui la définit doit être importé par la page qui lit les données, et on
+vous le dit sinon. Une classe de `src/lib/server/`, d'un `*.server.py` ou du
+`+page.server.py` d'une route, que SvelteKit ne laisse jamais importer au
+navigateur, est refusée sur le serveur, le module nommé. Ce que pickle refuse
+est refusé avec ses mots : un générateur, une vue de dict, une lambda ou une
+fonction locale. Au premier niveau d'un `load()`, la fusion de SvelteKit lit
+chaque valeur par sa vue, qui fait une liste d'un itérateur ou d'un
+générateur : la page lit cette liste, sur le serveur comme dans le navigateur.
+
+**Dans un seul sens.** Reconstruire une classe ou appeler une fonction que les
+données nomment exécute du code, donc le serveur ne le fait jamais avec ce que le
+navigateur envoie, l'argument d'une fonction distante compris : des valeurs
+seulement, une classe refusée. Ce qu'une fonction distante prérend, que
+SvelteKit relit sur le serveur depuis l'adresse même du site, est signé au
+build d'une clé propre à ce build, et seule une signature qui tient, lue là où
+SvelteKit relit son prérendu et jamais dans l'argument d'une fonction distante,
+laisse le serveur reconstruire ce qu'il nomme. Et dans le navigateur, seules les classes
+et fonctions de vos propres modules traversent par leur nom, jamais celles du
+moteur.
+
+Une coroutine que SvelteKit diffuse est attendue dans le navigateur comme sur
+le serveur, son résultat tel qu'il était : `1.0` un float, une instance de
+votre classe une instance de celle-ci. La réponse d'une action traverse telle
+que l'action l'a rendue, quoi que la page en ait lu pendant son rendu, un
+itérateur qu'elle a parcouru compris ; et `page.data` lu depuis Python est le
+même dict que `data`.
+
+Une page en JavaScript lit les mêmes données par des vues, comme une prop qu'un
+parent Python lui passe ; une page sans aucun Python ne charge aucun moteur pour
+elles, et en lit des copies aux mêmes formes, une instance d'une sous-classe
+d'un builtin comme la valeur de ce builtin, quoi que sa classe rende pour la
+reconstruire, et une instance de votre classe telle que la page du serveur la
+lit, reconstruite de ce que son `__reduce__` ou son `__getstate__` en rend, et
+telle que son `__setstate__` ou son `__setitem__` la remplit. Une fonction, une
+classe, une méthode liée ou ce que pickle nomme, un singleton, y
+est une fonction du même nom, qui dit à l'appel qu'il lui faut Python :
+importez son module dans la page. Un `load()` en JavaScript
+qui rend des valeurs Python garde ce qu'elles partagent, et ses propres
+tableaux, Maps et objets restent ceux de JavaScript.
 
 Les options de page marchent comme partout ailleurs, ce qui a une conséquence
 qui mérite d'être nommée :
@@ -1516,7 +1594,7 @@ def load(event):
     if not (fiche := trouver(numero)):
         error(404, "rien sous ce numéro")     # SvelteKit 2 lève lui-même
 
-    return {"pep": fiche}                     # un dict, converti au retour
+    return {"pep": fiche}                     # un dict, celui de la page dans le navigateur aussi
 ```
 
 `event` porte `params`, `query`, `url`, `method`, `route` et `js` : l'événement
@@ -1720,7 +1798,7 @@ parsing, que seul le compilateur charge ; le README de Bryntime en donne le poid
 
 ## État
 
-Validé par `npm test`, 2 098 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 2 130 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
@@ -1730,7 +1808,7 @@ rangée d'un `test.for`), aucun échec attendu :
   contrôle et frames. Chaque valeur attendue a été produite par CPython 3.12 en
   exécutant le code du composant tel quel, jamais écrite à la main. Brython
   reproduit CPython sur **chaque point** ;
-- build de production : **277 Ko gzip**, runtime Brython compris : ce que la
+- build de production : **284 Ko gzip**, runtime Brython compris : ce que la
   page de démo charge, son script, les modules qu'elle précharge et ses styles,
   mesuré après chaque build par `scripts/build-size.mjs`.
 
@@ -1832,7 +1910,7 @@ WebAssembly.
 où Svelte lit une valeur JavaScript. Moins de 4 ms pour 500 lignes, ce qu'une
 page ne ressent pas.
 
-L'autre prix est au chargement : 277 Ko gzip, runtime Brython compris, et
+L'autre prix est au chargement : 284 Ko gzip, runtime Brython compris, et
 **0,12 s jusqu'au contenu de la démo** en production, cache vide ; 0,33 s avec
 le processeur ralenti quatre fois, comme celui d'un portable modeste. Payé une
 fois par session, pas par page, puisque l'application ne recharge jamais.

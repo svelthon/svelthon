@@ -560,24 +560,98 @@ describe('the plugin loads a .py itself', () => {
 
     // A route's `load()` is handed back as a plain object, by the module that
     // binds it, and only where the module exports one: a route of actions
-    // alone warned at each build that `load` would always be undefined.
+    // alone warned at each build that `load` would always be undefined. A
+    // server module's, whose data crosses, by the relay that reads it as the
+    // browser does.
     test("a route module's load is wrapped where the module has one", () => {
         const dir = mkdtempSync(join(tmpdir(), 'svelthon-route-'));
-        const route = (name, source) => {
+        const route = (name, source, file = '+page.server.py') => {
             mkdirSync(join(dir, name));
-            writeFileSync(join(dir, name, '+page.server.py'), source);
-            plugin.load.call(context, join(dir, name, '+page.server.py'));
-            return plugin.load.call(context, join(dir, name, '+page.server.py') + '?python');
+            writeFileSync(join(dir, name, file), source);
+            plugin.load.call(context, join(dir, name, file));
+            return plugin.load.call(context, join(dir, name, file) + '?python');
         };
 
         try {
-            expect(route('loads', 'def load(event):\n    return {"n": 1}\n')).toContain('__export_load = __routeLoad(__value');
+            expect(route('loads', 'def load(event):\n    return {"n": 1}\n')).toContain('__export_load = __routeServerLoad(__value');
+            expect(route('universal', 'def load(event):\n    return {"n": 1}\n', '+page.py')).toContain('__export_load = __routeLoad(__value');
             expect(route('acts', 'def submit(event):\n    return None\n\nactions = {"default": submit}\n__all__ = ["actions"]\n')).not.toContain(
                 '__export_load'
             );
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
+    });
+});
+
+// A JavaScript server module's `load` is exported through the transport's relay
+// (`serverLoad`), whichever way the module exports it, TypeScript included; a
+// module with no `load`, or any other module, is left as it is.
+describe("a JavaScript server module's load crosses through the transport's relay", () => {
+    const plugin = svelthon();
+    const wrapped = (code, file = '/app/src/routes/x/+page.server.js') => plugin.transform(code, file);
+    const relayed = (code) =>
+        /const __svelthon_load = (?:'load' in __svelthon_stars \? )?__svelthon_liveLoad\(\(\) => (.+?)\)(?: : undefined)?;\nexport \{ __svelthon_load as load \};$/.exec(code)?.[1];
+
+    test.for([
+        ['a function', 'export function load(event) {\n    return {};\n}', 'load', 'function load(event)'],
+        ['an async function', 'export async function load() {}', 'load', 'async function load()'],
+        ['a typed constant', 'export const load: PageServerLoad = async () => ({});', 'load', 'const load: PageServerLoad'],
+        ['a list', 'const own = () => ({});\nexport { own as load, other };', 'own', 'export { other };'],
+        ['a re-export', "export { load } from './shared.js';", '__svelthon_route_load', "import { load as __svelthon_route_load } from './shared.js';"],
+        ['a pattern', 'export const { load, other } = make();', 'load', 'export { other };'],
+        ['a module it re-exports all of', "export * from './shared.js';", '__svelthon_stars.load', 'import * as __svelthon_stars from "/app/src/routes/x/+page.server.js?svelthon-stars";'],
+        ['two modules it re-exports all of', "export * from './one.js';\nexport * from './two.js';", '__svelthon_stars.load', 'import * as __svelthon_stars from "/app/src/routes/x/+page.server.js?svelthon-stars";'],
+        // and no relay where they export none, which SvelteKit would take for
+        // a `load` it asks the server for data by at each navigation
+        ['modules it re-exports all of, if one exports load', "export * from './options.js';", '__svelthon_stars.load', "= 'load' in __svelthon_stars ? __svelthon_liveLoad"]
+    ])('as %s', ([, code, local, kept]) => {
+        const out = wrapped(code, local === 'load' && kept.includes(':') ? '/app/src/routes/x/+layout.server.ts' : undefined);
+
+        expect([relayed(out), out.includes(kept), /export\s+(?:async\s+)?(?:function|const)\s+load/.test(out)]).toEqual([local, true, false]);
+    });
+
+    // The modules it re-exports all of, re-exported by a module of their own,
+    // which the module system resolves as it would the route itself: a `load`
+    // two of them export differently is left out, two bindings of the same
+    // function among them.
+    test('the modules it re-exports all of are those of a module of its own', () => {
+        wrapped("export * from './one.js';\nexport * from './two.js';");
+
+        expect(plugin.load('/app/src/routes/x/+page.server.js?svelthon-stars')).toBe("export * from './one.js';\nexport * from './two.js';");
+        expect(wrapped("export * from './one.js';", '/app/src/routes/x/+page.server.js?svelthon-stars')).toBeUndefined();
+    });
+
+    // A type re-exported under the name is no load: taken for one, its value
+    // was imported, which the module has not, and the build stopped.
+    test.for([
+        ["export { type Payload as load } from '../relay';"],
+        ["export type { Payload as load } from '../relay';"]
+    ])('a type re-exported as load is left as it is: %s', ([code]) => {
+        expect(wrapped(code, '/app/src/routes/x/+page.server.ts')).toBeUndefined();
+    });
+
+    // A `load` in a comment or in a string is none: an old version kept in a
+    // comment made the export twice, and the build failed.
+    test('read as code is, a load in a comment or a string left alone', () => {
+        const code = [
+            '/*',
+            "export function load() { return { version: 'old' }; }",
+            '*/',
+            "const shown = `export function load() {}`;",
+            "export function load() { return { version: 'new' }; }"
+        ].join('\n');
+        const out = wrapped(code);
+
+        expect(out.match(/export \{ __svelthon_load as load \}/g)).toHaveLength(1);
+        expect(out).toContain("export function load() { return { version: 'old' }; }");
+        expect(out).toContain('`export function load() {}`');
+        expect(out).toContain("\nfunction load() { return { version: 'new' }; }");
+    });
+
+    test('and nothing else', () => {
+        expect(wrapped('export const actions = {};')).toBeUndefined();
+        expect(wrapped('export function load() {}', '/app/src/routes/x/+page.js')).toBeUndefined();
     });
 });
 

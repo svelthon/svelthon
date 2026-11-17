@@ -1,6 +1,7 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { relative, resolve, dirname, basename } from 'node:path';
 import { readFileSync, existsSync, statSync, realpathSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 import {
     overMarkup,
@@ -1012,7 +1013,9 @@ function compilePython(file, path, root) {
         return cached.result;
     }
 
-    const mode = isReactive(file) ? { store: true } : { plain: true, eager: isRemote(file), read: routeNames(file) };
+    const mode = isReactive(file)
+        ? { store: true }
+        : { plain: true, eager: isRemote(file), read: routeNames(file), serverRoute: /[/\\]\+(?:page|layout)\.server\.py$/.test(file) };
     const result = compile(source, nameFor(file, root), shown, {
         ...mode,
         sourceContent: source,
@@ -1074,6 +1077,213 @@ const PYTHON_QUERY = '?python';
 // last `/` only: cut at the first one, as Vite cuts an id, a project in a
 // `has#hash/` folder lost its path and handed Rolldown its Python.
 const VITE_QUERY = /[?&](?:worker|sharedworker|raw|url)\b/;
+
+// SvelteKit's `transport` for Python's values (`transport.js`), installed with
+// no file of the author's at the two places SvelteKit starts it: its own
+// `#app/internal/transport`, whose `init_transport` the server calls with the
+// application's hooks, wrapped to add ours before them; and the client's
+// generated manifest, whose `hooks.transport` the browser decodes by.
+const KIT_TRANSPORT = '#app/internal/transport';
+const TRANSPORT_WRAPPER = '\0svelthon-transport?';
+const TRANSPORT_SERVER_WRAPPER = '\0svelthon-transport-server?';
+const transportFile = (name = 'transport.js') => fileURLToPath(new URL(`./${name}`, import.meta.url));
+
+// The key the server signs what it encodes while it builds by, the data a
+// remote function prerenders, which it reads back from the site's address
+// (`transport-server.js`): one per build, written into the server's code alone.
+let transportKey;
+
+const transportWrapper = (real, server) =>
+    [
+        `export * from ${JSON.stringify(real)};`,
+        `import { init_transport as __kit } from ${JSON.stringify(real)};`,
+        `import { transport as __svelthon, applicationTransport as __application } from ${JSON.stringify(transportFile())};`,
+        ...(server
+            ? [
+                  `import { signed as __signed } from ${JSON.stringify(transportFile('transport-server.js'))};`,
+                  `import { building as __building } from '$app/environment';`,
+                  `import { getRequestEvent as __event } from '$app/server';`,
+                  `const __readingBack = () => { try { return __event().isRemoteRequest === false; } catch { return false; } };`,
+                  `const __python = __signed(__svelthon, ${JSON.stringify((transportKey ??= randomBytes(32).toString('hex')))}, () => __building, __readingBack);`,
+                  `export function init_transport(transport) { __application(transport); __kit({ ...__python, ...transport }); }`
+              ]
+            : [`export function init_transport(transport) { __kit({ ...__svelthon, ...transport }); }`])
+    ].join('\n');
+
+// What a `.remote.py` imports of `$app/server` on the server: SvelteKit's own,
+// its four remote functions taking the Python function they declare through
+// the bridge's relay (`remoteHelper`), which hands SvelteKit what the browser
+// reads of each answer where a page of the server reads it, outside a remote
+// request.
+const KIT_SERVER = '$app/server';
+const REMOTE_SERVER = '\0svelthon-remote-server?';
+
+const remoteServer = (real) =>
+    [
+        `export * from ${JSON.stringify(real)};`,
+        `import { query as __query, command as __command, form as __form, prerender as __prerender, getRequestEvent as __event } from ${JSON.stringify(real)};`,
+        `import { remoteHelper as __remote } from 'svelthon/bridge';`,
+        `const __inRemote = () => { try { return __event().isRemoteRequest === true; } catch { return false; } };`,
+        `export const query = __remote(__query, __inRemote);`,
+        `export const command = __remote(__command, __inRemote);`,
+        `export const form = __remote(__form, __inRemote);`,
+        `export const prerender = __remote(__prerender, __inRemote);`
+    ].join('\n');
+
+// A JavaScript server module's `load`, `+page.server.js` or `.ts`, wrapped by
+// the transport's relay (`serverLoad`): its page reads on the server what the
+// browser reads of the Python values it returns. The binding the module exports
+// as `load` is exported no more, its wrapper is in its place: a declaration
+// binding `load`, a list naming one, re-exported from another module or not,
+// or a module it re-exports all of. Read by Svelte's own parser, TypeScript
+// included, so that a `load` in a comment or a string is none. The wrapper
+// reads the binding at each call (`liveLoad`), as SvelteKit reads the export at
+// each request: a module that binds `load` again is served the new one.
+const SERVER_ROUTE = /[/\\]\+(?:page|layout)\.server\.[cm]?[jt]s$/;
+const SCRIPT_OPEN = '<script lang="ts">';
+
+// The names a declaration binds: a plain name, or each one a pattern holds.
+const boundNames = (pattern) => {
+    switch (pattern?.type) {
+        case 'Identifier':
+            return [pattern.name];
+        case 'ObjectPattern':
+            return pattern.properties.flatMap((one) => boundNames(one.type === 'RestElement' ? one.argument : one.value));
+        case 'ArrayPattern':
+            return pattern.elements.flatMap(boundNames);
+        case 'AssignmentPattern':
+            return boundNames(pattern.left);
+        case 'RestElement':
+            return boundNames(pattern.argument);
+    }
+    return [];
+};
+
+const specifierName = (name) => (name.type === 'Identifier' ? name.name : name.value);
+
+// The re-exports of a module that re-exports all of others, by its file.
+const STARS = '?svelthon-stars';
+const STARRED = new Map();
+
+const starredModule = (id) => (STARRED.get(id.slice(0, -STARS.length)) ?? []).map((from) => `export * from ${from};`).join('\n');
+
+function withServerLoad(code, id) {
+    if (id.endsWith(STARS) || !SERVER_ROUTE.test(splitQuery(id)[0]) || !/load|export\s*\*/.test(code)) return undefined;
+
+    let body;
+
+    try {
+        body = parse(`${SCRIPT_OPEN}${code.replaceAll('</script', '</scrip_')}</script>`, { modern: true }).instance?.content.body;
+    } catch {
+        return undefined;
+    }
+
+    const at = (node) => node.start - SCRIPT_OPEN.length;
+    const end = (node) => node.end - SCRIPT_OPEN.length;
+    const edits = [];
+    const appended = [];
+    const stars = [];
+    let local;
+
+    for (const node of body ?? []) {
+        if (node.exportKind === 'type' || local !== undefined) continue;
+        if (node.type === 'ExportAllDeclaration') {
+            if (node.exported === null) stars.push(code.slice(at(node.source), end(node.source)));
+            continue;
+        }
+        if (node.type !== 'ExportNamedDeclaration') continue;
+
+        const { declaration, specifiers, source } = node;
+
+        if (declaration) {
+            const names =
+                declaration.type === 'FunctionDeclaration'
+                    ? [declaration.id?.name]
+                    : declaration.type === 'VariableDeclaration'
+                      ? declaration.declarations.flatMap((one) => boundNames(one.id))
+                      : [];
+
+            if (!names.includes('load')) continue;
+
+            const others = names.filter((name) => name !== 'load');
+
+            local = 'load';
+            edits.push([at(node), at(declaration), '']);
+            if (others.length > 0) appended.push(`export { ${others.join(', ')} };`);
+            continue;
+        }
+
+        // A type re-exported under the name, `export { type Payload as load }`,
+        // is no load: taken for one, its value was imported, which the module
+        // has not, and the build stopped.
+        const one = specifiers.find((spec) => specifierName(spec.exported) === 'load' && spec.exportKind !== 'type');
+
+        if (one === undefined) continue;
+
+        const from = source ? ` from ${code.slice(at(source), end(source))}` : '';
+        const rest = specifiers.filter((spec) => spec !== one).map((spec) => code.slice(at(spec), end(spec)));
+        const kept = rest.length > 0 ? `export { ${rest.join(', ')} }${from};` : '';
+
+        if (source === null) {
+            local = specifierName(one.local);
+            edits.push([at(node), end(node), kept]);
+        } else {
+            local = '__svelthon_route_load';
+            edits.push([at(node), end(node), `import { ${code.slice(at(one.local), end(one.local))} as ${local} }${from}; ${kept}`]);
+        }
+    }
+
+    // Exported by a module it re-exports all of: read off a module that does
+    // nothing but re-export them (`STARS`), which the module system resolves
+    // as it resolves this one, a `load` two of them export differently left out.
+    // None exported is none (`exported`): a relay would have SvelteKit ask the
+    // server for data at each navigation, a module of shared options among them.
+    let exported;
+
+    if (local === undefined && stars.length > 0) {
+        STARRED.set(splitQuery(id)[0], stars);
+        appended.push(`import * as __svelthon_stars from ${JSON.stringify(splitQuery(id)[0] + STARS)};`);
+        local = '__svelthon_stars.load';
+        exported = `'load' in __svelthon_stars`;
+    }
+
+    if (local === undefined) return undefined;
+
+    let out = code;
+
+    for (const [start, stop, text] of edits.sort((a, b) => b[0] - a[0])) out = out.slice(0, start) + text + out.slice(stop);
+
+    const relayed = `__svelthon_liveLoad(() => ${local})`;
+
+    return [
+        out,
+        ...appended,
+        `import { liveLoad as __svelthon_liveLoad } from ${JSON.stringify(transportFile())};`,
+        `const __svelthon_load = ${exported === undefined ? relayed : `${exported} ? ${relayed} : undefined`};`,
+        `export { __svelthon_load as load };`
+    ].join('\n');
+}
+
+const KIT_MANIFEST = /[/\\]\.svelte-kit[/\\]generated[/\\]/;
+const MANIFEST_TRANSPORT = /transport: ([^\n]*?)\{\}\n/;
+
+const withPythonTransport = (code, id) => {
+    if (!KIT_MANIFEST.test(id) || !code.includes('export const decoders')) return undefined;
+    if (!MANIFEST_TRANSPORT.test(code)) {
+        throw new Error(
+            `svelthon — SvelteKit's client manifest (${id}) no longer writes its hooks' \`transport\` as ` +
+                `Svelthon reads it, so the browser could not read what Python hands it: a SvelteKit Svelthon was not made for`
+        );
+    }
+
+    // The application's own, known from here: the data the page was rendered
+    // with is decoded as the manifest loads, before SvelteKit starts it.
+    return (
+        `import { transport as __svelthon_transport, applicationTransport as __svelthon_application } from ${JSON.stringify(transportFile())};\n` +
+        code.replace(MANIFEST_TRANSPORT, (_, before) => `transport: __svelthon_application({ ...__svelthon_transport, ...(${before}{}) })\n`)
+    );
+};
+
 const splitQuery = (id) => {
     const at = id.search(/\?|#[^/]*$/);
 
@@ -1517,6 +1727,16 @@ export function svelthon(options = {}) {
             }
         },
         resolveId(specifier, importer) {
+            if (specifier === KIT_TRANSPORT) {
+                const wrapper = this.environment === undefined || this.environment.name === 'client' ? TRANSPORT_WRAPPER : TRANSPORT_SERVER_WRAPPER;
+
+                return this.resolve(specifier, importer, { skipSelf: true }).then((real) => (real ? wrapper + real.id : real));
+            }
+
+            if (specifier === KIT_SERVER && importer !== undefined && isRemote(splitQuery(importer)[0])) {
+                return this.resolve(specifier, importer, { skipSelf: true }).then((real) => (real ? REMOTE_SERVER + real.id : real));
+            }
+
             // A component's import of itself is the module that imports it, as
             // it was asked for (`announced`).
             if (specifier === SELF && importer !== undefined) return importer;
@@ -1536,6 +1756,11 @@ export function svelthon(options = {}) {
             if (id.startsWith('.') || id.startsWith('/')) return pyFile(id, importer) + (isRemote(id) ? '' : query);
         },
         load(id) {
+            if (id.startsWith(REMOTE_SERVER)) return remoteServer(id.slice(REMOTE_SERVER.length));
+            if (id.endsWith(STARS)) return starredModule(id);
+            if (id.startsWith(TRANSPORT_SERVER_WRAPPER)) return transportWrapper(id.slice(TRANSPORT_SERVER_WRAPPER.length), true);
+            if (id.startsWith(TRANSPORT_WRAPPER)) return transportWrapper(id.slice(TRANSPORT_WRAPPER.length), false);
+
             if (id.startsWith('\0')) {
                 let entry = generated.get(key(id.slice(1)));
 
@@ -1577,6 +1802,13 @@ export function svelthon(options = {}) {
             // JavaScript's import of the file, which runs the module's body, or
             // the module itself when it runs its body on its own.
             return deferred || isRemote(file) ? script : eagerModule(file);
+        },
+
+        // The client's manifest SvelteKit generates, its hooks' `transport`
+        // given Python's first (`withPythonTransport`); and a JavaScript server
+        // module's `load` (`withServerLoad`).
+        transform(code, id) {
+            return withPythonTransport(code, id) ?? withServerLoad(code, id);
         },
 
         // A component's generated code lives in its own module, which Vite has

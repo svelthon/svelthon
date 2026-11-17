@@ -6,6 +6,7 @@ import { untrack } from 'svelte';
 import { createSubscriber } from 'svelte/reactivity';
 import BROWSER from 'esm-env/browser';
 import { attributeWrapper } from './attributes.js';
+import { markTop, origins, codecLoaded, rebuilt, transporters } from './transport.js';
 
 // Held here as constants of this module: a binding imported is read through the
 // module's cell at each use, which the hot paths of a crossing paid.
@@ -155,7 +156,17 @@ const {
     starredEntries,
     lookup,
     restOf,
-    unpackStarred
+    unpackStarred,
+    // pickle's.
+    pickled,
+    unpickled,
+    roundTrip,
+    pickleNode,
+    isPlainDict,
+    crossesBack,
+    readBack,
+    readsAsPython,
+    standsForPython
 } = core;
 
 export {
@@ -1167,6 +1178,12 @@ export const __pybridge = {
 
         // The call may have been made through what stands for it, its wrapper.
         return call !== undefined && standsFor(call.fn, new Set([fn])) ? call.values : null;
+    },
+
+    // What a module SvelteKit keeps out of the browser says as it runs: its
+    // name, refused at the transport (`refusedModule`).
+    serverModule(name) {
+        SERVER_MODULES.add(name);
     },
 
     // A `bind:group` control's `checked`, written by the server, where no action
@@ -2377,7 +2394,603 @@ export const pyExpression = (call, where, arity, kept = false, writes = false) =
 // JavaScript's own thenable among them, is awaited first and its answer made
 // one: a copy made before answered `{}`, and a thenable a JavaScript helper made
 // of what a Python callback answered was the view, which SvelteKit refused.
-const plainTop = (data) => (VIEWED.has(data) && isDict(pyBind(data)) ? { ...data } : data);
+//
+// And the transport writes the dict itself (`TOPS`), its keys, their types and
+// their order Python's. Where its plain object cannot say what the dict held,
+// a key that is not a string or that JavaScript puts first, a number `1.0` that
+// reads back the int 1, it says where its values came from (`markTop`), as the
+// browser's copy of it does, under a symbol SvelteKit's merge carries: a Python
+// page reads them back as the dict held them (`routeData`).
+const TOPS = new WeakMap();
+const INDEX_NAME = /^(?:0|[1-9]\d*)$/;
+
+const plainTop = (data, server = false) => {
+    if (!VIEWED.has(data)) return data;
+
+    const dict = pyBind(data);
+
+    if (!isDict(dict)) return data;
+
+    const spread = { ...data };
+    const items = pyEntries(dict);
+    // What the spread left of each value, what the page reads and what
+    // crosses: an iterator its view used up is the list the view made of it
+    // (`readBack`); a coroutine is itself, whose promise the transport streams.
+    const left = items.map(([key, value]) => (pyAwaitable(value) ? value : readBack(value, spread[propertyKey(key)])));
+    const crosses = left.some((value, at) => value !== items[at][1]) ? pyDict(items.map(([key], at) => [key, left[at]])) : dict;
+
+    if (!server) return topOf(crosses, spread);
+
+    // The data of a server's `load()` for a page it renders: the page reads
+    // there too what the browser reads (`crossing`), the dict itself where its
+    // copy could not differ, and what pickle refuses is refused here, in its
+    // words, as SvelteKit writes every node's data.
+    const { copy, structure } = crossing(crosses, false, true);
+
+    return topOf(copy, { ...viewOf(copy) }, structure);
+};
+
+const topOf = (dict, pojo, structure) => {
+    const items = pyEntries(dict);
+    const entries = items.map(([key, value]) => {
+        const name = propertyKey(key);
+        const js = pojo[name];
+
+        // A coroutine's promise is what any reader of it holds.
+        return [name, key, pyAwaitable(value) ? js : value, js];
+    });
+    // A coroutine's promise resolves to what JavaScript reads of its result:
+    // the dict, read where SvelteKit merged it, hands Python the coroutine's
+    // own, which the browser rebuilds as a future of its value.
+    const marked =
+        items.some(([, value]) => pyAwaitable(value)) ||
+        entries.some(([name, key, value, js]) => typeof key !== 'string' || INDEX_NAME.test(name) || !crossesBack(value, js));
+
+    TOPS.set(pojo, { dict, structure, marked, names: entries.map(([name]) => name) });
+
+    return marked ? markTop(pojo, { entries: () => entries }) : pojo;
+};
+
+// A route's `data` as its Python page reads it, a dict: what each node's
+// `load()` returned, merged in SvelteKit's order as `{**layout, **page}` merges
+// them, each value the one its dict held where the merge kept it; a name a node
+// wrote whose value reads back as it was, and a node's in JavaScript, read as
+// any value JavaScript hands Python. One dict per merged object, which
+// `page.data` read from Python is too.
+const ROUTE_DATA = new WeakMap();
+
+export const routeData = (data) => {
+    if (data === null || typeof data !== 'object' || VIEWED.has(data)) return pyBind(data);
+
+    const known = ROUTE_DATA.get(data);
+
+    if (known !== undefined) return known;
+
+    // Each name's last writer among the dicts: a key keeps the place its first
+    // writer gave it and takes the value of its last, as `{**a, **b}` does.
+    const owner = new Map();
+    const out = new Map();
+
+    for (const origin of origins(data)) {
+        for (const [name, key, value, js] of origin.entries()) {
+            const before = owner.get(name);
+
+            if (before !== undefined && before.key !== key) out.delete(before.key);
+            out.set(key, value);
+            owner.set(name, { key, js });
+        }
+    }
+
+    for (const name of Object.keys(data)) {
+        const own = owner.get(name);
+
+        if (own !== undefined && Object.is(data[name], own.js)) continue;
+        if (own !== undefined) out.delete(own.key);
+        out.set(name, pyBind(data[name]));
+    }
+
+    const dict = pyDict(out);
+
+    ROUTE_DATA.set(data, dict);
+    ADOPTED.add(data);
+    standsForPython(data, () => dict);
+
+    return dict;
+};
+
+// Read from Python wherever Python meets it, `page.data` before the page's own
+// `data` among them, SvelteKit's merge is the same dict.
+readsAsPython((object) => (origins(object).length > 0 ? routeData(object) : undefined));
+
+// The modules SvelteKit keeps out of the browser, as each says when it runs
+// (`serverModule`): what they define is refused by name at the transport.
+const SERVER_MODULES = new Set();
+
+const refusedModule = (module) =>
+    SERVER_MODULES.has(module)
+        ? `svelthon — \`${module}\` is a module of the server alone, which the browser never imports: what it ` +
+          `defines cannot cross to the page by its name; define it in a module the page imports`
+        : undefined;
+
+// What SvelteKit's `transport` hands the codec (`transport.js`): one memo per
+// serialisation, which runs at once, so an object two parts of the data hold is
+// one object at the other end.
+const OURS = new WeakSet();
+const ours = (...items) => (OURS.add(items), items);
+let serialising = null;
+let HELD = null;
+let FREE_NOW = null;
+let WRITTEN = null;
+
+const serialisation = () => {
+    if (serialising !== null) return;
+
+    serialising = new Map();
+    HELD = new WeakMap();
+    FREE_NOW = [];
+    WRITTEN = new WeakMap();
+    queueMicrotask(() => {
+        serialising = null;
+        HELD = null;
+        FREE_NOW = null;
+        WRITTEN = null;
+    });
+};
+
+const pickledFor = (value) => {
+    serialisation();
+
+    try {
+        return pickled(value, { memo: serialising, refused: refusedModule });
+    } catch (error) {
+        throw pyError(error, 'the data handed to the browser');
+    }
+};
+
+// What a page reads of a value that crosses to it, on the server as in the
+// browser, and what crosses for it (Bryntime's `roundTrip`): the value pickle
+// carries, rebuilt here from the very structure the transport then writes for
+// it (`CROSSING`), which the browser rebuilds the same. Where pickle will not
+// carry it, a `lenient` caller keeps the value itself: a remote function's,
+// which a page that ships no JavaScript never hands over.
+//
+// A caller that keeps the structure on an object of its own, made for that
+// one crossing, the data of a `load()`, may `keep` the value itself where its
+// copy could not differ from it, as SvelteKit hands its page the data of a
+// JavaScript `load()`: that value, a store a module holds among them, is no
+// copy, and the structure of one crossing is not its own.
+const CROSSING = new WeakMap();
+
+const crossing = (value, lenient = false, keep = false) => {
+    if (value === null || typeof value !== 'object') return { copy: value };
+    if (CROSSING.has(value)) return { copy: value, structure: CROSSING.get(value) };
+
+    let made;
+
+    try {
+        made = roundTrip(value, { refused: refusedModule, keep });
+    } catch (error) {
+        if (lenient) return undefined;
+        throw pyError(error, 'the data handed to the browser');
+    }
+    if (!made.kept && made.copy !== null && typeof made.copy === 'object') CROSSING.set(made.copy, made.structure);
+
+    return made;
+};
+
+// What a structure stands for, or `UNLOADED` when it names a module no code of
+// the page has evaluated yet, and `lenient` lets the caller read a copy first:
+// a page in JavaScript, which never imports a module of Python, or one decoded
+// before SvelteKit has loaded the page's modules.
+//
+// Rebuilt outside any reaction, though the first read is often a template's:
+// rebuilding reads and writes what nobody holds yet, and a `__setstate__` that
+// filled its instance through `self.__dict__.update(...)` was a write Svelte
+// refused there (`state_unsafe_mutation`), the page in the browser an error.
+const UNLOADED = Symbol('svelthon.unloaded');
+
+const unpickledFor = (value, lenient = false, trusted = false) => {
+    let missing;
+
+    try {
+        return untrack(() =>
+            unpickled(value, {
+                restricted: !BROWSER && !trusted,
+                missing: (module) => {
+                    missing = module;
+                }
+            })
+        );
+    } catch (error) {
+        if (lenient && missing !== undefined) return UNLOADED;
+        throw pyError(error, BROWSER ? 'the data the server handed' : 'the value the browser sent');
+    }
+};
+
+// The names a dict's keys take as a plain object's properties, a view's own.
+const namesOf = (dict) => pyEntries(dict).map(([key]) => propertyKey(key));
+
+const object = (one) => one !== null && typeof one === 'object';
+
+// The Python value what JavaScript holds stands for, if it stands for one: a
+// view, a copy of bytes, an object standing for one. A JavaScript function is
+// no door's, and stays JavaScript's; and a container of JavaScript's own is
+// none either, unless one was made to stand for a value (`ADOPTED`), asked of
+// no one: walking a JavaScript `load()`'s ten thousand rows, asking each one
+// cost it 60 % more.
+const ADOPTED = new WeakSet();
+
+const pythonOf = (thing) => {
+    if (!object(thing) && !VIEWED.has(thing)) return undefined;
+    if (containerOf(thing) && !ADOPTED.has(thing)) return undefined;
+
+    const python = pyBind(thing);
+
+    return quietPyType(python) === undefined ? undefined : python;
+};
+
+// JavaScript's own containers holding Python values at any depth, a `load()`
+// of JavaScript's returning `{ one, nested: { two } }`: SvelteKit writes each
+// value it encodes apart, and what two of them share came out two copies. The
+// outermost container holding two, SvelteKit's own envelope of a node's data
+// aside, crosses whole instead (`grouped`): its shape, each container made
+// again as SvelteKit's serialiser makes it (`kindOf`), around one Python list
+// of the values, pickled together. Not one holding what crosses as its own
+// whole, the data of a `load()`, an action's answer, SvelteKit's merge.
+const containerOf = (one) => object(one) && !VIEWED.has(one) && !OURS.has(one) && !thenable(one) && kindOf(one) !== undefined;
+
+// One the application's own transport writes (`'x'`), asked first, as
+// SvelteKit asks its transporters before devalue writes anything; an array, a
+// Map or a Set, a subclass of one as devalue writes it; a plain object, or one
+// with no prototype (`'O'`).
+const kindOf = (one) => {
+    if (written(one) !== undefined) return 'x';
+    if (Array.isArray(one)) return 'a';
+    if (one instanceof Map) return 'm';
+    if (one instanceof Set) return 's';
+
+    const prototype = Object.getPrototypeOf(one);
+
+    return prototype === Object.prototype ? 'o' : prototype === null ? 'O' : undefined;
+};
+
+// What the first of the application's transporters that writes an object makes
+// of it, with its key, asked once per serialisation (`WRITTEN`).
+const written = (one) => {
+    const given = transporters();
+
+    if (given.length === 0) return undefined;
+
+    let found = WRITTEN?.get(one);
+
+    if (found === undefined) {
+        found = null;
+        for (const [key, { encode }] of given) {
+            const made = encode(one);
+
+            if (made) {
+                found = [key, made];
+                break;
+            }
+        }
+        WRITTEN?.set(one, found);
+    }
+
+    return found ?? undefined;
+};
+
+const kitEnvelope = (one) => !Array.isArray(one) && one.type === 'data' && Object.hasOwn(one, 'uses');
+
+const partsOf = (one, kind = kindOf(one)) =>
+    kind === 'x' ? [written(one)[1]] : kind === 'a' ? one : kind === 'm' ? [...one].flat() : kind === 's' ? [...one] : Object.values(one);
+
+const crossesWhole = (one) => TOPS.has(one) || ANSWERS.has(one) || origins(one).length > 0;
+
+// What a container holds, two Python values at most and whether it holds what
+// crosses whole, once per serialisation (`HELD`). The containers of a cycle all
+// hold what any of them holds: one met again within its own asking takes in
+// each container asked since (`join`), and they read what it holds, whatever
+// the order the cycle was made in.
+//
+// The data of a JavaScript `load()`, walked as it returns, is not walked again
+// as SvelteKit writes it: what that walk found holding none, outside a cycle,
+// it marks (`marking`) for the writing of that data alone, kept on an object
+// made for that `load()` (`crossedData`) and taken up by the serialisation
+// that meets it (`FREE_NOW`). Marked for good, a store a `load()` returns at
+// each request, empty at first and filled later, crossed as it was first seen.
+const FREE_AFTER_LOAD = new WeakMap();
+let marking = null;
+
+const isFree = (one) => {
+    const free = FREE_AFTER_LOAD.get(one);
+
+    if (free !== undefined) {
+        FREE_AFTER_LOAD.delete(one);
+        serialisation();
+        FREE_NOW.push(free);
+    }
+
+    return FREE_NOW !== null && FREE_NOW.some((set) => set.has(one));
+};
+
+// The containers being asked, outermost first.
+const ASKING = [];
+
+const joinedInto = (found) => {
+    while (found.into !== undefined) found = found.into;
+    return found;
+};
+
+const join = (found, into) => {
+    found = joinedInto(found);
+    if (found === into) return;
+    found.into = into;
+    if (found.whole) into.whole = true;
+    for (const value of found.python) if (into.python.size < 2) into.python.add(value);
+};
+
+const heldIn = (one) => {
+    if (marking === null && isFree(one)) return NOTHING_HELD;
+
+    let found = HELD.get(one);
+
+    if (found !== undefined) {
+        if (!found.done) {
+            const into = joinedInto(found);
+
+            into.cycled = true;
+            for (const asked of ASKING.slice(ASKING.indexOf(found) + 1)) join(asked, into);
+        }
+        return joinedInto(found);
+    }
+    HELD.set(one, (found = { python: new Set(), whole: false, done: false, cycled: false }));
+    ASKING.push(found);
+
+    try {
+        for (const part of partsOf(one)) {
+            if (!object(part)) continue;
+            if (crossesWhole(part)) {
+                joinedInto(found).whole = true;
+                continue;
+            }
+
+            const python = pythonOf(part);
+            const inner = python === undefined && containerOf(part) ? heldIn(part) : undefined;
+            const held = joinedInto(found);
+
+            if (inner?.whole) held.whole = true;
+            if (inner?.cycled) held.cycled = true;
+            for (const value of python === undefined ? (inner?.python ?? []) : [python]) {
+                if (held.python.size < 2) held.python.add(value);
+            }
+        }
+    } finally {
+        ASKING.pop();
+    }
+
+    found.done = true;
+    if (found.into === undefined && !found.cycled && !found.whole && found.python.size === 0) marking?.add(one);
+
+    return joinedInto(found);
+};
+
+const NOTHING_HELD = Object.freeze({ python: new Set(), whole: false, done: true, cycled: false });
+
+// A container's shape, each container that holds Python values a node of its
+// kind, each Python value its place in the list of the values, anything else
+// JavaScript's own, a whole that crosses by itself among them, and a hole of
+// an array a hole (`'h'`).
+const shapeOf = (one) => {
+    const values = [];
+    const places = new Map();
+    const shapes = new Map();
+    const shape = (container) => {
+        let made = shapes.get(container);
+
+        if (made !== undefined) return made;
+        const kind = kindOf(container);
+
+        made = ours(kind);
+        shapes.set(container, made);
+
+        const part = (child) => {
+            const python = object(child) && !crossesWhole(child) ? pythonOf(child) : undefined;
+
+            if (python !== undefined) {
+                if (!places.has(python)) places.set(python, values.push(python) - 1);
+                return ours('@', places.get(python));
+            }
+
+            return containerOf(child) && heldIn(child).python.size > 0 ? shape(child) : ours('j', child);
+        };
+
+        if (kind === 'x') {
+            const [key, form] = written(container);
+
+            made.push(key, part(form));
+        } else if (kind === 'a') for (let at = 0; at < container.length; at++) made.push(at in container ? part(container[at]) : ours('h'));
+        else if (kind === 'm') for (const [key, value] of container) made.push(part(key), part(value));
+        else if (kind === 's') for (const value of container) made.push(part(value));
+        else for (const [name, value] of Object.entries(container)) made.push(name, part(value));
+
+        return made;
+    };
+
+    return { root: shape(one), values };
+};
+
+const grouped = (one) => {
+    const { root, values } = shapeOf(one);
+
+    return ours('J', root, pickledFor(pyList(values)));
+};
+
+// What a JavaScript server module's `load` returns, where it holds Python
+// values, its page reads on the server as the browser reads it: the same
+// shape around their copies, or around the values themselves where no copy
+// could differ (`crossing`), crossing as one group (`CROSSED_GROUPS`), the
+// structure they were rebuilt from. Walked as it is at each return, whatever an
+// earlier walk found; and where it holds none, made again for that `load()`
+// alone, the object the marks of that walk are kept on (`FREE_AFTER_LOAD`).
+const CROSSED_GROUPS = new WeakMap();
+
+const crossedData = (data, event) => {
+    if (event?.isDataRequest === true) return data;
+    // The data itself a dict of Python's: as the data of a Python `load()`.
+    if (VIEWED.has(data)) return plainTop(data, true);
+    if (!containerOf(data) || crossesWhole(data)) return data;
+
+    serialisation();
+
+    const free = new WeakSet();
+    const outer = [HELD, marking];
+    let shape;
+
+    [HELD, marking] = [new WeakMap(), free];
+
+    try {
+        if (heldIn(data).python.size > 0) shape = shapeOf(data);
+    } finally {
+        [HELD, marking] = outer;
+    }
+
+    if (shape === undefined || shape.values.length === 0) return free.has(data) ? ownData(data, free) : data;
+
+    const { copy, structure } = crossing(pyList(shape.values), false, true);
+    const made = rebuilt(shape.root, [...copy].map((one) => pyExport(one)));
+
+    CROSSED_GROUPS.set(made, ours('J', shape.root, structure));
+    FREE_AFTER_LOAD.set(made, free);
+
+    return made;
+};
+
+// The data of one `load()` as a plain object of its own, which SvelteKit's
+// merge spreads anyway.
+const ownData = (data, free) => {
+    if (Array.isArray(data) || data instanceof Map || data instanceof Set) return data;
+
+    const made = Object.assign(Object.create(Object.getPrototypeOf(data)), data);
+
+    free.add(made);
+    FREE_AFTER_LOAD.set(made, free);
+
+    return made;
+};
+
+// What the codec throws, SvelteKit reads where in the data it was, as it
+// reads devalue's own errors: a refusal of ours had no such place, and the
+// page's request logged that `path` was undefined, the refusal itself lost.
+const placed = (encode) => (thing) => {
+    try {
+        return encode(thing);
+    } catch (error) {
+        if (object(error) && error.path === undefined) error.path = '';
+        throw error;
+    }
+};
+
+const codec = {
+    UNLOADED,
+    // A dict met at the serialiser's own level, the data of a `load()`
+    // (`TOPS`), an action's answer, a remote function's, crosses as a plain
+    // object of its names (`'p'`), marked when the data of a `load()` says
+    // where its values came from (`plainTop`); a copy a door made, as the
+    // structure it was rebuilt from (`CROSSING`).
+    encode: placed((thing) => {
+        if (isFree(thing) || OURS.has(thing) || pickleNode(thing) || thenable(thing)) return undefined;
+
+        // An action's answer, pickled as it was returned (`routeActions`).
+        const answer = ANSWERS.get(thing) ?? CROSSED_GROUPS.get(thing);
+
+        if (answer !== undefined) return answer;
+
+        const top = TOPS.get(thing);
+
+        if (top !== undefined) return ours('p', top.names, top.structure ?? pickledFor(top.dict), ...(top.marked ? [1] : []));
+
+        // A merge of marked data, SvelteKit's `parent()` handed on: the dict a
+        // Python page reads of it (`routeData`), whose symbols devalue refuses.
+        if (object(thing) && !VIEWED.has(thing) && origins(thing).length > 0) {
+            const dict = routeData(thing);
+
+            return ours('p', namesOf(dict), pickledFor(dict));
+        }
+
+        // What a JavaScript reader was handed for a Python value is that value.
+        const python = pythonOf(thing);
+
+        if (python !== undefined) {
+            const structure = CROSSING.get(python) ?? pickledFor(python);
+            const made = isPlainDict(python) ? ours('p', namesOf(python), structure) : structure;
+
+            return Array.isArray(made) ? made : ours('=', made);
+        }
+
+        if (!containerOf(thing) || kitEnvelope(thing)) return undefined;
+
+        serialisation();
+
+        const held = heldIn(thing);
+
+        return !held.whole && held.python.size >= 2 ? grouped(thing) : undefined;
+    }),
+    crossedData,
+    // The Python value, and what JavaScript reads of it: a group's shape
+    // JavaScript's own, around what JavaScript reads of its values.
+    decodeValue(made, lenient, trusted) {
+        if (Array.isArray(made) && made[0] === 'J') {
+            const values = unpickledFor(made[2], lenient, trusted);
+
+            return values === UNLOADED ? UNLOADED : rebuilt(made[1], [...values].map((one) => pyExport(one)));
+        }
+
+        return unpickledFor(Array.isArray(made) && made[0] === '=' ? made[1] : made, lenient, trusted);
+    },
+    decode(made, lenient, trusted) {
+        const value = this.decodeValue(made, lenient, trusted);
+
+        return value === UNLOADED || (Array.isArray(made) && made[0] === 'J') ? value : pyExport(value);
+    },
+    // A top: its dict, and the values its plain object holds, read off its
+    // view as on the server (`plainTop`), each at its first read: Python,
+    // reading the dict first, finds an iterator where it stood, and one a
+    // JavaScript reader used up first, the list that reader holds (`readBack`).
+    decodeTop(names, made, lenient, trusted) {
+        const dict = unpickledFor(made, lenient, trusted);
+
+        if (dict === UNLOADED) return undefined;
+
+        const view = viewOf(dict);
+        const items = pyEntries(dict);
+        const forms = new Map();
+        const value = (at) => {
+            if (!forms.has(at)) forms.set(at, view[names[at]]);
+
+            return forms.get(at);
+        };
+        const held = (at) => (forms.has(at) ? readBack(items[at][1], forms.get(at)) : items[at][1]);
+
+        return {
+            value,
+            entries: () =>
+                items.map(([key], at) => {
+                    const js = value(at);
+
+                    return [names[at], key, held(at), js];
+                }),
+            dict: () => (items.some(([, one], at) => held(at) !== one) ? pyDict(items.map(([key], at) => [key, held(at)])) : dict)
+        };
+    },
+    // A plain object Python reads as the value it stands for.
+    adopt(object, python) {
+        ADOPTED.add(object);
+        standsForPython(object, python);
+    }
+};
+
+globalThis[Symbol.for('svelthon.codec')] = codec;
+codecLoaded();
 
 // A route module's `load` as each binding of the name hands it over
 // (`liveExport`), which SvelteKit reads off the module at each request, as a
@@ -2390,25 +3003,157 @@ const plainTop = (data) => (VIEWED.has(data) && isDict(pyBind(data)) ? { ...data
 // under another name, since what it answers SvelteKit is a plain object and
 // theirs a dict's view, which Svelte must not proxy.
 const ROUTE_LOADS = new WeakMap();
+const SERVER_LOADS = new WeakMap();
 
-export const routeLoad = (value, where) => {
+export const routeLoad = (value, where, server = false) => {
     const load = pyExport(value, where);
 
     if (typeof load !== 'function') return load;
 
-    let relay = ROUTE_LOADS.get(load);
+    const relays = server ? SERVER_LOADS : ROUTE_LOADS;
+    let relay = relays.get(load);
 
     if (relay === undefined) {
         relay = identified(
             (...args) => {
                 const data = load(...args);
+                // No page renders for a data request, which SvelteKit answers
+                // with the data alone.
+                const top = (one) => plainTop(one, server && args[0]?.isDataRequest !== true);
 
-                return thenable(data) ? Promise.resolve(data).then(plainTop) : plainTop(data);
+                return thenable(data) ? Promise.resolve(data).then(top) : top(data);
             },
             load.name,
             load.length
         );
-        ROUTE_LOADS.set(load, relay);
+        relays.set(load, relay);
+    }
+
+    return relay;
+};
+
+// A server module's `load`, whose data crosses to the browser (`plainTop`).
+export const routeServerLoad = (value, where) => routeLoad(value, where, true);
+
+// A route module's `actions` as SvelteKit calls them, each answer pickled as it
+// returns: SvelteKit writes a `load()`'s data before it renders the page, and
+// an action's answer after, once the page has read it, an iterator it walked
+// used up by then. The page reads, on the server too, the answer as the
+// browser reads it (`crossing`), the one a `fail()` holds as well. Each action
+// is the module's own at every call, one relay per function.
+const ANSWERS = new WeakMap();
+const ACTION_RELAYS = new WeakMap();
+
+const answered = (answer) => {
+    const failure = object(answer) && !VIEWED.has(answer) && pythonOf(answer.data) !== undefined;
+    const python = pythonOf(failure ? answer.data : answer);
+
+    if (python === undefined) return answer;
+
+    const { copy, structure } = crossing(python);
+    const view = pyExport(copy);
+
+    if (object(view)) ANSWERS.set(view, isPlainDict(copy) ? ours('p', namesOf(copy), structure) : structure);
+    if (!failure) return view;
+
+    answer.data = view;
+    return answer;
+};
+
+const actionRelay = (action) => {
+    let relay = ACTION_RELAYS.get(action);
+
+    if (relay === undefined) {
+        relay = identified(
+            (...args) => {
+                const answer = action(...args);
+
+                return thenable(answer) ? Promise.resolve(answer).then(answered) : answered(answer);
+            },
+            action.name,
+            action.length
+        );
+        ACTION_RELAYS.set(action, relay);
+    }
+
+    return relay;
+};
+
+export const routeActions = (value, where) => {
+    const actions = pyExport(value, where);
+
+    if (actions === null || typeof actions !== 'object') return actions;
+
+    return new Proxy(actions, {
+        get(target, key) {
+            const one = Reflect.get(target, key);
+
+            return typeof one === 'function' ? actionRelay(one) : one;
+        }
+    });
+};
+
+// SvelteKit's remote functions as a `.remote.py` declares them, `query`,
+// `command`, `form` and `prerender` (`svelthon.js` hands it these as
+// `$app/server`'s): what a Python function answers, the page reads on the
+// server too as the browser reads it (`crossing`), each answer of a batched
+// query's resolver and each value a live query yields among them. In a remote
+// request no page of the server reads it, and nothing is done: the transport
+// writes it as pickle writes it. Where pickle will not carry it, the answer
+// stays itself, for SvelteKit to refuse; a function of JavaScript's, a
+// validator among them, is left as it is.
+const ANSWERING = new WeakMap();
+
+const pythonFunction = (one) => typeof one === 'function' && quietPyType(pyBind(one)) !== undefined;
+
+const answering = (fn, remote) => {
+    let relays = ANSWERING.get(fn);
+
+    if (relays === undefined) ANSWERING.set(fn, (relays = new Map()));
+
+    let relay = relays.get(remote);
+
+    if (relay === undefined) {
+        relay = identified((...args) => (remote?.() ? fn(...args) : crossedAnswer(fn(...args))), fn.name, fn.length);
+        relays.set(remote, relay);
+    }
+
+    return relay;
+};
+
+const crossedAnswer = (answer) => {
+    if (thenable(answer)) return Promise.resolve(answer).then(crossedAnswer);
+    if (typeof answer === 'function') return answering(answer);
+    if (object(answer) && typeof answer[Symbol.asyncIterator] === 'function') return crossedSteps(answer);
+
+    const python = pythonOf(answer);
+    const crossed = python === undefined ? undefined : crossing(python, true);
+
+    return crossed === undefined ? answer : pyExport(crossed.copy);
+};
+
+const crossedSteps = (source) => {
+    const steps = source[Symbol.asyncIterator]();
+    const step = (made) => Promise.resolve(made).then((one) => (one.done ? one : Promise.resolve(crossedAnswer(one.value)).then((value) => ({ done: false, value }))));
+
+    return {
+        next: (value) => step(steps.next(value)),
+        return: (value) => (steps.return ? step(steps.return(value)) : Promise.resolve({ done: true, value })),
+        throw: (error) => (steps.throw ? step(steps.throw(error)) : Promise.reject(error)),
+        [Symbol.asyncIterator]() {
+            return this;
+        }
+    };
+};
+
+// `remote` says whether the request is a remote function's own.
+export const remoteHelper = (helper, remote) => {
+    if (typeof helper !== 'function') return helper;
+
+    const relay = (...args) => helper(...args.map((one) => (pythonFunction(one) ? answering(one, remote) : one)));
+
+    for (const name of ['batch', 'live']) {
+        if (typeof helper[name] === 'function') relay[name] = remoteHelper(helper[name], remote);
     }
 
     return relay;
