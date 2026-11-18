@@ -7,7 +7,9 @@
 //
 // A write Svelte refuses, in a derived, is refused whatever it writes. And an
 // instance whose class writes its attributes itself, by a `__setattr__` of its
-// own, may store a value anywhere: its write is told as it was.
+// own, may store a value anywhere: its write is told unless Python's lookup
+// finds the attribute unchanged before and after it, as a setter of Svelte's
+// normalising into its state tells nobody of the value it holds already.
 import { test, expect } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import SameItemWrite from './fixtures/SameItemWrite.svelte';
@@ -38,7 +40,9 @@ const runs = (Component, props) => {
 
 test.for(
     ['Python', 'Svelte'].flatMap((language) =>
-        ['item', 'item same', 'item from the end', 'attribute', 'attribute same'].map((kind) => [language, kind])
+        ['item', 'item same', 'item from the end', 'attribute', 'attribute same', 'own attribute', 'own property', 'own slot', 'own dict'].map(
+            (kind) => [language, kind]
+        )
     )
 )('%s: an effect writing an %s back runs once a change', ([language, kind]) => {
     const Component = language === 'Python' ? SameItemWrite : SameItemWriteNative;

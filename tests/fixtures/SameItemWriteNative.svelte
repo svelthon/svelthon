@@ -9,6 +9,20 @@
     const box = new Box();
     const round = (value) => Math.round(value * 100) / 100;
 
+    class Kept {
+        #x = $state(1.5);
+
+        get x() {
+            return this.#x;
+        }
+
+        set x(value) {
+            this.#x = round(value);
+        }
+    }
+
+    const kept = new Kept();
+
     $effect(() => {
         tick();
         if (kind === 'item') items[0] = round(items[0]);
@@ -16,6 +30,7 @@
         else if (kind === 'item from the end') items[items.length - 1] = round(items[items.length - 1]);
         else if (kind === 'attribute') box.x = round(box.x);
         else if (kind === 'attribute same') box.x = Number(box.x);
+        else if (kind.startsWith('own ')) kept.x = Number(kept.x);
     });
 
     let doubled = $derived.by(() => {
@@ -27,6 +42,7 @@
     export function change() {
         items[0] = 2.5;
         box.x = 2.5;
+        kept.x = 2.5;
     }
 </script>
 
