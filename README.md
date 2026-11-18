@@ -1562,9 +1562,10 @@ def GET(event):
 The body is `tojson()`'s, which writes `None` as `null`. `to_js()` makes `None`
 JavaScript's `undefined`, as every crossing does, and `JSON.stringify` drops
 a key whose value is `undefined`, as SvelteKit's `json()` does: `{"email":
-None}` would answer `{}`. And an `int` past 2⁵³ reaches JavaScript as a
-`BigInt`, which SvelteKit's `json()` refuses, as it does in JavaScript:
-`tojson()` writes its digits, as `json.dumps` does.
+None}` would answer `{}`. An `int` stays exact at any size: `tojson()` writes
+`2**64 + 1` as `18446744073709551617`, as `json.dumps` does. Use it rather
+than SvelteKit's `json()`, which goes through JavaScript's `JSON.stringify` and
+refuses such a number.
 
 ### The boundary converts, both ways
 
