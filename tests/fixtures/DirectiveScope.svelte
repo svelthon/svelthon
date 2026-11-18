@@ -47,6 +47,11 @@ def move():
     amount = 0.75
 
 
+def nudge():
+    global amount
+    amount = 1.0
+
+
 def grow():
     global js_options
     js_options = {"nested": {"amount": 0.75}, "values": [0.125]}
@@ -83,6 +88,7 @@ def show():
 <p data-k="maybe" use:maybe={0.5}>not yet</p>
 <button data-k="swap-action" onclick={swap_action}>swap action</button>
 <button data-k="move" onclick={move}>move</button>
+<button data-k="nudge" onclick={nudge}>nudge</button>
 <button data-k="renew" onclick={renew}>renew</button>
 
 <button data-k="grow" onclick={grow}>grow</button>

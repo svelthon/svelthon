@@ -3654,14 +3654,21 @@ const changed = (before, after, python) => {
 // installs the action again when it changes, as Svelte's own does. Read early,
 // an `update` turned on was never heard of. `update` is asked once, and the
 // wrapper is what Svelte calls after.
+//
+// Svelte's first comparison after the install is against nothing (`prev =
+// {}`), so the first run that reads the value again updates the action, the
+// value the same or not. Held as installed, that run was skipped when the value
+// had not changed, and an action measuring the node missed it.
 const actionPayload = (python, result, given) => {
     if (result === null || (typeof result !== 'object' && typeof result !== 'function')) return result;
 
-    let held = given[0];
+    let held;
+    let first = true;
     let updates;
     const update = ([, , ...next]) => {
-        if (!changed(held, next[0], python)) return;
+        if (!first && !changed(held, next[0], python)) return;
 
+        first = false;
         held = next[0];
         if (python) untrack(() => result.update(held));
         else result.update(forJavaScript([held])[0]);

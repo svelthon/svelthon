@@ -262,10 +262,16 @@ describe('a directive whose callee is', () => {
         expect(at('counted').dataset.updates).toBe('1');
         expect(at('counted-bare').dataset.updates).toBe('0');
 
-        // Recomputed and equal, `True` both times: Svelte's own comparison
-        // does not update, and the payload, a new array each time, always
-        // looked changed to it.
-        expect(at('counted-same').dataset.updates).toBe('0');
+        // Recomputed and equal, `True` both times: Svelte updates the action at
+        // this first run, its first comparison being against nothing, and not
+        // at the next, where its own comparison finds the value unchanged; the
+        // payload, a new array each time, always looked changed to it.
+        expect(at('counted-same').dataset.updates).toBe('1');
+
+        at('nudge').click();
+        flushSync();
+
+        expect([at('counted').dataset.updates, at('counted-same').dataset.updates]).toEqual(['2', '1']);
     });
 
     // Svelte calls an action optionally: an absent one installs nothing.

@@ -9,7 +9,10 @@ import ActionPayloadHost from './fixtures/ActionPayloadHost.svelte';
 import ActionReadsHost from './fixtures/ActionReadsHost.svelte';
 import ActionDictLive from './fixtures/ActionDictLive.svelte';
 import ActionDictLiveNative from './fixtures/ActionDictLiveNative.svelte';
+import ActionFirstUpdatePy from './fixtures/ActionFirstUpdatePy.svelte';
+import ActionFirstUpdateJs from './fixtures/ActionFirstUpdateJs.svelte';
 import { held } from './fixtures/action_resources.js';
+import { calls } from './fixtures/action_log.js';
 
 // The resources an action holds after each step: mounted, updated twice,
 // unmounted.
@@ -135,6 +138,30 @@ test.for(['float', 'int', 'str', 'object'])('a Python action is updated once by 
     flushSync();
 
     expect(target.textContent.trim()).toBe('install:EUR,update:USD');
+});
+
+// Svelte updates an action at the first run that reads its value again, the
+// value the same or not, its first comparison being against nothing; so does a
+// Python component, where that run was skipped and an action measuring its node
+// missed it.
+test('an action is updated at the first run of its value, as Svelte updates it', () => {
+    const run = (Component) => {
+        const target = document.body.appendChild(document.createElement('div'));
+
+        calls.length = 0;
+        mount(Component, { target });
+        flushSync();
+
+        for (let click = 0; click < 3; click++) {
+            target.querySelector('button').click();
+            flushSync();
+        }
+
+        return [...calls];
+    };
+    const svelte = run(ActionFirstUpdateJs);
+
+    expect([run(ActionFirstUpdatePy), svelte]).toEqual([svelte, ['mount:0', 'update:0', 'update:1']]);
 });
 
 // And by the number a float or an int stands for, so `1` then `1.0`, or `0.0`
