@@ -1,7 +1,9 @@
 import { test, expect } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import SharedRowsReader from './fixtures/SharedRowsReader.svelte';
+import AppendedRowsReader from './fixtures/AppendedRowsReader.svelte';
 import { store } from './fixtures/shared_rows.svelte.py';
+import { store as appended } from './fixtures/appended_rows.svelte.py';
 
 // One object a store holds is one object wherever it holds it, under a new
 // array or a second name, as one object is one proxy of Svelte's: written
@@ -37,4 +39,25 @@ test('a row under two names is written for both', () => {
     flushSync();
 
     expect([shown(), store.rows[0].n, store.total()]).toEqual([['7', '7'], 7, 7]);
+});
+
+// A row a store's function appends, handed by JavaScript, is kept by Python as
+// the very object, as CPython keeps what a list is handed, and handed to a page
+// as a proxy that tells of a write, as `$state` does: written through the
+// store, it is shown, and Python reads it, the object itself written. Handed
+// as itself, the write reached the object and no page.
+test('a row a store function appends is followed when a page writes it', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+    const shown = () => target.querySelector('p[data-k="first"]').textContent;
+    const given = { n: 1 };
+
+    appended.add(given);
+    mount(AppendedRowsReader, { target });
+    flushSync();
+    expect(shown()).toBe('1');
+
+    appended.rows[0].n = 2;
+    flushSync();
+
+    expect([shown(), appended.first_n(), given.n]).toEqual(['2', 2, 2]);
 });
