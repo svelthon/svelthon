@@ -1984,6 +1984,11 @@ arrives as one large payload, these are per-module `.wasm` files, and Svelthon
 already knows exactly which modules a component imports: `py2js()` exposes them,
 so only the ones actually named need travel.
 
+## Sites built with Svelthon
+
+- [Étymobio](https://etymobio.forge.apps.education.fr): the etymology of
+  biology!
+
 ## Licence
 
 Svelthon is MIT, the licence of Svelte and of the tooling around it. See

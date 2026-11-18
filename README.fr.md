@@ -2059,6 +2059,11 @@ arrive en une seule grosse charge, ce sont ici des `.wasm` par module, et
 Svelthon sait déjà exactement quels modules un composant importe, `py2js()` les
 expose, donc seuls ceux réellement nommés ont à voyager.
 
+## Sites faits avec Svelthon
+
+- [Étymobio](https://etymobio.forge.apps.education.fr) : l'étymologie de la
+  biologie !
+
 ## Licence
 
 Svelthon est sous MIT, la licence de Svelte et de l'outillage autour. Voir
