@@ -871,7 +871,11 @@ const DIRECTIVE = /^bind:/;
 // And it keeps the write on Python's path: Svelte's own version writes the value
 // with a plain JavaScript assignment, which lands on the object but never
 // reaches `$B.$setitem`, so nothing would re-render.
-const GROUP_DIRECTIVE = /^bind:group\b/;
+//
+// The directive's whole name: a word boundary ends it before a hyphen or a
+// letter past ASCII, and `bind:group-size`, a component's prop, or `bind:groupé`
+// became a group.
+const GROUP_DIRECTIVE = /^bind:group$/;
 
 // The shorthand: `bind:value` with no `={…}` is Svelte's way of writing
 // `bind:value={value}`. Left as written, Svelte would bind its own `let` for the
@@ -919,8 +923,9 @@ const EACH_ROWS = '__rows_';
 // shorthand `bind:group`, read off the markup before the walk: a declaration
 // comes before the binding that writes it, and has to know. Read as Python
 // reads them, as the binding reads its target (`bareName`): `(picked)` and
-// `picked # chosen` write `picked`.
-const GROUPED = /\bbind:group(?:\s*=\s*["']?\{([^{}]*)\})?/gu;
+// `picked # chosen` write `picked`. The directive whole, an attribute of its
+// own: not `data-bind:group`, nor `bind:group-size`.
+const GROUPED = /(?<=^|[\s"'}/])bind:group(?=[\s=/>]|$)(?:\s*=\s*["']?\{([^{}]*)\})?/gu;
 const groupedNames = (markup) =>
     new Set(
         [...markup.matchAll(GROUPED)]

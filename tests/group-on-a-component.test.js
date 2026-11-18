@@ -118,4 +118,28 @@ describe('bind:group on an element', () => {
     ])('%s keeps the binding', ([markup]) => {
         expect(rewrite(markup)).toContain('use:__group');
     });
+
+    // A directive whose name only begins with `group` is no group: a word
+    // boundary ended the name before the hyphen or the accented letter, and an
+    // element bound by it became a group Svelte refuses.
+    test.for([
+        ['<input type="checkbox" value="mail" bind:group-size={picked} />'],
+        ['<input type="checkbox" value="mail" bind:groupé={picked} />'],
+        ['<input type="checkbox" value="mail" bind:groupé />']
+    ])('%s is no group, as Svelte has it', ([markup]) => {
+        expect(rewrite(markup)).not.toContain('use:__group');
+    });
+});
+
+// And on a component, a prop of such a name binds as any prop does, a member
+// of a container among its targets: it was refused, the message speaking of
+// `bind:group`.
+describe('a prop whose name begins with group', () => {
+    const rewrite = (markup) => overMarkup(markup, (source, at) => pythonExpressions(source, collector([]), undefined, at));
+
+    test.for([['<Child bind:group-size={model["v"]} />'], ['<Child bind:groupé={model["v"]} />']])('%s binds the prop', ([markup]) => {
+        const written = rewrite(markup);
+
+        expect([written.includes('use:__group'), /bind:group(?:-size|é)=\{/u.test(written)]).toEqual([false, true]);
+    });
 });
