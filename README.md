@@ -72,6 +72,12 @@ The server's HTML, the hydrated page and a page reached by navigation all say
 | `{"py", "svelte"}` | refused | a set |
 | an instance of your class | refused | an instance, rebuilt as pickle rebuilds it |
 
+And an `int` stays exact at any size: `2**64 + 1` reaches the page as
+`18446744073709551617` on both sides, where a JavaScript number past 2⁵³ is
+rounded to `18446744073709552000`. A JavaScript page reads it as a `BigInt`,
+and `javascript.JSON` reads and writes it exact, where JavaScript's own
+`JSON.parse` rounds it.
+
 This is **pickle**, Python's own way of carrying a value from one process to
 another, which Bryntime writes for the browser and Svelthon installs in
 SvelteKit's `transport`, with no file of yours. It goes **one way only**: the

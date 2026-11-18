@@ -73,6 +73,12 @@ données :
 | `{"py", "svelte"}` | refusé | un set |
 | une instance de ta classe | refusée | une instance, refaite comme pickle la refait |
 
+Et un `int` reste exact quelle que soit sa taille : `2**64 + 1` arrive à la
+page en `18446744073709551617` des deux côtés, là où un nombre JavaScript
+au-delà de 2⁵³ est arrondi à `18446744073709552000`. Une page JavaScript le lit
+en `BigInt`, et `javascript.JSON` le lit et l'écrit exact, là où le
+`JSON.parse` de JavaScript l'arrondit.
+
 C'est **pickle**, la façon propre à Python de porter une valeur d'un processus
 à un autre, que Bryntime écrit pour le navigateur et que Svelthon installe dans
 le `transport` de SvelteKit, sans aucun fichier de ta part. Il ne va **que dans
