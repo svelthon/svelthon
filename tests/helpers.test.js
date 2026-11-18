@@ -116,6 +116,9 @@ describe('tojson', () => {
         ['two', 2, '{\n  "a": [\n    1,\n    "x"\n  ]\n}'],
         ['minus one', -1, '{\n"a": [\n1,\n"x"\n]\n}'],
         ['a string', '--', '{\n--"a": [\n----1,\n----"x"\n--]\n}'],
+        // which `replaceAll` read as patterns
+        ['a string of dollars', '$$', '{\n$$"a": [\n$$$$1,\n$$$$"x"\n$$]\n}'],
+        ['a string naming the match', '$&', '{\n$&"a": [\n$&$&1,\n$&$&"x"\n$&]\n}'],
         ['True', true, '{\n "a": [\n  1,\n  "x"\n ]\n}']
     ])('an indent of %s is laid out as json.dumps lays it out', ([, indent, cpython]) => {
         expect(tojson(pyData({ a: [1, 'x'] }), indent)).toBe(cpython);

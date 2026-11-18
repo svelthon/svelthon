@@ -421,7 +421,8 @@ export function tojson(value, indent) {
     // element `{@html}` wrote it in. Outside a string, JSON holds none of them.
     const safe = text?.replace(/[<>&']/g, (one) => `\\u00${one.charCodeAt(0).toString(16)}`);
 
-    return level === undefined || safe === undefined ? safe : safe.replaceAll('\u0001', level);
+    // By a function: a string would have its `$$` and `$&` read as patterns.
+    return level === undefined || safe === undefined ? safe : safe.replaceAll('\u0001', () => level);
 }
 
 // And the way back, through Brython's route rather than the JavaScript one,
