@@ -32,6 +32,11 @@ export const GroupHydrateValues =
 export const GroupHydrateSplit =
     "<!--[--><input data-k=\"email\" type=\"radio\" name=\"contact\" value=\"email\" checked=\"\"/> <input data-k=\"mail\" type=\"radio\" name=\"contact\" value=\"mail\"/> <input data-k=\"other\" type=\"radio\" name=\"contact\" value=\"other\"/> <p data-k=\"model\">email|</p><!--]-->";
 
+// A radio group the server checks, beside a confirmation; Svelte's witness
+// renders the same page.
+export const GroupConfirm =
+    "<!--[--><form data-k=\"form\"><input data-k=\"a\" type=\"radio\" name=\"contact\" value=\"a\" checked=\"\"/> <input data-k=\"b\" type=\"radio\" name=\"contact\" value=\"b\"/> <button data-k=\"confirm\" type=\"button\">Confirmer</button> <p data-k=\"message\"></p></form><!--]-->";
+
 // A radio and a checkbox whose values answer anew at each call: the numbers
 // are the server's, which the client's need not repeat.
 export const GroupHydrateMoving =

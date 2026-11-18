@@ -12,6 +12,8 @@ import GroupHydrateValues from './fixtures/GroupHydrateValues.svelte';
 import GroupHydrateValuesNative from './fixtures/GroupHydrateValuesNative.svelte';
 import GroupHydrateSplit from './fixtures/GroupHydrateSplit.svelte';
 import GroupHydrateSplitNative from './fixtures/GroupHydrateSplitNative.svelte';
+import GroupConfirm from './fixtures/GroupConfirm.svelte';
+import GroupConfirmNative from './fixtures/GroupConfirmNative.svelte';
 import GroupHydrateMoving from './fixtures/GroupHydrateMoving.svelte';
 import GroupHydrateMovingNative from './fixtures/GroupHydrateMovingNative.svelte';
 import GroupCheckedWritten from './fixtures/GroupCheckedWritten.svelte';
@@ -172,6 +174,28 @@ test.for([
     flushSync();
 
     expect([['email', 'mail', 'other'].filter((k) => q(k).checked), q('model').textContent]).toEqual([[picked], model]);
+});
+
+// A radio the server checked stays checked when the page renders again for
+// anything else once hydrated, and a form sends it. Hydration takes the
+// `checked` attribute away, writing `null` into the cache the next write of the
+// one this pass adds for the server, `undefined` in a browser, was compared
+// with: the confirmation unchecked every radio.
+test.for([
+    ['Python', GroupConfirm],
+    ['Svelte', GroupConfirmNative]
+])('%s: a radio the server checked stays checked when the page renders again', async ([, Component]) => {
+    const target = document.body.appendChild(document.createElement('div'));
+    const q = (k) => target.querySelector(`[data-k="${k}"]`);
+
+    target.innerHTML = html.GroupConfirm;
+    hydrated.push(hydrate(Component, { target }));
+    flushSync();
+    await Promise.resolve();
+    q('confirm').click();
+    flushSync();
+
+    expect([q('a').checked, q('message').textContent, new FormData(q('form')).get('contact')]).toEqual([true, 'a', 'a']);
 });
 
 // And the value it keeps is the one its field holds, evaluated once: past that

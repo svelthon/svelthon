@@ -17,6 +17,8 @@ import GroupHydrateValues from './fixtures/GroupHydrateValues.svelte';
 import GroupHydrateValuesNative from './fixtures/GroupHydrateValuesNative.svelte';
 import GroupHydrateSplit from './fixtures/GroupHydrateSplit.svelte';
 import GroupHydrateSplitNative from './fixtures/GroupHydrateSplitNative.svelte';
+import GroupConfirm from './fixtures/GroupConfirm.svelte';
+import GroupConfirmNative from './fixtures/GroupConfirmNative.svelte';
 import GroupHydrateMoving from './fixtures/GroupHydrateMoving.svelte';
 import GroupHydrateMovingNative from './fixtures/GroupHydrateMovingNative.svelte';
 import GroupServer from './fixtures/GroupServer.svelte';
@@ -135,7 +137,9 @@ test.for([
     ['two groups of evaluated values', GroupHydrateValues, {}, 'GroupHydrateValues'],
     ["Svelte's witness of these", GroupHydrateValuesNative, {}, 'GroupHydrateValues'],
     ['two bindings of one radio name', GroupHydrateSplit, {}, 'GroupHydrateSplit'],
-    ["Svelte's witness of them", GroupHydrateSplitNative, {}, 'GroupHydrateSplit']
+    ["Svelte's witness of them", GroupHydrateSplitNative, {}, 'GroupHydrateSplit'],
+    ['a radio group beside a confirmation', GroupConfirm, {}, 'GroupConfirm'],
+    ["Svelte's witness of it", GroupConfirmNative, {}, 'GroupConfirm']
 ])('the server renders %s', ([, Component, props, name]) => {
     expect(render(Component, { props }).body).toBe(html[name]);
 });

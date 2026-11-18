@@ -4461,6 +4461,25 @@ export function group(node, given) {
     const written = attributesOf(node);
     const reader = node.defaultChecked !== node.checked && written?.checked === undefined;
 
+    // Unless hydration writes `null` there, taking the attribute away once the
+    // page is in place (`remove_input_defaults`): that `undefined` was then a
+    // change, written at the next run of the effect, for anything else the
+    // page showed, and the radio the server checked went unchecked. Held as
+    // `undefined`, it is none, as Svelte's own group writes no `checked`.
+    if (written != null && written.checked === undefined) {
+        let held;
+
+        Object.defineProperty(written, 'checked', {
+            configurable: true,
+            enumerable: true,
+            get: () => held,
+            set(next) {
+                held = next ?? undefined;
+            }
+        });
+        followed.push([written, 'checked']);
+    }
+
     if (!reader) show(current);
     else
         queueMicrotask(() => {
