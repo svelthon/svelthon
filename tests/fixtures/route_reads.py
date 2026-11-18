@@ -9,6 +9,26 @@ def reads_query(event):
     return event["query"].get("x")
 
 
+def reads_absent(event):
+    return event["query"].get("q", "")
+
+
+def reads_contains(event):
+    return "x" in event["query"]
+
+
+def reads_item(event):
+    return event["query"]["x"]
+
+
+def walks_query(event):
+    return sorted(event["query"])
+
+
+def counts_query(event):
+    return len(event["query"])
+
+
 def reads_route(event):
     return [event["route"], event["params"]["slug"]]
 

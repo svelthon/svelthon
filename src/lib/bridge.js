@@ -27,6 +27,7 @@ const {
     pyEntries,
     pyDict,
     readNoted,
+    keysNoted,
     pyBytes,
     mutableBytes,
     bytesOut,
@@ -1973,17 +1974,30 @@ const routeArgument = (value) => {
             params: () => {
                 for (const key of new Set([...Object.keys(value.params), ...declared])) Reflect.get(value.params, key);
             },
-            query: () => {
-                try {
-                    [...value.url.searchParams];
-                } catch {
-                    // A prerendered page has no query string to depend on.
-                }
-            },
             url: () => value.url.href,
             route: () => value.route?.id
         }
     );
+};
+
+// The query's dict notes the key Python asks of it, held or not, as SvelteKit's
+// `searchParams.get` notes it, and the whole query when Python walks it
+// (`keysNoted`). Noted whole as `event["query"]` was read, a `load()` reading
+// `.get("q")` ran again when any other key changed, where SvelteKit's runs when
+// `q` does.
+const queryNoted = (value, query) =>
+    keysNoted(
+        pyDict(query),
+        (key) => searched(() => value.url.searchParams.get(key)),
+        () => searched(() => [...value.url.searchParams])
+    );
+
+const searched = (read) => {
+    try {
+        read();
+    } catch {
+        // A prerendered page has no query string to depend on.
+    }
 };
 
 const routeSnapshot = (value) => {
@@ -2029,7 +2043,7 @@ const routeSnapshot = (value) => {
     // method, as its JavaScript event has no request.
     return pyDict([
         ['params', pyDict(Object.entries({ ...value.params }))],
-        ['query', pyDict(query)],
+        ['query', queryNoted(value, query)],
         ['url', value.url.href],
         ...(value.request === undefined ? [] : [['method', value.request.method]]),
         ['route', value.route && value.route.id],

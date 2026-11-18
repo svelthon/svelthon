@@ -6,17 +6,67 @@
 // when Python reads its key.
 import { test, expect } from 'vitest';
 import { runInNewContext } from 'node:vm';
-import { reads_cookie, reads_query, reads_route, reads_optional, answers, answers_later } from './fixtures/route_reads.py';
+import {
+    reads_cookie,
+    reads_query,
+    reads_absent,
+    reads_contains,
+    reads_item,
+    walks_query,
+    counts_query,
+    reads_route,
+    reads_optional,
+    answers,
+    answers_later
+} from './fixtures/route_reads.py';
 import { requestEvent } from './request-event.js';
 import { routeLoad } from '../src/lib/bridge.js';
 
-// An event whose reads SvelteKit would track, noted unless under `untrack`.
+// SvelteKit's URL as `make_trackable` makes it: a key asked of `searchParams` by
+// `get`, `getAll` or `has` is noted alone, `search x`; anything else read of the
+// query, or the URL's own text, notes the whole URL.
+const trackable = (url, note) => {
+    const tracked = new URL(url);
+
+    Object.defineProperty(tracked, 'searchParams', {
+        value: new Proxy(tracked.searchParams, {
+            get(params, key) {
+                if (key === 'get' || key === 'getAll' || key === 'has') {
+                    return (name, ...rest) => {
+                        note(`search ${name}`);
+                        return params[key](name, ...rest);
+                    };
+                }
+
+                note('url');
+
+                const found = Reflect.get(params, key);
+
+                return typeof found === 'function' ? found.bind(params) : found;
+            }
+        })
+    });
+
+    for (const name of ['href', 'pathname', 'search']) {
+        Object.defineProperty(tracked, name, {
+            get() {
+                note('url');
+                return url[name];
+            }
+        });
+    }
+
+    return tracked;
+};
+
+// An event whose reads SvelteKit would track, each noted once, unless under
+// `untrack`.
 const tracked = ({ params = { slug: 'pep-8' }, route = { id: '/peps/[slug]' } } = {}) => {
-    const one = requestEvent({ url: 'https://example.test/peps/pep-8?x=1', params, route });
+    const one = requestEvent({ url: 'https://example.test/peps/pep-8?x=1&panel=a', params, route });
     const reads = [];
     let tracking = true;
     const note = (what) => {
-        if (tracking) reads.push(what);
+        if (tracking && !reads.includes(what)) reads.push(what);
     };
     const watched = (target, names) =>
         new Proxy(target, {
@@ -28,7 +78,7 @@ const tracked = ({ params = { slug: 'pep-8' }, route = { id: '/peps/[slug]' } } 
 
     const event = {
         ...one,
-        url: watched(one.url, ['href', 'searchParams']),
+        url: trackable(one.url, note),
         params: watched(one.params, ['slug']),
         route: watched(one.route, ['id']),
         cookie: 'theme=dark',
@@ -45,15 +95,32 @@ const tracked = ({ params = { slug: 'pep-8' }, route = { id: '/peps/[slug]' } } 
     return { event, reads };
 };
 
+// A key of the query is noted alone, held or not, as SvelteKit notes
+// `searchParams.get`: noted whole, a search's load() ran again when another key
+// of the URL changed.
 test.for([
     ['the JavaScript event alone', reads_cookie, 'theme=dark', []],
-    ['the query', reads_query, '1', ['searchParams']],
+    ['a key of the query', reads_query, '1', ['search x']],
+    ['a key the query does not hold', reads_absent, '', ['search q']],
+    ['a key of the query, by `in`', reads_contains, true, ['search x']],
+    ['a key of the query, by its index', reads_item, '1', ['search x']],
     ['the route and the params', reads_route, ['/peps/[slug]', 'pep-8'], ['id', 'slug']]
 ])('a load() reading %s is told of that and nothing else', async ([, load, answer, read]) => {
     const { event, reads } = tracked();
 
     expect(await load(event)).toEqual(answer);
     expect(reads).toEqual(read);
+});
+
+// And the whole query when it walks it, its keys or its length.
+test.for([
+    ['its keys', walks_query, ['panel', 'x']],
+    ['its length', counts_query, 2]
+])('a load() reading the query’s %s is told of the whole query', async ([, load, answer]) => {
+    const { event, reads } = tracked();
+
+    expect(await load(event)).toEqual(answer);
+    expect(reads).toContain('url');
 });
 
 // SvelteKit notes a param read even when the route holds none of it: an
