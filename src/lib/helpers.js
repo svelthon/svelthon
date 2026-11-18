@@ -21,6 +21,7 @@ import {
     pyCoroutine,
     pyScalar,
     pyItems,
+    hasItems,
     unpackedPair,
     pyName,
     isSet,
@@ -682,7 +683,7 @@ export function striptags(value) {
 // without touching the object's symbols, which matters because SvelteKit wraps
 // `event.params` in a proxy that records every key read.
 function mapping(value) {
-    if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+    if (value === null || typeof value !== 'object') return false;
     if (isDict(value)) return true;
 
     // The same question `plainData` asks, asked of the same predicate, so `to_js`,
@@ -691,8 +692,13 @@ function mapping(value) {
     // Brython's mark, and a foreign object is free to carry a field spelled the
     // same, `{ob_type: "business", value: 42}`, which encodes as the identical
     // Python dict does. The question is *is this a Python object*, and `pyClass`
-    // is what the rest of the project asks.
-    return !pyClass(ownType(value)) && plainObject(value);
+    // is what the rest of the project asks. A Python object is a mapping when its
+    // class has `items`, which is what CPython's `urlencode` asks of it
+    // (`hasItems`): a mapping of the author's that is no dict was written as its
+    // `str`, and the link lost every parameter. A list of the author's that has
+    // `items` too, asked first as CPython asks: read as a sequence, the link
+    // carried what the list stores.
+    return pyClass(ownType(value)) ? hasItems(value) : !Array.isArray(value) && plainObject(value);
 }
 
 // Whether Python's loop walks a value, as `iter()` answers it (`pyIterable`),
@@ -752,14 +758,15 @@ export function urlencode(value) {
     // was an array, the query was the list's repr, and a walk that refused
     // was never run. A view a JavaScript caller hands over is its container
     // again (`pyBind`), its rows the Python values they are.
-    const rows = Array.isArray(value)
+    const mapped = mapping(value);
+    const rows = !mapped && Array.isArray(value)
         ? yielded(value).map((one) => {
               const row = one !== null && typeof one === 'object' ? pyBind(one) : one;
 
               return walkable(row) ? yielded(row) : one;
           })
         : null;
-    const entries = mapping(value)
+    const entries = mapped
         ? pyItems(value, unpackedPair)
         : rows !== null && rows.every((one) => Array.isArray(one) && one.length === 2)
           ? rows

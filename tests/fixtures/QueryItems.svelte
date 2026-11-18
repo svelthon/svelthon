@@ -18,8 +18,33 @@ class Listed(dict):
         return [["tag", "selected"]]
 
 
+# A mapping that is no dict: what a class needs for Python to read it as one.
+class Filters:
+    def __init__(self, pairs):
+        self.pairs = pairs
+
+    def keys(self):
+        return [key for key, _ in self.pairs]
+
+    def items(self):
+        return list(self.pairs)
+
+    def __getitem__(self, key):
+        return dict(self.pairs)[key]
+
+    def __iter__(self):
+        return iter(self.keys())
+
+    def __len__(self):
+        return len(self.pairs)
+
+    def __str__(self):
+        return "filters"
+
+
 query = Selected({"tag": "stale", "page": 2})
 listed = Listed({"tag": "selected"})
+filters = Filters([("tag", "été"), ("page", 2)])
 
 
 def refused():
@@ -38,3 +63,4 @@ def read():
 <p data-k="json">{tojson(query)}</p>
 <p data-k="refused">{refused()}</p>
 <p data-k="copied">{to_js(listed).tag}</p>
+<p data-k="mapping">{urlencode(filters)}</p>

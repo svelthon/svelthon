@@ -67,3 +67,15 @@ test('a dict’s items() is what the page encodes', () => {
     expect(read('copied')).toBe('selected');
     expect(instance.read()).toBe('tag=selected');
 });
+
+// And a mapping that is no dict, an object whose class has `items`, is read the
+// same way, as CPython's `urlencode` reads it: encoded as its `str`, the link
+// lost every parameter.
+test('a mapping that is no dict is encoded by its items()', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+
+    mount(QueryItems, { target });
+    flushSync();
+
+    expect(target.querySelector('[data-k="mapping"]').textContent).toBe('tag=%C3%A9t%C3%A9&page=2');
+});

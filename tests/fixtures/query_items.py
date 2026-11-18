@@ -1,7 +1,7 @@
 # Dicts whose class says what its items are. `urllib.parse.urlencode` and
 # `json.dumps` under `python3` read them through `items()` and give what the
 # test expects; a `keys` or an `__iter__` of their own is not what they ask.
-__all__ = ["selected", "empty", "refusing", "keyed", "iterated", "spelled", "uneven", "listed", "copied", "returned"]
+__all__ = ["selected", "empty", "refusing", "keyed", "iterated", "spelled", "uneven", "listed", "copied", "returned", "filters", "guarded"]
 
 
 class Selected(dict):
@@ -47,6 +47,18 @@ class Listed(dict):
         return [["tag", "selected"]]
 
 
+# A list that has `items()` as well: `urlencode` asks `items()` first, whatever
+# the list holds, and walks none of it.
+class Filters(list):
+    def items(self):
+        return [("scope", "mine"), ("tag", "summer"), ("tag", "green")]
+
+
+class Guarded(Filters):
+    def __iter__(self):
+        raise ValueError("walked")
+
+
 def copied():
     return to_js(Listed({"tag": "selected"}))
 
@@ -63,3 +75,5 @@ keyed = Keyed({"tag": "stale", "page": 2})
 iterated = Iterated({"tag": "stale", "page": 2})
 spelled = Spelled({"tag": "stale"})
 uneven = Uneven({"tag": "stale"})
+filters = Filters([("scope", "all")])
+guarded = Guarded([("scope", "all")])

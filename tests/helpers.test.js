@@ -1237,6 +1237,10 @@ describe('urlencode', () => {
         expect(urlencode(raw('spelled'))).toBe('a=b');
         expect(raised(() => urlencode(raw('uneven')))).toBe('ValueError: too many values to unpack (expected 2, got 3)');
 
+        // And a list that has `items()`, asked first as CPython asks: read as a
+        // sequence, the link carried what the list stores, or its refusal.
+        expect([urlencode(raw('filters')), urlencode(raw('guarded'))]).toEqual(Array(2).fill('scope=mine&tag=summer&tag=green'));
+
         expect(JSON.parse(tojson(raw('selected')))).toEqual({ tag: 'selected' });
         expect(tojson(raw('empty'))).toBe('{}');
         expect(raised(() => tojson(raw('refusing')))).toBe('ValueError: query items failed');
