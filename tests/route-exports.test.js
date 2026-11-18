@@ -16,6 +16,8 @@ import * as endpoint from './fixtures/routes/endpoint/+server.py';
 import * as serverHooks from './fixtures/routes/hooks/hooks.server.py';
 import * as clientHooks from './fixtures/routes/hooks/hooks.client.py';
 import * as universalHooks from './fixtures/routes/hooks/hooks.py';
+import * as jsBrought from './fixtures/routes/jsbrought/+page.server.py';
+import * as jsLoaders from './fixtures/routes/jsbrought/loaders.js';
 
 const phases = async (module, times) => {
     const out = [];
@@ -100,4 +102,11 @@ test('a hooks module exports the hooks SvelteKit reads off it, whatever binds th
         universalHooks.reroute({}),
         typeof universalHooks.transport
     ]).toEqual(['handle', 'handleFetch', 'handleError', 'init', 'handleError', 'init', 'reroute', 'object']);
+});
+
+// And so is one `__js__` brings, JavaScript's own: the page answered no data,
+// a module of hooks had no `transport` (the SvelteKit check reads one). A
+// server route's `load` is relayed as a JavaScript server module's.
+test('a name SvelteKit reads that __js__ brings is exported, a server load relayed', async () => {
+    expect([(await jsBrought.load({})).phase, jsBrought.prerender, jsBrought.load === jsLoaders.load]).toEqual(['from javascript', false, false]);
 });

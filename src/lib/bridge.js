@@ -6,7 +6,7 @@ import { untrack } from 'svelte';
 import { createSubscriber } from 'svelte/reactivity';
 import BROWSER from 'esm-env/browser';
 import { attributeWrapper } from './attributes.js';
-import { markTop, origins, codecLoaded, rebuilt, transporters } from './transport.js';
+import { markTop, origins, codecLoaded, rebuilt, transporters, liveLoad } from './transport.js';
 
 // Held here as constants of this module: a binding imported is read through the
 // module's cell at each use, which the hot paths of a crossing paid.
@@ -3038,6 +3038,11 @@ export const routeLoad = (value, where, server = false) => {
 
 // A server module's `load`, whose data crosses to the browser (`plainTop`).
 export const routeServerLoad = (value, where) => routeLoad(value, where, true);
+
+// One of JavaScript's that `__js__` brings into a Python server module, read
+// where it is bound at each call and relayed as a JavaScript server module's
+// (`liveLoad`).
+export const jsServerLoad = liveLoad;
 
 // A route module's `actions` as SvelteKit calls them, each answer pickled as it
 // returns: SvelteKit writes a `load()`'s data before it renders the page, and

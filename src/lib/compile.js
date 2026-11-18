@@ -17,6 +17,7 @@ import {
     atomic,
     refuse,
     pythonName,
+    jsLocal,
     jsNameBindings,
     NS,
     runtimeAliases,
@@ -632,6 +633,7 @@ const RUNTIME = {
     pyExport: '__pyExport',
     routeLoad: '__routeLoad',
     routeServerLoad: '__routeServerLoad',
+    jsServerLoad: '__jsServerLoad',
     routeActions: '__routeActions',
     routeData: '__routeData',
     liveExport: '__liveExport',
@@ -2581,7 +2583,7 @@ function plainPreamble(c) {
         `import { init as __init } from ${JSON.stringify(c.body)};`,
         `import { ${runtimeAliases(HOST, [
             'bind', '__pybridge', 'jsGlobal', 'pyCall', 'pyError', 'plainData', 'pyArg',
-            'pyData', 'pyExport', 'routeLoad', 'routeServerLoad', 'routeActions', 'jsCall', 'ticking', 'pyBind', 'NONE', 'helpers',
+            'pyData', 'pyExport', 'routeLoad', 'routeServerLoad', 'jsServerLoad', 'routeActions', 'jsCall', 'ticking', 'pyBind', 'NONE', 'helpers',
             'pythonModule', 'group', 'invoke', 'liveExport', 'readOnlyImport'
         ])} } from 'svelthon/bridge';`,
         ...c.jsImports.map((one) => jsImportLine(HOST, one)),
@@ -2705,8 +2707,17 @@ const serverOnly = (source) => {
 
 // SvelteKit reads a route module's names off it, and refuses a default export
 // there: a `.py` exports by name only (Bryc's `moduleExports`), filled by the
-// body as it binds them (`liveExports`, `moduleLoad`).
-const plainExports = (c) => moduleExports(HOST, c);
+// body as it binds them (`liveExports`, `moduleLoad`). A server route's `load`
+// that `__js__` brings is JavaScript's, relayed as a JavaScript server
+// module's is (`jsServerLoad`).
+const plainExports = (c) =>
+    c.serverRoute && c.exported.includes('load') && c.jsImported.includes('load')
+        ? [
+              ...moduleExports(HOST, { ...c, exported: c.exported.filter((n) => n !== 'load') }),
+              `const __svelthon_load = ${RUNTIME.jsServerLoad}(() => ${jsLocal(HOST, 'load')});`,
+              'export { __svelthon_load as load };'
+          ]
+        : moduleExports(HOST, c);
 
 // The order, which is the one thing about this file that cannot be read off any
 // single section. Four constraints hold it, and `tests/sections.test.js` asserts
@@ -2954,11 +2965,13 @@ function compile(
     // And what the framework reads off it by name (`read`), whatever binds it:
     // `load = make_loader("…")`, `from loaders import load` or `ssr = False`
     // was a page answered with no data, and no word said. A star import may
-    // bind any of them, as JavaScript's `export *` hands them on.
+    // bind any of them, as JavaScript's `export *` hands them on; and so may
+    // `__js__`, a `transport` of JavaScript's in a module of hooks.
     const declaration = declaredExports(HOST, root._ast, table, source, lineOffset, src);
     const listed = declaration === null ? null : declaration.names;
     const binds = moduleBinds(table);
-    const exported = listed ?? [...new Set([...funcs.map((f) => f.name), ...read.filter((n) => starred || binds.has(n))])];
+    const exported =
+        listed ?? [...new Set([...funcs.map((f) => f.name), ...read.filter((n) => starred || binds.has(n) || jsImported.includes(n))])];
 
     // What the list names that the module cannot export (Bryc's
     // `exportChecks`); with a `from m import *`, a name not yet bound waits

@@ -867,8 +867,8 @@ Ses fonctions sont ses exports, et dans un module des routes ou des hooks de
 SvelteKit aussi les noms que SvelteKit y lit, `load`, `actions`, les options de
 page, le `GET` d'un endpoint et un hook, quoi qui les lie : `load =
 make_loader("pep")`, `from loaders import load`, `from loaders import *`, `ssr =
-False`, `handle = sequence(first, second)`. `__all__` dit autre chose quand on
-le souhaite :
+False`, `handle = sequence(first, second)`, un `transport` qu'amène `__js__`.
+`__all__` dit autre chose quand on le souhaite :
 
 ```python
 # peps.py
@@ -1804,7 +1804,7 @@ parsing, que seul le compilateur charge ; le README de Bryntime en donne le poid
 
 ## État
 
-Validé par `npm test`, 2 132 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 2 133 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
@@ -1814,7 +1814,7 @@ rangée d'un `test.for`), aucun échec attendu :
   contrôle et frames. Chaque valeur attendue a été produite par CPython 3.12 en
   exécutant le code du composant tel quel, jamais écrite à la main. Brython
   reproduit CPython sur **chaque point** ;
-- build de production : **285 Ko gzip**, runtime Brython compris : ce que la
+- build de production : **286 Ko gzip**, runtime Brython compris : ce que la
   page de démo charge, son script, les modules qu'elle précharge et ses styles,
   mesuré après chaque build par `scripts/build-size.mjs`.
 
@@ -1916,7 +1916,7 @@ WebAssembly.
 où Svelte lit une valeur JavaScript. Moins de 4 ms pour 500 lignes, ce qu'une
 page ne ressent pas.
 
-L'autre prix est au chargement : 285 Ko gzip, runtime Brython compris, et
+L'autre prix est au chargement : 286 Ko gzip, runtime Brython compris, et
 **0,12 s jusqu'au contenu de la démo** en production, cache vide ; 0,33 s avec
 le processeur ralenti quatre fois, comme celui d'un portable modeste. Payé une
 fois par session, pas par page, puisque l'application ne recharge jamais.

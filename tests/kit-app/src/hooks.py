@@ -2,7 +2,6 @@
 own transport among them."""
 
 __js__ = {"#lib/ledger.js": ["transport"]}
-__all__ = ["reroute", "transport"]
 
 
 def reroute(given):
