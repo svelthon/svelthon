@@ -13,6 +13,7 @@ import Semantics from '../demo/Semantics.svelte';
 import StoreDemo from '../demo/StoreDemo.svelte';
 import Composition from './fixtures/Composition.svelte';
 import CtxHost from './fixtures/CtxHost.svelte';
+import HeadUnderIf from './fixtures/HeadUnderIf.svelte';
 import { store } from '../demo/counter_store.svelte.py';
 
 // Svelte sprinkles hydration markers through the HTML; only the text matters here.
@@ -49,6 +50,18 @@ describe('server rendering', () => {
 
     test('props are resolved on the server', () => {
         expect(text(render(Greeting, { props: { name: 'Ada' } }))).toContain('Hello Ada!');
+    });
+
+    // A head whose title reads an expression under an {#if}: its derived was
+    // declared at the block's end, and the server renders a `<title>` in place,
+    // `Cannot access '__expr_1_memo' before initialization`, a 500 for the page.
+    test('a head’s title and description read under an {#if}', () => {
+        const { head, body } = render(HeadUnderIf);
+
+        expect([head.replace(/<!--[^>]*-->/g, ''), text({ body })]).toEqual([
+            '<meta name="description" content="zygote : zyg + ote. une cellule"/><title>zygote · Étymobio</title>',
+            '<p>zygote</p>'
+        ]);
     });
 
     test('Python values are computed, not approximated', () => {

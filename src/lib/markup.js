@@ -2684,6 +2684,22 @@ function scopeChain(seed, indexed, refuseCompilerName) {
         keyed.push(undefined);
     };
 
+    // The derived the scopes from `at` to the innermost declare (`memoRow`),
+    // taken from them, innermost first, each with the head of its scope
+    // (`opened`), where it is declared.
+    const taken = (at) => {
+        const held = [];
+
+        for (let one = scopes.length - 1; one >= at; one--) {
+            const text = (scopes[one].memos ?? []).join('');
+
+            if (text !== '') held.push({ head: scopes[one].head, text });
+            scopes[one].memos = [];
+        }
+
+        return held;
+    };
+
     // Never below the base scope: unbalanced markup is Svelte's to refuse, and
     // popping past the bottom here would lose the snippet names it holds.
     const pop = () => {
@@ -2892,6 +2908,46 @@ function scopeChain(seed, indexed, refuseCompilerName) {
         // The id of the innermost scope, which the first walk recorded under.
         id: () => ids.at(-1),
 
+        // A derived an expression reads (`unmemoized`), declared at the head
+        // of the innermost block, or of a `<svelte:boundary>`, which then
+        // catches what it raises, or at the end of the markup; and no further
+        // out than the scope that declares a name the expression reads, an
+        // element's template rune. At a block's end, a `<title>` the server
+        // renders in place read it before its declaration, `Cannot access …
+        // before initialization`: Svelte hoists a declaration over what the
+        // block renders, but not over that.
+        memoRow: (declaration, names) => {
+            let at = scopes.length - 1;
+
+            while (at > 0 && owners[at] !== null && owners[at] !== 'svelte:boundary') at--;
+
+            for (const name of names) at = Math.max(at, found(name)?.at ?? 0);
+
+            (scopes[at].memos ??= []).push(declaration);
+        },
+
+        // Where the innermost scope's own text begins, past what opened it: a
+        // block's tag and the declarations it makes, the first expression of
+        // an element's scope. The markup's own scope has none.
+        opened: (position) => {
+            const scope = scopes[scopes.length - 1];
+
+            if (scopes.length > 1 && scope.head === undefined) scope.head = position;
+        },
+
+        // The derived the innermost scope declares (`memoRow`).
+        memosAt: () => taken(scopes.length - 1),
+
+        // And those of every scope a closing tag of this name closes.
+        memosClosing: (name) => {
+            const at = closedAt(owners, name, null);
+
+            return at > 0 ? taken(at) : [];
+        },
+
+        // And those of every scope left open at the markup's end.
+        memosLeft: () => taken(0),
+
         // The element that opened the innermost scope.
         own: (name) => {
             owners[owners.length - 1] = name;
@@ -3076,10 +3132,15 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         let given = '';
         let at = 0;
 
-        for (const edit of edits) {
+        // In the order of the text: a scope's declarations are placed at its
+        // head once it has closed (`declared`).
+        for (const edit of edits.sort((one, other) => one.at - other.at)) {
             given += out.slice(at, edit.at);
 
-            if (edit.lines === undefined) {
+            if (edit.text !== undefined) {
+                given += edit.text;
+                at = edit.at;
+            } else if (edit.lines === undefined) {
                 at = edit.to;
             } else {
                 given += '\n'.repeat(edit.lines);
@@ -3088,6 +3149,15 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         }
 
         return given + out.slice(at);
+    };
+
+    // The derived a scope declares (`memoRow`), placed at its head, or written
+    // here for one that has none.
+    const declared = (memos) => {
+        for (const { head, text } of memos) {
+            if (head === undefined) out += text;
+            else edits.push({ at: head, text });
+        }
     };
 
     // ` (src/App.svelte:14:6)`, or nothing when there is no file to name.
@@ -3929,16 +3999,56 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         }
     };
 
-    // The text an expression renders. One that calls nothing (`callsAnything`)
-    // and reads a name the markup reads again where it is read (`reread`), a
-    // snippet's parameter or a field its pattern takes, is read through a
-    // getter, which Svelte takes for no call, as `{@render}` hands its
-    // arguments: Svelte reads such a name in the effect that renders it, each
-    // time the effect runs, and holds a call in a derived of its own until what
-    // the call read changes. Every Python expression being a call, the text
-    // kept the field of a JavaScript object changed in place when the row
-    // rendered again for another reason; and one the author wrote a call in,
-    // read through the getter, was called again at every render.
+    // A Python expression read where Svelte reads the author's own, in the
+    // effect that renders it, each time that effect runs, a text or the value
+    // of an element's attribute. Svelte holds a call in a derived of its own
+    // until what the call read changes, and every Python expression is a call:
+    // the page kept the field of a JavaScript object changed in place when it
+    // rendered again for another reason, where Svelte's showed the new one,
+    // a link in a loop opened the record it had left, and a spread left a
+    // button enabled that Svelte's disabled.
+    //
+    // One that calls nothing (`callsAnything`) is read from a derived of its
+    // own while it reads only Python's, which tells of its changes, and afresh
+    // at each render once it reads JavaScript's own data, which nothing
+    // follows (`__pybridge.reading`): written with no call, which Svelte holds
+    // in no derived of its own, and naming the derived, which tells Svelte the
+    // value moves. Read afresh whatever it read, thirty of them cost a page
+    // that renders often three times what Svelte's cost, and a hundred rows
+    // two and a half times what they did.
+    //
+    // The derived is declared at the end of the block that reads it, a row or
+    // a snippet's parameter in its scope, or of the markup (`memoRow`), where
+    // Svelte hoists a declaration, and holds the value itself, which Svelte
+    // compares: a row whose value is the same renders nothing again. In a
+    // `<svelte:boundary>`, it is declared there, and what it raises the
+    // boundary catches. One the author wrote a call in keeps its derived, as
+    // Svelte keeps a call's.
+    const unmemoized = (inner, read, text = false) => {
+        if (callsAnything(inner)) return read;
+
+        const called = /^(__expr_\w+)\(/.exec(read);
+
+        if (called !== null) {
+            const name = called[1];
+            const fresh = `__pybridge.reading(__expr_reread, '${name}', () => ${read})`;
+
+            chain.memoRow(`{const ${name}_memo = $derived(${fresh})}`, mentioned(inner.trim()));
+
+            return `(__expr_reread.${name} ? ({ get value() { return ${fresh}; } }).value : ${name}_memo)`;
+        }
+
+        return text && mentioned(inner.trim()).some((one) => chain.reread(one) !== null) ? `({ get value() { return ${read}; } }).value` : read;
+    };
+
+    // A read handed on through a call of the pass's own, which Svelte would hold
+    // in a derived with the read: through a getter, which it holds in none,
+    // once the expression calls nothing (`unmemoized`). One the author wrote a
+    // call in keeps the derived Svelte makes of the whole, as Svelte keeps a
+    // call's: in the getter, `{**make()}` was called at each render.
+    const readThrough = (inner, read, through) =>
+        callsAnything(inner) ? through(read) : `({ get value() { return ${through(unmemoized(inner, read))}; } }).value`;
+
     // `{}` holds no expression, which Svelte refuses: in the text or as the
     // value of an attribute it rendered nothing
     const refuseEmpty = (inner) => {
@@ -3947,14 +4057,11 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         }
     };
 
+    // The text an expression renders (`unmemoized`).
     const rendered = (inner) => {
         refuseEmpty(inner);
 
-        const read = call(inner, '__text');
-
-        return !callsAnything(inner) && mentioned(inner.trim()).some((one) => chain.reread(one) !== null)
-            ? `({ get value() { return ${read}; } }).value`
-            : read;
+        return unmemoized(inner, call(inner, '__text'), true);
     };
 
     // What an attribute's value compiles to, by its name and the tag it is on.
@@ -3991,7 +4098,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
             return calledAtTop(inner) ? `{${adapted}}` : `{${adapted} ?? undefined}`;
         }
 
-        if (CLASS_DIRECTIVE.test(name)) return `{${call(inner, '__truthy')}}`;
+        if (CLASS_DIRECTIVE.test(name)) return `{${unmemoized(inner, call(inner, '__truthy'))}}`;
 
         // `--rate={value}` on a component is no prop of the child's: Svelte
         // writes it into the wrapper it makes around the child, a CSS custom
@@ -4006,12 +4113,16 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
 
         // On a `<svelte:element>` whose name is known as it renders, the value
         // goes as it is to a custom element and as its truth to any other,
-        // asked of that name (`__pybridge.element`).
+        // asked of that name (`__pybridge.element`), read through a getter
+        // (`readThrough`) from a box made anew at each read (`__boxed`): held
+        // in a derived, a field of a JavaScript object changed in place left a
+        // button enabled that Svelte's disabled, and the list itself, changed
+        // in place, would have been the same value to Svelte.
         if (tag?.element !== undefined && TRUTH_WRAPPERS.has(wrapper)) {
-            return `{__pybridge.element(${tag.element}, ${JSON.stringify(wrapper)}, ${call(inner, '', undefined, 'python')}, ${JSON.stringify(name)})}`;
+            return `{${readThrough(inner, call(inner, '__boxed', undefined, 'python'), (boxed) => `__pybridge.element(${tag.element}, ${JSON.stringify(wrapper)}, ${boxed}[0], ${JSON.stringify(name)})`)}}`;
         }
 
-        if (wrapper) return `{${call(inner, wrapper)}}`;
+        if (wrapper) return `{${onElement(tag) ? unmemoized(inner, call(inner, wrapper)) : call(inner, wrapper)}}`;
 
         // `href={website}` with nothing to show: None goes out as undefined so
         // Svelte drops the attribute rather than writing the word "None" into
@@ -4031,8 +4142,9 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
 
         const grouped = !isComponent(tag) && tag !== null && tagNames(markup, tag.start).has('bind:group');
         const kind = toPythonChild() ? 'child' : name !== 'value' ? '' : grouped ? 'choice' : 'scalar';
+        const read = call(inner, '__bound', undefined, kind);
 
-        return `{${call(inner, '__bound', undefined, kind)}}`;
+        return `{${onElement(tag) ? unmemoized(inner, read) : read}}`;
     };
 
     const refuseLet = (name) => {
@@ -4277,14 +4389,29 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                         // And on a `<svelte:element>` whose name is known as it
                         // renders, each key asked of that name, as an attribute
                         // written by name is (`__pybridge.elementSpread`).
+                        //
+                        // On an element, read where Svelte reads its own spread,
+                        // with the element's other attributes, as any value of
+                        // an attribute is (`unmemoized`): held, the object a
+                        // JavaScript parent replaced in place left a button
+                        // enabled that Svelte's disabled. The call naming the
+                        // element is read through a getter (`readThrough`), from
+                        // the entries the spread reads, a fresh object at each
+                        // read (`__spreadEntries`): the dict itself, the derived
+                        // held the same object once it was changed in place,
+                        // which Svelte took for no change.
+                        const spreadExpression = trimmed.slice(2);
+
                         out +=
                             heldChild() !== null
-                                ? `{...${forChild(call(trimmed.slice(2), '', undefined, 'python'), 'spread')}}`
+                                ? `{...${forChild(call(spreadExpression, '', undefined, 'python'), 'spread')}}`
                                 : toPythonChild()
-                                  ? `{...${call(trimmed.slice(2), '__spreadPython', undefined, 'python')}}`
+                                  ? `{...${call(spreadExpression, '__spreadPython', undefined, 'python')}}`
                                   : tag?.element !== undefined
-                                    ? `{...__pybridge.elementSpread(${tag.element}, ${call(trimmed.slice(2), '', undefined, 'python')}, __event, ${spreadWrapper === '__spreadChoice'})}`
-                                    : `{...${call(trimmed.slice(2), spreadWrapper)}}`;
+                                    ? `{...${readThrough(spreadExpression, call(spreadExpression, '__spreadEntries', undefined, 'python'), (entries) => `__pybridge.elementSpread(${tag.element}, ${entries}, __event, ${spreadWrapper === '__spreadChoice'})`)}}`
+                                    : onElement(tag)
+                                      ? `{...${unmemoized(spreadExpression, call(spreadExpression, spreadWrapper))}}`
+                                      : `{...${call(spreadExpression, spreadWrapper)}}`;
                     } else if (trimmed.startsWith('...')) {
                         throw refuse(
                             new SyntaxError(
@@ -4451,6 +4578,8 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
             // A tag that holds its child is read once, under a name of its own
             // (`capture`), closing tag included.
             if (tag?.closing) {
+                declared(chain.memosClosing(tag.name));
+
                 const opener = captures.get(chain.openedBy(tag.name));
 
                 tag.ending = opener?.ending;
@@ -4662,10 +4791,13 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 throw refuse(unknownTag(trimmed, 'block', BLOCKS, said()));
             }
         } else if (trimmed.startsWith('/')) {
+            declared(chain.memosAt());
             pop();
             out += markup.slice(index, end + 1);
         } else if (trimmed.startsWith(':')) {
             const clause = keyword(trimmed, ':');
+
+            declared(chain.memosAt());
 
             // **A clause opens a branch, and a branch sees nothing of its
             // sibling.** The `row` of `{#each rows as row}` does not exist in
@@ -4942,7 +5074,10 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         keepLines(emitted, index, end);
         region = null;
         index = end + 1;
+        chain.opened(out.length);
     }
+
+    declared(chain.memosLeft());
 
     return edited();
 }

@@ -111,7 +111,7 @@ describe('what the walker refuses to touch', () => {
     test('and a comment holding an apostrophe does not open a string', () => {
         const { out } = rewrite("<!-- aujourd'hui -->{count}");
 
-        expect(out).toContain('__expr_0()');
+        expect(out).toContain('__expr_0_memo');
     });
 
     test('nor does one inside a quoted attribute value', () => {

@@ -701,6 +701,10 @@ const ADAPTERS = {
     __spreadCustom: '(value) => __pybridge.spreadElement(value, __event, false, true)',
     __spread: '__pybridge.spread',
     __spreadPython: '__pybridge.spreadPython',
+    // And on a `<svelte:element>`, the entries, which its name then reads.
+    __spreadEntries: '__pybridge.spreadEntries',
+    // A value boxed anew at each read, which its `<svelte:element>` then reads.
+    __boxed: '(value) => [value]',
     __bound: '__pybridge.bound',
     __assign: '__assign',
     __getattr: '__getattr',
@@ -2163,7 +2167,7 @@ function authorBindings(c) {
         // read back as the dict of what the `load()`s returned (`routeData`).
         ...c.props.map(
             (n, _, __, read = n === 'data' && routeComponent(c.source) ? '__routeData' : '__pyBind') =>
-                `__bind(__proto, '${n}', () => (__SHAPING.on ? (${local(n)}, __followOwn(${read}(${pick(n)}()))) : (${rev(n)}, __follow(${read}(${pick(n)}())))),` +
+                `__bind(__proto, '${n}', () => (__SHAPING.on ? (${local(n)}, __followOwn(__pybridge.prop(${read}(${pick(n)}())))) : (${rev(n)}, __follow(__pybridge.prop(${read}(${pick(n)}()))))),` +
                 ` function (${NEXT_VALUE}) { const __held = ${bump(n)}.held; const __current = ${fallback(n)}.current;` +
                 ` try { const __written = __track(${NEXT_VALUE}, ${bump(n)}, ${SUBS});` +
                 ` if (${declaring(c, n)}) { ${fallback(n)}.declared = __written; ${fallback(n)}.value = __written; ${local(n)} = __written; return; }` +
@@ -2349,6 +2353,12 @@ function instanceExports(c) {
                 : `const ${wrapperName(f.name)} = ${RUNTIME.pyComponent}(() => ${stateRead(f.name, fn(f.name))}, ` +
                   `${JSON.stringify(`${f.name}() — ${c.source}`)}${f.exported && !c.store ? ', true' : ''});`
         ),
+        // Whether each template expression that calls nothing has read
+        // JavaScript's own data, which nothing follows, and is read afresh at
+        // each render (`__pybridge.reading`, the markup's `unmemoized`): one
+        // flag per expression, held from the start, one shape for the object
+        // its reads look up at every render.
+        ...(c.rereads.length > 0 ? [`const __expr_reread = { ${c.rereads.map((m) => `${m}: false`).join(', ')} };`] : []),
         // What a parent holding `bind:this` can call. Svelte gathers whatever an
         // instance script exports into `$$exports` and hands that object back,
         // so a specifier list is enough: `export { focus }` becomes
@@ -2772,6 +2782,9 @@ function compile(
         defLines = [],
         defColumns = [],
         jsNames = [],
+        // The template expressions whose flag the markup reads (`unmemoized`),
+        // which the instance script declares.
+        rereads = [],
         lineOffset = 0,
         sourceContent = null,
         // Whether the component is compiled as a custom element.
@@ -3029,6 +3042,7 @@ function compile(
         eager,
         namespace,
         js,
+        rereads,
         // Every name the module reads as a global (`globalReads`). What decides
         // whether `host` and `props_id` are bound at all: each is bound only
         // where the name is actually read, `props_id` because its value must be

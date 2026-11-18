@@ -543,6 +543,34 @@ export const __pybridge = {
         return value;
     },
 
+    // An expression of the template that calls nothing, evaluated, and
+    // whether it read JavaScript's own data, which no tracking of Python's
+    // follows (`javascriptReads`): such an expression is read afresh at each
+    // render, as Svelte reads one, where one that read only Python's is held
+    // in its derived (`unmemoized`). Held whatever it read, the page kept the
+    // field of a JavaScript object changed in place when it rendered again
+    // for another reason.
+    reading(flags, key, expression) {
+        const before = core.javascriptReads();
+
+        core.weighingReads(true);
+
+        try {
+            return expression();
+        } finally {
+            core.weighingReads(false);
+            flags[key] = core.javascriptReads() !== before;
+        }
+    },
+
+    // What a prop holds, read: JavaScript's own object or array is counted as
+    // read (`javascriptRead`), an array Python reads as a list among them.
+    prop(value) {
+        core.javascriptRead(value);
+
+        return value;
+    },
+
     // A declared class bound by its statement: one whose metaclass is the
     // author's keeps the accessor that follows it (`declared`); any other is
     // written as the namespace's own property, read as any other name is, for
@@ -1460,9 +1488,16 @@ export const __pybridge = {
         return wrapper === '__hidden' ? __pybridge.hidden(value) : __pybridge.truthy(value);
     },
 
-    // And a spread there, the same question asked of each key it gives.
+    // And a spread there, the same question asked of each key it gives, of the
+    // entries the spread read (`spreadEntries`).
     elementSpread(tag, value, event, grouped = false) {
         return __pybridge.spreadElement(value, event, grouped, customTag(tag));
+    },
+
+    // The entries a spread reads, each once, the values as they are: a fresh
+    // object at each read, which a dict changed in place moves.
+    spreadEntries(value) {
+        return value === null || value === undefined || value === NONE ? value : spreadOf(value, (one) => one);
     }
 };
 

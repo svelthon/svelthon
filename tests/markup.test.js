@@ -31,6 +31,12 @@ const directiveHeads = (content) => {
 import { moduleImports, compileOptionsFor } from '../src/lib/svelthon.js';
 import { parse } from 'svelte/compiler';
 
+// A Python expression that calls nothing, as the markup reads it: from its
+// derived, or afresh once it has read JavaScript's own data (`unmemoized`),
+// written between `before` and `after`.
+const READ = String.raw`\(__expr_reread\.(__expr_\w+) \? \(\{ get value\(\) \{ return __pybridge\.reading\(__expr_reread, '\1', \(\) => \1\(\)\); \} \}\)\.value : \1_memo\)`;
+const read = (before, after = '') => new RegExp(`${before}${READ}${after}`);
+
 // `(x := 1)` in a template writes the component's name through the namespace,
 // which is what makes it reach the signal. Python's own grammar forces the
 // parentheses inside a lambda, and that parenthesised form is the only one
@@ -621,12 +627,18 @@ describe('pythonExpressions', () => {
         return { out, defs };
     };
 
+    // Read from its derived while it reads only Python's, and afresh once it
+    // reads JavaScript's own data, which nothing follows; the derived declared
+    // at the markup's end.
     test('an interpolation becomes a call', () => {
         const { out, defs } = rewrite('<p>{count}</p>');
+        const fresh = "__pybridge.reading(__expr_reread, '__expr_0', () => __expr_0())";
 
         // `__text` is the wrapper an interpolation gets: Python's str(), so a
         // list renders `['a']` rather than JavaScript's `a`.
-        expect(out).toContain('__expr_0()');
+        expect(out).toBe(
+            `<p>{(__expr_reread.__expr_0 ? ({ get value() { return ${fresh}; } }).value : __expr_0_memo)}</p>{const __expr_0_memo = $derived(${fresh})}`
+        );
         expect(defs[0]).toContain('return __text(count)');
     });
 
@@ -938,7 +950,7 @@ describe('the attribute pass', () => {
     test('an interpolation inside a quoted value', () => {
         const { out, defs } = rewrite('<p class="row {kind}">x</p>');
 
-        expect(out).toMatch(/class="row \{__expr_\d+\(\)\}"/);
+        expect(out).toMatch(read('class="row \\{', '\\}"'));
         expect(defs[0]).toContain('__text(kind)');
     });
 
@@ -963,7 +975,7 @@ describe('the attribute pass', () => {
         ['a handler', '<b title="y"onclick={go}>x</b>', /onclick=\{__event\(/],
         ['a binding', '<input title="y"bind:value={x}>', /bind:value=\{__pybridge\.boundRead\(\(\) =>/],
         ['the shorthand', "<input title='y'bind:value>", /bind:value=\{__pybridge\.boundRead\(\(\) =>/],
-        ['a class', '<b title="y"class:on={x}>x</b>', /class:on=\{__expr_\d+\(\)\}/]
+        ['a class', '<b title="y"class:on={x}>x</b>', read('class:on=\\{', '\\}')]
     ])('%s keeps its rule with no space before it', ([, markup, shape]) => {
         expect(rewrite(markup).out).toMatch(shape);
     });
@@ -982,8 +994,8 @@ describe('the attribute pass', () => {
         ['a handler', '<b onclick= {go}>x</b>', /onclick= \{__event\(/],
         ['the colon spelling', '<b on:click= {go}>x</b>', /on:click= \{__event\(/],
         ['a binding', '<input bind:value= {x}>', /bind:value= \{__pybridge\.boundRead\(\(\) =>/],
-        ['a class', '<b class:on= {x}>x</b>', /class:on= \{__expr_\d+\(\)\}/],
-        ['a plain attribute', '<b title= {x}>x</b>', /title= \{__expr_\d+\(\)\}/]
+        ['a class', '<b class:on= {x}>x</b>', read('class:on= \\{', '\\}')],
+        ['a plain attribute', '<b title= {x}>x</b>', read('title= \\{', '\\}')]
     ])('%s keeps its rule across a space after the =', ([, markup, shape]) => {
         expect(rewrite(markup).out).toMatch(shape);
     });
@@ -993,7 +1005,7 @@ describe('the attribute pass', () => {
     test('a spread is written the Python way and compiled as one expression', () => {
         const { out, defs } = rewrite('<div {**attrs}></div>');
 
-        expect(out).toMatch(/\{\.\.\.__expr_\d+\(\)\}/);
+        expect(out).toMatch(read('\\{\\.\\.\\.', '\\}'));
         expect(defs[0]).toContain('attrs');
     });
 
@@ -1022,12 +1034,13 @@ describe('the attribute pass', () => {
     // `...` is refused where a spread would go, and nowhere else: it is a Python
     // object, and it keeps its meaning wherever an expression is read.
     test('`...` stays Python\u2019s Ellipsis in an expression', () => {
-        expect(rewrite('<p>{...}</p>').out).toMatch(/\{__expr_\d+\(\)\}/);
+        expect(rewrite('<p>{...}</p>').out).toMatch(read('\\{', '\\}'));
         expect(rewrite('<p>{[..., 1]}</p>').defs[0]).toContain('[..., 1]');
     });
 
     test('a shorthand attribute keeps its name and gains a value', () => {
-        expect(rewrite('<input {value} />').out).toMatch(/value=\{__expr_scalar_\d+\(\)\}/);
+        expect(rewrite('<input {value} />').out).toMatch(read('value=\\{', '\\}'));
+        expect(rewrite('<input {value} />').out).toContain('__expr_scalar_');
     });
 
     // And it compiles to exactly what the long spelling does.
@@ -1078,7 +1091,7 @@ describe('the attribute pass', () => {
     test('an unquoted value keeps the text before its interpolation', () => {
         const { out, defs } = rewrite('<div style:color=red{variable}></div>');
 
-        expect(out).toMatch(/style:color=red\{__expr_\d+\(\)\}/);
+        expect(out).toMatch(read('style:color=red\\{', '\\}'));
         expect(out).not.toContain('redvariable');
 
         // The same wrapper the quoted spelling gets: what is written beside text

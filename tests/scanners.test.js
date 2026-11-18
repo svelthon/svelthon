@@ -27,6 +27,12 @@ import '../src/lib/compile.js';
 
 const rewrite = (markup) => pythonExpressions(markup, collector([]));
 
+// A text whose expression calls nothing, read from its derived while it reads
+// only Python's, and afresh once it reads JavaScript's own data; the derived
+// declared at the markup's end.
+const FRESH = "__pybridge.reading(__expr_reread, '__expr_0', () => __expr_0())";
+const READ = `<p>{(__expr_reread.__expr_0 ? ({ get value() { return ${FRESH}; } }).value : __expr_0_memo)}</p>{const __expr_0_memo = $derived(${FRESH})}`;
+
 // A brace that closes the expression, and one that only looks like it.
 describe('closingBrace reads through a string', () => {
     // Python `f("a}b")`: the `}` is inside a literal. Taken for the end of the
@@ -44,7 +50,7 @@ describe('closingBrace reads through a string', () => {
     });
 
     test('a brace nested in a dict literal is counted, not skipped', () => {
-        expect(rewrite('<p>{ {"k": 1}["k"] }</p>')).toBe('<p>{__expr_0()}</p>');
+        expect(rewrite('<p>{ {"k": 1}["k"] }</p>')).toBe(READ);
     });
 });
 
@@ -176,40 +182,40 @@ describe('trailingKey reads through a string', () => {
 // handed the rest as markup, which is what a wrong length here does.
 describe('atomic reads an f-string as a grammar', () => {
     test('a quote inside a field does not end the string', () => {
-        expect(rewrite('<p>{f"{d[\'a\']}"}</p>')).toBe('<p>{__expr_0()}</p>');
+        expect(rewrite('<p>{f"{d[\'a\']}"}</p>')).toBe(READ);
     });
 
     test('and neither does one inside a triple-quoted string', () => {
-        expect(rewrite('<p>{f"""{d[\'a\']}"""}</p>')).toBe('<p>{__expr_0()}</p>');
+        expect(rewrite('<p>{f"""{d[\'a\']}"""}</p>')).toBe(READ);
     });
 
     // The prefix is read backwards from the quote, so `rf` is an f-string and
     // the `f` of a name is not.
     test('a raw f-string is still an f-string', () => {
-        expect(rewrite('<p>{rf"{d[\'a\']}"}</p>')).toBe('<p>{__expr_0()}</p>');
+        expect(rewrite('<p>{rf"{d[\'a\']}"}</p>')).toBe(READ);
     });
 
     // `:` starts a format specification only at the top of a field and outside
     // brackets. In a slice and in a dict display it is Python's own syntax, and
     // reading it as a specification makes everything after it opaque.
     test('a colon inside a subscript is a slice', () => {
-        expect(rewrite('<p>{f"{xs[1:2]}"}</p>')).toBe('<p>{__expr_0()}</p>');
+        expect(rewrite('<p>{f"{xs[1:2]}"}</p>')).toBe(READ);
     });
 
     test('and a colon inside a nested display is a key', () => {
-        expect(rewrite('<p>{f"{ {\'a\': 1}[\'a\'] }"}</p>')).toBe('<p>{__expr_0()}</p>');
+        expect(rewrite('<p>{f"{ {\'a\': 1}[\'a\'] }"}</p>')).toBe(READ);
     });
 
     // A doubled brace is a literal brace and opens no field, so what follows it
     // is text and not an expression.
     test('a doubled brace is a literal', () => {
-        expect(rewrite('<p>{f"{{}}{d[\'a\']}"}</p>')).toBe('<p>{__expr_0()}</p>');
+        expect(rewrite('<p>{f"{{}}{d[\'a\']}"}</p>')).toBe(READ);
     });
 
     // And a field *inside* a specification is a field again, which is the one
     // place the rule flips: `{x:>{width}}` is a width read from a name.
     test('a field nested in a specification is a field', () => {
-        expect(rewrite('<p>{f"{x:>{w}}"}</p>')).toBe('<p>{__expr_0()}</p>');
+        expect(rewrite('<p>{f"{x:>{w}}"}</p>')).toBe(READ);
     });
 
     // A comment runs to the end of the line, and a line with no newline after

@@ -88,7 +88,7 @@ describe('the preprocessor decides by the script tag', () => {
             filename: 'B.svelte'
         });
 
-        expect(out.code).toContain('__expr_0()');
+        expect(out.code).toContain('__expr_0_memo');
         expect(out.code).toMatch(/<script [^>]*\blang="python">/);
     });
 
@@ -205,7 +205,7 @@ describe('the preprocessor decides by the script tag', () => {
             filename: 'C2.svelte'
         });
 
-        expect(out.code).toContain('__expr_0()');
+        expect(out.code).toContain('__expr_0_memo');
         expect(out.code.split('\n')[0]).toBe('<!-- doc');
     });
 

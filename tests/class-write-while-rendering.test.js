@@ -23,3 +23,16 @@ test.for([
         flushSync();
     }).toThrow(/state_unsafe_mutation/);
 });
+
+// Read as it is, the attribute is read where Svelte reads such an expression, in
+// the effect that renders the page, after the calls it holds in deriveds: the
+// write comes first, no reader has painted the old value, and the page shows
+// the one written, as Svelte shows a field of a JavaScript object written there.
+test('a read the page paints after the write shows what was written', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+
+    mount(ClassWriteWhileRendering, { target, props: { painted: false } });
+    flushSync();
+
+    expect([...target.querySelectorAll('p')].map((p) => p.textContent)).toEqual(['b', 'b']);
+});

@@ -764,6 +764,10 @@ export function python(options = {}) {
             // tells Python's or JavaScript's as it runs (`relanguaged`).
             if (filename) COMPILED_FROM.set(filename, { content, children: languages, holding: code.includes('__pybridge.child(') });
 
+            // The expressions whose flag the markup reads, which the script
+            // declares (`unmemoized`).
+            file.rereads = [...new Set(Array.from(code.matchAll(/\b__expr_reread\.(__expr_\w+)\b/g), (found) => found[1]))];
+
             return {
                 code: inModuleScript(
                     tagged(elementOptions(code, python, file.jsNames), calls.open(file)),
