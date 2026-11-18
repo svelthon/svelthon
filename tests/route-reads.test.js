@@ -16,6 +16,8 @@ import {
     counts_query,
     reads_route,
     reads_optional,
+    reads_team,
+    walks_params,
     answers,
     answers_later
 } from './fixtures/route_reads.py';
@@ -60,7 +62,7 @@ const trackable = (url, note) => {
 };
 
 // An event whose reads SvelteKit would track, each noted once, unless under
-// `untrack`.
+// `untrack`: every param read, held or not, as SvelteKit notes it.
 const tracked = ({ params = { slug: 'pep-8' }, route = { id: '/peps/[slug]' } } = {}) => {
     const one = requestEvent({ url: 'https://example.test/peps/pep-8?x=1&panel=a', params, route });
     const reads = [];
@@ -71,7 +73,7 @@ const tracked = ({ params = { slug: 'pep-8' }, route = { id: '/peps/[slug]' } } 
     const watched = (target, names) =>
         new Proxy(target, {
             get(object, key) {
-                if (names.includes(key)) note(key);
+                if (names === undefined ? typeof key === 'string' : names.includes(key)) note(key);
                 return Reflect.get(object, key, object);
             }
         });
@@ -79,7 +81,7 @@ const tracked = ({ params = { slug: 'pep-8' }, route = { id: '/peps/[slug]' } } 
     const event = {
         ...one,
         url: trackable(one.url, note),
-        params: watched(one.params, ['slug']),
+        params: watched(one.params),
         route: watched(one.route, ['id']),
         cookie: 'theme=dark',
         untrack: (read) => {
@@ -131,6 +133,22 @@ test('a load() reading an optional param the route does not hold is told of it',
 
     expect(await reads_optional(event)).toBe('all');
     expect(reads).toEqual(['slug']);
+});
+
+// A param is noted alone, as SvelteKit notes each param read, and every one,
+// the route's optional ones among them, when Python walks the params: noted
+// whole, a layout reading its team ran again at each ticket.
+test('a load() reading one param is told of that one alone, and of every one when it walks them', async () => {
+    const route = { id: '/[team]/[ticket]/[[tab]]' };
+    const one = tracked({ params: { team: 'nord', ticket: 'a' }, route });
+    const walking = tracked({ params: { team: 'nord', ticket: 'a' }, route });
+
+    expect([await reads_team(one.event), one.reads, await walks_params(walking.event), walking.reads]).toEqual([
+        'nord',
+        ['team'],
+        ['team', 'ticket'],
+        ['team', 'ticket', 'tab']
+    ]);
 });
 
 // A dict's view is made the plain object SvelteKit's dev server asks of a

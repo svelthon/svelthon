@@ -2004,16 +2004,26 @@ const routeArgument = (value) => {
     const declared = untracked(() => [...String(value.route?.id ?? '').matchAll(ROUTE_PARAM)].map((one) => one[1]));
 
     return readNoted(
-        untracked(() => routeSnapshot(value)),
+        untracked(() => routeSnapshot(value, declared)),
         {
-            params: () => {
-                for (const key of new Set([...Object.keys(value.params), ...declared])) Reflect.get(value.params, key);
-            },
             url: () => value.url.href,
             route: () => value.route?.id
         }
     );
 };
+
+// The params' dict notes the param Python asks of it, held or not, as
+// SvelteKit notes each param read, and every one when Python walks it
+// (`keysNoted`). Noted whole as `event["params"]` was read, a layout reading
+// its team ran again at each ticket, where SvelteKit's runs when the team does.
+const paramsNoted = (value, declared) =>
+    keysNoted(
+        pyDict(Object.entries({ ...value.params })),
+        (key) => Reflect.get(value.params, key),
+        () => {
+            for (const key of new Set([...Object.keys(value.params), ...declared])) Reflect.get(value.params, key);
+        }
+    );
 
 // The query's dict notes the key Python asks of it, held or not, as SvelteKit's
 // `searchParams.get` notes it, and the whole query when Python walks it
@@ -2035,7 +2045,7 @@ const searched = (read) => {
     }
 };
 
-const routeSnapshot = (value) => {
+const routeSnapshot = (value, declared) => {
     // The framework's own searchParams is tried first, but it throws while
     // prerendering, where a query string cannot exist. Parsing the URL again is
     // the fallback, and it touches nothing SvelteKit guards.
@@ -2077,7 +2087,7 @@ const routeSnapshot = (value) => {
     // `.items()`, and a JSObj has neither. A universal `load()`'s event has no
     // method, as its JavaScript event has no request.
     return pyDict([
-        ['params', pyDict(Object.entries({ ...value.params }))],
+        ['params', paramsNoted(value, declared)],
         ['query', queryNoted(value, query)],
         ['url', value.url.href],
         ...(value.request === undefined ? [] : [['method', value.request.method]]),

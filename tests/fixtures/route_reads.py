@@ -37,6 +37,14 @@ def reads_optional(event):
     return event["params"].get("slug", "all")
 
 
+def reads_team(event):
+    return event["params"].get("team")
+
+
+def walks_params(event):
+    return sorted(event["params"])
+
+
 def answers(event=None):
     return {"answer": 42, "rows": [1, 2]}
 
