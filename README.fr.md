@@ -1675,7 +1675,9 @@ brut ; celui d'un `load()` universel, dans `+page.py`, n'a pas de `method`, son
 `query` est un dict, donc une clé écrite deux fois garde la **première** valeur,
 celle que `url.searchParams.get()` répond de la même URL. Toutes les valeurs
 d'une clé répétée sont derrière l'échappatoire :
-`event["js"].url.searchParams.getAll("tag")`.
+`event["js"].url.searchParams.getAll("tag")`. Lue là, une clé est suivie
+seule, comme SvelteKit la suit pour JavaScript : le `load()` repart quand `tag`
+change, pas à chaque navigation.
 
 ```python
 biscuits = event["js"].cookies

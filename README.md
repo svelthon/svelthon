@@ -1600,7 +1600,9 @@ no request. That last one is the escape hatch, and it is enough on its own:
 `query` is a dict, so a key written twice keeps the **first** value, which is
 what `url.searchParams.get()` answers about the same URL. Every value of a
 repeated key is behind the escape hatch:
-`event["js"].url.searchParams.getAll("tag")`.
+`event["js"].url.searchParams.getAll("tag")`. Read there, a key is followed
+alone, as SvelteKit follows it for JavaScript: the `load()` runs again when
+`tag` changes, not at every navigation.
 
 ```python
 biscuits = event["js"].cookies

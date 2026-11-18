@@ -8,6 +8,13 @@ import { test, expect } from 'vitest';
 import { runInNewContext } from 'node:vm';
 import {
     reads_cookie,
+    reads_js_query,
+    reads_js_values,
+    reads_js_path,
+    shows_js_url,
+    moves_js_port,
+    moves_js_url,
+    hands_js_event,
     reads_query,
     reads_absent,
     reads_contains,
@@ -26,7 +33,8 @@ import { routeLoad } from '../src/lib/bridge.js';
 
 // SvelteKit's URL as `make_trackable` makes it: a key asked of `searchParams` by
 // `get`, `getAll` or `has` is noted alone, `search x`; anything else read of the
-// query, or the URL's own text, notes the whole URL.
+// query, or the URL's own text, its `toString` and `toJSON` among them, notes
+// the whole URL.
 const trackable = (url, note) => {
     const tracked = new URL(url);
 
@@ -49,7 +57,7 @@ const trackable = (url, note) => {
         })
     });
 
-    for (const name of ['href', 'pathname', 'search']) {
+    for (const name of ['href', 'pathname', 'search', 'toString', 'toJSON']) {
         Object.defineProperty(tracked, name, {
             get() {
                 note('url');
@@ -106,12 +114,33 @@ test.for([
     ['a key the query does not hold', reads_absent, '', ['search q']],
     ['a key of the query, by `in`', reads_contains, true, ['search x']],
     ['a key of the query, by its index', reads_item, '1', ['search x']],
-    ['the route and the params', reads_route, ['/peps/[slug]', 'pep-8'], ['id', 'slug']]
+    ['the route and the params', reads_route, ['/peps/[slug]', 'pep-8'], ['id', 'slug']],
+    // The JavaScript event's URL, read as JavaScript reads it: what the engine
+    // asks of every JavaScript object it meets noted the whole URL.
+    ["a key of the JavaScript URL's query", reads_js_query, '1', ['search x']],
+    ["every value of a key of the JavaScript URL's query", reads_js_values, ['1'], ['search x']],
+    ["the JavaScript URL's path", reads_js_path, '/peps/pep-8', ['url']],
+    ['the JavaScript URL as text', shows_js_url, 'https://example.test/peps/pep-8?x=1&panel=a', ['url']],
+    // And written as JavaScript writes it, to SvelteKit's.
+    ["the JavaScript URL's port it set", moves_js_port, '8080', []]
 ])('a load() reading %s is told of that and nothing else', async ([, load, answer, read]) => {
     const { event, reads } = tracked();
 
     expect(await load(event)).toEqual(answer);
     expect(reads).toEqual(read);
+});
+
+// An action's event, or an endpoint's, which tracks nothing and has no
+// `untrack`, is handed as it is: its URL one the action may change before it
+// redirects, as JavaScript's does, and the event the one a `WeakMap` holds.
+test('an action is handed its JavaScript event as it is', async () => {
+    const event = requestEvent({ url: 'https://example.test/form?x=1', method: 'POST' });
+    const held = new WeakMap([[event, 'held']]);
+
+    expect([await moves_js_url(event), await hands_js_event(event, (one) => held.get(one))]).toEqual([
+        'https://example.test/receipt?x=1&saved=1',
+        'held'
+    ]);
 });
 
 // And the whole query when it walks it, its keys or its length.

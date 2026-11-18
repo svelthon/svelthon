@@ -2045,6 +2045,85 @@ const searched = (read) => {
     }
 };
 
+// What a load()'s `event["js"].url` is to Python: a URL of its own over
+// SvelteKit's, each read and each write going to SvelteKit's as JavaScript
+// makes it. The engine asks every JavaScript object Python meets what it is,
+// its `toString`, its `nodeType`, its `constructor` and more, and SvelteKit
+// takes any such question of its URL or of its query for a read of the whole
+// URL: a load() reading `event["js"].url.searchParams.get("q")` ran again at
+// each navigation, where the same read in JavaScript runs it again when `q`
+// changes. Made under the event's `untrack`, from the URL as it is.
+const TRACKED = new WeakMap();
+const SEARCH_OF = new WeakMap();
+
+class LoadUrl extends URL {
+    constructor(url) {
+        super(url.href);
+        TRACKED.set(this, url);
+    }
+
+    get searchParams() {
+        let search = SEARCH_OF.get(this);
+
+        if (search === undefined) {
+            search = new LoadSearch(TRACKED.get(this), Reflect.get(URL.prototype, 'search', this));
+            SEARCH_OF.set(this, search);
+        }
+
+        return search;
+    }
+
+    toString() {
+        return TRACKED.get(this).toString();
+    }
+
+    toJSON() {
+        return TRACKED.get(this).toJSON();
+    }
+}
+
+for (const part of ['hash', 'host', 'hostname', 'href', 'origin', 'password', 'pathname', 'port', 'protocol', 'search', 'username']) {
+    Object.defineProperty(LoadUrl.prototype, part, {
+        configurable: true,
+        get() {
+            return TRACKED.get(this)[part];
+        },
+        set(next) {
+            TRACKED.get(this)[part] = next;
+        }
+    });
+}
+
+class LoadSearch extends URLSearchParams {
+    constructor(url, search) {
+        super(search);
+        TRACKED.set(this, url);
+    }
+
+    get size() {
+        return TRACKED.get(this).searchParams.size;
+    }
+}
+
+for (const method of ['append', 'delete', 'entries', 'forEach', 'get', 'getAll', 'has', 'keys', 'set', 'sort', 'toString', 'values', Symbol.iterator]) {
+    Object.defineProperty(LoadSearch.prototype, method, {
+        configurable: true,
+        writable: true,
+        value(...rest) {
+            return TRACKED.get(this).searchParams[method](...rest);
+        }
+    });
+}
+
+// The event itself for Python, its URL that one.
+const loadEvent = (value) => {
+    const url = new LoadUrl(value.url);
+
+    return new Proxy(value, {
+        get: (target, key) => (key === 'url' ? url : Reflect.get(target, key))
+    });
+};
+
 const routeSnapshot = (value, declared) => {
     // The framework's own searchParams is tried first, but it throws while
     // prerendering, where a query string cannot exist. Parsing the URL again is
@@ -2093,8 +2172,13 @@ const routeSnapshot = (value, declared) => {
         ...(value.request === undefined ? [] : [['method', value.request.method]]),
         ['route', value.route && value.route.id],
         // The event itself, for whatever the snapshot does not cover: cookies,
-        // fetch, setHeaders. It is a JavaScript object and stays one.
-        ['js', value]
+        // fetch, setHeaders. It is a JavaScript object and stays one: a
+        // load()'s with its URL Python's own (`loadEvent`), and an action's or
+        // an endpoint's, which tracks nothing and has no `untrack`, as it is.
+        // Made a proxy too, its URL one Python could not change, an action
+        // setting the path it redirects to raised, and a `WeakMap` keyed by
+        // the event found nothing of it.
+        ['js', typeof value.untrack === 'function' ? loadEvent(value) : value]
     ]);
 };
 
