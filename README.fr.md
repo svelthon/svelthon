@@ -1548,6 +1548,14 @@ importez son module dans la page. Un `load()` en JavaScript
 qui rend des valeurs Python garde ce qu'elles partagent, et ses propres
 tableaux, Maps et objets restent ceux de JavaScript.
 
+Entre le serveur et le navigateur, deux différences restent, et seulement deux.
+Ce que pickle porte par son nom, une fonction, une classe ou un singleton, lu
+par une page en JavaScript qui n'a pas de Python pour le retrouver : cette page
+reçoit une fonction du même nom, et importer le module dans la page fait
+disparaître la différence. Et l'adresse mémoire qu'affiche un `repr` par défaut,
+propre à chaque processus, comme en CPython. Tout le reste se lit de même des
+deux côtés.
+
 Les options de page marchent comme partout ailleurs, ce qui a une conséquence
 qui mérite d'être nommée :
 

@@ -1479,6 +1479,13 @@ pickle names, a singleton, is there a function of the same name, which says
 when called that it needs Python: import its module in the page. A `load()` in JavaScript returning Python values keeps what they share,
 and its own arrays, Maps and objects stay JavaScript's.
 
+Between the server and the browser, two differences remain, and only two.
+What pickle carries by its name, a function, a class or a singleton, read by a
+page in JavaScript that has no Python to find it again: that page receives a
+function of the same name, and importing the module in the page removes the
+difference. And the memory address a default `repr` shows, which belongs to
+each process, as in CPython. Everything else reads the same on both sides.
+
 Page options work as they do anywhere, which has one consequence worth naming:
 
 ```python
