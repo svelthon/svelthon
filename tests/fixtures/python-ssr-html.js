@@ -27,6 +27,11 @@ export const GroupHydrate =
 export const GroupHydrateValues =
     "<!--[--><input data-k=\"box-a\" type=\"checkbox\" value=\"a\" checked=\"\"/> <input data-k=\"box-b\" type=\"checkbox\" value=\"b\"/> <!--[--><input data-k=\"radio-a\" type=\"radio\" name=\"choice\" value=\"a\" checked=\"\"/><input data-k=\"radio-b\" type=\"radio\" name=\"choice\" value=\"b\"/><!--]--> <p data-k=\"model\">a|a</p><!--]-->";
 
+// Three radios of one name, two bound to `picked` with the first checked, one
+// bound to `alternative`; Svelte's witness renders the same page.
+export const GroupHydrateSplit =
+    "<!--[--><input data-k=\"email\" type=\"radio\" name=\"contact\" value=\"email\" checked=\"\"/> <input data-k=\"mail\" type=\"radio\" name=\"contact\" value=\"mail\"/> <input data-k=\"other\" type=\"radio\" name=\"contact\" value=\"other\"/> <p data-k=\"model\">email|</p><!--]-->";
+
 // A radio and a checkbox whose values answer anew at each call: the numbers
 // are the server's, which the client's need not repeat.
 export const GroupHydrateMoving =

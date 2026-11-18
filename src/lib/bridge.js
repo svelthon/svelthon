@@ -4362,7 +4362,10 @@ export function group(node, given) {
     // The control wins, and the model is rebuilt from the group once its inputs
     // are all registered and in order, as Svelte's own `bind_group` does;
     // showing the model first would erase the click. A fresh mount makes the two
-    // agree, so it shows the model as before.
+    // agree, so it shows the model as before. A radio's model is the group's
+    // checked input, or none, as Svelte finds it: a radio of another binding
+    // picked unchecks this one, and the model kept the choice the page no
+    // longer showed.
     //
     // A `checked` the markup writes as an expression is Svelte's, not the
     // reader's: Svelte sets the property and leaves the default to the template,
@@ -4375,7 +4378,14 @@ export function group(node, given) {
     const reader = node.defaultChecked !== node.checked && written?.checked === undefined;
 
     if (!reader) show(current);
-    else queueMicrotask(() => (boxes || node.checked) && changed());
+    else
+        queueMicrotask(() => {
+            if (boxes) return changed();
+
+            const checked = inOrder().find((one) => one.checked);
+
+            write(checked === undefined ? NONE : checked.$svelthonValue());
+        });
 
     return {
         update(next) {

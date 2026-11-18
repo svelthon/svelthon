@@ -10,6 +10,8 @@ import ScalarProps from './fixtures/ScalarProps.svelte';
 import GroupHydrate from './fixtures/GroupHydrate.svelte';
 import GroupHydrateValues from './fixtures/GroupHydrateValues.svelte';
 import GroupHydrateValuesNative from './fixtures/GroupHydrateValuesNative.svelte';
+import GroupHydrateSplit from './fixtures/GroupHydrateSplit.svelte';
+import GroupHydrateSplitNative from './fixtures/GroupHydrateSplitNative.svelte';
 import GroupHydrateMoving from './fixtures/GroupHydrateMoving.svelte';
 import GroupHydrateMovingNative from './fixtures/GroupHydrateMovingNative.svelte';
 import GroupCheckedWritten from './fixtures/GroupCheckedWritten.svelte';
@@ -147,6 +149,29 @@ test.for([
 
     expect(['box-a', 'box-b', 'radio-a', 'radio-b'].map((k) => q(k).checked)).toEqual([false, true, false, true]);
     expect(q('model').textContent).toBe('b|b');
+});
+
+// A radio of another binding picked before hydrating unchecks the first
+// binding's, whose model is then the group's checked input, none, as Svelte
+// reads it: kept, the model held the server's choice the page no longer showed,
+// and a handler confirming it sent that.
+test.for([
+    ['Python', 'other', '|other', GroupHydrateSplit],
+    ['Svelte', 'other', '|other', GroupHydrateSplitNative],
+    ['Python', 'mail', 'mail|', GroupHydrateSplit],
+    ['Svelte', 'mail', 'mail|', GroupHydrateSplitNative]
+])('%s: the radio %s picked before hydrating leaves each binding its checked input', async ([, picked, model, Component]) => {
+    const target = document.body.appendChild(document.createElement('div'));
+    const q = (k) => target.querySelector(`[data-k="${k}"]`);
+
+    target.innerHTML = html.GroupHydrateSplit;
+    q(picked).click();
+    hydrated.push(hydrate(Component, { target }));
+    flushSync();
+    await Promise.resolve();
+    flushSync();
+
+    expect([['email', 'mail', 'other'].filter((k) => q(k).checked), q('model').textContent]).toEqual([[picked], model]);
 });
 
 // And the value it keeps is the one its field holds, evaluated once: past that

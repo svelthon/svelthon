@@ -15,6 +15,8 @@ import ScalarProps from './fixtures/ScalarProps.svelte';
 import GroupHydrate from './fixtures/GroupHydrate.svelte';
 import GroupHydrateValues from './fixtures/GroupHydrateValues.svelte';
 import GroupHydrateValuesNative from './fixtures/GroupHydrateValuesNative.svelte';
+import GroupHydrateSplit from './fixtures/GroupHydrateSplit.svelte';
+import GroupHydrateSplitNative from './fixtures/GroupHydrateSplitNative.svelte';
 import GroupHydrateMoving from './fixtures/GroupHydrateMoving.svelte';
 import GroupHydrateMovingNative from './fixtures/GroupHydrateMovingNative.svelte';
 import GroupServer from './fixtures/GroupServer.svelte';
@@ -131,7 +133,9 @@ test.for([
     ['props given as JavaScript floats', ScalarProps, { amount: 0.42, two_way: 0.42 }, 'ScalarProps'],
     ['two empty groups', GroupHydrate, {}, 'GroupHydrate'],
     ['two groups of evaluated values', GroupHydrateValues, {}, 'GroupHydrateValues'],
-    ["Svelte's witness of these", GroupHydrateValuesNative, {}, 'GroupHydrateValues']
+    ["Svelte's witness of these", GroupHydrateValuesNative, {}, 'GroupHydrateValues'],
+    ['two bindings of one radio name', GroupHydrateSplit, {}, 'GroupHydrateSplit'],
+    ["Svelte's witness of them", GroupHydrateSplitNative, {}, 'GroupHydrateSplit']
 ])('the server renders %s', ([, Component, props, name]) => {
     expect(render(Component, { props }).body).toBe(html[name]);
 });
