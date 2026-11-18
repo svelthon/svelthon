@@ -1980,7 +1980,9 @@ fois par session, pas par page, puisque l'application ne recharge jamais.
   l'attend.
 
 
-**Notes de conception** : [notes/template.md](notes/template.md) sur ce en quoi
+**Notes de conception** : [notes/architecture.md](notes/architecture.md) sur
+les cinq couches sous un composant et ce que fait chacune,
+[notes/template.md](notes/template.md) sur ce en quoi
 une expression de gabarit est compilée et les cinq adaptateurs qui la tiennent,
 [notes/directives.md](notes/directives.md) sur les quatre façons dont la valeur
 d'une directive devient du Python et sur les deux points qui restent, et [notes/dicts-and-objects.md](notes/dicts-and-objects.md) sur ce que

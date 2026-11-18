@@ -1907,7 +1907,9 @@ session, not per page, since the app never reloads.
   it.
 
 
-**Design notes**: [notes/template.md](notes/template.md) on what a template
+**Design notes**: [notes/architecture.md](notes/architecture.md) on the five
+layers under a component and what each one does,
+[notes/template.md](notes/template.md) on what a template
 expression is compiled into and the five adapters under it,
 [notes/directives.md](notes/directives.md) on the four ways a directive's value
 becomes Python and the two things left over, and
