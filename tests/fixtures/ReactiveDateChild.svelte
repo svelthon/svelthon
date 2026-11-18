@@ -5,4 +5,4 @@ stamp: object = None
 
 <p data-k="date">{date(stamp, "short", None, "en-GB")}</p>
 <p data-k="urlencode">{urlencode(stamp)}</p>
-<p data-k="fromnow">{fromnow(stamp, "en-GB")}</p>
+<p data-k="from_now">{from_now(stamp, "en-GB")}</p>

@@ -89,7 +89,7 @@ describe('a subclass wrong about its own protocol is refused', () => {
 
 describe('and every other walk over the same object agrees', () => {
     // The loop was the site found first, and the question is asked at two
-    // more: what a module publishes, and what `tojson` writes. Both walked the
+    // more: what a module publishes, and what `to_json` writes. Both walked the
     // storage, so one component could render `[3, 2, 1]` and hand its parent
     // `[1, 2, 3]` for one list. CPython's `json.dumps` of a list subclass is its
     // `__iter__` too; `repr` is the storage, and stays so — `str(rows)` below is
@@ -105,7 +105,7 @@ describe('and every other walk over the same object agrees', () => {
         expect([...nested[0]]).toEqual([3, 2, 1]);
     });
 
-    test('and what tojson writes', () => {
+    test('and what to_json writes', () => {
         expect(serialised('real')).toBe('[3,2,1]');
         // The control: a subclass that leaves iteration alone.
         expect(serialised('tagged')).toBe('[1,2,3]');

@@ -57,4 +57,4 @@ def reads_python():
 
 
 def as_json():
-    return [tojson(price), tojson(held), tojson(plain_float)]
+    return [to_json(price), to_json(held), to_json(plain_float)]

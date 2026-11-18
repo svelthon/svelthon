@@ -1,12 +1,12 @@
 // The injected helpers are called by name as well as by position, because the
 // README writes their signatures the way Python writes them —
-// `tojson(value, indent=None)` — and an author writes what the documentation
+// `to_json(value, indent=None)` — and an author writes what the documentation
 // shows.
 //
 // Nothing read the keywords. They do arrive: Brython hands a keyword call a
 // trailing object carrying `$kw`, an array whose first entry holds the literal
 // keywords and whose rest are the dicts a `**` spread contributed. Dropping it
-// was the worst of the three behaviours this project names — `tojson(rows,
+// was the worst of the three behaviours this project names — `to_json(rows,
 // indent=2)` wrote unindented JSON and said nothing, and `batch(rows, n=2)`
 // refused the author for a size they had just given.
 //
@@ -55,7 +55,7 @@ describe('an injected helper takes its arguments by name', () => {
         expect(read('date-keyword')).toBe('20 Sept 2026');
     });
 
-    // `fromnow` reads the clock, so the clock is fixed: three days after the
+    // `from_now` reads the clock, so the clock is fixed: three days after the
     // date, each language has one phrasing.
     test('and the locale reaches a helper that reads the clock', () => {
         vi.useFakeTimers({ now: new Date('2026-09-23T12:00:00Z'), toFake: ['Date'] });
@@ -63,8 +63,8 @@ describe('an injected helper takes its arguments by name', () => {
         try {
             const read = setup();
 
-            expect(read('fromnow-english')).toBe('3 days ago');
-            expect(read('fromnow-french')).toBe('il y a 3 jours');
+            expect(read('from_now-english')).toBe('3 days ago');
+            expect(read('from_now-french')).toBe('il y a 3 jours');
         } finally {
             vi.useRealTimers();
         }
@@ -126,7 +126,7 @@ describe('an injected helper takes its arguments by name', () => {
     // **A parameter the signature requires and the call does not give.** The
     // table named the parameters and not which of them a call has to fill, so
     // an omission reached the helper as `undefined` and was read there as
-    // absence: `slugify()` answered the empty string and `tojson(indent=2)`
+    // absence: `slugify()` answered the empty string and `to_json(indent=2)`
     // wrote `null`, both without a word. A call whose only fault is a missing
     // argument is a call the author wants to be told about.
     //
@@ -134,7 +134,7 @@ describe('an injected helper takes its arguments by name', () => {
     // `'a' and 'b'`. Checked against `python3`.
     test.for([
         ['the only argument', 'nothing at all', /slugify\(\) missing 1 required positional argument: 'text'/],
-        ['the required one, the optional given', 'only the optional', /tojson\(\) missing 1 required positional argument: 'value'/],
+        ['the required one, the optional given', 'only the optional', /to_json\(\) missing 1 required positional argument: 'value'/],
         ['the second of two', 'one of two', /batch\(\) missing 1 required positional argument: 'n'/],
         ['both of two', 'neither of two', /batch\(\) missing 2 required positional arguments: 'xs' and 'n'/]
     ])('%s is refused', ([, what, says]) => {

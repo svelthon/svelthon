@@ -60,7 +60,7 @@ def read():
 </script>
 
 <p data-k="query">{urlencode(query)}</p>
-<p data-k="json">{tojson(query)}</p>
+<p data-k="json">{to_json(query)}</p>
 <p data-k="refused">{refused()}</p>
 <p data-k="copied">{to_js(listed).tag}</p>
 <p data-k="mapping">{urlencode(filters)}</p>

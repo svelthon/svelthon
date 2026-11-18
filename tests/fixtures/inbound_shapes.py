@@ -46,4 +46,4 @@ def field_named_type(value):
 
 def python_mapping_json():
     # The same shape written in Python, through the JSON helper.
-    return tojson({"ob_type": None, "value": 42})
+    return to_json({"ob_type": None, "value": 42})

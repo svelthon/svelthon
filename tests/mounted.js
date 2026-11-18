@@ -4,7 +4,7 @@
 // small bet.
 //
 // **Mounting.** 66 files mounted and 5 unmounted, so `$effect` teardowns never
-// ran and the shared `fromnow` clock, one `createSubscriber` for the whole
+// ran and the shared `from_now` clock, one `createSubscriber` for the whole
 // document, was never released inside a file. It cost nothing visible until
 // `custom-element.test.js` left an element in `document.body` and its
 // disconnection reached Svelte's `unmount` after jsdom had taken the document

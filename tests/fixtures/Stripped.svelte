@@ -19,7 +19,7 @@ samples = [
 </script>
 
 {#each samples as html, i}
-    <p data-k="out-{i}">{striptags(html)}</p>
+    <p data-k="out-{i}">{strip_tags(html)}</p>
 {/each}
 
-<p data-k="number">{striptags(703)}</p>
+<p data-k="number">{strip_tags(703)}</p>

@@ -2,7 +2,7 @@ import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import Dates from './fixtures/Dates.svelte';
 import ReactiveDateHost from './fixtures/ReactiveDateHost.svelte';
-import { date, fromnow, urlencode } from '../src/lib/helpers.js';
+import { date, from_now, urlencode } from '../src/lib/helpers.js';
 
 // A `SvelteDate` changed in place by its parent: the helpers read its instant
 // through its own `getTime`, which is what subscribes the page, where reading
@@ -12,7 +12,7 @@ test('the date helpers follow a SvelteDate changed in place', () => {
     const host = mount(ReactiveDateHost, { target });
     flushSync();
 
-    const read = () => ['date', 'urlencode', 'fromnow'].map((k) => target.querySelector(`p[data-k="${k}"]`).textContent);
+    const read = () => ['date', 'urlencode', 'from_now'].map((k) => target.querySelector(`p[data-k="${k}"]`).textContent);
     const before = read();
 
     host.change();
@@ -84,7 +84,7 @@ describe('date', () => {
 // A Date built by another JavaScript context — an iframe, a worker, a `vm`, an
 // adapter — is a Date by every behaviour, and `instanceof Date` answers false
 // because it asks about *our* constructor. The three sites of `helpers.js` asked
-// it: `date` and `fromnow` refused a perfectly good value, so a component
+// it: `date` and `from_now` refused a perfectly good value, so a component
 // holding one did not mount, and `urlencode` said nothing and wrote the Python
 // spelling of the object into the query string.
 //
@@ -105,7 +105,7 @@ describe('a Date from another JavaScript context', () => {
 
     test.for([
         ['date', (value) => date(value)],
-        ['fromnow', (value) => fromnow(value)],
+        ['from_now', (value) => from_now(value)],
         ['urlencode', (value) => urlencode(value)]
     ])('%s answers for it what it answers for ours', ([, run]) => {
         expect(run(foreign(0))).toBe(run(new Date(0)));

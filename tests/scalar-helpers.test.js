@@ -4,7 +4,7 @@
 // it reads one from.
 //
 // The repair for a scalar subclass landed in the runtime, and the helpers kept
-// recognitions of their own: `instant`, behind `date` and `fromnow`, asked
+// recognitions of their own: `instant`, behind `date` and `from_now`, asked
 // `ob_type === float` by identity, and `batch` asked `Number.isInteger` of the
 // object a Python `int` is. So `class Stamp(float)` crossed correctly, printed
 // correctly, and then `{date(stamp)}` answered *is not a date* — which in a

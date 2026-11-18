@@ -82,7 +82,7 @@ describe('a Python object crossing the boundary', () => {
 // updates by mutation — a structure handed out with its sharing undone is a
 // write that stops arriving. `to_js` *is* this converter, and the emitted code
 // puts it on the return value of every Python function crossing over, so the
-// JavaScript rule is the default and `tojson` asks for the other by name.
+// JavaScript rule is the default and `to_json` asks for the other by name.
 describe('a graph that loops back', () => {
     test('comes out as the graph it is', () => {
         const seen = looping();
@@ -98,7 +98,7 @@ describe('a graph that loops back', () => {
 
 // Jinja's `|tojson`: the same need, and the same reason it cannot be
 // `json.dumps` — an instance's fields are not where a Python dump looks.
-describe('tojson', () => {
+describe('to_json', () => {
     test('an instance becomes its fields', () => {
         expect(JSON.parse(dumped())).toEqual({ number: 703, tags: ['gil'] });
     });

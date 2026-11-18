@@ -2,11 +2,11 @@ import { test, expect, describe, beforeEach } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import Stripped from './fixtures/Stripped.svelte';
 
-// Jinja's `|striptags`, done with the browser's parser instead of a regex.
+// Django's `strip_tags`, done with the browser's parser instead of a regex.
 // Every case below is one the regex — Django's and Jinja's — gets wrong, and
 // two of them are ordinary content rather than an edge case: entities are left
 // undecoded, and markup escapes through an attribute holding a `>`.
-describe('striptags', () => {
+describe('strip_tags', () => {
     // Once per test rather than once per file, so the component is torn down
     // with the test that made it.
     let out;

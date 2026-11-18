@@ -1,5 +1,5 @@
 // The template helpers, as ordinary functions, where a coverage tool can
-// instrument them: `fromnow` alone chooses between seven units and two
+// instrument them: `from_now` alone chooses between seven units and two
 // directions. `injected.js` keeps the *names*, and what it emits is a
 // reference, `() => __helpers.date`, rather than a body.
 //
@@ -134,7 +134,7 @@ function shown(value) {
         // `undefined` rather than a throw is what `JSON.stringify` answers for
         // the values it has no notation for, a function among them, and
         // `String(fn)` is then the whole source text of it, a refusal printing
-        // a page of generated JavaScript at an author who wrote `tojson(save)`.
+        // a page of generated JavaScript at an author who wrote `to_json(save)`.
         // Python's own repr is what names it.
         //
         // `||` and not `??` on the second step, which is what the catch below
@@ -259,14 +259,14 @@ const serialisable = (one) => {
     // page should say.
     if (typeof one === 'number' && !Number.isFinite(one)) {
         throw refuse(
-            `tojson(): ${one} has no JSON: JSON has no notation for it and ` +
+            `to_json(): ${one} has no JSON: JSON has no notation for it and ` +
                 `JSON.stringify writes \`null\` instead, which is a different value. ` +
                 `Decide what the page should hold (None, 0, or a string) and write that.`
         );
     }
 
     if (pyClass(one)) {
-        throw refuse(`tojson(): ${shown(one)} is a class, and a class has no JSON`);
+        throw refuse(`to_json(): ${shown(one)} is a class, and a class has no JSON`);
     }
 
     // What a `toJSON` hands back arrives here without the walk, since
@@ -289,7 +289,7 @@ const serialisable = (one) => {
 // of its own. `JSON.stringify` has no notation for a call, so it drops it, and
 // the dropping is a different wrong answer in each position: `undefined` for a
 // value, a **key that disappears** from an object, `null` for an item of a list.
-// The first is the worst, since `tojson` is written in templates and `undefined`
+// The first is the worst, since `to_json` is written in templates and `undefined`
 // renders as nothing at all.
 //
 // Handed to the *walk* rather than to the replacer, and that is the whole of why
@@ -314,7 +314,7 @@ const noCall = (one) => {
         const kind = pyCoroutine(one) ? 'coroutine' : 'promise';
 
         throw refuse(
-            `tojson(): ${shown(one)} is a ${kind}, and a ${kind} has no JSON until it ` +
+            `to_json(): ${shown(one)} is a ${kind}, and a ${kind} has no JSON until it ` +
                 `is awaited. Await it and serialise what it answers.`
         );
     }
@@ -326,7 +326,7 @@ const noCall = (one) => {
     // A plain JavaScript function is caught here too, where the last arm would
     // otherwise call it a Function.
     if (callable(one)) {
-        throw refuse(`tojson(): ${shown(one)} is callable, and a call has no JSON`);
+        throw refuse(`to_json(): ${shown(one)} is callable, and a call has no JSON`);
     }
 
     // **A Python set**, named as itself. It is a plain object holding `$store`
@@ -335,7 +335,7 @@ const noCall = (one) => {
     // serializable`, and the way out is the one a Python author already knows.
     if (isSet(one)) {
         throw refuse(
-            `tojson(): ${__pybridge.str(one)} is a set, and a set has no JSON. ` +
+            `to_json(): ${__pybridge.str(one)} is a set, and a set has no JSON. ` +
                 `Convert it with list() and serialise that.`
         );
     }
@@ -345,7 +345,7 @@ const noCall = (one) => {
     // Python author reaches for depending on what the bytes hold.
     if (pyBytes(one)) {
         throw refuse(
-            `tojson(): ${__pybridge.str(one)} is bytes, and bytes have no JSON. ` +
+            `to_json(): ${__pybridge.str(one)} is bytes, and bytes have no JSON. ` +
                 `Decode them with .decode() for text, or list() for the numbers.`
         );
     }
@@ -355,7 +355,7 @@ const noCall = (one) => {
     // one (`JSON.stringify` answers undefined for it too), so it says its own
     // description.
     if (typeof one === 'symbol') {
-        throw refuse(`tojson(): ${String(one)} is a symbol, and a symbol has no JSON`);
+        throw refuse(`to_json(): ${String(one)} is a symbol, and a symbol has no JSON`);
     }
 
     // **Any other Python value with nothing to write**: a range, a complex, and
@@ -367,7 +367,7 @@ const noCall = (one) => {
         const named = pyTypeName(one);
 
         throw refuse(
-            `tojson(): ${__pybridge.str(one)} is a ${named}, and a ${named} has no JSON`
+            `to_json(): ${__pybridge.str(one)} is a ${named}, and a ${named} has no JSON`
         );
     }
 
@@ -384,12 +384,12 @@ const noCall = (one) => {
         Object.prototype.toString.call(one).slice(8, -1);
 
     throw refuse(
-        `tojson(): a ${named} has no JSON of its own. Give it a toJSON(), or build ` +
+        `to_json(): a ${named} has no JSON of its own. Give it a toJSON(), or build ` +
             `the object or the list you want written and serialise that.`
     );
 };
 
-export function tojson(value, indent) {
+export function to_json(value, indent) {
     // The same question as the date styles below, asked of a number: a
     // `class Width(int)` reads as an object here and the output came out on one
     // line, which is a difference nobody sees in a page.
@@ -417,7 +417,7 @@ export function tojson(value, indent) {
         level === undefined ? undefined : '\u0001'
     );
 
-    // As Jinja's `tojson`, which writes these four as escapes so the text holds
+    // As Jinja's `|tojson`, which writes these four as escapes so the text holds
     // in a `<script>` or an attribute: a `</script>` in a value closed the
     // element `{@html}` wrote it in. Outside a string, JSON holds none of them.
     const safe = text?.replace(/[<>&']/g, (one) => `\\u00${one.charCodeAt(0).toString(16)}`);
@@ -582,11 +582,11 @@ const UNITS = [
 // Reading it registers the block with a shared clock, and the delay asked for is
 // what the *display* needs: a second while it counts seconds, an hour once it
 // counts days. So it slows down on its own as a date ages.
-export function fromnow(value, locale) {
+export function from_now(value, locale) {
     const at = instant(value);
 
     if (Number.isNaN(at.getTime())) {
-        throw refuse('fromnow(): ' + shown(value) + ' is not a date');
+        throw refuse('from_now(): ' + shown(value) + ' is not a date');
     }
 
     const gap = (at.getTime() - Date.now()) / 1000;
@@ -616,7 +616,7 @@ export function fromnow(value, locale) {
 
     ticking(Math.max(1, Math.min(rounding, leaving) * 1000));
 
-    return formatter('fromnow', locale, (language) => new Intl.RelativeTimeFormat(language, { numeric: 'auto' })).format(count, unit);
+    return formatter('from_now', locale, (language) => new Intl.RelativeTimeFormat(language, { numeric: 'auto' })).format(count, unit);
 }
 
 // A URL segment made of a title, as Django's `|slugify` makes one, but not by
@@ -644,13 +644,13 @@ export function slugify(value) {
         .replace(/^[-_]+|[-_]+$/g, '');
 }
 
-// Jinja's `|striptags`, done by the browser's own parser, because nothing else
-// does it correctly. No fallback: off a browser this returns nothing rather than
-// something wrong.
+// Django's `strip_tags`, behind its `|striptags` and Jinja's, done by the
+// browser's own parser, because nothing else does it correctly. No fallback:
+// off a browser this returns nothing rather than something wrong.
 //
 // Whitespace is collapsed, as Jinja does. Neither inserts a separator between
 // blocks: `<p>a</p><p>b</p>` is `ab` there too.
-export function striptags(value) {
+export function strip_tags(value) {
     if (typeof DOMParser === 'undefined') return '';
 
     const parsed = new DOMParser().parseFromString(__pybridge.str(value), 'text/html');
@@ -687,7 +687,7 @@ function mapping(value) {
     if (isDict(value)) return true;
 
     // The same question `plainData` asks, asked of the same predicate, so `to_js`,
-    // `tojson` and `urlencode` take the same shapes, a null prototype included.
+    // `to_json` and `urlencode` take the same shapes, a null prototype included.
     // A **class** under the name `ob_type`, and not the name alone: it is
     // Brython's mark, and a foreign object is free to carry a field spelled the
     // same, `{ob_type: "business", value: 42}`, which encodes as the identical
@@ -789,12 +789,12 @@ export function urlencode(value) {
 }
 
 // **Called by name as well as by position.** The README writes these signatures
-// the way Python writes them, `tojson(value, indent=None)` or `batch(xs, n,
+// the way Python writes them, `to_json(value, indent=None)` or `batch(xs, n,
 // fill)`, and an author writes what the documentation shows.
 //
 // Brython hands a keyword call a trailing object carrying, under its symbol
 // `$B.KW`, an array whose first entry holds the literal keywords and whose rest
-// are the dicts a `**` spread contributed. Dropped, `tojson(rows, indent=2)`
+// are the dicts a `**` spread contributed. Dropped, `to_json(rows, indent=2)`
 // would write unindented JSON without a word.
 //
 // The names are ours, which is the whole reason this is fixable here: a
@@ -806,16 +806,16 @@ export function urlencode(value) {
 // signature, so the refusal below says *from 1 to 2*, as CPython does.
 //
 // `fn.length` cannot stand in for it: these are JavaScript functions whose
-// optional parameters are declared like every other one, so `tojson.length` is
+// optional parameters are declared like every other one, so `to_json.length` is
 // 2 and `date.length` is 4.
 const KEYWORDS = {
-    tojson: ['value', 'indent=None'],
+    to_json: ['value', 'indent=None'],
     from_json: ['text'],
     batch: ['xs', 'n', 'fill=None'],
     date: ['value', 'style=None', 'clock=None', 'locale=None'],
-    fromnow: ['value', 'locale=None'],
+    from_now: ['value', 'locale=None'],
     slugify: ['text'],
-    striptags: ['html'],
+    strip_tags: ['html'],
     urlencode: ['value']
 };
 
@@ -895,11 +895,11 @@ const byName = (fn, signature) => {
         // **Which parameters a call has to fill**, so that an omission is
         // refused rather than reaching the helper as `undefined` and being read
         // there as absence: `slugify()` would answer the empty string and
-        // `tojson(indent=2)` write `null`.
+        // `to_json(indent=2)` write `null`.
         //
         // The *positions*, never the values: `None`, `False`, `0` and the empty
         // string are arguments that were given, and two of them are what an
-        // author writes on purpose: `tojson(None)` is `null` and means it.
+        // author writes on purpose: `to_json(None)` is `null` and means it.
         const missing = names.slice(0, needed).filter((_, at) => !filled.has(at));
 
         if (missing.length) {
@@ -926,13 +926,13 @@ const byName = (fn, signature) => {
 // are the Python spellings so `injected.js` names them the way an author does.
 export const helpers = Object.fromEntries(
     Object.entries({
-        tojson,
+        to_json,
         from_json,
         batch,
         date,
-        fromnow,
+        from_now,
         slugify,
-        striptags,
+        strip_tags,
         urlencode
     }).map(([name, fn]) => [name, byName(fn, KEYWORDS[name])])
 );

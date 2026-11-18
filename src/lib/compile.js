@@ -674,10 +674,10 @@ const RUNTIME = {
 // What stands in for the standard modules an author reaches for first: a
 // builtin, the helpers the runtime injects, and `js`.
 const MODULE_INSTEAD = {
-    json: '`from_json(text)` reads JSON and `tojson(value)` writes it',
+    json: '`from_json(text)` reads JSON and `to_json(value)` writes it',
     math: '`abs`, `round`, `min`, `max` and `pow` are builtins, and `js.Math` holds the rest',
     random: '`js.Math.random()` draws a number',
-    datetime: '`date` and `fromnow` show a date, and `js.Date` reads the clock',
+    datetime: '`date` and `from_now` show a date, and `js.Date` reads the clock',
     time: '`js.Date.now()` reads the clock'
 };
 
@@ -737,7 +737,7 @@ const HOST = {
     runtime: RUNTIME,
     reserved: {
         words: INJECTED.filter((one) => one.locked).map((one) => ({ name: one.name, component: one.component === true })),
-        said: 'The helpers, `date`, `slugify`, `tojson` and the rest, may still be shadowed; the decorators may not.'
+        said: 'The helpers, `date`, `slugify`, `to_json` and the rest, may still be shadowed; the decorators may not.'
     },
     instead: MODULE_INSTEAD,
     pathOption: 'path',

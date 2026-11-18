@@ -3,7 +3,7 @@
 // The template helpers, called directly.
 //
 // Every one of them is already exercised through a mounted component
-// (`tests/dates.test.js`, `fromnow`, `slugs`, `urls`, `batch`, `from-json`,
+// (`tests/dates.test.js`, `from_now`, `slugs`, `urls`, `batch`, `from-json`,
 // `stripped`), and this file does not repeat that work. It goes after what a
 // component cannot reach: the refusals, the branch a fixture would have to be
 // built around, and the arguments Python spells `None`.
@@ -12,7 +12,7 @@
 // `injected.js`, so no coverage tool could instrument a line of them. Now they
 // are a module, and this is the file that reads it.
 //
-// Node rather than jsdom on purpose: `striptags` has a branch that only exists
+// Node rather than jsdom on purpose: `strip_tags` has a branch that only exists
 // where there is no DOM, and that branch is the whole server story.
 import { test, expect, describe } from 'vitest';
 
@@ -22,15 +22,15 @@ import {
     batch,
     date,
     from_json,
-    fromnow,
+    from_now,
     helpers,
     slugify,
-    striptags,
-    tojson,
+    strip_tags,
+    to_json,
     urlencode
 } from '../src/lib/helpers.js';
 // The calls are written in Python, which is where the helper is called from.
-import { says, control, keeps_an_instance, coroutine_says } from './fixtures/tojson_calls.py';
+import { says, control, keeps_an_instance, coroutine_says } from './fixtures/to_json_calls.py';
 import { shapes } from './fixtures/json_space.py';
 
 // The Python values that are objects rather than primitives, which is what these
@@ -41,7 +41,7 @@ describe('the set itself', () => {
     // The object the generated script binds. A helper added to the module and
     // forgotten here would be invisible to every component.
     test('every exported helper is in the object the compiler binds', () => {
-        const exported = { batch, date, from_json, fromnow, slugify, striptags, tojson, urlencode };
+        const exported = { batch, date, from_json, from_now, slugify, strip_tags, to_json, urlencode };
 
         expect(Object.keys(helpers).sort()).toEqual(Object.keys(exported).sort());
 
@@ -57,24 +57,24 @@ describe('the set itself', () => {
     });
 });
 
-describe('tojson', () => {
+describe('to_json', () => {
     test('a Python container goes out as plain JSON', () => {
-        expect(tojson(__pybridge.list([1, 2]))).toBe('[1,2]');
+        expect(to_json(__pybridge.list([1, 2]))).toBe('[1,2]');
     });
 
-    // Jinja's `tojson` writes `<`, `>`, `&` and `'` as escapes, so its text holds
+    // Jinja's `|tojson` writes `<`, `>`, `&` and `'` as escapes, so its text holds
     // in a `<script>` or an attribute: a `</script>` in a value closed the
     // element `{@html}` wrote it in, the way JSON-LD is written in Svelte.
     test("writes <, >, & and ' as Jinja's does, which the parse reads back", () => {
-        const text = tojson(pyData({ s: "</script><b>&'" }));
+        const text = to_json(pyData({ s: "</script><b>&'" }));
 
         expect(text).toBe('{"s":"\\u003c/script\\u003e\\u003cb\\u003e\\u0026\\u0027"}');
         expect(JSON.parse(text)).toEqual({ s: "</script><b>&'" });
     });
 
     test('a numeric indent is honoured', () => {
-        expect(tojson(__pybridge.list([1])).length).toBeLessThan(tojson(__pybridge.list([1]), 2).length);
-        expect(tojson(__pybridge.list([1]), 2)).toBe('[\n  1\n]');
+        expect(to_json(__pybridge.list([1])).length).toBeLessThan(to_json(__pybridge.list([1]), 2).length);
+        expect(to_json(__pybridge.list([1]), 2)).toBe('[\n  1\n]');
     });
 
     // The one refusal that arrives without an object around it. JSON has no
@@ -93,20 +93,20 @@ describe('tojson', () => {
         ['under a key', (one) => __pybridge.list([__pybridge.list([one])])]
     ])('a non-finite number %s is refused, not written as null', ([, wrap]) => {
         for (const one of [NaN, Infinity, -Infinity]) {
-            expect(() => tojson(wrap(one))).toThrow(/has no JSON/);
+            expect(() => to_json(wrap(one))).toThrow(/has no JSON/);
         }
 
         // The witness beside it: a finite float still crosses.
-        expect(tojson(wrap(0.25))).toContain('0.25');
+        expect(to_json(wrap(0.25))).toContain('0.25');
     });
 
     // Python's None is an object, and `JSON.stringify(v, null, None)` would
     // quietly indent with it: None writes one line.
     test('None as the indent means no indent, not indent-with-None', () => {
-        expect(tojson(__pybridge.list([1]), NONE)).toBe('[1]');
+        expect(to_json(__pybridge.list([1]), NONE)).toBe('[1]');
     });
 
-    // Every other indent as `json.dumps` takes it, and so Jinja's `tojson`: a
+    // Every other indent as `json.dumps` takes it, and so Jinja's `|tojson`: a
     // string repeated at each level, `0` and below breaking the lines without
     // indenting, a boolean as the number it is. A string was dropped and `0`
     // wrote one line. The answers are CPython's.
@@ -121,7 +121,7 @@ describe('tojson', () => {
         ['a string naming the match', '$&', '{\n$&"a": [\n$&$&1,\n$&$&"x"\n$&]\n}'],
         ['True', true, '{\n "a": [\n  1,\n  "x"\n ]\n}']
     ])('an indent of %s is laid out as json.dumps lays it out', ([, indent, cpython]) => {
-        expect(tojson(pyData({ a: [1, 'x'] }), indent)).toBe(cpython);
+        expect(to_json(pyData({ a: [1, 'x'] }), indent)).toBe(cpython);
     });
 
     // A Python int above 2^53 is a JavaScript BigInt, which `JSON.stringify`
@@ -133,8 +133,8 @@ describe('tojson', () => {
     test('a big integer is written as digits, the way json.dumps writes it', () => {
         const big = 2n ** 70n;
 
-        expect(tojson(big)).toBe('1180591620717411303424');
-        expect(tojson(__pybridge.list([big]))).toBe('[1180591620717411303424]');
+        expect(to_json(big)).toBe('1180591620717411303424');
+        expect(to_json(__pybridge.list([big]))).toBe('[1180591620717411303424]');
     });
 
     // A class has no JSON, and it reaches here whole since `plainData` stopped
@@ -159,9 +159,9 @@ describe('tojson', () => {
         // class does. Measured, so the shortcut is a fact rather than a hope.
         const cls = _b_.list;
 
-        expect(() => tojson(wrap(cls))).toThrow(/svelthon — tojson\(\)/);
-        expect(() => tojson(wrap(cls))).toThrow(/list/);
-        expect(() => tojson(wrap(cls))).not.toThrow(/circular structure/);
+        expect(() => to_json(wrap(cls))).toThrow(/svelthon — to_json\(\)/);
+        expect(() => to_json(wrap(cls))).toThrow(/list/);
+        expect(() => to_json(wrap(cls))).not.toThrow(/circular structure/);
     });
 
     test('and beside a None, which is the same crossing twice', () => {
@@ -171,12 +171,12 @@ describe('tojson', () => {
         $B.$setitem(table, 'none', NONE);
         $B.$setitem(table, 'big', 2n ** 70n);
 
-        expect(tojson(table)).toBe('{"none":null,"big":1180591620717411303424}');
+        expect(to_json(table)).toBe('{"none":null,"big":1180591620717411303424}');
     });
 
     // A str holding a character past U+FFFF is a `String` object in Brython,
     // made by `$B.String` to keep where its surrogate pairs fall, and the
-    // conversion read only a subclass's storage: `tojson("🌍")` answered *🌍 is a
+    // conversion read only a subclass's storage: `to_json("🌍")` answered *🌍 is a
     // str, and a str has no JSON*. The expected text is `json.dumps`'s with
     // `ensure_ascii=False`, as `JSON.stringify` writes it.
     test.for([
@@ -191,7 +191,7 @@ describe('tojson', () => {
         const text = globalThis.__BRYTHON__.String('🌍');
 
         expect(text).toBeInstanceOf(String);
-        expect(tojson(wrap(text))).toBe(json);
+        expect(to_json(wrap(text))).toBe(json);
     });
 
     // What the serialiser writes by the engine's own slot, and not by the
@@ -210,8 +210,8 @@ describe('tojson', () => {
         ['a Number object of another context', () => other('new Number(0.25)'), '0.25'],
         ['a Boolean object of another context', () => other('new Boolean(false)'), 'false']
     ])('%s is written as the serialiser writes it, alone and held', ([, make, json]) => {
-        expect(tojson(make())).toBe(json);
-        expect(tojson({ held: make() })).toBe(`{"held":${json}}`);
+        expect(to_json(make())).toBe(json);
+        expect(to_json({ held: make() })).toBe(`{"held":${json}}`);
     });
 
     // Recognised by the slot and converted as the serialiser converts: a Number
@@ -232,8 +232,8 @@ describe('tojson', () => {
         ['an object that only carries the tag', () => tagged({ amount: 1 }, 'Number'), '{"amount":1}']
     ])('%s is written as JSON.stringify writes it', ([, make, json]) => {
         expect(JSON.stringify(make())).toBe(json);
-        expect(tojson(make())).toBe(json);
-        expect(tojson({ held: make() })).toBe(`{"held":${json}}`);
+        expect(to_json(make())).toBe(json);
+        expect(to_json({ held: make() })).toBe(`{"held":${json}}`);
     });
 
     // A tag a getter gives is the author's code, which the serialiser never
@@ -275,7 +275,7 @@ describe('tojson', () => {
         const native = make();
         const json = JSON.stringify(native.value);
 
-        for (const write of [(value) => tojson(value), (value) => tojson({ held: value }).slice(8, -1)]) {
+        for (const write of [(value) => to_json(value), (value) => to_json({ held: value }).slice(8, -1)]) {
             const one = make();
 
             expect(write(one.value)).toBe(json);
@@ -306,7 +306,7 @@ describe('tojson', () => {
         const native = make();
         const json = JSON.stringify(native.value);
 
-        for (const write of [(value) => tojson(value), (value) => tojson({ held: value }).slice(8, -1)]) {
+        for (const write of [(value) => to_json(value), (value) => to_json({ held: value }).slice(8, -1)]) {
             const one = make();
 
             expect(write(one.value)).toBe(json);
@@ -424,8 +424,8 @@ describe('tojson', () => {
             return Object.defineProperty({}, 'ob_type', { enumerable: true, get: () => ++reads });
         }]
     ])('%s is written as JSON.stringify writes it', ([, make]) => {
-        expect(tojson(make())).toBe(JSON.stringify(make()));
-        expect(tojson({ held: make() })).toBe(JSON.stringify({ held: make() }));
+        expect(to_json(make())).toBe(JSON.stringify(make()));
+        expect(to_json({ held: make() })).toBe(JSON.stringify({ held: make() }));
     });
 
     // And where the serialiser's conversion raises, so does this one: a Number
@@ -434,14 +434,14 @@ describe('tojson', () => {
         const bare = () => Object.setPrototypeOf(new Number(1), null);
 
         expect(() => JSON.stringify(bare())).toThrow(TypeError);
-        expect(() => tojson(bare())).toThrow(TypeError);
+        expect(() => to_json(bare())).toThrow(TypeError);
     });
 
     // The slot, not the look of it: a property called `rawJSON` is data, and a
     // Number object holding NaN is the NaN every other number is refused for.
     test('a property named rawJSON is data, and a boxed NaN is a NaN', () => {
-        expect(tojson({ rawJSON: '1' })).toBe('{"rawJSON":"1"}');
-        expect(() => tojson(new Number(NaN))).toThrow(/NaN has no JSON/);
+        expect(to_json({ rawJSON: '1' })).toBe('{"rawJSON":"1"}');
+        expect(() => to_json(new Number(NaN))).toThrow(/NaN has no JSON/);
     });
 
     // The rule above was stated for a class and enforced for a class alone,
@@ -449,7 +449,7 @@ describe('tojson', () => {
     // `JSON.stringify` has no notation for one, so it drops it, and the dropping
     // is a different wrong answer in each position: `undefined` for a value, a
     // key that **disappears** from an object, `null` for an item. The first is
-    // the worst, since `tojson` is written in templates, where `undefined`
+    // the worst, since `to_json` is written in templates, where `undefined`
     // renders as nothing.
     //
     // One sentence for every cell: the shape and the position are both the
@@ -470,7 +470,7 @@ describe('tojson', () => {
             ['inside a dict', 'dict'],
             ['inside a list a dict holds', 'deep']
         ])('is refused by name, %s', ([, position]) => {
-            expect(says(shape, position)).toMatch(/svelthon — tojson\(\): .+ is callable/);
+            expect(says(shape, position)).toMatch(/svelthon — to_json\(\): .+ is callable/);
         });
     });
 
@@ -496,7 +496,7 @@ describe('tojson', () => {
     // A coroutine, which is the shape that did more than answer badly.
     //
     // The walk turned one into a promise before the JSON rule was consulted, and
-    // `JSON.stringify` has nothing to write of a promise: `tojson(work())`
+    // `JSON.stringify` has nothing to write of a promise: `to_json(work())`
     // answered `{}` — valid JSON saying nothing — **and ran the author's body**
     // on the way. A serialiser is synchronous and starts nothing; the refusal
     // happens before anything is scheduled, which is what the counts on either
@@ -507,7 +507,7 @@ describe('tojson', () => {
     ])('is refused before it is started, %s', ([, where]) => {
         const [said, before, after] = coroutine_says(where);
 
-        expect(said).toMatch(/svelthon — tojson\(\): .+ is a coroutine/);
+        expect(said).toMatch(/svelthon — to_json\(\): .+ is a coroutine/);
         expect(said).toMatch(/await/i);
         expect(after).toBe(before);
     });
@@ -533,11 +533,11 @@ describe('tojson', () => {
         // `tests/another-context.test.js`, where the realm family is held.
         ['a Promise subclass', () => new (class extends Promise {})(() => {})]
     ])('%s is refused, and named', ([, make]) => {
-        expect(() => tojson(make())).toThrow(/svelthon — tojson\(\): .+ is a promise/);
-        expect(() => tojson(make())).toThrow(/await/i);
+        expect(() => to_json(make())).toThrow(/svelthon — to_json\(\): .+ is a promise/);
+        expect(() => to_json(make())).toThrow(/await/i);
         // One level down, where the shape around it made the empty object look
         // like an answer.
-        expect(() => tojson({ task: make() })).toThrow(/is a promise/);
+        expect(() => to_json({ task: make() })).toThrow(/is a promise/);
     });
 
     // A **native collection**, which is the same `{}` again with nothing
@@ -570,19 +570,19 @@ describe('tojson', () => {
         ['an Error, whose message is not enumerable', () => Object.assign(new Error('gone'), { code: 'E' })],
         ['a Headers', () => new Headers({ a: 'b' })]
     ])('%s is refused rather than half-written', ([, make]) => {
-        expect(() => tojson(make())).toThrow(/has no JSON of its own/);
-        expect(() => tojson({ held: make() })).toThrow(/has no JSON of its own/);
+        expect(() => to_json(make())).toThrow(/has no JSON of its own/);
+        expect(() => to_json({ held: make() })).toThrow(/has no JSON of its own/);
     });
 
     test('and it is named by its class, which is what an author recognises', () => {
-        expect(() => tojson(new Map())).toThrow(/a Map has no JSON/);
-        expect(() => tojson(new Set())).toThrow(/a Set has no JSON/);
+        expect(() => to_json(new Map())).toThrow(/a Map has no JSON/);
+        expect(() => to_json(new Set())).toThrow(/a Set has no JSON/);
     });
 
     // The two halves of the contract, and the second is the cost of the first.
     test('while anything carrying toJSON says how it is written', () => {
-        expect(tojson(new Date(0))).toBe('"1970-01-01T00:00:00.000Z"');
-        expect(tojson(new URL('https://example.test/a'))).toBe('"https://example.test/a"');
+        expect(to_json(new Date(0))).toBe('"1970-01-01T00:00:00.000Z"');
+        expect(to_json(new URL('https://example.test/a'))).toBe('"https://example.test/a"');
 
         class Money {
             toJSON() {
@@ -590,7 +590,7 @@ describe('tojson', () => {
             }
         }
 
-        expect(tojson(new Money())).toBe('{"amount":3}');
+        expect(to_json(new Money())).toBe('{"amount":3}');
 
         // A literal carrying it too, whether the method is enumerable or not,
         // and nested, where `JSON.stringify` hands it its key.
@@ -598,9 +598,9 @@ describe('tojson', () => {
         const hidden = Object.defineProperty({}, 'toJSON', { value: () => ({ answer: 42 }) });
         const keyed = { toJSON: (key) => `at ${key}` };
 
-        expect(tojson(literal)).toBe('{"answer":42}');
-        expect(tojson(hidden)).toBe('{"answer":42}');
-        expect(tojson([keyed])).toBe('["at 0"]');
+        expect(to_json(literal)).toBe('{"answer":42}');
+        expect(to_json(hidden)).toBe('{"answer":42}');
+        expect(to_json([keyed])).toBe('["at 0"]');
 
         // An array too, its own method or its class's.
         const values = Object.assign([1, 2], { toJSON: () => ({ answer: 42 }) });
@@ -610,8 +610,8 @@ describe('tojson', () => {
             }
         }
 
-        expect(tojson(values)).toBe('{"answer":42}');
-        expect(tojson(Counted.from([1, 2]))).toBe('{"count":2}');
+        expect(to_json(values)).toBe('{"answer":42}');
+        expect(to_json(Counted.from([1, 2]))).toBe('{"count":2}');
     });
 
     // What a hook answers is held to the same refusals as what the author
@@ -628,8 +628,8 @@ describe('tojson', () => {
             }
         }
 
-        expect(() => tojson({ toJSON: () => ({ inner: make() }) })).toThrow(message);
-        expect(() => tojson(new Holder())).toThrow(message);
+        expect(() => to_json({ toJSON: () => ({ inner: make() }) })).toThrow(message);
+        expect(() => to_json(new Holder())).toThrow(message);
     });
 
     // A `toJSON` that gives no function is no hook, and keeps a Map or a Set
@@ -639,8 +639,8 @@ describe('tojson', () => {
         ['a Map whose getter gives a string', () => Object.defineProperty(new Map([['held', 1]]), 'toJSON', { get: () => 'no' }), /a Map has no JSON/],
         ['a Set whose getter gives undefined', () => Object.defineProperty(new Set([1]), 'toJSON', { get: () => undefined }), /a Set has no JSON/]
     ])('%s is refused', ([, make, message]) => {
-        expect(() => tojson(make())).toThrow(message);
-        expect(() => tojson({ held: make() })).toThrow(message);
+        expect(() => to_json(make())).toThrow(message);
+        expect(() => to_json({ held: make() })).toThrow(message);
     });
 
     test('and a class that does not is refused rather than guessed at', () => {
@@ -653,14 +653,14 @@ describe('tojson', () => {
         // Its own fields would have been written before, and a Map's label was
         // written the same way: nothing here can tell the two apart, so the
         // author is asked rather than the guess being made for them.
-        expect(() => tojson(new Point())).toThrow(/a Point has no JSON of its own/);
-        expect(() => tojson(new Point())).toThrow(/toJSON\(\)/);
+        expect(() => to_json(new Point())).toThrow(/a Point has no JSON of its own/);
+        expect(() => to_json(new Point())).toThrow(/toJSON\(\)/);
     });
 
     // And the **space**, rather than the cell an outside reading happened to
     // land on. Three passes closed a promise, then a Map, then a set, each time
     // as a new subject; the shapes left over were found in twenty lines by
-    // asking *what does `tojson` answer for everything it can be handed*.
+    // asking *what does `to_json` answer for everything it can be handed*.
     //
     // Two wrong answers, and they alternate. A value with no enumerable property
     // is written `{}` — valid JSON that has lost what it held, and worse one
@@ -695,18 +695,18 @@ describe('tojson', () => {
         ['an exception subclass', () => shapes('exception subclass'), /is a Failure/, null]
     ])('%s', ([, make, named, wayOut]) => {
         test('is refused under its own name', () => {
-            expect(() => tojson(make())).toThrow(named);
+            expect(() => to_json(make())).toThrow(named);
             // Never the accusation: the class of a value is not the value.
-            expect(() => tojson(make())).not.toThrow(/is a class/);
+            expect(() => to_json(make())).not.toThrow(/is a class/);
         });
 
         test('and under a key, where the empty object looked like an answer', () => {
-            expect(() => tojson({ held: make() })).toThrow(named);
+            expect(() => to_json({ held: make() })).toThrow(named);
         });
 
         if (wayOut !== null) {
             test('and says the way out a Python author already knows', () => {
-                expect(() => tojson(make())).toThrow(wayOut);
+                expect(() => to_json(make())).toThrow(wayOut);
             });
         }
     });
@@ -731,11 +731,11 @@ describe('tojson', () => {
         // Its own `label` is lost, because what it says it is has no room for
         // one. The row exists so the next reader meets the limit here and not in
         // a page.
-        expect(tojson({ ob_type: float, value: 42, label: 'kept' })).toBe('42');
+        expect(to_json({ ob_type: float, value: 42, label: 'kept' })).toBe('42');
 
         // And the repair that *is* possible stands: a field of the same name
         // holding data is data.
-        expect(tojson({ ob_type: 'business', value: 42, label: 'kept' })).toBe(
+        expect(to_json({ ob_type: 'business', value: 42, label: 'kept' })).toBe(
             '{"ob_type":"business","value":42,"label":"kept"}'
         );
     });
@@ -749,7 +749,7 @@ describe('tojson', () => {
         ['a string', 'text', '"hi"'],
         ['an instance, which is its fields', 'instance', '{"n":1}']
     ])('%s is written', ([, name, written]) => {
-        expect(tojson(shapes(name))).toBe(written);
+        expect(to_json(shapes(name))).toBe(written);
     });
 
     // A callable instance carries fields and they are not what it is: the export
@@ -963,8 +963,8 @@ describe('date', () => {
         ['a format of letters', () => date('2024-03-05', 'Y-m-d'), /svelthon — date\(\): "Y-m-d" is not a style: .*"full", "long", "medium" or "short"/],
         ['a time style', () => date('2024-03-05', NONE, 'H:i'), /svelthon — date\(\): "H:i" is not a style/],
         ['a locale with an underscore', () => date('2024-03-05', 'long', NONE, 'fr_FR'), /svelthon — date\(\): "fr_FR" is not a language tag: .*"fr-FR"/],
-        // And by `fromnow()` beside it, which raised `Intl`'s own sentence.
-        ['a locale with an underscore, to fromnow()', () => fromnow('2024-03-05', 'fr_FR'), /svelthon — fromnow\(\): "fr_FR" is not a language tag: .*"fr-FR"/]
+        // And by `from_now()` beside it, which raised `Intl`'s own sentence.
+        ['a locale with an underscore, to from_now()', () => from_now('2024-03-05', 'fr_FR'), /svelthon — from_now\(\): "fr_FR" is not a language tag: .*"fr-FR"/]
     ])('%s is refused, and says what to write', ([, call, message]) => {
         expect(call).toThrow(message);
     });
@@ -974,7 +974,7 @@ describe('date', () => {
     // to a number`, out of a template filter, on a line they never wrote.
     test('a big integer is refused by our sentence, not by a JavaScript accident', () => {
         expect(() => date(2n ** 70n)).toThrow(/date\(\): 1180591620717411303424 is not a date/);
-        expect(() => fromnow(2n ** 70n)).toThrow(/fromnow\(\): 1180591620717411303424 is not/);
+        expect(() => from_now(2n ** 70n)).toThrow(/from_now\(\): 1180591620717411303424 is not/);
     });
 
     // `new Date` coerces through a value's *string* form, so a one-item list of a
@@ -987,7 +987,7 @@ describe('date', () => {
         ['a boolean', true]
     ])('%s is refused rather than coerced into a date', ([, value]) => {
         expect(() => date(value)).toThrow(/date\(\): .* is not a date/);
-        expect(() => fromnow(value)).toThrow(/fromnow\(\): .* is not a date/);
+        expect(() => from_now(value)).toThrow(/from_now\(\): .* is not a date/);
     });
 
     // A day its month does not have, which V8 carries into the next month:
@@ -1008,10 +1008,10 @@ describe('date', () => {
     ])('%s is read as Python reads it', ([value, shown]) => {
         if (shown === null) {
             expect(() => date(value, 'medium', undefined, 'en-GB')).toThrow(/date\(\): .* is not a date/);
-            expect(() => fromnow(value, 'en-GB')).toThrow(/fromnow\(\): .* is not a date/);
+            expect(() => from_now(value, 'en-GB')).toThrow(/from_now\(\): .* is not a date/);
         } else {
             expect(date(value, 'medium', undefined, 'en-GB')).toBe(shown);
-            expect(fromnow(value, 'en-GB')).toMatch(/ago|in /);
+            expect(from_now(value, 'en-GB')).toMatch(/ago|in /);
         }
     });
 
@@ -1040,7 +1040,7 @@ describe('date', () => {
     });
 });
 
-describe('fromnow', () => {
+describe('from_now', () => {
     const at = (seconds) => new Date(Date.now() + seconds * 1000);
 
     // Every unit, both directions. The direction lives in the value, which is
@@ -1054,32 +1054,32 @@ describe('fromnow', () => {
         [-90, /minute/],
         [-5, /second/]
     ])('a gap of %s seconds reads in its own unit', ([seconds, unit]) => {
-        expect(fromnow(at(seconds), 'en-GB')).toMatch(unit);
+        expect(from_now(at(seconds), 'en-GB')).toMatch(unit);
     });
 
     // Three days rather than one: at a single unit `numeric: 'auto'` answers
     // "yesterday" and "tomorrow", which carry the direction in the word instead.
     test('the same gap forward and back differ only in direction', () => {
-        expect(fromnow(at(-260000), 'en-GB')).toBe('3 days ago');
-        expect(fromnow(at(260000), 'en-GB')).toBe('in 3 days');
+        expect(from_now(at(-260000), 'en-GB')).toBe('3 days ago');
+        expect(from_now(at(260000), 'en-GB')).toBe('in 3 days');
     });
 
     test('and it speaks the language it is given', () => {
-        expect(fromnow(at(-90000), 'fr-FR')).toMatch(/hier|jour/);
+        expect(from_now(at(-90000), 'fr-FR')).toMatch(/hier|jour/);
     });
 
     // `numeric: 'auto'` is what turns "1 day ago" into "yesterday", and it is
     // the reason a reader does not notice the helper at all.
     test('a single unit reads as a word rather than a number', () => {
-        expect(fromnow(at(-86400), 'en-GB')).toBe('yesterday');
+        expect(from_now(at(-86400), 'en-GB')).toBe('yesterday');
     });
 
     test.for([['not a date'], [NONE]])('%s is refused, and named', ([value]) => {
-        expect(() => fromnow(value)).toThrow(/fromnow\(\): .* is not a date/);
+        expect(() => from_now(value)).toThrow(/from_now\(\): .* is not a date/);
     });
 
     test('with no locale it still formats, in the platform’s own', () => {
-        expect(fromnow(at(-5))).toMatch(/\d|second|now/);
+        expect(from_now(at(-5))).toMatch(/\d|second|now/);
     });
 });
 
@@ -1138,13 +1138,13 @@ describe('slugify', () => {
     });
 });
 
-describe('striptags, off a browser', () => {
+describe('strip_tags, off a browser', () => {
     // The whole server story in one branch: no fallback regex, because every
     // regex that ships with a template engine gets this wrong. A first render
     // shows less and then shows the text, rather than showing `caf&eacute;`.
     test('returns nothing rather than something wrong', () => {
         expect(typeof DOMParser).toBe('undefined');
-        expect(striptags('<p>caf&eacute;</p>')).toBe('');
+        expect(strip_tags('<p>caf&eacute;</p>')).toBe('');
     });
 });
 
@@ -1241,17 +1241,17 @@ describe('urlencode', () => {
         // sequence, the link carried what the list stores, or its refusal.
         expect([urlencode(raw('filters')), urlencode(raw('guarded'))]).toEqual(Array(2).fill('scope=mine&tag=summer&tag=green'));
 
-        expect(JSON.parse(tojson(raw('selected')))).toEqual({ tag: 'selected' });
-        expect(tojson(raw('empty'))).toBe('{}');
-        expect(raised(() => tojson(raw('refusing')))).toBe('ValueError: query items failed');
-        expect(JSON.parse(tojson(raw('keyed')))).toEqual({ tag: 'stale', page: 2 });
-        expect(raised(() => tojson(raw('spelled')))).toBe('ValueError: items must return 2-tuples');
+        expect(JSON.parse(to_json(raw('selected')))).toEqual({ tag: 'selected' });
+        expect(to_json(raw('empty'))).toBe('{}');
+        expect(raised(() => to_json(raw('refusing')))).toBe('ValueError: query items failed');
+        expect(JSON.parse(to_json(raw('keyed')))).toEqual({ tag: 'stale', page: 2 });
+        expect(raised(() => to_json(raw('spelled')))).toBe('ValueError: items must return 2-tuples');
 
         // The 2-tuple is the serialiser's rule alone: a copy for JavaScript,
         // `to_js` or a function's result crossing over, reads a row as `for
         // key, one in value.items()` does, and a pair written as a list is one.
         expect(urlencode(raw('listed'))).toBe('tag=selected');
-        expect(raised(() => tojson(raw('listed')))).toBe('ValueError: items must return 2-tuples');
+        expect(raised(() => to_json(raw('listed')))).toBe('ValueError: items must return 2-tuples');
         expect(query.copied()).toEqual({ tag: 'selected' });
         expect(query.returned()).toEqual({ tag: 'selected' });
     });
@@ -1317,7 +1317,7 @@ describe('urlencode', () => {
 
     // The question *is this a mapping I may walk?* was decided twice, and the
     // two decisions agreed on everything but one shape: `plainData` accepted a
-    // null prototype and this file did not. So `to_js` and `tojson` rendered
+    // null prototype and this file did not. So `to_js` and `to_json` rendered
     // `{"a":1,"b":2}` while `urlencode` fell through to its string branch and
     // wrote `<Javascript object: [object Object]>` into the page, percent-
     // encoded, with no error and no warning.
@@ -1333,7 +1333,7 @@ describe('urlencode', () => {
         bare.page = 2;
 
         expect(urlencode(bare)).toBe('tag=a%2Fb&page=2');
-        expect(JSON.parse(tojson(bare))).toEqual({ tag: 'a/b', page: 2 });
+        expect(JSON.parse(to_json(bare))).toEqual({ tag: 'a/b', page: 2 });
     });
 
     // Jinja reads a float as a plain value, and so does this: `1.5`, not a

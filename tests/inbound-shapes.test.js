@@ -22,7 +22,7 @@ import {
     python_mapping_json
 } from './fixtures/inbound_shapes.py';
 import { plainData } from '../src/lib/bridge.js';
-import { tojson } from '../src/lib/helpers.js';
+import { to_json } from '../src/lib/helpers.js';
 
 describe('to_py on a value that is already Python', () => {
     test('hands back the same object', () => {
@@ -58,12 +58,12 @@ describe('to_py on data whose field is called ob_type', () => {
     // And when the field holds null: the class is what answers, at every site
     // that reads one, and null is no class. It arrives as `javascript.NULL`,
     // the `null` it is, and goes back as `null`.
-    test('holding null, it crosses in, out, and through tojson', () => {
+    test('holding null, it crosses in, out, and through to_json', () => {
         const data = { ob_type: null, value: 42 };
 
         expect(Array.from(field_named_type(data))).toEqual([null, 42]);
         expect(plainData(data)).toEqual(data);
-        expect(JSON.parse(tojson(data))).toEqual(data);
+        expect(JSON.parse(to_json(data))).toEqual(data);
         expect(JSON.parse(python_mapping_json())).toEqual(data);
     });
 });

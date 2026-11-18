@@ -12,8 +12,8 @@ def show_date():
 
 
 @export
-def show_fromnow():
-    return fromnow(when)
+def show_from_now():
+    return from_now(when)
 
 
 @export

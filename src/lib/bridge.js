@@ -4387,7 +4387,7 @@ export function group(node, given) {
     };
 }
 
-// A shared clock, for the values that go stale on their own. `fromnow` is the
+// A shared clock, for the values that go stale on their own. `from_now` is the
 // one, and Django never needed it because a rendered page is finished. A
 // component stays on screen, so "3 minutes ago" has to become "4 minutes ago"
 // without anyone touching the page.

@@ -203,13 +203,13 @@ of that prefix in the same scope.
 | `f = export(lambda: …)` | `export const f = () => …`, the same in one line |
 | `to_js(value)` | *none*, a Python container made readable from JavaScript |
 | `to_py(value)` | *none*, the other way: a JavaScript value read as Python |
-| `tojson(value, indent=None)` | *none*, `to_js` with the dump attached, under Jinja's own word |
+| `to_json(value, indent=None)` | *none*, `to_js` with the dump attached, the pair of `from_json` |
 | `from_json(text)` | *none*, `to_py` with the parse attached |
 | `batch(xs, n, fill)` | *none*, a flat list grouped into rows of `n`, the last padded with `fill`, as Jinja's `\|batch` |
 | `date(value, style)` | *none*, a date read in the visitor's language, as Django's `\|date` |
-| `fromnow(value)` | *none*, "3 days ago" or "in 2 hours", kept right as time passes |
+| `from_now(value)` | *none*, "3 days ago" or "in 2 hours", kept right as time passes |
 | `slugify(text)` | *none*, a title made into a URL segment, lowercased, every letter kept, accents included, and the rest a dash: `héllo-wörld`, where Django's `\|slugify` drops accents and punctuation |
-| `striptags(html)` | *none*, HTML shown as text, parsed rather than pattern-matched |
+| `strip_tags(html)` | *none*, HTML shown as text, as Django's `strip_tags`, but parsed rather than pattern-matched |
 | `urlencode(value)` | *none*, a value, a mapping or a list of pairs, encoded into a URL |
 | `js` | *none*, the JavaScript globals: `js.Response`, `js.JSON`, `js.URL` |
 | `items.append(x)` | `items.push(x)`, since `$state` proxies deeply |
@@ -1562,14 +1562,14 @@ Python container into something a Web API will accept:
 
 ```python
 def GET(event):
-    corps = tojson(chercher(event["query"].get("q", "")))
+    corps = to_json(chercher(event["query"].get("q", "")))
     return js.Response.new(corps, to_js({"headers": {"content-type": "application/json"}}))
 ```
 
-The body is `tojson()`'s, which writes `None` as `null`. `to_js()` makes `None`
+The body is `to_json()`'s, which writes `None` as `null`. `to_js()` makes `None`
 JavaScript's `undefined`, as every crossing does, and `JSON.stringify` drops
 a key whose value is `undefined`, as SvelteKit's `json()` does: `{"email":
-None}` would answer `{}`. An `int` stays exact at any size: `tojson()` writes
+None}` would answer `{}`. An `int` stays exact at any size: `to_json()` writes
 `2**64 + 1` as `18446744073709551617`, as `json.dumps` does. Use it rather
 than SvelteKit's `json()`, which goes through JavaScript's `JSON.stringify` and
 refuses such a number.
@@ -1769,19 +1769,19 @@ so are the builtins a page cannot run: `eval`, `exec` and `compile`, which need
 a parser the runtime leaves out, `__import__` and `open`. A module is found by its file name alone: a
 subdirectory is not a package, so `from lib import models` is refused too, and
 `models.py` is imported as `import models` once `lib` is on `path`. Everything else a template needs is already a
-name: `tojson`, `from_json`, `batch`, `date`, `fromnow`, `slugify`, `striptags`,
+name: `to_json`, `from_json`, `batch`, `date`, `from_now`, `slugify`, `strip_tags`,
 `urlencode`, and `js` for the platform's own, `js.Math` and `js.Date`.
 
-`tojson` writes what JSON has a notation for and **refuses the rest by name**
+`to_json` writes what JSON has a notation for and **refuses the rest by name**
 rather than writing `{}` or `null`: a set, bytes, a range, a complex, a
 coroutine, a promise, a `Map`, a `Set`, and `nan` or `inf`, which JSON cannot
 spell and `json.dumps` writes in a form no `JSON.parse` reads back. A JavaScript
 class says how it serialises by carrying
 `toJSON`, and one that does not is refused too, since nothing can tell its fields
 from a `Map`'s. It walks a structure about **2 500 levels deep** at most, where
-`json.dumps` writes 20 000: deeper, the engine's stack overflows. `striptags` shows the visible document, so the text of a
+`json.dumps` writes 20 000: deeper, the engine's stack overflows. `strip_tags` shows the visible document, so the text of a
 `<script>` or a `<style>` never reaches the page. It is the browser's parser
-that reads it, and a server has none: rendered there, `striptags` gives an
+that reads it, and a server has none: rendered there, `strip_tags` gives an
 empty string, so a page prerendered or served with `csr = false` shows its
 excerpts empty, and a hydrated page fills them in once in the browser.
 

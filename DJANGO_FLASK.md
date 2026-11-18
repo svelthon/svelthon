@@ -31,8 +31,8 @@ A blank cell means the two on its left are spelled the same.
 | `{{ note\|default:"—" }}` | `{{ note\|default("—", true) }}` | `{note or "—"}` |
 | `{{ body\|safe }}` | | `{@html body}` |
 | `{{ comment\|linebreaks }}` | *none* | `white-space: pre-wrap`, or split — see below |
-| `{{ d\|timesince }}` | *none* | `{fromnow(d)}` — see below |
-| `{{ d\|timeuntil }}` | *none* | `{fromnow(d)}`, the same one — see below |
+| `{{ d\|timesince }}` | *none* | `{from_now(d)}` — see below |
+| `{{ d\|timeuntil }}` | *none* | `{from_now(d)}`, the same one — see below |
 | `{% if a %}…{% elif b %}…{% else %}…{% endif %}` | | `{#if a}…{:else if b}…{:else}…{/if}` |
 | `{% for x in xs %}…{% endfor %}` | | `{#each xs as x}…{/each}` |
 | `{% for x in xs %}…{% empty %}…{% endfor %}` | `{% for %}…{% else %}…{% endfor %}` | `{#each xs as x}…{:else}…{/each}` |
@@ -330,16 +330,16 @@ Flask-Babel you call `format_timedelta(d - now, add_direction=True)` yourself,
 which is already the one-name shape.
 
 ```svelte
-{fromnow(pep.created)}              <!-- il y a 3 jours -->
-{fromnow(pep.launch)}               <!-- dans 2 heures -->
-{fromnow(pep.created, "en-GB")}     <!-- 3 days ago -->
+{from_now(pep.created)}              <!-- il y a 3 jours -->
+{from_now(pep.launch)}               <!-- dans 2 heures -->
+{from_now(pep.created, "en-GB")}     <!-- 3 days ago -->
 ```
 
 Django needs two filters because it measures an absolute duration and puts the
 direction in the name — each one answers `0 minutes` for a date on the wrong
 side. `Intl` formats a **signed** gap, so the direction rides in the value and
-`since` would lie half the time. `fromnow` is what the JavaScript world calls it,
-in `moment` and `dayjs` alike. Babel's `add_direction=True` is the same choice,
+`since` would lie half the time. `from_now` is what the JavaScript world calls it,
+`fromNow` in `moment` and `dayjs` alike, spelt as Python spells a name. Babel's `add_direction=True` is the same choice,
 and its output is the same too — measured, `dans 3 jours` and `il y a 2 heures`.
 
 It also gains the one thing Django could not give either filter:
@@ -385,7 +385,7 @@ less pretty when it nests. The gain is that there is nothing to learn and nothin
 to register: any function your module can import, the template can call.
 
 The handful with no Python one-liner have a helper of their own, listed in the
-README: `tojson`, `batch`, `date`, `fromnow`, `slugify`, `striptags`,
+README: `to_json`, `batch`, `date`, `from_now`, `slugify`, `strip_tags`,
 `urlencode`. Every one of them rests on a browser primitive — `JSON.stringify`,
 `Intl`, `DOMParser`, `URLSearchParams` — so a template is written without ever
 importing anything.
@@ -452,7 +452,7 @@ filters answer a weak expression language. Jinja's 54 answer what no Python
 expression does in one go — regex work, chunking, serialising, wrapping. Ours
 answer a third constraint, which is that a component ships to a browser and takes
 its batteries from the platform rather than from an import — and that is why
-`batch` and `tojson` echo Jinja's list while `date`, `timesince` and `slugify`
+`batch` and `to_json` echo Jinja's list while `date`, `timesince` and `slugify`
 echo Django's.
 
 ### Slugs
@@ -506,17 +506,18 @@ turns `हिन्दी भाषा` into `ह-न-द-भ-ष-` — not a fo
 
 ### HTML shown as text
 
-`{{ body|striptags }}` keeps its word and changes its engine — the browser's own
+`{{ body|striptags }}` takes the name Django's own Python gives the job,
+`django.utils.html.strip_tags`, and changes its engine — the browser's own
 parser, not a regular expression:
 
 ```svelte
-<p class="excerpt">{striptags(entry.summary)}</p>
+<p class="excerpt">{strip_tags(entry.summary)}</p>
 ```
 
 The case is content nobody here wrote: a feed, an API answer, an imported
 document. For your own pages you already hold the plain text.
 
-A server has no such parser: rendered there, `striptags` gives an empty
+A server has no such parser: rendered there, `strip_tags` gives an empty
 string. A page prerendered, or served with `csr = false`, shows that excerpt
 empty; a hydrated one fills it in once in the browser. Strip the tags where
 the text is made, on the server, when the page must show it without

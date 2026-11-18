@@ -6,7 +6,7 @@
 // else in a hash table, and this converter read the properties alone — under a
 // comment saying a dict keeps its keys there, which is true of the string ones
 // and of nothing else. No error, no warning, no partial result: an empty object,
-// through `to_js`, through `tojson`, and through every Python function's return
+// through `to_js`, through `to_json`, and through every Python function's return
 // value.
 //
 // `pyEntries` was already written, already correct, already used at five sites.
@@ -17,7 +17,7 @@
 // says nothing about the questions it does not ask.
 import { test, expect, describe } from 'vitest';
 import { plainData, pyExport } from '../src/lib/bridge.js';
-import { tojson } from '../src/lib/helpers.js';
+import { to_json } from '../src/lib/helpers.js';
 
 const $B = globalThis.__BRYTHON__;
 const _b_ = $B.builtins;
@@ -38,7 +38,7 @@ describe('a dict whose keys are not strings', () => {
         ]);
 
         expect(plainData(months)).toEqual({ 1: 'janvier', 2: 'février' });
-        expect(JSON.parse(tojson(months))).toEqual({ 1: 'janvier', 2: 'février' });
+        expect(JSON.parse(to_json(months))).toEqual({ 1: 'janvier', 2: 'février' });
     });
 
     test('mixed with string keys, which were the half that worked', () => {
@@ -79,7 +79,7 @@ describe('a dict whose keys are not strings', () => {
         ['a bool beside its own spelling', () => [[true, 'a'], ['true', 'b']]]
     ])('%s says so instead of dropping one', ([, entries]) => {
         expect(() => plainData(dict(entries()))).toThrow(/two keys JavaScript cannot tell apart/);
-        expect(() => tojson(dict(entries()))).toThrow(/two keys JavaScript cannot tell apart/);
+        expect(() => to_json(dict(entries()))).toThrow(/two keys JavaScript cannot tell apart/);
     });
 
     // And the export, which writes a mapping out at the second site.
@@ -117,7 +117,7 @@ describe('a dict whose keys are not strings', () => {
 
         expect([copied[token], copied[twin], copied.a, Object.keys(copied)]).toEqual([1, 2, 3, ['a']]);
         expect(exported[token]).toBe(1);
-        expect(() => tojson(dict([[token, 1]]))).toThrow('tojson(): Symbol(tail) is a symbol, and a symbol has no JSON');
+        expect(() => to_json(dict([[token, 1]]))).toThrow('to_json(): Symbol(tail) is a symbol, and a symbol has no JSON');
     });
 
     // A key "ob_type" is the author's, whatever it holds. Holding a class, it

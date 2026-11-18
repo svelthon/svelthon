@@ -70,16 +70,16 @@ const INJECTED = [
     { name: 'to_js', value: '() => __plainData' },
     { name: 'to_py', value: '() => __pyData' },
 
-    // Jinja's `|tojson`, under its own word: a body, an embedded payload, a
-    // data attribute. It keeps the template's spelling rather than the shape of
-    // the two above, because it is the only one of the three an author writes
-    // every day. Those are last-resort converters for reaching into `js.` by
-    // hand, and the framework already converts what crosses its own boundaries.
+    // Jinja's `|tojson`, spelt as Python spells a function, the pair of
+    // `from_json` below: a body, an embedded payload, a data attribute. Of the
+    // three, it is the one an author writes every day; the two above are
+    // last-resort converters for reaching into `js.` by hand, and the framework
+    // already converts what crosses its own boundaries.
     //
     // `json.dumps` cannot stand in for it: Brython leaves a class instance
     // untouched, so the dump walks the raw object. This is `to_js` with the
     // dump attached.
-    { name: 'tojson', value: '() => __helpers.tojson' },
+    { name: 'to_json', value: '() => __helpers.to_json' },
 
     // The mirror of the line above, and built the same way: this is `to_py`
     // with the parse attached.
@@ -120,9 +120,10 @@ const INJECTED = [
 
     // Django's `|timesince` and `|timeuntil` in one, which is why it carries
     // neither word: `Intl` formats a *signed* gap, so the direction is in the
-    // value rather than in the name. `fromnow` is the JavaScript world's word
-    // for it, moment and dayjs both spell it that way, and it stays true in
-    // both directions where "since" would lie half the time.
+    // value rather than in the name. `from_now` is the JavaScript world's word
+    // for it, `fromNow` in moment and dayjs alike, spelt as Python spells a
+    // name, and it stays true in both directions where "since" would lie half
+    // the time.
     //
     // It is also the one helper here that Django could not have had at all. A
     // rendered page is finished, so "3 minutes ago" is true once and then wrong;
@@ -132,7 +133,7 @@ const INJECTED = [
     // for is what the *display* needs: a second while it counts seconds, an
     // hour once it counts days. So it slows down on its own as a date ages,
     // which is why nothing has to switch it off.
-    { name: 'fromnow', value: '() => __helpers.fromnow' },
+    { name: 'from_now', value: '() => __helpers.from_now' },
 
     // Django's `|slugify`: a title made into a URL segment or an anchor id.
     //
@@ -155,8 +156,9 @@ const INJECTED = [
     // shredding it.
     { name: 'slugify', value: '() => __helpers.slugify' },
 
-    // Jinja's `|striptags`: HTML shown as text, an excerpt from a feed, a
-    // preview of an imported document, content nobody here wrote.
+    // Django's `strip_tags`, the function behind its `|striptags` and Jinja's:
+    // HTML shown as text, an excerpt from a feed, a preview of an imported
+    // document, content nobody here wrote.
     //
     // The browser's own parser does it, and nothing else does it correctly. The
     // regex Django and Jinja ship leaves entities undecoded (`caf&eacute;`),
@@ -171,7 +173,7 @@ const INJECTED = [
     //
     // Whitespace is collapsed, as Jinja does. Neither inserts a separator
     // between blocks: `<p>a</p><p>b</p>` is `ab` there too.
-    { name: 'striptags', value: '() => __helpers.striptags' },
+    { name: 'strip_tags', value: '() => __helpers.strip_tags' },
 
     // The word all three engines use, Liquid, Django and Jinja alike, for the one
     // thing a template genuinely does with a URL: build one. Decoding is an

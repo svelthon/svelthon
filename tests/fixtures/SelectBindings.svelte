@@ -26,7 +26,7 @@ def held():
     many = [i for i, one in enumerate(values) if any(one is x or (kind != "dict" and one == x) for x in picked)]
     single = [i for i, one in enumerate(values) if one is value or (kind != "dict" and one == value)]
     typed = all(type(x) is type(values[0]) for x in picked + [value])
-    return tojson([many, single, typed])
+    return to_json([many, single, typed])
 </script>
 
 <select data-k="many" multiple bind:value={picked}>

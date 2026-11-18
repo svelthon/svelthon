@@ -94,7 +94,7 @@ def walked(name):
 
 
 def serialised(name):
-    return tojson(rows(name))
+    return to_json(rows(name))
 
 
 # What a module publishes, which JavaScript imports by name: the same object

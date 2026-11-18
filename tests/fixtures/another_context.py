@@ -46,5 +46,5 @@ def seen(kind, foreign):
         type(converted).__name__,
         attempt(lambda: str(converted.get("answer"))),
         attempt(lambda: urlencode(value)),
-        attempt(lambda: tojson(value)),
+        attempt(lambda: to_json(value)),
     ]

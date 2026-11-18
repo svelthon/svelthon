@@ -81,7 +81,7 @@ describe('every repair, in one component', () => {
         expect(read('résumé')).toBe('ensemble en hôte');
         expect(read('marge')).toBe('6');
 
-        // `tojson` of a dict with an accented key.
+        // `to_json` of a dict with an accented key.
         expect(JSON.parse(read('json'))).toEqual({ rôle: 'hôte', limite: 3 });
     });
 

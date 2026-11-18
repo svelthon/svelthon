@@ -24,7 +24,7 @@ describe('a JavaScript module calling into Python', () => {
     // What a Python value looks like to `JSON.stringify`: a dict is an object,
     // a list an array, and None is `undefined`, which it leaves out as it leaves
     // out any `undefined`, rather than an object that serialises as `{}`. JSON
-    // that keeps it as `null` is `tojson`'s.
+    // that keeps it as `null` is `to_json`'s.
     test('a dict, a list and None serialise as JavaScript expects', () => {
         expect(read('payload')).toBe('{"a":[1,2]}');
     });

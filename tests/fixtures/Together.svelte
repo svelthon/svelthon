@@ -109,7 +109,7 @@ def état():
 {marge = LIMIT * MARGE}
 <p data-k="marge">{marge}</p>
 
-<p data-k="json">{tojson({"rôle": rôle, "limite": LIMIT})}</p>
+<p data-k="json">{to_json({"rôle": rôle, "limite": LIMIT})}</p>
 <p data-k="ouvertures">{ouvertures}</p>
 
 <style >

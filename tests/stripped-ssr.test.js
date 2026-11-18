@@ -1,6 +1,6 @@
 // @vitest-environment node
 //
-// Off a browser there is no parser, and `striptags` returns nothing rather than
+// Off a browser there is no parser, and `strip_tags` returns nothing rather than
 // something wrong: a first render shows less and then shows the text, instead of
 // showing `caf&eacute;` and correcting it after hydration.
 import { test, expect } from 'vitest';

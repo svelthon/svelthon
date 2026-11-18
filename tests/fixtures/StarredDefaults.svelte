@@ -11,9 +11,9 @@ pending = later("undefined")
 short = shortRows()
 </script>
 
-{#each short as [a="d", b="e", *rest]}<p data-k="short">{tojson([a, b, rest])}</p>{/each}
+{#each short as [a="d", b="e", *rest]}<p data-k="short">{to_json([a, b, rest])}</p>{/each}
 
-{#each rows as [value="fallback", *rest]}<p data-k="each">{tojson([value, rest])}</p>{/each}
-{#snippet shown([value="fallback", *rest])}<p data-k="snippet">{tojson([value, rest])}</p>{/snippet}
+{#each rows as [value="fallback", *rest]}<p data-k="each">{to_json([value, rest])}</p>{/each}
+{#snippet shown([value="fallback", *rest])}<p data-k="snippet">{to_json([value, rest])}</p>{/snippet}
 {#each rows as row}{@render shown(row)}{/each}
-{#await pending then [value="fallback", *rest]}<p data-k="then">{tojson([value, rest])}</p>{/await}
+{#await pending then [value="fallback", *rest]}<p data-k="then">{to_json([value, rest])}</p>{/await}

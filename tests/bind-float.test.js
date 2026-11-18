@@ -93,7 +93,7 @@ describe('a float handed back to the framework', () => {
         expect(typeof 43).toBe('number');
     });
 
-    // `tojson(1 / 3)` without this renders 20 KB: the float's type, its
+    // `to_json(1 / 3)` without this renders 20 KB: the float's type, its
     // descriptors, and theirs.
     test('plainData unwraps it', () => expect(plainData(float(4300))).toBe(4300));
 

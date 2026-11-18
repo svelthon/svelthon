@@ -3,7 +3,7 @@ import { mount, flushSync } from './mounted.js';
 import FromJson from './fixtures/FromJson.svelte';
 
 // `to_js` and `to_py` are the two directions of the same bridge, and
-// `tojson`/`from_json` are those two with the dump and the parse attached. What
+// `to_json`/`from_json` are those two with the dump and the parse attached. What
 // the inbound half has to produce is *real* Python: an unconverted JavaScript
 // object answers `.type` and nothing else.
 describe('the inbound bridge', () => {

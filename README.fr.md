@@ -208,13 +208,13 @@ noms sur ce préfixe, dans la même portée.
 | `f = export(lambda: …)` | `export const f = () => …`, le même, en une ligne |
 | `to_js(valeur)` | *aucun*, un conteneur Python rendu lisible par JavaScript |
 | `to_py(valeur)` | *aucun*, l'autre sens : une valeur JavaScript lue comme du Python |
-| `tojson(valeur, indent=None)` | *aucun*, `to_js` avec la sérialisation attachée, sous le mot de Jinja |
+| `to_json(valeur, indent=None)` | *aucun*, `to_js` avec la sérialisation attachée, le pendant de `from_json` |
 | `from_json(texte)` | *aucun*, `to_py` avec l'analyse attachée |
 | `batch(xs, n, fill)` | *aucun*, une liste plate groupée en lignes de `n`, la dernière complétée par `fill`, comme le `\|batch` de Jinja |
 | `date(valeur, style)` | *aucun*, une date lue dans la langue du visiteur, comme le `\|date` de Django |
-| `fromnow(valeur)` | *aucun*, « il y a 3 jours » ou « dans 2 heures », et ça reste juste |
+| `from_now(valeur)` | *aucun*, « il y a 3 jours » ou « dans 2 heures », et ça reste juste |
 | `slugify(texte)` | *aucun*, un titre transformé en segment d'URL, en minuscules, chaque lettre gardée, accents compris, et le reste un tiret : `héllo-wörld`, là où le `\|slugify` de Django retire accents et ponctuation |
-| `striptags(html)` | *aucun*, du HTML affiché en texte, analysé et non filtré par motif |
+| `strip_tags(html)` | *aucun*, du HTML affiché en texte, comme le `strip_tags` de Django, mais analysé et non filtré par motif |
 | `urlencode(valeur)` | *aucun*, une valeur, un dict ou une liste de paires, encodés dans une URL |
 | `js` | *aucun*, les globales JavaScript : `js.Response`, `js.JSON`, `js.URL` |
 | `items.append(x)` | `items.push(x)`, puisque `$state` proxifie en profondeur |
@@ -1636,16 +1636,16 @@ convertit un conteneur Python en quelque chose qu'une API Web acceptera :
 
 ```python
 def GET(event):
-    corps = tojson(chercher(event["query"].get("q", "")))
+    corps = to_json(chercher(event["query"].get("q", "")))
     return js.Response.new(corps, to_js({"headers": {"content-type": "application/json"}}))
 ```
 
-Le corps est celui de `tojson()`, qui écrit `None` en `null`. `to_js()` fait de
+Le corps est celui de `to_json()`, qui écrit `None` en `null`. `to_js()` fait de
 `None` l'`undefined` de JavaScript, comme toute traversée, et `JSON.stringify`
 omet une clé qui vaut `undefined`, comme le `json()` de SvelteKit :
 `{"email": None}` répondrait `{}`. Un `int` reste exact quelle que soit sa
-taille : `tojson()` écrit `2**64 + 1` en `18446744073709551617`, comme
-`json.dumps`. Il faut donc privilégier `tojson()` au `json()` de SvelteKit, qui
+taille : `to_json()` écrit `2**64 + 1` en `18446744073709551617`, comme
+`json.dumps`. Il faut donc privilégier `to_json()` au `json()` de SvelteKit, qui
 passe par le `JSON.stringify` de JavaScript et refuse un tel nombre.
 
 ### La frontière convertit, dans les deux sens
@@ -1836,11 +1836,11 @@ l'exécution, un alias `type` ou un `def f[T]` générique, `__reduce__()` et
 fichier : un sous-dossier n'est pas un paquet, donc `from lib import models`
 est refusé aussi, et `models.py` s'importe par `import models` une fois `lib`
 sur le `path`. Tout ce dont un gabarit a besoin est déjà
-un nom : `js` pour la plateforme, `js.Math` et `js.Date`, et `tojson`,
-`from_json`, `batch`, `date`, `fromnow`, `slugify`, `striptags`,
+un nom : `js` pour la plateforme, `js.Math` et `js.Date`, et `to_json`,
+`from_json`, `batch`, `date`, `from_now`, `slugify`, `strip_tags`,
 `urlencode`.
 
-`tojson` écrit ce dont JSON a une notation et **refuse le reste en le nommant**
+`to_json` écrit ce dont JSON a une notation et **refuse le reste en le nommant**
 plutôt que d'écrire `{}` ou `null` : un set, des bytes, un range, un complex,
 une coroutine, une promesse, une `Map`, un `Set`, et `nan` ou `inf`, que JSON ne
 sait pas écrire et que `json.dumps` écrit sous une forme qu'aucun `JSON.parse`
@@ -1848,10 +1848,10 @@ ne relit. Une classe JavaScript dit comment
 elle se sérialise en portant `toJSON` ; celle qui ne le dit pas est refusée
 aussi, puisque rien ne distingue ses champs de ceux d'une `Map`. Il parcourt
 une structure de **2 500 niveaux** environ au plus, là où `json.dumps` en écrit
-20 000 : au-delà, la pile du moteur déborde. `striptags`
+20 000 : au-delà, la pile du moteur déborde. `strip_tags`
 montre le document visible, donc le texte d'un `<script>` ou d'un `<style>`
 n'atteint jamais la page. C'est l'analyseur du navigateur qui le lit, et un
-serveur n'en a pas : rendu là, `striptags` donne une chaîne vide, donc une page
+serveur n'en a pas : rendu là, `strip_tags` donne une chaîne vide, donc une page
 prérendue ou servie avec `csr = false` montre ses extraits vides, et une page
 hydratée les remplit une fois dans le navigateur.
 

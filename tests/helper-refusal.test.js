@@ -3,7 +3,7 @@ import { mount, flushSync } from './mounted.js';
 
 import HelperRefusal from './fixtures/HelperRefusal.svelte';
 import RefusalCaught from './fixtures/RefusalCaught.svelte';
-import { batch, date, fromnow } from '../src/lib/helpers.js';
+import { batch, date, from_now } from '../src/lib/helpers.js';
 import { pyError, plainData, NONE } from '../src/lib/bridge.js';
 
 // The eighteen refusals in `compile.js` and `markup.js` all open with
@@ -34,7 +34,7 @@ describe('a helper refuses in the project’s own dialect', () => {
 
     test.for([
         ['date', 'show_date', /date\(\): .* is not a date/],
-        ['fromnow', 'show_fromnow', /fromnow\(\): .* is not a date/],
+        ['from_now', 'show_from_now', /from_now\(\): .* is not a date/],
         ['batch', 'show_batch', /batch\(\): n must be an integer/]
     ])('%s says what is wrong, with the prefix and the position', ([, call, sentence]) => {
         const component = setup();
@@ -76,7 +76,7 @@ describe('and the mark is what makes that possible', () => {
         let thrown;
 
         try {
-            fromnow('not a date');
+            from_now('not a date');
         } catch (error) {
             thrown = error;
         }

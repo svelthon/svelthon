@@ -18,15 +18,15 @@ class Text(str):
 
 LABELS = [
     "date(value)",
-    "fromnow(value)",
+    "from_now(value)",
     "date(text value)",
-    "fromnow(text value)",
+    "from_now(text value)",
     "batch(size)",
     "date(dateStyle)",
     "date(timeStyle)",
     "date(locale)",
-    "fromnow(locale)",
-    "tojson(indent)",
+    "from_now(locale)",
+    "to_json(indent)",
 ]
 
 WHEN = "2026-01-02T12:00:00Z"
@@ -46,15 +46,15 @@ def slots(number, count, text):
     # One call per slot, in the order a template would reach them.
     return [
         attempt(lambda: date(number(0.0))),
-        attempt(lambda: fromnow(number(0.0))),
+        attempt(lambda: from_now(number(0.0))),
         attempt(lambda: date(text(WHEN))),
-        attempt(lambda: fromnow(text(WHEN))),
+        attempt(lambda: from_now(text(WHEN))),
         attempt(lambda: str(batch([1, 2, 3], count(2)))),
         attempt(lambda: date(0.0, text("full"), None, "en-US")),
         attempt(lambda: date(0.0, None, text("short"), "en-US")),
         attempt(lambda: date(0.0, "full", None, text("fr-FR"))),
-        attempt(lambda: fromnow(0.0, text("fr-FR"))),
-        attempt(lambda: tojson({"a": [1]}, count(2))),
+        attempt(lambda: from_now(0.0, text("fr-FR"))),
+        attempt(lambda: to_json({"a": [1]}, count(2))),
     ]
 
 

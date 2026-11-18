@@ -41,7 +41,7 @@ def looping():
 
 def looping_json():
     # The same loop, asked for as JSON, where there is no identity to keep.
-    return tojson(looping())
+    return to_json(looping())
 
 
 def empty():
@@ -54,14 +54,14 @@ def mixed():
 
 
 def dumped():
-    # `tojson` is `to_js` with the dump attached: `json.dumps` would walk the
+    # `to_json` is `to_js` with the dump attached: `json.dumps` would walk the
     # raw Brython object and never find the fields.
-    return tojson(Pep(703, ["gil"]))
+    return to_json(Pep(703, ["gil"]))
 
 
 def indented():
-    return tojson({"a": 1}, 2)
+    return to_json({"a": 1}, 2)
 
 
 def plain():
-    return tojson([1, "two", None, True])
+    return to_json([1, "two", None, True])

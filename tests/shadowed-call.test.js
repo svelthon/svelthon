@@ -4,7 +4,7 @@
 // whose `call` answered 99 turned an awaited 0.5 into 99. Each is held against
 // the native object doing the same.
 import { test, expect } from 'vitest';
-import { tojson } from '../src/lib/helpers.js';
+import { to_json } from '../src/lib/helpers.js';
 import { values, empty, passing, fresh } from './fixtures/shadowed_call.py';
 
 const shadowed = (fn, call) => Object.assign(fn, { call });
@@ -107,5 +107,5 @@ test('an awaited object’s then is called itself', async () => {
 test('a toJSON is called itself', () => {
     const value = { toJSON: shadowed(() => 'written', null) };
 
-    expect(tojson(value)).toBe(JSON.stringify(value));
+    expect(to_json(value)).toBe(JSON.stringify(value));
 });

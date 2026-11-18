@@ -4,13 +4,13 @@ import FromNow from './fixtures/FromNow.svelte';
 
 // Django's `|timesince` and `|timeuntil` in one name, which is neither of
 // theirs: `Intl` formats a signed gap, so "since" would lie half the time.
-// `fromnow` is what the JavaScript world calls it.
+// `from_now` is what the JavaScript world calls it.
 //
 // It is also the one helper Django could not have had: a rendered page is
 // finished, so "3 minutes ago" is true once and then wrong. A component stays on
 // screen, so this one wakes itself when the display would change — and asks for
 // the delay the display needs, so it slows down as the date ages.
-describe('fromnow', () => {
+describe('from_now', () => {
     const mounted = [];
 
     // The clock is shared by the whole document, and its timer is cleared when

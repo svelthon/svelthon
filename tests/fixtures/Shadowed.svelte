@@ -12,14 +12,14 @@
 # component read `globalThis` where it had written a string.
 to_js = "mine to_js"
 to_py = "mine to_py"
-tojson = "mine tojson"
+to_json = "mine to_json"
 from_json = "mine from_json"
 js = "mine js"
 batch = "mine batch"
 date = "mine date"
-fromnow = "mine fromnow"
+from_now = "mine from_now"
 slugify = "mine slugify"
-striptags = "mine striptags"
+strip_tags = "mine strip_tags"
 urlencode = "mine urlencode"
 set_context = "mine set_context"
 get_context = "mine get_context"
@@ -29,14 +29,14 @@ host = "mine host"
 
 <p data-k="to_js">{to_js}</p>
 <p data-k="to_py">{to_py}</p>
-<p data-k="tojson">{tojson}</p>
+<p data-k="to_json">{to_json}</p>
 <p data-k="from_json">{from_json}</p>
 <p data-k="js">{js}</p>
 <p data-k="batch">{batch}</p>
 <p data-k="date">{date}</p>
-<p data-k="fromnow">{fromnow}</p>
+<p data-k="from_now">{from_now}</p>
 <p data-k="slugify">{slugify}</p>
-<p data-k="striptags">{striptags}</p>
+<p data-k="strip_tags">{strip_tags}</p>
 <p data-k="urlencode">{urlencode}</p>
 <p data-k="set_context">{set_context}</p>
 <p data-k="get_context">{get_context}</p>

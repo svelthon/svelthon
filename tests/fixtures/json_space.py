@@ -1,4 +1,4 @@
-# The space `tojson` can be handed, built where these values are ordinary.
+# The space `to_json` can be handed, built where these values are ordinary.
 #
 # Half of them cannot be made from JavaScript at all — `range` and `complex`
 # have no `$factory` — and that is the reason a probe written in JavaScript kept

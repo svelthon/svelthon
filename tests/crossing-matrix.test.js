@@ -12,7 +12,7 @@ import { test, expect } from 'vitest';
 import '../src/lib/compile.js';
 import { pyData, pyExpression } from '../src/lib/bridge.js';
 import { toJs, toPython } from 'bryntime';
-import { tojson } from '../src/lib/helpers.js';
+import { to_json } from '../src/lib/helpers.js';
 import { describeJs } from './crossing-describe.js';
 
 const $B = globalThis.__BRYTHON__;
@@ -326,7 +326,7 @@ test('to_js is a copy of what the view reads, on every kind', () => {
 
 // The None column: None is `undefined` at every door that hands JavaScript a
 // value, the engine's pairing (`pyobj2jsobj`), `null` being `javascript.NULL`'s,
-// and `null` in JSON alone, `tojson`'s. A door that hands Python's own value
+// and `null` in JSON alone, `to_json`'s. A door that hands Python's own value
 // to a Python reader keeps None. A context, a key and a `{@debug}` copy, which
 // no row above opens, alike. And the way in: `undefined` is None and `null`
 // the `javascript.NULL` it is, at every door.
@@ -339,7 +339,7 @@ test('None is undefined at every door to JavaScript, and null in JSON alone', ()
     // handed None as the absence its default fills.
     expect([cells.spreadPython, cells['expression-child']]).toEqual(['undefined', 'undefined']);
     expect([toJs(none, 'context'), toJs(none, 'key'), toJs(none, 'debug')]).toEqual([undefined, undefined, undefined]);
-    expect(tojson(none)).toBe('null');
+    expect(to_json(none)).toBe('null');
 
     const entering = Object.keys(TO_PY).filter((door) => {
         const one = row(door);
