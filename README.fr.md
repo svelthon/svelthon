@@ -71,7 +71,7 @@ données :
 | `(19.0, ada)` | une liste | un tuple |
 | `ada`, deux fois | deux copies | un seul dict |
 | `{"py", "svelte"}` | refusé | un set |
-| une instance de ta classe | refusée | une instance, refaite comme pickle la refait |
+| une instance de votre classe | refusée | une instance, refaite comme pickle la refait |
 
 Et un `int` reste exact quelle que soit sa taille : `2**64 + 1` arrive à la
 page en `18446744073709551617` des deux côtés, là où un nombre JavaScript
@@ -81,7 +81,7 @@ en `BigInt`, et `javascript.JSON` le lit et l'écrit exact, là où le
 
 C'est **pickle**, la façon propre à Python de porter une valeur d'un processus
 à un autre, que Bryntime écrit pour le navigateur et que Svelthon installe dans
-le `transport` de SvelteKit, sans aucun fichier de ta part. Il ne va **que dans
+le `transport` de SvelteKit, sans aucun fichier de votre part. Il ne va **que dans
 un sens** : le serveur ne refait jamais une classe à partir de ce que le
 navigateur envoie. Ce qui traverse, ce qui est refusé et pourquoi : [Ce qui
 traverse vers le navigateur](#ce-qui-traverse-vers-le-navigateur).
@@ -1637,8 +1637,8 @@ Le corps est celui de `tojson()`, qui écrit `None` en `null`. `to_js()` fait de
 omet une clé qui vaut `undefined`, comme le `json()` de SvelteKit :
 `{"email": None}` répondrait `{}`. Un `int` reste exact quelle que soit sa
 taille : `tojson()` écrit `2**64 + 1` en `18446744073709551617`, comme
-`json.dumps`. Utilise-le plutôt que le `json()` de SvelteKit, qui passe par le
-`JSON.stringify` de JavaScript et refuse un tel nombre.
+`json.dumps`. Il faut donc privilégier `tojson()` au `json()` de SvelteKit, qui
+passe par le `JSON.stringify` de JavaScript et refuse un tel nombre.
 
 ### La frontière convertit, dans les deux sens
 
