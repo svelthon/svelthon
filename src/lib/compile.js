@@ -647,6 +647,8 @@ const RUNTIME = {
     storeMember: '__storeMember',
     storeValue: '__storeValue',
     storeTrack: '__storeTrack',
+    storeHeld: '__storeHeld',
+    storeShown: '__storeShown',
     exportedMember: '__exportedMember',
     directiveAction: '__directiveAction',
     directiveTransition: '__directiveTransition',
@@ -1810,7 +1812,7 @@ function preamble(c) {
             ...(c.props.includes('data') && routeComponent(c.source) ? ['routeData'] : []),
             'directiveAction', 'directiveTransition', 'directiveAnimate',
             'plainScalar', 'storeMember', 'storeValue', 'invoke',
-            ...(c.store ? ['pythonModule', 'storeTrack'] : SUBSCRIBING(c) ? ['unsubscribe'] : []),
+            ...(c.store ? ['pythonModule', 'storeTrack', 'storeHeld', 'storeShown'] : SUBSCRIBING(c) ? ['unsubscribe'] : []),
             // Each by the rule that decides the code it is imported for.
             ...(c.store && storeExports(c).length ? ['liveExport'] : []),
             ...(exportsApi(c) ? ['liveExport', 'exportedMember'] : []),
@@ -2215,9 +2217,9 @@ function authorBindings(c) {
         }),
         // Bryc's accessor (`stateBinding`): the rows of an `{#each}` follow
         // the value's own changes and what they read under it
-        // (`__pybridge.walk`). A store's name keeps JavaScript's array as
-        // Python's own list (`storeTrack`), JavaScript reading and writing it.
-        ...c.state.map((n) => stateBinding(HOST, n, n, c.store ? { track: RUNTIME.storeTrack } : { subs: SUBS })),
+        // (`__pybridge.walk`). A store's name keeps JavaScript's array as it
+        // was handed until Python reads it (`storeTrack`, `storeHeld`).
+        ...c.state.map((n) => stateBinding(HOST, n, n, c.store ? { track: RUNTIME.storeTrack, read: RUNTIME.storeHeld } : { subs: SUBS })),
         // A name bound by `class` is declared, no state: no revision, no watch.
         // Its accessor follows, in a reaction, the special methods its
         // metaclass gives it when the metaclass is the author's
@@ -2407,9 +2409,11 @@ function instanceExports(c) {
                   // accessor is the one door that knows a name `del` removed, a
                   // cell a cleanup is handed as born, and the rows of a loop.
                   // Read off its cell, a deleted derived ran a body it no longer
-                  // had, and a state read `undefined` in an early cleanup.
+                  // had, and a state read `undefined` in an early cleanup. A
+                  // state's read as JavaScript's (`storeShown`), which takes a
+                  // value handed as it is, where Python's makes it its own.
                   `const ${STORE_FACADE} = {`,
-                  ...c.state.filter(c.published).map((n) => `    get ${n}() { return ${storeRead(`${NS}.${n}`)}; },`),
+                  ...c.state.filter(c.published).map((n) => `    get ${n}() { return ${RUNTIME.storeShown}(${NS}, '${n}'); },`),
                   ...c.unsignalled.map((n) => `    get ${n}() { return ${storeRead(`${NS}.${n}`)}; },`),
                   // The parameter and the name its body reads are one constant.
                   // `__pyArg`, because this setter is a **crossing**:
@@ -2423,8 +2427,9 @@ function instanceExports(c) {
                   //
                   // Written through the namespace, as a Python assignment is:
                   // its accessor is the one door that tracks the value and puts
-                  // back a name `del` removed, and that keeps an array as
-                  // Python's own list (`storeTrack`), whichever door wrote it.
+                  // back a name `del` removed, and that keeps an array as it
+                  // was handed until Python reads it (`storeTrack`), whichever
+                  // door wrote it.
                   ...c.state
                       .filter(c.published)
                       .map((n) => `    set ${n}(${NEXT_VALUE}) { ${NS}.${n} = ${storeWrite(NEXT_VALUE)}; },`),

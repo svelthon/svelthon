@@ -865,13 +865,15 @@ même objet. Un composant Svelte idiomatique avec `$state` se comporte exactemen
 pareil, ce que `tests/parity.test.js` démontre en faisant tourner le même
 composant dans les deux langages, ligne pour ligne.
 
-Les noms d'un store sont des états comme le `$state` de Svelte en est un : un
-tableau ou un objet simple que JavaScript donne à un store, `store.rows = [...]`
-ou `store.take(rows)`, devient la liste ou le dict du store, comme `$state` en
-fait un proxy, et le store tend à JavaScript sa vue, dont le `push` est
-l'`append` de Python. Ce qui a été donné n'est pas au store : modifié ensuite,
-il ne prévient personne, comme avec `$state`.
-`tests/store-from-javascript.test.js` tient les deux moitiés.
+Les noms d'un store sont des états comme le `$state` de Svelte en est un, au
+même coût : un tableau ou un objet simple que JavaScript donne à un store,
+`store.rows = [...]` ou `store.take(rows)`, est au store, et JavaScript le lit
+et l'écrit par un proxy qui prévient de chaque changement, chaque niveau fait
+sien à sa première lecture, comme `$state` fait ses proxys. La première lecture
+de Python en fait une liste et des dicts, avec tout ce que JavaScript y a fait,
+un par emplacement, et une page garde les objets mêmes qu'elle a lus. Ce qui a
+été donné n'est pas au store : modifié ensuite, il ne prévient personne, comme
+avec `$state`. `tests/store-from-javascript.test.js` tient les deux moitiés.
 
 Toutes les autres lignes propagent, et chacune est tenue par un test.
 
@@ -1855,7 +1857,7 @@ parsing, que seul le compilateur charge ; le README de Bryntime en donne le poid
 
 ## État
 
-Validé par `npm test`, 2 134 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 2 138 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
@@ -1865,7 +1867,7 @@ rangée d'un `test.for`), aucun échec attendu :
   contrôle et frames. Chaque valeur attendue a été produite par CPython 3.12 en
   exécutant le code du composant tel quel, jamais écrite à la main. Brython
   reproduit CPython sur **chaque point** ;
-- build de production : **286 Ko gzip**, runtime Brython compris : ce que la
+- build de production : **287 Ko gzip**, runtime Brython compris : ce que la
   page de démo charge, son script, les modules qu'elle précharge et ses styles,
   mesuré après chaque build par `scripts/build-size.mjs`.
 
@@ -1967,7 +1969,7 @@ WebAssembly.
 où Svelte lit une valeur JavaScript. Moins de 4 ms pour 500 lignes, ce qu'une
 page ne ressent pas.
 
-L'autre prix est au chargement : 286 Ko gzip, runtime Brython compris, et
+L'autre prix est au chargement : 287 Ko gzip, runtime Brython compris, et
 **0,12 s jusqu'au contenu de la démo** en production, cache vide ; 0,33 s avec
 le processeur ralenti quatre fois, comme celui d'un portable modeste. Payé une
 fois par session, pas par page, puisque l'application ne recharge jamais.

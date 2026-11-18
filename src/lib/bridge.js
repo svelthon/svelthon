@@ -102,6 +102,7 @@ const {
     shaped,
     SHAPING,
     track,
+    trackAlone,
     changesNothing,
     trackEach,
     trackOwns,
@@ -168,6 +169,7 @@ const {
     readBack,
     listedNow,
     readsAsPython,
+    handedAs,
     standsForPython
 } = core;
 
@@ -2261,27 +2263,325 @@ export function storeMember(value) {
 
 // And what a store's setter hands its name: the instance a view stands for, as
 // a call of a Python function finds it again, since the setter assigns with no
-// call in between; anything else as an argument crosses, which the name keeps
-// as it keeps what Python writes (`storeTrack`).
+// call in between; what a proxy of the store's own stands for (`handedProxy`);
+// anything else as an argument crosses, which the name keeps as it keeps what
+// Python writes (`storeTrack`).
 export function storeValue(value) {
+    const node = stoodFor(value);
+
+    if (NODES.has(node)) return node;
+
     return VIEWED.has(value) ? pyBind(value) : pyArg(value);
 }
 
 // How a store's name tracks a value written, by its setter or by Python, a
-// function JavaScript called with an array among it: what it keeps of it, an
-// array or a plain object of JavaScript's as Python's own list or dict, at any
-// depth, as a view keeps one JavaScript writes into it (`entering`), and as
-// Svelte's `$state` makes such a value its own. A change made through the store
-// is then followed, and one made to what was handed is not, as there: kept as
-// it was handed, a `push` through the store reached the array and no page.
+// function JavaScript called with an array among it. An array or a plain object
+// of JavaScript's is a state as Svelte's `$state` is one, and costs what it
+// costs there: the store keeps its own copy of the first level, JavaScript
+// reads and writes it through a proxy that tells of each change and copies
+// each level at its first read (`handedProxy`), as Svelte makes a proxy of each
+// at its first read, and Python's first read, by any door, makes it Python's
+// own list and dicts (`made`). Made Python's at the write, 50 000 rows cost 200
+// ms, where Svelte's cost nothing. One object is one node wherever the store
+// holds it, under two names or two parents, as one object is one proxy of
+// Svelte's: written through either, it is written for both. One with a getter
+// or a setter becomes Svelte's state, as a view makes it (`entering`).
 // Anything else as it is, Python's own told first (`ownedByJavascript`): every
 // write of a store's name asks, but of the value the name holds already, kept
 // as it was written, which `rows += [x]` writes again.
-export const storeTrack = (value, bump) =>
-    track(
-        value !== bump.held && object(value) && ownedByJavascript(value) && (Array.isArray(value) || plainObject(value)) ? entering(value) : value,
-        bump
+export const storeTrack = (value, bump) => {
+    value = NODE_OF.get(value) ?? value;
+
+    // A node the store holds, written under a name or put back after a
+    // refusal: its marker alone, what it holds told by its proxy
+    // (`trackAlone`).
+    if (NODES.has(value)) return trackAlone(value, bump);
+
+    if (value !== bump.held && object(value) && ownedByJavascript(value) && (Array.isArray(value) || plainObject(value))) {
+        if (!Array.isArray(value) && behaves(value)) return track(entering(value), bump);
+
+        return trackAlone(nodeOf(value), bump);
+    }
+
+    return track(value, bump);
+};
+
+// What Python reads of what a store's name holds: what Python made of a node
+// (`made`), the name then following that in its place, and anything else as it
+// is. JavaScript's read of the name, the store's getter, takes a node as it is
+// (`storeShown`).
+export const storeHeld = (value, bump) => {
+    if (shown || !object(value) || !NODES.has(value)) return value;
+
+    const python = made(value);
+
+    if (bump.held === value) track(python, bump);
+
+    return python;
+};
+
+// What the store's getter hands JavaScript for one of its names: a node as
+// `shownOf` hands it, and anything else as a member.
+export const storeShown = (ns, name) => {
+    shown = true;
+
+    let value;
+
+    try {
+        value = ns[name];
+    } finally {
+        shown = false;
+    }
+
+    return object(value) && NODES.has(value) ? shownOf(value) : storeMember(value);
+};
+
+let shown = false;
+
+// The objects the store holds, each JavaScript's array or object copied at its
+// first read (`nodeOf`); what Python made of each, at its first read of any of
+// them, and the view of it that a proxy JavaScript held reads and writes then;
+// and their proxies both ways.
+const NODES = new WeakSet();
+const MADE = new WeakMap();
+const MADE_VIEW = new WeakMap();
+const PROXY_OF = new WeakMap();
+const NODE_OF = new WeakMap();
+
+// Python's own of a node and of what it holds, made once, at Python's first
+// read of it by any door: the walk `pyData` makes, recording what it made of
+// each node for every other root that holds it, and one value for each place of
+// an array or object JavaScript has not read yet, as JavaScript's first read of
+// a place copies it: two places holding one object are two copies, as Svelte's
+// are, whoever reads first, and only one the walk is inside of, a cycle, is the
+// one value (`leave`). Shared by the walk, an object met twice made what a
+// Python write reached hang on what a page had read.
+//
+// Each node JavaScript read is then told of a change Python makes to what it
+// was made into, so a page that read it before reads what Python writes, and
+// its proxy is what Python hands for it from now on (`handedAs`), whatever
+// hands it, the getter, a function's result, a list Python made anew: the same
+// row to a page that keyed on it. Handed the view instead, a page saw another
+// object after a mere `len(rows)` in Python, and an `{#each}` keyed by the row
+// made its field again, what was typed in it gone.
+const made = (node) => {
+    const known = MADE.get(node);
+
+    if (known !== undefined) return known;
+
+    const inside = new Map();
+    const python = pyData(
+        node,
+        {
+            get: (one) => MADE.get(one) ?? inside.get(one),
+            set: (one, it) => (NODES.has(one) ? MADE : inside).set(one, it),
+            leave: (one) => inside.delete(one)
+        },
+        true
     );
+    const pending = [node];
+    const seen = new Set();
+
+    while (pending.length > 0) {
+        const one = pending.pop();
+
+        if (seen.has(one)) continue;
+        seen.add(one);
+
+        if (MARKS.has(one)) inherit(one, MADE.get(one), undefined, true);
+
+        const proxy = PROXY_OF.get(one);
+
+        if (proxy !== undefined && !MADE_VIEW.has(one)) MADE_VIEW.set(one, handedAs(MADE.get(one), proxy));
+
+        for (const child of Array.isArray(one) ? one : Object.values(one)) if (NODES.has(child)) pending.push(child);
+    }
+
+    return python;
+};
+
+// What JavaScript is handed for a node: its proxy, made until Python makes the
+// node its own, and then what Python hands for what it made, that same proxy if
+// JavaScript held one.
+const shownOf = (node) => {
+    const proxy = PROXY_OF.get(node);
+
+    if (proxy !== undefined) return proxy;
+
+    const python = MADE.get(node);
+
+    return python === undefined ? handedProxy(node) : viewOf(python);
+};
+
+// The node a store holds for JavaScript's array or object, its first level
+// copied, a proxy of the store's found in it standing for its own node.
+const nodeOf = (one) => {
+    const node = copyOf(one);
+
+    NODES.add(node);
+
+    return node;
+};
+
+const stoodFor = (one) => NODE_OF.get(one) ?? one;
+
+// An array or a plain object of JavaScript's that a store copies: no view or
+// proxy of the store's, and none of Python's.
+const javascriptData = (one) =>
+    object(one) &&
+    !VIEWED.has(one) &&
+    !NODE_OF.has(one) &&
+    ownedByJavascript(one) &&
+    (Array.isArray(one) || (plainObject(one) && !behaves(one)));
+
+// The first level of an array or a plain object, its prototype kept: what the
+// store holds of it, so that what it was handed changes nothing the store
+// holds, and nothing written through the store changes what it was handed.
+const copyOf = (one) => {
+    // Each place an array holds, a hole left one: written at every index, the
+    // copy held `undefined` where the array held nothing, and `forEach` and `in`
+    // found it. Only an `undefined` is asked whether it is held.
+    if (Array.isArray(one)) {
+        const copy = new Array(one.length);
+
+        for (let at = 0; at < one.length; at++) {
+            const item = one[at];
+
+            if (item !== undefined || at in one) copy[at] = stoodFor(item);
+        }
+
+        return copy;
+    }
+
+    const copy = Object.create(Object.getPrototypeOf(one));
+
+    for (const key of Reflect.ownKeys(one)) if (Object.prototype.propertyIsEnumerable.call(one, key)) put(copy, key, stoodFor(one[key]));
+
+    return copy;
+};
+
+const put = (into, key, value) => {
+    if (key === '__proto__') Object.defineProperty(into, key, { value, writable: true, enumerable: true, configurable: true });
+    else into[key] = value;
+};
+
+// The proxy of a node, the same each time, and the node's marker, which a read
+// through the proxy follows and a write through it tells, as each proxy of
+// Svelte's has its signals: a page that read the node hears of it, under
+// whatever name or parent it read it. Made without a walk of what the node
+// holds, and held by nothing until something reads it.
+const handedProxy = (node) => {
+    let proxy = PROXY_OF.get(node);
+
+    if (proxy === undefined) {
+        if (!MARKS.has(node)) mark(node, false);
+
+        proxy = new Proxy(node, HANDED_TRAPS);
+        PROXY_OF.set(node, proxy);
+        NODE_OF.set(proxy, node);
+    }
+
+    return proxy;
+};
+
+// A write through a proxy, told to the node's readers: as Svelte's state,
+// refused before anything is written where Svelte refuses a write.
+const changing = (node, write) => {
+    const marker = MARKS.get(node);
+
+    if (marker !== undefined && host.refuses()) marker();
+
+    const done = write();
+
+    if (marker !== undefined) marker();
+
+    return done;
+};
+
+// What the proxy reads: a node, as `shownOf` hands it; JavaScript's array or
+// object not read yet, copied first, in place; anything else as it is. Once
+// Python has made a node its own, each operation goes to the view of what it
+// made, so that a proxy JavaScript kept writes what Python reads.
+const HANDED_TRAPS = {
+    get(node, key) {
+        const view = MADE_VIEW.get(node);
+
+        if (view !== undefined) return Reflect.get(view, key);
+
+        follow(node);
+
+        const value = Reflect.get(node, key);
+
+        if (NODES.has(value)) return shownOf(value);
+        if (!javascriptData(value)) return value;
+
+        const copy = nodeOf(value);
+
+        put(node, key, copy);
+
+        return handedProxy(copy);
+    },
+    set(node, key, given) {
+        const view = MADE_VIEW.get(node);
+
+        if (view !== undefined) return Reflect.set(view, key, given);
+
+        const value = stoodFor(given);
+
+        return changing(node, () => Reflect.set(node, key, value));
+    },
+    deleteProperty(node, key) {
+        const view = MADE_VIEW.get(node);
+
+        if (view !== undefined) return Reflect.deleteProperty(view, key);
+
+        return changing(node, () => Reflect.deleteProperty(node, key));
+    },
+    defineProperty(node, key, descriptor) {
+        const view = MADE_VIEW.get(node);
+
+        if (view !== undefined) return Reflect.defineProperty(view, key, descriptor);
+
+        const given = 'value' in descriptor ? { ...descriptor, value: stoodFor(descriptor.value) } : descriptor;
+
+        return changing(node, () => Reflect.defineProperty(node, key, given));
+    },
+    has(node, key) {
+        const view = MADE_VIEW.get(node);
+
+        if (view !== undefined) return Reflect.has(view, key);
+
+        follow(node);
+
+        return Reflect.has(node, key);
+    },
+    ownKeys(node) {
+        const view = MADE_VIEW.get(node);
+
+        if (view !== undefined) return Reflect.ownKeys(view);
+
+        follow(node);
+
+        return Reflect.ownKeys(node);
+    },
+    getOwnPropertyDescriptor(node, key) {
+        const view = MADE_VIEW.get(node);
+
+        if (view !== undefined) return Reflect.getOwnPropertyDescriptor(view, key);
+
+        follow(node);
+
+        return Reflect.getOwnPropertyDescriptor(node, key);
+    }
+};
+
+// What a proxy of the store's stands for in Python, wherever Python first meets
+// it: what Python made of its node.
+readsAsPython((one) => {
+    const node = NODE_OF.get(one);
+
+    return node === undefined ? undefined : made(node);
+});
 
 // And what an instance's `@export` hands JavaScript, the value its name holds
 // as each binding of the name hands it over (`liveExport`): the one function
