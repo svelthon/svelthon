@@ -61,9 +61,8 @@ describe('both doors into a store agree', () => {
         ['a string', 'txt'],
         ['a boolean', true],
         ['null', null],
-        // The identity of a foreign container is kept, on both doors: the
-        // conversion a call owes is the scalar one, and converting containers
-        // would be a change of contract rather than a repair.
+        // A foreign array or plain object is the store's own list or dict,
+        // whichever door wrote it, as `$state` makes it its own.
         ['an array', [1, 2]],
         ['a plain object', { a: 1 }],
         ['a function', () => 1]
@@ -85,12 +84,18 @@ describe('both doors into a store agree', () => {
         expect(String(store.describe())).toBe('float | 0.25');
     });
 
-    test('while a foreign array keeps its identity', async () => {
+    // A function JavaScript calls hands it the array itself, which the name
+    // then keeps as Python's own list, as the setter's: kept as it was handed,
+    // a `push` through the store reached no page.
+    test('while a foreign array becomes the store’s own list, by either door', async () => {
         const { store } = await load();
         const rows = ['a'];
 
+        const byCall = String(store.take(rows));
+        const calledOwn = store.held !== rows;
+
         store.held = rows;
 
-        expect(store.held).toBe(rows);
+        expect([byCall, calledOwn, store.held !== rows, [...store.held]]).toEqual(['list | raises TypeError', true, true, ['a']]);
     });
 });

@@ -827,21 +827,21 @@ Where it stands, each line held by a test:
 | a child reached through `.items()`, `.values()` or `.get()` | yes |
 | `<p {**attrs}>`, a spread | yes |
 | `<p title={items}>`, an attribute carrying the container itself | no, **and neither does JavaScript** |
-| `store.rows.push(x)`, a store's container mutated from JavaScript | no, **and `store.rows = [...]` does** |
+| `store.rows.push(x)`, a store's container mutated from JavaScript, an array it was handed too | yes |
 
-The first `no` is host semantics, not a limitation of ours: Svelte compares the
+The `no` is host semantics, not a limitation of ours: Svelte compares the
 value against the one it last applied, by identity, inside its own DOM writer,
 where no signal reaches, and a mutated container is the same object. An
 idiomatic Svelte component with `$state` behaves exactly the same, which
 `tests/parity.test.js` proves by running the same component in both languages,
 line for line.
 
-The second is the boundary of the mechanism. The tracking wraps Brython's own
-entry points, `call_attr`, `$setitem` and `$delitem`, so a mutation written in
-Python notifies wherever it is written, and `Array.prototype.push` called from
-JavaScript goes around all three. Replacing the container notifies, since that
-goes through the store's setter; the next Python mutation catches up to the true
-value. `tests/store-from-javascript.test.js` holds both halves.
+A store's names are states as Svelte's `$state` is one: an array or a plain
+object JavaScript hands a store, `store.rows = [...]` or `store.take(rows)`,
+becomes the store's own list or dict, as `$state` makes a proxy of it, and the
+store hands JavaScript its view, whose `push` is Python's `append`. What was
+handed is not the store's: changed afterwards, it tells nobody, as with
+`$state`. `tests/store-from-javascript.test.js` holds both halves.
 
 Every other line propagates, and a test holds each one.
 
@@ -1813,7 +1813,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 2 133 tests as written (vitest reports more, one per
+Validated by `npm test`, 2 134 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;

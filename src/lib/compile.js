@@ -646,6 +646,7 @@ const RUNTIME = {
     plainScalar: '__plainScalar',
     storeMember: '__storeMember',
     storeValue: '__storeValue',
+    storeTrack: '__storeTrack',
     exportedMember: '__exportedMember',
     directiveAction: '__directiveAction',
     directiveTransition: '__directiveTransition',
@@ -1809,7 +1810,7 @@ function preamble(c) {
             ...(c.props.includes('data') && routeComponent(c.source) ? ['routeData'] : []),
             'directiveAction', 'directiveTransition', 'directiveAnimate',
             'plainScalar', 'storeMember', 'storeValue', 'invoke',
-            ...(c.store ? ['pythonModule'] : SUBSCRIBING(c) ? ['unsubscribe'] : []),
+            ...(c.store ? ['pythonModule', 'storeTrack'] : SUBSCRIBING(c) ? ['unsubscribe'] : []),
             // Each by the rule that decides the code it is imported for.
             ...(c.store && storeExports(c).length ? ['liveExport'] : []),
             ...(exportsApi(c) ? ['liveExport', 'exportedMember'] : []),
@@ -2214,8 +2215,9 @@ function authorBindings(c) {
         }),
         // Bryc's accessor (`stateBinding`): the rows of an `{#each}` follow
         // the value's own changes and what they read under it
-        // (`__pybridge.walk`).
-        ...c.state.map((n) => stateBinding(HOST, n, n, { subs: c.store ? null : SUBS })),
+        // (`__pybridge.walk`). A store's name keeps JavaScript's array as
+        // Python's own list (`storeTrack`), JavaScript reading and writing it.
+        ...c.state.map((n) => stateBinding(HOST, n, n, c.store ? { track: RUNTIME.storeTrack } : { subs: SUBS })),
         // A name bound by `class` is declared, no state: no revision, no watch.
         // Its accessor follows, in a reaction, the special methods its
         // metaclass gives it when the metaclass is the author's
@@ -2417,13 +2419,12 @@ function instanceExports(c) {
                   //
                   // The same conversion the call boundary owes, and no more: a
                   // scalar becomes its Python self and an object keeps its
-                  // identity, so a JavaScript array assigned to a store is still
-                  // that array. Converting containers too would be a change of
-                  // contract, not a repair.
+                  // identity, here as it does for `store.take(rows)`.
                   //
                   // Written through the namespace, as a Python assignment is:
                   // its accessor is the one door that tracks the value and puts
-                  // back a name `del` removed.
+                  // back a name `del` removed, and that keeps an array as
+                  // Python's own list (`storeTrack`), whichever door wrote it.
                   ...c.state
                       .filter(c.published)
                       .map((n) => `    set ${n}(${NEXT_VALUE}) { ${NS}.${n} = ${storeWrite(NEXT_VALUE)}; },`),

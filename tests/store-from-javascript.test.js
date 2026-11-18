@@ -7,12 +7,12 @@ import { store } from './fixtures/counted.svelte.py';
 // table did not have: every one of its rows is a mutation written in Python, and
 // a published store exists to be read and written from JavaScript.
 //
-// **Replacing the container propagates. Mutating it does not.** The tracking
-// wraps Brython's own entry points — `call_attr`, `$setitem`, `$delitem` — and
-// `Array.prototype.push` called from JavaScript goes around all three. Making it
-// notify would need a proxy on the value the getter hands out, on the hottest
-// path the engine has; the honest answer is to say so, and to hold the line with
-// this test rather than leave it to be discovered.
+// **Replacing the container propagates, and so does mutating it through the
+// store**, as with Svelte's `$state`, which makes an array it is handed its own:
+// the store keeps a JavaScript array as Python's own list, and its getter hands
+// the list's view, whose `push` is Python's `append`. Kept as it was handed, the
+// array was mutated around every entry point the tracking wraps, and the page
+// showed nothing until Python touched the list.
 describe('a store written from JavaScript', () => {
     const setup = () => {
         const target = document.body.appendChild(document.createElement('div'));
@@ -35,20 +35,42 @@ describe('a store written from JavaScript', () => {
         expect(read()).toBe('2');
     });
 
-    test('and does not when the container is mutated', () => {
+    test('and when the container is mutated through the store', () => {
         const read = setup();
 
         store.rows.push('a');
         flushSync();
+        expect(read()).toBe('1');
 
-        // The store has it; the page does not, until Python touches the list.
-        expect([...store.rows]).toHaveLength(1);
+        store.rows[1] = 'b';
+        flushSync();
+        expect(read()).toBe('2');
+
+        store.rows.splice(0, 1);
+        flushSync();
+        expect(read()).toBe('1');
+
+        store.rows.length = 0;
+        flushSync();
         expect(read()).toBe('0');
     });
 
-    // What makes the silence liveable: the next Python mutation catches up, and
-    // it catches up to the true value rather than to a stale one.
-    test('while Python catching up shows everything at once', () => {
+    // What was handed is not the store's: changed afterwards, it tells nobody
+    // and the store does not hold the change, as with `$state`.
+    test('but not when the array handed is changed afterwards', () => {
+        const read = setup();
+        const handed = [];
+
+        store.rows = handed;
+        flushSync();
+        handed.push('a');
+        flushSync();
+
+        expect([read(), [...store.rows]]).toEqual(['0', []]);
+    });
+
+    // A mutation from JavaScript and one from Python are of one list.
+    test('and a Python mutation after it shows both', () => {
         const read = setup();
 
         store.rows.push('a');
@@ -79,11 +101,12 @@ describe('a store read from JavaScript', () => {
         expect(store.doubled).toBe(1);
     });
 
-    // A container keeps its identity, which is what a mutation is followed by.
-    test('control: a container is itself', () => {
+    // An array handed is the store's own list, read back as its view, as
+    // `$state` reads back the proxy it made of one.
+    test('an array written reads back as the store’s own', () => {
         const rows = ['a'];
         store.rows = rows;
 
-        expect(store.rows).toBe(rows);
+        expect([store.rows === rows, Array.isArray(store.rows), [...store.rows]]).toEqual([false, true, ['a']]);
     });
 });

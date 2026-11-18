@@ -57,6 +57,7 @@ const {
     entering,
     iterated,
     javascriptOwn,
+    ownedByJavascript,
     opaque,
     boxed,
     unboxed,
@@ -2258,12 +2259,29 @@ export function storeMember(value) {
     return pyExport(value);
 }
 
-// And what a store's setter keeps: the instance a view stands for, as a call
-// of a Python function finds it again, since the setter assigns with no call
-// in between; anything else as an argument crosses.
+// And what a store's setter hands its name: the instance a view stands for, as
+// a call of a Python function finds it again, since the setter assigns with no
+// call in between; anything else as an argument crosses, which the name keeps
+// as it keeps what Python writes (`storeTrack`).
 export function storeValue(value) {
     return VIEWED.has(value) ? pyBind(value) : pyArg(value);
 }
+
+// How a store's name tracks a value written, by its setter or by Python, a
+// function JavaScript called with an array among it: what it keeps of it, an
+// array or a plain object of JavaScript's as Python's own list or dict, at any
+// depth, as a view keeps one JavaScript writes into it (`entering`), and as
+// Svelte's `$state` makes such a value its own. A change made through the store
+// is then followed, and one made to what was handed is not, as there: kept as
+// it was handed, a `push` through the store reached the array and no page.
+// Anything else as it is, Python's own told first (`ownedByJavascript`): every
+// write of a store's name asks, but of the value the name holds already, kept
+// as it was written, which `rows += [x]` writes again.
+export const storeTrack = (value, bump) =>
+    track(
+        value !== bump.held && object(value) && ownedByJavascript(value) && (Array.isArray(value) || plainObject(value)) ? entering(value) : value,
+        bump
+    );
 
 // And what an instance's `@export` hands JavaScript, the value its name holds
 // as each binding of the name hands it over (`liveExport`): the one function

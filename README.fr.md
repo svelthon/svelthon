@@ -856,21 +856,22 @@ Où on en est, chaque ligne tenue par un test :
 | un enfant atteint par `.items()`, `.values()` ou `.get()` | oui |
 | `<p {**attrs}>`, un étalement | oui |
 | `<p title={items}>`, un attribut portant le conteneur lui-même | non, **et JavaScript non plus** |
-| `store.rows.push(x)`, le conteneur d'un store muté depuis JavaScript | non, **et `store.rows = [...]` si** |
+| `store.rows.push(x)`, le conteneur d'un store muté depuis JavaScript, un tableau qu'il a reçu aussi | oui |
 
-Le premier `non` est la sémantique de l'hôte, pas une limite à nous : Svelte
+Le `non` est la sémantique de l'hôte, pas une limite à nous : Svelte
 compare la valeur à celle qu'il a appliquée la fois d'avant, par identité, dans
 son propre écrivain DOM, où aucun signal n'atteint, et un conteneur muté est le
 même objet. Un composant Svelte idiomatique avec `$state` se comporte exactement
 pareil, ce que `tests/parity.test.js` démontre en faisant tourner le même
 composant dans les deux langages, ligne pour ligne.
 
-Le second est la frontière du mécanisme. Le suivi enveloppe les points d'entrée
-de Brython, `call_attr`, `$setitem` et `$delitem`, donc une mutation écrite en
-Python notifie où qu'elle soit écrite, et `Array.prototype.push` appelé depuis
-JavaScript passe à côté des trois. Remplacer le conteneur notifie, puisque ça
-passe par le setter du store ; la mutation Python suivante rattrape la vraie
-valeur. `tests/store-from-javascript.test.js` tient les deux moitiés.
+Les noms d'un store sont des états comme le `$state` de Svelte en est un : un
+tableau ou un objet simple que JavaScript donne à un store, `store.rows = [...]`
+ou `store.take(rows)`, devient la liste ou le dict du store, comme `$state` en
+fait un proxy, et le store tend à JavaScript sa vue, dont le `push` est
+l'`append` de Python. Ce qui a été donné n'est pas au store : modifié ensuite,
+il ne prévient personne, comme avec `$state`.
+`tests/store-from-javascript.test.js` tient les deux moitiés.
 
 Toutes les autres lignes propagent, et chacune est tenue par un test.
 
@@ -1854,7 +1855,7 @@ parsing, que seul le compilateur charge ; le README de Bryntime en donne le poid
 
 ## État
 
-Validé par `npm test`, 2 133 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 2 134 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
