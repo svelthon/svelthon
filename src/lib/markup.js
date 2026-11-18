@@ -3810,9 +3810,16 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         // field's, and the control unchecked itself.
         const fielded = found !== null && (found.braced || value !== 'undefined');
 
+        // Named, and such a value a getter, which Svelte's read of the action's
+        // value evaluates, following it (`deep_read_state`), and nothing else:
+        // in an array, it was evaluated at the install and again at that read,
+        // three times in all with the field's, where Svelte's own group
+        // evaluates it twice.
+        const chosen = fielded ? `get chosen() { return ${value}; }` : `chosen: ${value}`;
+
         return (
-            `use:${GROUP_ACTION}={[${read}, (${BOUND_VALUE}) => ${write}, ${value}, ${fielded}, ` +
-            `${JSON.stringify(targetKey(expr))}, ${NAMESPACE}, [${where.join(', ')}]]}${checked}`
+            `use:${GROUP_ACTION}={{ current: ${read}, write: (${BOUND_VALUE}) => ${write}, ${chosen}, fielded: ${fielded}, ` +
+            `binding: ${JSON.stringify(targetKey(expr))}, scope: ${NAMESPACE}, where: [${where.join(', ')}] }}${checked}`
         );
     };
 

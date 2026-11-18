@@ -16,7 +16,7 @@ test('a group action with no scope mounts', () => {
         chosen = value;
     };
 
-    expect(() => group(node, [chosen, write, undefined, false, '"picked"', undefined])).not.toThrow();
+    expect(() => group(node, { current: chosen, write, chosen: undefined, fielded: false, binding: '"picked"', scope: undefined })).not.toThrow();
 
     node.remove();
 });

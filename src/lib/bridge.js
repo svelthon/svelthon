@@ -4091,18 +4091,22 @@ const attributesOf = (node) => {
     return ATTRIBUTES === undefined ? undefined : node[ATTRIBUTES];
 };
 
-export function group(node, [current, write, chosen, fielded, binding, scope, where = []]) {
+export function group(node, given) {
+    const { current, write, fielded, binding, scope, where = [] } = given;
     const boxes = node.type === 'checkbox';
     const token = groupToken(scope, binding);
 
     node.$svelthonGroup = targetOf(token, where);
 
     // The value the markup pass compiled from the tag, and whether the field
-    // evaluates it, as any value but static text. It is also what makes the
-    // action update when the value changes, as Svelte's own group reads its
-    // value with the model. `undefined` for a value that is static text, which
-    // the node holds and nothing can move.
-    let picked = chosen;
+    // evaluates it, as any value but static text. `undefined` for a value that
+    // is static text, which the node holds and nothing can move. One the field
+    // evaluates is read off the field, and never here: a getter, evaluated once
+    // more by Svelte's own read of the action's value, which follows what it
+    // reads (`deep_read_state`), as Svelte's own group evaluates it a second
+    // time to follow it. Read here as well, at the install and at each update,
+    // a `value={tickets.next()}` took one ticket more than Svelte's.
+    let picked = fielded ? undefined : given.chosen;
 
     // Read at each use, after Svelte has written the attributes of the turn: a
     // spread's value, its own or an attribute's it overrides, then the value as
@@ -4306,10 +4310,10 @@ export function group(node, [current, write, chosen, fielded, binding, scope, wh
     else queueMicrotask(() => (boxes || node.checked) && changed());
 
     return {
-        update([next, , given, , , , moved = []]) {
-            node.$svelthonGroup = targetOf(token, moved);
-            picked = given;
-            show(next);
+        update(next) {
+            node.$svelthonGroup = targetOf(token, next.where ?? []);
+            if (!fielded) picked = next.chosen;
+            show(next.current);
         },
         destroy() {
             node.removeEventListener('change', changed);
