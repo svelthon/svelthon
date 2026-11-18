@@ -4,6 +4,7 @@ import PlainPropParent from './fixtures/PlainPropParent.svelte';
 import PlainImportParent from './fixtures/PlainImportParent.svelte';
 import RecordParent from './fixtures/RecordParent.svelte';
 import ElementSpreadParent from './fixtures/ElementSpreadParent.svelte';
+import HandedRoot from './fixtures/HandedRoot.svelte';
 
 const shownIn = (target) => (side) => {
     const root = target.querySelector(`[data-k="${side}"]`);
@@ -109,4 +110,38 @@ test('a dict changed in place and a record, spread on a svelte:element, are read
         ['t2', 't2', 't2', 'a b', 'r2', 't2', '1', true, true],
         [1, 1]
     ]);
+});
+
+// And a prop a Python parent hands a component, which the child reads each
+// time it reads it, as a Svelte child reads the getter its parent wrote: named,
+// spread, between quotes, from a row or a snippet's parameter, as a CSS
+// property and to a child the script holds. Svelte held each in a derived of
+// its own, and the child showed, and picked when clicked, the record the parent
+// had left. A prop that is neither a name nor a member Svelte holds in one of
+// its own, and the value between quotes it is part of, and so does Svelthon.
+test('a prop a Python parent hands is read again each time the child reads it', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+    const instance = mount(HandedRoot, { target });
+    const forms = ['named', 'spread', 'quoted', 'row', 'snippet', 'held', 'sum', 'mixed'];
+    const shown = (side) => {
+        const at = (k) => target.querySelector(`[data-k="${side}"] [data-k="${k}"]`);
+
+        for (const form of forms) at(`${form}-pick`).click();
+        flushSync();
+
+        return [
+            ...forms.map((form) => [at(form).getAttribute('href'), at(form).textContent, at(`${form}-pick`).textContent]),
+            at('css').closest('svelte-css-wrapper').style.getPropertyValue('--theme')
+        ];
+    };
+
+    flushSync();
+    instance.next();
+    flushSync();
+
+    const read = ['/record/B', 'B (1)', 'B'];
+    const held = ['/record/A', 'A! (1)', 'A!'];
+    const seen = [read, read, ['/record/B', 'Open B (1)', 'Open B'], read, read, read, held, held, 'blue'];
+
+    expect([shown('python'), shown('svelte')]).toEqual([seen, seen]);
 });

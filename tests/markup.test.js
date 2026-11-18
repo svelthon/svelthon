@@ -37,6 +37,13 @@ import { parse } from 'svelte/compiler';
 const READ = String.raw`\(__expr_reread\.(__expr_\w+) \? \(\{ get value\(\) \{ return __pybridge\.reading\(__expr_reread, '\1', \(\) => \1\(\)\); \} \}\)\.value : \1_memo\)`;
 const read = (before, after = '') => new RegExp(`${before}${READ}${after}`);
 
+// And a prop handed to a component, through a getter whatever it read, made
+// once beside the derived it reads.
+const fresh = (name) => `__pybridge.reading(__expr_reread, '${name}', () => ${name}())`;
+const handed = (name) =>
+    `{const ${name}_memo = $derived(${fresh(name)})}` +
+    `{const ${name}_handed = { get value() { return __expr_reread.${name} ? ${fresh(name)} : ${name}_memo; } }}`;
+
 // `(x := 1)` in a template writes the component's name through the namespace,
 // which is what makes it reach the signal. Python's own grammar forces the
 // parentheses inside a lambda, and that parenthesised form is the only one
@@ -1106,7 +1113,7 @@ describe('the attribute pass', () => {
     // `<svelte:self>` in a component written in Python is that component, and is
     // handed the Python value, a float as a float, as any Python child is.
     test('<svelte:self> is handed the Python values', () => {
-        expect(rewrite('<svelte:self value={x} />').out).toBe('<svelte:self value={__expr_child_0()} />');
+        expect(rewrite('<svelte:self value={x} />').out).toBe(`<svelte:self value={__expr_child_0_handed.value} />${handed('__expr_child_0')}`);
     });
 
     test('bind:group on a component is a prop binding, not an action', () => {

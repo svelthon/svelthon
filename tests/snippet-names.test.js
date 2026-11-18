@@ -83,11 +83,16 @@ const rewrite = (markup) => {
 const takes = (defs, ...names) =>
     defs.some((one) => one.startsWith(`def __expr_`) && one.includes(`(${names.join(', ')}):`));
 
+// A prop handed to a component, read through a getter made beside the
+// derived it reads (`unmemoized`), which holds the call.
+const handed = (out, prop, name, call) =>
+    out.includes(`<Card ${prop}={${name}_handed.value} />`) && out.includes(`{const ${name}_memo = $derived(__pybridge.reading(__expr_reread, '${name}', () => ${call}))}`);
+
 describe('a snippet name in a template expression', () => {
     test('is passed to the expression that reads it', () => {
         const { out, defs } = rewrite('{#snippet row(x)}<b>{x}</b>{/snippet}<Card {row} />');
 
-        expect(out).toContain('<Card row={__expr_1(__follow(row))} />');
+        expect(handed(out, 'row', '__expr_1', '__expr_1(__follow(row))')).toBe(true);
         expect(takes(defs, 'row')).toBe(true);
     });
 
@@ -100,7 +105,7 @@ describe('a snippet name in a template expression', () => {
     test('under whichever prop name the child gives it', () => {
         const { out } = rewrite('{#snippet row(x)}<b>{x}</b>{/snippet}<Card header={row} />');
 
-        expect(out).toContain('<Card header={__expr_1(__follow(row))} />');
+        expect(handed(out, 'header', '__expr_1', '__expr_1(__follow(row))')).toBe(true);
     });
 
     // Only the names the expression reads: `{item}` reads neither the snippet's

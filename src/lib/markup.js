@@ -256,6 +256,17 @@ function calledAtTop(expression) {
     return NAME_END.test(text.slice(0, last).trimEnd());
 }
 
+// Whether Svelte reads a prop written as this expression again at each read
+// of the child, as it reads a name or a member, rather than holding it in a
+// derived of its own (`should_wrap_in_derived`): Python's name, attribute or
+// subscript at the top.
+function readByMember(expression) {
+    const tree = targetTree(`(${expression}\n)`);
+    const ast = globalThis.__BRYTHON__.ast;
+
+    return tree instanceof ast.Name || tree instanceof ast.Attribute || tree instanceof ast.Subscript;
+}
+
 const WALRUS_NAME = new RegExp(`^\\s*(${NAME})`, 'u');
 const WALRUS_ARROW = /^\s*:=\s*/;
 
@@ -4024,16 +4035,33 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     // `<svelte:boundary>`, it is declared there, and what it raises the
     // boundary catches. One the author wrote a call in keeps its derived, as
     // Svelte keeps a call's.
-    const unmemoized = (inner, read, text = false) => {
-        if (callsAnything(inner)) return read;
+    //
+    // And a prop handed to a component (`handed`), which its child reads where
+    // a Svelte child reads the getter its parent wrote, at each read: through
+    // a getter, and a Svelte child under a Python parent posted the ticket the
+    // parent had left. The getter is made once, beside the derived: made at
+    // each read, it cost a hundred children read again at each count 7 %. A
+    // prop written by name that is neither a name nor a member (`readByMember`)
+    // is Svelte's to hold in a derived of its own, as it holds one of its own
+    // (`should_wrap_in_derived`), and so is the whole value between quotes it
+    // is part of; a spread Svelte reads again unless it calls something.
+    const unmemoized = (inner, read, text = false, handed = false) => {
+        if (callsAnything(inner) || (handed === 'prop' && !readByMember(inner))) return read;
 
         const called = /^(__expr_\w+)\(/.exec(read);
 
         if (called !== null) {
             const name = called[1];
             const fresh = `__pybridge.reading(__expr_reread, '${name}', () => ${read})`;
+            const memo = `{const ${name}_memo = $derived(${fresh})}`;
 
-            chain.memoRow(`{const ${name}_memo = $derived(${fresh})}`, mentioned(inner.trim()));
+            if (handed) {
+                chain.memoRow(`${memo}{const ${name}_handed = { get value() { return __expr_reread.${name} ? ${fresh} : ${name}_memo; } }}`, mentioned(inner.trim()));
+
+                return `${name}_handed.value`;
+            }
+
+            chain.memoRow(memo, mentioned(inner.trim()));
 
             return `(__expr_reread.${name} ? ({ get value() { return ${fresh}; } }).value : ${name}_memo)`;
         }
@@ -4046,8 +4074,8 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     // once the expression calls nothing (`unmemoized`). One the author wrote a
     // call in keeps the derived Svelte makes of the whole, as Svelte keeps a
     // call's: in the getter, `{**make()}` was called at each render.
-    const readThrough = (inner, read, through) =>
-        callsAnything(inner) ? through(read) : `({ get value() { return ${through(unmemoized(inner, read))}; } }).value`;
+    const readThrough = (inner, read, through, again = !callsAnything(inner)) =>
+        again ? `({ get value() { return ${through(unmemoized(inner, read))}; } }).value` : through(read);
 
     // `{}` holds no expression, which Svelte refuses: in the text or as the
     // value of an attribute it rendered nothing
@@ -4057,11 +4085,12 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         }
     };
 
-    // The text an expression renders (`unmemoized`).
-    const rendered = (inner) => {
+    // The text an expression renders (`unmemoized`), in a prop a component is
+    // handed as well (`handed`).
+    const rendered = (inner, handed = false) => {
         refuseEmpty(inner);
 
-        return unmemoized(inner, call(inner, '__text'), true);
+        return unmemoized(inner, call(inner, '__text'), true, handed);
     };
 
     // What an attribute's value compiles to, by its name and the tag it is on.
@@ -4089,9 +4118,16 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
             // the author's own expression is one, so Svelte warns about None
             // where it warns about `undefined`, after `save()` and not after a
             // name holding an optional handler. `?? undefined` is a form
-            // Svelte reads as no call, and changes no value.
-            if (heldChild() !== null) return `{${forChild(call(rewritten, '__bound', inner, 'child'))}}`;
-            if (isComponent(tag)) return `{${call(rewritten, '__bound', inner, toPythonChild() ? 'child' : '')}}`;
+            // Svelte reads as no call, and changes no value. Read again each
+            // time the child reads it, as any other prop (below): a callback or
+            // a text a field of a JavaScript object holds, replaced in place,
+            // stayed the first one the call answered.
+            if (heldChild() !== null) {
+                const again = !callsAnything(inner) && readByMember(inner);
+
+                return `{${readThrough(inner, call(rewritten, '__bound', inner, 'child'), (read) => forChild(read), again)}}`;
+            }
+            if (isComponent(tag)) return `{${unmemoized(inner, call(rewritten, '__bound', inner, toPythonChild() ? 'child' : ''), false, 'prop')}}`;
 
             const adapted = `${EVENT_WRAPPER}(${call(rewritten, '', inner)})`;
 
@@ -4105,7 +4141,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         // property JavaScript reads. Crossed as for a JavaScript child, whatever
         // the child is written in: kept Python for a Python child, a float was
         // written `[object Object]` into the style.
-        if (name.startsWith('--') && (isComponent(tag) || heldChild() !== null)) return `{${call(inner, '__bound')}}`;
+        if (name.startsWith('--') && (isComponent(tag) || heldChild() !== null)) return `{${unmemoized(inner, call(inner, '__bound'))}}`;
 
         // `class`, which Svelte hands to `clsx`, and the boolean attributes,
         // which the DOM reads for truth: both read Python's truth instead.
@@ -4136,15 +4172,20 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         // binds is read by the group alone, which compares it as Python does
         // (`choice`).
         //
+        // A prop is read again as an attribute is (`unmemoized`), each time
+        // the child reads it, when Svelte reads its own so (`readByMember`).
         if (heldChild() !== null) {
-            return `{${forChild(call(inner, '__bound', undefined, 'child'), name === 'value' ? 'scalar' : '')}}`;
+            const kind = name === 'value' ? 'scalar' : '';
+            const again = !callsAnything(inner) && readByMember(inner);
+
+            return `{${readThrough(inner, call(inner, '__bound', undefined, 'child'), (read) => forChild(read, kind), again)}}`;
         }
 
         const grouped = !isComponent(tag) && tag !== null && tagNames(markup, tag.start).has('bind:group');
         const kind = toPythonChild() ? 'child' : name !== 'value' ? '' : grouped ? 'choice' : 'scalar';
         const read = call(inner, '__bound', undefined, kind);
 
-        return `{${onElement(tag) ? unmemoized(inner, read) : read}}`;
+        return `{${onElement(tag) ? unmemoized(inner, read) : isComponent(tag) ? unmemoized(inner, read, false, 'prop') : read}}`;
     };
 
     const refuseLet = (name) => {
@@ -4195,7 +4236,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
 
                         const inner = markup.slice(index + 1, end);
 
-                        out += quotedLone ? attributeValue(named, inner) : `{${rendered(inner)}}`;
+                        out += quotedLone ? attributeValue(named, inner) : `{${rendered(inner, isComponent(tag) && 'prop')}}`;
                         region = null;
                         index = end + 1;
                         continue;
@@ -4399,17 +4440,19 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                         // the entries the spread reads, a fresh object at each
                         // read (`__spreadEntries`): the dict itself, the derived
                         // held the same object once it was changed in place,
-                        // which Svelte took for no change.
+                        // which Svelte took for no change. On a component, as
+                        // any prop is, each time the child reads one, and from
+                        // the entries too on a component a tag holds.
                         const spreadExpression = trimmed.slice(2);
 
                         out +=
                             heldChild() !== null
-                                ? `{...${forChild(call(spreadExpression, '', undefined, 'python'), 'spread')}}`
+                                ? `{...${readThrough(spreadExpression, call(spreadExpression, '__spreadEntries', undefined, 'python'), (entries) => forChild(entries, 'spread'))}}`
                                 : toPythonChild()
-                                  ? `{...${call(spreadExpression, '__spreadPython', undefined, 'python')}}`
+                                  ? `{...${unmemoized(spreadExpression, call(spreadExpression, '__spreadPython', undefined, 'python'))}}`
                                   : tag?.element !== undefined
                                     ? `{...${readThrough(spreadExpression, call(spreadExpression, '__spreadEntries', undefined, 'python'), (entries) => `__pybridge.elementSpread(${tag.element}, ${entries}, __event, ${spreadWrapper === '__spreadChoice'})`)}}`
-                                    : onElement(tag)
+                                    : onElement(tag) || isComponent(tag)
                                       ? `{...${unmemoized(spreadExpression, call(spreadExpression, spreadWrapper))}}`
                                       : `{...${call(spreadExpression, spreadWrapper)}}`;
                     } else if (trimmed.startsWith('...')) {
