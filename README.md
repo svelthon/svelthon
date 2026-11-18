@@ -258,6 +258,29 @@ Two of the six have their answer here already, two wait on a feature Svelte has
 not settled, and two are development tools. None is an oversight, and each is
 measured rather than assumed.
 
+### Slugs in every language
+
+`slugify` keeps every letter, in every script. Django's `|slugify` keeps ASCII
+only: it takes the accents off the letters it can decompose and drops every
+other letter, and its filter cannot pass the `allow_unicode` that would keep
+them.
+
+| title | Django's `\|slugify` | Svelthon's `slugify` |
+|---|---|---|
+| `Café Crème` | `cafe-creme` | `café-crème` |
+| `Œuvre complète` | `uvre-complete` | `œuvre-complète` |
+| `Straße` | `strae` | `straße` |
+| `Đường Đồng Khởi` | `uong-ong-khoi` | `đường-đồng-khởi` |
+| `Ελληνικά` | *empty* | `ελληνικά` |
+| `हिन्दी भाषा` | *empty* | `हिन्दी-भाषा` |
+
+For a site in any language but English, this is an address the reader
+recognises rather than one with letters missing, or no address at all. Two words
+that differ only by an accent keep two addresses, which
+[Étymobio](https://etymobio.forge.apps.education.fr) needs: some of its roots
+differ only by an accent. The text is composed first (NFC), so an `é` typed as
+one character and an `e` followed by a combining accent give the same slug.
+
 ## Compilation pipeline
 
 ```

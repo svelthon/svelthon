@@ -264,6 +264,30 @@ Deux des six ont déjà leur réponse ici, deux attendent une fonctionnalité qu
 Svelte n'a pas stabilisée, et deux sont des outils de développement. Aucune n'est
 un oubli, et chacune est mesurée plutôt que supposée.
 
+### Des slugs dans toutes les langues
+
+`slugify` garde chaque lettre, dans toutes les écritures. Le `|slugify` de Django
+ne garde que l'ASCII : il retire les accents des lettres qu'il sait décomposer et
+jette toutes les autres, et son filtre ne peut pas passer l'`allow_unicode` qui
+les garderait.
+
+| titre | `\|slugify` de Django | `slugify` de Svelthon |
+|---|---|---|
+| `Café Crème` | `cafe-creme` | `café-crème` |
+| `Œuvre complète` | `uvre-complete` | `œuvre-complète` |
+| `Straße` | `strae` | `straße` |
+| `Đường Đồng Khởi` | `uong-ong-khoi` | `đường-đồng-khởi` |
+| `Ελληνικά` | *vide* | `ελληνικά` |
+| `हिन्दी भाषा` | *vide* | `हिन्दी-भाषा` |
+
+Pour un site dans une autre langue que l'anglais, c'est une adresse que le
+lecteur reconnaît, plutôt qu'une adresse amputée de ses lettres, voire pas
+d'adresse du tout. Deux mots qui ne diffèrent que par un accent gardent deux
+adresses, ce dont [Étymobio](https://etymobio.forge.apps.education.fr) a besoin :
+certaines de ses racines ne diffèrent que par un accent. Le texte est d'abord
+composé (NFC), si bien qu'un `é` tapé en un seul caractère et un `e` suivi d'un
+accent combinant donnent le même slug.
+
 ## Chaîne de compilation
 
 ```
