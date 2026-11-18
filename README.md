@@ -37,6 +37,47 @@ styles, keyed lists, HMR, tree-shaking, all of it, with Python as the
 component language and **no runtime penalty at load**, because the compilation
 already happened.
 
+## The same Python on the server and in the browser
+
+SvelteKit renders a page twice: on the server, then in the browser, from data
+sent over the network. Both renders must read the same values, and JavaScript
+frameworks have always kept that promise, because their serialiser carries
+JavaScript's own values. A page written in Python keeps it too:
+
+```python
+# src/routes/scores/+page.server.py
+def load(event):
+    ada = {"name": "Ada"}
+    return {"by_year": {2025: (19.0, ada), 2024: (17.5, ada)}, "tags": {"py", "svelte"}}
+```
+
+```svelte
+<script lang="python">
+data: dict
+</script>
+
+{#each data["by_year"].items() as (year, row)}
+    <p>{year + 1}: {row[0]} by {row[1]["name"]}, a {type(row).__name__}</p>
+{/each}
+```
+
+The server's HTML, the hydrated page and a page reached by navigation all say
+`2026: 19.0 by Ada, a tuple`. What JSON would have made of the same data:
+
+| `load()` returns | Through JSON | What the page reads, server and browser |
+| --- | --- | --- |
+| `{2025: …}` | the key `"2025"`, and `year + 1` raises | the key `2025` |
+| `(19.0, ada)` | a list | a tuple |
+| `ada`, twice | two copies | one dict |
+| `{"py", "svelte"}` | refused | a set |
+| an instance of your class | refused | an instance, rebuilt as pickle rebuilds it |
+
+This is **pickle**, Python's own way of carrying a value from one process to
+another, which Bryntime writes for the browser and Svelthon installs in
+SvelteKit's `transport`, with no file of yours. It goes **one way only**: the
+server never rebuilds a class from what the browser sends. What crosses, what
+is refused and why: [What crosses to the browser](#what-crosses-to-the-browser).
+
 ## Quick start
 
 ```sh

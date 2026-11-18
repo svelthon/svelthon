@@ -36,6 +36,50 @@ scopés, listes à clé, HMR, tree-shaking, tout, avec Python comme langage de
 composant et **aucune pénalité au chargement**, puisque la compilation a déjà eu
 lieu.
 
+## Le même Python au serveur et dans le navigateur
+
+SvelteKit rend une page deux fois : au serveur, puis dans le navigateur, à
+partir de données envoyées par le réseau. Les deux rendus doivent lire les
+mêmes valeurs, et les frameworks JavaScript ont toujours tenu cette promesse,
+parce que leur sérialiseur transporte les valeurs propres à JavaScript. Une
+page écrite en Python la tient aussi :
+
+```python
+# src/routes/scores/+page.server.py
+def load(event):
+    ada = {"name": "Ada"}
+    return {"by_year": {2025: (19.0, ada), 2024: (17.5, ada)}, "tags": {"py", "svelte"}}
+```
+
+```svelte
+<script lang="python">
+data: dict
+</script>
+
+{#each data["by_year"].items() as (year, row)}
+    <p>{year + 1}: {row[0]} by {row[1]["name"]}, a {type(row).__name__}</p>
+{/each}
+```
+
+Le HTML du serveur, la page hydratée et une page atteinte par navigation
+affichent tous `2026: 19.0 by Ada, a tuple`. Ce que JSON aurait fait des mêmes
+données :
+
+| `load()` rend | Par JSON | Ce que lit la page, au serveur et dans le navigateur |
+| --- | --- | --- |
+| `{2025: …}` | la clé `"2025"`, et `year + 1` lève | la clé `2025` |
+| `(19.0, ada)` | une liste | un tuple |
+| `ada`, deux fois | deux copies | un seul dict |
+| `{"py", "svelte"}` | refusé | un set |
+| une instance de ta classe | refusée | une instance, refaite comme pickle la refait |
+
+C'est **pickle**, la façon propre à Python de porter une valeur d'un processus
+à un autre, que Bryntime écrit pour le navigateur et que Svelthon installe dans
+le `transport` de SvelteKit, sans aucun fichier de ta part. Il ne va **que dans
+un sens** : le serveur ne refait jamais une classe à partir de ce que le
+navigateur envoie. Ce qui traverse, ce qui est refusé et pourquoi : [Ce qui
+traverse vers le navigateur](#ce-qui-traverse-vers-le-navigateur).
+
 ## Démarrer
 
 ```sh
