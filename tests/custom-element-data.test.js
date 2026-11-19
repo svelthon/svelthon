@@ -122,13 +122,15 @@ test("a `<svelte:element>`'s name told by its text, or read as it renders", () =
 
     const quoted = compiled('<svelte:element this="{tag}" open={data}></svelte:element>');
     const memo = "__pybridge.reading(__expr_reread, '__expr_py_1', () => __expr_py_1())";
+    const afresh = "__pybridge.reading(__expr_reread, '__expr_py_1', this.expression, this.held)";
 
     expect(quoted).toEqual({
         out:
             '<svelte:boundary>{@const SvelthonElement0 = __expr_0()}<svelte:element this={SvelthonElement0}  ' +
             `open={({ get value() { return __pybridge.element(SvelthonElement0, "__truthy", ` +
-            `(__expr_reread.__expr_py_1 ? ({ get value() { return ${memo}; } }).value : __expr_py_1_memo)[0], "open"); } }).value}>` +
-            `</svelte:element></svelte:boundary>{const __expr_py_1_memo = $derived(${memo})}`,
+            `(__expr_reread.__expr_py_1 ? __expr_py_1_read.value : __expr_py_1_memo)[0], "open"); } }).value}>` +
+            `</svelte:element></svelte:boundary>{const __expr_py_1_memo = $derived(${memo})}` +
+            `{const __expr_py_1_read = { expression: () => __expr_py_1(), held: () => __expr_py_1_memo, get value() { return ${afresh}; } }}`,
         defs: ['return __bound(tag)', 'return __boxed(data)']
     });
 });

@@ -5,6 +5,8 @@ import PlainImportParent from './fixtures/PlainImportParent.svelte';
 import RecordParent from './fixtures/RecordParent.svelte';
 import ElementSpreadParent from './fixtures/ElementSpreadParent.svelte';
 import HandedRoot from './fixtures/HandedRoot.svelte';
+import WrittenPropRoot from './fixtures/WrittenPropRoot.svelte';
+import OptionalRoot from './fixtures/OptionalRoot.svelte';
 
 const shownIn = (target) => (side) => {
     const root = target.querySelector(`[data-k="${side}"]`);
@@ -119,10 +121,10 @@ test('a dict changed in place and a record, spread on a svelte:element, are read
 // its own, and the child showed, and picked when clicked, the record the parent
 // had left. A prop that is neither a name nor a member Svelte holds in one of
 // its own, and the value between quotes it is part of, and so does Svelthon.
-test('a prop a Python parent hands is read again each time the child reads it', () => {
+const handedAfterNext = (child) => {
     const target = document.body.appendChild(document.createElement('div'));
     const instance = mount(HandedRoot, { target });
-    const forms = ['named', 'spread', 'quoted', 'row', 'snippet', 'held', 'sum', 'mixed'];
+    const forms = ['named', 'spread', 'quoted', 'row', 'snippet', 'held', 'sum', 'mixed'].map((form) => form + child);
     const shown = (side) => {
         const at = (k) => target.querySelector(`[data-k="${side}"] [data-k="${k}"]`);
 
@@ -131,7 +133,7 @@ test('a prop a Python parent hands is read again each time the child reads it', 
 
         return [
             ...forms.map((form) => [at(form).getAttribute('href'), at(form).textContent, at(`${form}-pick`).textContent]),
-            at('css').closest('svelte-css-wrapper').style.getPropertyValue('--theme')
+            at(`css${child}`).closest('svelte-css-wrapper').style.getPropertyValue('--theme')
         ];
     };
 
@@ -139,9 +141,85 @@ test('a prop a Python parent hands is read again each time the child reads it', 
     instance.next();
     flushSync();
 
-    const read = ['/record/B', 'B (1)', 'B'];
-    const held = ['/record/A', 'A! (1)', 'A!'];
-    const seen = [read, read, ['/record/B', 'Open B (1)', 'Open B'], read, read, read, held, held, 'blue'];
+    return [shown('python'), shown('svelte')];
+};
 
-    expect([shown('python'), shown('svelte')]).toEqual([seen, seen]);
+const read = ['/record/B', 'B (1)', 'B'];
+const held = ['/record/A', 'A! (1)', 'A!'];
+const handedRead = [read, read, ['/record/B', 'Open B (1)', 'Open B'], read, read, read, held, held, 'blue'];
+
+test('a prop a Python parent hands is read again each time the child reads it', () => {
+    expect(handedAfterNext('')).toEqual([handedRead, handedRead]);
+});
+
+// And a Python child reads its prop again each time it reads it, as a Svelte
+// child reads the getter its parent wrote, while it has written nothing over
+// it, under a Svelte parent as under a Python one: held in the derived that
+// took it first, it showed and confirmed the ticket the parent had left. A
+// getter no Python parent wrote is counted as a read of JavaScript's own data,
+// which no signal follows, so that its text is read again at each render too.
+test('a Python child reads its prop again each time it reads it', () => {
+    expect(handedAfterNext('-py')).toEqual([handedRead, handedRead]);
+});
+
+// But a prop the child writes somewhere, in a function not called yet, Svelte
+// holds in a derived of the parent's getter, and so does the Python child: read
+// again, it showed the parent's new value beside its derived's old one. Written
+// through `globals()`, at a key written out or computed, as well: no name was
+// written, and the child showed one ticket beside its derived's other.
+test('a prop the Python child writes somewhere is held as Svelte holds it', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+    const instance = mount(WrittenPropRoot, { target });
+    const sides = ['python', 'svelte', 'named', 'computed'];
+    const shown = () => sides.map((side) => target.querySelector(`[data-k="${side}"] [data-k="child"]`).textContent);
+    const seen = [];
+
+    flushSync();
+    instance.change(2);
+    flushSync();
+    seen.push(shown());
+    for (const one of target.querySelectorAll('[data-k="mine"]')) one.click();
+    flushSync();
+    seen.push(shown());
+    instance.change(3);
+    flushSync();
+    seen.push(shown());
+
+    expect(seen).toEqual([
+        Array(4).fill('1|t1|t1!|t2'),
+        Array(4).fill('1|mine|mine!|t2'),
+        Array(4).fill('2|mine|mine!|t3')
+    ]);
+});
+
+// And an optional prop, whose getter is read again before its default is
+// chosen, as Svelte reads it: a field that came after the child took the
+// default was confirmed as the default, and one gone as what it had been.
+test('an optional prop whose field comes and goes reads its default as Svelte does', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+    const instance = mount(OptionalRoot, { target });
+    const shown = (side) => {
+        const at = (k) => target.querySelector(`[data-k="${side}"] [data-k="${k}"]`);
+
+        at('pick').click();
+        flushSync();
+
+        return `${at('summary').textContent} ${at('pick').textContent}`;
+    };
+    const seen = [];
+
+    flushSync();
+
+    for (let step = 0; step < 4; step++) {
+        instance.next();
+        flushSync();
+        seen.push(['present', 'absent'].map((first) => [shown(`${first}-python`), shown(`${first}-svelte`)]));
+    }
+
+    expect(seen).toEqual([
+        [['fallback (1) fallback', 'fallback (1) fallback'], ['B (1) B', 'B (1) B']],
+        [['B (2) B', 'B (2) B'], ['fallback (2) fallback', 'fallback (2) fallback']],
+        [['fallback (3) fallback', 'fallback (3) fallback'], ['C (3) C', 'C (3) C']],
+        [['C (4) C', 'C (4) C'], ['C (4) C', 'C (4) C']]
+    ]);
 });

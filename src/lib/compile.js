@@ -129,6 +129,96 @@ function refuseTemplateWalrus(ast, table, source, ranges) {
 }
 
 
+// The props the component writes besides the default its annotation declares
+// (`annotatedAt`), or changes a part of, wherever it does: Svelte's question
+// (`PROPS_IS_UPDATED`), which holds such a prop in a derived of its parent's
+// getter, where it reads again at each read the getter of one it never
+// writes. Read off the tree, each name where Python resolves it: a write the
+// module makes, or a function that declares the name `global`, a part
+// written, `ticket.x = 1` or `ticket[0] = 1`, and the markup's `:=`, which
+// writes through `__assign`. And through the module's namespace: a key written
+// `globals()["ticket"] = 1` is that prop, and a namespace handed on, updated or
+// written at a key no text says, any of them.
+const NAMESPACE_READS = new Set(['get', 'keys', 'values', 'items', 'copy', '__contains__', '__getitem__']);
+
+function writtenProps(table, body, props, annotatedAt) {
+    const written = new Set();
+
+    if (props.length === 0) return written;
+
+    const ast = $B.ast;
+    const wanted = new Set(props);
+    const scopes =[ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda, ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp];
+    const namespace = (node) =>
+        node instanceof ast.Call && node.func instanceof ast.Name && node.func.id === 'globals' && node.args.length === 0;
+    const literal = (node) => (node instanceof ast.Constant && typeof node.value === 'string' ? node.value : null);
+    const LOOKUPS = ['get', '__getitem__', 'setdefault'];
+    // `globals().get("ticket")`, or as the template spells it,
+    // `__getattr(globals(), "get")("ticket")`.
+    const lookedUp = (node) =>
+        node instanceof ast.Call &&
+        ((node.func instanceof ast.Attribute && namespace(node.func.value) && LOOKUPS.includes(node.func.attr)) ||
+            (node.func instanceof ast.Call && node.func.func instanceof ast.Name && node.func.func.id === RUNTIME.readAttr && namespace(node.func.args[0]) && LOOKUPS.includes(literal(node.func.args[1]))));
+    // What a target writes into: its root name, or the key `globals()` reads it
+    // at (`through`), `globals()["ticket"]["label"] = …` or
+    // `globals().get("ticket")[…]`, where the walk stopped at the call and took
+    // it for no prop: the page read the parent's new object again, beside a
+    // derived of the old one, and the click wrote into the new one.
+    const rootOf = (node) => {
+        let one = node;
+
+        while (one instanceof ast.Attribute || one instanceof ast.Subscript) {
+            if (one instanceof ast.Subscript && namespace(one.value)) return { name: literal(one.slice), through: true };
+            one = one.value;
+        }
+
+        if (lookedUp(one)) return { name: literal(one.args[0]), through: true };
+
+        return { name: one instanceof ast.Name ? one.id : null, through: false };
+    };
+    const all = () => props.forEach((one) => written.add(one));
+    const visit = (node, block) => {
+        if (Array.isArray(node)) return node.forEach((one) => visit(one, block));
+        if (node === null || typeof node !== 'object' || !Array.isArray(node.constructor?._fields)) return;
+
+        const inner = scopes.some((kind) => node instanceof kind) ? (table.blockOf(node) ?? block) : block;
+        const stored = node.ctx !== undefined && !(node.ctx instanceof ast.Load);
+        const { name, through } = stored ? (node instanceof ast.Name ? { name: node.id, through: false } : rootOf(node)) : { name: null, through: false };
+
+        if (node instanceof ast.Subscript && namespace(node.value)) {
+            const key = node.slice instanceof ast.Constant && typeof node.slice.value === 'string' ? node.slice.value : null;
+
+            if (stored && key === null) all();
+            else if (stored && wanted.has(key)) written.add(key);
+            return visit(node.slice, inner);
+        }
+        if (node instanceof ast.Attribute && namespace(node.value)) {
+            if (!NAMESPACE_READS.has(node.attr)) all();
+            return;
+        }
+        if (namespace(node)) all();
+        if (through && name === null) all();
+
+        if (wanted.has(name) && (through || block === table.top || isGlobalScope(scopeIn(block, name)))) written.add(name);
+
+        if (node instanceof ast.Call && node.func instanceof ast.Name && node.func.id === '__assign' && wanted.has(node.args[0]?.value)) {
+            written.add(node.args[0].value);
+        }
+
+        // The annotation's own line declares the default, and writes nothing
+        // of the child's.
+        if (node instanceof ast.AnnAssign && node.target instanceof ast.Name && (node.value == null || annotatedAt[node.target.id] === node.lineno)) {
+            return visit([node.annotation, node.value], inner);
+        }
+
+        for (const field of node.constructor._fields) visit(node[field], inner);
+    };
+
+    visit(body, table.top);
+
+    return written;
+}
+
 // What the module reads as globals and nothing gives it: no statement binds it,
 // and it is no builtin, no name Svelthon publishes, none of the compiler's and
 // none JavaScript forbids. Asked of the builtins' own names: `constructor` is on
@@ -1936,24 +2026,35 @@ function declarations(c) {
         // derived holds is kept beside it (`current`) and written again when
         // the write is the same scalar: a Python parent passes its own float,
         // None or string, never `===` to the child's.
-        ...c.props.flatMap((n) => [
+        //
+        // What the parent passes is read again from its getter while the
+        // child has written nothing over it, as a Svelte child reads it at
+        // each read, when it may move with no signal (`passed`), and noted so
+        // at each read of the getter (`given`). Save a prop the component
+        // writes somewhere (`writtenProps`), which Svelte holds in a derived of
+        // the getter as this one is: read again, it showed the parent's new
+        // value beside a derived of its own that kept the old. And save a
+        // route's `data`, which SvelteKit hands as the state it replaces at
+        // each navigation.
+        ...c.props.flatMap((n, _, __, routed = (n === 'data' && routeComponent(c.source)) || c.written.has(n)) => [
             `let ${local(n)} = $state.raw(undefined);`,
             `let ${rev(n)} = $state.raw(0);`,
-            `const ${fallback(n)} = { declared: undefined, value: undefined, dirty: true, overridden: false, absent: false, current: undefined };`,
+            `const ${fallback(n)} = { declared: undefined, value: undefined, dirty: true, overridden: false, absent: false, current: undefined, fresh: true, flips: -1 };`,
             `const ${bump(n)} = () => { ${rev(n)} += 1; };`,
             // What JavaScript holds, as Svelte's derived holds it, which a write
             // is compared with: the default's own Python value is kept beside
             // it, and read when the derived stands for the absence.
             `let ${given(n)} = $derived.by(() => {` +
                 ` ${fallback(n)}.overridden = false;` +
-                ` const __passed = __props.${n};` +
+                ` const __passed = ${routed ? `__props.${n}` : `__pybridge.given(__props, '${n}', ${fallback(n)})`};` +
                 ` ${fallback(n)}.absent = __passed === undefined;` +
                 ` if (!${fallback(n)}.absent) { ${fallback(n)}.dirty = true; return (${fallback(n)}.current = __passed); }` +
                 ` if (${fallback(n)}.dirty) { ${fallback(n)}.dirty = false; ${fallback(n)}.value = ${fallback(n)}.declared; }` +
                 ` return (${fallback(n)}.current = __plainScalar(${fallback(n)}.value)); });`,
             `const ${pick(n)} = () => {` +
                 ` const __held = ${given(n)};` +
-                ` return ${fallback(n)}.overridden ? ${local(n)} : ${fallback(n)}.absent ? ${fallback(n)}.value : __held; };`,
+                ` return ${fallback(n)}.overridden ? ${local(n)} : ` +
+                `${routed ? `${fallback(n)}.absent ? ${fallback(n)}.value : __held` : `__pybridge.passed(__props, '${n}', __held, ${fallback(n)})`}; };`,
             // Read by Svelte's own compiler and not by ours: a snippet is a
             // prop, and `{@render name(…)}` references the bare name. Python
             // reaches the same value through the namespace accessor below, and
@@ -3062,6 +3163,7 @@ function compile(
         bindables,
         defaulted,
         annotatedAt,
+        written: writtenProps(table, root._ast.body, props, annotatedAt),
         // A custom element publishes an accessor per name the props
         // destructure, so it reads no parent's value by a second one.
         element: element && !store && !plain,

@@ -3024,6 +3024,10 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     // Whether the quoted value being read is one interpolation and nothing
     // else, `data="{value}"`.
     let quotedLone = false;
+    // And, on a component, how its interpolations are handed (`unmemoized`):
+    // read again when each is a name or a member, as Svelte reads such a value,
+    // and held whole otherwise, as Svelte holds it.
+    let quotedHanded = false;
     let region = null;
 
     // The index of the closing quote of a directive whose quotes are being
@@ -4042,28 +4046,49 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     // parent had left. The getter is made once, beside the derived: made at
     // each read, it cost a hundred children read again at each count 7 %. A
     // prop written by name that is neither a name nor a member (`readByMember`)
-    // is Svelte's to hold in a derived of its own, as it holds one of its own
+    // is held in its derived, as Svelte holds one of its own in one
     // (`should_wrap_in_derived`), and so is the whole value between quotes it
-    // is part of; a spread Svelte reads again unless it calls something.
+    // is part of (`held`); a spread Svelte reads again unless it calls
+    // something. The getter tells a Python child that its parent is Python,
+    // which weighed its own reads of JavaScript's data, and whether what it
+    // hands was read afresh (`__pybridge.handed`): held in Svelte's derived, a
+    // prop told it nothing, and the child read it again at each render.
     const unmemoized = (inner, read, text = false, handed = false) => {
-        if (callsAnything(inner) || (handed === 'prop' && !readByMember(inner))) return read;
-
         const called = /^(__expr_\w+)\(/.exec(read);
+        const calls = callsAnything(inner);
+
+        // Weighed in its derived (`__pybridge.reading`), and afresh beside it
+        // by a getter made once with what it reads: made at each read, with
+        // the functions it hands, a Python child of a JavaScript parent paid
+        // for them at each render.
+        const memo = (name) => `{const ${name}_memo = $derived(__pybridge.reading(__expr_reread, '${name}', () => ${read}))}`;
+        const reader = (name, value) =>
+            `{const ${name}_read = { expression: () => ${read}, held: () => ${name}_memo, get value() { return ${value}; } }}`;
+        const afresh = (name) => `__pybridge.reading(__expr_reread, '${name}', this.expression, this.held)`;
+
+        if (handed && called !== null) {
+            const name = called[1];
+            const again = !calls && (handed === 'spread' || (handed === 'prop' && readByMember(inner)));
+
+            chain.memoRow(
+                again
+                    ? memo(name) +
+                          reader(name, `__expr_reread.${name} ? __pybridge.handed(${afresh(name)}, true) : __pybridge.handed(${name}_memo, __expr_reread.${name})`)
+                    : `{const ${name}_memo = $derived(${read})}{const ${name}_read = { get value() { return __pybridge.handed(${name}_memo, false); } }}`,
+                mentioned(inner.trim())
+            );
+
+            return `${name}_read.value`;
+        }
+
+        if (calls) return read;
 
         if (called !== null) {
             const name = called[1];
-            const fresh = `__pybridge.reading(__expr_reread, '${name}', () => ${read})`;
-            const memo = `{const ${name}_memo = $derived(${fresh})}`;
 
-            if (handed) {
-                chain.memoRow(`${memo}{const ${name}_handed = { get value() { return __expr_reread.${name} ? ${fresh} : ${name}_memo; } }}`, mentioned(inner.trim()));
+            chain.memoRow(memo(name) + reader(name, afresh(name)), mentioned(inner.trim()));
 
-                return `${name}_handed.value`;
-            }
-
-            chain.memoRow(memo, mentioned(inner.trim()));
-
-            return `(__expr_reread.${name} ? ({ get value() { return ${fresh}; } }).value : ${name}_memo)`;
+            return `(__expr_reread.${name} ? ${name}_read.value : ${name}_memo)`;
         }
 
         return text && mentioned(inner.trim()).some((one) => chain.reread(one) !== null) ? `({ get value() { return ${read}; } }).value` : read;
@@ -4076,6 +4101,23 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     // call's: in the getter, `{**make()}` was called at each render.
     const readThrough = (inner, read, through, again = !callsAnything(inner)) =>
         again ? `({ get value() { return ${through(unmemoized(inner, read))}; } }).value` : through(read);
+
+    // How the interpolations of a component's value between quotes, from its
+    // opening quote `at`, are handed (`quotedHanded`).
+    const handedBetween = (at, closing) => {
+        for (let i = at + 1; i < markup.length && markup[i] !== closing; i++) {
+            if (markup[i] !== '{') continue;
+
+            const end = closingBrace(markup, i);
+
+            if (end === -1) break;
+            if (callsAnything(markup.slice(i + 1, end)) || !readByMember(markup.slice(i + 1, end))) return 'held';
+
+            i = end;
+        }
+
+        return 'prop';
+    };
 
     // `{}` holds no expression, which Svelte refuses: in the text or as the
     // value of an attribute it rendered nothing
@@ -4236,7 +4278,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
 
                         const inner = markup.slice(index + 1, end);
 
-                        out += quotedLone ? attributeValue(named, inner) : `{${rendered(inner, isComponent(tag) && 'prop')}}`;
+                        out += quotedLone ? attributeValue(named, inner) : `{${rendered(inner, quotedHanded)}}`;
                         region = null;
                         index = end + 1;
                         continue;
@@ -4335,6 +4377,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 quote = char;
                 quotedAttribute = named;
                 quotedLone = lone !== -1;
+                quotedHanded = isComponent(tag) && handedBetween(index, char);
             } else if (char === '{') {
                 const end = closingBrace(markup, index);
                 if (end === -1 && swallowed(markup, index)) {
@@ -4449,11 +4492,11 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                             heldChild() !== null
                                 ? `{...${readThrough(spreadExpression, call(spreadExpression, '__spreadEntries', undefined, 'python'), (entries) => forChild(entries, 'spread'))}}`
                                 : toPythonChild()
-                                  ? `{...${unmemoized(spreadExpression, call(spreadExpression, '__spreadPython', undefined, 'python'))}}`
+                                  ? `{...${unmemoized(spreadExpression, call(spreadExpression, '__spreadPython', undefined, 'python'), false, 'spread')}}`
                                   : tag?.element !== undefined
                                     ? `{...${readThrough(spreadExpression, call(spreadExpression, '__spreadEntries', undefined, 'python'), (entries) => `__pybridge.elementSpread(${tag.element}, ${entries}, __event, ${spreadWrapper === '__spreadChoice'})`)}}`
                                     : onElement(tag) || isComponent(tag)
-                                      ? `{...${unmemoized(spreadExpression, call(spreadExpression, spreadWrapper))}}`
+                                      ? `{...${unmemoized(spreadExpression, call(spreadExpression, spreadWrapper), false, isComponent(tag) && 'spread')}}`
                                       : `{...${call(spreadExpression, spreadWrapper)}}`;
                     } else if (trimmed.startsWith('...')) {
                         throw refuse(

@@ -438,6 +438,51 @@ const INITIALIZING = new Set();
 // loads (`__pybridge.deriving`).
 let derive;
 
+// The reads of a prop no Python parent handed, whether the getter just read
+// was a Python parent's and whether what it handed may move unseen (`given`),
+// and how many expressions have started reading JavaScript's own data
+// (`reading`).
+let UNFOLLOWED = 0;
+let HANDED = false;
+let FRESH = true;
+let FLIPS = 0;
+
+// The getters of those props read while expressions are weighed, three entries
+// each, the props, the key and what it answered, and how deep the weighing is
+// (`reading`).
+const PASSED = [];
+let WEIGHED = 0;
+
+// A prop read from its parent's getter, and noted on what the child keeps of
+// it (`noted`): whether the getter was a Python parent's, which weighed its
+// own reads of JavaScript's data, and whether what it handed may move with no
+// signal, a JavaScript parent's getter or a Python one's that read such data.
+const given = (props, key, noted) => {
+    HANDED = false;
+    FRESH = true;
+
+    const value = props[key];
+
+    if (!HANDED) {
+        UNFOLLOWED += 1;
+        if (WEIGHED > 0) PASSED.push(props, key, value);
+    }
+
+    noted.fresh = FRESH;
+    noted.flips = FLIPS;
+
+    return value;
+};
+
+// Whether each getter read answers what it answered then.
+const unmoved = (reads) => {
+    for (let at = 0; at < reads.length; at += 3) {
+        if (reads[at][reads[at + 1]] !== reads[at + 2]) return false;
+    }
+
+    return true;
+};
+
 export const __pybridge = {
     // Whether the components run in a browser or render on a server, as Svelte
     // tells them apart: by what the code was resolved for (`esm-env`), and not
@@ -549,17 +594,53 @@ export const __pybridge = {
     // render, as Svelte reads one, where one that read only Python's is held
     // in its derived (`unmemoized`). Held whatever it read, the page kept the
     // field of a JavaScript object changed in place when it rendered again
-    // for another reason.
-    reading(flags, key, expression) {
+    // for another reason. And a prop no Python parent handed (`given`), whose
+    // getters are kept with what they answered and with what the expression
+    // gave: read again at a render, it is evaluated again only once one of
+    // them answers otherwise, or once its derived (`held`) moved. Evaluated
+    // again at each render, the Python children of a JavaScript parent cost
+    // three quarters more each time it rendered them again. Kept so, the
+    // getters are handed on to the expression that reads this one.
+    reading(flags, key, expression, held) {
+        if (held !== undefined && typeof flags[key] === 'object') {
+            held();
+
+            const kept = flags[key];
+
+            if (typeof kept === 'object' && unmoved(kept.reads)) {
+                UNFOLLOWED += 1;
+                if (WEIGHED > 0) PASSED.push(...kept.reads);
+
+                return kept.value;
+            }
+        }
+
         const before = core.javascriptReads();
+        const unfollowed = UNFOLLOWED;
+        const start = PASSED.length;
+        let value;
+        let done = false;
 
         core.weighingReads(true);
+        WEIGHED += 1;
 
         try {
-            return expression();
+            value = expression();
+            done = true;
+
+            return value;
         } finally {
             core.weighingReads(false);
-            flags[key] = core.javascriptReads() !== before;
+            WEIGHED -= 1;
+
+            let fresh = core.javascriptReads() !== before;
+
+            if (UNFOLLOWED !== unfollowed) fresh ||= !done || { value, reads: PASSED.slice(start) };
+            if (fresh && !flags[key]) FLIPS += 1;
+
+            flags[key] = fresh;
+
+            if (WEIGHED === 0 && PASSED.length !== 0) PASSED.length = 0;
         }
     },
 
@@ -567,6 +648,50 @@ export const __pybridge = {
     // read (`javascriptRead`), an array Python reads as a list among them.
     prop(value) {
         core.javascriptRead(value);
+
+        return value;
+    },
+
+    // What a prop the parent passes holds, the first time and each time a
+    // signal moves it (`given`).
+    given(props, key, noted) {
+        return given(props, key, noted);
+    },
+
+    // And each time the child reads it while it has written nothing over it,
+    // as a Svelte child reads its parent's getter at each read, when it may
+    // move with no signal (`given`): held in the derived that took it first, a
+    // Python child confirmed the ticket its JavaScript parent had left. Read
+    // once more after an expression somewhere starts reading JavaScript's own
+    // data, which may be the one its parent's getter reads. Its default is
+    // chosen once the getter has answered, by the derived's rule, Svelte's
+    // (`fallback_dirty`): chosen first, a field that came after the child took
+    // the default was confirmed as the default, and one gone as what it had
+    // been.
+    passed(props, key, held, noted) {
+        if (!noted.fresh && noted.flips === FLIPS) return noted.absent ? noted.value : held;
+
+        const value = given(props, key, noted);
+
+        if (value !== undefined) {
+            noted.dirty = true;
+
+            return value;
+        }
+
+        if (noted.dirty) {
+            noted.dirty = false;
+            noted.value = noted.declared;
+        }
+
+        return noted.value;
+    },
+
+    // What a Python parent's getter hands (`given`), and whether it may move
+    // with no signal: read afresh, the expression read JavaScript's own data.
+    handed(value, fresh) {
+        HANDED = true;
+        FRESH = fresh;
 
         return value;
     },
@@ -591,6 +716,9 @@ export const __pybridge = {
     // value itself to one written in Python, and JavaScript's to any other, as
     // a child named by its import gets it.
     child(component, value, kind = '') {
+        HANDED = true;
+        FRESH = true;
+
         // Handed through a `{@render}` argument, which is Python, it comes
         // back as the adapter made for it, which knows the component.
         const python = pythonComponent(component);

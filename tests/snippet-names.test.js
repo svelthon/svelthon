@@ -86,7 +86,7 @@ const takes = (defs, ...names) =>
 // A prop handed to a component, read through a getter made beside the
 // derived it reads (`unmemoized`), which holds the call.
 const handed = (out, prop, name, call) =>
-    out.includes(`<Card ${prop}={${name}_handed.value} />`) && out.includes(`{const ${name}_memo = $derived(__pybridge.reading(__expr_reread, '${name}', () => ${call}))}`);
+    out.includes(`<Card ${prop}={${name}_read.value} />`) && out.includes(`{const ${name}_memo = $derived(__pybridge.reading(__expr_reread, '${name}', () => ${call}))}`);
 
 describe('a snippet name in a template expression', () => {
     test('is passed to the expression that reads it', () => {

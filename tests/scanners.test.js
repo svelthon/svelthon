@@ -28,10 +28,14 @@ import '../src/lib/compile.js';
 const rewrite = (markup) => pythonExpressions(markup, collector([]));
 
 // A text whose expression calls nothing, read from its derived while it reads
-// only Python's, and afresh once it reads JavaScript's own data; the derived
-// declared at the markup's end.
+// only Python's, and afresh once it reads JavaScript's own data, by a getter
+// made once beside it; the two declared at the markup's end.
 const FRESH = "__pybridge.reading(__expr_reread, '__expr_0', () => __expr_0())";
-const READ = `<p>{(__expr_reread.__expr_0 ? ({ get value() { return ${FRESH}; } }).value : __expr_0_memo)}</p>{const __expr_0_memo = $derived(${FRESH})}`;
+const AFRESH = "__pybridge.reading(__expr_reread, '__expr_0', this.expression, this.held)";
+const READ =
+    '<p>{(__expr_reread.__expr_0 ? __expr_0_read.value : __expr_0_memo)}</p>' +
+    `{const __expr_0_memo = $derived(${FRESH})}` +
+    `{const __expr_0_read = { expression: () => __expr_0(), held: () => __expr_0_memo, get value() { return ${AFRESH}; } }}`;
 
 // A brace that closes the expression, and one that only looks like it.
 describe('closingBrace reads through a string', () => {

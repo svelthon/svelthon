@@ -34,15 +34,16 @@ import { parse } from 'svelte/compiler';
 // A Python expression that calls nothing, as the markup reads it: from its
 // derived, or afresh once it has read JavaScript's own data (`unmemoized`),
 // written between `before` and `after`.
-const READ = String.raw`\(__expr_reread\.(__expr_\w+) \? \(\{ get value\(\) \{ return __pybridge\.reading\(__expr_reread, '\1', \(\) => \1\(\)\); \} \}\)\.value : \1_memo\)`;
+const READ = String.raw`\(__expr_reread\.(__expr_\w+) \? \1_read\.value : \1_memo\)`;
 const read = (before, after = '') => new RegExp(`${before}${READ}${after}`);
 
-// And a prop handed to a component, through a getter whatever it read, made
-// once beside the derived it reads.
-const fresh = (name) => `__pybridge.reading(__expr_reread, '${name}', () => ${name}())`;
+// And a prop handed to a component, a name or a member, through a getter made
+// once beside the derived it reads, and telling a Python child its parent is
+// Python and whether it read afresh.
 const handed = (name) =>
-    `{const ${name}_memo = $derived(${fresh(name)})}` +
-    `{const ${name}_handed = { get value() { return __expr_reread.${name} ? ${fresh(name)} : ${name}_memo; } }}`;
+    `{const ${name}_memo = $derived(__pybridge.reading(__expr_reread, '${name}', () => ${name}()))}` +
+    `{const ${name}_read = { expression: () => ${name}(), held: () => ${name}_memo, get value() { return __expr_reread.${name} ? ` +
+    `__pybridge.handed(__pybridge.reading(__expr_reread, '${name}', this.expression, this.held), true) : __pybridge.handed(${name}_memo, __expr_reread.${name}); } }}`;
 
 // `(x := 1)` in a template writes the component's name through the namespace,
 // which is what makes it reach the signal. Python's own grammar forces the
@@ -640,11 +641,14 @@ describe('pythonExpressions', () => {
     test('an interpolation becomes a call', () => {
         const { out, defs } = rewrite('<p>{count}</p>');
         const fresh = "__pybridge.reading(__expr_reread, '__expr_0', () => __expr_0())";
+        const afresh = "__pybridge.reading(__expr_reread, '__expr_0', this.expression, this.held)";
 
         // `__text` is the wrapper an interpolation gets: Python's str(), so a
         // list renders `['a']` rather than JavaScript's `a`.
         expect(out).toBe(
-            `<p>{(__expr_reread.__expr_0 ? ({ get value() { return ${fresh}; } }).value : __expr_0_memo)}</p>{const __expr_0_memo = $derived(${fresh})}`
+            '<p>{(__expr_reread.__expr_0 ? __expr_0_read.value : __expr_0_memo)}</p>' +
+                `{const __expr_0_memo = $derived(${fresh})}` +
+                `{const __expr_0_read = { expression: () => __expr_0(), held: () => __expr_0_memo, get value() { return ${afresh}; } }}`
         );
         expect(defs[0]).toContain('return __text(count)');
     });
@@ -1113,7 +1117,7 @@ describe('the attribute pass', () => {
     // `<svelte:self>` in a component written in Python is that component, and is
     // handed the Python value, a float as a float, as any Python child is.
     test('<svelte:self> is handed the Python values', () => {
-        expect(rewrite('<svelte:self value={x} />').out).toBe(`<svelte:self value={__expr_child_0_handed.value} />${handed('__expr_child_0')}`);
+        expect(rewrite('<svelte:self value={x} />').out).toBe(`<svelte:self value={__expr_child_0_read.value} />${handed('__expr_child_0')}`);
     });
 
     test('bind:group on a component is a prop binding, not an action', () => {
