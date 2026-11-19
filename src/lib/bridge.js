@@ -697,6 +697,13 @@ export const __pybridge = {
         return value;
     },
 
+    // Whether what a pattern's element holds is the absence its default stands
+    // in for: `undefined`, as JavaScript takes a default, and None, which is
+    // `undefined` at every door.
+    absent(value) {
+        return value === undefined || value === NONE;
+    },
+
     // A declared class bound by its statement: one whose metaclass is the
     // author's keeps the accessor that follows it (`declared`); any other is
     // written as the namespace's own property, read as any other name is, for
@@ -1390,11 +1397,11 @@ export const __pybridge = {
     // the snippet takes apart itself (`snippetParameters`): the value a
     // server's crossing kept for it before crossing, which its announcement took
     // back, or what the call handed it, read as every door's is; its default
-    // when nothing was handed, as Svelte reads one on `undefined`.
+    // when nothing was handed, or None, as Svelte reads one on `undefined`.
     param(value, served, at, fallback) {
         const given = served !== null && at < served.length ? served[at] : value;
 
-        return given === undefined && fallback !== undefined ? fallback() : pyBind(given);
+        return __pybridge.absent(given) && fallback !== undefined ? fallback() : pyBind(given);
     },
 
     // A default of a positional pattern taken under its token, and a name an
@@ -4163,7 +4170,10 @@ function directiveCallable(member) {
 // the rule when it runs later, on a click.
 //
 // `otherwise`, when given, is a callable whose result stands for a name that is
-// neither: the default of a key in a pattern, `{#each rows as {id=0}}`.
+// neither, or that holds None, which is `undefined` at every door, as Svelte
+// takes a default for `undefined`: the default of a key in a pattern,
+// `{#each rows as {id=0}}`. Held as a value, `{"id": None}` showed nothing
+// where Svelte's `{id: undefined}` showed `0`.
 export function readAttr(target, name, otherwise) {
     // A function a module's namespace exports, `importjs * as callbacks`, is
     // called as JavaScript calls a member (`jsMethod`): on the receiver it is
@@ -4214,12 +4224,12 @@ export function readAttr(target, name, otherwise) {
     // With a default, so a miss costs no exception: building one on every field
     // read of every dict would be the whole cost of this feature.
     const found = pyGetattr(target, name, MISSING);
-    if (found !== MISSING) return found;
+    const value = found !== MISSING ? found : lookup(target, name);
 
-    const item = lookup(target, name);
-    if (item !== MISSING) return item;
+    if (value !== MISSING && !(value === NONE && otherwise !== undefined)) return value;
 
-    // No such key either: the default, or the real lookup, which raises.
+    // No such key either, or None under a default: the default, or the real
+    // lookup, which raises.
     return otherwise === undefined ? pyGetattr(target, name) : invoke(otherwise);
 }
 

@@ -1815,12 +1815,11 @@ function unpackByKey(inside, call, names, tuple, unpack) {
 const derivedTag = (target, expression) => `{const ${target} = $derived(${expression})}`;
 
 // What one name a pattern unpacks holds, as JavaScript reads it: its `read`,
-// or, for a default that waits for the row, the alias where it is not
-// `undefined` and the default where it is, as JavaScript takes a default. The
-// one reading for the block (`unpacked`) and for its key (`eachKey`): asked in
-// Python, `undefined` and an explicit `None` arrive as the same `None`, where a
-// row holding `None` holds a value. An element of a row unpacked by position
-// is read in JavaScript, off the row taken apart (`unpackPositional`).
+// or, for a default that waits for the row, the alias where it is not absent
+// and the default where it is, as JavaScript takes a default (`orDefault`).
+// The one reading for the block (`unpacked`) and for its key (`eachKey`). An
+// element of a row unpacked by position is read in JavaScript, off the row
+// taken apart (`unpackPositional`).
 const entryValue = ({ read, source, lazy, missing, fallback, js, reaches }, call, followed = true) =>
     js !== undefined
         ? fallback === undefined
@@ -1831,10 +1830,12 @@ const entryValue = ({ read, source, lazy, missing, fallback, js, reaches }, call
           : orDefault(missing, call(fallback, '', undefined, 'lazy', [], followed));
 
 // A default as JavaScript takes one, where what it stands for is `undefined`,
-// with what it stands for read once: an element Svelte reads again at each
-// read, or one held behind a getter, was read twice where it was there, and a
-// getter that counts answered twice.
-const orDefault = (read, fallback) => `((__given) => (__given === undefined ? ${fallback} : __given))(${read})`;
+// or None, which is `undefined` at every door (`__pybridge.absent`): a row
+// holding None showed `5:` where Svelte's holding `undefined` showed `5:5`.
+// What it stands for is read once: an element Svelte reads again at each read,
+// or one held behind a getter, was read twice where it was there, and a getter
+// that counts answered twice.
+const orDefault = (read, fallback) => `((__given) => (__pybridge.absent(__given) ? ${fallback} : __given))(${read})`;
 
 // **A default reads a name an element after it binds as JavaScript does**:
 // raising while the default is taken, the name not bound yet, `ahead` in

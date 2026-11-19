@@ -6,6 +6,8 @@
 import { test, expect } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import KeyedDeferredDefaults from './fixtures/KeyedDeferredDefaults.svelte';
+import NoneDefaults from './fixtures/NoneDefaults.svelte';
+import NoneDefaultsNative from './fixtures/NoneDefaultsNative.svelte';
 
 test('a keyed each mounts and keys its rows by the names a waiting default binds', () => {
     const target = document.body.appendChild(document.createElement('div'));
@@ -30,4 +32,24 @@ test('a keyed each mounts and keys its rows by the names a waiting default binds
     expect(read('pairs')).toEqual(['4:9', '3:3', '6:', '5:5', '7:7']);
     // Each row kept its node, told by its key, the default's value among them.
     expect(after.slice(0, 4)).toEqual([before[1], before[0], before[3], before[2]]);
+});
+
+// And a row holding None takes the default, as Svelte takes it for `undefined`,
+// by position and by key: None is `undefined` at every door, where the pattern
+// held it as a value and showed `5:`. A snippet's parameter as well, which
+// showed nothing for `{@render line(None)}`.
+test('a pattern’s default stands in for None, as Svelte’s does for undefined', () => {
+    const read = (Component) => {
+        const target = document.body.appendChild(document.createElement('div'));
+
+        mount(Component, { target });
+        flushSync();
+
+        return ['pairs', 'keyed', 'param'].map((key) => [...target.querySelectorAll(`[data-k="${key}"]`)].map((one) => one.textContent));
+    };
+
+    expect([read(NoneDefaults), read(NoneDefaultsNative)]).toEqual([
+        [['5:5', '6:7'], ['1', '2'], ['7', '3']],
+        [['5:5', '6:7'], ['1', '2'], ['7', '3']]
+    ]);
 });
