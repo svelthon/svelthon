@@ -1109,11 +1109,49 @@ describe('slugify', () => {
 
     // The same character written two ways must give one slug, or two identical
     // titles produce two URLs.
-    test('NFC first, so a composed and a decomposed é agree', () => {
+    test('NFKC first, so a composed and a decomposed é agree', () => {
         expect(slugify('café')).toBe(slugify('café'));
     });
 
-    // And NFC again once lowercased, which may make a sequence composable that
+    // NFKC, as Django's `allow_unicode`: a superscript, a ligature or a
+    // full-width letter is the character a reader types in the address bar.
+    test.for([
+        ['homo¹', 'homo1'],
+        ['ﬁnal', 'final'],
+        ['ＡＢＣ', 'abc']
+    ])('%s gives %s', ([title, slug]) => {
+        expect(slugify(title)).toBe(slug);
+    });
+
+    // NFKC writes a spacing accent as a space and a combining one; a mark goes
+    // when what it sat on goes, rather than sitting on a dash or opening a slug,
+    // and one the text opens with sat on nothing.
+    test.for([
+        ['l´arbre', 'l-arbre'],
+        ['x¨', 'x'],
+        ['_́x', 'x'],
+        ['x_́', 'x'],
+        ['́Paris', 'paris'],
+        ['́', '']
+    ])('a mark goes with what it sat on: %s gives %s', ([title, slug]) => {
+        expect(slugify(title)).toBe(slug);
+    });
+
+    // The Turkish `İ` lowercased is `i` and a combining dot above, the dot a
+    // lowercase `i` has already: `İstanbul` gave `i̇stanbul`. So did a title
+    // Python lowercased first, the one a heading's `lower()` makes.
+    test.for([
+        ['İstanbul', 'istanbul'],
+        ['İstanbul', 'istanbul'],
+        ['İZMİR', 'izmir'],
+        ['Istanbul', 'istanbul'],
+        ['i̇stanbul', 'istanbul'],
+        ['i̇zmi̇r', 'izmir']
+    ])('%s gives %s, with no dot lowercasing added', ([title, slug]) => {
+        expect(slugify(title)).toBe(slug);
+    });
+
+    // And NFKC again once lowercased, which may make a sequence composable that
     // was not: `J` and a caron have no composed form, `j` and a caron have one,
     // `ǰ`. Lowercased last, two cases of one title gave two slugs, and the
     // slug was renamed when made a slug again, so a link missed its anchor.

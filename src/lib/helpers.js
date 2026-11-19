@@ -682,24 +682,37 @@ export function from_now(value, locale) {
 // normalise, lowercase, keep every letter, digit and mark, turn the rest into
 // a dash.
 //
-// NFC, not NFD: `é` written as one code point and as `e` plus a combining acute
-// look the same and must give the same URL. And NFC again once lowercased,
-// which may make a sequence composable that was not: `J` and a caron have no
-// composed form, `j` and a caron have one, `ǰ`. Lowercased last, `J̌` and `ǰ`
-// gave two slugs, and a link missed the anchor its own title made.
+// NFKC, as Django's `allow_unicode` does: `é` written as one code point and as
+// `e` plus a combining acute look the same and must give the same URL, and so
+// must `homo¹` and `homo1`, `ﬁ` and `fi`, a full-width `Ａ` and `a`. And NFKC
+// again once lowercased, which may make a sequence composable that was not:
+// `J` and a caron have no composed form, `j` and a caron have one, `ǰ`.
+// Lowercased last, `J̌` and `ǰ` gave two slugs, and a link missed the anchor
+// its own title made.
 //
 // And marks are *kept*, which is not decoration: a Devanagari vowel sign is a
 // combining mark with no composed form, so dropping marks turns `हिन्दी भाषा`
-// into `ह-न-द-भ-ष-`. That is not folding a word, it is shredding it.
+// into `ह-न-द-भ-ष-`. That is not folding a word, it is shredding it. A mark
+// goes when what it sat on goes: NFKC writes a spacing `´` as a space and a
+// combining acute, and `l´arbre` is `l-arbre`. And one the text opens with sat
+// on nothing: a lone accent gives an empty slug, which `or "untitled"` takes.
+//
+// But the one mark lowercasing adds is not kept: the Turkish `İ` is `i` and a
+// combining dot above, the dot a lowercase `i` has already, and `İstanbul`
+// gave `i̇stanbul`, an address no reader types, which `Istanbul` did not give.
+// Dropped once lowercased, so that a title Python lowercased first, a
+// heading's `lower()`, gives the slug its link gives.
 export function slugify(value) {
     return __pybridge
         .str(value)
-        .normalize('NFC')
+        .normalize('NFKC')
         .toLowerCase()
-        .normalize('NFC')
-        .replace(/[^\p{L}\p{N}\p{M}_]+/gu, '-')
+        .replaceAll('i̇', 'i')
+        .normalize('NFKC')
+        .replace(/^\p{M}+/u, '')
+        .replace(/(?:[^\p{L}\p{N}\p{M}_]\p{M}*)+/gu, '-')
         // Django's `strip("-_")`: an underscore is kept inside, not at the ends.
-        .replace(/^[-_]+|[-_]+$/g, '');
+        .replace(/^(?:[-_]\p{M}*)+|(?:[-_]\p{M}*)+$/gu, '');
 }
 
 // Django's `strip_tags`, behind its `|striptags` and Jinja's, done by the

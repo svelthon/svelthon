@@ -278,8 +278,9 @@ For a site in any language but English, this is an address the reader
 recognises rather than one with letters missing, or no address at all. Two words
 that differ only by an accent keep two addresses, which
 [Étymobio](https://etymobio.forge.apps.education.fr) needs: some of its roots
-differ only by an accent. The text is composed first (NFC), so an `é` typed as
-one character and an `e` followed by a combining accent give the same slug.
+differ only by an accent. The text is normalised first (NFKC, as Django's
+`allow_unicode` does), so an `é` typed as one character and an `e` followed by a
+combining accent give the same slug, and `homo¹` gives `homo1`.
 
 ## Compilation pipeline
 
