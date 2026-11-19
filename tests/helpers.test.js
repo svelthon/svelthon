@@ -32,6 +32,7 @@ import {
 // The calls are written in Python, which is where the helper is called from.
 import { says, control, keeps_an_instance, coroutine_says } from './fixtures/to_json_calls.py';
 import { shapes } from './fixtures/json_space.py';
+import { written } from './fixtures/json_written.py';
 
 // The Python values that are objects rather than primitives, which is what these
 // helpers keep meeting: a float, a list, a tuple, a set.
@@ -75,6 +76,20 @@ describe('to_json', () => {
     test('a numeric indent is honoured', () => {
         expect(to_json(__pybridge.list([1])).length).toBeLessThan(to_json(__pybridge.list([1]), 2).length);
         expect(to_json(__pybridge.list([1]), 2)).toBe('[\n  1\n]');
+    });
+
+    // As `json.dumps` writes them: a dict's keys in the order it holds them,
+    // where a JavaScript object lists its integer keys first, and a float as its
+    // `float.__repr__`, a subclass's own repr aside, where a number wrote `2.0`
+    // as `2` and `-0.0` as `0`.
+    test('keys in the order the dict holds them, and a float as Python writes it', () => {
+        expect(['order', 'keys', 'float', 'floats'].map((name) => written(name))).toEqual([
+            '{"a":1,"2":[1],"b":{"10":2,"x":3}}',
+            '{"1.5":"x","true":"t","null":"n","3":"three"}',
+            '2.0',
+            '[1.0,0.1,1e+16,1e-07,-0.0,3.0,1.5e+300]'
+        ]);
+        expect(written('order', 2)).toBe('{\n  "a": 1,\n  "2": [\n    1\n  ],\n  "b": {\n    "10": 2,\n    "x": 3\n  }\n}');
     });
 
     // The one refusal that arrives without an object around it. JSON has no
@@ -730,8 +745,8 @@ describe('to_json', () => {
 
         // Its own `label` is lost, because what it says it is has no room for
         // one. The row exists so the next reader meets the limit here and not in
-        // a page.
-        expect(to_json({ ob_type: float, value: 42, label: 'kept' })).toBe('42');
+        // a page. A float, written as `json.dumps` writes one.
+        expect(to_json({ ob_type: float, value: 42, label: 'kept' })).toBe('42.0');
 
         // And the repair that *is* possible stands: a field of the same name
         // holding data is data.

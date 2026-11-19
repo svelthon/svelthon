@@ -30,6 +30,7 @@ import {
     keywordsOf,
     parseKeywords,
     pyJsonParse,
+    KEY_ORDER,
     opaque,
     pyBytes,
     thenable,
@@ -401,12 +402,7 @@ export function to_json(value, indent) {
               ? spaces
               : undefined;
 
-    // `JSON.stringify` takes ten characters of indent at most, and breaks no
-    // line for an empty one, where Python takes any string and breaks lines
-    // for `0`. So each level is laid out with a character no JSON text holds
-    // raw, every control character inside a string being escaped, and then
-    // replaced by the level Python writes.
-    const text = JSON.stringify(
+    return stringified(
         // The JSON rule, asked for by name. JSON has neither identity nor
         // cycles, so a shared reference comes out twice and a loop comes out
         // `null`, the only thing a serialiser can do. It is not the default: the
@@ -414,16 +410,78 @@ export function to_json(value, indent) {
         // which has identity.
         plainData(value, new Set(), noCall),
         (_, one) => serialisable(one),
-        level === undefined ? undefined : '\u0001'
+        level
     );
+}
 
-    // As Jinja's `|tojson`, which writes these four as escapes so the text holds
-    // in a `<script>` or an attribute: a `</script>` in a value closed the
-    // element `{@html}` wrote it in. Outside a string, JSON holds none of them.
-    const safe = text?.replace(/[<>&']/g, (one) => `\\u00${one.charCodeAt(0).toString(16)}`);
+// A string or a key as Jinja's `|tojson` writes it, with these four as escapes
+// so the text holds in a `<script>` or an attribute: a `</script>` in a value
+// closed the element `{@html}` wrote it in. Outside a string, JSON holds none of
+// them, and an indent keeps its own.
+const quoted = (text) => JSON.stringify(text).replace(/[<>&']/g, (one) => `\\u00${one.charCodeAt(0).toString(16)}`);
 
-    // By a function: a string would have its `$$` and `$&` read as patterns.
-    return level === undefined || safe === undefined ? safe : safe.replaceAll('\u0001', () => level);
+// `JSON.stringify`'s own walk (`SerializeJSONProperty`), written out for two
+// things it cannot do: keep the order a dict holds its keys in (`KEY_ORDER`),
+// where a JavaScript object lists its integer keys first, and lay a level out
+// as Python does, any string, and lines broken for `0` too, where it takes ten
+// characters at most and breaks no line for an empty one (`level`, undefined
+// for one line).
+function stringified(root, replacer, level) {
+    const open = [];
+    const property = (holder, key, indent) => {
+        let value = holder[key];
+
+        if ((typeof value === 'object' && value !== null) || typeof value === 'bigint') {
+            const hook = value.toJSON;
+
+            if (typeof hook === 'function') value = hook.call(value, key);
+        }
+        value = replacer.call(holder, key, value);
+
+        if (typeof value === 'object' && value !== null) {
+            if (JSON.isRawJSON?.(value)) return value.rawJSON;
+
+            const box = unboxed(value);
+
+            if (box !== undefined) value = box.value;
+        }
+
+        if (typeof value === 'string') return quoted(value);
+        if (value === null || typeof value === 'boolean' || typeof value === 'number') return JSON.stringify(value);
+        if (typeof value === 'bigint') throw new TypeError('Do not know how to serialize a BigInt');
+        if (typeof value !== 'object') return undefined;
+        if (open.includes(value)) throw new TypeError('Converting circular structure to JSON');
+
+        open.push(value);
+
+        // Loops and not callbacks, one frame a level: a structure as deep as
+        // the walk before reaches is written.
+        try {
+            const inner = level === undefined ? '' : indent + level;
+            const parts = [];
+
+            if (Array.isArray(value)) {
+                for (let at = 0; at < value.length; at++) parts.push(property(value, String(at), inner) ?? 'null');
+            } else {
+                for (const name of value[KEY_ORDER] ?? Object.keys(value)) {
+                    const written = property(value, name, inner);
+
+                    if (written !== undefined) parts.push(`${quoted(name)}:${level === undefined ? '' : ' '}${written}`);
+                }
+            }
+
+            const [start, end] = Array.isArray(value) ? ['[', ']'] : ['{', '}'];
+
+            if (parts.length === 0) return start + end;
+            if (level === undefined) return `${start}${parts.join(',')}${end}`;
+
+            return `${start}\n${inner}${parts.join(`,\n${inner}`)}\n${indent}${end}`;
+        } finally {
+            open.pop();
+        }
+    };
+
+    return property({ '': root }, '', '');
 }
 
 // And the way back, through Brython's route rather than the JavaScript one,
