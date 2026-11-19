@@ -1435,9 +1435,12 @@ export const __pybridge = {
     // its first `length` elements, which is as far as the pattern reads. A
     // value of Python's is walked as Python walks it (`pyLeading`): asked for
     // JavaScript's protocol, a `range`, a generator or an `__iter__` had none,
-    // and the pattern read empty positions without a word.
+    // and the pattern read empty positions without a word. And so is a value
+    // JavaScript hands back as the view of one of Python's, a dict a promise
+    // resolved: taken apart as the view, it gave nothing, where the dict gives
+    // its keys.
     positional(value, length) {
-        const python = pyLeading(value, length);
+        const python = pyLeading(VIEWED.has(value) ? pyBind(value) : value, length);
 
         if (python !== null) return python;
         if (Array.isArray(value)) return value;
@@ -1462,9 +1465,12 @@ export const __pybridge = {
     // JavaScript reads one without the star: `[a="d", b="e", *rest]` on `[]`
     // takes both defaults and an empty rest, where it raised Python's
     // `ValueError`. Any other row, a value of Python's, is Python's to take
-    // apart, with Python's errors (`unpack`).
+    // apart, with Python's errors (`unpack`), and so is the view JavaScript
+    // hands back of one, as `positional` takes it: taken apart as the array it
+    // looks like, a list a promise resolved lost its elements' methods and its
+    // own `__iter__`.
     starred(value, before, after, unpack) {
-        if (!Array.isArray(value) || pyLeading(value, 0) !== null) return unpack();
+        if (!Array.isArray(value) || pyLeading(VIEWED.has(value) ? pyBind(value) : value, 0) !== null) return unpack();
 
         const remaining = value.slice(before);
         const middle = Math.max(0, remaining.length - after);
@@ -1479,10 +1485,10 @@ export const __pybridge = {
     // A name of that pattern before or after the star (`slot`), read again at
     // each read from the array `starred` took apart in JavaScript, as Svelte
     // reads `[first, ...rest]`: copied out, `first` kept the element the array
-    // held first. A row of Python's keeps what it was taken apart to
-    // (`taken`).
+    // held first. A row of Python's, or its view, keeps what it was taken apart
+    // to (`taken`).
     starredRead(value, before, after, slot, taken) {
-        if (!Array.isArray(value) || pyLeading(value, 0) !== null) return taken();
+        if (!Array.isArray(value) || pyLeading(VIEWED.has(value) ? pyBind(value) : value, 0) !== null) return taken();
         if (slot < before) return value[slot];
 
         return value[before + Math.max(0, value.length - before - after) + slot - before - 1];

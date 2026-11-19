@@ -40,6 +40,14 @@ test('a row Python iterates is taken apart by position, in an each, a keyed each
         // A string by its characters and a dict by its keys, as Python
         // unpacks them.
         'each-string': 'a:b',
-        'each-dict': 'x:y'
+        'each-dict': 'x:y',
+        // And a container a JavaScript promise hands back as its view, as
+        // Python takes the container apart: the dict showed `:`.
+        'then-promise-dict': 'x:y',
+        'then-promise-list': '10:20',
+        // Around a starred name too: taken apart as the array the view looks
+        // like, the elements lost their methods and the list its own order.
+        'then-promise-starred': '10:20:30',
+        'then-promise-starred-order': '30:20:10'
     });
 });

@@ -17,6 +17,16 @@ class Pair:
 
 async def later(value):
     return value
+
+
+class Price(float):
+    def cents(self):
+        return round(self * 100)
+
+
+class Backwards(list):
+    def __iter__(self):
+        return iter(self[::-1])
 </script>
 
 {#each [range(10, 21, 10)] as [first, second]}<output data-k="each-range">{first}:{second}</output>{/each}
@@ -30,6 +40,10 @@ async def later(value):
 {#await later(Pair()) then (first, second)}<output data-k="then-tuple">{first}:{second}</output>{/await}
 {#await later(Pair())}{:then (first, second)}<output data-k="clause-tuple">{first}:{second}</output>{/await}
 {#await later(Pair())}{:then (((first, second)))}<output data-k="clause-grouped">{first}:{second}</output>{/await}
+{#await js.Promise.resolve({"x": 1, "y": 2}) then (first, second)}<output data-k="then-promise-dict">{first}:{second}</output>{/await}
+{#await js.Promise.resolve([10, 20]) then (first, second)}<output data-k="then-promise-list">{first}:{second}</output>{/await}
+{#await js.Promise.resolve([Price(0.1), Price(0.2), Price(0.3)]) then [first, *rest, last]}<output data-k="then-promise-starred">{first.cents()}:{rest[0].cents()}:{last.cents()}</output>{/await}
+{#await js.Promise.resolve(Backwards([10, 20, 30])) then [first, *rest, last]}<output data-k="then-promise-starred-order">{first}:{rest[0]}:{last}</output>{/await}
 {#each [counted()] as ((first, second))}<output data-k="each-grouped">{first}:{second}</output>{/each}
 {#each [counted()] as ((first), (second))}<output data-k="each-names-grouped">{first}:{second}</output>{/each}
 {#each ["ab"] as (first, second)}<output data-k="each-string">{first}:{second}</output>{/each}
