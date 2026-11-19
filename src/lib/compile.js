@@ -795,15 +795,18 @@ function componentImports(src, where) {
 
 // What Vite's dependency scanner is handed for a component's Python, which it
 // would read as JavaScript: the modules its `importjs` lines import, the
-// packages among them being what it pre-bundles. Nothing for a script the
+// packages among them being what it pre-bundles, and the bridge the compiled
+// component imports, whose own packages the scanner then finds: told nothing of
+// it, Vite found the engine and `esm-env` at the first visit, optimized them
+// then and reloaded the page. Nothing of the author's for a script the
 // compiler would refuse, which it then does itself.
 export function scannedScript(src) {
+    const bridge = `import ${JSON.stringify(HOST.bridge)};`;
+
     try {
-        return takeImportJs(HOST, $B.unindent(src), 'scan', 0, true)
-            .imports.map((one) => `import ${JSON.stringify(one.from)};`)
-            .join('\n');
+        return [bridge, ...takeImportJs(HOST, $B.unindent(src), 'scan', 0, true).imports.map((one) => `import ${JSON.stringify(one.from)};`)].join('\n');
     } catch {
-        return '';
+        return bridge;
     }
 }
 

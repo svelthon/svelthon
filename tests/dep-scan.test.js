@@ -4,7 +4,9 @@
 // JavaScript, the Python one too: every cold start said `Failed to run
 // dependency scan`, `Expected a semicolon` on a Python import, a SvelteKit
 // project once per page. The plugin hands the scan what the Python imports from
-// JavaScript instead, and leaves a JavaScript script as it is.
+// JavaScript instead, and leaves a JavaScript script as it is. And the bridge
+// the compiled component imports: told nothing of it, Vite found the engine and
+// `esm-env` at the first visit and reloaded the page.
 import { test, expect } from 'vitest';
 import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
@@ -22,7 +24,7 @@ test('the scanner is handed what a Python script imports from JavaScript', () =>
     const scanned = (at) => scan.transform(scripts[at], `virtual-module:${file}?id=${at}`);
 
     expect(scanned(0)).toBe(null);
-    expect(scanned(1)).toEqual({ code: 'import "svelte/motion";\nimport "./Child.svelte";', moduleType: 'js' });
+    expect(scanned(1)).toEqual({ code: 'import "svelthon/bridge";\nimport "svelte/motion";\nimport "./Child.svelte";', moduleType: 'js' });
 });
 
 // Vite 7 scans with esbuild and reads no `rolldownOptions`: the error was
@@ -42,7 +44,7 @@ test('and so is the scanner of Vite 7, by an esbuild plugin', () => {
     expect(filter.filter.test(path(1))).toBe(true);
     expect(load({ path: path(0) })).toBe(undefined);
     expect(load({ path: path(1) })).toEqual({
-        contents: 'import "svelte/motion";\nimport "./Child.svelte";',
+        contents: 'import "svelthon/bridge";\nimport "svelte/motion";\nimport "./Child.svelte";',
         loader: 'js',
         resolveDir: dirname(file)
     });
