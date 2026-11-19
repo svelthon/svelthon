@@ -252,7 +252,8 @@ function broughtByStars(body, starNames) {
 // its `__all__`, as its own level writes it, statement after statement, a list
 // or a tuple of strings assigned, added with `+=` or by `append` and `extend`;
 // or else every name its own level binds, a name deleted no longer, and what
-// its own star imports bring (`starNames`), that does not begin with `_`. Null
+// its own star imports bring (`starNames`), and what it writes at a key of
+// `globals()`, that does not begin with `_`. Null
 // when that is not told without running it: an `__all__` computed, or written
 // or read anywhere else, a name deleted in a block, the names `__js__` binds,
 // a star import not known, or text that does not parse.
@@ -326,6 +327,17 @@ function publishedNames(text, starNames = () => null) {
 
             if (starred) return null;
             for (const one of bound) names.add(one);
+
+            // And the keys its own level writes in `globals()`,
+            // `globals()["GET"] = read` or `globals().update(POST=save)`: a
+            // route that took them by a star answered 405. A function's body
+            // does not run as it is imported.
+            if (node instanceof ast.FunctionDef || node instanceof ast.AsyncFunctionDef || node instanceof ast.ClassDef) continue;
+
+            const keys = namespaceKeys([node]);
+
+            if (keys.any) return null;
+            for (const one of keys.written) if (keys.removed.has(one)) names.delete(one); else names.add(one);
         }
     }
 
@@ -338,16 +350,147 @@ function publishedNames(text, starNames = () => null) {
 // and it is no builtin, no name Svelthon publishes, none of the compiler's and
 // none JavaScript forbids. Asked of the builtins' own names: `constructor` is on
 // their prototype, and no builtin.
-function unboundReads(table, taken) {
+//
+// Read by its name or at its key, `globals().get("x")`, which no read by its
+// name gave a cell: the page kept what it first read.
+function unboundReads(table, taken, body) {
     const binds = moduleBinds(table);
 
-    return [...globalReads(table)].filter(
+    return [...new Set([...globalReads(table), ...namespaceKeys(body).read])].filter(
         (name) =>
+            IDENTIFIER.test(name) &&
             !binds.has(name) &&
             !taken.has(name) &&
             !Object.hasOwn($B.builtins, name) &&
             !INJECTED.some((one) => one.name === name) &&
             !COMPILER_PREFIX.test(name) &&
+            !JS_RESERVED.has(name)
+    );
+}
+
+const IDENTIFIER = /^[\p{ID_Start}_][\p{ID_Continue}]*$/u;
+
+// The keys a module reads and writes through `globals()` where its text names
+// them: `globals()["x"]`, `globals().get("x")` and `"x" in globals()` read it,
+// any other spelling at a key writes it, `update` the keys of the dict written
+// out or of its keywords. And whether it may write at a key no text names
+// (`any`): a key computed, a dict handed to `update`, the namespace handed on.
+// A method the template reads off it is `__getattr(globals(), "get")`, its dot
+// rewritten (`templateDots`), which was taken for nothing. A key deleted,
+// `del globals()["x"]` or `pop("x")`, is `removed` too.
+function namespaceKeys(body) {
+    const ast = $B.ast;
+    const read = new Set();
+    const written = new Set();
+    const removed = new Set();
+    const placed = new Set();
+    let any = false;
+    const namespace = (node) => node instanceof ast.Call && node.func instanceof ast.Name && node.func.id === 'globals' && node.args.length === 0;
+    const literal = (node) => (node instanceof ast.Constant && typeof node.value === 'string' ? node.value : null);
+    const owner = (func) => (func instanceof ast.Attribute ? func.value : func instanceof ast.Call && func.func instanceof ast.Name && func.func.id === RUNTIME.readAttr ? func.args[0] : null);
+    const method = (func) => (func instanceof ast.Attribute ? func.attr : literal(func.args[1]));
+    const write = (key, gone = false) => {
+        if (key === null) any = true;
+        else written.add(key);
+        if (key !== null && gone) removed.add(key);
+    };
+    const visit = (node) => {
+        if (Array.isArray(node)) return node.forEach(visit);
+        if (node === null || typeof node !== 'object' || !Array.isArray(node.constructor?._fields)) return;
+
+        if (node instanceof ast.Subscript && namespace(node.value)) {
+            placed.add(node.value);
+            if (node.ctx instanceof ast.Load) {
+                if (literal(node.slice) !== null) read.add(literal(node.slice));
+            } else {
+                write(literal(node.slice), node.ctx instanceof ast.Del);
+            }
+        } else if (node instanceof ast.Call && namespace(owner(node.func))) {
+            const name = method(node.func);
+
+            placed.add(owner(node.func));
+            if (NAMESPACE_READS.has(name)) {
+                if (literal(node.args[0]) !== null) read.add(literal(node.args[0]));
+            } else if (name === 'update') {
+                const [dict] = node.args;
+
+                if (dict !== undefined && !(dict instanceof ast.Dict)) any = true;
+                for (const key of dict?.keys ?? []) write(key === null ? null : literal(key));
+                for (const keyword of node.keywords) write(keyword.arg ?? null);
+            } else {
+                write(literal(node.args[0]) ?? null, name === 'pop' || name === '__delitem__');
+            }
+        } else if (node instanceof ast.Compare && literal(node.left) !== null && node.comparators.some(namespace)) {
+            node.comparators.filter(namespace).forEach((one) => placed.add(one));
+            read.add(literal(node.left));
+        } else if (namespace(node) && !placed.has(node)) {
+            any = true;
+        }
+
+        for (const field of node.constructor._fields) visit(node[field]);
+    };
+
+    visit(body);
+
+    return { read, written, removed, any };
+}
+
+// The names a body reads, wherever.
+function loadedNames(body) {
+    const ast = $B.ast;
+    const names = new Set();
+    const visit = (node) => {
+        if (Array.isArray(node)) return node.forEach(visit);
+        if (node === null || typeof node !== 'object' || !Array.isArray(node.constructor?._fields)) return;
+        if (node instanceof ast.Name && node.ctx instanceof ast.Load) names.add(node.id);
+        for (const field of node.constructor._fields) visit(node[field]);
+    };
+
+    visit(body);
+
+    return names;
+}
+
+// Builtins no statement may bind, which a dict may still hold as keys.
+const UNASSIGNABLE = new Set(['True', 'False', 'None', '__debug__']);
+
+// The builtins a module writes at their key, `globals()["len"] = …`, which it
+// then binds too (`compile`), past its last line, where no line moves:
+// Brython reads the builtin itself where the module never binds the name, and
+// the module's own stood for nothing, the page and the script's functions
+// kept the builtin. Bound, an absent name is the builtin again, as in Python.
+// Every builtin it reads where it may write at a key no text names, and none
+// no statement may bind: `True = None` refused the module. Nor one the module
+// imports from JavaScript, which is no builtin there, and which Bryc refuses
+// to see bound: `importjs { round }` beside `len(globals())` compiled no more.
+// Nor one its script binds, which needs no binding. Nor one JavaScript
+// reserves, `eval`, a parameter's name or a key read: bound, it refused the
+// module.
+function writtenBuiltins(src, defs, where, jsNames) {
+    if (![src, ...defs].some((text) => text.includes('globals'))) return [];
+
+    const parsed = (text) => {
+        try {
+            return $B._PyPegen.run_parser(new $B.Parser($B.unindent(text), where, 'file')).body;
+        } catch {
+            return [];
+        }
+    };
+    const script = readScript(src, where, jsNames);
+    const bound = script === null ? new Set() : moduleBinds(symbolTable(script.tree, where));
+    const bodies = [script?.tree.body ?? [], ...defs.map(parsed)];
+    const keys = bodies.map(namespaceKeys);
+    const read = keys.some((one) => one.any) ? bodies.flatMap((body) => [...loadedNames(body)]) : [];
+
+    return [...new Set([...keys.flatMap((one) => [...one.written]), ...read])].filter(
+        (name) =>
+            IDENTIFIER.test(name) &&
+            Object.hasOwn($B.builtins, name) &&
+            !UNASSIGNABLE.has(name) &&
+            !/^__.*__$/.test(name) &&
+            !script?.theirs.has(name) &&
+            !jsNames.includes(name) &&
+            !bound.has(name) &&
             !JS_RESERVED.has(name)
     );
 }
@@ -3061,6 +3204,14 @@ function compile(
 
     refuseGeneratedSpelling(src, source, lineOffset);
 
+    // The builtins the module writes at their key, bound by it too
+    // (`writtenBuiltins`): after the template's functions, which hold no line
+    // of the file, or after a module's last line.
+    const shadowed = writtenBuiltins(src, defs, source, jsNames);
+    const binding = shadowed.length > 0 ? `if False:\n${shadowed.map((one) => `    ${one} = None`).join('\n')}` : null;
+
+    if (binding !== null && !component) src = `${src}\n${binding}\n`;
+
     // The common half, Bryc's: a component's script joined with its template's
     // functions, a `.py` taken as it is, `importjs` lifted, Svelthon's signs
     // made Python (`HOST.rewrite`), the translation, and the imports the
@@ -3075,7 +3226,7 @@ function compile(
         source,
         component,
         named: component ? null : pythonModuleName(source),
-        defs: defs.map((def) => templateDots(HOST, def)),
+        defs: [...defs.map((def) => templateDots(HOST, def)), ...(binding !== null && component ? [binding] : [])],
         defLines,
         defColumns,
         lineOffset,
@@ -3101,7 +3252,7 @@ function compile(
     // the cell, as a name imported does. Until it is written it is no name, and
     // the template's read raises `NameError` as Python's does (`templateFrom`):
     // a typo is such a name too.
-    const unwritten = plain ? [] : unboundReads(table, new Set([...state, ...foreign]));
+    const unwritten = plain ? [] : unboundReads(table, new Set([...state, ...foreign]), root._ast.body);
 
     state = [...state, ...unwritten];
 

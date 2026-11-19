@@ -619,7 +619,9 @@ describe('the plugin loads a .py itself', () => {
         ['an __all__ annotated', `${methods}__all__: list = ["GET"]\n`, null, ['GET']],
         ['a method deleted', `${methods}del POST\n`, null, ['GET', 'PUT']],
         ['a star import of its own', 'from base import *\n', 'def GET(event):\n    return None\n\n\ndef PUT(event):\n    return None\n', ['GET', 'PUT']],
-        ['an __all__ computed', `${methods}__all__ = [name for name in ["GET"]]\n`, null, ['GET', 'POST', 'PUT']]
+        ['an __all__ computed', `${methods}__all__ = [name for name in ["GET"]]\n`, null, ['GET', 'POST', 'PUT']],
+        // and the keys its own level writes in `globals()`, which answered 405
+        ['keys written in globals()', 'def read(event):\n    return None\n\nglobals()["GET"] = read\nglobals().update(POST=read)\nglobals()["PUT"] = read\nglobals().pop("PUT")\n', null, ['GET', 'POST']]
     ])('a server route exports what its star import brings of %s', ([, text, base, expected]) => {
         const dir = mkdtempSync(join(tmpdir(), 'svelthon-star-'));
         const route = join(dir, 'api', '+server.py');
