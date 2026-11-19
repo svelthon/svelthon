@@ -13,6 +13,12 @@ import ImportedDecorators from './fixtures/ImportedDecorators.svelte';
 import ImportedEffectMounted from './fixtures/ImportedEffectMounted.svelte';
 import ModuleInspect from './fixtures/ModuleInspect.svelte';
 import ImportedHost from './fixtures/ImportedHost.svelte';
+import ModuleRunes, * as moduleRunes from './fixtures/ModuleRunes.svelte';
+import ModuleRunesImported, * as moduleRunesImported from './fixtures/ModuleRunesImported.svelte';
+import ModuleRunesSwitch from './fixtures/ModuleRunesSwitch.svelte';
+import ModuleRunesInline, * as moduleRunesInline from './fixtures/ModuleRunesInline.svelte';
+import ModuleRunesAlias from './fixtures/ModuleRunesAlias.svelte';
+import ModuleRunesMixed, * as moduleRunesMixed from './fixtures/ModuleRunesMixed.svelte';
 import { compile } from '../src/lib/compile.js';
 import ImportedBindable from './fixtures/ImportedBindable.svelte';
 import ImportedBindableAlias from './fixtures/ImportedBindableAlias.svelte';
@@ -57,12 +63,54 @@ test.for([
     expect(target.querySelector('output').textContent).toBe('7');
 });
 
-// A name the `<script module>` binds that a rune shadows, `state`, made the
-// `$state` the component compiles to a read of a store, and the component did
-// not mount: refused, as Svelte asks it renamed.
-test.for(['state', 'effect'])('a `<script module>` binding `%s` is refused, the component writing that rune', (name) => {
-    expect(() => compile('count = 0\n', 'C', 'src/C.svelte', { jsNames: [name] })).toThrow(
-        new RegExp(`^svelthon — the \`<script module>\` binds \`${name}\`, and Svelte reads the \`\\$${name}\``)
+// A name the `<script module>` binds that a rune shadows, `derived`, made every
+// `$derived` the component compiles to a read of a store: `const derived = …`
+// stopped the compile of any Python component, and `state` or `effect` was
+// refused, where Svelte compiles a component that binds them and writes no
+// such rune itself. The author's binding is held under another variable,
+// exported and read by Python under its name.
+test('rune names the `<script module>` binds are the author’s, the runes the component compiles to Svelte’s', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+    mount(ModuleRunes, { target });
+    flushSync();
+    mount(ModuleRunesImported, { target });
+    flushSync();
+    // A `switch` whose case binds the name again, which its test was read
+    // under, and an export on a line with no `;`, which the export said again
+    // after it joined.
+    mount(ModuleRunesSwitch, { target });
+    flushSync();
+    mount(ModuleRunesInline, { target });
+    flushSync();
+    // And a function declaring the variable the name was held under, which
+    // then read its own where it read the module's.
+    mount(ModuleRunesAlias, { target });
+    flushSync();
+    // And a rune name beside an ordinary one in one declaration, whose export
+    // was written `undefined as caption`.
+    mount(ModuleRunesMixed, { target });
+    flushSync();
+
+    expect([...target.querySelectorAll('p')].map((one) => one.textContent)).toEqual(['312|6|7|3', 'x', 'ready:local', '6', 'module:local', 'ready:card:d:l']);
+    expect(['state', 'caption', 'derived', 'label'].map((name) => moduleRunesMixed[name])).toEqual(['ready', 'card', 'd', 'l']);
+    expect(moduleRunesInline.derived(5)).toBe(15);
+    expect([moduleRunes.derived(4), moduleRunes.state(4), moduleRunes.effect.derived]).toEqual([8, 9, 3]);
+
+    let doubled;
+    moduleRunesImported.doubled.subscribe((value) => (doubled = value))();
+    expect([typeof moduleRunesImported.derived, doubled]).toEqual(['function', 4]);
+});
+
+// But a sign written with the marker the `<script module>` binds called the
+// author's binding, `'str' object is not callable`, as Svelte reads the rune
+// the author writes beside it as a store: refused, as an `importjs` of it is.
+test.for([
+    ['doubled => 1', 'derived', 'name =>'],
+    ['=> print(1)', 'effect', '=>'],
+    ['value: str <=>', 'bindable', '<=>']
+])('`%s` beside a `<script module>` binding `%s` is refused', ([line, name, sign]) => {
+    expect(() => compile(`${line}\n`, 'C', 'src/C.svelte', { jsNames: [name] })).toThrow(
+        `svelthon — \`${sign}\` is written with \`${name}\`, and \`${name}\` here is the one the \`<script module>\` binds`
     );
 });
 

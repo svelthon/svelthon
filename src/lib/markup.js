@@ -5286,6 +5286,11 @@ export function moduleScriptStart(content) {
     return componentScript(content, declaresModule)?.body[0] ?? -1;
 }
 
+// Where its element begins, which `moduleScript` reads from.
+export function moduleScriptIndex(content) {
+    return componentScript(content, declaresModule)?.index ?? -1;
+}
+
 
 
 // The hidden Python functions a template needs, one per distinct expression.

@@ -11,6 +11,7 @@ import {
     collector,
     moduleScript,
     moduleScriptStart,
+    moduleScriptIndex,
     withoutComments,
     markupOnly,
     blankBodies
@@ -19,6 +20,7 @@ import { parse } from 'svelte/compiler';
 import {
     compile,
     MODULE_READERS,
+    RUNES,
     bridgeHooks,
     VIRTUAL_PREFIX,
     virtualId,
@@ -536,8 +538,171 @@ const announcement = (filename) =>
 // scope, which Python reads them through (`MODULE_READERS`): the instance
 // script is a scope inside it, where the compiler declares names of its own,
 // and a bare read of the module's name found the instance's first.
-const moduleReaders = (names) =>
-    names.length === 0 ? '' : `const ${MODULE_READERS} = { ${names.map((name) => `get ${JSON.stringify(name)}() { return ${name}; }`).join(', ')} };`;
+const moduleReaders = (names, held) =>
+    names.length === 0
+        ? ''
+        : `const ${MODULE_READERS} = { ${names.map((name) => `get ${JSON.stringify(name)}() { return ${held.get(name) ?? name}; }`).join(', ')} };`;
+
+// A rune's name the `<script module>` binds at its top, `export const derived
+// = …`, is held under another variable: Svelte reads `$derived` as a store once
+// the component binds `derived`, and every `$derived` Svelthon writes for the
+// author stopped the compile (`store_invalid_subscription`). The export keeps
+// its name, and Python reads the variable (`moduleReaders`). A variable the
+// script's text names nowhere: `__svelthon_state` declared in a function of the
+// author's took there the reads of the module's `state`.
+const heldRunes = (code, names) => {
+    const named = new Set(moduleScript(code)?.match(/[\p{ID_Start}$_][\p{ID_Continue}$‌‍]*/gu));
+
+    return new Map(
+        names
+            .filter((name) => RUNES.includes(name))
+            .map((name) => {
+                let held = `__svelthon_${name}`;
+
+                while (named.has(held)) held += '_';
+
+                return [name, held];
+            })
+    );
+};
+
+const TYPE_KEYS = new Set(['typeAnnotation', 'returnType', 'typeParameters', 'typeArguments', 'superTypeParameters', 'implements']);
+
+// What a scope declares of its own: a function's parameters and the name of a
+// function or class expression; the `let`, `const`, class and function of a
+// block, and with a function's body its `var`s; a `for`'s and a `catch`'s.
+const ownNames = (node, functionBody) => {
+    switch (node.type) {
+        case 'FunctionDeclaration':
+        case 'FunctionExpression':
+        case 'ArrowFunctionExpression':
+            return [...node.params.flatMap(declaredBy), ...(node.type === 'FunctionExpression' && node.id ? [node.id.name] : [])];
+        case 'ClassExpression':
+            return node.id ? [node.id.name] : [];
+        case 'CatchClause':
+            return node.param ? declaredBy(node.param) : [];
+        case 'ForStatement':
+        case 'ForInStatement':
+        case 'ForOfStatement': {
+            const init = node.type === 'ForStatement' ? node.init : node.left;
+
+            return init?.type === 'VariableDeclaration' && init.kind !== 'var' ? init.declarations.flatMap((one) => declaredBy(one.id)) : [];
+        }
+        case 'BlockStatement':
+        case 'StaticBlock':
+        case 'SwitchStatement': {
+            const body = node.type === 'SwitchStatement' ? node.cases.flatMap((one) => one.consequent) : node.body;
+
+            return [
+                ...body.flatMap((one) => (one.type === 'VariableDeclaration' && one.kind === 'var' ? [] : declares(one))),
+                ...(functionBody ? hoisted(body) : [])
+            ];
+        }
+        default:
+            return [];
+    }
+};
+
+// The component with its `<script module>`'s rune names held (`heldRunes`):
+// the binding and each read of it that no inner scope shadows, an import or an
+// export by name keeping the name it imports or exports.
+function holdRunes(code, aliases) {
+    const bound = [...aliases.keys()];
+    // A name beside a rune's in one declaration keeps its own: written
+    // `undefined as caption`, the export was refused (`export_undefined`).
+    const heldRune = (name) => aliases.get(name) ?? name;
+
+    if (bound.length === 0) return code;
+
+    const at = moduleScriptIndex(code);
+    const program = parse(moduleScript(code), { modern: true }).module.content;
+    const edits = [];
+    const held = (node, shadowed) => node.type === 'Identifier' && bound.includes(node.name) && !shadowed.has(node.name);
+    const rename = (node) => edits.push([node.start, node.end, heldRune(node.name)]);
+    const renamedAs = (node, outside) => edits.push([node.start, node.end, `${outside}${heldRune(node.name)}`]);
+
+    const visit = (node, shadowed, functionBody = false) => {
+        if (node === null || typeof node !== 'object') return;
+        if (Array.isArray(node)) {
+            for (const one of node) visit(one, shadowed);
+            return;
+        }
+        if (typeof node.type !== 'string') return;
+
+        const outer = shadowed;
+        const own = ownNames(node, functionBody).filter((name) => bound.includes(name));
+
+        if (own.length > 0) shadowed = new Set([...shadowed, ...own]);
+
+        switch (node.type) {
+            case 'Identifier':
+                if (held(node, shadowed)) rename(node);
+                return;
+            // What a `switch` tests is read outside the scope its cases make.
+            case 'SwitchStatement':
+                visit(node.discriminant, outer);
+                visit(node.cases, shadowed);
+                return;
+            case 'ImportSpecifier':
+                if (held(node.local, shadowed)) {
+                    if (node.imported.start === node.local.start) renamedAs(node.local, `${node.local.name} as `);
+                    else rename(node.local);
+                }
+                return;
+            case 'ExportSpecifier':
+                if (held(node.local, shadowed)) {
+                    if (node.exported.start === node.local.start) edits.push([node.local.start, node.local.end, `${heldRune(node.local.name)} as ${node.local.name}`]);
+                    else rename(node.local);
+                }
+                return;
+            case 'ExportAllDeclaration':
+                return;
+            case 'ExportNamedDeclaration':
+                if (node.source) return;
+                // The export said again right behind its declaration, on its
+                // line: at the end of the script, it joined a last statement
+                // written with no `;`, or a comment that ends it.
+                if (node.declaration && declares(node.declaration).some((name) => bound.includes(name))) {
+                    const names = declares(node.declaration).map((name) => `${heldRune(name)} as ${name}`);
+
+                    edits.push([node.start, node.declaration.start, ''], [node.end, node.end, `;export { ${names.join(', ')} };`]);
+                }
+                break;
+            case 'Property':
+                if (node.shorthand && !node.computed && held(node.key, shadowed)) {
+                    renamedAs(node.key, `${node.key.name}: `);
+                    if (node.value.type === 'AssignmentPattern') visit(node.value.right, shadowed);
+                    return;
+                }
+                break;
+            case 'LabeledStatement':
+            case 'BreakStatement':
+            case 'ContinueStatement':
+                visit(node.body, shadowed);
+                return;
+        }
+
+        for (const [key, value] of Object.entries(node)) {
+            if (POSITIONS.has(key) || TYPE_KEYS.has(key)) continue;
+            if (node.type.startsWith('TS') && key !== 'expression') continue;
+            if (key === 'property' && node.type === 'MemberExpression' && !node.computed) continue;
+            if (key === 'key' && !node.computed) continue;
+            visit(value, shadowed, key === 'body' && FUNCTIONS.has(node.type));
+        }
+    };
+
+    visit(program, new Set());
+
+    let text = code;
+
+    for (const [start, end, replacement] of edits.sort((a, b) => b[0] - a[0])) {
+        text = text.slice(0, at + start) + replacement + text.slice(at + end);
+    }
+
+    return text;
+}
+
+const FUNCTIONS = new Set(['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression']);
 
 // The questions the runtime asks of Svelte (`bridgeHooks`), laid down in the
 // `<script module>`, once, in a scope that holds no instance's data: laid down
@@ -769,10 +934,12 @@ export function python(options = {}) {
             // declares (`unmemoized`).
             file.rereads = [...new Set(Array.from(code.matchAll(/\b__expr_reread\.(__expr_\w+)\b/g), (found) => found[1]))];
 
+            const held = heldRunes(code, file.jsNames);
+
             return {
                 code: inModuleScript(
-                    tagged(elementOptions(code, python, file.jsNames), calls.open(file)),
-                    announcement(filename) + HOOKS + moduleReaders(file.jsNames)
+                    tagged(elementOptions(holdRunes(code, held), python, file.jsNames), calls.open(file)),
+                    announcement(filename) + HOOKS + moduleReaders(file.jsNames, held)
                 ),
                 dependencies: childrenWatched() ? [] : languages.map(([path]) => path)
             };

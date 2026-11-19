@@ -554,8 +554,9 @@ function statements(text) {
 
 const ARROW_INDENTED = /^[ \t]+(?:[\p{XID_Start}_]\p{XID_Continue}*\s*)?=>\s/u;
 
-// `theirs` names what the author imported with `importjs`.
-function takeArrows(src, where, lineOffset, allowed, theirs = new Set()) {
+// `theirs` names what the author imported with `importjs`, `moduleNames` what
+// the `<script module>` binds.
+function takeArrows(src, where, lineOffset, allowed, theirs = new Set(), moduleNames = []) {
     const lines = src.split('\n');
     const continued = continuedLines(src);
     const out = [];
@@ -707,14 +708,25 @@ function takeArrows(src, where, lineOffset, allowed, theirs = new Set()) {
         }
 
         // Each sign is written with a marker, and one the author imported from
-        // JavaScript under that name would be called in its place.
+        // JavaScript under that name, or bound in the `<script module>`, would
+        // be called in its place, as Svelte reads the rune as a store of it.
         const marker = found ? kind(named) : both ? 'bindable' : null;
+        const sign = both ? '<=>' : named ? 'name =>' : '=>';
 
         if (theirs.has(marker)) {
             throw refuse(
-                `svelthon — \`${both ? '<=>' : named ? 'name =>' : '=>'}\` is written with ` +
+                `svelthon — \`${sign}\` is written with ` +
                     `\`${marker}\`, and \`${marker}\` here is the one imported from JavaScript; ` +
                     `import it under another name, \`importjs {${marker} as …}\` (${at})`,
+                where,
+                lineno
+            );
+        }
+
+        if (marker !== null && moduleNames.includes(marker)) {
+            throw refuse(
+                `svelthon — \`${sign}\` is written with \`${marker}\`, and \`${marker}\` here is the ` +
+                    `one the \`<script module>\` binds; bind it there under another name (${at})`,
                 where,
                 lineno
             );
@@ -956,7 +968,8 @@ const HOST = {
         read: (name, cell) => `(${rev(name)}, ${stateRead(name, cell)})`,
         write: (cell, value) => `${cell} = ${value}`
     },
-    rewrite: (text, { source, lineOffset, component, bound }) => takeArrows(text, source, lineOffset, component, bound),
+    rewrite: (text, { source, lineOffset, component, bound, jsNames = [] }) =>
+        takeArrows(text, source, lineOffset, component, bound, jsNames),
     // Each declaration's marker read as its own statement's (`runeMarkerWords`).
     translate: (text, tree, names) => translateMarkers(text, tree, names),
     // A name of the `<script module>`, read off the getters the markup pass
@@ -3331,7 +3344,6 @@ function compile(
         .flatMap((section) => section(c))
         .join('\n');
 
-    refuseShadowedRunes(jsNames, script, source);
     refuseBuilt(declared, script, source, lines, lineOffset);
 
     return {
@@ -3387,38 +3399,6 @@ function refuseBuilt(declared, script, source, lines, lineOffset = 0) {
             `(${line === undefined ? source : `${source}:${line}`}), and the two would collide: choose another.`,
         source,
         line
-    );
-}
-
-// A name the `<script module>` binds, `state` or `effect`, is one Svelte reads
-// `$state` and `$effect` as a store of, and the script this component compiles
-// to writes those runes: it would not mount, `store.subscribe is not a
-// function`. Svelte's own answer is to rename it (`store_rune_conflict`), and
-// the author's JavaScript is the author's to rename, so it is refused, said
-// where.
-//
-// Only for a rune the component runs as it is built, which certainly fails: one
-// written on a line of the script's own level, ahead of any arrow on it. A rune
-// inside a function, the `$derived` of a helper or the `$host()` of another,
-// runs only if it is called, and Svelte warns of it as it compiles.
-const builtWith = (script, name) =>
-    script.split('\n').some((line) => {
-        const at = line.search(new RegExp(`\\$${name}\\b`));
-        const arrow = line.indexOf('=>');
-
-        return at !== -1 && !/^\s/.test(line) && (arrow === -1 || at < arrow);
-    });
-
-function refuseShadowedRunes(jsNames, script, source) {
-    const shadowed = jsNames.find((name) => HOST.runes.includes(name) && builtWith(script, name));
-
-    if (shadowed === undefined) return;
-
-    throw refuse(
-        `svelthon — the \`<script module>\` binds \`${shadowed}\`, and Svelte reads the ` +
-            `\`$${shadowed}\` this component compiles to as a store of it (${source}): ` +
-            `give it another name, as Svelte asks of a name a rune shadows.`,
-        source
     );
 }
 
@@ -3524,9 +3504,12 @@ function elementProps(src, jsNames = []) {
     return [...props, ...bindables].map((name) => ({ name, type: types.get(name) }));
 }
 
+const RUNES = HOST.runes;
+
 export {
     compile,
     MODULE_READERS,
+    RUNES,
     bridgeHooks,
     VIRTUAL_PREFIX,
     virtualId,
