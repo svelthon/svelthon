@@ -2607,6 +2607,32 @@ export const storeHeld = (value, bump) => {
     return python;
 };
 
+// A store's names as its module holds them now, as Python's `hasattr` answers,
+// asked of its `globals()`, which a page asking follows (`namespaceHolds`): a
+// name the module deleted, only annotated, or bound in a comprehension of its
+// own has a getter of the store, and was a key of it all the same. Its reads
+// are the getters' own.
+//
+// Left out only while JavaScript lets a key be: frozen or sealed, the store
+// keeps every key it has, as a frozen object must, where the freeze threw and
+// every listing after it. So the keys it left out go first, as it is closed:
+// a name only annotated appeared once it was.
+export const storeFacade = (members, ns) => {
+    const shown = (target, key) =>
+        typeof key !== 'string' || !Object.isExtensible(target) || Reflect.getOwnPropertyDescriptor(target, key)?.configurable === false || core.namespaceHolds(ns, key);
+
+    return new Proxy(members, {
+        has: (target, key) => (Object.hasOwn(target, key) ? shown(target, key) : Reflect.has(target, key)),
+        ownKeys: (target) => Reflect.ownKeys(target).filter((key) => shown(target, key)),
+        getOwnPropertyDescriptor: (target, key) => (shown(target, key) ? Reflect.getOwnPropertyDescriptor(target, key) : undefined),
+        preventExtensions: (target) => {
+            for (const key of Reflect.ownKeys(target)) if (!shown(target, key)) delete target[key];
+
+            return Reflect.preventExtensions(target);
+        }
+    });
+};
+
 // What the store's getter hands JavaScript for one of its names: a node as
 // `shownOf` hands it, and anything else as a member.
 export const storeShown = (ns, name) => {

@@ -869,6 +869,7 @@ const RUNTIME = {
     storeTrack: '__storeTrack',
     storeHeld: '__storeHeld',
     storeShown: '__storeShown',
+    storeFacade: '__storeFacade',
     exportedMember: '__exportedMember',
     directiveAction: '__directiveAction',
     directiveTransition: '__directiveTransition',
@@ -2037,7 +2038,7 @@ function preamble(c) {
             ...(c.props.includes('data') && routeComponent(c.source) ? ['routeData'] : []),
             'directiveAction', 'directiveTransition', 'directiveAnimate',
             'plainScalar', 'storeMember', 'storeValue', 'invoke',
-            ...(c.store ? ['pythonModule', 'storeTrack', 'storeHeld', 'storeShown'] : SUBSCRIBING(c) ? ['unsubscribe'] : []),
+            ...(c.store ? ['pythonModule', 'storeTrack', 'storeHeld', 'storeShown', 'storeFacade'] : SUBSCRIBING(c) ? ['unsubscribe'] : []),
             // Each by the rule that decides the code it is imported for.
             ...(c.store && storeExports(c).length ? ['liveExport'] : []),
             ...(exportsApi(c) ? ['liveExport', 'exportedMember'] : []),
@@ -2654,7 +2655,8 @@ function instanceExports(c) {
                   // had, and a state read `undefined` in an early cleanup. A
                   // state's read as JavaScript's (`storeShown`), which takes a
                   // value handed as it is, where Python's makes it its own.
-                  `const ${STORE_FACADE} = {`,
+                  // Its keys those the module holds now (`storeFacade`).
+                  `const ${STORE_FACADE} = ${RUNTIME.storeFacade}({`,
                   ...c.state.filter(c.published).map((n) => `    get ${n}() { return ${RUNTIME.storeShown}(${NS}, '${n}'); },`),
                   ...c.unsignalled.map((n) => `    get ${n}() { return ${storeRead(`${NS}.${n}`)}; },`),
                   // The parameter and the name its body reads are one constant.
@@ -2682,7 +2684,7 @@ function instanceExports(c) {
                   ...c.funcs
                       .filter((f) => c.published(f.name))
                       .map((f) => `    get ${f.name}() { return ${storeRead(`${NS}.${f.name}`)}; },`),
-                  `};`,
+                  `}, ${NS});`,
                   `export { ${STORE_FACADE} as store };`,
                   // Its default export too, made by the module JavaScript
                   // imports (`svelthon.js`, `eagerModule`).
@@ -3273,6 +3275,14 @@ function compile(
         (n) => !state.includes(n) && !deriveds.some((d) => d.name === n) && !isFunction(n)
     );
 
+    // And of the names it reads, only those something binds, a statement or
+    // `globals()` at a key, or a star import: a name nothing binds was a key of
+    // the store, `'missing' in store` true and `Object.keys` listing it, where
+    // Python's `hasattr` is false.
+    const readOnly = store && listed === null ? state.filter((n) => !binds.has(n) && !jsImported.includes(n)) : [];
+    const namespaceBound = writtenProps(table, root._ast.body, readOnly, annotatedAt);
+    const nothingBinds = new Set(starred ? [] : readOnly.filter((n) => !namespaceBound.has(n)));
+
     // Everything the sections read, gathered once. Nothing is computed here:
     // the whole of `compile()` above this line is the reading, and everything
     // below it is the writing.
@@ -3304,7 +3314,7 @@ function compile(
         emitted,
         // Whether a name belongs to the module's public surface. `__all__` when
         // the module wrote one, everything when it did not.
-        published: (name) => listed === null || listed.includes(name),
+        published: (name) => (listed === null ? !nothingBinds.has(name) : listed.includes(name)),
         listsAll: listed !== null,
         imported,
         props,

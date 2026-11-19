@@ -4,11 +4,13 @@
 // held another. A name the module reads and no statement binds has a cell.
 import { test, expect } from 'vitest';
 import { mount, flushSync } from './mounted.js';
+import { store as heldNamesStore } from './fixtures/store_held_names.svelte.py';
 import GlobalsWritten from './fixtures/GlobalsWritten.svelte';
 import GlobalsThroughFunctions from './fixtures/GlobalsThroughFunctions.svelte';
 import GlobalsBesideStar from './fixtures/GlobalsBesideStar.svelte';
 import GlobalsPrototypeNames from './fixtures/GlobalsPrototypeNames.svelte';
 import GlobalsWrittenStoreReader from './fixtures/GlobalsWrittenStoreReader.svelte';
+import { store as globalsWrittenStore } from './fixtures/globals_written_store.svelte.py';
 
 const mounted = (Component) => {
     const target = document.body.appendChild(document.createElement('div'));
@@ -68,4 +70,20 @@ test('a store follows one too, and a name nothing binds stays unbound', () => {
     instance.write(2);
 
     expect([first, view()]).toEqual([`2|1|1|${absent}`, `4|2|2|${absent}`]);
+});
+
+// A store with no `__all__` publishes the names it has, and a name it only reads
+// is none of them: `missing` was a key of the store, where Python's `hasattr`
+// is false. The name only `globals()` binds is one of them.
+test('a store publishes no name that nothing binds', () => {
+    expect(['missing' in globalsWrittenStore, 'future' in globalsWrittenStore, Object.keys(globalsWrittenStore).includes('missing')]).toEqual([false, true, false]);
+});
+
+// Nor a name its module does not hold, as Python's `hasattr` answers: one only
+// annotated, one deleted, the variable of a comprehension of its own.
+test('a store publishes no name its module does not hold', () => {
+    const names = ['note', 'deleted', 'value', 'last', 'squares', 'kept'];
+
+    expect(names.filter((name) => name in heldNamesStore)).toEqual(['last', 'squares', 'kept']);
+    expect(Object.keys(heldNamesStore).sort()).toEqual(['kept', 'last', 'squares']);
 });
