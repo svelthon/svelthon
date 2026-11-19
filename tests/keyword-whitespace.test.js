@@ -77,7 +77,7 @@ describe.for(CONSTRUCTS)('%s', ([, shape]) => {
 // each of these is a construct Svelte refuses too.
 describe('and what is still not a block', () => {
     test.for([
-        ['a keyword with nothing after it', '{#if}<p>a</p>{/if}', 'not a block'],
+        ['a keyword with nothing after it, told what it opens on', '{#if}<p>a</p>{/if}', '`{#if}` holds nothing'],
         ['a block nobody has', '{#unless ready}<p>a</p>{/unless}', 'not a block'],
         ['a clause nobody has', '{#if ready}<p>a</p>{:otherwise}<p>b</p>{/if}', 'not a clause'],
         ['a tag nobody has', '{@paste text}', 'not a tag'],

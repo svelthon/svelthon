@@ -2540,6 +2540,20 @@ const declarationKeyword = (trimmed, at) =>
             `rather than passed through.`
     );
 
+// And one that takes a value apart, `{const {a, b} = row}` or `{@const [a] =
+// pair}`, which Svelthon declares one name at a time: it was told a tag
+// Svelthon does not know, or that its Python did not parse.
+const DESTRUCTURING_KEYWORD = /^@?(const|let|var)\s+[[{][\s\S]*?[\]}]\s*=(?!=)/;
+
+const destructuringKeyword = (trimmed, at) =>
+    new SyntaxError(
+        `svelthon — \`{${trimmed}}\` takes a value apart with ` +
+            `${trimmed.startsWith('@') ? "Svelte's `{@const}`" : 'a JavaScript keyword'}${at}; ` +
+            `a Svelthon declaration binds one name to one expression, \`{name = expression}\`, ` +
+            `one for each name the pattern takes out, and \`{name => expression}\` for one ` +
+            `that follows what it reads.`
+    );
+
 // Where a spread is written, and the three places it is not.
 //
 // A spread fills a tag's attributes, so it is an attribute of its own: `<div
@@ -2578,6 +2592,21 @@ const unknownTag = (trimmed, kind, known, at) =>
             `the ${kind}s are ${known.join(', ')}. A construct left unhandled would ` +
             `cross as JavaScript, so it is refused rather than passed through.`
     );
+
+// What a block, or an `{:else if}`, opens on, said of one written with nothing
+// there: `{#if }` was told it was not a block, and `{:else if }` reached Svelte
+// as `Unexpected token`, at no line of the author's.
+const OPENS_ON = {
+    if: 'a condition, `{#if condition}`',
+    each: 'the rows it walks, `{#each rows as row}`',
+    key: 'the value it is keyed on, `{#key value}`',
+    await: 'what it waits for, `{#await promise then value}`',
+    snippet: 'a name, `{#snippet name()}`',
+    'else if': 'a condition, `{:else if condition}`'
+};
+
+const emptyBlock = (written, name, at) =>
+    new SyntaxError(`svelthon — \`{${written}}\` holds nothing${at}: it opens on ${OPENS_ON[name]}.`);
 
 // Where a refusal happened, in the file the author is looking at, as every
 // refusal of the compiler names one: `walk()` keeps `region` on every `{…}` it
@@ -4498,6 +4527,17 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                         // the entries too on a component a tag holds.
                         const spreadExpression = trimmed.slice(2);
 
+                        // A spread of nothing, which compiled to one of an
+                        // empty call, where Svelte refuses `{...}`.
+                        if (spreadExpression.trim() === '') {
+                            throw refuse(
+                                new SyntaxError(
+                                    `svelthon — \`{**}\` spreads nothing${said()}: a spread names the mapping ` +
+                                        `whose entries become the attributes, \`{**attrs}\`.`
+                                )
+                            );
+                        }
+
                         out +=
                             heldChild() !== null
                                 ? `{...${readThrough(spreadExpression, call(spreadExpression, '__spreadEntries', undefined, 'python'), (entries) => forChild(entries, 'spread'))}}`
@@ -4883,6 +4923,8 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                     `${SNIPPET_FRAME}${serial}`,
                     identity
                 )}`;
+            } else if (opened !== null && BLOCKS.includes(opened.name) && opened.rest === '') {
+                throw refuse(emptyBlock(trimmed, opened.name, said()));
             } else {
                 throw refuse(unknownTag(trimmed, 'block', BLOCKS, said()));
             }
@@ -4892,6 +4934,8 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
             out += markup.slice(index, end + 1);
         } else if (trimmed.startsWith(':')) {
             const clause = keyword(trimmed, ':');
+
+            if (/^:else\s+if$/.test(trimmed)) throw refuse(emptyBlock(':else if', 'else if', said()));
 
             declared(chain.memosAt());
 
@@ -5114,6 +5158,8 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                             `and \`{name => expression}\` for one that follows what it reads.`
                     )
                 );
+            } else if (DESTRUCTURING_KEYWORD.test(trimmed)) {
+                throw refuse(destructuringKeyword(trimmed, said()));
             } else {
                 throw refuse(unknownTag(trimmed, 'tag', TAGS, said()));
             }
@@ -5121,6 +5167,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
             throw refuse(spreadOutOfPlace(trimmed, said(), null));
         } else {
             if (DECLARATION_KEYWORD.test(trimmed)) throw refuse(declarationKeyword(trimmed, said()));
+            if (DESTRUCTURING_KEYWORD.test(trimmed)) throw refuse(destructuringKeyword(trimmed, said()));
 
             const declared = declaration(inner);
 

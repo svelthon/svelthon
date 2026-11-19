@@ -1343,6 +1343,43 @@ describe('an unknown construct is refused, never passed through', () => {
         }
     });
 
+    // And one that takes a value apart, which Svelthon declares one name at a
+    // time: `{@const {a} = x}` was told a tag Svelthon does not know, and
+    // `{const {a} = x}` that its Python did not parse. A variable `const`
+    // subscripted is an expression still.
+    test.for([
+        ['{#each rows as n}{@const {a} = n}{/each}', "Svelte's `{@const}`"],
+        ['{#each rows as n}{@const [a, b] = n}{/each}', "Svelte's `{@const}`"],
+        ['{#each rows as n}{const {a} = n}{/each}', 'a JavaScript keyword'],
+        ['{#each rows as n}{let [a] = n}{/each}', 'a JavaScript keyword']
+    ])('%s is refused as a declaration that takes a value apart', ([markup, said]) => {
+        expect(() => rewrite(markup)).toThrow(`takes a value apart with ${said}`);
+        expect(() => rewrite(markup)).toThrow('one for each name the pattern takes out');
+    });
+
+    test('while a variable named const, subscripted, is an expression', () => {
+        expect(() => rewrite('<p>{const [0]}</p>')).not.toThrow();
+    });
+
+    // A block, or an `{:else if}`, with nothing to open on: `{#if }` was told it
+    // was no block, and `{:else if }` reached Svelte as `Unexpected token`, at no
+    // line of the author's.
+    test.for([
+        ['{#if }x{/if}', '{#if}', '`{#if condition}`'],
+        ['{#each }x{/each}', '{#each}', '`{#each rows as row}`'],
+        ['{#key }x{/key}', '{#key}', '`{#key value}`'],
+        ['{#await }x{/await}', '{#await}', '`{#await promise then value}`'],
+        ['{#if x}a{:else if }b{/if}', '{:else if}', '`{:else if condition}`']
+    ])('%s says what it opens on', ([markup, written, opens]) => {
+        expect(() => rewrite(markup)).toThrow(`\`${written}\` holds nothing`);
+        expect(() => rewrite(markup)).toThrow(opens);
+    });
+
+    // And a spread of nothing, which compiled, where Svelte refuses `{...}`.
+    test('{**} is refused as a spread of nothing', () => {
+        expect(() => rewrite('<i {**}>x</i>')).toThrow('`{**}` spreads nothing');
+    });
+
     // A spread is an attribute of its own. Written as the *value* of a named one
     // it was refused in neither spelling: `title={**x}` reached Brython as an
     // expression and `title="{**x}"` reached it as `__text(**x)`, so the author
