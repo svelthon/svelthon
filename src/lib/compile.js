@@ -3158,6 +3158,7 @@ function compile(
         defs = [],
         defLines = [],
         defColumns = [],
+        defTexts = [],
         jsNames = [],
         // The template expressions whose flag the markup reads (`unmemoized`),
         // which the instance script declares.
@@ -3229,6 +3230,7 @@ function compile(
         defs: [...defs.map((def) => templateDots(HOST, def)), ...(binding !== null && component ? [binding] : [])],
         defLines,
         defColumns,
+        defTexts,
         lineOffset,
         jsNames,
         resolves,
@@ -3443,8 +3445,10 @@ function compile(
         source,
         lineOffset,
         // How a Python line becomes a file line, read by `pyError`: the offset
-        // alone, or the offset with the template functions' ranges.
-        lines: exprLines.length ? { offset: lineOffset, ranges: exprLines } : lineOffset,
+        // alone, or the offset with the template functions' ranges. Without
+        // the text of each expression, which only a compile error quotes: in
+        // the script, `f"<script>{name}</script>"` closed it.
+        lines: exprLines.length ? { offset: lineOffset, ranges: exprLines.map((range) => range.slice(0, 4)) } : lineOffset,
         templateLine,
         unwritten,
         store,

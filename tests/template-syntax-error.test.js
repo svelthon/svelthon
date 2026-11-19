@@ -44,6 +44,16 @@ test('and an expression over three lines, the line at fault', async () => {
     expect(error.message).toMatch(/\(Component:8\)/);
 });
 
+// The expression quoted as written, out of the pair the template's pass holds
+// it in: `{#if a = 5}` was quoted `(a = 5)`, a text the author never wrote.
+test.for([
+    ['{#if ok = 5}<p>x</p>{/if}\n', '`ok = 5`'],
+    ['<p class={ok = 5}>x</p>\n', '`ok = 5`'],
+    ['{#if (ok = 5)}<p>x</p>{/if}\n', '`(ok = 5)`']
+])('the expression of %s is quoted as written', async ([markup, quoted]) => {
+    expect((await refused(markup)).message).toContain(`in the template expression ${quoted}, which is Python`);
+});
+
 // A conversion is not a negation: `!r` belongs in an f-string field.
 test('a conversion outside an f-string is not called a negation', async () => {
     const error = await refused('{count!r}\n');

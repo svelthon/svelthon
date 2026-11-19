@@ -2531,10 +2531,18 @@ function misdeclared(inner) {
 // reads Python, and it is refused with the spelling that replaces it.
 const DECLARATION_KEYWORD = new RegExp(`^(const|let|var)\\s+(${NAME})\\s*=\\s*(.+)$`, 'su');
 
+// How Svelthon writes such a declaration, `const a = n` as `{a = n}`; one that
+// compares, `const c == a`, declares nothing, and was told `{c = = a}`.
+const declarationSpelled = (text) => {
+    const match = DECLARATION_KEYWORD.exec(text);
+
+    return match === null || match[3].startsWith('=') ? 'a declaration `{name = expression}`' : `it \`{${match[2]} = ${match[3]}}\``;
+};
+
 const declarationKeyword = (trimmed, at) =>
     new SyntaxError(
         `svelthon — \`{${trimmed}}\` declares with a JavaScript keyword${at}; ` +
-            `Svelthon writes it \`{${trimmed.replace(DECLARATION_KEYWORD, '$2 = $3')}}\`, ` +
+            `Svelthon writes ${declarationSpelled(trimmed)}, ` +
             `and \`{name => expression}\` for one that follows what it reads. A ` +
             `construct left unhandled would cross as JavaScript, so it is refused ` +
             `rather than passed through.`
@@ -5217,7 +5225,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 throw refuse(
                     new SyntaxError(
                         `svelthon — \`{${trimmed}}\` is Svelte's \`{@const}\`${said()}; ` +
-                            `Svelthon writes it \`{${trimmed.slice(1).replace(DECLARATION_KEYWORD, '$2 = $3')}}\`, ` +
+                            `Svelthon writes ${declarationSpelled(trimmed.slice(1))}, ` +
                             `and \`{name => expression}\` for one that follows what it reads.`
                     )
                 );
@@ -5425,7 +5433,7 @@ export function moduleScriptIndex(content) {
 // `lines` and `columns` receive, per function, where its expression is written
 // in the file: the table an error is placed with, at compile time and at run
 // time.
-export function collector(defs, lines, columns) {
+export function collector(defs, lines, columns, texts) {
     const seen = new Map();
 
     return (written, wrapper, args, assign = false, line, kind = '', column, late = false) => {
@@ -5461,6 +5469,10 @@ export function collector(defs, lines, columns) {
         seen.set(key, name);
         lines?.push(line);
         columns?.push(column);
+        // And its text, which an error quotes as written (`pythonError`): out
+        // of the pair the functions below hold it in, `{#if a = 5}` was quoted
+        // `(a = 5)`.
+        texts?.push(expression);
 
         if (assign === 'call') {
             // The write half of a function binding, `bind:value={get, put}`:

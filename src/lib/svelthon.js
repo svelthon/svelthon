@@ -786,6 +786,15 @@ const compiledAsBefore = (file) => {
 // strings are refused, as Svelte refuses an option it does not know, where the
 // first was ignored in silence and the second raised a JavaScript error.
 const searchPathOf = (options, root) => {
+    // An object to begin with: `python(null)` raised a JavaScript error, and
+    // `python('src/lib')` was told of an option `0`, the index of its first
+    // letter. The folders a string or a list names are said as the option.
+    if (options === null || typeof options !== 'object' || Array.isArray(options)) {
+        const named = typeof options === 'string' ? [options] : Array.isArray(options) && options.every((one) => typeof one === 'string') ? options : ['src/lib'];
+
+        throw new Error(`svelthon — the options are an object, as \`{ path: ${JSON.stringify(named).replaceAll('"', "'").replaceAll(',', ', ')} }\``);
+    }
+
     for (const name of Object.keys(options)) {
         if (name !== 'path') {
             throw new Error(`svelthon — unknown option \`${name}\`: the one option is \`path\`, as \`path: ['src/lib']\``);
@@ -862,11 +871,12 @@ export function python(options = {}) {
                 lineOffset: content.slice(0, open).split('\n').length - 1,
                 defs: [],
                 defLines: [],
-                defColumns: []
+                defColumns: [],
+                defTexts: []
             };
 
             // The collector itself is in markup.js, which the browser can load.
-            const collect = collector(file.defs, file.defLines, file.defColumns);
+            const collect = collector(file.defs, file.defLines, file.defColumns, file.defTexts);
 
             const python = content.slice(open, declaring.end);
 

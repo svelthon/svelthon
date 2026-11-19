@@ -1337,6 +1337,9 @@ describe('an unknown construct is refused, never passed through', () => {
     test('Svelte’s {@const} is named, and only it', () => {
         expect(() => rewrite('{#each rows as n}{@const a = n}{/each}')).toThrow("is Svelte's `{@const}`");
         expect(() => rewrite('{#each rows as n}{@const a = n}{/each}')).toThrow('Svelthon writes it `{a = n}`');
+        // and one that compares declares nothing: it was told `{c = = a}`
+        expect(() => rewrite('{#each rows as n}{@const c == n}{/each}')).toThrow('Svelthon writes a declaration `{name = expression}`');
+        expect(() => rewrite('{#each rows as n}{const c == n}{/each}')).toThrow('Svelthon writes a declaration `{name = expression}`');
 
         for (const markup of ['{#each rows as n}{@let a = n}{/each}', '{#each rows as n}{@var a = n}{/each}']) {
             expect(() => rewrite(markup)).toThrow(/is not a tag Svelthon knows/);
