@@ -3533,6 +3533,32 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         return node.elts.map((one) => source.slice(offset(one.lineno, one.col_offset), offset(one.end_lineno, one.end_col_offset)));
     };
 
+    // A class written as a string, or as a choice between such, `"a" if on else
+    // "b"`, written so Svelte reads which classes it may be: through its adapter
+    // it was a call, which Svelte takes for any class, and a selector no element
+    // could take went unwarned (`css_unused_selector`). The test is Python's,
+    // read for its truth as an `{#if}` reads it. Null for any other expression.
+    const knownClass = (expr) => {
+        const source = `(${expr}\n)`;
+        const ast = globalThis.__BRYTHON__.ast;
+        const lines = source.split('\n');
+        const offset = (line, column) => lines.slice(0, line - 1).reduce((sum, one) => sum + one.length + 1, 0) + column;
+        const known = (node) => {
+            if (node instanceof ast.Constant && typeof node.value === 'string') return JSON.stringify(node.value);
+            if (!(node instanceof ast.IfExp)) return null;
+
+            const [body, orelse] = [known(node.body), known(node.orelse)];
+
+            if (body === null || orelse === null) return null;
+
+            const test = source.slice(offset(node.test.lineno, node.test.col_offset), offset(node.test.end_lineno, node.test.end_col_offset));
+
+            return `(${unmemoized(test, call(test, '__truthy'))} ? ${body} : ${orelse})`;
+        };
+
+        return known(targetTree(source));
+    };
+
     const spreadSelect = (directive, expr) => {
         if (directive !== 'bind:value' || tag?.name !== 'select' || selectMode(markup, tag.start) !== 'element') return null;
 
@@ -4230,6 +4256,9 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
             return `{${readThrough(inner, call(inner, '__boxed', undefined, 'python'), (boxed) => `__pybridge.element(${tag.element}, ${JSON.stringify(wrapper)}, ${boxed}[0], ${JSON.stringify(name)})`)}}`;
         }
 
+        const known = wrapper === '__class' && tag?.element === undefined ? knownClass(inner) : null;
+
+        if (known !== null) return `{${known}}`;
         if (wrapper) return `{${onElement(tag) ? unmemoized(inner, call(inner, wrapper)) : call(inner, wrapper)}}`;
 
         // `href={website}` with nothing to show: None goes out as undefined so
@@ -4316,8 +4345,10 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                         if (SPREAD(written)) throw refuse(spreadOutOfPlace(written, said(), named));
 
                         const inner = markup.slice(index + 1, end);
+                        // A class among the text, as Svelte reads one (`knownClass`).
+                        const known = !quotedLone && named === 'class' && onElement(tag) && tag.element === undefined ? knownClass(inner) : null;
 
-                        out += quotedLone ? attributeValue(named, inner) : `{${rendered(inner, quotedHanded)}}`;
+                        out += quotedLone ? attributeValue(named, inner) : known !== null ? `{${known}}` : `{${rendered(inner, quotedHanded)}}`;
                         region = null;
                         index = end + 1;
                         continue;
