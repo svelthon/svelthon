@@ -165,6 +165,7 @@ const {
     pickled,
     unpickled,
     roundTrip,
+    statePrint,
     pickleNode,
     isPlainDict,
     crossesBack,
@@ -3133,7 +3134,7 @@ const pickledFor = (value) => {
     serialisation();
 
     try {
-        return pickled(value, { memo: serialising, refused: refusedModule });
+        return pickled(value, { memo: serialising, refused: refusedModule, crossed: FRESH_REBUILT });
     } catch (error) {
         throw pyError(error, 'the data handed to the browser');
     }
@@ -3153,19 +3154,62 @@ const pickledFor = (value) => {
 // copy, and the structure of one crossing is not its own.
 const CROSSING = new WeakMap();
 
+// And each instance of a copy that a reduction or the author's code rebuilt,
+// the node it was rebuilt from (`REBUILT`), which it crosses as wherever it
+// crosses again: a remote function's answer a JavaScript `load()` returns was
+// rebuilt again from the copy, its reduction run twice. Only those: any other
+// copy is pickled as it is then, a change made to it since included.
+const REBUILT = new WeakMap();
+
+// Each structure kept beside what its copy held as it was rebuilt (`print`,
+// read off its storage by `statePrint`), and taken again only while the copy
+// holds the same: a `load()` that wrote to the answer it was handed saw its
+// write lost in the browser, which rebuilt the answer as it was. A copy changed
+// since crosses as it is then. Read without the author's code: pickled again
+// for the print, a reduction that moves a counter moved it in the answer the
+// page then read.
+const remember = (map, copy, structure) => {
+    map.set(copy, { structure, print: statePrint(copy) });
+};
+
+const remembered = (map, copy) => {
+    const kept = map.get(copy);
+
+    return kept !== undefined && sameStructure(statePrint(copy), kept.print) ? kept.structure : undefined;
+};
+
+// Alike, and shared alike: each object of one print stands for one object of
+// the other, both ways. Asked one way, two labels a `load()` took apart, or
+// one it made of two, read alike, and the browser rebuilt the sharing before
+// the write.
+const sameStructure = (one, other, forth = new Map(), back = new Map()) => {
+    if (Object.is(one, other)) return true;
+    if (!Array.isArray(one) || !Array.isArray(other) || one.length !== other.length) return false;
+    if (forth.has(one) || back.has(other)) return forth.get(one) === other && back.get(other) === one;
+    forth.set(one, other);
+    back.set(other, one);
+    return one.every((part, at) => sameStructure(part, other[at], forth, back));
+};
+
+const FRESH_REBUILT = { get: (copy) => remembered(REBUILT, copy) };
+
 const crossing = (value, lenient = false, keep = false) => {
     if (value === null || typeof value !== 'object') return { copy: value };
-    if (CROSSING.has(value)) return { copy: value, structure: CROSSING.get(value) };
+
+    const kept = remembered(CROSSING, value);
+
+    if (kept !== undefined) return { copy: value, structure: kept };
 
     let made;
 
     try {
-        made = roundTrip(value, { refused: refusedModule, keep });
+        made = roundTrip(value, { refused: refusedModule, keep, crossed: FRESH_REBUILT });
     } catch (error) {
         if (lenient) return undefined;
         throw pyError(error, 'the data handed to the browser');
     }
-    if (!made.kept && made.copy !== null && typeof made.copy === 'object') CROSSING.set(made.copy, made.structure);
+    if (!made.kept && made.copy !== null && typeof made.copy === 'object') remember(CROSSING, made.copy, made.structure);
+    for (const [copy, structure] of made.rebuilt) remember(REBUILT, copy, structure);
 
     return made;
 };
@@ -3516,7 +3560,7 @@ const codec = {
         const python = pythonOf(thing);
 
         if (python !== undefined) {
-            const structure = CROSSING.get(python) ?? pickledFor(python);
+            const structure = remembered(CROSSING, python) ?? pickledFor(python);
             const made = isPlainDict(python) ? ours('p', namesOf(python), structure) : structure;
 
             return Array.isArray(made) ? made : ours('=', made);

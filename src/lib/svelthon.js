@@ -1460,6 +1460,11 @@ export function svelthon(options = {}) {
     const searchPath = searchPathOf(options, root);
     const key = (id) => generatedKey(root, id);
 
+    // Whether a module is Python's: a `.py` file, or the body of one, served
+    // under an id of its own that names the file it was compiled from.
+    const pythonImporter = (importer) =>
+        splitQuery(importer)[0].endsWith('.py') || (importer.startsWith('\0') && generated.get(key(importer.slice(1)))?.file !== undefined);
+
     // Whether a change of a file leaves it as it was compiled from
     // (`compiledAsBefore`), asked once per change, its `timestamp`, which Vite
     // hands every environment alike (`hotUpdate`).
@@ -1494,6 +1499,12 @@ export function svelthon(options = {}) {
     // `cart_impl.py` is a store. Taken for its target, the module was compiled
     // as `settings_dev`, and `import config` found no module of its name.
     let preserveSymlinks = false;
+
+    // What a `.remote.py`'s `$app/server` reaches this plugin as: SvelteKit's
+    // alias makes a path of `$app` before `resolveId` is asked
+    // (`configResolved`).
+    let kitServer = KIT_SERVER;
+
     const fileOf = (path) => {
         if (preserveSymlinks) return path;
 
@@ -1719,6 +1730,10 @@ export function svelthon(options = {}) {
             routes = config.root;
             preserveSymlinks = config.resolve?.preserveSymlinks === true;
 
+            const app = [config.resolve?.alias ?? []].flat().find((one) => one.find === '$app')?.replacement;
+
+            if (typeof app === 'string') kitServer = `${app}/server`;
+
             const names = config.plugins.map((one) => one.name);
 
             if (names.indexOf('vite-plugin-sveltekit-guard') > names.indexOf('svelthon:modules')) {
@@ -1737,7 +1752,16 @@ export function svelthon(options = {}) {
                 return this.resolve(specifier, importer, { skipSelf: true }).then((real) => (real ? wrapper + real.id : real));
             }
 
-            if (specifier === KIT_SERVER && importer !== undefined && isRemote(splitQuery(importer)[0])) {
+            // A Python module's `$app/server`, by its name or by the path
+            // SvelteKit's alias makes of it before this hook is asked
+            // (`kitServer`): asked by the name alone, the remote functions
+            // stayed SvelteKit's own, and a page the server rendered read the
+            // raw answer where the browser read it rebuilt. Told by its text,
+            // and not by resolving `$app/server` here, which the alias handed
+            // back to this hook without end. Any Python module's, a
+            // `.remote.py`'s or the body of one a remote module imports: a
+            // factory there made the remote functions SvelteKit's own.
+            if ((specifier === KIT_SERVER || specifier === kitServer) && importer !== undefined && pythonImporter(importer)) {
                 return this.resolve(specifier, importer, { skipSelf: true }).then((real) => (real ? REMOTE_SERVER + real.id : real));
             }
 

@@ -230,6 +230,37 @@ if (doors.includes('action')) {
     compare('action', 'walked', 'form', picked(answered, 'form'), await text('form'));
 }
 
+// Remote answers a JavaScript `load()` hands its page, one of them changed by
+// the load: the browser rebuilt it as the remote function answered it, the
+// change lost, after hydration and after a navigation.
+if (doors.includes('ssr')) {
+    const page = await server('/relayed');
+
+    said = [];
+    await visit('/relayed');
+    for (const key of ['relayed', 'made', 'changed', 'shelf']) compare('ssr', 'relayed', key, picked(page, key), await text(key));
+    await visit('/data');
+    said = [];
+    await evaluate(`const link = document.createElement('a'); link.href = '/relayed'; document.body.append(link); link.click()`);
+    await until(`document.body.dataset.navigated === '2'`);
+    for (const key of ['relayed', 'made', 'changed', 'shelf']) compare('nav', 'relayed', key, picked(page, key), await text(key));
+
+    // And a pair the load takes apart, or makes of one, as its page's one
+    // Python value: read after a navigation with the sharing it had before.
+    for (const [mode, expected] of [['split', 'apart|apart'], ['merge', 'shared|shared']]) {
+        const paired = await server(`/paired/${mode}`);
+
+        said = [];
+        await visit(`/paired/${mode}`);
+        compare('ssr', `paired-${mode}`, 'paired', expected, await text('paired'));
+        await visit('/data');
+        said = [];
+        await evaluate(`const link = document.createElement('a'); link.href = '/paired/${mode}'; document.body.append(link); link.click()`);
+        await until(`document.body.dataset.navigated === '2'`);
+        compare('nav', `paired-${mode}`, 'paired', picked(paired, 'paired'), await text('paired'));
+    }
+}
+
 // What a remote function prerendered, which the server reads back from the
 // site's address as it renders, and hands the page: an instance, rebuilt there
 // under the build's signature, and in the browser by its class.

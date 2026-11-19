@@ -191,6 +191,18 @@ fi
 
 remote greeting 'hello from Python'
 remote shout 'shouted from python'
+# An instance a remote function answers, read by a page the server renders as
+# the browser reads it, rebuilt from what it reduces to: SvelteKit's alias of
+# `$app` hid the import Svelthon relays, and the server read the raw one. The
+# answer a JavaScript load returns was rebuilt again, its mark doubled. And one
+# a factory of a module of its own made, whose import Svelthon did not relay.
+# And one the load changes, read changed (`kit-data.mjs` reads it in the browser),
+# and one whose reduction counts its runs, which checking it ran again. And a
+# pair a load takes apart or makes of one (`/paired`, read by `kit-data.mjs`).
+route /relayed 'data-k="relayed">RELAYED FROM PYTHON!|RELAYED FROM PYTHON!<'
+route /relayed 'data-k="made">MADE BY A FACTORY!<'
+route /relayed 'data-k="changed">CHANGED BY A LOAD / PUBLIC|CHANGED BY A LOAD / PUBLIC<'
+route /relayed 'data-k="shelf">shelf:1<'
 # Prerendered at build: SvelteKit rewrites the declaration of its name, and a
 # variable of ours of that name stopped the build.
 remote facts 'prerendered from Python'
@@ -229,6 +241,10 @@ if kill -0 "$DEV" 2>/dev/null; then
     answered /moved 303 /load
     header / 'x-python-hook: handle'
     route /rerouted '42 from [0, 1, 4, 9]'
+    route /relayed 'data-k="relayed">RELAYED FROM PYTHON!|RELAYED FROM PYTHON!<'
+    route /relayed 'data-k="made">MADE BY A FACTORY!<'
+    route /relayed 'data-k="changed">CHANGED BY A LOAD / PUBLIC|CHANGED BY A LOAD / PUBLIC<'
+    route /relayed 'data-k="shelf">shelf:1<'
     answered /vault 500
     data_check
 else
