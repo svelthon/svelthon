@@ -71,6 +71,18 @@ describe('every component an element', () => {
         expect(py.names).toEqual(['v', 'flag']);
     });
 
+    // As Svelte takes a Svelte component's, by their names alone, which no
+    // preprocessor is handed: its attributes arrive as strings. A file that
+    // declares its element gives each the type its annotation names.
+    test('a component the compile options make an element takes its props by their names alone', async () => {
+        const api = configured(true);
+        const props = ({ js }) => /create_custom_element\(\s*\w+,\s*(\{[^]*?\}),\s*\[/.exec(js)?.[1].replace(/\s+/g, ' ');
+        const [py, js] = [await element(api, python), await element(api, native)];
+
+        expect(props(py)).toBe(props(js));
+        expect(props(py)).not.toContain('type');
+    });
+
     // And `"{null}"` between quotes, Svelte's configuration as it is bare, was
     // read as Python's `null` and refused.
     test('and left as it is where Svelte compiles none as one', async () => {

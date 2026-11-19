@@ -39,11 +39,11 @@ const read = (before, after = '') => new RegExp(`${before}${READ}${after}`);
 
 // And a prop handed to a component, a name or a member, through a getter made
 // once beside the derived it reads, and telling a Python child its parent is
-// Python and whether it read afresh.
+// Python.
 const handed = (name) =>
     `{const ${name}_memo = $derived(__pybridge.reading(__expr_reread, '${name}', () => ${name}()))}` +
-    `{const ${name}_read = { expression: () => ${name}(), held: () => ${name}_memo, get value() { return __expr_reread.${name} ? ` +
-    `__pybridge.handed(__pybridge.reading(__expr_reread, '${name}', this.expression, this.held), true) : __pybridge.handed(${name}_memo, __expr_reread.${name}); } }}`;
+    `{const ${name}_read = { expression: () => ${name}(), held: () => ${name}_memo, get value() { return ` +
+    `__pybridge.handed(__expr_reread.${name} ? __pybridge.reading(__expr_reread, '${name}', this.expression, this.held) : ${name}_memo); } }}`;
 
 // `(x := 1)` in a template writes the component's name through the namespace,
 // which is what makes it reach the signal. Python's own grammar forces the

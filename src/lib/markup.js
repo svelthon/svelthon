@@ -4141,9 +4141,8 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     // (`should_wrap_in_derived`), and so is the whole value between quotes it
     // is part of (`held`); a spread Svelte reads again unless it calls
     // something. The getter tells a Python child that its parent is Python,
-    // which weighed its own reads of JavaScript's data, and whether what it
-    // hands was read afresh (`__pybridge.handed`): held in Svelte's derived, a
-    // prop told it nothing, and the child read it again at each render.
+    // which weighed its own reads of JavaScript's data (`__pybridge.handed`),
+    // so that the child takes no read of it for one no signal follows.
     const unmemoized = (inner, read, text = false, handed = false) => {
         const called = /^(__expr_\w+)\(/.exec(read);
         const calls = callsAnything(inner);
@@ -4164,8 +4163,8 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
             chain.memoRow(
                 again
                     ? memo(name) +
-                          reader(name, `__expr_reread.${name} ? __pybridge.handed(${afresh(name)}, true) : __pybridge.handed(${name}_memo, __expr_reread.${name})`)
-                    : `{const ${name}_memo = $derived(${read})}{const ${name}_read = { get value() { return __pybridge.handed(${name}_memo, false); } }}`,
+                          reader(name, `__pybridge.handed(__expr_reread.${name} ? ${afresh(name)} : ${name}_memo)`)
+                    : `{const ${name}_memo = $derived(${read})}{const ${name}_read = { get value() { return __pybridge.handed(${name}_memo); } }}`,
                 mentioned(inner.trim())
             );
 

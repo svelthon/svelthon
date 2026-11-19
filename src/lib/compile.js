@@ -140,6 +140,7 @@ function refuseTemplateWalrus(ast, table, source, ranges) {
 // `globals()["ticket"] = 1` is that prop, and a namespace handed on, updated or
 // written at a key no text says, any of them.
 const NAMESPACE_READS = new Set(['get', 'keys', 'values', 'items', 'copy', '__contains__', '__getitem__']);
+const NAMESPACE_DOORS = ['globals', '__globals__', 'f_globals'];
 
 function writtenProps(table, body, props, annotatedAt) {
     const written = new Set();
@@ -196,6 +197,43 @@ function writtenProps(table, body, props, annotatedAt) {
             if (!NAMESPACE_READS.has(node.attr)) all();
             return;
         }
+
+        // A name a statement binds by its text, not by a target: `def`,
+        // `class`, `import … as`, `except … as`, which deletes it as it ends,
+        // and a capture of `match`, written where they bind it. A star import
+        // may bring any name.
+        const boundByText =
+            node instanceof ast.FunctionDef || node instanceof ast.AsyncFunctionDef || node instanceof ast.ClassDef
+                ? node.name
+                : node instanceof ast.alias
+                  ? (node.asname ?? node.name.split('.')[0])
+                  : node instanceof ast.ExceptHandler || node instanceof ast.MatchAs || node instanceof ast.MatchStar
+                    ? node.name
+                    : node instanceof ast.MatchMapping
+                      ? node.rest
+                      : null;
+
+        if (boundByText === '*') all();
+        else if (wanted.has(boundByText) && (block === table.top || isGlobalScope(scopeIn(block, boundByText)))) written.add(boundByText);
+
+        // And the namespace reached through another door than `globals()`,
+        // any of them in doubt: `vars()` and `locals()`, which are `globals()`
+        // at the module's level alone (in a function or a class, they are its
+        // own names, which hold no prop), the function itself handed on, a
+        // function's `__globals__`, a frame's `f_globals`, and an attribute
+        // `getattr` reads by a name the text does not say.
+        if (node instanceof ast.Call && node.func instanceof ast.Name && ['vars', 'locals'].includes(node.func.id)) {
+            if (node.args.length === 0 && block === table.top) all();
+            return visit(node.args, inner);
+        }
+        if (node instanceof ast.Name && node.ctx instanceof ast.Load && ['globals', 'vars', 'locals'].includes(node.id)) all();
+        if (node instanceof ast.Attribute && NAMESPACE_DOORS.includes(node.attr)) all();
+        if (node instanceof ast.Call && node.func instanceof ast.Name && node.func.id === 'getattr' && node.args.length > 1) {
+            const attribute = literal(node.args[1]);
+
+            if (attribute === null || NAMESPACE_DOORS.includes(attribute)) all();
+        }
+
         if (namespace(node)) all();
         if (through && name === null) all();
 
@@ -209,6 +247,23 @@ function writtenProps(table, body, props, annotatedAt) {
         // of the child's.
         if (node instanceof ast.AnnAssign && node.target instanceof ast.Name && (node.value == null || annotatedAt[node.target.id] === node.lineno)) {
             return visit([node.annotation, node.value], inner);
+        }
+
+        // What a definition evaluates as it runs, its defaults, its decorators
+        // and its bases, is read where it is defined, as Python evaluates it;
+        // the rest in its own scope. Read in the function's, a `:=` in a default
+        // wrote no prop, and the page refused it as read-only.
+        if (inner !== block && (node instanceof ast.FunctionDef || node instanceof ast.AsyncFunctionDef || node instanceof ast.Lambda || node instanceof ast.ClassDef)) {
+            const definedBy = (field) => ['decorator_list', 'bases', 'keywords'].includes(field);
+
+            for (const field of node.constructor._fields) {
+                if (definedBy(field)) visit(node[field], block);
+                else if (field === 'args' && node.args instanceof ast.arguments) {
+                    for (const part of node.args.constructor._fields) visit(node.args[part], part === 'defaults' || part === 'kw_defaults' ? block : inner);
+                } else visit(node[field], inner);
+            }
+
+            return;
         }
 
         for (const field of node.constructor._fields) visit(node[field], inner);
@@ -1001,6 +1056,7 @@ const RUNTIME = {
     routeData: '__routeData',
     liveExport: '__liveExport',
     readOnlyImport: '__readOnlyImport',
+    readOnlyProp: '__readOnlyProp',
     templateFrom: '__templateFrom',
     fileLines: '__fileLines',
     jsCall: '__jsCall',
@@ -1663,7 +1719,11 @@ function surface(body, theirs = new Set()) {
     const props = [];
     const bindables = [];
     const defaulted = [];
-    const annotatedAt = {};
+    // Without a prototype: a prop named `constructor` or `toString` found
+    // Object's own there, and wrote its source as its default.
+    const literals = Object.create(null);
+    const ambiguous = [];
+    const annotatedAt = Object.create(null);
     const state = [];
     const funcs = [];
     const classes = [];
@@ -1914,6 +1974,28 @@ function surface(body, theirs = new Set()) {
 
                     if (value != null && !(value instanceof $B.ast.Constant && value.value === $B.builtins.None)) {
                         defaulted.push(node.target.id);
+
+                        // A literal, which the props destructure as one, as
+                        // Svelte reads `{ amount = 0.25 }`: eagerly, the
+                        // child's write while the parent passes nothing taken
+                        // for the default, where Svelte reads any other
+                        // default lazily. A float its number, `1.0` the `1` it
+                        // crosses as, which its default's box gives back to
+                        // Python as the float.
+                        const literal = value instanceof $B.ast.Constant ? value.value : undefined;
+                        const float = literal?.ob_type === $B.builtins.float;
+                        const number = float ? literal.value : literal;
+
+                        if (typeof literal === 'string' || typeof literal === 'boolean') literals[node.target.id] = JSON.stringify(literal);
+                        else if (typeof number === 'number' && Number.isFinite(number) && (!Number.isInteger(number) || Number.isSafeInteger(number))) {
+                            literals[node.target.id] = String(number);
+                        }
+
+                        // And whether a value a parent passes may cross as the
+                        // default does, which Python then could not tell from
+                        // it: `1` and the default `1.0`, or whatever a default
+                        // computed crosses as.
+                        if (literals[node.target.id] === undefined || (float && Number.isInteger(number))) ambiguous.push(node.target.id);
                     }
 
                     // The line whose write declares the default: any other
@@ -2034,14 +2116,13 @@ function surface(body, theirs = new Set()) {
     globals(body);
     walruses(body);
 
-    return { props, bindables, defaulted, annotatedAt, state, funcs, classes, deriveds, effects, inspects, reserved, bound, lines, remarked, starred };
+    return { props, bindables, defaulted, literals, ambiguous, annotatedAt, state, funcs, classes, deriveds, effects, inspects, reserved, bound, lines, remarked, starred };
 }
 
 // The names the emitted script gives to what it generates. Pure functions of the
 // author's name. `markup.js` writes calls to the same spellings, and
 // `tests/generated-names.test.js` holds the two files to them.
 const fn = (name) => `__fn_${name}`;
-const local = (name) => `__local_${name}`;
 
 // The variable a plain module holds a name's value in. Under the name itself,
 // it was what SvelteKit took for the export of that name in a remote module,
@@ -2058,20 +2139,25 @@ const held = (name) => `__var_${name}`;
 // The runes are the host's list (`HOST.runes`), the one a JavaScript import
 // named like one is held under another variable by.
 const wrapperName = (name) => (HOST.runes.includes(name) ? `__def_${name}` : name);
-// And a `bindable` prop's variable, its key in the props still the name.
+// And a prop's variable, its key in the props still the name.
 const bindableVariable = (name) => (HOST.runes.includes(name) ? `__prop_${name}` : name);
-// What the parent passes a prop, which a write of the child's overrides, the
-// default it falls back on, and the choice between them.
-const given = (name) => `__given_${name}`;
-const fallback = (name) => `__default_${name}`;
-const pick = (name) => `__pick_${name}`;
-// A `bindable` prop's last scalar written by Python, beside the number Svelte
-// was handed for it (`handOver`), and the default it declares, which Svelte
-// reads when the parent leaves it `undefined`.
+// A prop's last scalar written by Python, beside the number Svelte was handed
+// for it (`handOver`), and the default it declares, which Svelte reads when
+// the parent leaves it `undefined`.
 const crossed = (name) => `__crossed_${name}`;
 const bindableDefault = (name) => `__declared_${name}`;
 // What the parent passes it, `undefined` when nothing, read past the fallback.
 const passed = (name) => `__passed_${name}`;
+// Read where Python needs it: a default that may cross as the parent's value
+// does (`ambiguous`), and a write of the module's, which holds until the parent
+// passes a value (`unproxied`). A custom element's page passes none Python reads.
+const readsPassed = (c, b) =>
+    c.plainProps.includes(b)
+        ? (c.defaulted.includes(b) && c.ambiguous.includes(b)) || (!c.element && c.written.has(b))
+        : !c.element && (c.defaulted.includes(b) || c.written.has(b));
+// What a prop the module writes holds, as Python last read or wrote it, which
+// a write of the same value hands back to Svelte.
+const seenOf = (name) => `__seen_${name}`;
 // What `$effect.root` hands back. Python reads the decorated name and gets
 // this, exactly as JavaScript reads `const destroy = $effect.root(…)`, and
 // the name belongs to the destructor on both sides.
@@ -2155,7 +2241,7 @@ const holders = (c) => releases(c) && c.effects.some((e) => e.root);
 const SUBS = '__subs';
 
 const SUBSCRIBING = (c) =>
-    c.state.length > 0 || c.funcs.length > 0 || c.bindables.length > 0 || c.props.length > 0 || c.starred;
+    c.state.length > 0 || c.funcs.length > 0 || c.bindables.length > 0 || c.starred;
 
 // The revision of a name: Svelte's state beside the cell, which a change in
 // place of what the cell holds moves (Bryc's `bump`).
@@ -2178,7 +2264,8 @@ function preamble(c) {
             'pyDerive', 'pyRead', 'pyEvent', 'pyAttach', 'plainData', 'pyArg', 'pyData', 'pyComponent', 'pyExpression',
             'jsCall',
             'ticking', 'pyBind', 'NONE', 'helpers',
-            ...(c.props.includes('data') && routeComponent(c.source) ? ['routeData'] : []),
+            ...(c.plainProps.includes('data') && routeComponent(c.source) ? ['routeData'] : []),
+            ...(c.plainProps.some((one) => !c.written.has(one)) ? ['readOnlyProp'] : []),
             'directiveAction', 'directiveTransition', 'directiveAnimate',
             'plainScalar', 'storeMember', 'storeValue', 'invoke',
             ...(c.store ? ['pythonModule', 'storeTrack', 'storeHeld', 'storeShown', 'storeFacade'] : SUBSCRIBING(c) ? ['unsubscribe'] : []),
@@ -2244,22 +2331,24 @@ function declarations(c) {
                   // `$bindable()` and `$bindable(undefined)` have none.
                   ...(defaulted.length ? [`class __Declared { value = $state.raw(); py = undefined; }`] : []),
                   ...defaulted.map((b) => `const ${bindableDefault(b)} = new __Declared();`),
-                  // A custom element's plain prop is destructured plain
-                  // (`elementProps`).
+                  // A plain prop destructured plain (`plainProps`), its default
+                  // the literal written when it is one (`literals`). And what
+                  // the parent passes it read beside, where Python needs it
+                  // (`readsPassed`): before it, so that the accessor a custom
+                  // element publishes is the one that reads the default.
                   `let { ${c.bindables
                       .map((b) => [b, b === bindableVariable(b) ? b : `${b}: ${bindableVariable(b)}`])
                       .map(([b, bound]) =>
-                          c.elementProps.includes(b)
-                              ? defaulted.includes(b)
-                                  ? `${bound} = ${bindableDefault(b)}.value`
-                                  : bound
-                              : defaulted.includes(b)
-                                ? `${bound} = $bindable(${bindableDefault(b)}.value)${c.element ? '' : `, ${b}: ${passed(b)}`}`
-                                : `${bound} = $bindable()`
+                          c.plainProps.includes(b)
+                              ? `${readsPassed(c, b) ? `${b}: ${passed(b)}, ` : ''}${bound}` +
+                                (defaulted.includes(b) ? ` = ${c.literals[b] ?? `${bindableDefault(b)}.value`}` : '')
+                              : `${bound} = $bindable(${defaulted.includes(b) ? `${bindableDefault(b)}.value` : ''})` +
+                                (readsPassed(c, b) ? `, ${b}: ${passed(b)}` : '')
                       )
-                      .join(', ')}, ...__props } =` + ` $props();`,
+                      .join(', ')} } =` + ` $props();`,
                   ...c.bindables.flatMap((b) => [
                       `let ${crossed(b)} = null;`,
+                      ...(c.plainProps.includes(b) && c.written.has(b) ? [`let ${seenOf(b)};`] : []),
                       `let ${rev(b)} = $state.raw(0);`,
                       `const ${bump(b)} = () => { ${rev(b)} += 1; };`
                   ]),
@@ -2269,75 +2358,7 @@ function declarations(c) {
                   undeclared(c),
                   ``
               ]
-            : c.props.length
-              ? [`const __props = $props();`, undeclared(c), ``]
-              : []),
-        // A prop's value comes from the parent when it was passed, and from the
-        // annotation's default otherwise, the default being whatever the Python
-        // body assigned during init(). Reading __props keeps it reactive, so a
-        // parent update flows into Python's namespace on the next read.
-        //
-        // A write of the child's own overrides a value the parent passed, as
-        // reassigning a prop does in Svelte, until the parent passes one again.
-        // Svelte's own rule, read in `props.js`: the write lands on the derived
-        // that reads the parent's value, which runs again when the parent
-        // writes, even to come back to the value it held. So the override is a
-        // mark written on that derived, and a parent's write wipes it. The
-        // default init() writes is not an override. A prop passed as
-        // `undefined` takes the default, as in Svelte; `null` is a value.
-        //
-        // Svelte's own rule for the absence, read in `props.js`: the default is
-        // the one declared once the parent has passed a value, and a write the
-        // child made while nothing was passed until then. So the default
-        // declared is kept beside the one an absence reads, and `dirty` says
-        // the parent passed a value since, as Svelte's `fallback_dirty` does.
-        //
-        // And the write is Svelte's: it lands on the derived without reading
-        // it, compared as Svelte compares a prop's write, `===` on what
-        // JavaScript holds, a scalar by its value. A child writing again the
-        // value it wrote leaves the derived as it was, so a parent's write not
-        // read yet still wins at the next read. Read first, the write took the
-        // parent's value in and then hid it under the child's. What the
-        // derived holds is kept beside it (`current`) and written again when
-        // the write is the same scalar: a Python parent passes its own float,
-        // None or string, never `===` to the child's.
-        //
-        // What the parent passes is read again from its getter while the
-        // child has written nothing over it, as a Svelte child reads it at
-        // each read, when it may move with no signal (`passed`), and noted so
-        // at each read of the getter (`given`). Save a prop the component
-        // writes somewhere (`writtenProps`), which Svelte holds in a derived of
-        // the getter as this one is: read again, it showed the parent's new
-        // value beside a derived of its own that kept the old. And save a
-        // route's `data`, which SvelteKit hands as the state it replaces at
-        // each navigation.
-        ...c.props.flatMap((n, _, __, routed = (n === 'data' && routeComponent(c.source)) || c.written.has(n)) => [
-            `let ${local(n)} = $state.raw(undefined);`,
-            `let ${rev(n)} = $state.raw(0);`,
-            `const ${fallback(n)} = { declared: undefined, value: undefined, dirty: true, overridden: false, absent: false, current: undefined, fresh: true, flips: -1 };`,
-            `const ${bump(n)} = () => { ${rev(n)} += 1; };`,
-            // What JavaScript holds, as Svelte's derived holds it, which a write
-            // is compared with: the default's own Python value is kept beside
-            // it, and read when the derived stands for the absence.
-            `let ${given(n)} = $derived.by(() => {` +
-                ` ${fallback(n)}.overridden = false;` +
-                ` const __passed = ${routed ? `__props.${n}` : `__pybridge.given(__props, '${n}', ${fallback(n)})`};` +
-                ` ${fallback(n)}.absent = __passed === undefined;` +
-                ` if (!${fallback(n)}.absent) { ${fallback(n)}.dirty = true; return (${fallback(n)}.current = __passed); }` +
-                ` if (${fallback(n)}.dirty) { ${fallback(n)}.dirty = false; ${fallback(n)}.value = ${fallback(n)}.declared; }` +
-                ` return (${fallback(n)}.current = __plainScalar(${fallback(n)}.value)); });`,
-            `const ${pick(n)} = () => {` +
-                ` const __held = ${given(n)};` +
-                ` return ${fallback(n)}.overridden ? ${local(n)} : ` +
-                `${routed ? `${fallback(n)}.absent ? ${fallback(n)}.value : __held` : `__pybridge.passed(__props, '${n}', __held, ${fallback(n)})`}; };`,
-            // Read by Svelte's own compiler and not by ours: a snippet is a
-            // prop, and `{@render name(…)}` references the bare name. Python
-            // reaches the same value through the namespace accessor below, and
-            // that is the copy a falsy value has to survive. This one is
-            // Svelte's, so its absence is JavaScript's: None is `undefined`,
-            // which `{@render name?.()}` skips as it skips an omitted prop.
-            `const ${n} = $derived.by(() => { ${rev(n)}; const __given = ${pick(n)}(); return __given === __NONE ? undefined : __given; });`
-        ]),
+            : []),
         ...c.state.flatMap((n) => stateCell(HOST, n, n)),
         // A `def`'s cell is a state cell: a decorator or a later line may put a
         // list there, and its mutations are followed as any name's are.
@@ -2477,7 +2498,7 @@ function templateBridge(c) {
 //
 // The names `class` binds that no other binding of the module takes.
 const declaredClasses = (c) => {
-    const taken = new Set([...c.props, ...c.bindables, ...c.state, ...[...c.funcs, ...c.deriveds, ...c.effects, ...c.inspects].map((one) => one.name)]);
+    const taken = new Set([...c.bindables, ...c.state, ...[...c.funcs, ...c.deriveds, ...c.effects, ...c.inspects].map((one) => one.name)]);
 
     return c.classes.filter((name) => !taken.has(name));
 };
@@ -2493,7 +2514,7 @@ const declaring = (c, n) =>
 
 // The props whose default init() has yet to write, emptied when it returns.
 const undeclared = (c) =>
-    `const __undeclared = new __global.Set(${JSON.stringify([...c.props, ...c.bindables].filter((n) => c.annotatedAt?.[n] !== undefined))});`;
+    `const __undeclared = new __global.Set(${JSON.stringify(c.bindables.filter((n) => c.annotatedAt?.[n] !== undefined))});`;
 
 function authorBindings(c) {
     return [
@@ -2508,54 +2529,6 @@ function authorBindings(c) {
         ...(c.starred
             ? [`__global.Object.defineProperty(__proto, '$bryntimeStarred', { value: { owner: ${c.store ? 'undefined, names: new __global.Set()' : SUBS} } });`]
             : []),
-        // Python may write to a prop; the write lands in the local fallback and
-        // is shadowed for as long as the parent supplies a value, which is
-        // Svelte's own rule for non-bindable props.
-        //
-        // The accessors read the raw cell, never the tracked binding: Python must
-        // not subscribe to Svelte's graph, only feed it.
-        //
-        // What a parent hands over may be JavaScript's: `pyBind` makes a
-        // fractional number a float and an absence None, as at a binding.
-        //
-        // The fallback is the component's own, so a container in it is watched
-        // like any state's: `rows.append(1)` on a default repaints its readers.
-        //
-        // A write after init() overrides what the parent passed, or is the
-        // value of this absence, and either way what was read before it may
-        // not have been the cell it lands in: the revision every reader reads
-        // is moved, as a write to an override is a write to Svelte's own
-        // derived. Unless it changes nothing Python reads (`changesNothing`),
-        // told by what the derived held when it was last read, and not by a
-        // read of it, which would take a parent's write in: then the prop is
-        // left as it was, as Svelte leaves a state written the value it holds.
-        //
-        // The default is the write init() makes on the annotation's own line
-        // (`declaring`). Any other write of the body is the child's, as in
-        // Svelte: `value = value.strip()` under `value: str` was taken for the
-        // default, and the page kept what the parent passed.
-        //
-        // A write Svelte refuses, made while the page renders, leaves the prop
-        // following what it held, as Bryc's accessor leaves a state, and what
-        // the derived holds (`current`) as it was.
-        //
-        // A route's `data` is SvelteKit's merge of its nodes' plain objects,
-        // read back as the dict of what the `load()`s returned (`routeData`).
-        ...c.props.map(
-            (n, _, __, read = n === 'data' && routeComponent(c.source) ? '__routeData' : '__pyBind') =>
-                `__bind(__proto, '${n}', () => (__SHAPING.on ? (${local(n)}, __followOwn(__pybridge.prop(${read}(${pick(n)}())))) : (${rev(n)}, __follow(__pybridge.prop(${read}(${pick(n)}()))))),` +
-                ` function (${NEXT_VALUE}) { const __held = ${bump(n)}.held; const __current = ${fallback(n)}.current;` +
-                ` try { const __written = __track(${NEXT_VALUE}, ${bump(n)}, ${SUBS});` +
-                ` if (${declaring(c, n)}) { ${fallback(n)}.declared = __written; ${fallback(n)}.value = __written; ${local(n)} = __written; return; }` +
-                ` if (__changesNothing(__written, __pyBind(${fallback(n)}.overridden ? __held : ${fallback(n)}.absent ? ${fallback(n)}.value : ${fallback(n)}.current))) return;` +
-                ` const __plain = __plainScalar(__written);` +
-                ` if (__plainScalar(${fallback(n)}.current) !== __plain) ${fallback(n)}.current = __plain;` +
-                ` ${given(n)} = ${fallback(n)}.current; ${fallback(n)}.overridden = true;` +
-                ` if (${fallback(n)}.value !== undefined) ${fallback(n)}.value = __written;` +
-                ` ${local(n)} = __written; ${bump(n)}(); }` +
-                ` catch (__refused) { ${fallback(n)}.current = __current; __track(__held, ${bump(n)}, ${SUBS}); throw __refused; } },` +
-                ` () => ${pick(n)}());`
-        ),
         // What Python writes goes up as JavaScript's own, a scalar its number
         // and a container its view, its original kept beside it (`handOver`),
         // which `unproxied` gives Python again while the prop still holds what
@@ -2573,26 +2546,71 @@ function authorBindings(c) {
         // revision its readers read. And one value read as two objects, the
         // float a JavaScript number reads as and the float written over it,
         // moves nothing (`changesNothing`).
+        //
+        // A plain prop (`plainProps`) is Svelte's own. One the module never
+        // writes (`written`) has no setter: Svelte reads it again at each read,
+        // and so does Python, which notes such a read as one no signal follows
+        // unless a Python parent's getter answered (`readProp`); its default,
+        // which a server destructures before init() wrote it, read off its box
+        // while the parent passes nothing. A write the analysis did not see is
+        // refused, with the prop and the file (`readOnlyProp`): with no setter
+        // it would have gone nowhere.
+        //
+        // One the module writes has the setter whose assignment Svelte holds
+        // the prop for, in a derived of the parent's getter, and the write
+        // lands there unread, as Svelte compares it: the object the prop holds
+        // handed back when the write is that value (`changesNothing`), as
+        // Python last read or wrote it (`seenOf`), since a Python parent hands
+        // its own float, never `===` to the child's number. Read first, the
+        // write took the parent's next value in and hid it under the child's.
+        // And a write Svelte refuses, made while the page renders, leaves the
+        // prop following what it held, as Bryc's accessor leaves a state.
+        //
+        // A route's `data` is SvelteKit's merge of its nodes' plain objects,
+        // read back as the dict of what the `load()`s returned (`routeData`),
+        // a state SvelteKit replaces at each navigation, which a signal follows.
         ...c.bindables.map((b) => {
             const declared = c.defaulted.includes(b);
             const box = bindableDefault(b);
             const bound = bindableVariable(b);
-            const held = declared
-                ? `__unproxied(${bound}, ${crossed(b)}, ${c.element ? 'undefined' : passed(b)}, ${box})`
-                : `__unproxied(${bound}, ${crossed(b)})`;
+            const plainProp = c.plainProps.includes(b);
+            const routed = b === 'data' && routeComponent(c.source);
+            const readOnly = plainProp && !c.written.has(b);
+            const seen = seenOf(b);
+            const read = readOnly ? (routed ? bound : `__pybridge.readProp(() => ${bound})`) : plainProp ? `(${seen} = ${bound})` : bound;
+            const given = readsPassed(c, b) ? passed(b) : 'undefined';
+            const parentNow = readsPassed(c, b) ? `, () => __untrack(() => ${passed(b)})` : '';
+            const held = !declared
+                ? `__unproxied(${read}, ${crossed(b)}, ${given})`
+                : readOnly
+                  ? `((__read) => (__read === undefined ? ${box}.py : __unproxied(__read, ${crossed(b)}, ${given}, ${box})))(${read})`
+                  : `__unproxied(${read}, ${crossed(b)}, ${given}, ${box})`;
             const written = `const __written = __track(${NEXT_VALUE}, ${bump(b)}${c.store ? '' : `, ${SUBS}`});`;
-            const handed =
-                `const __was = __untrack(() => ${held});` +
-                ` ${crossed(b)} = __handOver(__written, (__crossing) => { ${bound} = __crossing; });` +
-                ` if (!__changesNothing(__pyBind(__untrack(() => ${held})), __pyBind(__was))) ${bump(b)}();`;
-            const set = declared
+            const handed = plainProp
+                ? `${crossed(b)} = __handOver(__written, (__crossing) => { ${bound} = ${seen} = __changesNothing(__written, ${seen}) ? ${seen} : __crossing; }${parentNow});` +
+                  ` if (!__changesNothing(__written, ${bump(b)}.last)) { ${bump(b)}.last = __written; ${bump(b)}(); }`
+                : `const __was = __untrack(() => ${held});` +
+                  ` ${crossed(b)} = __handOver(__written, (__crossing) => { ${bound} = __crossing; }${parentNow});` +
+                  ` if (!__changesNothing(__pyBind(__untrack(() => ${held})), __pyBind(__was))) ${bump(b)}();`;
+            const assigned = declared
                 ? `${written} if (${declaring(c, b)}) { ${box}.py = __written;` +
                   ` __handOver(__written, (__crossing) => { ${box}.value = __crossing; });` +
                   ` if (${bound} !== undefined) return; } ${handed}`
                 : `if (!(${declaring(c, b)}) || ${bound} === undefined) { ${written} ${handed} }`;
+            const refused = `${RUNTIME.readOnlyProp}('${b}', ${JSON.stringify(c.source)});`;
+            const set = readOnly
+                ? declared
+                    ? `if (${declaring(c, b)}) { ${written} ${box}.py = __written;` +
+                      ` __handOver(__written, (__crossing) => { ${box}.value = __crossing; }); ${bump(b)}(); return; } ${refused}`
+                    : `if (${declaring(c, b)}) return; ${refused}`
+                : plainProp
+                  ? `const __held = ${bump(b)}.held; try { ${assigned} } catch (__refused) { __track(__held, ${bump(b)}, ${SUBS}); throw __refused; }`
+                  : assigned;
+            const value = plainProp ? `(${bump(b)}.last = __pybridge.prop(${routed ? RUNTIME.routeData : '__pyBind'}(${held})))` : `__pyBind(${held})`;
+
             return (
-                `__bind(__proto, '${b}', () => (__SHAPING.on ? __followOwn(__pyBind(${held})) : (${rev(b)}, __follow(__pyBind(${held})))),` +
-                ` function (${NEXT_VALUE}) { ${set} }, () => ${bound});`
+                `__bind(__proto, '${b}', () => (__SHAPING.on ? __followOwn(${value}) : (${rev(b)}, __follow(${value}))),` +
+                ` function (${NEXT_VALUE}) { ${set} }, () => ${plainProp && !readOnly ? `(${seen} = ${bound})` : bound});`
             );
         }),
         // Bryc's accessor (`stateBinding`): the rows of an `{#each}` follow
@@ -2694,7 +2712,7 @@ function initCall(c) {
         ``,
         `__init(${NS});`,
         ...unboundRefusals(HOST, c.unbound, c.listedAt),
-        ...(c.bindables.length || c.props.length ? [`__undeclared.clear();`] : []),
+        ...(c.bindables.length ? [`__undeclared.clear();`] : []),
         ``
     ];
 }
@@ -3244,7 +3262,7 @@ function compile(
 
     const foreign = foreignNames([...jsImported, ...jsNames]);
 
-    let { props, bindables, defaulted, annotatedAt, state, funcs, classes, deriveds, effects, inspects, reserved, bound, lines, remarked, starred } =
+    let { props, bindables, defaulted, literals, ambiguous, annotatedAt, state, funcs, classes, deriveds, effects, inspects, reserved, bound, lines, remarked, starred } =
         surface(root._ast.body, foreign);
 
     // A name the module reads and no statement binds, which it may still bind
@@ -3258,21 +3276,25 @@ function compile(
 
     state = [...state, ...unwritten];
 
-    // A custom element's props belong to its element, which reads each back,
-    // as `element.middle` and as the attribute `reflect` writes. Svelte answers
-    // both from an accessor it publishes for a destructured prop, the one a
-    // `bindable` is, so every prop takes that path; a scalar the component
-    // writes reaches the element as JavaScript's own (`handOver`).
+    // Every prop of a component destructured by its name, as Svelte
+    // destructures `let { amount = 1.5 } = $props()`, so that Svelte applies
+    // its own rule to it: read again at each read while the component never
+    // writes it, held in a derived of the parent's getter once it does, which
+    // Svelte tells by the assignment the setter of a prop the Python writes
+    // makes (`written`). And a custom element observes each, as Svelte learns
+    // an element's props from the names destructured, and reads each back, as
+    // `element.middle` and as the attribute `reflect` writes, from the
+    // accessor it publishes for a destructured prop; a scalar the component
+    // writes reaches it as JavaScript's own (`handOver`).
     //
-    // Destructured as Svelte destructures a plain one, `let { amount = 1.5 } =
-    // $props()`, and not as `$bindable(1.5)`, which the author did not write:
-    // Svelte refuses a bindable's default for a prop the page set `undefined`
-    // (`props_invalid_value`), and an element whose page wrote
+    // Destructured plain, and not as `$bindable(1.5)`, which the author did not
+    // write: Svelte refuses a bindable's default for a prop the page set
+    // `undefined` (`props_invalid_value`), and an element whose page wrote
     // `element.amount = undefined` before it was connected, or again before it
     // was reconnected, never mounted.
-    const elementProps = element && !store && !plain ? props : [];
+    const plainProps = store || plain ? [] : props;
 
-    if (element && !store && !plain) {
+    if (!store && !plain) {
         bindables = [...props, ...bindables];
         props = [];
     }
@@ -3338,7 +3360,7 @@ function compile(
     const defined = (hook) => funcs.some((f) => f.name === hook);
     const holdsHook = (hook) =>
         state.includes(hook) ||
-        [...props, ...bindables, ...deriveds].some((one) => (one.name ?? one) === hook) ||
+        [...bindables, ...deriveds].some((one) => (one.name ?? one) === hook) ||
         foreign.has(hook);
     const lifecycle = (hook) => !store && (defined(hook) || holdsHook(hook) || bound.includes(hook) || starred);
     const hook = (name) => (defined(name) ? fn(name) : holdsHook(name) ? name : `${NS}.${name}`);
@@ -3354,7 +3376,7 @@ function compile(
     // helper may be injected over a name, and whether a locked word has been
     // redefined, are questions about the author's text and not about signals.
     const emitted = [
-        ...props, ...bindables, ...state, ...funcs, ...deriveds, ...effects, ...inspects
+        ...bindables, ...state, ...funcs, ...deriveds, ...effects, ...inspects
     ].map((n) => n.name || n);
 
     const declared = [...new Set([...emitted, ...bound])];
@@ -3472,15 +3494,16 @@ function compile(
         published: (name) => (listed === null ? !nothingBinds.has(name) : listed.includes(name)),
         listsAll: listed !== null,
         imported,
-        props,
         bindables,
         defaulted,
+        literals,
+        ambiguous,
         annotatedAt,
-        written: writtenProps(table, root._ast.body, props, annotatedAt),
+        written: writtenProps(table, root._ast.body, plainProps, annotatedAt),
         // A custom element publishes an accessor per name the props
         // destructure, so it reads no parent's value by a second one.
         element: element && !store && !plain,
-        elementProps,
+        plainProps,
         state,
         funcs,
         classes,

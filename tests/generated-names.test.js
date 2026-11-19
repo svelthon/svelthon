@@ -61,7 +61,10 @@ const MARKUP_LOCAL = new Set([
     '__probe',
     // The token a positional pattern's default is taken under, the parameter
     // of the function that takes it (`initializing`).
-    '__token'
+    '__token',
+    // The value a default stands in for when absent, the parameter of the
+    // function that tells it (`orDefault`).
+    '__given'
 ]);
 
 // Python's own special methods, which the markup calls on a number it reads at a

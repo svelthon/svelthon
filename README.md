@@ -322,7 +322,12 @@ greeting = "Hello"     # internal state, invisible to the parent
 A prop is readable while the module body runs, a parent update flows through to
 Python, and a required prop that was not passed reads as `None`, not
 `undefined`. Writing to a prop from Python overrides it until the parent passes
-a new value, which is Svelte's own rule for non-`$bindable` props.
+a new value, which is Svelte's own rule for non-`$bindable` props: each prop is
+destructured by its name, and Svelte reads again at each read one the module
+never writes, as it does for its own. The compiler sees a write by the name,
+`global` included, at a key of `globals()`, and through every other door of
+the module's namespace it knows; a write past them all raises a `TypeError`
+naming the prop.
 
 A Python parent hands a Python child the value itself, a `float` subclass with
 its class, a generator untouched, and a JavaScript child JavaScript's number or
@@ -1223,6 +1228,11 @@ number then crosses as every number from JavaScript does, a whole one as an
 whatever its value. A property the page sets back to `undefined` reads its
 default again, as a Svelte element's does, `15.0` as Python wrote it.
 
+A component that Svelte's compile options make an element, rather than its own
+`<svelte:options>`, through `compilerOptions.customElement` or
+`dynamicCompileOptions`, takes its props by their names alone, as Svelte takes a
+Svelte component's: each attribute arrives as a string.
+
 `host()` is the way back out, and the only one: a custom element speaks to the
 page through DOM events rather than props. Without it a component could receive
 and render but never answer.
@@ -1852,7 +1862,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 2 196 tests as written (vitest reports more, one per
+Validated by `npm test`, 2 203 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;

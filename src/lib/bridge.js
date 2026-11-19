@@ -439,46 +439,22 @@ const INITIALIZING = new Set();
 // loads (`__pybridge.deriving`).
 let derive;
 
-// The reads of a prop no Python parent handed, whether the getter just read
-// was a Python parent's and whether what it handed may move unseen (`given`),
-// and how many expressions have started reading JavaScript's own data
-// (`reading`).
+// The reads of a prop no Python parent handed, which no signal follows
+// (`readProp`), and whether the getter just read was a Python parent's
+// (`handed`).
 let UNFOLLOWED = 0;
 let HANDED = false;
-let FRESH = true;
-let FLIPS = 0;
 
-// The getters of those props read while expressions are weighed, three entries
-// each, the props, the key and what it answered, and how deep the weighing is
+// Those reads made while expressions are weighed, two entries each, how to
+// read the prop again and what it answered, and how deep the weighing is
 // (`reading`).
 const PASSED = [];
 let WEIGHED = 0;
 
-// A prop read from its parent's getter, and noted on what the child keeps of
-// it (`noted`): whether the getter was a Python parent's, which weighed its
-// own reads of JavaScript's data, and whether what it handed may move with no
-// signal, a JavaScript parent's getter or a Python one's that read such data.
-const given = (props, key, noted) => {
-    HANDED = false;
-    FRESH = true;
-
-    const value = props[key];
-
-    if (!HANDED) {
-        UNFOLLOWED += 1;
-        if (WEIGHED > 0) PASSED.push(props, key, value);
-    }
-
-    noted.fresh = FRESH;
-    noted.flips = FLIPS;
-
-    return value;
-};
-
-// Whether each getter read answers what it answered then.
+// Whether each read answers what it answered then.
 const unmoved = (reads) => {
-    for (let at = 0; at < reads.length; at += 3) {
-        if (reads[at][reads[at + 1]] !== reads[at + 2]) return false;
+    for (let at = 0; at < reads.length; at += 2) {
+        if (reads[at]() !== reads[at + 1]) return false;
     }
 
     return true;
@@ -595,7 +571,7 @@ export const __pybridge = {
     // render, as Svelte reads one, where one that read only Python's is held
     // in its derived (`unmemoized`). Held whatever it read, the page kept the
     // field of a JavaScript object changed in place when it rendered again
-    // for another reason. And a prop no Python parent handed (`given`), whose
+    // for another reason. And a prop no Python parent handed (`readProp`), whose
     // getters are kept with what they answered and with what the expression
     // gave: read again at a render, it is evaluated again only once one of
     // them answers otherwise, or once its derived (`held`) moved. Evaluated
@@ -637,7 +613,6 @@ export const __pybridge = {
             let fresh = core.javascriptReads() !== before;
 
             if (UNFOLLOWED !== unfollowed) fresh ||= !done || { value, reads: PASSED.slice(start) };
-            if (fresh && !flags[key]) FLIPS += 1;
 
             flags[key] = fresh;
 
@@ -653,46 +628,26 @@ export const __pybridge = {
         return value;
     },
 
-    // What a prop the parent passes holds, the first time and each time a
-    // signal moves it (`given`).
-    given(props, key, noted) {
-        return given(props, key, noted);
-    },
+    // A prop the component never writes, read as Svelte reads it, through the
+    // parent's getter at each read: noted as a read no signal follows, as a
+    // JavaScript parent's getter may answer otherwise with none, unless a
+    // Python parent's getter answered (`handed`), which weighed its own reads.
+    readProp(read) {
+        HANDED = false;
 
-    // And each time the child reads it while it has written nothing over it,
-    // as a Svelte child reads its parent's getter at each read, when it may
-    // move with no signal (`given`): held in the derived that took it first, a
-    // Python child confirmed the ticket its JavaScript parent had left. Read
-    // once more after an expression somewhere starts reading JavaScript's own
-    // data, which may be the one its parent's getter reads. Its default is
-    // chosen once the getter has answered, by the derived's rule, Svelte's
-    // (`fallback_dirty`): chosen first, a field that came after the child took
-    // the default was confirmed as the default, and one gone as what it had
-    // been.
-    passed(props, key, held, noted) {
-        if (!noted.fresh && noted.flips === FLIPS) return noted.absent ? noted.value : held;
+        const value = read();
 
-        const value = given(props, key, noted);
-
-        if (value !== undefined) {
-            noted.dirty = true;
-
-            return value;
+        if (!HANDED) {
+            UNFOLLOWED += 1;
+            if (WEIGHED > 0) PASSED.push(read, value);
         }
 
-        if (noted.dirty) {
-            noted.dirty = false;
-            noted.value = noted.declared;
-        }
-
-        return noted.value;
+        return value;
     },
 
-    // What a Python parent's getter hands (`given`), and whether it may move
-    // with no signal: read afresh, the expression read JavaScript's own data.
-    handed(value, fresh) {
+    // What a Python parent's getter hands (`readProp`).
+    handed(value) {
         HANDED = true;
-        FRESH = fresh;
 
         return value;
     },
@@ -725,7 +680,6 @@ export const __pybridge = {
     // a child named by its import gets it.
     child(component, value, kind = '') {
         HANDED = true;
-        FRESH = true;
 
         // Handed through a `{@render}` argument, which is Python, it comes
         // back as the adapter made for it, which knows the component.
@@ -2469,6 +2423,19 @@ export function readOnlyImport(name, where) {
         'TypeError',
         `'${name}' is a JavaScript import of ${where}, and an import is read-only; ` +
             `bind another name to hold a value of your own`
+    );
+}
+
+// A write from Python to a prop the compiler saw no write to, which it
+// compiled as Svelte compiles a prop its component never writes, with no
+// setter: refused, with the prop and the file, and how to write it so that
+// the compiler sees the write.
+export function readOnlyProp(name, where) {
+    pyRaise(
+        'TypeError',
+        `'${name}' is a prop of ${where} that the compiler saw no write to, so it is read-only; ` +
+            `write it by its name, \`${name} = …\` (declared \`global\` in a function), ` +
+            `or at its key, \`globals()["${name}"] = …\``
     );
 }
 

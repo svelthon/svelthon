@@ -956,19 +956,9 @@ export function python(options = {}) {
                 announcement(filename) + HOOKS + moduleReaders(file.jsNames, held)
             );
 
-            // And the props of one that declares no element, which its compile
-            // may make one (`elementReady`).
-            if (filename) {
-                keepWritten(filename, file, {
-                    written: content,
-                    emitted,
-                    code,
-                    marks,
-                    declared: file.element,
-                    props: () => elementPropsText(python, file.jsNames),
-                    declare: (compiled) => elementOptions(compiled, python, file.jsNames)
-                });
-            }
+            // And what it was written and emitted as, which a warning its
+            // compile makes is placed by (`placeWarning`).
+            if (filename) keepWritten(filename, file, { written: content, emitted, code, marks });
 
             return { code: emitted, dependencies: childrenWatched() ? [] : languages.map(([path]) => path) };
         },
@@ -1064,16 +1054,16 @@ export function python(options = {}) {
     };
 }
 
-// `<svelte:options customElement="my-tag">` on a Python component, given its
-// props. Svelte learns a custom element's props from a destructured `$props()`,
-// which the generated script does not write, so without this list the element
-// observed no attribute and exposed no property: it read its attributes once,
-// at connection. Each prop carries the type its annotation names, so an
-// attribute arrives as the number or the list it declares. In the written-out
+// `<svelte:options customElement="my-tag">` on a Python component, given the
+// type of each prop its annotation names, so that an attribute arrives as the
+// number or the list it declares: Svelte learns an element's props from the
+// names the props destructure, and gives them no type. In the written-out
 // object form, an entry the author wrote in `props` is theirs and is kept, and
 // every other prop is added beside it, as Svelte adds the props of a
-// destructured `$props()`: configuring one prop stopped the element observing
-// all the others.
+// destructured `$props()`. Only where the file declares the element: a
+// component Svelte compiles as one by its compile options, which no
+// preprocessor is handed, takes its props from the names alone, its attributes
+// strings, as a Svelte component's are.
 //
 // The attribute as Svelte's own parser reads it, whatever its spelling: a tag
 // quoted or not, `customElement=my-tag`, its character references decoded,
@@ -1098,50 +1088,11 @@ const elementPropsText = (python, jsNames) =>
         .map(({ name, type }) => `${name}: {${type ? ` type: ${JSON.stringify(type)} ` : ''}}`)
         .join(', ');
 
-// And where Svelte compiles a component as one by its compile options,
-// `compilerOptions.customElement` for every file or `dynamicCompileOptions` for
-// some, a component that declares none, or declares `{null}`, is given the
-// props as well: an element too, it exposed none. Asked as vite-plugin-svelte
-// compiles it (`holdCompile`), of the code preprocessed and with the
-// environment, as it asks itself: asked by the preprocessor, a choice made by
-// environment threw, and one read off a mark another preprocessor writes was
-// made on the text before it. Added to its own `<svelte:options>`, or in one
-// after the file's last line, so that no line moves.
-//
-// A declaration a preprocessor after Svelthon's wrote is given the props as one
-// the author wrote is (`declare`), where it was written over and lost its tag,
-// its shadow and its attributes.
-function elementReady(file, request, code, { compileOptions, dynamic }) {
-    if (file.declared) return code;
-    if (compileOptionsFor(code)) return file.declare(code);
-
-    // Read as Svelte reads it: the file's options over the global ones, and a
-    // function asked of the file.
-    const chosen = { ...compileOptions, ...dynamic }.customElement;
-    const element = (typeof chosen === 'function' ? chosen({ filename: request.filename }) : chosen) === true;
-
-    return element ? everyElementOptions(code, file.props) : code;
-}
-
-// The author's `dynamicCompileOptions`, asked as vite-plugin-svelte asks it, of
-// the code preprocessed and in development with a rule that scopes every node
-// before the style closes; and asked once, its answer handed on to
-// vite-plugin-svelte (`holdCompile`): asked again of the code with the props
-// added, it saw a `<svelte:options>` and chose otherwise.
-async function askedOptions(request, code, options, environment) {
-    const compileOptions = { ...options.compilerOptions, filename: request.filename, generate: request.ssr ? 'server' : 'client' };
-    const styled = code.lastIndexOf('</style>');
-    const finalCode = compileOptions.hmr && options.emitCss && styled > -1 ? `${code.slice(0, styled)} *{}${code.slice(styled)}` : code;
-    const dynamic = await options.dynamicCompileOptions?.({ filename: request.filename, code: finalCode, compileOptions, environment });
-
-    return { compileOptions, dynamic };
-}
-
-// vite-plugin-svelte's compile, its own (`api.compileSvelte`) made to ask
-// first (`elementReady`), and to place each warning Svelte makes on what was
-// written (`placeWarning`) before the author's own filter reads it: set by its
-// configuration, read by its compile once both are resolved, so held as it is
-// set, whichever comes first.
+// vite-plugin-svelte's compile, its own (`api.compileSvelte`) made to place
+// each warning Svelte makes on what was written (`placeWarning`) before the
+// author's own filter reads it: set by its configuration, read by its compile
+// once both are resolved, so held as it is set, whichever comes first. It
+// decides nothing of the compile.
 const HELD_COMPILES = new WeakSet();
 
 function holdCompile(api) {
@@ -1150,27 +1101,32 @@ function holdCompile(api) {
 
     // The global filter and one `dynamicCompileOptions` answers, which
     // vite-plugin-svelte puts over it: answered there, it read the columns of
-    // the code emitted.
+    // the code emitted. The answer wrapped as vite-plugin-svelte asks for it,
+    // once and of the code it compiles.
     const placing = (file, filter) => (warning) => (placeWarning(warning, file), filter === undefined ? true : filter(warning));
+    const placed = (file, dynamic) => async (...asked) => {
+        const answer = await dynamic(...asked);
+
+        return answer !== null && typeof answer === 'object' && Object.hasOwn(answer, 'warningFilter')
+            ? { ...answer, warningFilter: placing(file, answer.warningFilter) }
+            : answer;
+    };
     // The map vite-plugin-svelte hands with the code is that of the
     // preprocessors, a preprocessor after Svelthon's among them: one that adds
     // lines moves the code Svelte warns of, read by the map back to where
     // Svelthon emitted it.
     const hold = (compile) =>
         typeof compile === 'function'
-            ? async (request, code, options, environment, sourcemap, ...rest) => {
+            ? (request, code, options, environment, sourcemap, ...rest) => {
                   const written = writtenAs(request.filename, code);
                   const file = written !== undefined && sourcemap?.mappings ? { ...written, trace: new TraceMap(sourcemap) } : written;
 
                   if (file === undefined) return compile(request, code, options, environment, sourcemap, ...rest);
 
-                  const asked = await askedOptions(request, code, options, environment);
-                  const filtered = typeof asked.dynamic === 'object' && asked.dynamic !== null && Object.hasOwn(asked.dynamic, 'warningFilter');
-                  const dynamic = filtered ? { ...asked.dynamic, warningFilter: placing(file, asked.dynamic.warningFilter) } : asked.dynamic;
-                  const answered = options.dynamicCompileOptions === undefined ? {} : { dynamicCompileOptions: () => dynamic };
+                  const dynamic = options.dynamicCompileOptions === undefined ? {} : { dynamicCompileOptions: placed(file, options.dynamicCompileOptions) };
                   const compilerOptions = { ...options.compilerOptions, warningFilter: placing(file, options.compilerOptions?.warningFilter) };
 
-                  return compile(request, elementReady(file, request, code, asked), { ...options, ...answered, compilerOptions }, environment, sourcemap, ...rest);
+                  return compile(request, code, { ...options, ...dynamic, compilerOptions }, environment, sourcemap, ...rest);
               }
             : compile;
     let held = hold(api.compileSvelte);
@@ -1183,17 +1139,6 @@ function holdCompile(api) {
             held = hold(compile);
         }
     });
-}
-
-function everyElementOptions(code, props) {
-    const declared = `customElement={{ props: { ${props()} } }}`;
-    const options = parse(blankBodies(code), { modern: true }).options;
-    const attribute = options?.attributes.find((one) => one.name === 'customElement');
-
-    if (attribute !== undefined) return code.slice(0, attribute.start) + declared + code.slice(attribute.end);
-    if (options) return `${code.slice(0, options.start)}<svelte:options ${declared}${code.slice(options.start + '<svelte:options'.length)}`;
-
-    return `${code}\n<svelte:options ${declared} />`;
 }
 
 // The props are read off the script with the names the `<script module>` gives
@@ -1300,12 +1245,12 @@ const WRITTEN_AS = (globalThis[Symbol.for('svelthon.writtenAs')] ??= new Map());
 
 // Found again by its script as the script pass compiled it, and not by the file
 // alone: two variants of one file (`?variant=…`) are preprocessed under its
-// name, and the second took the props and the text of the first. The script
-// names its module by the whole file it was handed (`bodyId`), and no other
-// preprocessor rewrites it: by the markup, a class another added made both
-// variants the file's last. And nothing else is taken for it: the file's last,
-// taken where none was found, gave a variant the props of another and a file
-// rewritten in JavaScript those of the Python it was.
+// name, and the second took the text of the first. The script names its
+// module by the whole file it was handed (`bodyId`), and no other preprocessor
+// rewrites it: by the markup, a class another added made both variants the
+// file's last. And nothing else is taken for it: the file's last, taken where
+// none was found, gave a variant the text of another and a file rewritten in
+// JavaScript that of the Python it was.
 //
 // Kept until its compile reads it, then until another of the file is read: a
 // count of eight lost the ninth variant prepared at once, and forgetting the
@@ -2300,9 +2245,8 @@ export function svelthon(options = {}) {
                 );
             }
 
-            // vite-plugin-svelte's own, whose compile asks whether Svelte makes
-            // a component a custom element, which no preprocessor is handed
-            // (`holdCompile`).
+            // vite-plugin-svelte's own, whose compile places each warning
+            // Svelte makes on what was written (`holdCompile`).
             const svelte = config.plugins.find((one) => one.name === 'vite-plugin-svelte:config')?.api;
 
             if (svelte) holdCompile(svelte);

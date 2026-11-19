@@ -329,7 +329,12 @@ Un prop est lisible dès l'exécution du corps du module, une mise à jour du
 parent traverse jusqu'au Python, et un prop requis non fourni vaut `None`, pas
 `undefined`. Écrire dans un prop depuis Python le remplace jusqu'à ce que le
 parent passe une nouvelle valeur : c'est la règle de Svelte pour les props non
-`$bindable`.
+`$bindable`. Chaque prop est déstructuré par son nom, et Svelte relit à chaque
+lecture celui que le module n'écrit jamais, comme pour les siens. Le
+compilateur voit une écriture par le nom, `global` compris, à une clé de
+`globals()`, et par chacune des autres portes du namespace du module qu'il
+connaît ; une écriture qui ne passe par aucune lève une `TypeError` qui nomme
+le prop.
 
 Un parent Python donne à un enfant Python la valeur elle-même, une sous-classe
 de `float` avec sa classe, un générateur intact, et à un enfant JavaScript le
@@ -1278,6 +1283,12 @@ nombre passe ensuite comme tout nombre venu de JavaScript, un entier en `int` :
 soit sa valeur. Une propriété que la page remet à `undefined` relit son défaut,
 comme celle d'un élément Svelte, `15.0` tel que Python l'a écrit.
 
+Un composant dont ce sont les options de compilation de Svelte qui font un
+élément, et non son propre `<svelte:options>`, par
+`compilerOptions.customElement` ou `dynamicCompileOptions`, prend ses props par
+leurs seuls noms, comme Svelte celles d'un composant Svelte : chaque attribut
+arrive en chaîne.
+
 `host()` est la sortie, et la seule : un élément personnalisé parle à la page par
 des événements DOM et non par des props. Sans lui, un composant pourrait recevoir
 et afficher, jamais répondre.
@@ -1894,7 +1905,7 @@ parsing, que seul le compilateur charge ; le README de Bryntime en donne le poid
 
 ## État
 
-Validé par `npm test`, 2 196 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 2 203 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
