@@ -116,6 +116,83 @@ describe('every component an element', () => {
         expect([py.names, py.warnings]).toEqual([js.names, js.warnings]);
         expect(py.names).toEqual(made ? ['v', 'flag'] : null);
     });
+
+    // Asked once, of the code as it was handed, and answered as it answered:
+    // asked again of the code with the props added, it saw a `<svelte:options>`
+    // and chose legacy mode, where the runes broke the build.
+    test('dynamicCompileOptions is asked once, of the code it was handed', async () => {
+        const seen = [];
+        const chosen = ({ code }) => (seen.push(code.includes('<svelte:options')), code.includes('<svelte:options') ? undefined : { customElement: true, runes: true });
+        const api = configured(false, chosen);
+
+        api.options.compilerOptions.runes = false;
+
+        const py = await element(api, python);
+        const asked = seen.splice(0);
+        const js = await element(api, native);
+
+        expect([py.names, py.warnings]).toEqual([js.names, js.warnings]);
+        expect(py.names).toEqual(['v', 'flag']);
+        expect(asked).toEqual(seen);
+    });
+
+    // A declaration a preprocessor after Svelthon's writes is given the props as
+    // one the author wrote is: written over, it lost its tag, its shadow and the
+    // attribute it names a prop by.
+    test('a declaration another preprocessor adds after Svelthon keeps its tag, its shadow and its attributes', async () => {
+        const declaring = { markup: ({ content }) => ({ code: `<svelte:options customElement={{ tag: 'x-probe', shadow: 'none', props: { v: { attribute: 'message' } } }} />\n${content}` }) };
+        const api = configured(true);
+        const [py, js] = [await element(api, python, '/app/Probe.svelte', [declaring]), await element(api, native, '/app/Probe.svelte', [declaring])];
+        const read = ({ js }) => [/customElements\.define\(\s*['"]x-probe['"]/.test(js), /attribute: ['"]message['"]/.test(js), /mode: ['"]open['"]/.test(js)];
+
+        expect(read(py)).toEqual(read(js));
+        expect(read(py)).toEqual([true, true, false]);
+        expect(py.names).toEqual(js.names);
+    });
+
+    // Rewritten in JavaScript, a file is what it is now: its element observed
+    // the props of the Python it was before.
+    test('a file rewritten in JavaScript is given nothing of the Python it was', async () => {
+        const api = configured(true);
+        const filename = '/app/Rewritten.svelte';
+
+        await element(api, python, filename);
+
+        expect((await element(api, '<script>\nlet { size = 0 } = $props();\n</script>\n<b>{size}</b>', filename)).names).toEqual(['size']);
+    });
+
+    // Nine variants prepared before any is compiled: a count of eight kept lost
+    // the props of the first. And a variant in JavaScript prepared meanwhile,
+    // which forgot the file, lost those of the Python one still compiling.
+    test('nine variants prepared at once, and one in JavaScript among them, are each given their own props', async () => {
+        const api = configured(true);
+        const filename = '/app/Many.svelte';
+        const names = Array.from({ length: 9 }, (_, at) => `item${at + 1}`);
+        const prepared = (source) => preprocess(source, [pythonPreprocessor()], { filename }).then((one) => one.code);
+        const codes = await Promise.all(names.map((name) => prepared(`<script lang="python">\n${name}: int = 0\n</script>\n<b>{${name}}</b>`)));
+        const javascript = await prepared('<script>\nlet { native = 0 } = $props();\n</script>\n<b>{native}</b>');
+        const props = async (code) => /create_custom_element\(\s*\w+,\s*\{\s*(\w+):/.exec((await api.compileSvelte({ filename, ssr: false }, code, api.options, client)).compiled.js.code)?.[1];
+
+        expect([await props(javascript), ...(await Promise.all(codes.map(props)))]).toEqual(['native', ...names]);
+    });
+
+    // Two variants of one file, preprocessed under its name before either is
+    // compiled: the second took the props of the first. And so it did again
+    // where another preprocessor added a class to the markup after Svelthon's.
+    const retouching = { markup: ({ content }) => ({ code: content.replace('<b>', '<b class="shown">') }) };
+
+    test.for([
+        ['', []],
+        [', its markup retouched after Svelthon', [retouching]]
+    ])('two variants of one file are given each its own props%s', async ([, after]) => {
+        const api = configured(true);
+        const filename = '/app/Variant.svelte';
+        const variant = (name) => `<script lang="python">\n${name}: int = 0\n</script>\n<b>{${name}}</b>`;
+        const codes = await Promise.all(['first', 'second'].map(async (name) => (await preprocess(variant(name), [pythonPreprocessor(), ...after], { filename })).code));
+        const props = async (code) => /create_custom_element\(\s*\w+,\s*\{\s*(\w+):/.exec((await api.compileSvelte({ filename, ssr: false }, code, api.options, client)).compiled.js.code)?.[1];
+
+        expect([await props(codes[0]), await props(codes[1])]).toEqual(['first', 'second']);
+    });
 });
 
 // **An entry of `customElement.props` that writes no type keeps the type the

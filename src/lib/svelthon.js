@@ -1,3 +1,4 @@
+import { TraceMap, traceSegment } from '@jridgewell/trace-mapping';
 import { createHash, randomBytes } from 'node:crypto';
 import { relative, resolve, dirname, basename } from 'node:path';
 import { readFileSync, existsSync, statSync, realpathSync } from 'node:fs';
@@ -912,6 +913,8 @@ export function python(options = {}) {
                 return running === null || running.includes(name);
             };
 
+            // And what each stretch of the markup became (`marks`).
+            const marks = [];
             const code = overMarkup(
                 content,
                 // The markup, and where it starts, so a refusal can name a
@@ -924,7 +927,8 @@ export function python(options = {}) {
                         pythonChildren,
                         javascriptChildren,
                         imported,
-                        runs
+                        runs,
+                        marks
                     })
             );
 
@@ -945,7 +949,15 @@ export function python(options = {}) {
             // And the props of one that declares no element, which its compile
             // may make one (`elementReady`).
             if (filename) {
-                WRITTEN_AS.set(filename, { declared: file.element, props: () => elementPropsText(python, file.jsNames) });
+                keepWritten(filename, file, {
+                    written: content,
+                    emitted,
+                    code,
+                    marks,
+                    declared: file.element,
+                    props: () => elementPropsText(python, file.jsNames),
+                    declare: (compiled) => elementOptions(compiled, python, file.jsNames)
+                });
             }
 
             return { code: emitted, dependencies: childrenWatched() ? [] : languages.map(([path]) => path) };
@@ -1032,7 +1044,12 @@ export function python(options = {}) {
             // way, but every tool downstream reads the attribute and refuses:
             // `svelte-check`, installed by 93% of SvelteKit projects, would
             // report dozens of parse errors per component.
-            return { code: sameLines(script, content), attributes: rest };
+            const code = sameLines(script, content);
+            const kept = KEPT_FOR.get(about);
+
+            if (kept !== undefined) keptScript(filename, kept, code);
+
+            return { code, attributes: rest };
         }
     };
 }
@@ -1080,17 +1097,14 @@ const elementPropsText = (python, jsNames) =>
 // environment threw, and one read off a mark another preprocessor writes was
 // made on the text before it. Added to its own `<svelte:options>`, or in one
 // after the file's last line, so that no line moves.
-async function elementReady(request, code, options, environment) {
-    const file = WRITTEN_AS.get(request.filename);
+//
+// A declaration a preprocessor after Svelthon's wrote is given the props as one
+// the author wrote is (`declare`), where it was written over and lost its tag,
+// its shadow and its attributes.
+function elementReady(file, request, code, { compileOptions, dynamic }) {
+    if (file.declared) return code;
+    if (compileOptionsFor(code)) return file.declare(code);
 
-    if (file === undefined || file.declared) return code;
-
-    const compileOptions = { ...options.compilerOptions, filename: request.filename, generate: request.ssr ? 'server' : 'client' };
-    const styled = code.lastIndexOf('</style>');
-    // The code vite-plugin-svelte hands its callback: in development, with a
-    // rule that scopes every node before the style closes.
-    const finalCode = compileOptions.hmr && options.emitCss && styled > -1 ? `${code.slice(0, styled)} *{}${code.slice(styled)}` : code;
-    const dynamic = await options.dynamicCompileOptions?.({ filename: request.filename, code: finalCode, compileOptions, environment });
     // Read as Svelte reads it: the file's options over the global ones, and a
     // function asked of the file.
     const chosen = { ...compileOptions, ...dynamic }.customElement;
@@ -1099,18 +1113,55 @@ async function elementReady(request, code, options, environment) {
     return element ? everyElementOptions(code, file.props) : code;
 }
 
+// The author's `dynamicCompileOptions`, asked as vite-plugin-svelte asks it, of
+// the code preprocessed and in development with a rule that scopes every node
+// before the style closes; and asked once, its answer handed on to
+// vite-plugin-svelte (`holdCompile`): asked again of the code with the props
+// added, it saw a `<svelte:options>` and chose otherwise.
+async function askedOptions(request, code, options, environment) {
+    const compileOptions = { ...options.compilerOptions, filename: request.filename, generate: request.ssr ? 'server' : 'client' };
+    const styled = code.lastIndexOf('</style>');
+    const finalCode = compileOptions.hmr && options.emitCss && styled > -1 ? `${code.slice(0, styled)} *{}${code.slice(styled)}` : code;
+    const dynamic = await options.dynamicCompileOptions?.({ filename: request.filename, code: finalCode, compileOptions, environment });
+
+    return { compileOptions, dynamic };
+}
+
 // vite-plugin-svelte's compile, its own (`api.compileSvelte`) made to ask
-// first (`elementReady`): set by its configuration, read by its compile once
-// both are resolved, so held as it is set, whichever comes first.
+// first (`elementReady`), and to place each warning Svelte makes on what was
+// written (`placeWarning`) before the author's own filter reads it: set by its
+// configuration, read by its compile once both are resolved, so held as it is
+// set, whichever comes first.
 const HELD_COMPILES = new WeakSet();
 
 function holdCompile(api) {
     if (HELD_COMPILES.has(api)) return;
     HELD_COMPILES.add(api);
 
+    // The global filter and one `dynamicCompileOptions` answers, which
+    // vite-plugin-svelte puts over it: answered there, it read the columns of
+    // the code emitted.
+    const placing = (file, filter) => (warning) => (placeWarning(warning, file), filter === undefined ? true : filter(warning));
+    // The map vite-plugin-svelte hands with the code is that of the
+    // preprocessors, a preprocessor after Svelthon's among them: one that adds
+    // lines moves the code Svelte warns of, read by the map back to where
+    // Svelthon emitted it.
     const hold = (compile) =>
         typeof compile === 'function'
-            ? async (request, code, options, environment, ...rest) => compile(request, await elementReady(request, code, options, environment), options, environment, ...rest)
+            ? async (request, code, options, environment, sourcemap, ...rest) => {
+                  const written = writtenAs(request.filename, code);
+                  const file = written !== undefined && sourcemap?.mappings ? { ...written, trace: new TraceMap(sourcemap) } : written;
+
+                  if (file === undefined) return compile(request, code, options, environment, sourcemap, ...rest);
+
+                  const asked = await askedOptions(request, code, options, environment);
+                  const filtered = typeof asked.dynamic === 'object' && asked.dynamic !== null && Object.hasOwn(asked.dynamic, 'warningFilter');
+                  const dynamic = filtered ? { ...asked.dynamic, warningFilter: placing(file, asked.dynamic.warningFilter) } : asked.dynamic;
+                  const answered = options.dynamicCompileOptions === undefined ? {} : { dynamicCompileOptions: () => dynamic };
+                  const compilerOptions = { ...options.compilerOptions, warningFilter: placing(file, options.compilerOptions?.warningFilter) };
+
+                  return compile(request, elementReady(file, request, code, asked), { ...options, ...answered, compilerOptions }, environment, sourcemap, ...rest);
+              }
             : compile;
     let held = hold(api.compileSvelte);
 
@@ -1229,10 +1280,199 @@ function sameLines(code, content) {
     return [...lines.slice(0, count - 1), lines.slice(count - 1).join(' ')].join('\n');
 }
 
-// What each component was preprocessed into, by its file (`WRITTEN_AS`), on
-// the global the plugin shares with the preprocessor: its props, for a compile
-// that makes it a custom element (`elementReady`).
+// And the columns, which the lines kept cannot keep: `{word}` emitted as a call
+// is longer, and a warning about the `<img>` after it on its line was placed
+// where the call pushed it. What each component was written as and emitted as,
+// by its file (`WRITTEN_AS`), on the global the plugin shares with the
+// preprocessor, and each warning Svelte makes placed back on what was written
+// (`placeWarning`), which the plugin asks of it (`holdCompile`).
 const WRITTEN_AS = (globalThis[Symbol.for('svelthon.writtenAs')] ??= new Map());
+
+// Found again by its script as the script pass compiled it, and not by the file
+// alone: two variants of one file (`?variant=…`) are preprocessed under its
+// name, and the second took the props and the text of the first. The script
+// names its module by the whole file it was handed (`bodyId`), and no other
+// preprocessor rewrites it: by the markup, a class another added made both
+// variants the file's last. And nothing else is taken for it: the file's last,
+// taken where none was found, gave a variant the props of another and a file
+// rewritten in JavaScript those of the Python it was.
+//
+// Kept until its compile reads it, then until another of the file is read: a
+// count of eight lost the ninth variant prepared at once, and forgetting the
+// file once it was JavaScript lost a Python variant of it still compiling.
+const KEPT_FOR = new WeakMap();
+
+// What the markup pass kept, by what it hands the script pass (`calls`).
+function keepWritten(filename, about, kept) {
+    KEPT_FOR.set(about, kept);
+    WRITTEN_AS.set(filename, [...(WRITTEN_AS.get(filename) ?? []), kept]);
+}
+
+// And the script the script pass compiled, the same preprocessing kept before
+// forgotten: its compile reads this one.
+function keptScript(filename, kept, script) {
+    kept.script = script;
+    WRITTEN_AS.set(filename, (WRITTEN_AS.get(filename) ?? []).filter((one) => one === kept || one.script !== script));
+}
+
+function writtenAs(filename, code) {
+    const all = WRITTEN_AS.get(filename) ?? [];
+    const found = all.findLast((kept) => kept.script !== undefined && code.includes(kept.script));
+
+    if (found !== undefined) {
+        found.read = true;
+        WRITTEN_AS.set(filename, all.filter((kept) => kept === found || !kept.read));
+    }
+
+    return found;
+}
+
+// The column of the line `written` that `column` of the line `emitted` stands
+// for, the two aligned on what they share. Asked of what the steps after the
+// markup pass made of its text, which put a statement or an attribute into a
+// script or an option, and rename a rune there: they rewrite nothing the author
+// wrote, so what the two lines share is what stayed. A column inside what was
+// put in is that of what follows it. A line too long to align keeps its column.
+//
+// Aligned word by word, not letter by letter: the declarations written after
+// the markup, on its last line where the file ends without a newline, held
+// every letter of the rest of the line in order.
+const TOKEN = /[\p{L}\p{N}_$]+|\s+|[^]/gu;
+
+function writtenColumn(emitted, written, column) {
+    const tokens = (line) => Array.from(line.matchAll(TOKEN), (found) => [found[0], found.index]);
+    const [from, to] = [tokens(emitted), tokens(written)];
+    const [n, m] = [from.length, to.length];
+
+    if (n * m > 4_000_000) return Math.min(column, written.length);
+
+    const table = Array.from({ length: n + 1 }, () => new Uint32Array(m + 1));
+
+    for (let i = n - 1; i >= 0; i--) {
+        for (let j = m - 1; j >= 0; j--) {
+            table[i][j] = from[i][0] === to[j][0] ? table[i + 1][j + 1] + 1 : Math.max(table[i + 1][j], table[i][j + 1]);
+        }
+    }
+
+    let [i, j] = [0, 0];
+
+    while (i < n && j < m) {
+        const [text, at] = from[i];
+        const within = column < at + text.length;
+
+        if (text === to[j][0] && table[i][j] === table[i + 1][j + 1] + 1) {
+            if (within) return to[j][1] + Math.max(0, column - at);
+            i += 1;
+            j += 1;
+        } else if (table[i + 1][j] >= table[i][j + 1]) {
+            if (within) break;
+            i += 1;
+        } else {
+            j += 1;
+        }
+    }
+
+    return j < m ? to[j][1] : written.length;
+}
+
+// The offset of what was written that `offset` of the markup pass's text stands
+// for, read off the stretch it falls in (`marks`): the same in a stretch copied,
+// and in one the pass rewrote, `{picture}` made a call, the same at its start
+// and its end as far as they read as written, and the start of what it rewrote
+// in between.
+function writtenOffset({ marks, code, written }, offset) {
+    let [low, high] = [0, marks.length / 2 - 1];
+
+    while (low < high) {
+        const middle = (low + high + 1) >> 1;
+
+        if (marks[2 * middle + 1] <= offset) low = middle;
+        else high = middle - 1;
+    }
+
+    const [fromIn, fromOut, toIn, toOut] = marks.slice(2 * low, 2 * low + 4);
+
+    if (toOut === undefined) return Math.min(fromIn + offset - fromOut, written.length);
+
+    const [made, was] = [code.slice(fromOut, toOut), written.slice(fromIn, toIn)];
+    let same = 0;
+    let end = 0;
+
+    while (same < made.length && same < was.length && made[same] === was[same]) same += 1;
+    while (end < made.length - same && end < was.length - same && made.at(-1 - end) === was.at(-1 - end)) end += 1;
+
+    if (offset - fromOut <= same) return fromIn + offset - fromOut;
+
+    return offset >= toOut - end ? toIn - (toOut - offset) : fromIn + same;
+}
+
+// The line an offset is on, by where each line starts.
+function lineAt(starts, offset) {
+    let [low, high] = [0, starts.length - 1];
+
+    while (low < high) {
+        const middle = (low + high + 1) >> 1;
+
+        if (starts[middle] <= offset) low = middle;
+        else high = middle - 1;
+    }
+
+    return low;
+}
+
+// Svelte's own frame (`get_code_frame`), drawn on the lines written.
+function writtenFrame(lines, line, column) {
+    const spaced = (text) => text.replace(/^\t+/, (tabs) => tabs.split('\t').join('  '));
+    const [start, end] = [Math.max(0, line - 2), Math.min(line + 3, lines.length)];
+    const digits = String(end + 1).length;
+
+    return lines
+        .slice(start, end)
+        .map((text, at) => {
+            const number = String(at + start + 1).padStart(digits, ' ');
+
+            return start + at === line ? `${number}: ${spaced(text)}\n${' '.repeat(digits + 2 + spaced(text.slice(0, column)).length)}^` : `${number}: ${spaced(text)}`;
+        })
+        .join('\n');
+}
+
+// Placed by the compile that made it, and not by the file it names: Svelte
+// names it relative to its `rootDir`, the working directory by default, where
+// the preprocessor was handed the whole path.
+function placeWarning(warning, file) {
+    if (!warning?.start || !warning.end) return warning;
+
+    const written = file.written.split('\n');
+    const emitted = file.emitted.split('\n');
+    const code = file.code.split('\n');
+    const startsOf = (lines) => lines.reduce((starts, line) => (starts.push(starts.at(-1) + line.length + 1), starts), [0]);
+    const [starts, codeStarts] = [startsOf(written), startsOf(code)];
+
+    // Read by the map into the stretch it starts: the end of an `<img>` that
+    // ends its line falls past the last stretch the map starts, and was taken
+    // for the start of that one, the `>`.
+    const placed = (compiled) => {
+        const segment = file.trace === undefined ? null : traceSegment(file.trace, compiled.line - 1, compiled.column);
+        const at = segment === null || segment.length < 4 ? compiled : { line: segment[2] + 1, column: segment[3] + compiled.column - segment[0] };
+        const line = at.line - 1;
+
+        if (written[line] === undefined || emitted[line] === undefined || code[line] === undefined) return compiled;
+        if (written[line] === emitted[line]) return { line: at.line, column: at.column, character: starts[line] + at.column };
+
+        const column = code[line] === emitted[line] ? at.column : writtenColumn(emitted[line], code[line], at.column);
+        const character = writtenOffset(file, codeStarts[line] + column);
+        const placedLine = lineAt(starts, character);
+
+        return { line: placedLine + 1, column: character - starts[placedLine], character };
+    };
+
+    warning.start = placed(warning.start);
+    warning.end = placed(warning.end);
+    if (warning.position) warning.position = [warning.start.character, warning.end.character];
+    if (warning.frame !== undefined) warning.frame = writtenFrame(written, warning.start.line - 1, warning.end.column);
+
+    return warning;
+}
 
 // A store is served on every request in dev, and compiling Python is the
 // expensive half. Keyed on what the file holds, read at each ask, which costs

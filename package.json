@@ -71,6 +71,7 @@
     "vitest": "^4.1.10"
   },
   "dependencies": {
+    "@jridgewell/trace-mapping": "^0.3.31",
     "bryc": "file:../bryc",
     "bryntime": "file:../bryntime",
     "bryve": "file:../bryve",

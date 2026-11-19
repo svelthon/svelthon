@@ -3171,27 +3171,54 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         edits.push({ at: out.length - length, to: out.length });
     };
 
+    // What each stretch of the output was written as, which a warning Svelte
+    // makes on the output is placed back by (`placeWarning`): flat pairs, where
+    // a stretch starts in the markup and in the output, one at each step after
+    // which the output stands elsewhere against the markup, a rewrite of
+    // another length behind it. Placed by aligning the two texts, a tag written
+    // inside a Python string took the warning of the real one after it. Kept by
+    // the walk that compiles, when `where.marks` asks. Read off lengths alone:
+    // reading the output as it grows flattened it at each step, and the walk
+    // went quadratic.
+    const marks = record === null ? where?.marks : undefined;
+    const mark = () => {
+        if (marks !== undefined && out.length - index !== marks.at(-1) - marks.at(-2)) marks.push(index, out.length);
+    };
+    // And the output from `from` on, moved by text put before it.
+    const shiftMarks = (from, by) => {
+        for (let at = (marks?.length ?? 0) - 1; at > 0 && marks[at] >= from; at -= 2) marks[at] += by;
+    };
+
     // The output with what is owed given back and what is cut taken out, each
-    // noted where the walk stood, so in the order they stand in it.
+    // noted where the walk stood, so in the order they stand in it, the marks
+    // moved with the text they stand at.
     const edited = () => {
         let given = '';
         let at = 0;
+        let next = 1;
+        const moved = (upTo, to) => {
+            for (; marks !== undefined && next < marks.length && marks[next] < upTo; next += 2) marks[next] = to(marks[next]);
+        };
 
         // In the order of the text: a scope's declarations are placed at its
         // head once it has closed (`declared`).
         for (const edit of edits.sort((one, other) => one.at - other.at)) {
+            moved(edit.at, (offset) => given.length + offset - at);
             given += out.slice(at, edit.at);
 
             if (edit.text !== undefined) {
                 given += edit.text;
                 at = edit.at;
             } else if (edit.lines === undefined) {
+                moved(edit.to, () => given.length);
                 at = edit.to;
             } else {
                 given += '\n'.repeat(edit.lines);
                 at = edit.at;
             }
         }
+
+        moved(Infinity, (offset) => given.length + offset - at);
 
         return given + out.slice(at);
     };
@@ -4301,6 +4328,8 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     };
 
     while (index < markup.length) {
+        mark();
+
         const char = markup[index];
 
         if (inTag) {
@@ -4347,8 +4376,10 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                         const inner = markup.slice(index + 1, end);
                         // A class among the text, as Svelte reads one (`knownClass`).
                         const known = !quotedLone && named === 'class' && onElement(tag) && tag.element === undefined ? knownClass(inner) : null;
+                        const emitted = out.length;
 
                         out += quotedLone ? attributeValue(named, inner) : known !== null ? `{${known}}` : `{${rendered(inner, quotedHanded)}}`;
+                        keepLines(emitted, index, end);
                         region = null;
                         index = end + 1;
                         continue;
@@ -5171,6 +5202,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                         if (closes(next)) {
                             let kept = 0;
                             while (kept < out.length && /\s/.test(out[out.length - 1 - kept])) kept += 1;
+                            shiftMarks(out.length - kept, blocks.length);
                             out = out.slice(0, out.length - kept) + blocks + out.slice(out.length - kept);
                         } else {
                             out += stands ? blocks + space : space + blocks;
@@ -5252,6 +5284,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     }
 
     declared(chain.memosLeft());
+    marks?.push(index, out.length);
 
     return edited();
 }
