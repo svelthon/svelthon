@@ -219,6 +219,121 @@ function writtenProps(table, body, props, annotatedAt) {
     return written;
 }
 
+// What the star imports of a module bring, `from handlers import *`: the names
+// each module it reads publishes (`starNames`), or null once one of them is
+// not known.
+function broughtByStars(body, starNames) {
+    const brought = new Set();
+    const walk = (statements) => {
+        for (const node of statements ?? []) {
+            if (node instanceof $B.ast.ImportFrom && node.names.some((one) => one.name === '*')) {
+                const names = starNames?.(node.module ?? '', node.level ?? 0) ?? null;
+
+                if (names === null) return false;
+                for (const one of names) brought.add(one);
+            }
+
+            for (const field of ['body', 'orelse', 'finalbody']) {
+                if (!(node instanceof $B.ast.FunctionDef || node instanceof $B.ast.AsyncFunctionDef || node instanceof $B.ast.ClassDef) && walk(node[field]) === false) {
+                    return false;
+                }
+            }
+
+            for (const one of [...(node.handlers ?? []), ...(node.cases ?? [])]) if (walk(one.body) === false) return false;
+        }
+
+        return true;
+    };
+
+    return walk(body) ? brought : null;
+}
+
+// What `from m import *` takes of a module, by its text, as Python takes it:
+// its `__all__`, as its own level writes it, statement after statement, a list
+// or a tuple of strings assigned, added with `+=` or by `append` and `extend`;
+// or else every name its own level binds, a name deleted no longer, and what
+// its own star imports bring (`starNames`), that does not begin with `_`. Null
+// when that is not told without running it: an `__all__` computed, or written
+// or read anywhere else, a name deleted in a block, the names `__js__` binds,
+// a star import not known, or text that does not parse.
+function publishedNames(text, starNames = () => null) {
+    let tree;
+
+    try {
+        tree = $B._PyPegen.run_parser(new $B.Parser(text, '<star>', 'file'));
+    } catch {
+        return null;
+    }
+
+    const ast = $B.ast;
+    const isAll = (node) => node instanceof ast.Name && node.id === '__all__';
+    const listed = (value) =>
+        (value instanceof ast.List || value instanceof ast.Tuple) &&
+        value.elts.every((one) => one instanceof ast.Constant && typeof one.value === 'string')
+            ? value.elts.map((one) => one.value)
+            : null;
+    const found = (node, wanted, inner = true) => {
+        if (Array.isArray(node)) return node.some((one) => found(one, wanted, inner));
+        if (node === null || typeof node !== 'object' || !Array.isArray(node.constructor?._fields)) return false;
+        if (wanted(node)) return true;
+        if (!inner && (node instanceof ast.FunctionDef || node instanceof ast.AsyncFunctionDef || node instanceof ast.ClassDef || node instanceof ast.Lambda)) {
+            return false;
+        }
+        return node.constructor._fields.some((field) => found(node[field], wanted, inner));
+    };
+
+    if (found(tree.body, isAll)) {
+        let all = null;
+
+        for (const node of tree.body) {
+            const call = node instanceof ast.Expr && node.value instanceof ast.Call ? node.value : null;
+            const method = call?.func instanceof ast.Attribute && isAll(call.func.value) && call.args.length === 1 ? call.func.attr : null;
+
+            if ((node instanceof ast.Assign && node.targets.length === 1 && isAll(node.targets[0])) || (node instanceof ast.AnnAssign && isAll(node.target) && node.value)) {
+                all = listed(node.value);
+            } else if (node instanceof ast.AugAssign && isAll(node.target) && node.op instanceof ast.Add && all !== null && listed(node.value) !== null) {
+                all = [...all, ...listed(node.value)];
+            } else if (method === 'append' && all !== null && call.args[0] instanceof ast.Constant && typeof call.args[0].value === 'string') {
+                all = [...all, call.args[0].value];
+            } else if (method === 'extend' && all !== null && listed(call.args[0]) !== null) {
+                all = [...all, ...listed(call.args[0])];
+            } else if (found(node, isAll)) {
+                return null;
+            } else {
+                continue;
+            }
+
+            if (all === null || found(call ? call.args : node.value, isAll)) return null;
+        }
+
+        return new Set(all);
+    }
+
+    const names = new Set();
+
+    for (const node of tree.body) {
+        if (node instanceof ast.ImportFrom && node.names.some((one) => one.name === '*')) {
+            const brought = starNames(node.module ?? '', node.level ?? 0);
+
+            if (brought === null) return null;
+            for (const one of brought) names.add(one);
+        } else if (node instanceof ast.Delete) {
+            for (const one of node.targets) if (one instanceof ast.Name) names.delete(one.id);
+        } else if (found(node, (one) => one instanceof ast.Delete && one.targets.some((target) => target instanceof ast.Name), false)) {
+            return null;
+        } else {
+            const { bound, starred } = surface([node]);
+
+            if (starred) return null;
+            for (const one of bound) names.add(one);
+        }
+    }
+
+    if (names.has('__js__')) return null;
+
+    return new Set([...names].filter((one) => !one.startsWith('_')));
+}
+
 // What the module reads as globals and nothing gives it: no statement binds it,
 // and it is no builtin, no name Svelthon publishes, none of the compiler's and
 // none JavaScript forbids. Asked of the builtins' own names: `constructor` is on
@@ -2904,6 +3019,11 @@ function compile(
         // whoever can read the file system. Without it the imports are not
         // checked.
         resolves = null,
+        // The names `from m import *` brings, by the module and the level of
+        // the import, asked by whoever can read the module (`publishedNames`),
+        // or null when it cannot be told. Without it, a star import may bring
+        // any name the framework reads.
+        starNames = null,
         // The module the script takes its body from (`init`), the name's
         // unless the caller tells the body apart.
         body = virtualId(name)
@@ -3090,8 +3210,20 @@ function compile(
     const declaration = declaredExports(HOST, root._ast, table, source, lineOffset, src);
     const listed = declaration === null ? null : declaration.names;
     const binds = moduleBinds(table);
+    // Of what a star import may bind, what it does bring when the modules it
+    // reads are known (`broughtByStars`): every name the framework reads was
+    // exported, and SvelteKit, which counts a route's methods by the names its
+    // module holds, answered a 405 allowing seven methods where the module had
+    // one.
+    const brought = starred ? broughtByStars(root._ast.body, starNames) : new Set();
     const exported =
-        listed ?? [...new Set([...funcs.map((f) => f.name), ...read.filter((n) => starred || binds.has(n) || jsImported.includes(n))])];
+        listed ??
+        [
+            ...new Set([
+                ...funcs.map((f) => f.name),
+                ...read.filter((n) => (brought === null ? starred : brought.has(n)) || binds.has(n) || jsImported.includes(n))
+            ])
+        ];
 
     // What the list names that the module cannot export (Bryc's
     // `exportChecks`); with a `from m import *`, a name not yet bound waits
@@ -3405,5 +3537,6 @@ export {
     PY_NAME,
     componentImports,
     importedFile,
-    importedNames
+    importedNames,
+    publishedNames
 };

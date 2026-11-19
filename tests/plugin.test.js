@@ -582,6 +582,60 @@ describe('the plugin loads a .py itself', () => {
             rmSync(dir, { recursive: true, force: true });
         }
     });
+
+    // A server route that takes its methods from a module by a star import
+    // exports those the module publishes, which SvelteKit counts: exported
+    // whole, all seven held nothing, and a 405 allowed every method. And
+    // again once the module publishes another.
+    test('a server route exports the methods its star import brings, and only those', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'svelthon-star-'));
+        const route = join(dir, 'api', '+server.py');
+        const handlers = join(dir, 'api', 'handlers.py');
+        const exported = (code) => ['GET', 'POST', 'PUT'].filter((name) => new RegExp(`\\bas ${name}\\b|export (const|let|function) ${name}\\b`).test(code));
+
+        try {
+            mkdirSync(join(dir, 'api'));
+            writeFileSync(handlers, 'def GET(event):\n    return None\n');
+            writeFileSync(route, 'from handlers import *\n');
+            plugin.load.call(context, route);
+
+            const first = exported(plugin.load.call(context, `${route}?python`));
+
+            writeFileSync(handlers, 'def GET(event):\n    return None\n\n\ndef POST(event):\n    return None\n');
+
+            expect([first, exported(plugin.load.call(context, `${route}?python`))]).toEqual([['GET'], ['GET', 'POST']]);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    // What the star brings as CPython runs the module: an `__all__` added to
+    // after its assignment was read as that assignment, and the method added
+    // was no longer exported, a 405; one computed exports all seven, as before.
+    const methods = 'def GET(event):\n    return None\n\n\ndef POST(event):\n    return None\n\n\ndef PUT(event):\n    return None\n';
+    test.for([
+        ['an __all__ added to with +=', `${methods}__all__ = ["GET"]\n__all__ += ["POST"]\n`, null, ['GET', 'POST']],
+        ['an __all__ added to with append', `${methods}__all__ = ["GET"]\n__all__.append("POST")\n`, null, ['GET', 'POST']],
+        ['an __all__ annotated', `${methods}__all__: list = ["GET"]\n`, null, ['GET']],
+        ['a method deleted', `${methods}del POST\n`, null, ['GET', 'PUT']],
+        ['a star import of its own', 'from base import *\n', 'def GET(event):\n    return None\n\n\ndef PUT(event):\n    return None\n', ['GET', 'PUT']],
+        ['an __all__ computed', `${methods}__all__ = [name for name in ["GET"]]\n`, null, ['GET', 'POST', 'PUT']]
+    ])('a server route exports what its star import brings of %s', ([, text, base, expected]) => {
+        const dir = mkdtempSync(join(tmpdir(), 'svelthon-star-'));
+        const route = join(dir, 'api', '+server.py');
+        const exported = (code) => ['GET', 'POST', 'PUT'].filter((name) => new RegExp(`\\bas ${name}\\b|export (const|let|function) ${name}\\b`).test(code));
+
+        try {
+            mkdirSync(join(dir, 'api'));
+            writeFileSync(join(dir, 'api', 'handlers.py'), text);
+            if (base !== null) writeFileSync(join(dir, 'api', 'base.py'), base);
+            writeFileSync(route, 'from handlers import *\n');
+
+            expect(exported(plugin.load.call(context, `${route}?python`))).toEqual(expected);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
 });
 
 // A JavaScript server module's `load` is exported through the transport's relay
@@ -1049,6 +1103,36 @@ describe('hot update invalidates the generated module too', () => {
                 expect(changed).toContainEqual(['change', at(relay)]);
             })
         );
+
+        // And a route whose star import reads a module edited: the route served
+        // the new body of GET, and answered 405 to the POST its starred
+        // module's `__all__` had just gained, until the route was edited.
+        test('and the watcher changes a module whose star import reads the module edited', () =>
+            inRoom(async ({ at }) => {
+                const handlers = {};
+                const changed = [];
+                const server = {
+                    watcher: {
+                        on: (event, handler) => (handlers[event] = handler),
+                        emit: (event, file) => changed.push([event, file])
+                    }
+                };
+                const plugin = svelthon();
+
+                mkdirSync(at('api'));
+                writeFileSync(at('api/handlers.py'), 'def GET(event):\n    return None\n\n\ndef POST(event):\n    return None\n\n__all__ = ["GET"]\n');
+                writeFileSync(at('api/+server.py'), 'from handlers import *\n');
+                plugin.load.call({ addWatchFile() {} }, `${at('api/+server.py')}?python`);
+                plugin.configureServer(server);
+
+                handlers.change(at('api/handlers.py'));
+                expect(changed).toEqual([]);
+
+                writeFileSync(at('api/handlers.py'), 'def GET(event):\n    return None\n\n\ndef POST(event):\n    return None\n\n__all__ = ["GET", "POST"]\n');
+                handlers.change(at('api/handlers.py'));
+
+                expect(changed).toContainEqual(['change', at('api/+server.py')]);
+            }));
 
         test('and is updated when the child changed language, or its own source', () =>
             inRoom(async ({ at, compiled, asked }) => {

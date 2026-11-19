@@ -30,6 +30,7 @@ import {
     componentImports,
     importedFile,
     importedNames,
+    publishedNames,
     scannedScript
 } from './compile.js';
 
@@ -1004,6 +1005,9 @@ const compiledStores = new Map();
 // which its module name and the import of that module are made of: one file
 // shared by two projects is `../shared/x.py` from one and `../../shared/x.py`
 // from the other, and each project imports the module of its own path.
+//
+// And the modules its star imports read, by their text: what one publishes is
+// what the other exports to the framework (`starNames`).
 function compilePython(file, path, root) {
     const source = readFileSync(file, 'utf8');
     const shown = relative(root, file);
@@ -1012,7 +1016,8 @@ function compilePython(file, path, root) {
         cached &&
         cached.source === source &&
         cached.shown === shown &&
-        cached.found === foundAs(cached.result.imports, dirname(file), path)
+        cached.found === foundAs(cached.result.imports, dirname(file), path) &&
+        cached.stars.every(([one, text]) => readOr(one) === text)
     ) {
         return cached.result;
     }
@@ -1020,13 +1025,15 @@ function compilePython(file, path, root) {
     const mode = isReactive(file)
         ? { store: true }
         : { plain: true, eager: isRemote(file), read: routeNames(file), serverRoute: /[/\\]\+(?:page|layout)\.server\.py$/.test(file) };
+    const stars = [];
     const result = compile(source, nameFor(file, root), shown, {
         ...mode,
         sourceContent: source,
-        resolves: (mod) => moduleKind(mod, dirname(file), path)
+        resolves: (mod) => moduleKind(mod, dirname(file), path),
+        starNames: (mod, level) => publishedBy(starredFile(mod, level, dirname(file), path), path, stars)
     });
 
-    compiledStores.set(file, { source, shown, result, found: foundAs(result.imports, dirname(file), path) });
+    compiledStores.set(file, { source, shown, result, found: foundAs(result.imports, dirname(file), path), stars });
     return result;
 }
 
@@ -1394,6 +1401,39 @@ function moduleKind(mod, fromDirectory, path) {
     return directory ? 'package' : undefined;
 }
 
+// A file's text, or null for one gone.
+const readOr = (file) => {
+    try {
+        return readFileSync(file, 'utf8');
+    } catch {
+        return null;
+    }
+};
+
+// What a starred file publishes, its own star imports read from its folder in
+// turn, each file read kept for the cache (`stars`); nothing known of a file
+// missing, or of one a cycle reads again.
+function publishedBy(found, path, stars, seen = new Set()) {
+    const text = found === undefined || seen.has(found) ? null : readOr(found);
+
+    if (text === null) return null;
+
+    stars.push([found, text]);
+
+    return publishedNames(text, (mod, level) => publishedBy(starredFile(mod, level, dirname(found), path), path, stars, new Set([...seen, found])));
+}
+
+// The file a star import reads, `from handlers import *` as an absolute one is
+// found, `from .handlers import *` beside the module, or nothing.
+function starredFile(mod, level, fromDirectory, path) {
+    if (level === 0) return moduleFile(mod, fromDirectory, path);
+
+    const base = resolve(fromDirectory, ...Array(level - 1).fill('..'));
+    const named = resolve(base, ...mod.split('.').filter(Boolean));
+
+    return [`${named}.py`, resolve(named, '__init__.py')].find((one) => existsSync(one));
+}
+
 // The file a module name stands for, or nothing.
 function moduleFile(mod, fromDirectory, path) {
     return searchedFrom(fromDirectory, path)
@@ -1684,9 +1724,25 @@ export function svelthon(options = {}) {
                 }
             };
 
+            // And a module whose star imports read the one changed, which
+            // publishes what that one exports to the framework (`starNames`):
+            // the route served the new body of `GET`, and answered 405 to the
+            // `POST` its starred module's `__all__` had just gained, until the
+            // route itself was edited.
+            const restarred = (file) => {
+                for (const [module, compiled] of compiledStores) {
+                    if (module !== file && existsSync(module) && compiled.stars.some(([one, text]) => one === file && readOr(one) !== text)) {
+                        server.watcher.emit('change', module);
+                    }
+                }
+            };
+
             server.watcher.on('add', moved);
             server.watcher.on('unlink', moved);
-            server.watcher.on('change', relanguaged);
+            server.watcher.on('change', (file) => {
+                relanguaged(file);
+                restarred(file);
+            });
 
             // Without HMR, vitest's server among them, Vite asks no
             // `hotUpdate`, and a `.py` kept the body it was first compiled to,
