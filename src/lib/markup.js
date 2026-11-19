@@ -4270,6 +4270,15 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
 
                     const named = quotedAttribute || '';
 
+                    // A value of `<svelte:options>` between quotes is Svelte's
+                    // configuration too, as it is bare: `customElement="{null}"`
+                    // was read as Python's `null` and refused.
+                    if (end !== -1 && tag !== null && tag.name === 'svelte:options') {
+                        out += markup.slice(index, end + 1);
+                        index = end + 1;
+                        continue;
+                    }
+
                     if (end !== -1 && !DIRECTIVE.test(named) && !HANDLER.test(named)) {
                         region = { start: index + 1, end };
 

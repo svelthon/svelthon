@@ -19,6 +19,104 @@ import './fixtures/UndefinedPropElement.svelte';
 import './fixtures/UndefinedPropElementNative.svelte';
 import './fixtures/UnquotedTagElement.svelte';
 import AnonymousElement from './fixtures/AnonymousElement.svelte';
+import { preprocess, compile as svelteCompile } from 'svelte/compiler';
+import { python as pythonPreprocessor, svelthon } from '../src/lib/svelthon.js';
+
+// Where Svelte compiles a component as a custom element by its compile options,
+// the global `compilerOptions.customElement` or `dynamicCompileOptions`, a
+// Python component that declares none, or declares `{null}`, is given its props
+// as its native twin is: no preprocessor is handed those, and the element
+// exposed no prop. Asked as vite-plugin-svelte compiles, whose compile the
+// plugin holds (`api.compileSvelte`), with the code preprocessed and the
+// environment, as vite-plugin-svelte asks itself.
+describe('every component an element', () => {
+    const python = '<script lang="python">\nv: int = 0\nflag: bool = False\n</script>\n<b>{v}</b>';
+    const native = '<script>\nlet { v = 0, flag = false } = $props();\n</script>\n<b>{v}</b>';
+    const client = { name: 'client' };
+    // vite-plugin-svelte's configuration, its compile set as its own sets it,
+    // after the plugin has read it.
+    const configured = (customElement, dynamicCompileOptions) => {
+        const api = { options: { compilerOptions: { customElement }, dynamicCompileOptions } };
+
+        svelthon().configResolved({ root: '/app', resolve: {}, plugins: [{ name: 'vite-plugin-svelte:config', api }] });
+        api.compileSvelte = async (request, code, options, environment) => ({
+            compiled: svelteCompile(code, {
+                ...options.compilerOptions,
+                ...(await options.dynamicCompileOptions?.({ filename: request.filename, code, compileOptions: options.compilerOptions, environment })),
+                filename: request.filename,
+                generate: 'client'
+            })
+        });
+
+        return api;
+    };
+    const element = async (api, source, filename = '/app/Probe.svelte', preprocessors = []) => {
+        const code = (await preprocess(source, [pythonPreprocessor(), ...preprocessors], { filename })).code;
+        const made = (await api.compileSvelte({ filename, ssr: false }, code, api.options, client)).compiled;
+        const props = /create_custom_element\(\s*\w+,\s*(\{[^]*?\}),\s*\[/.exec(made.js.code)?.[1] ?? null;
+
+        return { names: props && [...props.matchAll(/(\w+): \{/g)].map((one) => one[1]), warnings: made.warnings.map((one) => one.code), js: made.js.code };
+    };
+
+    test.for([
+        ['declaring nothing', ''],
+        ['declaring other options', '<svelte:options runes={true} />\n'],
+        ['declaring {null}', '<svelte:options customElement={null} />\n'],
+        ['declaring "{null}" between quotes', '<svelte:options customElement="{null}" />\n']
+    ])('a Python component %s is given its props', async ([, options]) => {
+        const api = configured(true);
+        const [py, js] = [await element(api, options + python), await element(api, options + native)];
+
+        expect([py.names, py.warnings]).toEqual([js.names, js.warnings]);
+        expect(py.names).toEqual(['v', 'flag']);
+    });
+
+    // And `"{null}"` between quotes, Svelte's configuration as it is bare, was
+    // read as Python's `null` and refused.
+    test('and left as it is where Svelte compiles none as one', async () => {
+        const quoted = '<svelte:options customElement="{null}" />\n';
+        const api = configured(false);
+
+        expect((await element(api, python)).js).not.toContain('create_custom_element');
+        expect((await element(api, quoted + python)).warnings).toEqual((await element(api, quoted + native)).warnings);
+    });
+
+    // And a file Vite compiles as one by `dynamicCompileOptions`, chosen by its
+    // name, answered at once or by a promise, by its environment, or by a mark
+    // another preprocessor writes: its element observed no attribute and took
+    // no property, the environment the preprocessor asked with was none, and
+    // the text it asked of was the one before the mark. Another file is left
+    // as it is.
+    const marking = { markup: ({ content }) => ({ code: content.replace('<b>', '<!-- widget --><b>') }) };
+
+    test.for([
+        ['by its name, at once', ({ filename }) => (filename.endsWith('.widget.svelte') ? { customElement: true } : undefined), '/app/Probe.widget.svelte', []],
+        ['by its name, by a promise', ({ filename }) => Promise.resolve(filename.endsWith('.widget.svelte') ? { customElement: true } : undefined), '/app/Probe.widget.svelte', []],
+        ['by its environment', ({ filename, environment }) => (environment.name === 'client' && filename.includes('widget') ? { customElement: true } : undefined), '/app/Probe.widget.svelte', []],
+        ['by a mark another preprocessor writes', ({ code }) => (code.includes('<!-- widget -->') ? { customElement: true } : undefined), '/app/Probe.svelte', [marking]]
+    ])('a Python component dynamicCompileOptions makes an element %s is given its props', async ([, chosen, filename, preprocessors]) => {
+        const api = configured(false, chosen);
+        const [py, js] = [await element(api, python, filename, preprocessors), await element(api, native, filename, preprocessors)];
+
+        expect([py.names, py.warnings]).toEqual([js.names, js.warnings]);
+        expect(py.names).toEqual(['v', 'flag']);
+        expect((await element(api, python, '/app/Other.svelte')).js).not.toContain('create_custom_element');
+    });
+
+    // Read as Svelte reads it: a file's `false` over the global `true`, which
+    // made an element of a component Svelte compiles as none, and the function
+    // form asked of the file, which made one that observed nothing.
+    test.for([
+        ['a file’s false over the global true', () => configured(true, ({ filename }) => (filename.endsWith('.page.svelte') ? { customElement: false } : undefined)), '/app/Probe.page.svelte', false],
+        ['the function form, asked of the file', () => configured(({ filename }) => filename.endsWith('.widget.svelte')), '/app/Probe.widget.svelte', true]
+    ])('%s', async ([, api, filename, made]) => {
+        const options = api();
+        const [py, js] = [await element(options, python, filename), await element(options, native, filename)];
+
+        expect([py.names, py.warnings]).toEqual([js.names, js.warnings]);
+        expect(py.names).toEqual(made ? ['v', 'flag'] : null);
+    });
+});
 
 // **An entry of `customElement.props` that writes no type keeps the type the
 // annotation names**, as Svelte infers one from a default of `$props()`:

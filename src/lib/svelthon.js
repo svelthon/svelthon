@@ -417,9 +417,11 @@ export function moduleImports(content) {
 //
 // `customElement={null}` declares nothing: Svelte's parser skips it, as an
 // option Svelte 3 asked for, and compiled as an element, a component no global
-// option makes one was one.
-const NULL_ELEMENT = /\bcustomElement\s*=\s*\{\s*null\s*\}/;
-const isNull = (value) => value?.expression?.type === 'Literal' && value.expression.value === null;
+// option makes one was one. Quoted as well, `"{null}"`, which Svelte reads the
+// same, and which was taken for a tag, an empty one Svelte refused.
+const NULL_ELEMENT = /\bcustomElement\s*=\s*(["']?)\{\s*null\s*\}\1/;
+const isNullTag = (one) => one?.expression?.type === 'Literal' && one.expression.value === null;
+const isNull = (value) => isNullTag(value) || (Array.isArray(value) && value.length === 1 && value[0].type === 'ExpressionTag' && isNullTag(value[0]));
 
 export const compileOptionsFor = (code) => {
     let declared;
@@ -935,14 +937,18 @@ export function python(options = {}) {
             file.rereads = [...new Set(Array.from(code.matchAll(/\b__expr_reread\.(__expr_\w+)\b/g), (found) => found[1]))];
 
             const held = heldRunes(code, file.jsNames);
+            const emitted = inModuleScript(
+                tagged(elementOptions(holdRunes(code, held), python, file.jsNames), calls.open(file)),
+                announcement(filename) + HOOKS + moduleReaders(file.jsNames, held)
+            );
 
-            return {
-                code: inModuleScript(
-                    tagged(elementOptions(holdRunes(code, held), python, file.jsNames), calls.open(file)),
-                    announcement(filename) + HOOKS + moduleReaders(file.jsNames, held)
-                ),
-                dependencies: childrenWatched() ? [] : languages.map(([path]) => path)
-            };
+            // And the props of one that declares no element, which its compile
+            // may make one (`elementReady`).
+            if (filename) {
+                WRITTEN_AS.set(filename, { declared: file.element, props: () => elementPropsText(python, file.jsNames) });
+            }
+
+            return { code: emitted, dependencies: childrenWatched() ? [] : languages.map(([path]) => path) };
         },
         script({ content, attributes, filename }) {
             // Read as `pythonScript` reads the tag, by names in any case: Svelte
@@ -1058,6 +1064,77 @@ function elementAttribute(code) {
     return parse(blankBodies(code), { modern: true }).options?.attributes.find((one) => one.name === 'customElement');
 }
 
+// A custom element's props, each with the type its annotation names, read off
+// the script with the names the `<script module>` gives it.
+const elementPropsText = (python, jsNames) =>
+    elementProps(python, jsNames)
+        .map(({ name, type }) => `${name}: {${type ? ` type: ${JSON.stringify(type)} ` : ''}}`)
+        .join(', ');
+
+// And where Svelte compiles a component as one by its compile options,
+// `compilerOptions.customElement` for every file or `dynamicCompileOptions` for
+// some, a component that declares none, or declares `{null}`, is given the
+// props as well: an element too, it exposed none. Asked as vite-plugin-svelte
+// compiles it (`holdCompile`), of the code preprocessed and with the
+// environment, as it asks itself: asked by the preprocessor, a choice made by
+// environment threw, and one read off a mark another preprocessor writes was
+// made on the text before it. Added to its own `<svelte:options>`, or in one
+// after the file's last line, so that no line moves.
+async function elementReady(request, code, options, environment) {
+    const file = WRITTEN_AS.get(request.filename);
+
+    if (file === undefined || file.declared) return code;
+
+    const compileOptions = { ...options.compilerOptions, filename: request.filename, generate: request.ssr ? 'server' : 'client' };
+    const styled = code.lastIndexOf('</style>');
+    // The code vite-plugin-svelte hands its callback: in development, with a
+    // rule that scopes every node before the style closes.
+    const finalCode = compileOptions.hmr && options.emitCss && styled > -1 ? `${code.slice(0, styled)} *{}${code.slice(styled)}` : code;
+    const dynamic = await options.dynamicCompileOptions?.({ filename: request.filename, code: finalCode, compileOptions, environment });
+    // Read as Svelte reads it: the file's options over the global ones, and a
+    // function asked of the file.
+    const chosen = { ...compileOptions, ...dynamic }.customElement;
+    const element = (typeof chosen === 'function' ? chosen({ filename: request.filename }) : chosen) === true;
+
+    return element ? everyElementOptions(code, file.props) : code;
+}
+
+// vite-plugin-svelte's compile, its own (`api.compileSvelte`) made to ask
+// first (`elementReady`): set by its configuration, read by its compile once
+// both are resolved, so held as it is set, whichever comes first.
+const HELD_COMPILES = new WeakSet();
+
+function holdCompile(api) {
+    if (HELD_COMPILES.has(api)) return;
+    HELD_COMPILES.add(api);
+
+    const hold = (compile) =>
+        typeof compile === 'function'
+            ? async (request, code, options, environment, ...rest) => compile(request, await elementReady(request, code, options, environment), options, environment, ...rest)
+            : compile;
+    let held = hold(api.compileSvelte);
+
+    Object.defineProperty(api, 'compileSvelte', {
+        configurable: true,
+        enumerable: true,
+        get: () => held,
+        set: (compile) => {
+            held = hold(compile);
+        }
+    });
+}
+
+function everyElementOptions(code, props) {
+    const declared = `customElement={{ props: { ${props()} } }}`;
+    const options = parse(blankBodies(code), { modern: true }).options;
+    const attribute = options?.attributes.find((one) => one.name === 'customElement');
+
+    if (attribute !== undefined) return code.slice(0, attribute.start) + declared + code.slice(attribute.end);
+    if (options) return `${code.slice(0, options.start)}<svelte:options ${declared}${code.slice(options.start + '<svelte:options'.length)}`;
+
+    return `${code}\n<svelte:options ${declared} />`;
+}
+
 // The props are read off the script with the names the `<script module>` gives
 // it (`jsNames`), as the compile reads them: `amount: int = inspect(1)`, its
 // `inspect` the module's, is a prop, where taken for the marker it was left out
@@ -1067,7 +1144,7 @@ function elementOptions(code, python, jsNames = []) {
     const entry = ({ name, type }) => `${name}: {${type ? ` type: ${JSON.stringify(type)} ` : ''}}`;
     // Read only for a component that is an element: every Python component
     // comes through here.
-    const props = () => elementProps(python, jsNames).map(entry).join(', ');
+    const props = () => elementPropsText(python, jsNames);
 
     if (!ELEMENT_OPTION.test(markupOnly(code))) return code;
 
@@ -1151,6 +1228,11 @@ function sameLines(code, content) {
 
     return [...lines.slice(0, count - 1), lines.slice(count - 1).join(' ')].join('\n');
 }
+
+// What each component was preprocessed into, by its file (`WRITTEN_AS`), on
+// the global the plugin shares with the preprocessor: its props, for a compile
+// that makes it a custom element (`elementReady`).
+const WRITTEN_AS = (globalThis[Symbol.for('svelthon.writtenAs')] ??= new Map());
 
 // A store is served on every request in dev, and compiling Python is the
 // expensive half. Keyed on what the file holds, read at each ask, which costs
@@ -1967,6 +2049,13 @@ export function svelthon(options = {}) {
                         'built into the client among them'
                 );
             }
+
+            // vite-plugin-svelte's own, whose compile asks whether Svelte makes
+            // a component a custom element, which no preprocessor is handed
+            // (`holdCompile`).
+            const svelte = config.plugins.find((one) => one.name === 'vite-plugin-svelte:config')?.api;
+
+            if (svelte) holdCompile(svelte);
         },
         resolveId(specifier, importer) {
             if (specifier === KIT_TRANSPORT) {
