@@ -88,10 +88,13 @@ test.for([
 
 // Brython's runtime imports `copyreg` for `__reduce__` and `__reduce_ex__`, and
 // `pydoc` for `help()` asked about a name it cannot link to: both died at run
-// time on `Network error`. Refused on their line, the way an import is.
+// time on `Network error`. Refused on their line, the way an import is, where
+// the receiver certainly has only `object`'s: one made there of `object`, or of
+// a class of the module that defines neither, nor its bases.
 test.for([
     ['class Box:\n    pass\n\nstate = Box().__reduce_ex__(2)', /`__reduce_ex__\(\)` builds its answer with `copyreg`.*\(src\/C\.svelte:4\)/],
-    ['def save(box):\n    return box.__reduce__()', /`__reduce__\(\)` builds its answer with `copyreg`.*\(src\/C\.svelte:2\)/],
+    ['state = object().__reduce__()', /`__reduce__\(\)` builds its answer with `copyreg`.*\(src\/C\.svelte:1\)/],
+    ['class Base(object):\n    pass\n\nclass Box(Base):\n    pass\n\ndef save():\n    return Box().__reduce__()', /`__reduce__\(\)` builds its answer with `copyreg`.*\(src\/C\.svelte:8\)/],
     ['help("str.join")', /`help\("str\.join"\)` looks the name up with `pydoc`.*`help\(obj\)` prints.*\(src\/C\.svelte:1\)/],
     ['help("toString")', /`help\("toString"\)` looks the name up with `pydoc`/]
 ])('`%s` is refused on its line', ([written, message]) => {
@@ -237,13 +240,19 @@ test.for([
 
 // What needs none of them compiles: `help` of an object prints its docstring, of
 // a builtin or a standard module's name links to the documentation, and a `help`
-// of the author's own is theirs.
+// of the author's own is theirs. And a reduction asked of a receiver that may
+// have its own: whatever a function is handed, an instance of a class whose
+// base, or whose `__reduce__` an own `__reduce_ex__` calls, is another's. Refused,
+// an instance of a class a module beside it defines could not be reduced.
 test.for([
     'help(len)',
     'help("len")',
     'help("json")',
     'def help(topic):\n    return topic\n\nhelp("anything")',
-    'class Box:\n    def __reduce__(self):\n        return (Box, ())'
+    'class Box:\n    def __reduce__(self):\n        return (Box, ())',
+    'def save(box):\n    return box.__reduce__()',
+    'def save(Base):\n    class Box(Base):\n        pass\n\n    return Box().__reduce_ex__(2)',
+    'class Box:\n    def __reduce__(self):\n        return (Box, ())\n\nstate = Box().__reduce_ex__(2)'
 ])('`%s` compiles', (written) => {
     expect(() => compile(`${written}\n`, 'C', 'src/C.svelte')).not.toThrow();
 });
