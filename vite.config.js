@@ -1,6 +1,6 @@
 import { defineConfig, configDefaults } from 'vitest/config';
 import { searchForWorkspaceRoot } from 'vite';
-import { svelte } from '@sveltejs/vite-plugin-svelte';
+import { svelte, vitePreprocess } from '@sveltejs/vite-plugin-svelte';
 import { realpathSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -8,9 +8,17 @@ import { python, svelthon, compileOptionsFor } from './src/lib/svelthon.js';
 import { demoStats } from './demo/stats.js';
 import { variants } from './tests/variants.js';
 
+// TypeScript's own transform, which the fixtures under `tests/fixtures/typescript/`
+// go through after Python's, as an application's do: an `enum` or a namespace
+// is JavaScript only through it.
+const typescript = vitePreprocess({ script: true });
+
 export default defineConfig({
     plugins: [demoStats(), variants(), svelthon(), svelte({
-            preprocess: [python({ path: ['demo'] })],
+            preprocess: [
+                python({ path: ['demo'] }),
+                { script: (input) => (input.filename?.includes('fixtures/typescript/') ? typescript.script(input) : undefined) }
+            ],
             // vite-plugin-svelte's module filter, widened to Python: a
             // `.svelte.py` compiles as a `.svelte.ts` does, under its own name.
             experimental: { compileModule: { extensions: ['.js', '.ts', '.py'] } },

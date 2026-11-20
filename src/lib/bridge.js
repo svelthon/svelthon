@@ -1047,6 +1047,20 @@ export const __pybridge = {
         return value;
     },
 
+    // A function or a class of the `<script module>` held under another
+    // variable (`holdRunes`), given back the name it was declared or assigned
+    // under, which `.name` reads, and handed back. Here, where `Object` is
+    // JavaScript's: written in the module, it read the module's own. Only the
+    // name JavaScript gave, a text no one may write: a static method or
+    // accessor `name` the class defines, by whatever key, is the author's, and
+    // told from the class's text, one under a computed key was written over.
+    named(value, name) {
+        const own = Object.getOwnPropertyDescriptor(value, 'name');
+
+        if (typeof own?.value === 'string' && !own.writable) Object.defineProperty(value, 'name', { value: name, configurable: true });
+        return value;
+    },
+
     // The rows an `{#each}` walks, and whether they are still the ones its
     // block holds. The block runs again on a change of the rows themselves, a
     // row added, removed, moved or replaced, and not on a change inside a row,

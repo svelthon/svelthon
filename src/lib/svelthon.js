@@ -618,11 +618,30 @@ function holdRunes(code, aliases) {
     if (bound.length === 0) return code;
 
     const at = moduleScriptIndex(code);
-    const program = parse(moduleScript(code), { modern: true }).module.content;
+    const source = moduleScript(code);
+    const program = parse(source, { modern: true }).module.content;
     const edits = [];
     const held = (node, shadowed) => node.type === 'Identifier' && bound.includes(node.name) && !shadowed.has(node.name);
     const rename = (node) => edits.push([node.start, node.end, heldRune(node.name)]);
     const renamedAs = (node, outside) => edits.push([node.start, node.end, `${outside}${heldRune(node.name)}`]);
+    // A function or a class with no name of its own, evaluated for a binding
+    // held under another variable: named there after the binding as written,
+    // by the bridge, which hands it back. Behind its statement, an assignment
+    // left it `__svelthon_state`, and a default of a pattern as well. And one
+    // behind what TypeScript erases, `(() => 1) as Handler`, named once erased.
+    const namedHere = (id, value) => {
+        let made = value;
+
+        while (ERASED_AROUND.has(made?.type)) made = made.expression;
+        if (!ANONYMOUS.has(made?.type) || made.id) return;
+        if (made.type === 'ClassExpression') namedFirst(made, id.name);
+        else edits.push([value.start, value.start, `${HOOKS_NAME}.named(`], [value.end, value.end, `, ${JSON.stringify(id.name)})`]);
+    };
+    // A class named in a first static block, as JavaScript names it before
+    // any of its own: behind it, a static field or block that read `this.name`
+    // read `__svelthon_state`, and a `static ['name']` was written over.
+    const namedFirst = (node, name) =>
+        edits.push([node.body.start + 1, node.body.start + 1, `static { ${HOOKS_NAME}.named(this, ${JSON.stringify(name)}); }`]);
 
     const visit = (node, shadowed, functionBody = false) => {
         if (node === null || typeof node !== 'object') return;
@@ -658,14 +677,54 @@ function holdRunes(code, aliases) {
                     else rename(node.local);
                 }
                 return;
+            // What TypeScript makes a value of binds its name as a variable
+            // does, `enum state` and a namespace `derived`, and reads the
+            // module's names: an enum's members by their own names, a
+            // namespace's body as a function's, its names its own, a dotted
+            // name's inner part a member of the outer. The skip below kept
+            // the declared name as written where its export and its reads
+            // were held. What the transform erases binds nothing.
+            case 'TSEnumDeclaration': {
+                if (erased(node)) return;
+                if (held(node.id, shadowed)) rename(node.id);
+
+                const members = new Set([...shadowed, ...node.members.map((one) => one.id.name ?? one.id.value)]);
+
+                for (const member of node.members) visit(member.initializer, members);
+                return;
+            }
+            case 'TSModuleDeclaration':
+                if (erased(node) || !instantiated(node)) return;
+                if (held(node.id, shadowed)) rename(node.id);
+                namespaceBody(node.body, shadowed);
+                return;
+            case 'TSImportEqualsDeclaration': {
+                if (erased(node)) return;
+
+                let reference = node.moduleReference;
+
+                while (reference.type === 'TSQualifiedName') reference = reference.left;
+                visit(reference, shadowed);
+                if (!held(node.id, shadowed)) return;
+                rename(node.id);
+                // `export import`, as the export of a declaration is said.
+                if (node.isExport) {
+                    edits.push(
+                        [node.start, node.start + source.slice(node.start).indexOf('import'), ''],
+                        [node.end, node.end, `;export { ${heldRune(node.id.name)} as ${node.id.name} };`]
+                    );
+                }
+                return;
+            }
             case 'ExportAllDeclaration':
                 return;
             case 'ExportNamedDeclaration':
                 if (node.source) return;
                 // The export said again right behind its declaration, on its
                 // line: at the end of the script, it joined a last statement
-                // written with no `;`, or a comment that ends it.
-                if (node.declaration && declares(node.declaration).some((name) => bound.includes(name))) {
+                // written with no `;`, or a comment that ends it. Not a
+                // namespace's own, whose names are its own.
+                if (node.declaration && declares(node.declaration).some((name) => bound.includes(name) && !shadowed.has(name))) {
                     const names = declares(node.declaration).map((name) => `${heldRune(name)} as ${name}`);
 
                     edits.push([node.start, node.declaration.start, ''], [node.end, node.end, `;export { ${names.join(', ')} };`]);
@@ -674,9 +733,24 @@ function holdRunes(code, aliases) {
             case 'Property':
                 if (node.shorthand && !node.computed && held(node.key, shadowed)) {
                     renamedAs(node.key, `${node.key.name}: `);
-                    if (node.value.type === 'AssignmentPattern') visit(node.value.right, shadowed);
+                    if (node.value.type === 'AssignmentPattern') {
+                        namedHere(node.key, node.value.right);
+                        visit(node.value.right, shadowed);
+                    }
                     return;
                 }
+                break;
+            // Where JavaScript names a function or a class after the binding
+            // it is evaluated for, which `.name` reads: a declaration, an
+            // assignment, a logical one, a default of a pattern (`namedHere`).
+            case 'VariableDeclarator':
+                if (held(node.id, shadowed)) namedHere(node.id, node.init);
+                break;
+            case 'AssignmentExpression':
+                if (NAMING.has(node.operator) && held(node.left, shadowed)) namedHere(node.left, node.right);
+                break;
+            case 'AssignmentPattern':
+                if (held(node.left, shadowed)) namedHere(node.left, node.right);
                 break;
             case 'LabeledStatement':
             case 'BreakStatement':
@@ -694,7 +768,36 @@ function holdRunes(code, aliases) {
         }
     };
 
+    // A namespace's body, `namespace derived.inner { … }` the inner one's.
+    const namespaceBody = (body, shadowed) => {
+        if (body?.type === 'TSModuleDeclaration') return namespaceBody(body.body, shadowed);
+        if (body?.type !== 'TSModuleBlock') return;
+
+        const own = [...body.body.flatMap(declares), ...hoisted(body.body)].filter((name) => bound.includes(name));
+
+        visit(body.body, new Set([...shadowed, ...own]));
+    };
+
     visit(program, new Set());
+
+    // And the name JavaScript gives a function or a class after the binding it
+    // is declared under, which `.name` reads: `class state` was named
+    // `__svelthon_state`, and a registry keyed by it missed it. A function's
+    // given back at the top, where it is hoisted to, a class's in its first
+    // static block. By the bridge the module imports for its hooks, whose name
+    // is the plugin's, and which leaves a name the author's code gave
+    // (`named`).
+    for (const statement of program.body) {
+        const declaration = /^Export(Named|Default)Declaration$/.test(statement.type) ? statement.declaration : statement;
+
+        if (declaration === null || erased(declaration)) continue;
+        if (!/^(Function|Class)Declaration$/.test(declaration.type) || !declaration.id || !bound.includes(declaration.id.name)) continue;
+
+        const { name } = declaration.id;
+
+        if (declaration.type === 'ClassDeclaration') namedFirst(declaration, name);
+        else edits.push([program.start, program.start, `${HOOKS_NAME}.named(${heldRune(name)}, ${JSON.stringify(name)});`]);
+    }
 
     let text = code;
 
@@ -707,11 +810,18 @@ function holdRunes(code, aliases) {
 
 const FUNCTIONS = new Set(['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression']);
 
+// What takes its name from the binding it is first assigned to, and the
+// assignments that name it.
+const ANONYMOUS = new Set(['FunctionExpression', 'ArrowFunctionExpression', 'ClassExpression']);
+const NAMING = new Set(['=', '&&=', '||=', '??=']);
+const ERASED_AROUND = new Set(['TSAsExpression', 'TSSatisfiesExpression', 'TSNonNullExpression', 'TSTypeAssertion']);
+
 // The questions the runtime asks of Svelte (`bridgeHooks`), laid down in the
 // `<script module>`, once, in a scope that holds no instance's data: laid down
 // by each instance, they were functions of its scope, which the runtime keeps,
 // and the last instance's props stayed alive once it was unmounted.
-const HOOKS = `import { __pybridge as __svelthon_hooks } from 'svelthon/bridge';` + bridgeHooks('__svelthon_hooks').join('');
+const HOOKS_NAME = '__svelthon_hooks';
+const HOOKS = `import { __pybridge as ${HOOKS_NAME} } from 'svelthon/bridge';` + bridgeHooks(HOOKS_NAME).join('');
 
 // Whether a component's own file is written in Python.
 const pythonFile = (path) => pythonScript(readFileSync(path, 'utf8')) !== null;
