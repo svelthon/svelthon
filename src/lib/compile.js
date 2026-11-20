@@ -3362,7 +3362,11 @@ function compile(
         state.includes(hook) ||
         [...bindables, ...deriveds].some((one) => (one.name ?? one) === hook) ||
         foreign.has(hook);
-    const lifecycle = (hook) => !store && (defined(hook) || holdsHook(hook) || bound.includes(hook) || starred);
+    // Or bound at its key, `globals()["on_mount"] = enter`, which no statement
+    // names, or maybe at a key no text says, as a star import may bind it.
+    const keyed = namespaceKeys(root._ast.body);
+    const lifecycle = (hook) =>
+        !store && (defined(hook) || holdsHook(hook) || bound.includes(hook) || starred || keyed.any || keyed.written.has(hook));
     const hook = (name) => (defined(name) ? fn(name) : holdsHook(name) ? name : `${NS}.${name}`);
 
     // A component free to define its own `publish` or `derived` keeps it.
