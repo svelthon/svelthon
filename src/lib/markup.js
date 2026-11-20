@@ -267,6 +267,12 @@ function readByMember(expression) {
     return tree instanceof ast.Name || tree instanceof ast.Attribute || tree instanceof ast.Subscript;
 }
 
+// Whether an expression is a function written in place, `lambda event: …`,
+// which Svelte hands as the handler itself (`build_event_handler`).
+function writesFunction(expression) {
+    return targetTree(`(${expression}\n)`) instanceof globalThis.__BRYTHON__.ast.Lambda;
+}
+
 const WALRUS_NAME = new RegExp(`^\\s*(${NAME})`, 'u');
 const WALRUS_ARROW = /^\s*:=\s*/;
 
@@ -4262,6 +4268,14 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
             if (isComponent(tag)) return `{${unmemoized(inner, call(rewritten, '__bound', inner, toPythonChild() ? 'child' : ''), false, 'prop')}}`;
 
             const adapted = `${EVENT_WRAPPER}(${call(rewritten, '', inner)})`;
+
+            // What calls nothing read at each event, as Svelte reads it, in a
+            // handler of the form it writes, but a function written in place:
+            // written as a call, Svelte kept it in a derived, and a callback a
+            // field of a JavaScript object held, replaced in place, stayed the
+            // first one, by a member, a conditional or an `or`. A walrus, which
+            // writes, is a call once rewritten.
+            if (!callsAnything(rewritten) && !writesFunction(inner)) return `{function (...$$args) { ${adapted}?.apply(this, $$args); }}`;
 
             return calledAtTop(inner) ? `{${adapted}}` : `{${adapted} ?? undefined}`;
         }

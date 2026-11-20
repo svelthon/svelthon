@@ -8,6 +8,7 @@ import { mount, flushSync } from './mounted.js';
 import DomHandlers from './fixtures/DomHandlers.svelte';
 import DomHandlersNative from './fixtures/DomHandlersNative.svelte';
 import CustomEventHandler from './fixtures/CustomEventHandler.svelte';
+import DomHandlerRead from './fixtures/DomHandlerRead.svelte';
 import { seen } from './fixtures/dom_handlers.js';
 import { pythonExpressions, collector } from '../src/lib/markup.js';
 // The parser the names an expression reads are read with, which the plugin
@@ -57,25 +58,54 @@ test('a handler that is no function is warned about as Svelte warns', () => {
 // Which handler is written as a call, against Svelte's own reading of the same
 // form in JavaScript (`has_side_effects`, on the expression's root): a call, a
 // `new` and an assignment are; a name, a member, a subscript, a function, a
-// conditional, a logical and a unary expression are not.
+// conditional, a logical and a unary expression are not. And what calls
+// nothing is read at each event, in the handler Svelte writes for it, but a
+// function written in place (`build_event_handler`).
 test.for([
-    ['handler', false],
-    ['obj.handler', false],
-    ['handlers[key]', false],
-    ['lambda event: save(event)', false],
-    ['a if ready else make()', false],
-    ['make() or other', false],
-    ['not make()', false],
-    ['save()', true],
-    ['make(1)(2)', true],
-    ['(save())', true],
-    ['rows["x"].pop()', true],
-    ['"-".join(parts)', true],
-    ['(flag := not flag)', true]
-])('`%s` is written as a call: %s', ([expression, called]) => {
+    ['handler', 'read'],
+    ['obj.handler', 'read'],
+    ['handlers[key]', 'read'],
+    ['a if ready else b', 'read'],
+    ['primary or fallback', 'read'],
+    ['not ready', 'read'],
+    ['lambda event: save(event)', 'value'],
+    ['a if ready else make()', 'value'],
+    ['make() or other', 'value'],
+    ['not make()', 'value'],
+    ['save()', 'call'],
+    ['make(1)(2)', 'call'],
+    ['(save())', 'call'],
+    ['rows["x"].pop()', 'call'],
+    ['"-".join(parts)', 'call'],
+    ['(flag := not flag)', 'call']
+])('`%s` is written as a %s', ([expression, form]) => {
     const written = pythonExpressions(`<button onclick={${expression}}>x</button>`, collector([]));
 
-    expect(written.includes('?? undefined')).toBe(!called);
+    expect(written.includes('?.apply(this, $$args)') ? 'read' : written.includes('?? undefined') ? 'value' : 'call').toBe(form);
+});
+
+// A callback a field of a JavaScript object holds, replaced in place, by a
+// member, between quotes, chosen by a conditional or an `or`, and called by a
+// lambda: the clicks after each change call the new one, where the member, the
+// conditional and the `or` kept calling the first.
+test('a handler read off a member calls the callback that replaced it in place', () => {
+    const fired = [];
+    const config = { confirm: () => fired.push('A'), ready: true, fallback: () => fired.push('X'), missing: undefined };
+    const target = document.body.appendChild(document.createElement('div'));
+    const clickAll = () => ['member', 'quoted', 'conditional', 'or', 'lambda'].forEach((key) => target.querySelector(`[data-k="${key}"]`).click());
+
+    mount(DomHandlerRead, { target, props: { config } });
+    flushSync();
+
+    for (const next of ['B', 'C']) {
+        clickAll();
+        config.confirm = () => fired.push(next);
+        flushSync();
+    }
+
+    clickAll();
+    target.remove();
+    expect(fired.join('')).toBe('AAAAABBBBBCCCCC');
 });
 
 // Svelte reads any attribute whose name starts with `on` as a handler, so

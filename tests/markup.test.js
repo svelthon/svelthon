@@ -983,7 +983,7 @@ describe('the attribute pass', () => {
     // class that did not exclude the quote, so `title="y"onclick` was the name
     // and matched no rule at all.
     test.for([
-        ['a handler', '<b title="y"onclick={go}>x</b>', /onclick=\{__event\(/],
+        ['a handler', '<b title="y"onclick={go}>x</b>', /onclick=\{function \(\.\.\.\$\$args\) \{ __event\(/],
         ['a binding', '<input title="y"bind:value={x}>', /bind:value=\{__pybridge\.boundRead\(\(\) =>/],
         ['the shorthand', "<input title='y'bind:value>", /bind:value=\{__pybridge\.boundRead\(\(\) =>/],
         ['a class', '<b title="y"class:on={x}>x</b>', read('class:on=\\{', '\\}')]
@@ -1002,8 +1002,8 @@ describe('the attribute pass', () => {
     // shorthand expansion, which wrote `title= x={…}`. Svelte then answered
     // `Expected token >` about a token the author never typed.
     test.for([
-        ['a handler', '<b onclick= {go}>x</b>', /onclick= \{__event\(/],
-        ['the colon spelling', '<b on:click= {go}>x</b>', /on:click= \{__event\(/],
+        ['a handler', '<b onclick= {go}>x</b>', /onclick= \{function \(\.\.\.\$\$args\) \{ __event\(/],
+        ['the colon spelling', '<b on:click= {go}>x</b>', /on:click= \{function \(\.\.\.\$\$args\) \{ __event\(/],
         ['a binding', '<input bind:value= {x}>', /bind:value= \{__pybridge\.boundRead\(\(\) =>/],
         ['a class', '<b class:on= {x}>x</b>', read('class:on= \\{', '\\}')],
         ['a plain attribute', '<b title= {x}>x</b>', read('title= \\{', '\\}')]
