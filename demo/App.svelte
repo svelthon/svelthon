@@ -173,7 +173,7 @@
     </nav>
 
     <footer>
-        <span><strong>283 KB</strong> gzip, runtime included</span>
+        <span><strong>284 KB</strong> gzip, runtime included</span>
         <span><strong>{tests}</strong> tests</span>
         <span><strong>0 ms</strong> compiling at load</span>
     </footer>

@@ -29,6 +29,9 @@ import EachPairIdentity from './fixtures/EachPairIdentity.svelte';
 import EachPairIdentityNative from './fixtures/EachPairIdentityNative.svelte';
 import EachForeignKey from './fixtures/EachForeignKey.svelte';
 import EachForeignKeyNative from './fixtures/EachForeignKeyNative.svelte';
+import EachKeyReads from './fixtures/EachKeyReads.svelte';
+import EachKeyReadsNative from './fixtures/EachKeyReadsNative.svelte';
+import * as keyReads from './fixtures/key-reads.js';
 
 // What a component counted and showed after mounting and after each action.
 const steps = (Component, props, ...actions) => {
@@ -141,12 +144,42 @@ test.for([['enumerate'], ['zip'], ['items']])('pairs made anew under a key read 
 // Rows handed anew, `rows = list(rows)`, the same row in them, under a key that
 // reads what nothing follows, a JavaScript object's field changed before: the
 // block kept the key it noted, and the input its text. Svelte reads every key
-// again, and makes a new row, twice.
-test.for([['list'], ['star'], ['tuple']])('rows handed anew under a key reading a foreign field, %s, are keyed again, as in Svelte', ([kind]) => {
+// again, and makes a new row, twice. And so it does when the iterable runs
+// again and yields the same list (`same`).
+test.for([['list'], ['star'], ['tuple'], ['same']])('rows handed anew under a key reading a foreign field, %s, are keyed again, as in Svelte', ([kind]) => {
     const native = walks(EachForeignKeyNative, {});
 
     expect(native).toEqual([[[true, 'draft']], [[true, 'draft']]]);
     expect(walks(EachForeignKey, { kind })).toEqual(native);
+});
+
+// The same list computed again, its keys the same, its last one moved in place,
+// or its first: each key read as often as Svelte reads it. Compared first, the
+// keys up to the one that moved were read again by the block.
+test.for([
+    ['the same', null],
+    ['the last moved', [3, 40]],
+    ['the first moved', [0, 10]]
+])('a list computed again, its keys %s, reads them as often as Svelte does', ([, change]) => {
+    const reads = (Component) => {
+        const target = document.body.appendChild(document.createElement('div'));
+
+        keyReads.reset();
+
+        const instance = mount(Component, { target });
+
+        flushSync();
+
+        const before = keyReads.log.reads;
+
+        if (change !== null) keyReads.rekey(...change);
+        instance.step();
+        flushSync();
+        target.remove();
+        return keyReads.log.reads - before;
+    };
+
+    expect(reads(EachKeyReads)).toBe(reads(EachKeyReadsNative));
 });
 
 // The other half: a key changed in place is a new row to Svelte, made again,

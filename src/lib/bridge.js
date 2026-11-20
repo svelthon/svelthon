@@ -1077,6 +1077,7 @@ export const __pybridge = {
         let held;
         let source;
         let stamp;
+        let recomputed = false;
         let moved;
         let keys = [];
         let update;
@@ -1128,31 +1129,6 @@ export const __pybridge = {
             return changed;
         };
 
-        // A pair made anew holding the same row stands for it while its key
-        // does too: a key read off the pair itself, `id(pair)`, is a new one,
-        // and the block takes the new pairs, as Svelte's does. Asked of every
-        // pair made anew, since one key may read the pair for one row and its
-        // members for another, `pair[0] if pair[0] == 0 else id(pair)`: against
-        // the key noted for the one it stands for when nothing under it changed
-        // since, and otherwise against the key of that one, read again. One key
-        // read per pair made anew, as Svelte reads every key when its iterable
-        // runs again. Unfollowed.
-        //
-        // And every row of an iterable made anew, `rows = list(rows)`: a key
-        // may read what nothing follows, a JavaScript object's field, and the
-        // block kept the key noted where Svelte's reads it again.
-        const renewed = (rows, anew) => {
-            for (let at = 0; at < held.length; at++) {
-                if ((held[at] === rows[at] && !anew) || !(at in keys)) continue;
-
-                const was = seenUnder(held[at]) === moved[at] ? keys[at] : untrack(() => keyOf(held[at], at));
-
-                if (untrack(() => keyOf(rows[at], at)) !== was) return true;
-            }
-
-            return false;
-        };
-
         return {
             // What the block walks, undefined until the first `refresh`.
             get held() {
@@ -1167,6 +1143,7 @@ export const __pybridge = {
             // The rows the iterable yields, its pairs noted as they are made
             // when the block needs them noted (`noting`).
             computed(compute) {
+                recomputed = true;
                 return computed(this, compute);
             },
 
@@ -1181,6 +1158,9 @@ export const __pybridge = {
             // then become.
             refresh(rows) {
                 const walked = Array.isArray(held);
+                const again = recomputed;
+
+                recomputed = false;
 
                 // A foreign iterable is walked as Svelte walks one.
                 if (!Array.isArray(rows)) {
@@ -1191,12 +1171,19 @@ export const __pybridge = {
                 const marker = MARKS.get(rows);
                 let unchanged =
                     walked && ((rows === source && marker !== undefined && marker.stamp === stamp) || sameRows(held, rows));
-                const anew = rows !== source;
+                const anew = again || rows !== source;
 
                 source = rows;
                 stamp = marker?.stamp;
 
-                if (unchanged && keyOf !== undefined && renewed(rows, anew)) unchanged = false;
+                // A keyed block walks again an iterable made anew, `rows =
+                // list(rows)`, or computed again, `current(revision)` yielding
+                // the same list, as Svelte's does, reading every key: one may
+                // read what nothing follows, a JavaScript object's field, or a
+                // pair made anew itself, `id(pair)`, and the block kept the key
+                // noted. Compared here first, the keys up to the first that
+                // moved were read again by the block, past Svelte's reads.
+                if (unchanged && keyOf !== undefined && anew) unchanged = false;
                 if (unchanged && !(keyOf !== undefined && rekeyed())) return false;
 
                 held = Array.from(unchanged ? held : rows);
