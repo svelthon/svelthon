@@ -1426,6 +1426,14 @@ describe('urlencode', () => {
             expect(urlencode(dict([[1, 'a'], ['1', 'b']]))).toBe('1=a&1=b');
         });
 
+        // The template's text writes None as nothing, which made it the key "".
+        test('a None key is written None, beside the empty one', async () => {
+            const query = await import('./fixtures/query_items.py');
+            const raw = (name) => globalThis.__BRYTHON__.PYOBJ_MAP.get(query[name]) ?? query[name];
+
+            expect([urlencode(raw('none_keyed')), urlencode(raw('none_paired'))]).toEqual(Array(2).fill('None=missing&=blank&0=zero'));
+        });
+
         test('a tuple key is written rather than dropped', () => {
             expect(urlencode(dict([[_b_.tuple.$factory([1, 2]), 'pair']]))).toBe(
                 '%281%2C+2%29=pair'

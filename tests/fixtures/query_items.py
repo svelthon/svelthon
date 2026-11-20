@@ -1,7 +1,11 @@
 # Dicts whose class says what its items are. `urllib.parse.urlencode` and
 # `json.dumps` under `python3` read them through `items()` and give what the
 # test expects; a `keys` or an `__iter__` of their own is not what they ask.
-__all__ = ["selected", "empty", "refusing", "keyed", "iterated", "spelled", "uneven", "listed", "copied", "returned", "filters", "guarded"]
+__all__ = ["selected", "empty", "refusing", "keyed", "iterated", "spelled", "uneven", "listed", "copied", "returned", "filters", "guarded", "none_keyed", "none_paired"]
+
+# A None key, beside the empty one: `urlencode` writes it `str(None)`.
+none_keyed = {None: "missing", "": "blank", 0: "zero"}
+none_paired = [(None, "missing"), ("", "blank"), (0, "zero")]
 
 
 class Selected(dict):

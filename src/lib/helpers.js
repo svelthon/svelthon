@@ -792,7 +792,8 @@ const walkable = (one) => {
 //
 // A key that is not a string is written the way `str()` writes it, and two that
 // collide once written both stay, as in CPython's `urllib.parse.urlencode`,
-// which answers `1=a&1=b` for `{1: "a", "1": "b"}`.
+// which answers `1=a&1=b` for `{1: "a", "1": "b"}`. `None` among them, which
+// the template's text writes as nothing: the key `None` was the key `""`.
 export function urlencode(value) {
     // A Date is a value and never a mapping, and the sortable spelling is the
     // one a URL wants. Reading it through Python instead gave
@@ -849,7 +850,7 @@ export function urlencode(value) {
         const pairs = new URLSearchParams();
 
         for (const [key, one] of entries) {
-            pairs.append(__pybridge.str(key), __pybridge.str(one));
+            pairs.append(key === NONE ? 'None' : __pybridge.str(key), __pybridge.str(one));
         }
 
         return pairs.toString();
