@@ -256,7 +256,7 @@ host.untrack = untrack;
 // file a frame's line stands for, by the offset that file registered.
 lent.seq = (value) => __pybridge.seq(value);
 lent.argument = (value) => routeArgument(value);
-lent.place = (file, line) => inFile(line, FILE_LINES.get(file) ?? 0);
+lent.place = (file, line, namespace) => inFile(line, OWN_LINES.get(namespace) ?? FILE_LINES.get(file) ?? 0);
 
 // Whether the tag a `<svelte:element>` renders makes a custom element, as
 // Svelte tells one there, by the element's name: a dash in it.
@@ -1756,12 +1756,17 @@ const inFile = (line, lines) => {
 // An offset handed in by the caller placed the first in its Python block and
 // the second as if it were the component's.
 //
-// Keyed by the path a component is shown by, relative to its project: one
+// Keyed by the namespace the frame holds as its globals: two variants of one
+// file, which a plugin may shift by lines, are two namespaces, and the last
+// one mounted placed the other's lines. And by the path a component is shown
+// by, relative to its project, for a frame of a namespace none registered: one
 // project runs per runtime, whose Brython modules are named by that same path.
+const OWN_LINES = new WeakMap();
 const FILE_LINES = new Map();
 
-export const fileLines = (file, lines) => {
+export const fileLines = (file, lines, namespace) => {
     FILE_LINES.set(file, lines);
+    if (namespace !== undefined) OWN_LINES.set(namespace, lines);
 };
 
 
@@ -3854,14 +3859,21 @@ export const pyRead = (read) => {
 // running module can write, `globals()["x"] = 1`: until it does, the name is
 // no name, a typo `{conut}` among them, and its read raises `NameError` at its
 // line, as in Python and in Svelte.
+//
+// Per namespace and per file, as the lines are (`fileLines`): the template of
+// one variant began where the other's did, and its read raised `NameError`.
+const OWN_TEMPLATE = new WeakMap();
 const TEMPLATE_LINES = new Map();
 
-export const templateFrom = (file, line, unbound = []) => {
-    TEMPLATE_LINES.set(file, { line, unbound: new Set(unbound) });
+export const templateFrom = (file, line, unbound = [], namespace) => {
+    const from = { line, unbound: new Set(unbound) };
+
+    TEMPLATE_LINES.set(file, from);
+    if (namespace !== undefined) OWN_TEMPLATE.set(namespace, from);
 };
 
-host.absent = (file, line, name) => {
-    const from = TEMPLATE_LINES.get(file);
+host.absent = (file, line, name, namespace) => {
+    const from = OWN_TEMPLATE.get(namespace) ?? TEMPLATE_LINES.get(file);
 
     return rendering > 0 && from !== undefined && line >= from.line && !from.unbound.has(name);
 };

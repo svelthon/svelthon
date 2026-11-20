@@ -3,6 +3,8 @@
 // name, in the fixtures of `variant-bodies.test.js` alone. And one that makes
 // a file another language, `?language=python` or `?language=javascript`, its
 // text then the other card's, in the fixtures of `language-variants.test.js`.
+// And one that shifts a file by lines, `?layout=long`, five before its script
+// and thirty-five in it, in the fixture of `shifted-variants.test.js`.
 import { readFileSync } from 'node:fs';
 
 const CARDS = { python: 'LanguageCardPython.svelte', javascript: 'LanguageCardNative.svelte' };
@@ -18,6 +20,10 @@ export function variants() {
                 const card = CARDS[new URLSearchParams(query).get('language')];
 
                 return card === undefined ? undefined : { code: readFileSync(new URL(`./fixtures/${card}`, import.meta.url), 'utf8'), map: null };
+            }
+
+            if (/\/tests\/fixtures\/ShiftedPanel\.svelte$/.test(file) && new URLSearchParams(query).get('layout') === 'long') {
+                return { code: '<!-- layout -->\n'.repeat(5) + code.replace('@export', '\n'.repeat(35) + '@export'), map: null };
             }
 
             if (!/\/tests\/fixtures\/Variant(?:Native)?\.svelte\?/.test(id)) return;

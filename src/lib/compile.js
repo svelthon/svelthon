@@ -2423,18 +2423,6 @@ function declarations(c) {
                   `__onDestroy(__leave);`
               ]
             : []),
-        // How an error's Python line becomes a line of this file; see `inFile`
-        // in the runtime. Only a component has template functions to place.
-        // Registered under the file, the one place a frame's line is placed
-        // from, whoever called the function: a callback a library keeps, a
-        // handler another component set, a function another file reached.
-        ...(c.store ? [] : [`__fileLines(${JSON.stringify(c.source)}, ${JSON.stringify(c.lines)});`]),
-        // Where the template's own code begins in the module's source, so that
-        // a read made there is the template's however deep it is written, and
-        // the names no statement binds, which are no absence there.
-        ...(c.templateLine === undefined
-            ? []
-            : [`__templateFrom(${JSON.stringify(c.source)}, ${c.templateLine}, ${JSON.stringify(c.unwritten)});`]),
         ``
     ];
 }
@@ -2658,8 +2646,26 @@ function authorBindings(c) {
 }
 
 // A module's is replaced by a new one when its body raises (`moduleLoad`).
+//
+// And how an error's Python line becomes a line of this file (see `inFile` in
+// the runtime), and where the template's own code begins in the module's
+// source, so that a read made there is the template's however deep it is
+// written, with the names no statement binds, which are no absence there.
+// Only a component has template functions to place. Registered under the
+// namespace, which a frame of this code holds as its globals, whoever called
+// the function, a callback a library keeps or a handler another component set:
+// two variants of one file, which a plugin may shift by lines, are two
+// namespaces under one name. And under the file, for a frame of no namespace
+// registered.
 function componentNamespace(c) {
-    return [``, ...namespaceObject(HOST, { name: c.namespace, replaced: c.store })];
+    return [
+        ``,
+        ...namespaceObject(HOST, { name: c.namespace, replaced: c.store }),
+        ...(c.store ? [] : [`__fileLines(${JSON.stringify(c.source)}, ${JSON.stringify(c.lines)}, ${NS});`]),
+        ...(c.templateLine === undefined
+            ? []
+            : [`__templateFrom(${JSON.stringify(c.source)}, ${c.templateLine}, ${JSON.stringify(c.unwritten)}, ${NS});`])
+    ];
 }
 
 
