@@ -73,6 +73,81 @@ class Virtual(dict):
 virtual = Virtual(label="key")
 
 
+# A mapping whose property of a key's name raises AttributeError to say it
+# holds none: the dot reads the key then, so it writes there too; and where
+# the property holds one, it reads and writes the property.
+class Labelled(dict):
+    def __init__(self, own):
+        super().__init__(label="from-map")
+        self._label = own
+
+    @property
+    def label(self):
+        if self._label is None:
+            raise AttributeError("label")
+        return self._label
+
+    @label.setter
+    def label(self, value):
+        self._label = value
+
+
+fallback = Labelled(None)
+attribute = Labelled("from-attribute")
+
+
+# A property beside rows read by index, whose `__getitem__` refuses a text: the
+# attribute is found first, as a read finds it, and no key is asked for.
+class Indexed:
+    def __init__(self):
+        self._label = "from-attribute"
+        self.rows = ["first"]
+
+    @property
+    def label(self):
+        return self._label
+
+    @label.setter
+    def label(self, value):
+        self._label = value
+
+    def __getitem__(self, index):
+        if not isinstance(index, int):
+            raise TypeError("row index must be an integer")
+        return self.rows[index]
+
+
+indexed = Indexed()
+
+
+# A name `__getattr__` answers for one read only, once armed, beside a key of
+# that name: read once, as a read reads it, the write goes to the attribute.
+class Once(dict):
+    def __init__(self):
+        super().__init__(label="key")
+        self.armed = False
+        self.reads = 0
+
+    def arm(self):
+        self.armed = True
+
+    def __getattr__(self, name):
+        if name == "label":
+            self.reads += 1
+            if self.armed:
+                self.armed = False
+                return "attribute"
+        raise AttributeError(name)
+
+
+once = Once()
+
+
+@export
+def once_state():
+    return [once["label"], vars(once).get("label", "none"), once.reads]
+
+
 @export
 def reset(block):
     Model.reads = 0
@@ -83,6 +158,11 @@ def reset(block):
 @export
 def written():
     return [model._value, Model.reads_at_write]
+
+
+@export
+def own_fallback(text):
+    fallback._label = text
 </script>
 
 <input bind:value={model.value} />
@@ -90,3 +170,10 @@ def written():
 <p>{row.label}|{row["label"]}</p>
 <input data-k="virtual" bind:value={virtual.label} />
 <p data-k="virtual">{virtual.label}|{virtual["label"]}</p>
+<input data-k="fallback" bind:value={fallback.label} />
+<p data-k="fallback">{fallback.label}|{fallback["label"]}|{str(fallback._label)}</p>
+<input data-k="attribute" bind:value={attribute.label} />
+<p data-k="attribute">{attribute.label}|{attribute["label"]}|{str(attribute._label)}</p>
+<input data-k="indexed" bind:value={indexed.label} />
+<p data-k="indexed">{indexed.label}|{indexed[0]}</p>
+<button data-k="once" onclick={lambda: (once.arm(), (once.label := "edited"))}>once</button>

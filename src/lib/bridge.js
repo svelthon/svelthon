@@ -159,6 +159,7 @@ const {
     javaScriptRow,
     starredEntries,
     lookup,
+    subscriptable,
     restOf,
     unpackStarred,
     // pickle's.
@@ -4239,6 +4240,23 @@ export function readAttr(target, name, otherwise) {
     return otherwise === undefined ? pyGetattr(target, name) : invoke(otherwise);
 }
 
+// Whether a read through the dot finds the attribute, read once as `readAttr`
+// reads it first: the one thing that knows, as a property raising
+// `AttributeError` says it holds none and the read takes the key. Told by what
+// the class declares, the typed text went to the setter, and the key the field
+// read again on its next mount held the old one; told by an earlier read, a
+// property that came to hold one since was written past; asked twice, a name
+// `__getattr__` answers once was found, then sent to the key. A getter raising
+// anything else fails the read, and the write goes to the attribute, as a
+// refused read does not stop one.
+const readsAttribute = (target, name) => {
+    try {
+        return pyGetattr(target, name, MISSING) !== MISSING;
+    } catch {
+        return true;
+    }
+};
+
 // Whether the dot should write a key rather than an attribute: the object has
 // one of that name.
 //
@@ -4252,14 +4270,26 @@ const keyed = (target, name) => lookup(target, name) !== MISSING;
 // which Python's own grammar refuses the walrus, and the write half of
 // `bind:value={row.label}`. And `(obj[key] := value)` beside it.
 //
-// The write half of `readAttr`: an existing key wins over an attribute, so the
-// write lands where the read came from. Only an *existing* key: what a missing
-// one should do is still open, so it keeps Python's own answer.
+// The write half of `readAttr`: an existing key wins over an attribute a read
+// does not find, so the write lands where the read comes from. Only an
+// *existing* key: what a missing one should do is still open, so it keeps
+// Python's own answer. A Python object is asked in the read's order and once:
+// the attribute (`readsAttribute`), then the key only for one it does not find;
+// asked first, a `__getitem__` refusing a text, rows read by index, failed a
+// write the setter takes. One whose class has no `__getitem__` holds no key and
+// is read nothing before its setter, as an assignment reads nothing. A
+// JavaScript object's attribute and key are one property, which `attributed`
+// tells without running a getter.
 //
 // They return the value, as an assignment expression must, so that a group can
 // hold several and `{count}` still reads afterwards.
 export function writeAttr(target, name, value) {
-    if (!attributed(target, name) && keyed(target, name)) {
+    const toKey =
+        quietPyType(target) !== undefined
+            ? subscriptable(target) && !readsAttribute(target, name) && keyed(target, name)
+            : !attributed(target, name) && keyed(target, name);
+
+    if (toKey) {
         // Outside the `try`, for the reason written above `keyed`.
         pySetitem(target, name, value);
 

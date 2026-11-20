@@ -143,3 +143,64 @@ test('an attribute only __getattr__ answers is written where it is read', () => 
 
     expect(target.querySelector('p[data-k="virtual"]').textContent).toBe('typed|key');
 });
+
+// And a property of a key's name that raises `AttributeError` to say it holds
+// none: the dot read the key, and wrote through the property's setter, so the
+// key the field read on its next mount held the old text. Where the property
+// holds one, the write is still its own; and beside rows read by index, whose
+// `__getitem__` refuses a text, asked for a key first, the write failed.
+test.for([
+    ['fallback', 'typed|typed|None'],
+    ['attribute', 'typed|from-map|typed'],
+    ['indexed', 'typed|first']
+])('an object with a property and a key is written where it is read: %s', ([key, expected]) => {
+    const target = document.body.appendChild(document.createElement('div'));
+
+    mount(WriteSetter, { target });
+    flushSync();
+
+    const field = target.querySelector(`input[data-k="${key}"]`);
+
+    field.value = 'typed';
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+    flushSync();
+
+    expect(target.querySelector(`p[data-k="${key}"]`).textContent).toBe(expected);
+    target.remove();
+});
+
+// A name `__getattr__` answers for one read, beside a key of that name: read
+// once, as the read reads it, the write is the attribute's. Asked twice, the
+// second read missed it and the key was written.
+test('a name __getattr__ answers once is read once and written as an attribute', () => {
+    const target = document.body.appendChild(document.createElement('div'));
+    const instance = mount(WriteSetter, { target });
+
+    flushSync();
+    target.querySelector('button[data-k="once"]').click();
+    flushSync();
+
+    expect(Array.from(instance.once_state())).toEqual(['key', 'edited', 1]);
+    target.remove();
+});
+
+// Until the property holds one: the write is the property's then, rendered in
+// between or not. Told by the earlier read, the write written at once went to
+// the key.
+test.for([['flushed'], ['at once']])('a mapping whose property comes to hold one is written to it: %s', ([when]) => {
+    const target = document.body.appendChild(document.createElement('div'));
+    const instance = mount(WriteSetter, { target });
+
+    flushSync();
+    instance.own_fallback('owned');
+    if (when === 'flushed') flushSync();
+
+    const field = target.querySelector('input[data-k="fallback"]');
+
+    field.value = 'typed';
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+    flushSync();
+
+    expect(target.querySelector('p[data-k="fallback"]').textContent).toBe('typed|from-map|typed');
+    target.remove();
+});
