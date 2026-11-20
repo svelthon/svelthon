@@ -1825,7 +1825,9 @@ excerpts empty, and a hydrated page fills them in once in the browser.
 wherever it is read. `"2026-08-24"` is 24 August for everyone, which is what
 `datetime.date` means and what Django's `|date` shows; the specification reads
 such a string as midnight UTC, so without the rule every reader west of
-Greenwich saw the day before. A value carrying a time is an instant and is
+Greenwich saw the day before. A month alone, `"2026-08"`, what an
+`<input type="month">` holds, and a year alone, `"2026"`, are read the same way,
+as their first day. A value carrying a time is an instant and is
 rendered in the reader's own zone, which is what an instant is for.
 
 The runtime is Bryntime's, and a browser gets it without the parsing chain,
@@ -1872,7 +1874,7 @@ row of a `test.for`), none expected to fail:
   Every expected value was produced by running the component's Python through
   CPython 3.12 as-is, never written by hand. Brython matches CPython on **every
   point**;
-- production build: **282 KB gzip**, Brython runtime included: what the demo
+- production build: **283 KB gzip**, Brython runtime included: what the demo
   page loads, its script, the modules it preloads and its styles, measured
   after each build by `scripts/build-size.mjs`.
 
@@ -1942,7 +1944,7 @@ runs. Keep hot loops out of a component, or reach for the C extensions
 Svelte reads a JavaScript value. Under 4 ms for 500 rows, which a page does
 not feel.
 
-Loading is the other price: 282 KB gzip, the Brython runtime included, and
+Loading is the other price: 283 KB gzip, the Brython runtime included, and
 **0.12 s to the demo's content** in production with a cold cache, 0.33 s with
 the processor slowed four times, as a modest laptop's is. Paid once per
 session, not per page, since the app never reloads.

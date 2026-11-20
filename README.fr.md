@@ -1896,7 +1896,9 @@ hydratée les remplit une fois dans le navigateur.
 où qu'on le lise. `"2026-08-24"` est le 24 août pour tout le monde, ce que
 `datetime.date` veut dire et ce que le `|date` de Django affiche ; la
 spécification lit une telle chaîne comme minuit UTC, donc sans cette règle tout
-lecteur à l'ouest de Greenwich voyait la veille. Une valeur qui porte une heure
+lecteur à l'ouest de Greenwich voyait la veille. Un mois seul, `"2026-08"`, ce
+que tient un `<input type="month">`, et une année seule, `"2026"`, se lisent de
+même, comme leur premier jour. Une valeur qui porte une heure
 est un instant, et se rend dans le fuseau du lecteur, ce qui est le propre d'un
 instant.
 
@@ -1915,7 +1917,7 @@ rangée d'un `test.for`), aucun échec attendu :
   contrôle et frames. Chaque valeur attendue a été produite par CPython 3.12 en
   exécutant le code du composant tel quel, jamais écrite à la main. Brython
   reproduit CPython sur **chaque point** ;
-- build de production : **282 Ko gzip**, runtime Brython compris : ce que la
+- build de production : **283 Ko gzip**, runtime Brython compris : ce que la
   page de démo charge, son script, les modules qu'elle précharge et ses styles,
   mesuré après chaque build par `scripts/build-size.mjs`.
 
@@ -2017,7 +2019,7 @@ WebAssembly.
 où Svelte lit une valeur JavaScript. Moins de 4 ms pour 500 lignes, ce qu'une
 page ne ressent pas.
 
-L'autre prix est au chargement : 282 Ko gzip, runtime Brython compris, et
+L'autre prix est au chargement : 283 Ko gzip, runtime Brython compris, et
 **0,12 s jusqu'au contenu de la démo** en production, cache vide ; 0,33 s avec
 le processeur ralenti quatre fois, comme celui d'un portable modeste. Payé une
 fois par session, pas par page, puisque l'application ne recharge jamais.

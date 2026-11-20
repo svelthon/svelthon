@@ -927,7 +927,12 @@ describe('date', () => {
         // did not, so Los Angeles was shown the 9th.
         test.for([
             ['+002026-09-10', '10 Sept 2026'],
-            ['+010000-09-10', '10 Sept 10000']
+            ['+010000-09-10', '10 Sept 10000'],
+            // A month alone, what an `<input type="month">` holds, and a year
+            // alone, the two shorter forms the specification reads at midnight
+            // UTC too: Los Angeles was shown 31 August and 31 December 2025.
+            ['2026-09', '1 Sept 2026'],
+            ['2026', '1 Jan 2026']
         ])('and so is %s', ([day, shown]) => {
             expect(inZone(() => date(day, 'medium', undefined, 'en-GB'))).toBe(shown);
         });

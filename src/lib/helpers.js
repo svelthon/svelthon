@@ -548,8 +548,10 @@ export function batch(xs, size, fill) {
 // `locale` matters most under server rendering: without it the server formats in
 // *its* language and the browser reformats in the visitor's, which Svelte
 // reports as a hydration mismatch.
-// A date and nothing else: the one shape that is a day rather than an instant.
-const DAY_ALONE = new RegExp(`^${DAY.source}$`);
+// A date and nothing else: the one shape that is a day rather than an instant,
+// in the three forms the specification reads at midnight UTC, a day, a month,
+// what an `<input type="month">` holds, and a year.
+const DAY_ALONE = /^(?:[+-]\d{6}|\d{4})(?:-\d{2}(?:-\d{2})?)?$/;
 const DAY_ONLY = (value) => typeof value === 'string' && DAY_ALONE.test(value);
 
 const STYLES = ['full', 'long', 'medium', 'short'];
