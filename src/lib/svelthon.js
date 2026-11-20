@@ -887,15 +887,17 @@ export function python(options = {}) {
             // the `<script module>`, the way the README writes a composition.
             // Any other child, one a package, a module that re-exports it or a
             // namespace gives, or one the script assigned, is told apart when it
-            // is mounted. A child that changes language compiles this one again:
-            // the dev server asks it when it does (`WATCHED_CHILDREN`), and a
-            // build that watches takes each file read for a dependency.
+            // is mounted, and so is one imported with a query: a plugin may make
+            // it another language than its file. A child that changes language
+            // compiles this one again: the dev server asks it when it does
+            // (`WATCHED_CHILDREN`), and a build that watches takes each file
+            // read for a dependency.
             const languages = [];
             const pythonChildren = new Set();
             const javascriptChildren = new Set();
 
             for (const { local, from } of [...componentImports(python, filename ?? 'component'), ...moduleComponents(content)]) {
-                if (!filename || !from.startsWith('.')) continue;
+                if (!filename || !from.startsWith('.') || /[?#]/.test(from)) continue;
 
                 const path = resolve(dirname(filename), importedFile(from));
 
