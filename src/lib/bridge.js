@@ -168,7 +168,6 @@ const {
     statePrint,
     pickleNode,
     isPlainDict,
-    crossesBack,
     readBack,
     listedNow,
     readsAsPython,
@@ -2987,13 +2986,13 @@ export const pyExpression = (call, where, arity, kept = false, writes = false) =
 // of what a Python callback answered was the view, which SvelteKit refused.
 //
 // And the transport writes the dict itself (`TOPS`), its keys, their types and
-// their order Python's. Where its plain object cannot say what the dict held,
-// a key that is not a string or that JavaScript puts first, a number `1.0` that
-// reads back the int 1, it says where its values came from (`markTop`), as the
-// browser's copy of it does, under a symbol SvelteKit's merge carries: a Python
-// page reads them back as the dict held them (`routeData`).
+// their order Python's. Its plain object says where its values came from
+// (`markTop`), as the browser's copy of it does, under a symbol SvelteKit's
+// merge carries: a Python page reads them back as the dict held them
+// (`routeData`). Each one, and not only one whose plain object cannot say what
+// the dict held: a page's `1` over its layout's `1.0` reads in JavaScript as
+// the `1.0` did, and the page, saying nothing, was read the layout's float.
 const TOPS = new WeakMap();
-const INDEX_NAME = /^(?:0|[1-9]\d*)$/;
 
 const plainTop = (data, server = false) => {
     if (!VIEWED.has(data)) return data;
@@ -3030,24 +3029,20 @@ const topOf = (dict, pojo, structure) => {
         // A coroutine's promise is what any reader of it holds.
         return [name, key, pyAwaitable(value) ? js : value, js];
     });
-    // A coroutine's promise resolves to what JavaScript reads of its result:
-    // the dict, read where SvelteKit merged it, hands Python the coroutine's
-    // own, which the browser rebuilds as a future of its value.
-    const marked =
-        items.some(([, value]) => pyAwaitable(value)) ||
-        entries.some(([name, key, value, js]) => typeof key !== 'string' || INDEX_NAME.test(name) || !crossesBack(value, js));
+    TOPS.set(pojo, { dict, structure, names: entries.map(([name]) => name) });
 
-    TOPS.set(pojo, { dict, structure, marked, names: entries.map(([name]) => name) });
-
-    return marked ? markTop(pojo, { entries: () => entries }) : pojo;
+    return markTop(pojo, { entries: () => entries });
 };
 
 // A route's `data` as its Python page reads it, a dict: what each node's
 // `load()` returned, merged in SvelteKit's order as `{**layout, **page}` merges
-// them, each value the one its dict held where the merge kept it; a name a node
-// wrote whose value reads back as it was, and a node's in JavaScript, read as
-// any value JavaScript hands Python. One dict per merged object, which
-// `page.data` read from Python is too.
+// them, each value the one its dict held where the merge kept it, and a node's
+// in JavaScript read as any value JavaScript hands Python. Nothing in the
+// merged object says what a node in JavaScript wrote, so two things are not
+// as Python merges them: a value it writes over a Python node's that reads in
+// JavaScript as the Python one did, `1` over a layout's `1.0`, is the Python
+// one; and the names of a layout in JavaScript come after its Python page's.
+// One dict per merged object, which `page.data` read from Python is too.
 const ROUTE_DATA = new WeakMap();
 
 export const routeData = (data) => {
@@ -3057,30 +3052,29 @@ export const routeData = (data) => {
 
     if (known !== undefined) return known;
 
-    // Each name's last writer among the dicts: a key keeps the place its first
-    // writer gave it and takes the value of its last, as `{**a, **b}` does.
-    const owner = new Map();
-    const out = new Map();
+    // Every key the dicts hold, written in their order, and what JavaScript read
+    // of the last one each name held: the dict made of them keeps the place of a
+    // key's first writer and the value of its last, as `{**a, **b}` does, `1.0`
+    // and `1` one key, and two keys JavaScript names alike, `1` and `"1"`, two,
+    // where the last one's name took the other's place. Each write, and not a
+    // `Map` of them, which tells `True` and `1` apart: the page's `True` went to
+    // the root's place, and the nested layout's `1`, after it, was the last.
+    const named = new Map();
+    const writes = [];
 
     for (const origin of origins(data)) {
         for (const [name, key, value, js] of origin.entries()) {
-            const before = owner.get(name);
-
-            if (before !== undefined && before.key !== key) out.delete(before.key);
-            out.set(key, value);
-            owner.set(name, { key, js });
+            writes.push([key, value]);
+            named.set(name, js);
         }
     }
 
+    // And what a node in JavaScript wrote, a string key, after them.
     for (const name of Object.keys(data)) {
-        const own = owner.get(name);
-
-        if (own !== undefined && Object.is(data[name], own.js)) continue;
-        if (own !== undefined) out.delete(own.key);
-        out.set(name, pyBind(data[name]));
+        if (!(named.has(name) && Object.is(data[name], named.get(name)))) writes.push([name, pyBind(data[name])]);
     }
 
-    const dict = pyDict(out);
+    const dict = pyDict(writes);
 
     ROUTE_DATA.set(data, dict);
     ADOPTED.add(data);
@@ -3544,7 +3538,7 @@ const codec = {
 
         const top = TOPS.get(thing);
 
-        if (top !== undefined) return ours('p', top.names, top.structure ?? pickledFor(top.dict), ...(top.marked ? [1] : []));
+        if (top !== undefined) return ours('p', top.names, top.structure ?? pickledFor(top.dict), 1);
 
         // A merge of marked data, SvelteKit's `parent()` handed on: the dict a
         // Python page reads of it (`routeData`), whose symbols devalue refuses.

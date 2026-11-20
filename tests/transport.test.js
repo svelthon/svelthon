@@ -11,6 +11,9 @@ import {
     values,
     load,
     layout,
+    merge_layout,
+    merge_section,
+    merge_page,
     walked,
     streamed,
     actions,
@@ -93,6 +96,56 @@ test('the data of a load() keeps its floats at the top, and its page reads a dic
     expect(merged.top).toBe(1);
     expect(merged.both).toBe('page');
     expect(String(describe(routeData(merged)))).toBe("dict:{'both': 'page', 'first': 2.0, 'top': 1.0, 'rows': (1, 2)}");
+});
+
+// The merge is `{**layout, **page}`: a page's value that reads in JavaScript as
+// the layout's did is the page's, `1` over `1.0`, the layout's keys first; two
+// keys JavaScript names alike, `1` and `"1"`, are two; `1.0` and `1` are one,
+// the layout's key with the page's value. Each node's data unmarked when it
+// held nothing JavaScript reads back otherwise, the layout's value stood; and
+// a key that shared its name with another took its place. As the server renders
+// it, in the browser each node's data crossed, and run there by a universal
+// `load()`.
+test.for([
+    ['typed', "dict:{'amount': 1, 'layer': 'page', 'masthead': 'm', 'page_field': 'p'}"],
+    ['int-str', "dict:{1: 'layout-int', 'shared': 'page', 'layout_field': 'layout only', '1': 'page-string', 'page_field': 'page only'}"],
+    ['str-int', "dict:{'1': 'layout-string', 'shared': 'page', 'layout_field': 'layout only', 1: 'page-int', 'page_field': 'page only'}"],
+    ['float-int', "dict:{1.0: 'page'}"]
+])('a layout and its page merge as {**layout, **page}: %s', async ([kind, expected]) => {
+    const event = { kind };
+    const [served, page] = [await routeServerLoad(merge_layout, 'layout — merge')(event), await routeServerLoad(merge_page, 'page — merge')(event)];
+    const crossed = { ...viaJson(served), ...viaScript({ type: 'data', data: page }).data };
+    const universal = { ...(await routeLoad(merge_layout, 'layout — merge')(event)), ...(await routeLoad(merge_page, 'page — merge')(event)) };
+
+    expect([{ ...served, ...page }, crossed, universal].map((data) => String(describe(routeData(data))))).toEqual([expected, expected, expected]);
+});
+
+// And three nodes writing keys equal in Python that JavaScript tells apart,
+// `True`, `1`, `True`: the first node's key with the page's value, where the
+// nested layout's stood, the third write having gone to the first key's place
+// before the dict was made of them.
+test.for([
+    ['bool-int-bool', "dict:{True: 'page'}"],
+    ['int-bool-int', "dict:{1: 'page'}"]
+])('three nodes merge as {**root, **section, **page}: %s', async ([kind, expected]) => {
+    const event = { kind };
+    const [root, section, page] = [
+        await routeServerLoad(merge_layout, 'root — merge')(event),
+        await routeServerLoad(merge_section, 'section — merge')(event),
+        await routeServerLoad(merge_page, 'page — merge')(event)
+    ];
+    const crossed = { ...viaJson(root), ...viaJson(section), ...viaScript({ type: 'data', data: page }).data };
+
+    expect([{ ...root, ...section, ...page }, crossed].map((data) => String(describe(routeData(data))))).toEqual([expected, expected]);
+});
+
+// And a node of JavaScript's after a Python one, writing the name of a Python
+// key, `"1"` over the layout's `1`: its key is the string, and the Python one
+// stays, where it was taken out.
+test('a JavaScript node writing the name of a Python key adds its own', async () => {
+    const served = await routeServerLoad(merge_layout, 'layout — merge')({ kind: 'int-str' });
+
+    expect(String(describe(routeData({ ...served, 1: 'from-js' })))).toBe("dict:{1: 'layout-int', 'shared': 'layout', 'layout_field': 'layout only', '1': 'from-js'}");
 });
 
 // A `load()` of JavaScript's returning Python values that share a list, at any

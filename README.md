@@ -1456,7 +1456,11 @@ page reads in the browser what it read on the server: a tuple is a tuple, an
 its order, one object reached twice one object, a cycle a cycle, and an
 instance of your class an instance of it, rebuilt by its `__reduce__`, its
 `__getstate__` and `__setstate__`, its `__slots__`, as pickle rebuilds it. A
-layout's data and its page's merge as `{**layout, **page}`. A remote function's
+layout's data and its page's merge as `{**layout, **page}`. With one of them
+written in JavaScript, nothing says what it wrote, and two things are not so: a
+value it writes over a Python one that JavaScript reads alike, `1` over a
+layout's `1.0`, stays the Python one, and a JavaScript layout's names come after
+its Python page's. A remote function's
 answer is what the function returned: `answer["text"]` of a dict.
 
 On the server too, the page reads that value rebuilt, from the very structure
@@ -1864,7 +1868,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 2 207 tests as written (vitest reports more, one per
+Validated by `npm test`, 2 208 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;

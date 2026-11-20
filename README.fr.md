@@ -1518,7 +1518,11 @@ profondeur, `data` lui-même un dict, un set dans son ordre, un objet atteint
 deux fois un seul objet, un cycle un cycle, et une instance de votre classe une
 instance de cette classe, reconstruite par son `__reduce__`, son `__getstate__`
 et son `__setstate__`, ses `__slots__`, comme pickle la reconstruit. Les données
-d'un layout et celles de sa page se fusionnent comme `{**layout, **page}`. La
+d'un layout et celles de sa page se fusionnent comme `{**layout, **page}`. Si
+l'un des deux est écrit en JavaScript, rien ne dit ce qu'il a écrit, et deux
+choses diffèrent : une valeur qu'il met à la place d'une valeur Python que
+JavaScript lit pareil, `1` sur le `1.0` d'un layout, reste la valeur Python, et
+les noms d'un layout en JavaScript viennent après ceux de sa page Python. La
 réponse d'une fonction distante est ce que la fonction a rendu :
 `answer["text"]` d'un dict.
 
@@ -1907,7 +1911,7 @@ parsing, que seul le compilateur charge ; le README de Bryntime en donne le poid
 
 ## État
 
-Validé par `npm test`, 2 207 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 2 208 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;

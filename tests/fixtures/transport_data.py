@@ -1,6 +1,6 @@
 # What a server hands a page, through SvelteKit's transport (`transport.js`).
 __all__ = [
-    "values", "load", "layout", "walked", "streamed", "actions", "one", "two", "callables", "lossy", "unpicklable",
+    "values", "load", "layout", "merge_layout", "merge_section", "merge_page", "walked", "streamed", "actions", "one", "two", "callables", "lossy", "unpicklable",
     "remote_lossy", "remote_batch", "remote_live", "remote_hook", "bumped", "kept", "stored", "STORE", "hooked", "Point",
     "Money", "describe", "data_of",
 ]
@@ -129,6 +129,33 @@ def load(event):
 
 def layout(event):
     return {"both": "layout", "first": 2.0}
+
+
+# A layout's data and its page's, by kind: a page's value that reads in
+# JavaScript as the layout's did, `1` over `1.0`; two keys JavaScript names
+# alike, `1` and `"1"`, either way; and `1.0` and `1`, one key. And three
+# nodes, a layout's, a nested layout's and the page's, writing keys equal in
+# Python that JavaScript tells apart, `True` and `1`.
+MERGED = {
+    "typed": ({"amount": 1.0, "layer": "layout", "masthead": "m"}, {"amount": 1, "layer": "page", "page_field": "p"}),
+    "int-str": ({1: "layout-int", "shared": "layout", "layout_field": "layout only"}, {"shared": "page", "1": "page-string", "page_field": "page only"}),
+    "str-int": ({"1": "layout-string", "shared": "layout", "layout_field": "layout only"}, {"shared": "page", 1: "page-int", "page_field": "page only"}),
+    "float-int": ({1.0: "layout"}, {1: "page"}),
+    "bool-int-bool": ({True: "root"}, {1: "section"}, {True: "page"}),
+    "int-bool-int": ({1: "root"}, {True: "section"}, {1: "page"}),
+}
+
+
+def merge_layout(event):
+    return dict(MERGED[event.kind][0])
+
+
+def merge_section(event):
+    return dict(MERGED[event.kind][1])
+
+
+def merge_page(event):
+    return dict(MERGED[event.kind][-1])
 
 
 def numbers():

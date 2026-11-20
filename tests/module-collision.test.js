@@ -61,8 +61,10 @@ test('two +page.server.py load side by side', async () => {
     const blog = await import('./fixtures/routes/blog/+page.server.py');
     const about = await import('./fixtures/routes/about/+page.server.py');
 
-    expect(await blog.load()).toEqual({ page: 'blog' });
-    expect(await about.load()).toEqual({ page: 'about' });
+    // By name: the data says where its values came from under a symbol of its
+    // own, which SvelteKit's merge carries.
+    expect(Object.entries(await blog.load())).toEqual([['page', 'blog']]);
+    expect(Object.entries(await about.load())).toEqual([['page', 'about']]);
 
     // A name no `import` can write is not published where imports look.
     expect(globalThis.__BRYTHON__.imported['+page.server']).toBeUndefined();
