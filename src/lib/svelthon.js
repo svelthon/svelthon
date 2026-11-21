@@ -859,6 +859,31 @@ const relanguages = (file) => {
 // named a file that is no longer the one Python imports.
 const COMPILED_FROM = (globalThis[Symbol.for('svelthon.compiledFrom')] ??= new Map());
 
+// The modules missing for which a component or module of Python was last
+// refused: a file of one of those names created asks it again
+// (`configureServer`), as Vite asks again an importer whose import it could not
+// resolve. A refused compile records nothing in `COMPILED_FROM` nor in
+// `compiledStores`, and the page kept the overlay until it was reloaded. On the
+// global registry, as `COMPILED_FROM` is.
+const REFUSED_IMPORTS = (globalThis[Symbol.for('svelthon.refusedImports')] ??= new Map());
+
+const refusedFor = (file, missing, compiling) => {
+    REFUSED_IMPORTS.delete(file);
+
+    try {
+        return compiling();
+    } catch (error) {
+        if (file !== undefined && missing.length > 0) REFUSED_IMPORTS.set(file, missing);
+        throw error;
+    }
+};
+
+// What `resolves` answers, a name found as no file kept as missing.
+const kindNoted = (kind, mod, missing) => {
+    if (kind !== 'file') missing.push(mod);
+    return kind;
+};
+
 // The watchers of the dev servers that watch the children a component reads for
 // their language (`configureServer`), while they watch: a server closed, a
 // build that watches, each child is a dependency of its parent, which a change
@@ -959,6 +984,7 @@ export function python(options = {}) {
             // Known as compiled once this pass has compiled it, and as nothing
             // when it is JavaScript, or refused.
             COMPILED_FROM.delete(filename);
+            REFUSED_IMPORTS.delete(filename);
 
             if (declaring === null) {
                 refuseStrayPython(content, filename, root);
@@ -1120,17 +1146,20 @@ export function python(options = {}) {
 
             const name = nameFor(filename, root);
             const body = bodyId(root, name, content, about);
-            const { script, module, map, imports } = compile(content, name, shownPath(filename, root), {
-                // The block alone when no markup pass came first; the whole file
-                // the markup pass was handed when one did (`about`).
-                sourceContent: content,
-                ...about,
-                resolves: (mod) => {
-                    asked.push(mod);
-                    return moduleKind(mod, directory, searchPath);
-                },
-                body
-            });
+            const missing = [];
+            const { script, module, map, imports } = refusedFor(filename, missing, () =>
+                compile(content, name, shownPath(filename, root), {
+                    // The block alone when no markup pass came first; the whole
+                    // file the markup pass was handed when one did (`about`).
+                    sourceContent: content,
+                    ...about,
+                    resolves: (mod) => {
+                        asked.push(mod);
+                        return kindNoted(moduleKind(mod, directory, searchPath), mod, missing);
+                    },
+                    body
+                })
+            );
 
             if (record !== undefined) {
                 const names = [...new Set([...asked, ...imports])];
@@ -1576,6 +1605,7 @@ function compilePython(file, path, root) {
         cached.found === foundAs(cached.result.imports, dirname(file), path) &&
         cached.stars.every(([one, text]) => readOr(one) === text)
     ) {
+        REFUSED_IMPORTS.delete(file);
         return cached.result;
     }
 
@@ -1583,12 +1613,15 @@ function compilePython(file, path, root) {
         ? { store: true }
         : { plain: true, eager: isRemote(file), read: routeNames(file), serverRoute: /[/\\]\+(?:page|layout)\.server\.py$/.test(file) };
     const stars = [];
-    const result = compile(source, nameFor(file, root), shown, {
-        ...mode,
-        sourceContent: source,
-        resolves: (mod) => moduleKind(mod, dirname(file), path),
-        starNames: (mod, level) => publishedBy(starredFile(mod, level, dirname(file), path), path, stars)
-    });
+    const missing = [];
+    const result = refusedFor(file, missing, () =>
+        compile(source, nameFor(file, root), shown, {
+            ...mode,
+            sourceContent: source,
+            resolves: (mod) => kindNoted(moduleKind(mod, dirname(file), path), mod, missing),
+            starNames: (mod, level) => publishedBy(starredFile(mod, level, dirname(file), path), path, stars)
+        })
+    );
 
     compiledStores.set(file, { source, shown, result, found: foundAs(result.imports, dirname(file), path), stars });
     return result;
@@ -2269,7 +2302,9 @@ export function svelthon(options = {}) {
         // component (`compiledAsBefore`), and a module of Python, `relay.py`
         // importing `helper` for the component that imports `relay`
         // (`foundAs`). Left alone, the page asked for the file no longer
-        // there until the importer itself was edited.
+        // there until the importer itself was edited. An importer refused for
+        // a module missing is changed too when that module appears
+        // (`REFUSED_IMPORTS`).
         //
         // And a child that changes language changes each parent compiled for
         // the other one, which the props it hands that child were converted
@@ -2299,6 +2334,10 @@ export function svelthon(options = {}) {
                     if (imports.includes(name) && existsSync(module) && compiled.found !== foundAs(imports, dirname(module), searchPath)) {
                         server.watcher.emit('change', module);
                     }
+                }
+
+                for (const [importer, missing] of REFUSED_IMPORTS) {
+                    if (missing.includes(name) && existsSync(importer)) server.watcher.emit('change', importer);
                 }
             };
 
@@ -2555,7 +2594,14 @@ export function svelthon(options = {}) {
         // file that changes language reloads the page where such a parent is
         // compiled, as one imported recompiles its parents (`relanguaged`): a
         // JavaScript child edited into Python was handed JavaScript's numbers.
+        //
+        // An importer refused before Vite ever analysed it, on the first visit,
+        // accepts no update, and Vite stops the update there: marked as Vite
+        // marks an importer whose import it could not resolve, the update goes
+        // on to the page.
         hotUpdate({ file, modules, timestamp }) {
+            if (REFUSED_IMPORTS.has(file)) for (const mod of modules) mod.isSelfAccepting ??= false;
+
             const stale = forgotten(file, this.environment.moduleGraph, timestamp);
 
             if (this.environment.name === 'client' && relanguages(file) && [...COMPILED_FROM].some(([source, one]) => one.holding && existsSync(source))) {

@@ -1134,6 +1134,57 @@ describe('hot update invalidates the generated module too', () => {
             })
         );
 
+        // And an importer refused for a module missing, the component or a
+        // module of Python between it and the page: the module created, the
+        // watcher changed none, and the error stayed until the page was
+        // reloaded. A module of another name changes none. Refused on the
+        // first visit, Vite never analysed it, and stopped the update there:
+        // it is marked as accepting none, as Vite marks its own, and one
+        // analysed keeps what it accepts.
+        test.for([['a component', 'Uses.svelte'], ['a module of Python', 'relay.py']])(
+            'and the watcher changes %s refused for a module missing once it is created',
+            ([, importer]) =>
+                inRoom(async ({ at }) => {
+                    const handlers = {};
+                    const changed = [];
+                    const server = {
+                        watcher: {
+                            on: (event, handler) => (handlers[event] = handler),
+                            emit: (event, file) => changed.push([event, file])
+                        }
+                    };
+                    const plugin = svelthon();
+                    const shared = Symbol.for('svelthon.path');
+                    const kept = globalThis[shared];
+                    const source = importer.endsWith('.svelte')
+                        ? '<script lang="python">\nfrom note import text\n</script>\n<p>{text()}</p>\n'
+                        : 'from note import text\n';
+
+                    writeFileSync(at(importer), source);
+                    if (importer.endsWith('.svelte')) {
+                        await expect(preprocess(source, [python()], { filename: at(importer) })).rejects.toThrow(/note/);
+                        globalThis[shared] = kept;
+                    } else {
+                        expect(() => plugin.load.call({ addWatchFile() {} }, at(importer))).toThrow(/note/);
+                    }
+                    plugin.configureServer(server);
+
+                    writeFileSync(at('other.py'), 'value = 3\n');
+                    handlers.add(at('other.py'));
+                    expect(changed).toEqual([]);
+
+                    writeFileSync(at('note.py'), 'def text():\n    return "ready"\n');
+                    handlers.add(at('note.py'));
+
+                    expect(changed).toEqual([['change', at(importer)]]);
+
+                    const modules = [{ id: at(importer) }, { id: `${at(importer)}?python`, isSelfAccepting: true }];
+
+                    plugin.hotUpdate.call({ environment: graph() }, { file: at(importer), modules });
+                    expect(modules.map((one) => one.isSelfAccepting)).toEqual([false, true]);
+                })
+        );
+
         // And a route whose star import reads a module edited: the route served
         // the new body of GET, and answered 405 to the POST its starred
         // module's `__all__` had just gained, until the route was edited.
