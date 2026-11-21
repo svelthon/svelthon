@@ -12,6 +12,8 @@ import './fixtures/ImportedInspectElement.svelte';
 import ImportedDecorators from './fixtures/ImportedDecorators.svelte';
 import ImportedEffectMounted from './fixtures/ImportedEffectMounted.svelte';
 import ModuleInspect from './fixtures/ModuleInspect.svelte';
+import ModuleInspectCalled from './fixtures/ModuleInspectCalled.svelte';
+import ModuleInspectWith from './fixtures/ModuleInspectWith.svelte';
 import ImportedHost from './fixtures/ImportedHost.svelte';
 import ModuleRunes, * as moduleRunes from './fixtures/ModuleRunes.svelte';
 import ModuleRunesImported, * as moduleRunesImported from './fixtures/ModuleRunesImported.svelte';
@@ -61,6 +63,20 @@ test.for([
     flushSync();
 
     expect(target.querySelector('output').textContent).toBe('7');
+});
+
+// And called on a line of its own, where Svelthon reads its `inspect()`: the
+// module's function was handed a callback, `function`, and `inspect_with(*[7])`
+// stopped the compile of the component.
+test.for([
+    ['inspect(7)', ModuleInspectCalled],
+    ['inspect_with(*[7])', ModuleInspectWith]
+])('the <script module>’s own function is called by %s as written', ([, Component]) => {
+    const target = document.body.appendChild(document.createElement('div'));
+    mount(Component, { target });
+    flushSync();
+
+    expect(target.querySelector('output').textContent).toBe('number:7');
 });
 
 // A name the `<script module>` binds that a rune shadows, `derived`, made every

@@ -855,7 +855,9 @@ function takeArrows(src, where, lineOffset, allowed, theirs = new Set(), moduleN
 
         // `inspect(…)` at the top level of a component, whose arguments become a
         // lambda so that they are read again on every change. A call to an
-        // `inspect` the author imported from JavaScript is theirs, as written.
+        // `inspect` the author imported from JavaScript, or bound in the
+        // `<script module>`, is theirs, as written: the module's was handed a
+        // callback, and `inspect_with(*values)` refused.
         //
         // One left open on its line, as a formatter lays out a long call, is
         // the lines up to the one that closes it, read as one statement and
@@ -884,7 +886,8 @@ function takeArrows(src, where, lineOffset, allowed, theirs = new Set(), moduleN
 
         const matched = statement && !found && allowed ? call.match(INSPECT) : null;
         const inspected = matched && enclosed(matched[2]) ? matched : null;
-        const watched = inspected && !theirs.has(inspected[1] ? 'inspect_with' : 'inspect') ? inspected : null;
+        const rune = inspected && (inspected[1] ? 'inspect_with' : 'inspect');
+        const watched = inspected && !theirs.has(rune) && !moduleNames.includes(rune) ? inspected : null;
 
         if (last > n && !watched) {
             out.push(...lines.slice(n, last + 1));
