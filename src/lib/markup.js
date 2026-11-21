@@ -2477,9 +2477,30 @@ const targetKey = (expr) => {
 // define it.
 const COMPILER_PREFIX = /^__(?!.*__$)/;
 
-// What `walrus()` emits for the plain form, read back so that a write aimed at a
-// markup name can be refused rather than sent to the wrong scope.
-const ASSIGNED = new RegExp(`__assign\\("(${NAME})"`, 'gu');
+// The names `walrus()` writes for the plain form, read back so that a write
+// aimed at a markup name can be refused rather than sent to the wrong scope:
+// the first argument of each call to `__assign`, off the tree of what it
+// rewrote. Read off the text, `__assign("row"` in a string, or at the end of a
+// name, `record__assign("row", row)`, was taken for a write, and a handler that
+// wrote nothing was refused.
+function assignedNames(rewritten) {
+    const $B = globalThis.__BRYTHON__;
+    const names = [];
+    const visit = (node) => {
+        if (Array.isArray(node)) return node.forEach(visit);
+        if (node === null || typeof node !== 'object' || !Array.isArray(node.constructor?._fields)) return;
+
+        if (node instanceof $B.ast.Call && node.func instanceof $B.ast.Name && node.func.id === '__assign') {
+            const [first] = node.args;
+
+            if (first instanceof $B.ast.Constant && typeof first.value === 'string') names.push(first.value);
+        }
+        node.constructor._fields.forEach((field) => visit(node[field]));
+    };
+
+    visit(targetTree(`(${rewritten}\n)`));
+    return names;
+}
 
 // The signs that end in `=` without being an assignment, plus the comparison.
 const NOT_ASSIGNMENT = new Set(['=', '!', '<', '>', '+', '-', '*', '/', '%', '&', '|', '^', ':']);
@@ -4105,7 +4126,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     // missing is the ability to *write* a markup name from a handler, and none
     // of the 889 components of the corpus asks for it.
     const refuseMarkupWalrus = (rewritten, source) => {
-        for (const [, name] of rewritten.matchAll(ASSIGNED)) {
+        for (const name of assignedNames(rewritten)) {
             if (scoped(name) === null) continue;
 
             throw refuse(

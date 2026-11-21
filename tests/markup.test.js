@@ -816,6 +816,20 @@ describe('the blocks that declare names', () => {
             .toThrow(/declared by the markup/);
     });
 
+    // Only a write: the text `__assign("open"` in a string, or at the end of a
+    // name, `record__assign("open", open)`, writes nothing, and the handler was
+    // refused; a walrus in an f-string's field writes.
+    test.for([
+        ['a string', `<button onclick={lambda: show('|__assign("open", 1)')}>x</button>`, false],
+        ['a name', '<button onclick={lambda: record__assign("open", open)}>x</button>', false],
+        ['an f-string field', '<button onclick={lambda: show(f"{(open := 1)}")}>x</button>', true]
+    ])('the text of a write to a markup name, in %s, is refused only where it writes', ([, handler, refused]) => {
+        const run = () => rewrite(`{open = False}${handler}`);
+
+        if (refused) expect(run).toThrow(/declared by the markup/);
+        else expect(run).not.toThrow();
+    });
+
     test('and still writes one the script owns', () => {
         expect(rewrite('<button onclick={(open := not open)}>x</button>').out).toContain(
             '__event('
