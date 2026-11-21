@@ -10,7 +10,7 @@
 // each conversion runs the getter as many times as it does, and no more.
 import { test, expect } from 'vitest';
 import { plainData, pyData } from '../src/lib/bridge.js';
-import { to_json, urlencode } from '../src/lib/helpers.js';
+import { to_json, urlencode } from 'brylters';
 
 // A record with a getter `ob_type` that counts its runs, hidden or enumerable,
 // and one that throws.

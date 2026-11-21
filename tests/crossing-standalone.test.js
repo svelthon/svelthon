@@ -93,6 +93,6 @@ test('at run time, nothing of Svelthon touches the engine', () => {
                 .map(([where, code]) => `${where}: ${code.trim()}`)
         );
 
-    expect(files).toEqual(expect.arrayContaining([...COMPILER, 'bridge.js', 'helpers.js']));
+    expect(files).toEqual(expect.arrayContaining([...COMPILER, 'bridge.js']));
     expect(touching).toEqual([]);
 });

@@ -2014,9 +2014,11 @@ runtime for JavaScript frameworks, which holds the crossing between Python and
 JavaScript, and which Svelthon reaches through its one entry, `bryntime`. The
 engine is **Bryvend**, Brython with its fixes, started where it is imported, on
 which Bryntime runs and from which **Brycomp**, the compiler, loads the parsing
-chain, `bryvend/compiler`. Until they are published, the three are installed
-from checkouts beside this one, `../bryntime`, `../bryve` and `../bryc`. Which
-engine ships, built from what and with which repairs, is Bryvend's to say.
+chain, `bryvend/compiler`. The template filters, `date`, `from_now`, `slugify`,
+`strip_tags`, `urlencode`, `to_json` and `from_json`, are **Brylters**, the
+Brython filters for JavaScript frameworks, to which Svelthon hands the text its
+templates show of a value. Which engine ships, built from what and with which
+repairs, is Bryvend's to say.
 
 **And it is the only Python that ships.** No stdlib module travels with
 Svelthon, `sys` included: a stdlib exists so that an author can `import`

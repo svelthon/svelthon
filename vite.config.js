@@ -1,8 +1,5 @@
 import { defineConfig, configDefaults } from 'vitest/config';
-import { searchForWorkspaceRoot } from 'vite';
 import { svelte, vitePreprocess } from '@sveltejs/vite-plugin-svelte';
-import { realpathSync } from 'node:fs';
-import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { python, svelthon, compileOptionsFor } from './src/lib/svelthon.js';
 import { demoStats } from './demo/stats.js';
@@ -56,19 +53,10 @@ export default defineConfig({
     // The dev server watches the tree for the edits it reloads, and probes
     // archive thousands of files under `tests/scratch`, which no page serves:
     // watched, they ran the system out of file watchers (`ENOSPC`) and the
-    // server died before the first edit.
-    //
-    // And it serves Bryntime, Bryc and Bryve where the packages really are:
-    // installed from checkouts beside this one, each is a link Vite follows out
-    // of the project, whose files it then refused to serve, every page at a 403.
+    // server died before the first edit. What it serves of the packages
+    // Svelthon brings, the plugin says (`served`).
     server: {
-        watch: { ignored: ['**/tests/scratch/**'] },
-        fs: {
-            allow: [
-                searchForWorkspaceRoot(process.cwd()),
-                ...['bryntime', 'bryc', 'bryve'].map((name) => realpathSync(dirname(fileURLToPath(import.meta.resolve(`${name}/package.json`)))))
-            ]
-        }
+        watch: { ignored: ['**/tests/scratch/**'] }
     },
 
     // The demo's pages, served under `/demo/`; the two pages at the root are

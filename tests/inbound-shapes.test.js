@@ -22,7 +22,7 @@ import {
     python_mapping_json
 } from './fixtures/inbound_shapes.py';
 import { plainData } from '../src/lib/bridge.js';
-import { to_json } from '../src/lib/helpers.js';
+import { to_json } from 'brylters';
 
 describe('to_py on a value that is already Python', () => {
     test('hands back the same object', () => {

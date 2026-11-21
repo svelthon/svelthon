@@ -2089,10 +2089,12 @@ runtime Brython pour les frameworks JavaScript, qui tient la traversée entre
 Python et JavaScript, que Svelthon atteint par sa seule entrée, `bryntime`. Le
 moteur est **Bryvend**, Brython et ses réparations, démarré là où il est
 importé, sur lequel Bryntime tourne et dont **Brycomp**, le compilateur, charge
-la chaîne d'analyse, `bryvend/compiler`. Tant qu'ils ne sont pas publiés, les
-trois s'installent depuis des dépôts posés à côté de celui-ci, `../bryntime`,
-`../bryve` et `../bryc`. Quel moteur est livré, construit depuis quoi et avec
-quelles réparations, c'est à Bryvend de le dire.
+la chaîne d'analyse, `bryvend/compiler`. Les filtres de gabarit, `date`,
+`from_now`, `slugify`, `strip_tags`, `urlencode`, `to_json` et `from_json`,
+sont ceux de **Brylters**, les filtres Brython pour les frameworks JavaScript,
+à qui Svelthon passe le texte que ses gabarits montrent d'une valeur. Quel
+moteur est livré, construit depuis quoi et avec quelles réparations, c'est à
+Bryvend de le dire.
 
 **Et c'est le seul Python livré.** Aucun module de la stdlib ne voyage avec
 Svelthon, `sys` compris : une stdlib existe pour qu'un auteur puisse `import`

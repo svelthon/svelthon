@@ -331,6 +331,34 @@ describe('the plugin resolves what Vite cannot', () => {
         expect(plugin.config().ssr.noExternal).toContain('svelthon');
     });
 
+    // And it serves the packages Svelthon brings where they really are, beside
+    // what Vite serves for the root it settled on: a list given before, of the
+    // root known then, left the application's own files refused when a later
+    // plugin chose the root. Each folder is a workspace of its own, wherever the
+    // temporary folder lies: under a project, Vite serves that project for both.
+    test('the packages it brings are served, and the root a later plugin chose', async () => {
+        const { resolveConfig } = await import('vite');
+        const launcher = mkdtempSync(join(tmpdir(), 'svelthon-launcher-'));
+        const consumer = mkdtempSync(join(tmpdir(), 'svelthon-consumer-'));
+        const late = { name: 'late-root', config: () => ({ root: consumer }) };
+
+        try {
+            for (const folder of [launcher, consumer]) writeFileSync(join(folder, 'package.json'), '{ "workspaces": [] }');
+
+            const config = await resolveConfig(
+                { configFile: false, root: launcher, logLevel: 'silent', plugins: [svelthon(), late] },
+                'serve'
+            );
+
+            expect(config.root).toBe(consumer);
+            expect(config.server.fs.allow).toContain(consumer);
+            expect(config.server.fs.allow).toContain(realpathSync(resolve('node_modules/brylters')));
+        } finally {
+            rmSync(launcher, { recursive: true, force: true });
+            rmSync(consumer, { recursive: true, force: true });
+        }
+    });
+
     // A `.py` reached by a link is the file the link leads to, as Vite resolves
     // a file unless told to keep links: taken by its two paths, one file was
     // two of one Python name, and its second import was refused as a clash.

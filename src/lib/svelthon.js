@@ -2039,6 +2039,23 @@ const isReactive = (file) => file.endsWith('.svelte.py');
 // is where this departs from CPython.
 const isRemote = (file) => /[/.]remote\.py$/.test(file);
 
+// Svelthon and the packages it brings, where they really are. Installed from
+// checkouts beside the application, each is a link Vite follows out of the
+// project, whose files it then refused to serve, every page at a 403, unless
+// the application listed each of them; installed from the registry, they are
+// inside the project already.
+const served = () => {
+    const own = fileURLToPath(new URL('../..', import.meta.url));
+
+    return [
+        realpathSync(own),
+        ...Object.keys(JSON.parse(readFileSync(resolve(own, 'package.json'), 'utf8')).dependencies ?? {})
+            .map((name) => resolve(own, 'node_modules', name))
+            .filter((path) => existsSync(path))
+            .map((path) => realpathSync(path))
+    ];
+};
+
 // The Vite plugin that serves those modules.
 export function svelthon(options = {}) {
     const isVirtual = (id) => id.startsWith(VIRTUAL_PREFIX);
@@ -2341,6 +2358,13 @@ export function svelthon(options = {}) {
         configResolved(config) {
             routes = config.root;
             preserveSymlinks = config.resolve?.preserveSymlinks === true;
+
+            // Svelthon and the packages it brings served (`served`), added to
+            // what Vite serves for the root it settled on, the application's
+            // list or its workspace: given in `config()`, the list held the root
+            // known then, and a plugin choosing the root later had the
+            // application's own files refused.
+            config.server?.fs?.allow?.push(...served());
 
             const app = [config.resolve?.alias ?? []].flat().find((one) => one.find === '$app')?.replacement;
 

@@ -27,7 +27,7 @@ import {
     strip_tags,
     to_json,
     urlencode
-} from '../src/lib/helpers.js';
+} from 'brylters';
 // The calls are written in Python, which is where the helper is called from.
 import { says, control, keeps_an_instance, coroutine_says } from './fixtures/to_json_calls.py';
 import { shapes } from './fixtures/json_space.py';

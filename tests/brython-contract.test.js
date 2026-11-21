@@ -51,10 +51,10 @@ for (const file of files) {
 describe('BRYTHON.md names every member the code reaches for', () => {
     test('there are members to check at all', () => {
         // The measurement above found 28, 11 once Bryc had left with the rest,
-        // and 9 once a group was keyed by its literals as written. A regex that
-        // stopped matching would otherwise make this file pass by finding
-        // nothing.
-        expect(used.size).toBeGreaterThanOrEqual(9);
+        // 9 once a group was keyed by its literals as written, and 8 once the
+        // template filters had left for Brylters. A regex that stopped matching
+        // would otherwise make this file pass by finding nothing.
+        expect(used.size).toBeGreaterThanOrEqual(8);
     });
 
     test.for([...used].sort().map((member) => [member]))('%s', ([member]) => {

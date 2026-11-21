@@ -73,6 +73,7 @@
   "dependencies": {
     "@jridgewell/trace-mapping": "^0.3.31",
     "bryc": "file:../bryc",
+    "brylters": "file:../brylters",
     "bryntime": "file:../bryntime",
     "bryve": "file:../bryve",
     "esm-env": "^1.2.2"

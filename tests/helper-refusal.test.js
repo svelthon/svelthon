@@ -3,7 +3,7 @@ import { mount, flushSync } from './mounted.js';
 
 import HelperRefusal from './fixtures/HelperRefusal.svelte';
 import RefusalCaught from './fixtures/RefusalCaught.svelte';
-import { date, from_now } from '../src/lib/helpers.js';
+import { date, from_now } from 'brylters';
 import { pyError, plainData, NONE } from '../src/lib/bridge.js';
 
 // The eighteen refusals in `compile.js` and `markup.js` all open with

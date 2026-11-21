@@ -1060,7 +1060,6 @@ const RUNTIME = {
     templateFrom: '__templateFrom',
     fileLines: '__fileLines',
     jsCall: '__jsCall',
-    ticking: '__ticking',
     pyBind: '__pyBind',
     plainScalar: '__plainScalar',
     storeMember: '__storeMember',
@@ -2267,7 +2266,7 @@ function preamble(c) {
             'bind', '__pybridge', 'jsGlobal', 'track', 'changesNothing', 'follow', 'followOwn', 'SHAPING', 'pyError',
             'pyDerive', 'pyRead', 'pyEvent', 'pyAttach', 'plainData', 'pyArg', 'pyData', 'pyComponent', 'pyExpression',
             'jsCall',
-            'ticking', 'pyBind', 'NONE', 'helpers',
+            'pyBind', 'NONE', 'helpers',
             ...(c.plainProps.includes('data') && routeComponent(c.source) ? ['routeData'] : []),
             ...(c.plainProps.some((one) => !c.written.has(one)) ? ['readOnlyProp'] : []),
             'directiveAction', 'directiveTransition', 'directiveAnimate',
@@ -3004,7 +3003,7 @@ function plainPreamble(c) {
         `import { init as __init } from ${JSON.stringify(c.body)};`,
         `import { ${runtimeAliases(HOST, [
             'bind', '__pybridge', 'jsGlobal', 'pyCall', 'pyError', 'plainData', 'pyArg',
-            'pyData', 'pyExport', 'routeLoad', 'routeServerLoad', 'jsServerLoad', 'routeActions', 'jsCall', 'ticking', 'pyBind', 'NONE', 'helpers',
+            'pyData', 'pyExport', 'routeLoad', 'routeServerLoad', 'jsServerLoad', 'routeActions', 'jsCall', 'pyBind', 'NONE', 'helpers',
             'pythonModule', 'group', 'invoke', 'liveExport', 'readOnlyImport'
         ])} } from 'svelthon/bridge';`,
         ...c.jsImports.map((one) => jsImportLine(HOST, one)),

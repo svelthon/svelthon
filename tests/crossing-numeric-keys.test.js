@@ -17,7 +17,7 @@
 // says nothing about the questions it does not ask.
 import { test, expect, describe } from 'vitest';
 import { plainData, pyExport } from '../src/lib/bridge.js';
-import { to_json } from '../src/lib/helpers.js';
+import { to_json } from 'brylters';
 
 const $B = globalThis.__BRYTHON__;
 const _b_ = $B.builtins;

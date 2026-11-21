@@ -12,7 +12,7 @@ import { test, expect } from 'vitest';
 import '../src/lib/compile.js';
 import { pyData, pyExpression } from '../src/lib/bridge.js';
 import { toJs, toPython } from 'bryntime';
-import { to_json } from '../src/lib/helpers.js';
+import { to_json } from 'brylters';
 import { describeJs } from './crossing-describe.js';
 
 const $B = globalThis.__BRYTHON__;

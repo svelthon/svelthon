@@ -4,7 +4,7 @@
 // whose `call` answered 99 turned an awaited 0.5 into 99. Each is held against
 // the native object doing the same.
 import { test, expect } from 'vitest';
-import { to_json } from '../src/lib/helpers.js';
+import { to_json } from 'brylters';
 import { values, empty, passing, fresh } from './fixtures/shadowed_call.py';
 
 const shadowed = (fn, call) => Object.assign(fn, { call });

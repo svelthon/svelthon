@@ -2,7 +2,7 @@ import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import Dates from './fixtures/Dates.svelte';
 import ReactiveDateHost from './fixtures/ReactiveDateHost.svelte';
-import { date, from_now, urlencode } from '../src/lib/helpers.js';
+import { date, from_now, urlencode } from 'brylters';
 
 // A `SvelteDate` changed in place by its parent: the helpers read its instant
 // through its own `getTime`, which is what subscribes the page, where reading

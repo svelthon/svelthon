@@ -2,6 +2,7 @@
 // door, the package: it starts the engine, and installs the mutation tracking
 // on it, before this module runs.
 import * as core from 'bryntime';
+import { host as brylters } from 'brylters';
 import { untrack } from 'svelte';
 import { createSubscriber } from 'svelte/reactivity';
 import BROWSER from 'esm-env/browser';
@@ -308,14 +309,14 @@ doors.out('spread-python', spreadPython);
 // generated module's own scope, where the generated code read it in its place.
 export const jsGlobal = globalThis;
 
-// The template helpers, re-exported so a generated component has one specifier
-// to import rather than two, and so every satellite repo keeps the single
-// `svelthon/bridge` alias it already resolves.
-//
-// The cycle is deliberate and safe: `helpers.js` reads `NONE`, `__pybridge`,
-// `ticking`, `plainData` and `pyData` from here, but only from inside function
-// bodies, so nothing is touched while either module is still evaluating.
-export { helpers } from './helpers.js';
+// The template filters, Brylters', re-exported so a generated component has one
+// specifier to import rather than two, and so every satellite repo keeps the
+// single `svelthon/bridge` alias it already resolves. Handed the text a template
+// shows of a value, which a filter starts from: `slugify(None)` is empty, as
+// `{x}` is.
+export { helpers } from 'brylters';
+
+brylters.str = (value) => __pybridge.str(value);
 
 // Svelte interpolates with String(), and None is an object, so it would render
 // "[object Object]". Non-enumerable so nothing that walks the singleton's
@@ -2283,17 +2284,6 @@ const routeSnapshot = (value, declared) => {
         // the event found nothing of it.
         ['js', typeof value.untrack === 'function' ? loadEvent(value) : value]
     ]);
-};
-
-// What to call a Python function in a message: its qualified name as
-// `$function_infos` records it, `Box.save` where `__name__` says `save`.
-//
-// Null for anything Python did not declare, so a caller keeps whatever it shows
-// of a value it cannot name.
-export const pyName = (value) => {
-    const found = declared(value);
-
-    return found === null ? null : found.where.split(' — ')[0];
 };
 
 // A Python function seen from JavaScript, wrapped by reading its own signature
@@ -4732,71 +4722,3 @@ export function group(node, given) {
         }
     };
 }
-
-// A shared clock, for the values that go stale on their own. `from_now` is the
-// one, and Django never needed it because a rendered page is finished. A
-// component stays on screen, so "3 minutes ago" has to become "4 minutes ago"
-// without anyone touching the page.
-//
-// One timer for the whole document, not one per date: every reader registers
-// through the same subscriber, so a tick re-runs exactly the blocks that read a
-// relative time and nothing else. `createSubscriber` is a no-op on the server,
-// which is what stops a render from arming anything.
-//
-// The delay is what the *display* needs, not a fixed beat: a value shown in
-// seconds asks to be woken in a second, one shown in days asks for a day. So it
-// slows down on its own as the dates age, and the cap keeps a timer that would
-// otherwise be set for months down to an hour, which never sleeps, and costs
-// nothing.
-const AT_MOST = 3600 * 1000;
-
-let announce = null;
-let armed = null;
-let wanted = Infinity;
-
-// `createSubscriber` hands `update` to a *render effect*, so it arrives on the
-// next flush rather than on the line after the call. The delay asked for is
-// therefore recorded first and armed whenever arming becomes possible: once
-// here, once from `start`. Getting that backwards leaves the timer unset and the
-// value frozen, with nothing to show for it.
-const clock = createSubscriber((update) => {
-    announce = update;
-    arm();
-
-    return () => {
-        announce = null;
-        if (armed) clearTimeout(armed.timer);
-        armed = null;
-        wanted = Infinity;
-    };
-});
-
-function arm() {
-    if (announce === null || wanted === Infinity) return;
-
-    const at = Date.now() + wanted;
-
-    // Keep the soonest of everything asked for since the last tick.
-    if (armed && armed.at <= at) return;
-    if (armed) clearTimeout(armed.timer);
-
-    armed = {
-        at,
-        timer: setTimeout(() => {
-            armed = null;
-            wanted = Infinity;
-            announce?.();
-        }, wanted)
-    };
-}
-
-export function ticking(after) {
-    // Registers the dependency: the block calling this re-runs on the next tick.
-    clock();
-
-    if (!(after > 0)) return;
-
-    wanted = Math.min(wanted, after, AT_MOST);
-    arm();
-}
-
