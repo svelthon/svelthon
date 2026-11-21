@@ -12,6 +12,10 @@ import HooksModule from './fixtures/HooksModule.svelte';
 import HooksNative from './fixtures/HooksNative.svelte';
 import HooksKeyed from './fixtures/HooksKeyed.svelte';
 import HooksComputedKey from './fixtures/HooksComputedKey.svelte';
+import HooksFunctionGlobals from './fixtures/HooksFunctionGlobals.svelte';
+import HooksModuleVars from './fixtures/HooksModuleVars.svelte';
+import HooksModuleLocals from './fixtures/HooksModuleLocals.svelte';
+import HooksBuiltinsGlobals from './fixtures/HooksBuiltinsGlobals.svelte';
 import { on_mount, on_destroy } from './fixtures/lifecycle_hooks.js';
 import { events } from './fixtures/lifecycle_log.js';
 
@@ -50,7 +54,12 @@ test.for([
     // Bound at its key of `globals()`, which no statement names, or at a key
     // computed: neither hook ran, and nothing said so.
     ['bound at its key of globals()', HooksKeyed, {}],
-    ['bound at a key computed', HooksComputedKey, {}]
+    ['bound at a key computed', HooksComputedKey, {}],
+    // Or through another door to the namespace, as a prop may be written.
+    ['bound through a function’s __globals__', HooksFunctionGlobals, {}],
+    ['bound through vars()', HooksModuleVars, {}],
+    ['bound through locals()', HooksModuleLocals, {}],
+    ['bound through builtins.globals()', HooksBuiltinsGlobals, {}]
 ])('a hook %s runs as Svelte’s does', ([, Component, props]) => {
     const run = (Component, props) => {
         events.length = 0;
