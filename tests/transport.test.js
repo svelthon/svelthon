@@ -148,6 +148,40 @@ test('a JavaScript node writing the name of a Python key adds its own', async ()
     expect(String(describe(routeData({ ...served, 1: 'from-js' })))).toBe("dict:{1: 'layout-int', 'shared': 'layout', 'layout_field': 'layout only', '1': 'from-js'}");
 });
 
+// And a `load()` of JavaScript's that leaves a Python key out of what it
+// returns: its copy carries the symbol that says where the values came from,
+// and the key left out came back, `"omitted" in data` true where Svelte's page
+// saw it gone. As the server holds the node's data and as the browser reads it.
+test.for([
+    ['by destructuring', ({ layout_field, ...rest }) => rest, "dict:{1: 'layout-int', 'shared': 'layout'}"],
+    ['by deleting it from a copy', (data) => {
+        const copy = { ...data };
+
+        delete copy.shared;
+        return copy;
+    }, "dict:{1: 'layout-int', 'layout_field': 'layout only'}"],
+    ['under another name', ({ layout_field, ...rest }) => ({ ...rest, renamed: layout_field }), "dict:{1: 'layout-int', 'shared': 'layout', 'renamed': 'layout only'}"]
+])('a key a JavaScript load() leaves out is gone, %s', async ([, project, expected]) => {
+    const served = await routeServerLoad(merge_layout, 'layout — merge')({ kind: 'int-str' });
+
+    expect([project(served), project(viaJson(served))].map((data) => String(describe(routeData(data))))).toEqual([expected, expected]);
+});
+
+// And left out by a page whose layout gives a key of the same name: the merge
+// holds the layout's, and the page's came back over it, `data[1] == "page"`
+// where Python's merge of what each returned has `data["1"]` alone, and the
+// layout's `2.0` was read as the page's `1`.
+test.for([
+    ['str-int', ({ 1: left, ...rest }) => rest, "dict:{'1': 'layout-string', 'shared': 'page', 'layout_field': 'layout only', 'page_field': 'page only'}"],
+    ['float-other', ({ score, ...rest }) => rest, "dict:{'score': 2.0}"]
+])('a key a page leaves out under its layout’s name is the layout’s: %s', async ([kind, project, expected]) => {
+    const event = { kind };
+    const [served, page] = [await routeServerLoad(merge_layout, 'layout — merge')(event), await routeServerLoad(merge_page, 'page — merge')(event)];
+    const merged = [{ ...served, ...project(page) }, { ...viaJson(served), ...project(viaScript({ type: 'data', data: page }).data) }];
+
+    expect(merged.map((data) => String(describe(routeData(data))))).toEqual([expected, expected]);
+});
+
 // A `load()` of JavaScript's returning Python values that share a list, at any
 // depth, in an array or a Map: written whole from the outermost container that
 // holds two, SvelteKit's envelope aside, they share it in the browser too, and

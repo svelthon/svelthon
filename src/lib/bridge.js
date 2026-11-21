@@ -3065,14 +3065,30 @@ export const routeData = (data) => {
     // where the last one's name took the other's place. Each write, and not a
     // `Map` of them, which tells `True` and `1` apart: the page's `True` went to
     // the root's place, and the nested layout's `1`, after it, was the last.
+    //
+    // Only what the merged object still holds: a `load()` of JavaScript's that
+    // leaves a key out returns a copy, which carries the symbol along, and the
+    // key left out came back. Left out with an earlier node's key of its name in
+    // the merge, it is told by its value, which is not the one the merge holds
+    // while that earlier key's is: past the last write of a name the merge
+    // holds the value of, a write of that name was left out. One leaving out
+    // the very value an earlier node gives leaves the merge as keeping it
+    // would, and is read as kept.
+    const entries = origins(data).flatMap((origin) => origin.entries());
+    const shown = new Map();
+
+    entries.forEach(([name, , , js], at) => {
+        if (Object.hasOwn(data, name) && Object.is(data[name], js)) shown.set(name, at);
+    });
+
     const named = new Map();
     const writes = [];
 
-    for (const origin of origins(data)) {
-        for (const [name, key, value, js] of origin.entries()) {
-            writes.push([key, value]);
-            named.set(name, js);
-        }
+    for (const [at, [name, key, value, js]] of entries.entries()) {
+        if (!Object.hasOwn(data, name) || at > (shown.get(name) ?? Infinity)) continue;
+
+        writes.push([key, value]);
+        named.set(name, js);
     }
 
     // And what a node in JavaScript wrote, a string key, after them.

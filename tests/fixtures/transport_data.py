@@ -141,6 +141,7 @@ MERGED = {
     "int-str": ({1: "layout-int", "shared": "layout", "layout_field": "layout only"}, {"shared": "page", "1": "page-string", "page_field": "page only"}),
     "str-int": ({"1": "layout-string", "shared": "layout", "layout_field": "layout only"}, {"shared": "page", 1: "page-int", "page_field": "page only"}),
     "float-int": ({1.0: "layout"}, {1: "page"}),
+    "float-other": ({"score": 2.0}, {"score": 1}),
     "bool-int-bool": ({True: "root"}, {1: "section"}, {True: "page"}),
     "int-bool-int": ({1: "root"}, {True: "section"}, {1: "page"}),
 }
