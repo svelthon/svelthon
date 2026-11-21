@@ -847,7 +847,7 @@ export const attributesOf = (text) => {
     return found;
 };
 
-const declaresPython = (text) => attributesOf(text).get('lang') === 'python';
+export const declaresPython = (text) => attributesOf(text).get('lang') === 'python';
 
 // Where a file's Python script block begins, where its body does, past the
 // tag's own `>`, where the body ends, at the tag that really closes it and not

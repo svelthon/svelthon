@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 import {
     overMarkup,
+    declaresPython,
     pythonScript,
     strayPythonScript,
     pythonExpressions,
@@ -1877,12 +1878,17 @@ function eagerModule(file) {
 // them (Vite's `htmlTypeOnLoadCallback`), and a Python one is handed over as the
 // modules its `importjs` lines import (`scannedScript`).
 //
+// Which scripts get a number is read with Vite's own patterns for `type` and
+// `src`, or a number would name another script; whether that script is Python,
+// with the reading of every other site (`declaresPython`): Vite's pattern took
+// the `lang` of a `data-lang`, or a `lang='js'` inside another attribute's value.
+//
 // Vite 8 scans with Rolldown, under `virtual-module:`; Vite 7 with esbuild, in
 // its `script` namespace, where a plugin of the config is asked before Vite's
 // own loader and hands the script itself, read off the file.
 const SCANNED_SCRIPT = /^(?:virtual-module:)?(.*\.svelte)\?id=(\d+)$/;
 const SCRIPT_TAG = /(<script(?:\s+[a-z_:][-\w:]*(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^"'<>=\s]+))?)*\s*>)(.*?)<\/script>/gis;
-const attributeOf = (tag, name) => {
+const viteAttribute = (tag, name) => {
     const found = new RegExp(`\\b${name}\\s*=\\s*(?:"([^"]+)"|'([^']+)'|([^\\s'">]+))`, 'i').exec(tag);
 
     return found && (found[1] || found[2] || found[3]);
@@ -1896,11 +1902,11 @@ const scannedPython = (id) => {
     if (found === null) return null;
 
     for (const [, open, content] of readFileSync(found[1], 'utf8').replace(/<!--.*?-->/gs, '<!---->').matchAll(SCRIPT_TAG)) {
-        const type = attributeOf(open, 'type');
+        const type = viteAttribute(open, 'type');
 
         if (type && !(type.includes('javascript') || type.includes('ecmascript') || type === 'module')) continue;
-        if (attributeOf(open, 'src') || !content.trim()) continue;
-        if (at++ === Number(found[2])) return attributeOf(open, 'lang') === 'python' ? content : null;
+        if (viteAttribute(open, 'src') || !content.trim()) continue;
+        if (at++ === Number(found[2])) return declaresPython(open) ? content : null;
     }
 
     return null;

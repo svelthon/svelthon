@@ -9,8 +9,9 @@
 // `esm-env` at the first visit and reloaded the page.
 import { test, expect } from 'vitest';
 import { fileURLToPath } from 'node:url';
-import { readFileSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { readFileSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 import { svelthon } from '../src/lib/svelthon.js';
 
 const file = fileURLToPath(new URL('./fixtures/ScannedScripts.svelte', import.meta.url));
@@ -25,6 +26,35 @@ test('the scanner is handed what a Python script imports from JavaScript', () =>
 
     expect(scanned(0)).toBe(null);
     expect(scanned(1)).toEqual({ code: 'import "svelthon/bridge";\nimport "svelte/motion";\nimport "./Child.svelte";', moduleType: 'js' });
+});
+
+// Whether a script is Python is read as every other site reads it, `lang` an
+// attribute of its own. Vite's pattern took the `lang` of a `data-lang`, or a
+// `lang='js'` in another attribute's value: the cold start skipped
+// pre-bundling, or a JavaScript script went over as Python and its imports were
+// lost. Which scripts get a number stays Vite's reading, `data-type` included,
+// or the number names another script.
+const PYTHON = '\n    importjs { tweened } from "svelte/motion"\n';
+const JAVASCRIPT = "\n    import { cubicOut } from 'svelte/easing';\n";
+const IMPORTS = { code: 'import "svelthon/bridge";\nimport "svelte/motion";', moduleType: 'js' };
+
+test.each([
+    [`<script data-lang="js" lang="python">${PYTHON}</script>`, PYTHON, IMPORTS],
+    [`<script data-note="lang='js'" lang="python">${PYTHON}</script>`, PYTHON, IMPORTS],
+    [`<script generics="lang='js'" lang="python">${PYTHON}</script>`, PYTHON, IMPORTS],
+    [`<script data-note="lang='python'">${JAVASCRIPT}</script>`, JAVASCRIPT, null],
+    [`<script data-type="text/x" lang="python">${PYTHON}</script>\n<script module>${JAVASCRIPT}</script>`, JAVASCRIPT, null]
+])('the script Vite numbers 0 in %s', (source, script, expected) => {
+    const [scan] = configured({ viteVersion: '8.2.1', rolldownVersion: '1.0.0' }).rolldownOptions.plugins;
+    const dir = mkdtempSync(join(tmpdir(), 'svelthon-scan-'));
+    const component = join(dir, 'App.svelte');
+
+    try {
+        writeFileSync(component, source);
+        expect(scan.transform(script, `virtual-module:${component}?id=0`)).toEqual(expected);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
 });
 
 // Vite 7 scans with esbuild and reads no `rolldownOptions`: the error was
