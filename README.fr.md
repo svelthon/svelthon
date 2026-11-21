@@ -4,7 +4,7 @@
 
 > Version française. La documentation de référence est le [README anglais](README.md).
 
-**Des composants Svelte en Python.**
+**Svelte et SvelteKit en Python.**
 
 ```svelte
 <script lang="python">
@@ -1919,7 +1919,7 @@ rangée d'un `test.for`), aucun échec attendu :
   contrôle et frames. Chaque valeur attendue a été produite par CPython 3.12 en
   exécutant le code du composant tel quel, jamais écrite à la main. Brython
   reproduit CPython sur **chaque point** ;
-- build de production : **285 Ko gzip**, runtime Brython compris : ce que la
+- build de production : **286 Ko gzip**, runtime Brython compris : ce que la
   page de démo charge, son script, les modules qu'elle précharge et ses styles,
   mesuré après chaque build par `scripts/build-size.mjs`.
 
@@ -2021,7 +2021,7 @@ WebAssembly.
 où Svelte lit une valeur JavaScript. Moins de 4 ms pour 500 lignes, ce qu'une
 page ne ressent pas.
 
-L'autre prix est au chargement : 285 Ko gzip, runtime Brython compris, et
+L'autre prix est au chargement : 286 Ko gzip, runtime Brython compris, et
 **0,12 s jusqu'au contenu de la démo** en production, cache vide ; 0,33 s avec
 le processeur ralenti quatre fois, comme celui d'un portable modeste. Payé une
 fois par session, pas par page, puisque l'application ne recharge jamais.
