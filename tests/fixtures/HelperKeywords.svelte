@@ -24,9 +24,6 @@ class Keywords:
 CALLS = {
     "json-positional": lambda: to_json(rows, 2),
     "json-keyword": lambda: to_json(rows, indent=2),
-    "batch-positional": lambda: batch(rows, 2),
-    "batch-keyword": lambda: batch(rows, n=2),
-    "batch-fill": lambda: batch(rows, n=3, fill=0),
     "date-keyword": lambda: date("2026-09-20", locale="en-GB"),
     # Two languages for one instant, read with the test's clock fixed.
     "from_now-english": lambda: from_now("2026-09-20", locale="en-GB"),
@@ -50,7 +47,6 @@ CALLS = {
     # keyword, and the extra word was dropped by a function that had nowhere to
     # put it.
     "by both": lambda: to_json(rows, 2, indent=4),
-    "size by both": lambda: batch(rows, 2, n=3),
     "twice by spread": lambda: to_json(rows, indent=2, **{"indent": 4}),
     "too many": lambda: slugify("first", "second"),
     "too many of two": lambda: to_json(rows, 2, 4),
@@ -59,8 +55,6 @@ CALLS = {
     # as absence, so a call whose only fault is a missing argument answered.
     "nothing at all": lambda: slugify(),
     "only the optional": lambda: to_json(indent=2),
-    "one of two": lambda: batch(rows),
-    "neither of two": lambda: batch(),
     # And the witnesses: a position that was filled, whatever it was filled
     # with. `None`, `False`, `0` and the empty string are values an author
     # writes on purpose, and `to_json(None)` is `null` and means it.

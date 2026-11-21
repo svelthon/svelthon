@@ -9,7 +9,7 @@
 // question is not "is this reactive" but "did the author take this word":
 //
 //   1. an injected helper is skipped where the author has a name of that
-//      spelling. `date`, `batch`, `js` and eighteen others;
+//      spelling. `date`, `js` and eighteen others;
 //   2. a JavaScript name from `<script module>` is published the same way;
 //   3. `refuseLocked` refuses the six words of the dialect outright.
 //

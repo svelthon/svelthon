@@ -3,12 +3,12 @@ import { mount, flushSync } from './mounted.js';
 
 import HelperRefusal from './fixtures/HelperRefusal.svelte';
 import RefusalCaught from './fixtures/RefusalCaught.svelte';
-import { batch, date, from_now } from '../src/lib/helpers.js';
+import { date, from_now } from '../src/lib/helpers.js';
 import { pyError, plainData, NONE } from '../src/lib/bridge.js';
 
 // The eighteen refusals in `compile.js` and `markup.js` all open with
-// `svelthon — ` and all name a file. The three in `helpers.js` could do neither,
-// and they are the three a beginner meets first: `{date(row.when)}` on a column
+// `svelthon — ` and all name a file. The two in `helpers.js` could do neither,
+// and they are the two a beginner meets first: `{date(row.when)}` on a column
 // that is sometimes empty is the ordinary way to reach one.
 //
 // They cannot know the file: they run at render time, inside a compiled
@@ -34,8 +34,7 @@ describe('a helper refuses in the project’s own dialect', () => {
 
     test.for([
         ['date', 'show_date', /date\(\): .* is not a date/],
-        ['from_now', 'show_from_now', /from_now\(\): .* is not a date/],
-        ['batch', 'show_batch', /batch\(\): n must be an integer/]
+        ['from_now', 'show_from_now', /from_now\(\): .* is not a date/]
     ])('%s says what is wrong, with the prefix and the position', ([, call, sentence]) => {
         const component = setup();
 
@@ -89,7 +88,7 @@ describe('and the mark is what makes that possible', () => {
     });
 
     test('a helper called outside a component still says what is wrong', () => {
-        expect(() => batch([1], 0)).toThrow(/^svelthon — batch\(\): n must be an integer/);
+        expect(() => date('soon')).toThrow(/^svelthon — date\(\): "soon" is not a date/);
     });
 
     // The crossing signs a refusal where it makes it, with the name the host

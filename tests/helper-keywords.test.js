@@ -7,8 +7,7 @@
 // trailing object carrying `$kw`, an array whose first entry holds the literal
 // keywords and whose rest are the dicts a `**` spread contributed. Dropping it
 // was the worst of the three behaviours this project names — `to_json(rows,
-// indent=2)` wrote unindented JSON and said nothing, and `batch(rows, n=2)`
-// refused the author for a size they had just given.
+// indent=2)` wrote unindented JSON and said nothing.
 //
 // Measured through a mounted component rather than by handing the adapter a
 // `$kw` object: the shape is Brython's, and a test that builds it itself would
@@ -30,7 +29,6 @@ describe('an injected helper takes its arguments by name', () => {
         const read = setup();
 
         expect(read('json-keyword')).toBe(read('json-positional'));
-        expect(read('batch-keyword')).toBe(read('batch-positional'));
     });
 
     // The witness the comparison above cannot give: that both are the *right*
@@ -39,8 +37,6 @@ describe('an injected helper takes its arguments by name', () => {
         const read = setup();
 
         expect(read('json-keyword')).toContain('\n');
-        expect(read('batch-keyword')).toBe('[[1, 2], [3, 4]]');
-        expect(read('batch-fill')).toBe('[[1, 2, 3], [4, 0, 0]]');
     });
 
     test('a key that is a subclass of str names the argument by its value', () => {
@@ -108,11 +104,9 @@ describe('an injected helper takes its arguments by name', () => {
     // checked against `python3` on the same four spellings — and each was
     // silent: the keyword overwrote what position had put there, the spread
     // overwrote the keyword, and the extra word went to a function with nowhere
-    // to put it. `batch(rows, 2, n=3)` is the one that costs data: it grouped
-    // by three out of a call that asked for two.
+    // to put it.
     test.for([
         ['a parameter given by position and by name', 'by both', /multiple values for argument 'indent'/],
-        ['a size given twice', 'size by both', /multiple values for argument 'n'/],
         ['a keyword the spread repeats', 'twice by spread', /multiple values for argument 'indent'/],
         // CPython says how many a signature takes when every parameter is
         // required, and says the *range* when one carries a default. Both
@@ -130,13 +124,10 @@ describe('an injected helper takes its arguments by name', () => {
     // wrote `null`, both without a word. A call whose only fault is a missing
     // argument is a call the author wants to be told about.
     //
-    // CPython's wording again, and its way of listing the names: `'a'`, then
-    // `'a' and 'b'`. Checked against `python3`.
+    // CPython's wording again. Checked against `python3`.
     test.for([
         ['the only argument', 'nothing at all', /slugify\(\) missing 1 required positional argument: 'text'/],
-        ['the required one, the optional given', 'only the optional', /to_json\(\) missing 1 required positional argument: 'value'/],
-        ['the second of two', 'one of two', /batch\(\) missing 1 required positional argument: 'n'/],
-        ['both of two', 'neither of two', /batch\(\) missing 2 required positional arguments: 'xs' and 'n'/]
+        ['the required one, the optional given', 'only the optional', /to_json\(\) missing 1 required positional argument: 'value'/]
     ])('%s is refused', ([, what, says]) => {
         expect(setup()(what)).toMatch(says);
     });

@@ -34,8 +34,6 @@ import { walked, serialised, crossed, nested } from './fixtures/iterated_rows.py
 import IteratedRows from './fixtures/IteratedRows.svelte';
 import IteratedChild from './fixtures/IteratedChild.svelte';
 import ForeignRows from './fixtures/ForeignRows.svelte';
-import { batch } from '../src/lib/helpers.js';
-import { plainData } from '../src/lib/bridge.js';
 
 const render = (props) => {
     const target = document.body.appendChild(document.createElement('div'));
@@ -121,8 +119,8 @@ describe('a JavaScript iterable is walked too, and its errors stay its own', () 
     // — which is why the fallback beside it exists for almost nothing, and why
     // what it was really catching was **the author's own exception**. A
     // generator that threw on its second step read as *not Python's to convert*:
-    // the spent generator went back to Svelte, the loop rendered nothing, and
-    // `batch` answered `[]` with the message gone.
+    // the spent generator went back to Svelte, and the loop rendered nothing
+    // with the message gone.
     const rendered = (items) => {
         const target = document.body.appendChild(document.createElement('div'));
 
@@ -152,23 +150,14 @@ describe('a JavaScript iterable is walked too, and its errors stay its own', () 
     // A field spelled like the engine's mark, on an array this time. Read as a
     // class, the business string was handed to Brython, which tried to write a
     // slot on it: *Cannot create property 'tp_iter' on string 'business'*, a
-    // JavaScript accident where the author wrote `{#each rows}`. One cause, six
-    // crossings — the loop and the helper below, and four more the converters'
-    // own tests hold.
+    // JavaScript accident where the author wrote `{#each rows}`. One cause, five
+    // crossings — the loop below, and four more the converters' own tests hold.
     test('and one carrying a field spelled like the engine’s mark still renders', () => {
         const rows = [1, 2];
 
         rows.ob_type = 'business';
 
         expect(rendered(rows)).toBe('12');
-        expect(plainData(batch(rows, 1))).toEqual([[1], [2]]);
-    });
-
-    test('including through a helper, which used to answer an empty list', () => {
-        expect(() => batch(broken(), 2)).toThrow('iterator failure');
-        // The control: the same helper, the same shape, nothing raised. Read
-        // through the crossing, since `batch` answers in Python lists.
-        expect(plainData(batch((function* () { yield 1; yield 2; })(), 2))).toEqual([[1, 2]]);
     });
 });
 

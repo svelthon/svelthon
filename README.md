@@ -205,7 +205,6 @@ of that prefix in the same scope.
 | `to_py(value)` | *none*, the other way: a JavaScript value read as Python |
 | `to_json(value, indent=None)` | *none*, `to_js` with the dump attached, the pair of `from_json` |
 | `from_json(text)` | *none*, `to_py` with the parse attached |
-| `batch(xs, n, fill)` | *none*, a flat list grouped into rows of `n`, the last padded with `fill`, as Jinja's `\|batch` |
 | `date(value, style)` | *none*, a date read in the visitor's language, as Django's `\|date` |
 | `from_now(value)` | *none*, "3 days ago" or "in 2 hours", kept right as time passes |
 | `slugify(text)` | *none*, a title made into a URL segment, lowercased, every letter kept, accents included, and the rest a dash: `héllo-wörld`, where Django's `\|slugify` drops accents and punctuation |
@@ -1809,7 +1808,7 @@ so are the builtins a page cannot run: `eval`, `exec` and `compile`, which need
 a parser the runtime leaves out, `__import__` and `open`. A module is found by its file name alone: a
 subdirectory is not a package, so `from lib import models` is refused too, and
 `models.py` is imported as `import models` once `lib` is on `path`. Everything else a template needs is already a
-name: `to_json`, `from_json`, `batch`, `date`, `from_now`, `slugify`, `strip_tags`,
+name: `to_json`, `from_json`, `date`, `from_now`, `slugify`, `strip_tags`,
 `urlencode`, and `js` for the platform's own, `js.Math` and `js.Date`.
 
 `to_json` writes what JSON has a notation for and **refuses the rest by name**

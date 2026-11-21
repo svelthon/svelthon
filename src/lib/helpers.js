@@ -4,7 +4,7 @@
 // reference, `() => __helpers.date`, rather than a body.
 //
 // Why the generated script reaches them through one object rather than by name:
-// a component is free to call its own state `date` or `batch`, and an import of
+// a component is free to call its own state `date` or `slugify`, and an import of
 // that spelling would collide with the `let date = …` the compiler emits beside
 // it. `__helpers` carries the prefix that says "generated", the same convention
 // `__pybridge` and `__proto` follow.
@@ -501,46 +501,6 @@ export function from_json(text) {
 // methods would ask for the copy they make.
 const yielded = (value) => Array.from(__pybridge.seq(value));
 
-// Jinja's `|batch(3)`. A list of lists, not a lazy iterator: an `{#each}` reads
-// its rows again on every update, and an iterator would come back empty the
-// second time, silently, with the table simply gone.
-//
-// `fill` pads the last row. `None` there means *no padding*, not "pad with
-// None", the rule every helper follows, since None is an object and would
-// otherwise sail through an `!== undefined` test and be rendered as a cell.
-export function batch(xs, size, fill) {
-    // The same recognition, for the same reason: `Number.isInteger` asked of the
-    // object a Python `int` subclass is answers false, so the size is read
-    // through `written` first. An int past 2^53 is a `bigint` there, and an int
-    // all the same, and so is `True`, the int 1. The constraint below is this
-    // helper's own.
-    size = written(size);
-    if (typeof size === 'boolean') size = Number(size);
-
-    if (!(typeof size === 'bigint' || Number.isInteger(size)) || size < 1) {
-        throw refuse('batch(): n must be an integer of at least one');
-    }
-
-    const items = yielded(xs);
-    const padded = fill !== undefined && fill !== NONE;
-
-    // A padded row holds `size` items, which no JavaScript array can past this.
-    if (padded && size > 2 ** 32 - 1) throw refuse('batch(): n is too large to pad a row to');
-
-    // A row is never longer than the input when nothing pads it, so a larger
-    // size is that length, read without a `bigint` turned into a double.
-    const step = size > items.length ? Math.max(items.length, 1) : Number(size);
-    const out = [];
-
-    for (let at = 0; at < items.length; at += step) {
-        const row = items.slice(at, at + step);
-        if (padded) while (row.length < size) row.push(fill);
-        out.push(__pybridge.list(row));
-    }
-
-    return __pybridge.list(out);
-}
-
 // Django's `|date`, under Django's word, with the platform's behaviour behind
 // it. No format letters: `Intl` takes four styles and answers in the reader's
 // own language, which Django's codes never do.
@@ -863,8 +823,8 @@ export function urlencode(value) {
 }
 
 // **Called by name as well as by position.** The README writes these signatures
-// the way Python writes them, `to_json(value, indent=None)` or `batch(xs, n,
-// fill)`, and an author writes what the documentation shows.
+// the way Python writes them, `to_json(value, indent=None)` or `date(value,
+// style=None)`, and an author writes what the documentation shows.
 //
 // Brython hands a keyword call a trailing object carrying, under its symbol
 // `$B.KW`, an array whose first entry holds the literal keywords and whose rest
@@ -885,7 +845,6 @@ export function urlencode(value) {
 const KEYWORDS = {
     to_json: ['value', 'indent=None'],
     from_json: ['text'],
-    batch: ['xs', 'n', 'fill=None'],
     date: ['value', 'style=None', 'clock=None', 'locale=None'],
     from_now: ['value', 'locale=None'],
     slugify: ['text'],
@@ -936,8 +895,8 @@ const byName = (fn, signature) => {
         }
 
         // Which positions the call has already filled: a keyword naming one,
-        // `batch(rows, 2, n=3)`, is refused as Python refuses it, rather than
-        // overwriting what position put there.
+        // `date(when, "full", style="long")`, is refused as Python refuses it,
+        // rather than overwriting what position put there.
         const filled = new Set(given.keys());
 
         // The engine's own reading of the keywords, which is what a Python
@@ -956,8 +915,8 @@ const byName = (fn, signature) => {
                 throw refuse(`${fn.name}(): no argument named ${name}. ${takes}`);
             }
 
-            // A keyword that names a position already filled: `batch(rows, 2,
-            // n=3)` is two values for one parameter.
+            // A keyword that names a position already filled: `date(when,
+            // "full", style="long")` is two values for one parameter.
             if (filled.has(at)) {
                 throw refuse(`${fn.name}() got multiple values for argument '${name}'`);
             }
@@ -1002,7 +961,6 @@ export const helpers = Object.fromEntries(
     Object.entries({
         to_json,
         from_json,
-        batch,
         date,
         from_now,
         slugify,

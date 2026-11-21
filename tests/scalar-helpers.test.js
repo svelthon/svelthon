@@ -5,8 +5,7 @@
 //
 // The repair for a scalar subclass landed in the runtime, and the helpers kept
 // recognitions of their own: `instant`, behind `date` and `from_now`, asked
-// `ob_type === float` by identity, and `batch` asked `Number.isInteger` of the
-// object a Python `int` is. So `class Stamp(float)` crossed correctly, printed
+// `ob_type === float` by identity. So `class Stamp(float)` crossed correctly, printed
 // correctly, and then `{date(stamp)}` answered *is not a date* — which in a
 // template is a component that does not mount.
 //
@@ -37,13 +36,12 @@ describe('a helper handed a subclass of a scalar', () => {
     test('and the answers are the real ones, not two identical failures', () => {
         // A row of matching nothings would pass the grid above, so each control
         // is read for what it should actually say.
-        const [stamp, relative, text, since, batched, full, short, french, ago, indented] = exact;
+        const [stamp, relative, text, since, full, short, french, ago, indented] = exact;
 
         expect(stamp).not.toMatch(/Invalid/);
         expect(relative).toBeTruthy();
         expect(text).toMatch(/2026/);
         expect(since).toBeTruthy();
-        expect(batched).toBe('[[1, 2], [3]]');
         // The options are the half that failed in silence, so each has to be
         // shown doing something: a style that is not the default, a locale that
         // is not English, and an indent that puts the JSON on more than one line.

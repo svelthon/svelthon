@@ -1,12 +1,17 @@
 # A list subclass that says what iterating it means, and a foreign object whose
 # data happens to be spelled like the engine's mark.
 __js__ = {"./foreign_record.js": ["record", "control", "tagged_rows", "plain_rows"]}
-__all__ = ["rows", "plain", "python_order", "encoded", "batched", "converted"]
+__all__ = ["rows", "plain", "python_order", "encoded", "paired", "converted"]
 
 
 class Reverse(list):
     def __iter__(self):
         return iter([3, 2, 1])
+
+
+class ReversePairs(list):
+    def __iter__(self):
+        return iter([("b", 2), ("a", 1)])
 
 
 rows = Reverse([1, 2, 3])
@@ -25,8 +30,8 @@ def encoded():
     return [urlencode(record()), urlencode({"ob_type": "business", "value": 42}), urlencode(control())]
 
 
-def batched():
-    return [str(batch(rows, 2)), str(batch(plain, 2))]
+def paired():
+    return [urlencode(ReversePairs([("a", 1), ("b", 2)])), urlencode([("a", 1), ("b", 2)])]
 
 
 def converted():

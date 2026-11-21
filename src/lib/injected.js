@@ -89,21 +89,6 @@ const INJECTED = [
     // runtime's name for them, which no name of the module's shadows.
     { name: 'js', value: '() => __global' },
 
-    // Jinja's `|batch(3)`, kept under its own name because that is the word a
-    // Django or Flask author searches for. It is the one grouping an index
-    // cannot give you: a real <table> needs its <tr>s, and JavaScript has no
-    // equivalent at all.
-    //
-    // A list of lists, not a lazy iterator: an `{#each}` reads its rows again on
-    // every update, and an iterator would come back empty the second time,
-    // silently, with the table simply gone. The third argument, `fill`, pads the
-    // last row, which is what aligns one, given by position or by name.
-    //
-    // `None` there means *no padding*, not "pad with None", the rule every
-    // helper here follows, since None is an object and would otherwise sail
-    // through an `!== undefined` test and be rendered as a cell.
-    { name: 'batch', value: '() => __helpers.batch' },
-
     // Django's `|date`, under Django's word, with the platform's behaviour
     // behind it, which is the rule the whole set follows: the keyword guides
     // someone arriving from Jinja, what they get is Svelte's.

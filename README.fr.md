@@ -210,7 +210,6 @@ noms sur ce préfixe, dans la même portée.
 | `to_py(valeur)` | *aucun*, l'autre sens : une valeur JavaScript lue comme du Python |
 | `to_json(valeur, indent=None)` | *aucun*, `to_js` avec la sérialisation attachée, le pendant de `from_json` |
 | `from_json(texte)` | *aucun*, `to_py` avec l'analyse attachée |
-| `batch(xs, n, fill)` | *aucun*, une liste plate groupée en lignes de `n`, la dernière complétée par `fill`, comme le `\|batch` de Jinja |
 | `date(valeur, style)` | *aucun*, une date lue dans la langue du visiteur, comme le `\|date` de Django |
 | `from_now(valeur)` | *aucun*, « il y a 3 jours » ou « dans 2 heures », et ça reste juste |
 | `slugify(texte)` | *aucun*, un titre transformé en segment d'URL, en minuscules, chaque lettre gardée, accents compris, et le reste un tiret : `héllo-wörld`, là où le `\|slugify` de Django retire accents et ponctuation |
@@ -1878,8 +1877,7 @@ fichier : un sous-dossier n'est pas un paquet, donc `from lib import models`
 est refusé aussi, et `models.py` s'importe par `import models` une fois `lib`
 sur le `path`. Tout ce dont un gabarit a besoin est déjà
 un nom : `js` pour la plateforme, `js.Math` et `js.Date`, et `to_json`,
-`from_json`, `batch`, `date`, `from_now`, `slugify`, `strip_tags`,
-`urlencode`.
+`from_json`, `date`, `from_now`, `slugify`, `strip_tags`, `urlencode`.
 
 `to_json` écrit ce dont JSON a une notation et **refuse le reste en le nommant**
 plutôt que d'écrire `{}` ou `null` : un set, des bytes, un range, un complex,

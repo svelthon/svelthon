@@ -6,7 +6,7 @@
 // array, so `{#each}` walked the storage: `[x for x in rows]` answered `[3, 2, 1]`
 // in Python while the loop beside it showed `123`, for one object. The storage
 // stops being the sequence the moment an author says what iterating means.
-// `batch` shared the cause, since both go through `seq`.
+// `urlencode`, walking pairs, shared the cause.
 //
 // **A foreign object carrying a field called `ob_type`.** That name is Brython's
 // mark, and data is free to be spelled the same: `urlencode({ob_type: "business",
@@ -16,7 +16,7 @@
 // converter had the same repair when it read `ob_type === undefined`.
 import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
-import { python_order, encoded, batched, converted } from './fixtures/iterating_subclass.py';
+import { python_order, encoded, paired, converted } from './fixtures/iterating_subclass.py';
 import IteratingSubclass from './fixtures/IteratingSubclass.svelte';
 
 describe('a list subclass with its own __iter__', () => {
@@ -49,11 +49,11 @@ describe('a list subclass with its own __iter__', () => {
     });
 
     test('and a helper that walks it sees the same order', () => {
-        const [custom, plain] = batched();
+        const [custom, plain] = paired();
 
-        expect(custom).toBe('[[3, 2], [1]]');
+        expect(custom).toBe('b=2&a=1');
         // The control: an ordinary list, whose storage *is* its sequence.
-        expect(plain).toBe('[[1, 2], [3]]');
+        expect(plain).toBe('a=1&b=2');
     });
 });
 
