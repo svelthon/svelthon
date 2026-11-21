@@ -1909,7 +1909,7 @@ parsing, que seul le compilateur charge ; le README de Bryntime en donne le poid
 
 ## État
 
-Validé par `npm test`, 2 211 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 2 214 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;
@@ -2128,5 +2128,5 @@ expose, donc seuls ceux réellement nommés ont à voyager.
 Svelthon est sous MIT, la licence de Svelte et de l'outillage autour. Voir
 `LICENSE`.
 
-Bryntime, dont Svelthon dépend, est sous BSD-3-Clause, la même licence que
-Brython.
+Bryntime, Brycomp, Bryvend et Brylters, dont Svelthon dépend, sont sous
+BSD-3-Clause, la même licence que Brython.

@@ -50,6 +50,7 @@ import {
     continuedLines,
     takeImportJs,
     jsImportLine,
+    moduleImports,
     templateDots
 } from 'bryc';
 
@@ -991,22 +992,35 @@ function componentImports(src, where) {
     }
 }
 
-// What Vite's dependency scanner is handed for a component's Python, which it
-// would read as JavaScript: the modules its `importjs` lines import, the
-// packages among them being what it pre-bundles, and the bridge the compiled
-// component imports, whose own packages the scanner then finds: told nothing of
-// it, Vite found the engine and `esm-env` at the first visit, optimized them
-// then and reloaded the page. Nothing of the author's for a script the
-// compiler would refuse, which it then does itself.
-export function scannedScript(src) {
-    const bridge = `import ${JSON.stringify(HOST.bridge)};`;
+// What Vite's dependency scanner is handed for a component's Python, or a
+// `.py`'s (`component`), which it would read as JavaScript: the modules it
+// imports from JavaScript, the packages among them being what it pre-bundles,
+// the files of the modules it imports of Python (`found`), which the scan reads
+// in turn, and the bridge the compiled code imports, whose own packages the
+// scanner then finds: told nothing of it, Vite found the engine and `esm-env`
+// at the first visit, optimized them then and reloaded the page. A package only
+// a `.py` brought was found so too.
+//
+// Read as the compile reads it, with the names its `<script module>` binds
+// (`jsNames`): told none, a call of the module's own `inspect_with(*values)`
+// read as Svelthon's, refused, and the scan was handed nothing of the
+// author's. And the `importjs` lines of a script whose Python does not read,
+// which they are lines of their own in: nothing of the author's only for one
+// the compiler would refuse there, which it then does itself.
+export function scannedScript(src, found = () => [], component = true, jsNames = []) {
+    const read = readScript(src, 'scan', jsNames, component);
+    const python = read === null ? [] : [...moduleImports(read.tree).found.keys()].flatMap(found);
 
-    try {
-        return [bridge, ...takeImportJs(HOST, $B.unindent(src), 'scan', 0, true).imports.map((one) => `import ${JSON.stringify(one.from)};`)].join('\n');
-    } catch {
-        return bridge;
-    }
+    return [HOST.bridge, ...(read?.from ?? importJsOf(src, component)), ...python].map((one) => `import ${JSON.stringify(one)};`).join('\n');
 }
+
+const importJsOf = (src, component) => {
+    try {
+        return takeImportJs(HOST, $B.unindent(src), 'scan', 0, component).imports.map((one) => one.from);
+    } catch {
+        return [];
+    }
+};
 
 // `src/counter_store.svelte.py` → `counter_store`, the name Python imports it by.
 // The `.svelte` marker says the module is reactive; it is not part of its name,
@@ -3636,19 +3650,24 @@ function importedNames(src, where) {
 // declares: parsed with its signs rewritten as the compile rewrites them, and
 // the names JavaScript brings in (`theirs`), which `surface` sets apart, the
 // `<script module>`'s (`jsNames`) as the compile has them. A script that does
-// not parse gives null: the compile says why.
-function readScript(src, where, jsNames = []) {
+// not parse gives null: the compile says why. A `.py` is read as the compile
+// reads one, no `importjs` and no component's signs (`component`).
+//
+// And what it imports from JavaScript (`from`), in the compile's order
+// (`jsImportsOf`): what `__js__` declares, then the `importjs` lines.
+function readScript(src, where, jsNames = [], component = true) {
     try {
-        const lifted = takeImportJs(HOST, $B.unindent(src), where, 0, true);
+        const lifted = takeImportJs(HOST, $B.unindent(src), where, 0, component);
         const theirs = foreignNames([...lifted.imports.flatMap((one) => one.entries.map((e) => e.local)), ...jsNames]);
-        const body = takeArrows(lifted.source, where, 0, true, theirs);
+        const body = takeArrows(lifted.source, where, 0, component, theirs, jsNames);
         const tree = $B._PyPegen.run_parser(new $B.Parser(body, where, 'file'));
+        const declared = declaredJsImports(HOST, tree, symbolTable(tree, where), where);
 
-        for (const one of declaredJsImports(HOST,tree, symbolTable(tree, where), where)) {
+        for (const one of declared) {
             for (const name of one.names) theirs.add(name);
         }
 
-        return { tree, theirs };
+        return { tree, theirs, from: [...declared, ...lifted.imports].map((one) => one.from) };
     } catch {
         return null;
     }

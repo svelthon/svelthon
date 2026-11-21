@@ -1876,7 +1876,11 @@ function eagerModule(file) {
 // dependency scan`, a SvelteKit project once per page. The script reaches the
 // scan as a module of its own, `<file>?id=<n>`, numbered as the scanner numbers
 // them (Vite's `htmlTypeOnLoadCallback`), and a Python one is handed over as the
-// modules its `importjs` lines import (`scannedScript`).
+// modules it imports (`scannedScript`): from JavaScript, and the files of its
+// Python imports, which the scan reads in turn, a `.py` being scannable
+// (`optimizeDeps.extensions`, as vite-plugin-svelte makes a `.svelte`). A
+// package only a `.py` brought was found at the first visit, optimized then,
+// and the page reloaded when it shared code with one optimized already.
 //
 // Which scripts get a number is read with Vite's own patterns for `type` and
 // `src`, or a number would name another script; whether that script is Python,
@@ -1912,21 +1916,45 @@ const scannedPython = (id) => {
     return null;
 };
 
-const pythonScan = () => ({
-    name: 'svelthon:dep-scan',
-    transform(code, id) {
-        return scannedPython(id) === null ? null : { code: scannedScript(code), moduleType: 'js' };
-    }
-});
+// A component's script is read with the names its `<script module>` binds, as
+// the compile reads it (`moduleImports`).
+const scannedComponent = (code, file, found) => scannedScript(code, found(file), true, moduleImports(readFileSync(file, 'utf8')));
 
-const pythonScanEsbuild = () => ({
+// Vite hands its optimizer the scan's plugins too, where a `.py` is no module
+// to read the imports of: the scan is told apart by its own plugin, as
+// vite-plugin-svelte tells it.
+const pythonScan = (found) => {
+    let scanning = false;
+
+    return {
+        name: 'svelthon:dep-scan',
+        options(options) {
+            scanning = options.plugins.some((one) => one?.name === 'vite:dep-scan:resolve');
+        },
+        transform(code, id) {
+            if (id.endsWith('.py')) return scanning ? { code: scannedScript(code, found(id), false), moduleType: 'js' } : null;
+
+            return scannedPython(id) === null ? null : { code: scannedComponent(code, SCANNED_SCRIPT.exec(id)[1], found), moduleType: 'js' };
+        }
+    };
+};
+
+const pythonScanEsbuild = (found) => ({
     name: 'svelthon:dep-scan',
     setup(build) {
         build.onLoad({ filter: /\.svelte\?id=\d+$/, namespace: 'script' }, ({ path }) => {
             const python = scannedPython(path);
 
-            return python === null ? undefined : { contents: scannedScript(python), loader: 'js', resolveDir: dirname(path) };
+            return python === null ? undefined : { contents: scannedComponent(python, path.replace(/\?id=\d+$/, ''), found), loader: 'js', resolveDir: dirname(path) };
         });
+
+        if (build.initialOptions?.plugins?.some((one) => one.name === 'vite:dep-scan')) {
+            build.onLoad({ filter: /\.py$/ }, ({ path }) => ({
+                contents: scannedScript(readFileSync(path, 'utf8'), found(path), false),
+                loader: 'js',
+                resolveDir: dirname(path)
+            }));
+        }
     }
 });
 
@@ -2349,11 +2377,18 @@ export function svelthon(options = {}) {
         // JavaScript rather than its Python (`pythonScan`), by Rolldown's
         // option or by esbuild's, whichever scans: Vite 8 warns of the second.
         config() {
-            const scan = this?.meta?.rolldownVersion
-                ? { rolldownOptions: { plugins: [pythonScan()] } }
-                : { esbuildOptions: { plugins: [pythonScanEsbuild()] } };
+            // Beside the importer: a path that resolves to itself, an absolute
+            // one, is external to Vite's scan (`shouldExternalizeDep`).
+            const found = (from) => (mod) => {
+                const file = moduleFile(mod, dirname(from), searchPath);
 
-            return { ssr: { noExternal: ['svelthon'] }, optimizeDeps: scan };
+                return file === undefined ? [] : [`./${relative(dirname(from), file).replaceAll('\\', '/')}`];
+            };
+            const scan = this?.meta?.rolldownVersion
+                ? { rolldownOptions: { plugins: [pythonScan(found)] } }
+                : { esbuildOptions: { plugins: [pythonScanEsbuild(found)] } };
+
+            return { ssr: { noExternal: ['svelthon'] }, optimizeDeps: { ...scan, extensions: ['.py'] } };
         },
         // SvelteKit refuses to build code that runs in the browser and imports a
         // module of a `server/` directory, a `*.server.*` file or `$app/server`.
@@ -2375,6 +2410,16 @@ export function svelthon(options = {}) {
             const app = [config.resolve?.alias ?? []].flat().find((one) => one.find === '$app')?.replacement;
 
             if (typeof app === 'string') kitServer = `${app}/server`;
+
+            // SvelteKit hands Vite's scan its route modules by a pattern of its
+            // own, `+*.{svelte,js,ts}`, whatever `moduleExtensions` names: what a
+            // `+page.py` brought was found at its first visit. Its pattern, for
+            // Python's, its exclusion of the server's standing.
+            const entries = config.optimizeDeps?.entries;
+
+            if (Array.isArray(entries)) {
+                for (const one of entries.filter((entry) => entry.endsWith('/**/+*.{svelte,js,ts}'))) entries.push(one.replace(/\{svelte,js,ts\}$/, 'py'));
+            }
 
             const names = config.plugins.map((one) => one.name);
 

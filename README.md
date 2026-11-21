@@ -1867,7 +1867,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 2 211 tests as written (vitest reports more, one per
+Validated by `npm test`, 2 214 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;
@@ -2052,5 +2052,5 @@ so only the ones actually named need travel.
 Svelthon is MIT, the licence of Svelte and of the tooling around it. See
 `LICENSE`.
 
-Bryntime, which Svelthon depends on, is BSD-3-Clause, the same licence as
-Brython.
+Bryntime, Brycomp, Bryvend and Brylters, which Svelthon depends on, are
+BSD-3-Clause, the same licence as Brython.
