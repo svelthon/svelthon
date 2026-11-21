@@ -2396,65 +2396,22 @@ const bareName = (expr) => {
     return node instanceof globalThis.__BRYTHON__.ast.Name ? node.id : null;
 };
 
-const NUMBERS = new Set(['bool', 'int', 'float', 'complex']);
-
-// A number as Python compares it as a key: `1`, `1.0` and `True` are one entry
-// of a dict, and so is `1+0j`.
-const numberKey = (value) => {
-    const $B = globalThis.__BRYTHON__;
-    const _b_ = $B.builtins;
-    let real = value;
-
-    if ($B.class_name(value) === 'complex') {
-        if (_b_.bool.$factory($B.$getattr(value, 'imag'))) return _b_.repr(value);
-        real = $B.$getattr(value, 'real');
-    }
-
-    // A float holding a whole number is that int's key; `nan` and `inf` hold none.
-    if ($B.class_name(real) === 'float' && !$B.$call($B.$getattr(real, 'is_integer'))) return _b_.repr(real);
-
-    return _b_.repr(_b_.int.$factory(real));
-};
-
-// What makes two targets one whatever their spelling: the tree, positions left
-// out, a constant by its class and its `repr`, and a number that is a key by its
-// value, as Python compares keys. A key is what a subscript holds, each member
-// of a tuple held there and the operand of a sign in front of it: `bag[1]`,
-// `bag[True]` and `bag[(1.0, -1)]` are entries a dict compares, while the `1`
-// of `bag[str(1)]` is an argument, and `str(1)` is not `str(True)`. A sign in
-// front of a number at a key is the number it makes: `bag[+1]` is `bag[1]`, and
-// `bag[-0.0]` is `bag[0]`.
+// What makes two targets one group whatever their spelling: the tree, positions
+// left out, a constant by its class and its `repr`. Svelte's own key
+// (`extract_all_identifiers_from_expression`) is the target's identifiers and
+// literals as written, a literal by its value, and no key semantics: `a[1]` and
+// `a["1"]` are two groups there, where JavaScript reads one property. So are
+// `bag[1]`, `bag[1.0]` and `bag[True]` here, three literals, where a dict reads
+// one entry. Keyed by how a receiver compares its keys, which only the running
+// receiver says, each rule had a next case it missed.
 const targetKey = (expr) => {
     const $B = globalThis.__BRYTHON__;
-    const signed = (node) => node.op instanceof $B.ast.USub || node.op instanceof $B.ast.UAdd;
-    const number = (node) => {
-        if (node instanceof $B.ast.Constant) return NUMBERS.has($B.class_name(node.value)) ? node.value : null;
-        if (!(node instanceof $B.ast.UnaryOp) || !signed(node)) return null;
-
-        const operand = number(node.operand);
-
-        return operand === null
-            ? null
-            : $B.$call($B.$getattr(operand, node.op instanceof $B.ast.USub ? '__neg__' : '__pos__'));
-    };
-    const atKey = (node, field, held) =>
-        node instanceof $B.ast.Subscript
-            ? field === 'slice'
-            : held &&
-              ((node instanceof $B.ast.Tuple && field === 'elts') ||
-                  (node instanceof $B.ast.UnaryOp && field === 'operand' && signed(node)));
-    const key = (node, held = false) => {
-        if (Array.isArray(node)) return `[${node.map((one) => key(one, held)).join(',')}]`;
+    const key = (node) => {
+        if (Array.isArray(node)) return `[${node.map(key).join(',')}]`;
         if (node === null || typeof node !== 'object') return JSON.stringify(node ?? null);
-
-        const value = held ? number(node) : null;
-
-        if (value !== null) return `Number(${numberKey(value)})`;
         if (node instanceof $B.ast.Constant) return `Constant(${$B.class_name(node.value)}:${$B.builtins.repr(node.value)})`;
 
-        const fields = node.constructor._fields.map((field) => key(node[field], atKey(node, field, held)));
-
-        return `${node.constructor.$name}(${fields.join(',')})`;
+        return `${node.constructor.$name}(${node.constructor._fields.map((field) => key(node[field])).join(',')})`;
     };
     const node = targetTree(expr);
 

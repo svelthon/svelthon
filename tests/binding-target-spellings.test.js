@@ -12,9 +12,8 @@ import { mount } from './mounted.js';
 import GroupSpellings from './fixtures/GroupSpellings.svelte';
 import GroupSpellingsNative from './fixtures/GroupSpellingsNative.svelte';
 import ParenthesizedTargets from './fixtures/ParenthesizedTargets.svelte';
-import GroupNumericKeys from './fixtures/GroupNumericKeys.svelte';
-import GroupSignedKeys from './fixtures/GroupSignedKeys.svelte';
-import GroupDistinctKeys from './fixtures/GroupDistinctKeys.svelte';
+import GroupLiteralKeys from './fixtures/GroupLiteralKeys.svelte';
+import GroupLiteralKeysNative from './fixtures/GroupLiteralKeysNative.svelte';
 
 const mounted = async (Component) => {
     const target = document.body.appendChild(document.createElement('div'));
@@ -26,11 +25,11 @@ const mounted = async (Component) => {
     return target;
 };
 
-const clicks = async (Component) => {
+const clicks = async (Component, keys = ['b', 'a', 'c', 'b']) => {
     const target = await mounted(Component);
     const states = [];
 
-    for (const key of ['b', 'a', 'c', 'b']) {
+    for (const key of keys) {
         target.querySelector(`[data-k="${key}"]`).click();
         flushSync();
         states.push([target.querySelector('p').textContent, [...target.querySelectorAll('input')].map((one) => one.checked)]);
@@ -46,60 +45,20 @@ test('three spellings of one target are one group, as in Svelte', async () => {
     expect(await clicks(GroupSpellings)).toEqual(native);
 });
 
-// `bag[1]`, `bag[1.0]` and `bag[True]` are one entry of the dict, Python
-// comparing numeric keys by value, so they are one group; `bag[one]` is another
-// expression, which Svelte keeps apart too. A number that is not the key keeps
-// its class: `str(1)` and `str(True)` are `'1'` and `'True'`, two entries, where
-// they were one group writing both. `python3` on the same dict.
-test('equal numeric keys are one target, and only the key is compared by value', async () => {
-    const target = await mounted(GroupNumericKeys);
-    const models = [];
+// Two literals for one entry are two groups, as in Svelte, which keys a group by
+// the target's identifiers and literals as written: `bag[1]` and `bag["1"]` are
+// two there, where JavaScript reads one property, and `bag[1]` and `bag[True]`
+// two here, where a dict reads one entry. Each box writes its own group over
+// the other's choice.
+test('two literals for one entry are two groups, as in Svelte', async () => {
+    const native = await clicks(GroupLiteralKeysNative, ['a', 'b', 'a']);
 
-    for (const key of ['a', 'b', 'c', 'd']) {
-        target.querySelector(`[data-k="${key}"]`).click();
-        flushSync();
-        models.push(target.querySelector('p').textContent);
-    }
-    for (const key of ['e', 'f']) {
-        target.querySelector(`[data-k="${key}"]`).click();
-        flushSync();
-    }
-
-    expect(models).toEqual(['a', 'a,b', 'a,b,c', 'd']);
-    expect(target.querySelector('output').textContent).toBe("{'1': ['e'], 'True': ['f']}");
-});
-
-// A sign in front of a number at a key is the number it makes: `bag[1] is
-// bag[+1]` and `bag[0] is bag[-0.0]` in `python3`, so each pair is one group,
-// where the second box of a pair cleared the first. Svelte keeps `+1` apart
-// from `1`, as it keeps every two spellings it does not parse as Python.
-test('a signed number at a key is the number it makes', async () => {
-    const target = await mounted(GroupSignedKeys);
-    const models = [];
-
-    for (const key of ['a', 'b', 'c', 'd', 'e']) {
-        target.querySelector(`[data-k="${key}"]`).click();
-        flushSync();
-        models.push(target.querySelector('p').textContent);
-    }
-
-    expect(models).toEqual(['a|', 'a,b|', 'a,b,c|', 'a,b,c|d', 'a,b,c|d,e']);
-    expect([...target.querySelectorAll('input')].map((one) => one.checked)).toEqual([true, true, true, true, true]);
-});
-
-// And the keys a dict tells apart stay apart: `0.5` is no `0`, `not 1` is no `1`,
-// a complex key is one too, while a tuple's members are keys, `(1.0, 2)` the
-// entry `(1, 2)` is. Each box of the page clicked once, each list holds its own.
-test('the keys a dict tells apart are two groups, and the members of a tuple are keys', async () => {
-    const target = await mounted(GroupDistinctKeys);
-
-    for (const key of ['a', 'b', 'c', 'd', 'e', 'f', 'g']) {
-        target.querySelector(`[data-k="${key}"]`).click();
-        flushSync();
-    }
-
-    expect(target.querySelector('p').textContent).toBe("['a']|['b']|['c']|['d', 'e']|['f']|['g']");
-    expect([...target.querySelectorAll('input')].map((one) => one.checked)).toEqual([true, true, true, true, true, true, true]);
+    expect(native).toEqual([
+        ['a', [true, false]],
+        ['b', [false, true]],
+        ['a', [true, false]]
+    ]);
+    expect(await clicks(GroupLiteralKeys, ['a', 'b', 'a'])).toEqual(native);
 });
 
 test('a parenthesized name is the name it holds, in the script and in the markup', async () => {
