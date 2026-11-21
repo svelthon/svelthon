@@ -11,6 +11,7 @@ import ActionDictLive from './fixtures/ActionDictLive.svelte';
 import ActionDictLiveNative from './fixtures/ActionDictLiveNative.svelte';
 import ActionFirstUpdatePy from './fixtures/ActionFirstUpdatePy.svelte';
 import ActionFirstUpdateJs from './fixtures/ActionFirstUpdateJs.svelte';
+import ActionDelegated from './fixtures/ActionDelegated.svelte';
 import { held } from './fixtures/action_resources.js';
 import { calls } from './fixtures/action_log.js';
 
@@ -162,6 +163,24 @@ test('an action is updated at the first run of its value, as Svelte updates it',
     const svelte = run(ActionFirstUpdateJs);
 
     expect([run(ActionFirstUpdatePy), svelte]).toEqual([svelte, ['mount:0', 'update:0', 'update:1']]);
+});
+
+// A JavaScript action a Python function installs and returns keeps its
+// `update`, JavaScript's, which is handed what the install was: it was handed
+// the Python float, an object, and a list of them, where the install had the
+// number, and an action formatting it broke at the first change.
+test('a JavaScript action a Python function returns is updated as it was installed', () => {
+    calls.length = 0;
+    const target = document.body.appendChild(document.createElement('div'));
+    const instance = mount(ActionDelegated, { target });
+
+    flushSync();
+    instance.bump();
+    flushSync();
+    unmount(instance);
+    target.remove();
+
+    expect(calls).toEqual(['mount:number', 'mount:[number]', 'update:number', 'update:[number]']);
 });
 
 // And by the number a float or an int stands for, so `1` then `1.0`, or `0.0`

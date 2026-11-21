@@ -3918,7 +3918,7 @@ host.absent = (file, line, name, namespace) => {
 const directives = new WeakMap();
 
 const directiveCall = (where, fn, args) => {
-    if (declared(fn) !== null) return { python: true, result: directiveCallable(fn)(...args) };
+    if (declared(fn) !== null) return directiveCallable(fn)(...args);
 
     if (typeof fn !== 'function') {
         throw new TypeError(`svelthon — the directive \`${where}\` names ${String(fn)}, which is not callable`);
@@ -3927,7 +3927,7 @@ const directiveCall = (where, fn, args) => {
     // The adapter `importjs` publishes converts what it is called with, and is
     // handed the arguments as they are; any other JavaScript function, one a
     // prop brought among them, is handed them converted.
-    return { python: false, result: fn(...(ADAPTERS.has(fn) ? args : forJavaScript(args))) };
+    return fn(...(ADAPTERS.has(fn) ? args : forJavaScript(args)));
 };
 
 // What a JavaScript function is handed by a directive: a Python value converted
@@ -3995,6 +3995,11 @@ const changed = (before, after, python) => {
 // {}`), so the first run that reads the value again updates the action, the
 // value the same or not. Held as installed, that run was skipped when the value
 // had not changed, and an action measuring the node missed it.
+//
+// Which `update` it is, Python's or JavaScript's, is the result's: a Python
+// function that installs a JavaScript action and returns what it returned
+// hands back JavaScript's, which was handed the Python value, a float its
+// `toFixed` refused, where the install had been handed its number.
 const actionPayload = (python, result, given) => {
     if (result === null || (typeof result !== 'object' && typeof result !== 'function')) return result;
 
@@ -4033,9 +4038,9 @@ export function directiveAction(node, [where, head, ...value]) {
 
     if (fn === undefined || fn === null || fn === NONE) return undefined;
 
-    const { python, result } = directiveCall(where, fn, [node, ...value]);
+    const result = directiveCall(where, fn, [node, ...value]);
 
-    return actionPayload(python, result, value);
+    return actionPayload(PYTHON_RESULTS.has(result), result, value);
 }
 
 // `transition:`, `in:` and `out:`, called `(node, payload, options)`. Svelte
@@ -4052,7 +4057,7 @@ export function directiveTransition(node, [where, head, ...value], options) {
               ? pyDict([])
               : {};
 
-    return directiveCall(where, fn, [node, params, options]).result;
+    return directiveCall(where, fn, [node, params, options]);
 }
 
 // `animate:`, called `(node, { from, to }, payload)`, the payload's place kept
@@ -4060,7 +4065,7 @@ export function directiveTransition(node, [where, head, ...value], options) {
 // None to Python. An action's is not, and Svelte calls a bare one with the node
 // alone.
 export function directiveAnimate(node, rects, [where, head, ...value]) {
-    return directiveCall(where, head(), [node, rects, value.length ? value[0] : undefined]).result;
+    return directiveCall(where, head(), [node, rects, value.length ? value[0] : undefined]);
 }
 
 // What a directive hands back, read by Svelte: an action's `update` and
@@ -4092,6 +4097,10 @@ export function directiveAnimate(node, rects, [where, head, ...value]) {
 // called as a cleanup is (`unreadCall`); `css` and `easing` answer Svelte.
 const UNREAD_MEMBERS = new Set(['update', 'destroy', 'tick']);
 
+// The results read through that view, whose members are Python's
+// (`actionPayload`).
+const PYTHON_RESULTS = new WeakSet();
+
 function directiveResult(value, where) {
     const called = declared(value) !== null;
     const instance =
@@ -4106,7 +4115,7 @@ function directiveResult(value, where) {
     // Read when Svelte asks, after the directive has returned, so what a
     // property raises is relayed here, as under a view (`relayed`). What the
     // function Svelte calls has of its own is its own.
-    return new Proxy(
+    const view = new Proxy(
         called ? directiveCallable(value) : Object.create(null),
         relayed(
             {
@@ -4126,6 +4135,9 @@ function directiveResult(value, where) {
             `${where} result`
         )
     );
+
+    PYTHON_RESULTS.add(view);
+    return view;
 }
 
 // Callable in Python, which is the question every boundary that promises to
