@@ -2,6 +2,7 @@ import { test, expect, describe } from 'vitest';
 import { mount, flushSync } from './mounted.js';
 import DotFallback from './fixtures/DotFallback.svelte';
 import DotMissing from './fixtures/DotMissing.svelte';
+import DotMissingOnce from './fixtures/DotMissingOnce.svelte';
 import DotHiddenGetitem from './fixtures/DotHiddenGetitem.svelte';
 
 // `{pep.title}` on a dict. A template expression already differs from the same
@@ -59,12 +60,17 @@ describe('the dot in a template expression', () => {
         expect(read('held')).toBe('7');
     });
 
-    test('a name that is neither raises rather than rendering nothing', () => {
+    // Once asked: read again to raise, a `__getattr__` that answers the second
+    // time rendered its answer where Python finds none.
+    test.for([
+        [DotMissing, /absent/],
+        [DotMissingOnce, /'Once' object has no attribute 'label'/]
+    ])('a name that is neither raises rather than rendering nothing: %#', ([Component, said]) => {
         const target = document.body.appendChild(document.createElement('div'));
         expect(() => {
-            mount(DotMissing, { target });
+            mount(Component, { target });
             flushSync();
-        }).toThrow(/absent/);
+        }).toThrow(said);
     });
 });
 

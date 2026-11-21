@@ -41,6 +41,7 @@ const {
     pyStr,
     pyList,
     pyGetattr,
+    pyAttributeError,
     pySetattr,
     pySetitem,
     pyContains,
@@ -4235,9 +4236,13 @@ export function readAttr(target, name, otherwise) {
 
     if (value !== MISSING && !(value === NONE && otherwise !== undefined)) return value;
 
-    // No such key either, or None under a default: the default, or the real
-    // lookup, which raises.
-    return otherwise === undefined ? pyGetattr(target, name) : invoke(otherwise);
+    // No such key either, or None under a default: the default, or the error a
+    // missing attribute raises, built without reading it again. Read again, a
+    // `__getattr__` that answered the second time gave a value where the first
+    // read found none, and one that never answers was asked twice.
+    if (otherwise === undefined) throw pyAttributeError(target, name);
+
+    return invoke(otherwise);
 }
 
 // Whether a read through the dot finds the attribute, read once as `readAttr`
