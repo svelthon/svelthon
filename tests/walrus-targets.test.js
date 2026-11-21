@@ -38,6 +38,14 @@ describe('what a walrus may aim at', () => {
         ['lambda: (box.ﬁeld := 1)', 'lambda: __setattr(box, "field", 1)'],
         ['lambda: (rows[(chosen := 1)] := 7)', 'lambda: __setitem(rows, __assign("chosen", 1), 7)'],
         ['lambda: (boxes[(chosen := 1)].width := 7)', 'lambda: __setattr(boxes[__assign("chosen", 1)], "width", 7)'],
+        // A receiver in parentheses, as Python's `=` writes through one; and
+        // parentheses with no step after them, which Python refuses, left to it.
+        ['lambda: ((left if ready else right).label := 1)', 'lambda: __setattr((left if ready else right), "label", 1)'],
+        ['lambda: ((left if ready else right)["label"] := 1)', 'lambda: __setitem((left if ready else right), "label", 1)'],
+        ['lambda: ((x) := 1)', 'lambda: ((x) := 1)'],
+        // And a list or a dict written in place.
+        ['lambda: ([left, right][i].label := 1)', 'lambda: __setattr([left, right][i], "label", 1)'],
+        ['lambda: ({True: left, False: right}[ready]["label"] := 1)', 'lambda: __setitem({True: left, False: right}[ready], "label", 1)'],
 
         // Mixed, in one tuple: the three targets side by side.
         [
@@ -193,6 +201,41 @@ describe('a walrus onto something other than a name', () => {
         flushSync();
 
         expect(target.querySelector('p[data-k="nested"]').textContent).toBe(k === 'nested-key' ? '1|7|1' : '1|0|8');
+    });
+
+    // A receiver in parentheses, chosen by a conditional: the build was refused.
+    // Each write goes to the row chosen when it runs, the dot finding the key.
+    test('writes through a receiver in parentheses the row it chooses', () => {
+        const target = document.body.appendChild(document.createElement('div'));
+        mount(WalrusTargets, { target });
+        flushSync();
+
+        const shown = [];
+        const click = (k) => {
+            target.querySelector(`button[data-k="${k}"]`).click();
+            flushSync();
+            shown.push(target.querySelector('p[data-k="grouped"]').textContent);
+        };
+
+        ['grouped-dot', 'grouped-switch', 'grouped-key'].forEach(click);
+        expect(shown).toEqual(['dot|R', 'dot|R', 'dot|key']);
+    });
+
+    // And a list or a dict written in place, which chose the row.
+    test('writes through a list or a dict written in place the row it chooses', () => {
+        const target = document.body.appendChild(document.createElement('div'));
+        mount(WalrusTargets, { target });
+        flushSync();
+
+        const shown = [];
+        const click = (k) => {
+            target.querySelector(`button[data-k="${k}"]`).click();
+            flushSync();
+            shown.push(target.querySelector('p[data-k="grouped"]').textContent);
+        };
+
+        ['listed-dot', 'grouped-switch', 'mapped-key'].forEach(click);
+        expect(shown).toEqual(['dot|R', 'dot|R', 'dot|key']);
     });
 
     // The texts are CPython's for the same f-strings with `chosen` a global.

@@ -15,6 +15,9 @@ chosen = 0
 rows = [0, 0]
 boxes = [Box(), Box()]
 said = ""
+left = {"label": "L"}
+right = {"label": "R"}
+use_left = True
 </script>
 
 <p data-k="key">{m["x"]}</p>
@@ -41,3 +44,12 @@ said = ""
 <button data-k="in-field" onclick={lambda: (said := f"{(chosen := chosen + 1)}")}>field</button>
 <button data-k="in-debug" onclick={lambda: (said := f"{(chosen := 5)=}")}>debug</button>
 <button data-k="in-spec" onclick={lambda: (said := f"{(chosen := 6)=:>3}")}>spec</button>
+
+<!-- A receiver in parentheses, chosen by a conditional: the row it names is
+     written, by the dot and by a key, and the next one once it names another. -->
+<p data-k="grouped">{left["label"]}|{right["label"]}</p>
+<button data-k="grouped-dot" onclick={lambda: ((left if use_left else right).label := "dot")}>dot</button>
+<button data-k="grouped-key" onclick={lambda: ((left if use_left else right)["label"] := "key")}>key</button>
+<button data-k="grouped-switch" onclick={lambda: (use_left := not use_left)}>switch</button>
+<button data-k="listed-dot" onclick={lambda: ([right, left][use_left].label := "dot")}>dot</button>
+<button data-k="mapped-key" onclick={lambda: ({True: left, False: right}[use_left]["label"] := "key")}>key</button>

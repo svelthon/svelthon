@@ -343,11 +343,19 @@ function slices(inner) {
 //
 // Returns the name for the plain form, or the object and key for the other two,
 // with `subscript` telling which was written. Null when there is no walrus here.
+//
+// The object may start in parentheses, `(left if ready else right).label`, or
+// be a list, a dict or a set written there, `[left, right][i].label`, as
+// Python's `=` writes through each: told by a name at the start, the walrus was
+// left to Python, which refused the build.
 function walrusTarget(text) {
     const found = text.match(WALRUS_NAME);
-    if (!found) return null;
+    const blank = text.match(/^[ \t\f\r\n]*/)[0].length;
+    const grouped = found || !(text[blank] in CLOSES) ? -1 : closingPair(text, blank);
 
-    let index = found[0].length;
+    if (!found && grouped === -1) return null;
+
+    let index = found ? found[0].length : grouped + 1;
     let object = null;
     let key = null;
     let subscript = false;
@@ -411,7 +419,7 @@ function walrusTarget(text) {
     }
 
     const arrow = text.slice(index).match(WALRUS_ARROW);
-    if (!arrow || called) return null;
+    if (!arrow || called || (object === null && !found)) return null;
 
     return {
         name: object === null ? found[1] : null,
