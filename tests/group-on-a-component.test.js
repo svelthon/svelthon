@@ -110,6 +110,26 @@ describe('bind:group on an element', () => {
         ).toThrow(refusal);
     });
 
+    // Nor onto a snippet's parameter, as Svelte refuses it
+    // (`bind_group_invalid_snippet_parameter`): the renders of a snippet are no
+    // rows a group tells apart, and it compiled, every render one group. A key
+    // read off one keeps the binding, its target being the list it keys.
+    test.for([
+        ['{#snippet box(row)}<input type="checkbox" value="a" bind:group={row["picked"]} />{/snippet}', true],
+        ['{#snippet box(row)}<input type="checkbox" value="a" bind:group={row.picked} />{/snippet}', true],
+        ['{#snippet box(key)}<input type="checkbox" value="a" bind:group={picked[key]} />{/snippet}', false]
+    ])('%s, refused %s as Svelte has it', ([markup, refused]) => {
+        const native = () => compileSvelte(`<script>let picked = $state({});</script>${markup}`, { name: 'Probe' });
+
+        if (refused) {
+            expect(() => rewrite(markup)).toThrow(/`bind:group` cannot bind to `row`, a snippet parameter/);
+            expect(native).toThrow(/Cannot `bind:group` to a snippet parameter/);
+        } else {
+            expect(rewrite(markup)).toContain('use:__group');
+            expect(native).not.toThrow();
+        }
+    });
+
     test.for([
         ['<input type="checkbox" value="a" bind:group={picked} />'],
         ['<input type="radio" value="a" bind:group={picked} />'],

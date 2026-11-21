@@ -2156,6 +2156,20 @@ function eachBlock(trimmed, declare, call, refuse, loop) {
     const body = head[1];
     const at = atTopLevel(body, (i) => /^\s+as\s+/.test(body.slice(i)));
 
+    // The loop as a group finds it (`iterations`), in both forms, with `as` and
+    // without: what its iterable reads, and the author's index held under the
+    // walk's name where the block declares it, as Svelte declares the author's
+    // from its own, since an inner block may declare the same name. Noted in
+    // one form alone, `{#each slots, outer}` was no loop to a group inside it,
+    // and two of its rows were one group.
+    const grouped = (iterable, written) => {
+        loop.noted(freeNames(iterable));
+
+        const held = written === null ? null : loop.index(false);
+
+        return held === null ? '' : `{@const ${held} = ${written}}`;
+    };
+
     // No `as`: no row is named. Compiled before the scope opens, like the
     // iterable below. Svelte's index may still follow, `{#each items, i}`,
     // read as Svelte's parser reads it: what follows the first comma at the
@@ -2217,7 +2231,10 @@ function eachBlock(trimmed, declare, call, refuse, loop) {
         const iterable = call(walkedText, '__seq', undefined, 'python');
 
         declare(indexed ? [index] : []);
-        return `${walked(loop.rows(), iterable, null)}{#each ${loop.rows()}()${indexed ? `, ${index}` : ''}}`;
+        return (
+            `${walked(loop.rows(), iterable, null)}{#each ${loop.rows()}()${indexed ? `, ${index}` : ''}}` +
+            grouped(walkedText, indexed ? index : null)
+        );
     }
 
     const named = body.slice(at).replace(/^\s+as\s+/, '');
@@ -2253,9 +2270,6 @@ function eachBlock(trimmed, declare, call, refuse, loop) {
     const parts = arguments_(target.trim());
     const written = parts.length === 2 ? parts[1].trim() : null;
     const index = written ?? loop.index(keyed !== null);
-
-    loop.noted(index, freeNames(body.slice(0, at)));
-
     const declared = written === null && index !== null ? `${pattern}, ${index}` : pattern;
     const key = keyed ? eachKey(keyed[1], unpack, call) : null;
 
@@ -2267,7 +2281,7 @@ function eachBlock(trimmed, declare, call, refuse, loop) {
         walked(loop.rows(), iterable, key === null ? null : `(${declared}) => ${key}`) +
         `{#each ${loop.rows()}() as ${declared}` +
         (key === null ? '' : ` (${loop.rows()}.noted(${index}, ${key}))`) +
-        `}${consts}`
+        `}${consts}${grouped(body.slice(0, at), written)}`
     );
 }
 
@@ -2894,8 +2908,10 @@ function scopeChain(seed, indexed, refuseCompilerName) {
     // The iterations a group binding stands in, as Svelte finds them: every
     // `{#each}` whose names the binding reads, and then those its iterable
     // reads, from the innermost out. Their indexes keep apart two rows holding
-    // one object, which the values the binding mentions cannot. A block whose
-    // author wrote no index is noted for the second walk to give it one.
+    // one object, which the values the binding mentions cannot. Each is the
+    // block's own, under a name of the walk's, which the second walk gives the
+    // block, as Svelte gives it one of its own: read by the author's name, an
+    // inner block's `i` stood for the outer one, and two outer rows were one.
     const iterations = (expr) => {
         const names = new Set(freeNames(expr).map(pythonName));
         const indexes = [];
@@ -2905,8 +2921,8 @@ function scopeChain(seed, indexed, refuseCompilerName) {
 
             if (loop === undefined || !scopes[at].some((one) => names.has(pythonName(one)))) continue;
 
-            if (loop.index === null) indexed.add(ids[at]);
-            else indexes.push(loop.index);
+            indexed.add(ids[at]);
+            indexes.push(`${EACH_INDEX}${ids[at]}`);
 
             for (const one of scopes[at]) names.delete(pythonName(one));
             for (const one of loop.from) names.add(pythonName(one));
@@ -2914,6 +2930,16 @@ function scopeChain(seed, indexed, refuseCompilerName) {
 
         return indexes;
     };
+
+    // The scope that declares each name a binding reads, as Svelte's group key
+    // holds each name's declaration: two loops that each declare `row` are two
+    // groups, whatever object they hand over.
+    const declarations = (expr) =>
+        [...new Set(freeNames(expr).map(pythonName))].flatMap((name) => {
+            const held = found(name);
+
+            return held === null ? [] : [String(ids[held.at])];
+        });
 
     return {
         push,
@@ -2933,6 +2959,7 @@ function scopeChain(seed, indexed, refuseCompilerName) {
         mentioned,
         scoped,
         iterations,
+        declarations,
 
         // Whether a scope holds `name`.
         holds: (name) => found(name) !== null,
@@ -3134,7 +3161,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
     };
 
     const chain = scopeChain(seed, indexed, refuseCompilerName);
-    const { push, pop, closeElement, branch, seeded, declare, parameters, rereading, computing, costly, received, mentioned, scoped, iterations, holds } =
+    const { push, pop, closeElement, branch, seeded, declare, parameters, rereading, computing, costly, received, mentioned, scoped, iterations, declarations, holds } =
         chain;
 
     // The `{` of the construct being read, as the author sees it. `region.start`
@@ -3882,6 +3909,23 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
 
         refuseUnwritable('bind:group', expr);
 
+        // Nor onto a snippet's parameter, which Svelte refuses
+        // (`bind_group_invalid_snippet_parameter`): the renders of a snippet are
+        // no rows its group can tell apart.
+        const $B = globalThis.__BRYTHON__;
+        let root = targetTree(`(${expr}\n)`);
+
+        while (root instanceof $B.ast.Subscript || root instanceof $B.ast.Attribute) root = root.value;
+
+        if (root instanceof $B.ast.Name && chain.parameter(root.id)) {
+            throw refuse(
+                new SyntaxError(
+                    `svelthon — \`bind:group\` cannot bind to \`${root.id}\`, a snippet parameter, ` +
+                        `which Svelte refuses (\`bind_group_invalid_snippet_parameter\`)${said()}`
+                )
+            );
+        }
+
         // The Python list itself: the group compares with Python's `==`, and
         // its inputs know each other by the list they share.
         const read = call(expr, '', undefined, 'python');
@@ -3929,12 +3973,17 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
         // rows of an `{#each}` apart: `row.picked` is one target per `row`.
         // The list the row holds cannot stand in for them, since two rows may
         // be handed one default list and are still two targets. A cell the
-        // markup declared is its own target, told by its token.
+        // markup declared is its own target, told by its token. And the scope
+        // each name is declared in, as Svelte's key holds it (`declarations`).
         const cell = own ? `${CELL}${scoped(bareName(expr))}` : null;
         const where =
             cell !== null && holds(cell)
                 ? [cell]
-                : [...mentioned(expr.trim()).map((one) => chain.reread(one) ?? one), ...iterations(expr)];
+                : [
+                      ...declarations(expr),
+                      ...mentioned(expr.trim()).map((one) => chain.reread(one) ?? one),
+                      ...iterations(expr)
+                  ];
 
         // And `checked` for the server, which runs no action: Svelte's server
         // writes it for its own group, from the model, when the tag has a value,
@@ -4881,7 +4930,7 @@ function walk(markup, collect, onPython, seed, record, where, indexed) {
                 out += eachBlock(trimmed, declare, call, refusePattern, {
                     rows: () => `${EACH_ROWS}${id}`,
                     index: (keyed) => (keyed || indexed.has(id) ? `${EACH_INDEX}${id}` : null),
-                    noted: (index, from) => chain.loop(id, { index, from })
+                    noted: (from) => chain.loop(id, { from })
                 });
             } else if (opens('key')) {
                 // Svelte re-creates the block when the value changes, by

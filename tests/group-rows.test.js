@@ -15,6 +15,12 @@ import GroupSharedRowNative from './fixtures/GroupSharedRowNative.svelte';
 import GroupSharedNested from './fixtures/GroupSharedNested.svelte';
 import GroupSharedNestedNative from './fixtures/GroupSharedNestedNative.svelte';
 import GroupSharedRowSpelled from './fixtures/GroupSharedRowSpelled.svelte';
+import GroupSharedShadowed from './fixtures/GroupSharedShadowed.svelte';
+import GroupSharedShadowedNative from './fixtures/GroupSharedShadowedNative.svelte';
+import GroupSharedSiblings from './fixtures/GroupSharedSiblings.svelte';
+import GroupSharedSiblingsNative from './fixtures/GroupSharedSiblingsNative.svelte';
+import GroupSharedIndexOnly from './fixtures/GroupSharedIndexOnly.svelte';
+import GroupSharedIndexOnlyNative from './fixtures/GroupSharedIndexOnlyNative.svelte';
 
 // **And two rows holding one object are two groups**, as Svelte keeps them: a
 // group per iteration, by its index. Told apart by the values the binding
@@ -29,7 +35,17 @@ test.for([
     // two rows were one group again.
     ['its name declared ﬁ', GroupSharedRowSpelled, GroupSharedRowNative, { way: 'declared ﬁ' }],
     ['its name read ﬁ', GroupSharedRowSpelled, GroupSharedRowNative, { way: 'read ﬁ' }],
-    ['its name declared ﬁ, no index written', GroupSharedRowSpelled, GroupSharedRowNative, { way: 'unindexed' }]
+    ['its name declared ﬁ, no index written', GroupSharedRowSpelled, GroupSharedRowNative, { way: 'unindexed' }],
+    // The outer index read by its name where the inner loop declares the same
+    // one: both rows read the inner index, 0, and were one group.
+    ['an inner loop declaring the outer index name', GroupSharedShadowed, GroupSharedShadowedNative],
+    // And two loops that each declare `row`, as Svelte keys a group by each
+    // name's declaration: told by the object alone, they were one group.
+    ['in two loops each declaring it', GroupSharedSiblings, GroupSharedSiblingsNative],
+    // And an outer loop that names no row, only its index, keyed by it or not:
+    // noted in the other form alone, it was no loop to the group.
+    ['under an outer loop naming its index alone', GroupSharedIndexOnly, GroupSharedIndexOnlyNative],
+    ['under an outer loop naming its index alone, keyed by it', GroupSharedIndexOnly, GroupSharedIndexOnlyNative, { keyed: true }]
 ])('rows holding one object stay two groups, %s', ([, Python, Native, props = {}]) => {
     const steps = (component, given = {}) => {
         const target = document.body.appendChild(document.createElement('div'));
