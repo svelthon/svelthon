@@ -1149,8 +1149,11 @@ const ADAPTERS = {
 // runes, whose names no binding of the component may take: Svelte reads
 // `$state` as a store once `state` is bound, so a JavaScript import of one is
 // held under another variable (Bryc's), and a `def`'s wrapper too
-// (`wrapperName`); and the adapters of the template, which its functions then
-// read off the namespace, where a search at each call found them.
+// (`wrapperName`); the adapters of the template, which its functions then
+// read off the namespace, where a search at each call found them; and where
+// Bryntime does `d[k]`, `d.get(k)`, `x in c`, `==` and `!=` inline, which the
+// generated code calls (`fast`): a keystroke of a page that rebuilds a draft
+// from every row was a fifth slower through the engine's general path.
 const HOST = {
     name: 'svelthon',
     bridge: 'svelthon/bridge',
@@ -1179,7 +1182,8 @@ const HOST = {
     // lays down in that script's own scope (`MODULE_READERS`).
     moduleName: (name) => `${MODULE_READERS}[${JSON.stringify(name)}]`,
     runes: ['state', 'derived', 'effect', 'props', 'bindable', 'inspect', 'host'],
-    adapters: Object.keys(ADAPTERS)
+    adapters: Object.keys(ADAPTERS),
+    fast: '$bryntimeFast'
 };
 
 // The getters of the names the `<script module>` binds, which the markup pass
