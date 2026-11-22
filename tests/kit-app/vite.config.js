@@ -32,6 +32,7 @@ export default defineConfig({
     resolve: {
         alias: {
             'svelthon/bridge': at('../../src/lib/bridge.js'),
+            'svelthon/bryntime': at('../../src/lib/bryntime.js'),
             'svelthon/compile': at('../../src/lib/compile.js')
         }
     },

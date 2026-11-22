@@ -2,7 +2,8 @@ import { TraceMap, traceSegment } from '@jridgewell/trace-mapping';
 import { createHash, randomBytes } from 'node:crypto';
 import { relative, resolve, dirname, basename } from 'node:path';
 import { readFileSync, existsSync, statSync, realpathSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import * as nodeModule from 'node:module';
 
 import {
     overMarkup,
@@ -1724,6 +1725,30 @@ const transportWrapper = (real, server) =>
 const KIT_SERVER = '$app/server';
 const REMOTE_SERVER = '\0svelthon-remote-server?';
 
+// Whether Node finds this plugin's own package by the name `svelthon` from a
+// directory, as it will from a server built there: by its own resolver where
+// it has it (`findPackageJSON`, Node 22.14 and 23.2), and before it by the
+// lookup that resolver makes, a `node_modules` from the directory up. Asked of
+// Vite, an alias of the application's answered for a name Node never found.
+const ownPackageFrom = (root) => {
+    const own = realpathSync(fileURLToPath(new URL('../../package.json', import.meta.url)));
+
+    try {
+        if (nodeModule.findPackageJSON !== undefined) {
+            return realpathSync(nodeModule.findPackageJSON('svelthon', pathToFileURL(resolve(root, 'package.json')))) === own;
+        }
+
+        for (let directory = root; ; directory = dirname(directory)) {
+            const found = resolve(directory, 'node_modules', 'svelthon', 'package.json');
+
+            if (existsSync(found)) return realpathSync(found) === own;
+            if (dirname(directory) === directory) return false;
+        }
+    } catch {
+        return false;
+    }
+};
+
 const remoteServer = (real) =>
     [
         `export * from ${JSON.stringify(real)};`,
@@ -2507,16 +2532,17 @@ export function svelthon(options = {}) {
             // A server built asks Node for the plugin's Bryntime, the file the
             // plugin loaded, as SvelteKit's prerendering worker loads the
             // plugin with its configuration: through Svelthon
-            // (`svelthon/bryntime`) where the application finds Svelthon, as
-            // it finds one installed, and Node Bryntime from it; by its name
-            // for a plugin imported by its path. Asked by its name, a
-            // Bryntime installed under Svelthon alone was found from nowhere,
-            // and one the application had of its own was a second copy beside
-            // the plugin's.
+            // (`svelthon/bryntime`) where Node finds this plugin's package
+            // from the application (`ownPackageFrom`), as it finds one
+            // installed, and Bryntime from it; by its name for a plugin
+            // imported by its path. Asked by its name, a Bryntime installed
+            // under Svelthon alone was found from nowhere, and one the
+            // application had of its own was a second copy beside the
+            // plugin's.
             if (specifier === 'bryntime' && building && options?.ssr) {
-                throughSvelthon ??= this.resolve('svelthon/bryntime', resolve(routes, 'package.json'), { skipSelf: true }).then((found) => found !== null);
+                throughSvelthon ??= ownPackageFrom(routes);
 
-                return throughSvelthon.then((through) => ({ id: through ? 'svelthon/bryntime' : specifier, external: true }));
+                return { id: throughSvelthon ? 'svelthon/bryntime' : specifier, external: true };
             }
 
             if (specifier === KIT_TRANSPORT) {
