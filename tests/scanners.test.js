@@ -89,28 +89,33 @@ describe('atTopLevel reads through a string', () => {
     });
 });
 
-// What a walrus aims at: a name, an attribute, or a key.
+// What a walrus aims at: a name, an attribute, or a key, its value evaluated
+// first and handed to the lambda that writes it.
+const written = (helper) => (object, key, value) => `(lambda __brycomp_given: ${helper}(${object}, ${key}, __brycomp_given))((${value}))`;
+const setattr = written('__brycomp_setattr');
+const setitem = written('__brycomp_setitem');
+
 describe('walrusTarget reads through a string', () => {
     test('a key holding a bracket is one key, not two', () => {
-        expect(walrus('(d["a]b"] := 1)')).toBe('__brycomp_setitem(d, "a]b", 1)');
+        expect(walrus('(d["a]b"] := 1)')).toBe(setitem('d', '"a]b"', '1'));
     });
 
     test('and a key holding an escaped quote is still one key', () => {
-        expect(walrus('(d["a\\"]b"] := 1)')).toBe('__brycomp_setitem(d, "a\\"]b", 1)');
+        expect(walrus('(d["a\\"]b"] := 1)')).toBe(setitem('d', '"a\\"]b"', '1'));
     });
 
     // A slice is a target Python assigns to, and a key spelt as Python spells it
     // as an expression, `slice(start, stop)`; three colons, which no slice
     // holds, are left for Python to report.
     test('a slice is written as the key Python spells it', () => {
-        expect([walrus('(d[1:] := 1)'), walrus('(d[1:2:3:4] := 1)')]).toEqual(['__brycomp_setitem(d, __brycomp_slice(1, None), 1)', '(d[1:2:3:4] := 1)']);
+        expect([walrus('(d[1:] := 1)'), walrus('(d[1:2:3:4] := 1)')]).toEqual([setitem('d', '__brycomp_slice(1, None)', '1'), '(d[1:2:3:4] := 1)']);
     });
 
     // A call is a step of the object, as a name is: `(make(1).x := 1)` was left
     // to Python, which refused an attribute where `(box.n := 1)` beside it
     // wrote one. A call as the target itself is still Python's to refuse.
     test('an object reached through a call is written into, and a call is no target', () => {
-        expect([walrus('(make(1).x := 1)'), walrus('(make(1) := 1)')]).toEqual(['__brycomp_setattr(make(1), "x", 1)', '(make(1) := 1)']);
+        expect([walrus('(make(1).x := 1)'), walrus('(make(1) := 1)')]).toEqual([setattr('make(1)', '"x"', '1'), '(make(1) := 1)']);
     });
 });
 
@@ -225,6 +230,6 @@ describe('atomic reads an f-string as a grammar', () => {
     // A comment runs to the end of the line, and a line with no newline after
     // it ends at the end of the source.
     test('a comment with no newline after it ends where the source does', () => {
-        expect(walrus('(d["a"] := 1)  # note')).toBe('__brycomp_setitem(d, "a", 1)  # note');
+        expect(walrus('(d["a"] := 1)  # note')).toBe(`${setitem('d', '"a"', '1')}  # note`);
     });
 });

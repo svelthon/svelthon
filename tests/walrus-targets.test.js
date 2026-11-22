@@ -14,6 +14,12 @@ import WalrusTargets from './fixtures/WalrusTargets.svelte';
 // else did. This is the hole, and the companion of the tuple in
 // `walrus-tuple.test.js`: that one taught the walrus to assign twice, this one
 // teaches it where.
+// What a walrus through a receiver writes: its value evaluated first, as
+// Python's `=` evaluates it, handed to the lambda that writes it.
+const written = (helper) => (object, key, value) => `(lambda __brycomp_given: ${helper}(${object}, ${key}, __brycomp_given))((${value}))`;
+const setattr = written('__brycomp_setattr');
+const setitem = written('__brycomp_setitem');
+
 describe('what a walrus may aim at', () => {
     test.for([
         // Unchanged: a name still goes through the namespace, which is what
@@ -21,53 +27,47 @@ describe('what a walrus may aim at', () => {
         ['lambda: (count := count + 1)', 'lambda: __brycomp_assign("count", count + 1)'],
 
         // An attribute, the form `Tween` and `Spring` force on a handler.
-        ['lambda: (progress.target := 1)', 'lambda: __brycomp_setattr(progress, "target", 1)'],
+        ['lambda: (progress.target := 1)', `lambda: ${setattr('progress', '"target"', '1')}`],
 
         // A key. The whole subscript is the target, so the object is what comes
         // before the last bracket.
-        [
-            'lambda event: (m["x"] := event.clientX)',
-            'lambda event: __brycomp_setitem(m, "x", event.clientX)'
-        ],
+        ['lambda event: (m["x"] := event.clientX)', `lambda event: ${setitem('m', '"x"', 'event.clientX')}`],
 
         // Only the last step is assigned; the rest is the object to assign into.
-        ['lambda: (a.b.c := 1)', 'lambda: __brycomp_setattr(a.b, "c", 1)'],
-        ['lambda: (rows[i]["done"] := True)', 'lambda: __brycomp_setitem(rows[i], "done", True)'],
+        ['lambda: (a.b.c := 1)', `lambda: ${setattr('a.b', '"c"', '1')}`],
+        ['lambda: (rows[i]["done"] := True)', `lambda: ${setitem('rows[i]', '"done"', 'True')}`],
         // An attribute named as Python reads the name, and a walrus inside the
         // key or the receiver rewritten as one in the value is.
-        ['lambda: (box.ﬁeld := 1)', 'lambda: __brycomp_setattr(box, "field", 1)'],
-        ['lambda: (rows[(chosen := 1)] := 7)', 'lambda: __brycomp_setitem(rows, __brycomp_assign("chosen", 1), 7)'],
-        ['lambda: (boxes[(chosen := 1)].width := 7)', 'lambda: __brycomp_setattr(boxes[__brycomp_assign("chosen", 1)], "width", 7)'],
+        ['lambda: (box.ﬁeld := 1)', `lambda: ${setattr('box', '"field"', '1')}`],
+        ['lambda: (rows[(chosen := 1)] := 7)', `lambda: ${setitem('rows', '__brycomp_assign("chosen", 1)', '7')}`],
+        ['lambda: (boxes[(chosen := 1)].width := 7)', `lambda: ${setattr('boxes[__brycomp_assign("chosen", 1)]', '"width"', '7')}`],
         // A receiver in parentheses, as Python's `=` writes through one; and
         // parentheses with no step after them, which Python refuses, left to it.
-        ['lambda: ((left if ready else right).label := 1)', 'lambda: __brycomp_setattr((left if ready else right), "label", 1)'],
-        ['lambda: ((left if ready else right)["label"] := 1)', 'lambda: __brycomp_setitem((left if ready else right), "label", 1)'],
+        ['lambda: ((left if ready else right).label := 1)', `lambda: ${setattr('(left if ready else right)', '"label"', '1')}`],
+        ['lambda: ((left if ready else right)["label"] := 1)', `lambda: ${setitem('(left if ready else right)', '"label"', '1')}`],
         ['lambda: ((x) := 1)', 'lambda: ((x) := 1)'],
         // And a list or a dict written in place.
-        ['lambda: ([left, right][i].label := 1)', 'lambda: __brycomp_setattr([left, right][i], "label", 1)'],
-        ['lambda: ({True: left, False: right}[ready]["label"] := 1)', 'lambda: __brycomp_setitem({True: left, False: right}[ready], "label", 1)'],
+        ['lambda: ([left, right][i].label := 1)', `lambda: ${setattr('[left, right][i]', '"label"', '1')}`],
+        ['lambda: ({True: left, False: right}[ready]["label"] := 1)', `lambda: ${setitem('{True: left, False: right}[ready]', '"label"', '1')}`],
 
         // Mixed, in one tuple: the three targets side by side.
-        [
-            'lambda: (a := 1, b.c := 2, d[k] := 3)',
-            'lambda: (__brycomp_assign("a", 1), __brycomp_setattr(b, "c", 2), __brycomp_setitem(d, k, 3))'
-        ],
+        ['lambda: (a := 1, b.c := 2, d[k] := 3)', `lambda: (__brycomp_assign("a", 1), ${setattr('b', '"c"', '2')}, ${setitem('d', 'k', '3')})`],
 
         // A colon inside the key is a slice, which Python assigns to and passes
         // as an argument spelt `slice(start, stop, step)`, under the compiler's
         // name, a bound left out being `None`; one per part of a tuple key.
-        ['lambda: (items[1:] := 2)', 'lambda: __brycomp_setitem(items, __brycomp_slice(1, None), 2)'],
-        ['lambda: (grid[::2, 0] := 2)', 'lambda: __brycomp_setitem(grid, (__brycomp_slice(None, None, 2), 0), 2)'],
+        ['lambda: (items[1:] := 2)', `lambda: ${setitem('items', '__brycomp_slice(1, None)', '2')}`],
+        ['lambda: (grid[::2, 0] := 2)', `lambda: ${setitem('grid', '(__brycomp_slice(None, None, 2), 0)', '2')}`],
 
         // ...but each `lambda` takes the next colon, as Python reads it, before
         // or after a slice's own, or with none at all.
-        ['lambda: (d[1:lambda: 2] := 1)', 'lambda: __brycomp_setitem(d, __brycomp_slice(1, lambda: 2), 1)'],
-        ['lambda: (d[lambda: 1:2] := 1)', 'lambda: __brycomp_setitem(d, __brycomp_slice(lambda: 1, 2), 1)'],
-        ['lambda: (d[1 if True else lambda: 2] := 1)', 'lambda: __brycomp_setitem(d, 1 if True else lambda: 2, 1)'],
+        ['lambda: (d[1:lambda: 2] := 1)', `lambda: ${setitem('d', '__brycomp_slice(1, lambda: 2)', '1')}`],
+        ['lambda: (d[lambda: 1:2] := 1)', `lambda: ${setitem('d', '__brycomp_slice(lambda: 1, 2)', '1')}`],
+        ['lambda: (d[1 if True else lambda: 2] := 1)', `lambda: ${setitem('d', '1 if True else lambda: 2', '1')}`],
 
         // A `:=` alone between the brackets is the key it binds, written as the
         // parenthesised one is, the component's name with it.
-        ['lambda: (items[i := 0] := 9)', 'lambda: __brycomp_setitem(items, __brycomp_assign("i", 0), 9)'],
+        ['lambda: (items[i := 0] := 9)', `lambda: ${setitem('items', '__brycomp_assign("i", 0)', '9')}`],
 
         // Parentheses that are a generator's, the walrus its element: the `for`
         // and its `if` stay the generator's, around the assignment.
@@ -90,7 +90,7 @@ describe('what a walrus may aim at', () => {
         ['lambda: (selected := forêt())', 'lambda: __brycomp_assign("selected", forêt())'],
 
         // ...but a colon inside a string is just a string.
-        ['lambda: (d["a:b"] := 1)', 'lambda: __brycomp_setitem(d, "a:b", 1)'],
+        ['lambda: (d["a:b"] := 1)', `lambda: ${setitem('d', '"a:b"', '1')}`],
 
         // Untouched, as before: a call's parenthesis is not a group, and a
         // comparison is not an assignment.

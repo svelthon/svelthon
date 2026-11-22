@@ -547,12 +547,16 @@ export function walrus(expression) {
                     // lives, the attribute under the template's rule for a dot.
                     // The receiver and the key are expressions too, rewritten
                     // as the value is: `(rows[(chosen := 1)] := 7)` sets
-                    // `chosen` as well.
+                    // `chosen` as well. The value is evaluated first, as
+                    // Python evaluates `=`'s, handed to a lambda whose body
+                    // writes: an argument after the receiver, `(target().label
+                    // := value())` called `target` first.
                     if (found.name) return `__brycomp_assign("${pythonName(found.name)}", ${value})${clause}`;
 
                     const key = found.subscript ? walrus(found.key).trim() : found.key;
+                    const write = found.subscript ? '__brycomp_setitem' : '__brycomp_setattr';
 
-                    return `${found.subscript ? '__brycomp_setitem' : '__brycomp_setattr'}(${walrus(found.object).trim()}, ${key}, ${value})${clause}`;
+                    return `(lambda __brycomp_given: ${write}(${walrus(found.object).trim()}, ${key}, __brycomp_given))((${value}))${clause}`;
                 });
 
                 // One element was a grouping parenthesis and goes with it;

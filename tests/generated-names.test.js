@@ -30,6 +30,9 @@ const read = (name) =>
 const MARKUP_LOCAL = new Set([
     // The setter's parameter in the `bind:` pair, consumed by Svelte.
     '__brycomp_value',
+    // The value a walrus through a receiver writes, evaluated before it and
+    // handed to the lambda that writes it.
+    '__brycomp_given',
     // The functions the halves of a function binding gave where the binding
     // is made, handed to its read and its write.
     '__brycomp_get',
