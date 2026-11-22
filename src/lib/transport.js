@@ -94,7 +94,7 @@ export const codecLoaded = () => {
 function top(names, dict, marked, trusted) {
     let made;
     let rebuilt;
-    const resolve = () => (made ??= codec()?.decodeTop(names, dict, true, trusted) ?? copiedTop(dict));
+    const resolve = () => (made ??= codec()?.decodeTop(names, dict, true, trusted) ?? copiedTop(dict, (at) => python().entries()[at][2]));
     const pojo = {};
 
     // No function made here names `pojo`: it would be kept with every function
@@ -115,7 +115,11 @@ function top(names, dict, marked, trusted) {
 
     adopt(pojo, () => python().dict());
 
-    return marked ? markTop(pojo, { entries: () => python().entries() }) : pojo;
+    // Each entry as JavaScript read it, a copy among them, which SvelteKit's
+    // merge holds.
+    const entries = () => python().entries().map(([name, key, value], at) => [name, key, value, resolve().value(at)]);
+
+    return marked ? markTop(pojo, { entries }) : pojo;
 }
 
 // `trusted` for what the server reads back under its own signature
@@ -395,11 +399,18 @@ const define = (target, name, value) => Object.defineProperty(target, name, { va
 // writes them.
 const nameOf = (key, memo) => (Array.isArray(key) && key[0] === 'g' ? key[2] : String(copied(key, memo)));
 
-function copiedTop(dict) {
+// A top read before its values can be rebuilt: the copies of its entries, each
+// of which Python reads, at its first read, as the entry rebuilt then, as a
+// group's values are (`copiedGroup`).
+function copiedTop(dict, held) {
     const memo = new Map();
     const values = [];
 
     for (let at = 2; at < dict.length; at += 2) values.push(copied(dict[at], memo));
+
+    values.forEach((one, at) => {
+        if (one !== null && typeof one === 'object') adopt(one, () => held(at));
+    });
 
     return { value: (at) => values[at] };
 }

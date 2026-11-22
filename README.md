@@ -1514,7 +1514,11 @@ or `__getstate__` hands over, as its `__setstate__` or its `__setitem__` fills
 it. A function, a class, a bound method or what
 pickle names, a singleton, is there a function of the same name, which says
 when called that it needs Python: import its module in the page. A `load()` in JavaScript returning Python values keeps what they share,
-and its own arrays, Maps and objects stay JavaScript's.
+and its own arrays, Maps and objects stay JavaScript's. What the page read
+before the engine or a class loaded, the data of a `load()` or one of its
+values, Python reads once they are there as the value it stands for, handed
+on as a prop as well; a copy found only further down, the instance in a tuple
+no value of the data also holds, stays a copy.
 
 Between the server and the browser, two differences remain, and only two.
 What pickle carries by its name, a function, a class or a singleton, read by a
@@ -1867,7 +1871,7 @@ library at all.
 
 ## Status
 
-Validated by `npm test`, 2 215 tests as written (vitest reports more, one per
+Validated by `npm test`, 2 216 tests as written (vitest reports more, one per
 row of a `test.for`), none expected to fail:
 
 - end-to-end reactivity, and which write paths propagate;

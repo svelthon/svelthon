@@ -1584,7 +1584,11 @@ classe, une méthode liée ou ce que pickle nomme, un singleton, y
 est une fonction du même nom, qui dit à l'appel qu'il lui faut Python :
 importez son module dans la page. Un `load()` en JavaScript
 qui rend des valeurs Python garde ce qu'elles partagent, et ses propres
-tableaux, Maps et objets restent ceux de JavaScript.
+tableaux, Maps et objets restent ceux de JavaScript. Ce que la page a lu avant
+le moteur ou une classe, les données d'un `load()` ou l'une de leurs valeurs,
+Python le lit, une fois ceux-ci là, comme la valeur dont c'est la copie, passé
+en prop aussi ; une copie qu'on ne trouve que plus bas, l'instance d'un tuple
+qu'aucune valeur des données ne tient aussi, reste une copie.
 
 Entre le serveur et le navigateur, deux différences restent, et seulement deux.
 Ce que pickle porte par son nom, une fonction, une classe ou un singleton, lu
@@ -1909,7 +1913,7 @@ parsing, que seul le compilateur charge ; le README de Bryntime en donne le poid
 
 ## État
 
-Validé par `npm test`, 2 215 tests écrits (vitest en compte plus, un par
+Validé par `npm test`, 2 216 tests écrits (vitest en compte plus, un par
 rangée d'un `test.for`), aucun échec attendu :
 
 - réactivité de bout en bout, et quels chemins d'écriture propagent ;

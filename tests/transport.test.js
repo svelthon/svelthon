@@ -15,6 +15,7 @@ import {
     merge_section,
     merge_page,
     walked,
+    pointed,
     streamed,
     actions,
     one,
@@ -636,6 +637,43 @@ test('a value no engine can rebuild yet is JavaScript’s copy, which Python rea
     // The codec there, Python reads the copy as the instance it stands for.
     codecLoaded();
     expect(String(describe(pyBind(copy)))).toBe('Point:Point(3)');
+});
+
+// The data of a `load()` JavaScript read with no engine, as SvelteKit merges
+// it: each of its values Python reads as the value it stands for, one handed
+// apart as a prop and the merged data alike, an alias the same instance.
+test('the values of a load() read with no engine are, to Python, the values they stand for', async () => {
+    const made = encode(await routeLoad(pointed, 'pointed — transport')({}));
+    const codec = globalThis[CODEC];
+    let item;
+    let pair;
+    let merged;
+
+    delete globalThis[CODEC];
+
+    try {
+        const top = decode(made);
+
+        [item, pair, merged] = [top.item, top.pair, { ...top }];
+    } finally {
+        globalThis[CODEC] = codec;
+    }
+
+    codecLoaded();
+
+    const data = routeData(merged);
+    const read = (key) => $B.$getitem(data, key);
+
+    expect([shown(item), shown(pair), String(describe(data))]).toEqual([
+        'Point:Point(7)',
+        'tuple:(Point(7), 1)',
+        "dict:{'item': Point(7), 'same': Point(7), 'pair': (Point(7), 1), 2: [Point(7)]}"
+    ]);
+    expect([pyBind(item) === read('item'), read('same') === read('item'), $B.$getitem(read('pair'), 0) === read('item')]).toEqual([
+        true,
+        true,
+        true
+    ]);
 });
 
 // JavaScript has no complex: its two parts, the view a reader on the server is
